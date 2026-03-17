@@ -10,6 +10,7 @@ import { Spinner } from "@/components/ui/Spinner";
 
 interface ProtectedRouteProps {
   requireOnboarding?: boolean;
+  requireAdmin?: boolean;
 }
 
 export function ProtectedRoute({ requireOnboarding = true }: ProtectedRouteProps) {
