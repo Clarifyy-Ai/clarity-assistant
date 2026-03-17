@@ -1,47 +1,79 @@
-import * as React from "react";
-import { Slot } from "@radix-ui/react-slot";
-import { cva, type VariantProps } from "class-variance-authority";
-
+import { forwardRef, type ButtonHTMLAttributes, type ReactNode } from "react";
+import { Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const buttonVariants = cva(
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:size-4 [&_svg]:shrink-0",
-  {
-    variants: {
-      variant: {
-        default: "bg-primary text-primary-foreground hover:bg-primary/90",
-        destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-        outline: "border border-input bg-background hover:bg-accent hover:text-accent-foreground",
-        secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/80",
-        ghost: "hover:bg-accent hover:text-accent-foreground",
-        link: "text-primary underline-offset-4 hover:underline",
-      },
-      size: {
-        default: "h-10 px-4 py-2",
-        sm: "h-9 rounded-md px-3",
-        lg: "h-11 rounded-md px-8",
-        icon: "h-10 w-10",
-      },
-    },
-    defaultVariants: {
-      variant: "default",
-      size: "default",
-    },
-  },
-);
+// ─────────────────────────────────────────────────────────────────
+// Button
+// Design system primitive — variant + size + loading state.
+// ─────────────────────────────────────────────────────────────────
 
-export interface ButtonProps
-  extends React.ButtonHTMLAttributes<HTMLButtonElement>,
-    VariantProps<typeof buttonVariants> {
-  asChild?: boolean;
+interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  variant?:  "primary" | "secondary" | "ghost" | "danger" | "success";
+  size?:     "xs" | "sm" | "md" | "lg";
+  loading?:  boolean;
+  leftIcon?: ReactNode;
+  rightIcon?: ReactNode;
+  fullWidth?: boolean;
 }
 
-const Button = React.forwardRef<HTMLButtonElement, ButtonProps>(
-  ({ className, variant, size, asChild = false, ...props }, ref) => {
-    const Comp = asChild ? Slot : "button";
-    return <Comp className={cn(buttonVariants({ variant, size, className }))} ref={ref} {...props} />;
-  },
-);
-Button.displayName = "Button";
+const VARIANTS = {
+  primary:   "bg-violet-600 hover:bg-violet-500 text-white border-transparent",
+  secondary: "bg-white/5 hover:bg-white/10 text-gray-200 border-white/10",
+  ghost:     "bg-transparent hover:bg-white/5 text-gray-400 hover:text-white border-transparent",
+  danger:    "bg-red-600/20 hover:bg-red-600/30 text-red-400 border-red-500/30",
+  success:   "bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border-emerald-500/30",
+};
 
-export { Button, buttonVariants };
+const SIZES = {
+  xs: "px-2.5 py-1   text-xs  rounded-lg  gap-1.5",
+  sm: "px-3   py-1.5 text-xs  rounded-xl  gap-1.5",
+  md: "px-4   py-2.5 text-sm  rounded-xl  gap-2",
+  lg: "px-5   py-3   text-sm  rounded-2xl gap-2",
+};
+
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
+  (
+    {
+      variant   = "secondary",
+      size      = "md",
+      loading   = false,
+      leftIcon,
+      rightIcon,
+      fullWidth = false,
+      disabled,
+      className,
+      children,
+      ...props
+    },
+    ref
+  ) => {
+    return (
+      <button
+        ref={ref}
+        disabled={disabled || loading}
+        className={cn(
+          "inline-flex items-center justify-center font-medium border transition-all",
+          "disabled:opacity-40 disabled:cursor-not-allowed",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50",
+          VARIANTS[variant],
+          SIZES[size],
+          fullWidth && "w-full",
+          className
+        )}
+        {...props}
+      >
+        {loading ? (
+          <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+        ) : leftIcon ? (
+          <span className="shrink-0">{leftIcon}</span>
+        ) : null}
+        {children}
+        {!loading && rightIcon && (
+          <span className="shrink-0">{rightIcon}</span>
+        )}
+      </button>
+    );
+  }
+);
+
+Button.displayName = "Button";
