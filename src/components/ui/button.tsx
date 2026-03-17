@@ -7,7 +7,7 @@ import { cn } from "@/lib/utils";
 // Design system primitive — variant + size + loading state.
 // ─────────────────────────────────────────────────────────────────
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?:  "primary" | "secondary" | "ghost" | "danger" | "success";
   size?:     "xs" | "sm" | "md" | "lg";
   loading?:  boolean;
