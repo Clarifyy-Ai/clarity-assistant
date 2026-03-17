@@ -8,9 +8,9 @@ import { cn } from "@/lib/utils";
 // ─────────────────────────────────────────────────────────────────
 
 export function NetworkBanner() {
-  const { mode, rtt } = useNetworkMonitor();
+  const { mode, rttMs } = useNetworkMonitor();
 
-  if (mode === "fast") return null;
+  if (mode === "strong") return null;
 
   return (
     <div
