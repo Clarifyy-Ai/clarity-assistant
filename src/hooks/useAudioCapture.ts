@@ -21,7 +21,7 @@ export function useAudioCapture() {
       return { error: null };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Mic access denied";
-      audioStore.setStreamError({ code: "mic_denied", message: msg });
+      audioStore.setStreamError({ code: "mic_denied" as any, message: msg });
       return { error: msg };
     }
   }, [audioStore]);
