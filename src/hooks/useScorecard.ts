@@ -1,25 +1,59 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { callGemini } from "@/lib/ai/geminiClient";
-import { callOpenAI } from "@/lib/ai/openaiClient";
 import { buildFillerSummary } from "@/lib/audio/fillerDetector";
 import { analyseWPMTrend } from "@/lib/audio/wpmTracker";
 import { useAuthStore } from "@/store/userStore";
 import type {
-  Scorecard,
-  QuestionScore,
+  SessionScorecard,
+  SessionAnswer,
   FillerWordOccurrence,
   WPMDataPoint,
 } from "@/types/session.types";
 
 // ─────────────────────────────────────────────────────────────────
 // useScorecard
-// Fetches session data, generates AI scorecard analysis,
-// and handles PDF export + sharing.
 // ─────────────────────────────────────────────────────────────────
 
 interface UseScorecardOptions {
   sessionId: string;
+}
+
+interface QuestionScore {
+  question_id: string;
+  question_text: string;
+  order_index: number;
+  score: number;
+  confidence_score: number;
+  star_used: boolean;
+  key_strength: string;
+  key_weakness: string;
+  coach_tip: string;
+}
+
+interface Scorecard {
+  id: string;
+  session_id: string;
+  user_id: string;
+  overall_score: number;
+  confidence_score: number;
+  clarity_score: number;
+  structure_score: number;
+  relevance_score: number;
+  question_scores: QuestionScore[];
+  filler_count: number;
+  filler_rate: number;
+  top_filler_words: Array<{ word: string; count: number }>;
+  wpm_avg: number;
+  wpm_trend: string;
+  strengths: string[];
+  improvements: string[];
+  coach_note: string;
+  star_adherence: number;
+  is_shared: boolean;
+  share_token: string | null;
+  pdf_url: string | null;
+  generated_at: string;
 }
 
 interface ScorecardState {
@@ -45,8 +79,6 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
     shareToken:   null,
   });
 
-  // ── Load scorecard ────────────────────────────────────────────
-
   useEffect(() => {
     if (!sessionId) return;
     loadScorecard();
@@ -56,7 +88,6 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
     setState((s) => ({ ...s, isLoading: true, error: null }));
 
     try {
-      // Check if scorecard already exists in DB
       const { data: existing } = await supabase
         .from("scorecards")
         .select("*")
@@ -77,10 +108,8 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
         return;
       }
 
-      // Generate scorecard from session data
       await generateScorecard();
-
-    } catch (err) {
+    } catch {
       setState((s) => ({
         ...s,
         isLoading: false,
@@ -89,74 +118,47 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
     }
   }
 
-  // ── Generate scorecard ────────────────────────────────────────
-
   const generateScorecard = useCallback(async (): Promise<void> => {
     setState((s) => ({ ...s, isGenerating: true, isLoading: false }));
 
     try {
-      // Fetch session data
       const { data: session } = await supabase
         .from("sessions")
-        .select(`
-          *,
-          session_questions(*)
-        `)
+        .select(`*, session_questions(*)`)
         .eq("id", sessionId)
         .single();
 
       if (!session) throw new Error("Session not found");
 
-      // Fetch transcript
       const { data: transcript } = await supabase
         .from("transcripts")
         .select("utterances, filler_occurrences, wpm_data_points")
         .eq("session_id", sessionId)
         .single();
 
-      const fillerOccurrences: FillerWordOccurrence[] =
-        transcript?.filler_occurrences ?? [];
-      const wpmDataPoints: WPMDataPoint[] =
-        transcript?.wpm_data_points ?? [];
+      const fillerOccurrences: FillerWordOccurrence[] = transcript?.filler_occurrences ?? [];
+      const wpmDataPoints: WPMDataPoint[] = transcript?.wpm_data_points ?? [];
       const durationSeconds = session.duration_seconds ?? 0;
 
-      // Build filler + WPM summaries
       const fillerSummary = buildFillerSummary(fillerOccurrences, durationSeconds);
-      const wpmTrend      = analyseWPMTrend(wpmDataPoints);
+      const wpmTrend = analyseWPMTrend(wpmDataPoints);
 
-      // Call AI to score each question answer
       const questionScores = await scoreQuestions(
         session.session_questions ?? [],
         transcript?.utterances ?? [],
         session
       );
 
-      // Calculate overall score
-      const overallScore = calculateOverallScore(
-        questionScores,
-        fillerSummary.rate_per_minute,
-        wpmTrend.avg
-      );
+      const overallScore = calculateOverallScore(questionScores, fillerSummary.rate_per_minute, wpmTrend.avg);
 
-      // Generate written feedback
-      const feedback = await generateFeedback(
-        session,
-        questionScores,
-        fillerSummary,
-        wpmTrend,
-        overallScore
-      );
+      const feedback = await generateFeedback(session, questionScores, fillerSummary, wpmTrend, overallScore);
 
-      // Assemble scorecard
       const scorecard: Scorecard = {
         id:                  crypto.randomUUID(),
         session_id:          sessionId,
         user_id:             profile?.id ?? "",
         overall_score:       overallScore,
-        confidence_score:    Math.round(
-                               questionScores.reduce((a, q) => a + q.confidence_score, 0) /
-                               Math.max(1, questionScores.length)
-                             ),
+        confidence_score:    Math.round(questionScores.reduce((a, q) => a + q.confidence_score, 0) / Math.max(1, questionScores.length)),
         clarity_score:       feedback.clarity_score,
         structure_score:     feedback.structure_score,
         relevance_score:     feedback.relevance_score,
@@ -176,66 +178,33 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
         generated_at:        new Date().toISOString(),
       };
 
-      // Save to DB
       await supabase.from("scorecards").insert(scorecard);
 
-      setState((s) => ({
-        ...s,
-        scorecard,
-        isGenerating: false,
-      }));
-
-    } catch (err) {
-      setState((s) => ({
-        ...s,
-        isGenerating: false,
-        error: "Failed to generate scorecard",
-      }));
+      setState((s) => ({ ...s, scorecard, isGenerating: false }));
+    } catch {
+      setState((s) => ({ ...s, isGenerating: false, error: "Failed to generate scorecard" }));
     }
   }, [sessionId, profile]);
 
-  // ── Share scorecard ───────────────────────────────────────────
-
   const shareScorecard = useCallback(async (): Promise<string | null> => {
     if (!state.scorecard) return null;
-
     const token = generateShareToken();
     const url   = buildShareUrl(token);
-
-    const { error } = await supabase
-      .from("scorecards")
-      .update({ is_shared: true, share_token: token })
-      .eq("session_id", sessionId);
-
+    const { error } = await supabase.from("scorecards").update({ is_shared: true, share_token: token }).eq("session_id", sessionId);
     if (error) return null;
-
-    setState((s) => ({
-      ...s,
-      isShared:   true,
-      shareToken: token,
-      shareUrl:   url,
-    }));
-
+    setState((s) => ({ ...s, isShared: true, shareToken: token, shareUrl: url }));
     return url;
   }, [state.scorecard, sessionId]);
 
-  // ── Export PDF ────────────────────────────────────────────────
-
   const exportPDF = useCallback(async (): Promise<void> => {
     if (!state.scorecard) return;
-
     const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
     const response = await fetch(`${EDGE_BASE}/export-scorecard-pdf`, {
       method: "POST",
-      headers: {
-        "Content-Type":  "application/json",
-        "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      },
+      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
       body: JSON.stringify({ session_id: sessionId }),
     });
-
     if (!response.ok) return;
-
     const blob = await response.blob();
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
@@ -254,31 +223,16 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
   };
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────
 
-async function scoreQuestions(
-  questions: any[],
-  utterances: any[],
-  session: any
-): Promise<QuestionScore[]> {
+async function scoreQuestions(questions: any[], utterances: any[], session: any): Promise<QuestionScore[]> {
   if (questions.length === 0) return [];
-
   const prompt = `You are an expert interview coach. Score each answer on a 0-100 scale.
 Session type: ${session.interview_type}
 Experience level: ${session.experience_level}
 
 For each question, return a JSON array with objects:
-{
-  "question_id": string,
-  "score": number (0-100),
-  "confidence_score": number (0-100),
-  "star_used": boolean,
-  "key_strength": string,
-  "key_weakness": string,
-  "coach_tip": string
-}
+{ "question_id": string, "score": number (0-100), "confidence_score": number (0-100), "star_used": boolean, "key_strength": string, "key_weakness": string, "coach_tip": string }
 
 Questions and answers:
 ${questions.map((q: any, i: number) => `Q${i + 1}: "${q.question_text}"\nA: "${q.candidate_answer ?? "No answer recorded"}"`).join("\n\n")}
@@ -289,61 +243,27 @@ Return ONLY valid JSON array.`;
     const text  = await callGemini({ prompt, model: "gemini-1.5-flash" });
     const clean = text.replace(/```json|```/g, "").trim();
     const raw   = JSON.parse(clean);
-    return raw.map((r: any, i: number) => ({
-      ...r,
-      question_text: questions[i]?.question_text ?? "",
-      order_index:   i,
-    })) as QuestionScore[];
+    return raw.map((r: any, i: number) => ({ ...r, question_text: questions[i]?.question_text ?? "", order_index: i })) as QuestionScore[];
   } catch {
     return questions.map((q: any, i: number) => ({
-      question_id:      q.id,
-      question_text:    q.question_text,
-      order_index:      i,
-      score:            50,
-      confidence_score: 50,
-      star_used:        false,
-      key_strength:     "Unable to analyse",
-      key_weakness:     "Unable to analyse",
-      coach_tip:        "Review your answer and practice the STAR framework.",
+      question_id: q.id, question_text: q.question_text, order_index: i,
+      score: 50, confidence_score: 50, star_used: false,
+      key_strength: "Unable to analyse", key_weakness: "Unable to analyse",
+      coach_tip: "Review your answer and practice the STAR framework.",
     }));
   }
 }
 
-async function generateFeedback(
-  session: any,
-  scores: QuestionScore[],
-  fillerSummary: ReturnType<typeof buildFillerSummary>,
-  wpmTrend: ReturnType<typeof analyseWPMTrend>,
-  overallScore: number
-): Promise<{
-  strengths:      string[];
-  improvements:   string[];
-  coach_note:     string;
-  star_adherence: number;
-  clarity_score:  number;
-  structure_score: number;
-  relevance_score: number;
-}> {
+async function generateFeedback(session: any, scores: QuestionScore[], fillerSummary: any, wpmTrend: any, overallScore: number): Promise<{ strengths: string[]; improvements: string[]; coach_note: string; star_adherence: number; clarity_score: number; structure_score: number; relevance_score: number; }> {
   const prompt = `You are an expert interview coach. Generate structured feedback.
 
 Session: ${session.interview_type}, ${session.experience_level}-level
 Overall score: ${overallScore}/100
 Filler word rate: ${fillerSummary.rate_per_minute.toFixed(1)}/min
 Speaking pace: ${wpmTrend.avg} WPM (${wpmTrend.trend})
-Top fillers: ${fillerSummary.top_3.map((f) => f.word).join(", ") || "none"}
-
-Question scores: ${scores.map((s) => `${s.score}/100`).join(", ")}
 
 Return JSON:
-{
-  "strengths": ["...", "...", "..."],
-  "improvements": ["...", "...", "..."],
-  "coach_note": "2-3 sentence personal note",
-  "star_adherence": number (0-100),
-  "clarity_score": number (0-100),
-  "structure_score": number (0-100),
-  "relevance_score": number (0-100)
-}
+{ "strengths": ["..."], "improvements": ["..."], "coach_note": "...", "star_adherence": number, "clarity_score": number, "structure_score": number, "relevance_score": number }
 
 Return ONLY valid JSON.`;
 
@@ -352,38 +272,15 @@ Return ONLY valid JSON.`;
     const clean = text.replace(/```json|```/g, "").trim();
     return JSON.parse(clean);
   } catch {
-    return {
-      strengths:       ["Completed the session"],
-      improvements:    ["Practice the STAR framework", "Reduce filler words"],
-      coach_note:      "Keep practising — consistency is key.",
-      star_adherence:  50,
-      clarity_score:   50,
-      structure_score: 50,
-      relevance_score: 50,
-    };
+    return { strengths: ["Completed the session"], improvements: ["Practice the STAR framework"], coach_note: "Keep practising.", star_adherence: 50, clarity_score: 50, structure_score: 50, relevance_score: 50 };
   }
 }
 
-function calculateOverallScore(
-  questionScores: QuestionScore[],
-  fillerRate: number,
-  avgWPM: number
-): number {
-  const avgQuestionScore =
-    questionScores.reduce((a, q) => a + q.score, 0) /
-    Math.max(1, questionScores.length);
-
-  // Filler penalty: -1 point per filler per minute above 2/min
+function calculateOverallScore(questionScores: QuestionScore[], fillerRate: number, avgWPM: number): number {
+  const avgQuestionScore = questionScores.reduce((a, q) => a + q.score, 0) / Math.max(1, questionScores.length);
   const fillerPenalty = Math.max(0, (fillerRate - 2) * 1);
-
-  // WPM penalty: outside 110-160 range
-  const wpmPenalty =
-    avgWPM < 110 ? (110 - avgWPM) * 0.2 :
-    avgWPM > 180 ? (avgWPM - 180) * 0.1 : 0;
-
-  return Math.max(0, Math.min(100, Math.round(
-    avgQuestionScore - fillerPenalty - wpmPenalty
-  )));
+  const wpmPenalty = avgWPM < 110 ? (110 - avgWPM) * 0.2 : avgWPM > 180 ? (avgWPM - 180) * 0.1 : 0;
+  return Math.max(0, Math.min(100, Math.round(avgQuestionScore - fillerPenalty - wpmPenalty)));
 }
 
 function generateShareToken(): string {

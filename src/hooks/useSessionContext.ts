@@ -2,8 +2,8 @@ import { useCallback } from "react";
 import { useCoachStore } from "@/store/coachStore";
 import { useAuthStore } from "@/store/userStore";
 import { useDocumentStore } from "@/store/documentStore";
-import { buildContextEnvelope } from "@/lib/ai/contextEnvelopeBuilder";
-import type { CoachContext } from "@/types/ai.types";
+import { buildCoachingContext, serialiseContextForPrompt } from "@/lib/ai/contextEnvelopeBuilder";
+import type { CoachingContext } from "@/types/ai.types";
 
 // ─────────────────────────────────────────────────────────────────
 // useSessionContext
@@ -18,34 +18,29 @@ export function useSessionContext() {
 
   // ── Build fresh context for session start ─────────────────────
 
-  const initContext = useCallback((overrides?: Partial<CoachContext>): void => {
+  const initContext = useCallback((overrides?: Partial<CoachingContext>): void => {
     const profile = authStore.profile;
-    const resume  = docStore.activeResume;
-    const jd      = docStore.activeJD;
+    if (!profile) return;
 
-    const context: CoachContext = {
-      user_id:          profile?.id ?? "",
-      role:             profile?.role ?? "interview_candidate",
-      domain:           profile?.domain ?? "Technology",
-      experience_level: profile?.experience_level ?? "mid",
-      target_company:   overrides?.target_company ?? null,
-      target_role:      overrides?.target_role    ?? null,
-      coach_tone:       profile?.coach_tone ?? "encouraging",
-      hint_style:       profile?.hint_style ?? "short_hints",
-      session_goals:    overrides?.session_goals ?? [],
-      weak_areas:       profile?.weak_areas ?? [],
-      strong_areas:     profile?.strong_areas ?? [],
-      resume_summary:   resume?.active_version?.parsed_data?.summary ?? null,
-      jd_summary:       jd?.parsed_data?.role_title
-        ? `${jd.parsed_data.role_title} at ${jd.company_name ?? "target company"}`
-        : null,
-      recent_answers:   [],
-      session_number:   (profile?.total_sessions ?? 0) + 1,
-      ...overrides,
-    };
+    const { active_context } = docStore;
 
-    coachStore.setContext(context);
-  }, [authStore.profile, docStore.activeResume, docStore.activeJD]);
+    const context = buildCoachingContext(profile, {
+      company: overrides?.target_company ?? null,
+      role: overrides?.role ?? null,
+      experience_level: profile.experience_level ?? "mid",
+      interview_type: overrides?.session_type ?? "mixed",
+      question_count: overrides?.total_questions ?? 5,
+      time_per_question_seconds: 180,
+      model: profile.preferred_model,
+      hint_style: profile.hint_style,
+      include_warmup: false,
+      resume_id: null,
+      jd_id: null,
+      focus_areas: [],
+    }, active_context, overrides);
+
+    coachStore.initContext(context);
+  }, [authStore.profile, docStore]);
 
   // ── Record an answer summary after each question ──────────────
 
@@ -55,14 +50,12 @@ export function useSessionContext() {
     score: number;
     fillerCount: number;
   }): void => {
-    coachStore.appendRecentAnswer({
+    coachStore.addAnswerSummary({
       question: params.questionText,
-      summary:  params.answerSummary,
       score:    params.score,
-      fillers:  params.fillerCount,
+      key_weakness: params.fillerCount > 5 ? "Too many filler words" : null,
     });
 
-    // Update weak areas dynamically
     if (params.score < 50) {
       coachStore.addWeakArea(params.questionText.slice(0, 40));
     }
@@ -74,18 +67,22 @@ export function useSessionContext() {
   // ── Set session goal ──────────────────────────────────────────
 
   const setGoal = useCallback((goal: string): void => {
-    coachStore.addSessionGoal(goal);
+    const ctx = coachStore.getContext();
+    if (ctx) {
+      coachStore.setSessionGoals([...ctx.session_goals, goal]);
+    }
   }, [coachStore]);
 
   // ── Get full envelope for an AI call ─────────────────────────
 
   const getEnvelope = useCallback((question: string): Record<string, unknown> => {
-    return buildContextEnvelope({
-      profile:      authStore.profile ?? undefined,
-      coachContext: coachStore.context,
+    const ctx = coachStore.getContext();
+    if (!ctx) return { question };
+    return {
       question,
-    });
-  }, [authStore.profile, coachStore.context]);
+      context_summary: serialiseContextForPrompt(ctx),
+    };
+  }, [coachStore]);
 
   return {
     context:      coachStore.context,

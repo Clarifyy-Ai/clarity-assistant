@@ -71,7 +71,7 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
       category:    "coding",
       action:      () => captureAndAnalyseCodingProblem(),
       isEnabled:   () =>
-        useSessionStore.getState().status === "in_progress" &&
+        useSessionStore.getState().status === "active" &&
         useOverlayStore.getState().is_visible,
       showInHelp:  true,
     },
@@ -87,7 +87,7 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
         const result = useSessionStore.getState().triggerPanic();
         useOverlayStore.getState().showPanic(result);
       },
-      isEnabled:   () => useSessionStore.getState().status === "in_progress",
+      isEnabled:   () => useSessionStore.getState().status === "active",
       showInHelp:  true,
     },
 
@@ -99,7 +99,7 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
       keys:        ["ctrl", "shift", "e"],
       category:    "session",
       action:      () => useSessionStore.getState().setStatus("completed"),
-      isEnabled:   () => useSessionStore.getState().status === "in_progress",
+      isEnabled:   () => useSessionStore.getState().status === "active",
       showInHelp:  false,           // Hidden — prevent accidental triggers
     },
 

@@ -1,5 +1,4 @@
 import { createClient } from "@supabase/supabase-js";
-import type { Database } from "@/types/supabase";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
@@ -10,11 +9,7 @@ if (!SUPABASE_URL || !SUPABASE_ANON_KEY) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Primary Supabase client — used everywhere in the app
-// ─────────────────────────────────────────────────────────────────
-
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
   auth: {
     persistSession:    true,
     autoRefreshToken:  true,
@@ -31,7 +26,7 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, 
   global: {
     headers: {
       "x-app-name": "confideq",
-      "x-app-version": __APP_VERSION__ ?? "1.0.0",
+      "x-app-version": "1.0.0",
     },
   },
   db: {
@@ -39,9 +34,7 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, 
   },
 });
 
-// ─────────────────────────────────────────────────────────────────
-// Storage bucket names
-// ─────────────────────────────────────────────────────────────────
+// ── Storage bucket names ─────────────────────────────────────────
 
 export const STORAGE_BUCKETS = {
   RESUMES:      "resumes",
@@ -51,13 +44,8 @@ export const STORAGE_BUCKETS = {
   ROOM_RECORDINGS: "room-recordings",
 } as const;
 
-// ─────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────
+// ── Helpers ──────────────────────────────────────────────────────
 
-/**
- * Get a short-lived signed URL for a private storage object.
- */
 export async function getSignedUrl(
   bucket: string,
   path: string,
@@ -70,17 +58,12 @@ export async function getSignedUrl(
   return data.signedUrl;
 }
 
-/**
- * Upload a file to Supabase Storage with progress tracking.
- */
 export async function uploadFile(
   bucket: string,
   path: string,
   file: File,
   onProgress?: (percent: number) => void
 ): Promise<{ url: string; path: string } | null> {
-  // Supabase JS v2 doesn't expose upload progress natively,
-  // so we use XMLHttpRequest for progress tracking
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const url = `${SUPABASE_URL}/storage/v1/object/${bucket}/${path}`;
@@ -112,9 +95,6 @@ export async function uploadFile(
   });
 }
 
-/**
- * Delete a file from Supabase Storage.
- */
 export async function deleteFile(
   bucket: string,
   path: string
@@ -123,9 +103,6 @@ export async function deleteFile(
   return !error;
 }
 
-/**
- * Subscribe to a Supabase Realtime channel for a specific table + filter.
- */
 export function subscribeToTable<T>(
   table: string,
   filter: string,
@@ -135,56 +112,20 @@ export function subscribeToTable<T>(
 ) {
   return supabase
     .channel(`${table}:${filter}`)
-    .on(
-      "postgres_changes",
-      { event: "INSERT", schema: "public", table, filter },
-      (payload) => onInsert?.(payload.new as T)
-    )
-    .on(
-      "postgres_changes",
-      { event: "UPDATE", schema: "public", table, filter },
-      (payload) => onUpdate?.(payload.new as T)
-    )
-    .on(
-      "postgres_changes",
-      { event: "DELETE", schema: "public", table, filter },
-      (payload) => onDelete?.(payload.old as T)
-    )
+    .on("postgres_changes", { event: "INSERT", schema: "public", table, filter }, (payload) => onInsert?.(payload.new as T))
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table, filter }, (payload) => onUpdate?.(payload.new as T))
+    .on("postgres_changes", { event: "DELETE", schema: "public", table, filter }, (payload) => onDelete?.(payload.old as T))
     .subscribe();
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Typed query helpers
-// ─────────────────────────────────────────────────────────────────
-
-/**
- * Fetch a single row by ID, returning null if not found.
- */
-export async function fetchById<T>(
-  table: string,
-  id: string
-): Promise<T | null> {
-  const { data, error } = await supabase
-    .from(table)
-    .select("*")
-    .eq("id", id)
-    .single();
+export async function fetchById<T>(table: string, id: string): Promise<T | null> {
+  const { data, error } = await supabase.from(table).select("*").eq("id", id).single();
   if (error || !data) return null;
   return data as T;
 }
 
-/**
- * Upsert a row and return the result.
- */
-export async function upsertRow<T>(
-  table: string,
-  row: Partial<T>
-): Promise<T | null> {
-  const { data, error } = await supabase
-    .from(table)
-    .upsert(row as never)
-    .select()
-    .single();
+export async function upsertRow<T>(table: string, row: Partial<T>): Promise<T | null> {
+  const { data, error } = await supabase.from(table).upsert(row as never).select().single();
   if (error || !data) return null;
   return data as T;
 }

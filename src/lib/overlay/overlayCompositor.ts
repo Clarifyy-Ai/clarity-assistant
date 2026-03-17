@@ -66,7 +66,7 @@ export function composeHint(
     if (headerMatch) {
       lines.push({
         type:    "header",
-        content: headerMatch,
+        content: headerMatch[2],
         indent:  0,
         bold:    true,
       });
@@ -76,10 +76,10 @@ export function composeHint(
     // ── Bullet points ─────────────────────────────────────
     const bulletMatch = raw.match(/^(\s*)[•\-\*]\s+(.+)$/);
     if (bulletMatch) {
-      const indent = Math.floor(bulletMatch.length / 2);[1]
+      const indent = Math.floor((bulletMatch[1]?.length ?? 0) / 2);
       lines.push({
         type:    "bullet",
-        content: bulletMatch,
+        content: bulletMatch[2],
         indent,
         bold:    false,
       });
@@ -91,7 +91,7 @@ export function composeHint(
     if (numberedMatch) {
       lines.push({
         type:    "bullet",
-        content: numberedMatch,
+        content: numberedMatch[2],
         indent:  0,
         bold:    false,
       });
@@ -122,7 +122,7 @@ export function composeHint(
   }
 
   // Remove leading/trailing blank lines
-  while (lines.length > 0 && lines.type === "blank") lines.shift();
+  while (lines.length > 0 && lines[0].type === "blank") lines.shift();
   while (lines.length > 0 && lines[lines.length - 1].type === "blank") lines.pop();
 
   // Estimate display rows for dynamic height
@@ -153,7 +153,7 @@ export function splitInlineCode(text: string): Array<{
     if (match.index > lastIndex) {
       parts.push({ text: text.slice(lastIndex, match.index), isCode: false });
     }
-    parts.push({ text: match, isCode: true });[1]
+    parts.push({ text: match[1], isCode: true });
     lastIndex = regex.lastIndex;
   }
 

@@ -11,13 +11,11 @@ import type { ParsedResume, ParsedJD } from "@/types/ai.types";
 export function useResumeContext() {
   const docStore = useDocumentStore();
 
-  const activeResume  = docStore.activeResume;
-  const activeVersion = activeResume?.versions?.find(
-    (v) => v.id === activeResume.active_version_id
-  ) ?? activeResume?.versions?.[0] ?? null;
+  const activeResume  = docStore.active_context.resume;
+  const activeVersion = docStore.active_context.resume_version;
 
   const parsedResume: ParsedResume | null = activeVersion?.parsed_data ?? null;
-  const activeJD      = docStore.activeJD;
+  const activeJD      = docStore.active_context.jd;
   const parsedJD: ParsedJD | null = activeJD?.parsed_data ?? null;
 
   // ── Build a compact context string for AI prompts ─────────────
@@ -26,9 +24,9 @@ export function useResumeContext() {
     if (!parsedResume) return "No resume uploaded.";
 
     const skills   = parsedResume.skills?.slice(0, 15).join(", ")    ?? "N/A";
-    const role     = parsedResume.current_title                       ?? "Unknown role";
-    const years    = parsedResume.total_experience_years              ?? "?";
-    const recent   = parsedResume.work_experience?.[0]?.company       ?? "Unknown company";
+    const role     = parsedResume.experience?.[0]?.title              ?? "Unknown role";
+    const years    = parsedResume.total_years_experience              ?? "?";
+    const recent   = parsedResume.experience?.[0]?.company            ?? "Unknown company";
 
     return `Role: ${role} | ${years} years exp | Current/last: ${recent} | Skills: ${skills}`;
   }, [parsedResume]);

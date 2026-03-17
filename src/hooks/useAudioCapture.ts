@@ -21,7 +21,7 @@ export function useAudioCapture() {
       return { error: null };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Mic access denied";
-      audioStore.setStreamError({ code: "mic_denied" as any, message: msg });
+      audioStore.setStreamError({ code: "PERMISSION_DENIED", message: msg, recoverable: true, suggestion: "Check your browser permissions" });
       return { error: msg };
     }
   }, [audioStore]);
@@ -34,7 +34,7 @@ export function useAudioCapture() {
       return { error: null };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "System audio unavailable";
-      audioStore.setStreamError({ code: "system_audio_denied" as any, message: msg });
+      audioStore.setStreamError({ code: "SYSTEM_AUDIO_NOT_SUPPORTED", message: msg, recoverable: false, suggestion: "System audio capture may not be supported in this browser" });
       return { error: msg };
     }
   }, [audioStore]);
