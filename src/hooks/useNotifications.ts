@@ -2,29 +2,19 @@ import { useCallback, useEffect } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useNotificationStore } from "@/store/notificationStore";
 import { useAuthStore } from "@/store/userStore";
-import type { AppNotification } from "@/types/notification.types";
-
-// ─────────────────────────────────────────────────────────────────
-// useNotifications
-// Loads, marks-read, and listens for new notifications.
-// Also handles push permission prompting.
-// ─────────────────────────────────────────────────────────────────
+import type { AppNotification } from "@/types/user.types";
 
 export function useNotifications() {
   const { user }  = useAuthStore();
   const store     = useNotificationStore();
 
-  // ── Load on mount ─────────────────────────────────────────────
-
   useEffect(() => {
     if (!user) return;
     loadNotifications();
-    const unsub = subscribeRealtime();
-    return () => { unsub(); };
   }, [user?.id]);
 
   async function loadNotifications(): Promise<void> {
-    store.setLoading(true);
+    store.setIsLoading(true);
     const { data } = await supabase
       .from("notifications")
       .select("*")
@@ -33,66 +23,36 @@ export function useNotifications() {
       .limit(50);
 
     if (data) store.setNotifications(data as AppNotification[]);
-    store.setLoading(false);
+    store.setIsLoading(false);
   }
-
-  // ── Realtime subscription ─────────────────────────────────────
-
-  function subscribeRealtime(): () => void {
-    const channel = supabase
-      .channel(`notifications:${user!.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event:  "INSERT",
-          schema: "public",
-          table:  "notifications",
-          filter: `user_id=eq.${user!.id}`,
-        },
-        (payload) => {
-          store.prependNotification(payload.new as AppNotification);
-        }
-      )
-      .subscribe();
-
-    return () => { supabase.removeChannel(channel); };
-  }
-
-  // ── Mark single notification as read ─────────────────────────
 
   const markRead = useCallback(async (id: string): Promise<void> => {
     await supabase
       .from("notifications")
-      .update({ is_read: true, read_at: new Date().toISOString() })
+      .update({ is_read: true })
       .eq("id", id);
-    store.markRead(id);
+    store.markAsRead(id);
   }, [store]);
 
-  // ── Mark all as read ──────────────────────────────────────────
-
   const markAllRead = useCallback(async (): Promise<void> => {
+    if (!user) return;
     await supabase
       .from("notifications")
-      .update({ is_read: true, read_at: new Date().toISOString() })
-      .eq("user_id", user!.id)
+      .update({ is_read: true })
+      .eq("user_id", user.id)
       .eq("is_read", false);
-    store.markAllRead();
+    store.markAllAsRead();
   }, [user, store]);
 
-  // ── Request push permission ───────────────────────────────────
-
   const requestPushPermission = useCallback(async (): Promise<boolean> => {
-    if (!("Notification" in window)) return false;
-    const result = await Notification.requestPermission();
-    store.setPushPermission(result === "granted");
-    return result === "granted";
+    return store.requestPushPermission();
   }, [store]);
 
   return {
     notifications:      store.notifications,
-    unreadCount:        store.unreadCount,
-    isLoading:          store.isLoading,
-    pushPermission:     store.pushPermission,
+    unreadCount:        store.unread_count,
+    isLoading:          store.is_loading,
+    pushPermission:     store.push_permission,
     markRead,
     markAllRead,
     requestPushPermission,

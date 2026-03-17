@@ -1,8 +1,8 @@
 import { useCallback, useRef } from "react";
 import { useAudioStore } from "@/store/audioStore";
-import { createMicStream } from "@/lib/audio/micCapture";
-import { createSystemAudioStream } from "@/lib/audio/systemAudioCapture";
-import { mixAudioStreams } from "@/lib/audio/audioMixer";
+import { startMicCapture, stopMicCapture } from "@/lib/audio/micCapture";
+import { startSystemAudioCapture, stopSystemAudioCapture } from "@/lib/audio/systemAudioCapture";
+import { mixStreams } from "@/lib/audio/audioMixer";
 
 export function useAudioCapture() {
   const audioStore  = useAudioStore();
@@ -10,78 +10,60 @@ export function useAudioCapture() {
   const sysRef      = useRef<MediaStream | null>(null);
   const mixedRef    = useRef<MediaStream | null>(null);
 
-  // ── Start mic capture ─────────────────────────────────────────
-
   const startMic = useCallback(async (
     deviceId?: string | null
   ): Promise<{ error: string | null }> => {
     try {
-      const stream = await createMicStream(deviceId ?? undefined);
+      const stream = await startMicCapture(deviceId);
       micRef.current = stream;
       audioStore.setMicStream(stream);
-      audioStore.setMicActive(true);
+      audioStore.setIsCapturing(true);
       return { error: null };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Mic access denied";
-      audioStore.setMicError(msg);
+      audioStore.setStreamError({ code: "mic_denied", message: msg });
       return { error: msg };
     }
-  }, []);
-
-  // ── Start system audio capture ────────────────────────────────
+  }, [audioStore]);
 
   const startSystemAudio = useCallback(async (): Promise<{ error: string | null }> => {
     try {
-      const stream = await createSystemAudioStream();
+      const stream = await startSystemAudioCapture();
       sysRef.current = stream;
       audioStore.setSystemStream(stream);
-      audioStore.setSystemAudioActive(true);
       return { error: null };
     } catch (err) {
-      // Non-fatal — system audio is optional
       const msg = err instanceof Error ? err.message : "System audio unavailable";
-      audioStore.setSystemAudioError(msg);
+      audioStore.setStreamError({ code: "system_audio_denied", message: msg });
       return { error: msg };
     }
-  }, []);
-
-  // ── Mix streams together ──────────────────────────────────────
+  }, [audioStore]);
 
   const buildMixedStream = useCallback((): MediaStream | null => {
-    const streams = [micRef.current, sysRef.current].filter(Boolean) as MediaStream[];
-    if (!streams.length) return null;
-    const mixed = mixAudioStreams(streams);
+    const mixed = mixStreams(micRef.current, sysRef.current);
     mixedRef.current = mixed;
-    audioStore.setMixedStream(mixed);
+    if (mixed) audioStore.setCombinedStream(mixed);
     return mixed;
-  }, []);
-
-  // ── Stop all ──────────────────────────────────────────────────
+  }, [audioStore]);
 
   const stopAll = useCallback((): void => {
-    [micRef.current, sysRef.current, mixedRef.current].forEach((s) => {
-      s?.getTracks().forEach((t) => t.stop());
-    });
-    micRef.current  = null;
-    sysRef.current  = null;
+    stopMicCapture(micRef.current);
+    stopSystemAudioCapture(sysRef.current);
+    mixedRef.current?.getTracks().forEach(t => t.stop());
+    micRef.current = null;
+    sysRef.current = null;
     mixedRef.current = null;
-    audioStore.clearStreams();
-  }, []);
-
-  // ── Mute / unmute mic ─────────────────────────────────────────
+    audioStore.stopAllStreams();
+  }, [audioStore]);
 
   const setMuted = useCallback((muted: boolean): void => {
-    micRef.current?.getAudioTracks().forEach((t) => {
-      t.enabled = !muted;
-    });
-    audioStore.setMuted(muted);
-  }, []);
-
-  // ── Enumerate devices ─────────────────────────────────────────
+    micRef.current?.getAudioTracks().forEach(t => { t.enabled = !muted; });
+    audioStore.setIsMuted(muted);
+  }, [audioStore]);
 
   const getDevices = useCallback(async (): Promise<MediaDeviceInfo[]> => {
     const devices = await navigator.mediaDevices.enumerateDevices();
-    return devices.filter((d) => d.kind === "audioinput");
+    return devices.filter(d => d.kind === "audioinput");
   }, []);
 
   return {
@@ -91,12 +73,12 @@ export function useAudioCapture() {
     stopAll,
     setMuted,
     getDevices,
-    micStream:     audioStore.micStream,
-    systemStream:  audioStore.systemStream,
-    mixedStream:   audioStore.mixedStream,
-    isMicActive:   audioStore.isMicActive,
-    isMuted:       audioStore.isMuted,
-    micError:      audioStore.micError,
-    systemError:   audioStore.systemAudioError,
+    micStream:    audioStore.streams.mic_stream,
+    systemStream: audioStore.streams.system_stream,
+    mixedStream:  audioStore.streams.combined_stream,
+    isMicActive:  audioStore.streams.is_capturing,
+    isMuted:      audioStore.is_muted,
+    micError:     audioStore.streams.error?.message ?? null,
+    systemError:  null,
   };
 }
