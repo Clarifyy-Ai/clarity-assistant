@@ -79,7 +79,7 @@ export function useCredits() {
       p_cost: cost,
     });
     if (!error) {
-      authStore.updateProfile({ credits_remaining: balance + cost });
+      authStore.updateProfile({ credits: balance + cost });
     }
   }, [balance, authStore]);
 
