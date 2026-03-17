@@ -15,7 +15,7 @@ export function AppTopBar() {
   const notifStore   = useNotificationStore();
   const uiStore      = useUIStore();
 
-  const credits  = profile?.credits_remaining ?? 0;
+  const credits  = profile?.credits ?? 0;
   const isLow    = credits <= 2;
   const isEmpty  = credits === 0;
 
