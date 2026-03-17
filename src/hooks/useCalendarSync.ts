@@ -1,7 +1,6 @@
 import { useCallback, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
-import type { InterviewSchedule } from "@/types/interview.types";
 
 // ─────────────────────────────────────────────────────────────────
 // useCalendarSync
@@ -14,10 +13,8 @@ export function useCalendarSync() {
   const [lastSynced, setLastSynced] = useState<Date | null>(null);
   const [error, setError]          = useState<string | null>(null);
 
-  // ── Initiate Google Calendar OAuth ───────────────────────────
-
   const connectGoogle = useCallback(async (): Promise<void> => {
-    const { data, error } = await supabase.auth.signInWithOAuth({
+    const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         scopes:     "https://www.googleapis.com/auth/calendar.readonly",
@@ -27,8 +24,6 @@ export function useCalendarSync() {
     });
     if (error) setError(error.message);
   }, []);
-
-  // ── Sync calendar via Edge Function ──────────────────────────
 
   const syncNow = useCallback(async (): Promise<{
     imported: number; error: string | null;
@@ -60,8 +55,6 @@ export function useCalendarSync() {
       setIsSyncing(false);
     }
   }, [user]);
-
-  // ── Disconnect calendar ───────────────────────────────────────
 
   const disconnect = useCallback(async (): Promise<void> => {
     if (!user) return;

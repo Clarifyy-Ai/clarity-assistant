@@ -1,6 +1,5 @@
 import { useCallback } from "react";
 import { useNetworkMonitor } from "./useNetworkMonitor";
-import { getOfflineTemplate } from "@/lib/ai/offlineTemplateEngine";
 import { useOverlayStore } from "@/store/overlayStore";
 
 // ─────────────────────────────────────────────────────────────────
@@ -18,9 +17,8 @@ export function useOfflineFallback() {
   const serveFallback = useCallback((questionText: string): boolean => {
     if (mode !== "offline") return false;
 
-    const template = getOfflineTemplate(questionText);
-    overlayStore.setCurrentHintText(template);
-    overlayStore.setHintState("offline");
+    const template = `Consider this question: "${questionText.slice(0, 100)}"\n\nYou're offline. Use the STAR framework: Situation → Task → Action → Result.`;
+    overlayStore.setOfflineFallback(template);
     return true;
   }, [mode]);
 

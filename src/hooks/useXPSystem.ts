@@ -2,26 +2,27 @@ import { useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useGamificationStore } from "@/hooks/useGamification";
 import { useAuthStore } from "@/store/userStore";
-import { BADGE_DEFINITIONS, checkBadgeUnlock } from "@/lib/gamification/badgeEngine";
-import type { XPAction } from "@/types/gamification.types";
+import { BADGE_DEFINITIONS } from "@/types/gamification.types";
+import type { XPEventType, BadgeId } from "@/types/gamification.types";
 
 // ─────────────────────────────────────────────────────────────────
 // XP awarded per action
 // ─────────────────────────────────────────────────────────────────
 
-export const XP_REWARDS: Record<XPAction, number> = {
-  mock_session_complete:   50,
-  live_session_complete:   40,
-  scorecard_viewed:        10,
-  star_answer_saved:        5,
-  debrief_submitted:       20,
-  prep_tool_used:           5,
-  perfect_session:         25,   // bonus: 0 fillers
-  streak_7_days:           30,
-  streak_30_days:          100,
-  first_session:           20,
-  score_above_70:          15,
-  score_above_85:          25,
+export const XP_REWARDS: Record<XPEventType, number> = {
+  mock_session_complete:       50,
+  live_session_complete:       40,
+  prep_lab_use:                10,
+  debrief_complete:            20,
+  first_session:               100,
+  streak_milestone:            25,
+  weekly_challenge_complete:   75,
+  answer_saved:                5,
+  resume_uploaded:             15,
+  zero_filler_session:         30,
+  perfect_score:               50,
+  room_session_complete:       45,
+  referral_converted:          60,
 };
 
 export function useXPSystem() {
@@ -30,7 +31,7 @@ export function useXPSystem() {
 
   // ── Award XP and check badge unlocks ─────────────────────────
 
-  const awardXP = useCallback(async (action: XPAction): Promise<void> => {
+  const awardXP = useCallback(async (action: XPEventType): Promise<void> => {
     if (!user) return;
 
     const amount = XP_REWARDS[action] ?? 0;
@@ -55,23 +56,21 @@ export function useXPSystem() {
 
     if (data) {
       gamification.setXP(data.new_total);
-      gamification.setLevel(data.new_level, data.level_label);
 
       // Check badge unlocks
       const unlocked = checkBadgeUnlock({
         xp:       data.new_total,
-        level:    data.new_level,
+        level:    gamification.level,
         sessions: data.total_sessions,
-        streak:   gamification.streakCurrent,
+        streak:   gamification.streak_current,
         action,
       });
 
       for (const badgeId of unlocked) {
-        if (!gamification.unlockedBadges.includes(badgeId)) {
+        if (!gamification.unlocked_badges.includes(badgeId)) {
           gamification.unlockBadge(badgeId);
           gamification.setPendingBadge(badgeId);
 
-          // Persist badge unlock
           await supabase.from("user_badges").insert({
             user_id:     user.id,
             badge_id:    badgeId,
@@ -88,4 +87,24 @@ export function useXPSystem() {
     level:    gamification.level,
     rewards:  XP_REWARDS,
   };
+}
+
+// Simple badge unlock checker
+function checkBadgeUnlock(params: {
+  xp: number;
+  level: number;
+  sessions: number;
+  streak: number;
+  action: XPEventType;
+}): BadgeId[] {
+  const unlocked: BadgeId[] = [];
+  if (params.sessions >= 1)   unlocked.push("first_session");
+  if (params.sessions >= 10)  unlocked.push("ten_sessions");
+  if (params.sessions >= 25)  unlocked.push("twenty_five_sessions");
+  if (params.streak >= 7)     unlocked.push("streak_7");
+  if (params.streak >= 14)    unlocked.push("streak_14");
+  if (params.streak >= 30)    unlocked.push("streak_30");
+  if (params.action === "zero_filler_session") unlocked.push("zero_filler");
+  if (params.action === "perfect_score")       unlocked.push("perfect_score");
+  return unlocked;
 }

@@ -4,7 +4,7 @@ import { useSessionStore } from "@/store/sessionStore";
 import { useCoachStore } from "@/store/coachStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { useAuthStore } from "@/store/userStore";
-import { useGamificationStore } from "@/store/gamificationStore";
+import { useGamificationStore } from "@/hooks/useGamification";
 import { buildCoachingContext } from "@/lib/ai/contextEnvelopeBuilder";
 import { routeHint } from "@/lib/ai/modelRouter";
 import { checkCredits, deductCredits } from "@/lib/billing/creditsManager";
@@ -15,9 +15,6 @@ import type { SessionQuestion } from "@/types/session.types";
 
 // ─────────────────────────────────────────────────────────────────
 // useSessionOrchestrator
-// Top-level session lifecycle management hook.
-// Coordinates: config → question loading → hint routing
-//              → credit deduction → XP + gamification → scorecard nav
 // ─────────────────────────────────────────────────────────────────
 
 export function useSessionOrchestrator() {
@@ -39,20 +36,18 @@ export function useSessionOrchestrator() {
     sessionStore.setSessionId(sessionId);
     sessionStore.setMode("mock");
     sessionStore.setConfig(config);
-    sessionStore.setStatus("setting_up");
+    sessionStore.setStatus("warming_up");
 
-    // Build coaching context
     const { active_context } = useDocumentStore.getState();
     const context = buildCoachingContext(profile, config, active_context);
     coachStore.initContext(context);
 
-    // Load questions from Edge Function
     try {
       const questions = await fetchQuestions(config, sessionId);
       sessionStore.setQuestions(questions);
-      sessionStore.setStatus("in_progress");
-    } catch (err) {
-      sessionStore.setStatus("error" as any);
+      sessionStore.setStatus("active");
+    } catch {
+      sessionStore.setStatus("abandoned");
     }
   }, [profile]);
 
@@ -67,14 +62,12 @@ export function useSessionOrchestrator() {
     const preferredModel = profile.preferred_model;
     const interviewType  = context.session_type;
 
-    // Credit check
     const creditCheck = checkCredits(preferredModel);
     if (!creditCheck.canProceed) {
       overlayStore.setError(creditCheck.reason ?? "Insufficient credits");
       return;
     }
 
-    // Abort any in-flight request
     abortControllerRef.current?.abort();
     const controller = new AbortController();
     abortControllerRef.current = controller;
@@ -96,20 +89,15 @@ export function useSessionOrchestrator() {
       sessionId:      session_id ?? "unknown",
       questionId:     requestId,
       onChunk:        (chunk) => {
-        // Only apply if this is still the current request
         if (hintRequestIdRef.current === requestId) {
           overlayStore.appendStreamChunk(chunk);
         }
       },
-      onDone:         async (fullText) => {
+      onDone:         async () => {
         if (hintRequestIdRef.current !== requestId) return;
         overlayStore.commitStreamedHint();
-
-        // Deduct credits after successful response
         await deductCredits(preferredModel, session_id ?? "unknown");
         sessionStore.consumeCredit(creditCheck.creditsRequired);
-
-        // Update coaching context with answer summary
         coachStore.incrementQuestionNumber();
       },
       onError:        (error) => {
@@ -121,15 +109,11 @@ export function useSessionOrchestrator() {
     });
   }, [profile]);
 
-  // ── Advance to next question ───────────────────────────────────
-
   const nextQuestion = useCallback(() => {
     overlayStore.clearHint();
     coachStore.incrementQuestionNumber();
     sessionStore.advanceQuestion();
   }, []);
-
-  // ── Complete session ───────────────────────────────────────────
 
   const completeSession = useCallback(async () => {
     abortControllerRef.current?.abort();
@@ -138,25 +122,20 @@ export function useSessionOrchestrator() {
     const { session_id } = useSessionStore.getState();
     if (!session_id) return;
 
-    // Award XP
+    // Award XP via gamification store
     try {
-      const { awardXP } = await import("@/lib/gamification/xpEngine");
-      await awardXP("mock_session_complete", session_id);
+      const gamStore = useGamificationStore.getState();
+      gamStore.addXP(50); // mock_session_complete XP
     } catch { /* non-fatal */ }
 
-    // Navigate to scorecard
     navigate(`/scorecard/${session_id}`);
   }, [navigate]);
-
-  // ── Abort current hint ─────────────────────────────────────────
 
   const abortHint = useCallback(() => {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
     overlayStore.clearHint();
   }, []);
-
-  // ── Reset session ─────────────────────────────────────────────
 
   const resetSession = useCallback(() => {
     abortHint();
@@ -181,9 +160,7 @@ export function useSessionOrchestrator() {
   };
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Fetch questions from Edge Function
-// ─────────────────────────────────────────────────────────────────
+// ── Fetch questions from Edge Function ──────────────────────────
 
 async function fetchQuestions(
   config: SessionConfig,
@@ -203,7 +180,6 @@ async function fetchQuestions(
       company:          config.company ?? null,
       role:             config.role ?? null,
       question_count:   config.question_count ?? 5,
-      difficulty:       config.difficulty ?? "medium",
       session_id:       sessionId,
       resume_context:   useDocumentStore.getState().active_context.resume_version?.parsed_data ?? null,
       jd_context:       useDocumentStore.getState().active_context.jd?.parsed_data ?? null,
@@ -213,11 +189,8 @@ async function fetchQuestions(
   if (!response.ok) throw new Error(`Question fetch failed: ${response.status}`);
 
   const data = await response.json();
-  return (data.questions as SessionQuestion[]).map((q, i) => ({
+  return (data.questions as SessionQuestion[]).map((q: any, i: number) => ({
     ...q,
-    id:             q.id ?? generateId(),
-    order_index:    i,
-    is_answered:    false,
-    time_taken_sec: null,
+    id: q.id ?? generateId(),
   }));
 }

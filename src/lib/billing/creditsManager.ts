@@ -6,16 +6,13 @@ import { getCreditCost } from "@/lib/ai/modelRouter";
 
 // ─────────────────────────────────────────────────────────────────
 // Credits Manager
-// All credit operations go through this module.
-// Server-side Edge Functions handle the actual deduction —
-// client-side only optimistically updates UI and shows warnings.
 // ─────────────────────────────────────────────────────────────────
 
 export interface CreditCheckResult {
   canProceed:        boolean;
   creditsRequired:   number;
   creditsAvailable:  number;
-  isLow:             boolean;     // < 5 credits remaining
+  isLow:             boolean;
   isBYOKActive:      boolean;
   reason:            string | null;
 }
@@ -27,12 +24,9 @@ export interface CreditDeductionResult {
   error:             string | null;
 }
 
-// Low credit warning threshold
 const LOW_CREDIT_THRESHOLD = 5;
 
-// ─────────────────────────────────────────────────────────────────
-// Check if user can afford a model call
-// ─────────────────────────────────────────────────────────────────
+// ── Check if user can afford a model call ───────────────────────
 
 export function checkCredits(model: PreferredAIModel): CreditCheckResult {
   const { profile } = useAuthStore.getState();
@@ -48,17 +42,16 @@ export function checkCredits(model: PreferredAIModel): CreditCheckResult {
   }
 
   const isBYOKActive = !!(
-    profile.byok_gemini_key ||
-    profile.byok_openai_key ||
-    profile.byok_anthropic_key
+    profile.byok_gemini ||
+    profile.byok_openai ||
+    profile.byok_anthropic
   );
 
-  // BYOK users bypass credit system
   if (isBYOKActive) {
     return {
       canProceed:       true,
       creditsRequired:  0,
-      creditsAvailable: profile.credits_remaining,
+      creditsAvailable: profile.credits,
       isLow:            false,
       isBYOKActive:     true,
       reason:           null,
@@ -66,7 +59,7 @@ export function checkCredits(model: PreferredAIModel): CreditCheckResult {
   }
 
   const required  = getCreditCost(model);
-  const available = profile.credits_remaining;
+  const available = profile.credits;
   const isLow     = available - required < LOW_CREDIT_THRESHOLD;
 
   if (available < required) {
@@ -90,10 +83,7 @@ export function checkCredits(model: PreferredAIModel): CreditCheckResult {
   };
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Deduct credits — calls Edge Function which handles DB write
-// Client-side optimistic update only; server is source of truth
-// ─────────────────────────────────────────────────────────────────
+// ── Deduct credits ──────────────────────────────────────────────
 
 export async function deductCredits(
   model: PreferredAIModel,
@@ -122,12 +112,10 @@ export async function deductCredits(
 
     const data = await response.json();
 
-    // Optimistically update profile in store
     useAuthStore.getState().updateProfile({
-      credits_remaining: data.credits_remaining,
+      credits: data.credits_remaining,
     });
 
-    // Show upgrade modal if now critically low
     if (data.credits_remaining < LOW_CREDIT_THRESHOLD) {
       showLowCreditWarning(data.credits_remaining);
     }
@@ -143,15 +131,13 @@ export async function deductCredits(
     return {
       success:          false,
       creditsDeducted:  0,
-      creditsRemaining: useAuthStore.getState().profile?.credits_remaining ?? 0,
+      creditsRemaining: useAuthStore.getState().profile?.credits ?? 0,
       error:            err instanceof Error ? err.message : "Unknown error",
     };
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Credit top-up — redirect to billing or open upgrade modal
-// ─────────────────────────────────────────────────────────────────
+// ── Credit top-up ───────────────────────────────────────────────
 
 export function openUpgradeFlow(trigger = "out_of_credits"): void {
   useUIStore.getState().openUpgradeModal(trigger);
@@ -161,17 +147,13 @@ export function showLowCreditWarning(creditsRemaining: number): void {
   if (creditsRemaining === 0) {
     openUpgradeFlow("out_of_credits");
   } else if (creditsRemaining < LOW_CREDIT_THRESHOLD) {
-    // Non-blocking toast is handled by notification system
-    // Just open modal if < 2 left
     if (creditsRemaining < 2) {
       openUpgradeFlow("low_credits");
     }
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Refetch credits from DB (after purchase / plan change)
-// ─────────────────────────────────────────────────────────────────
+// ── Refetch credits from DB ─────────────────────────────────────
 
 export async function refreshCredits(): Promise<number | null> {
   const { user } = useAuthStore.getState();
@@ -179,23 +161,21 @@ export async function refreshCredits(): Promise<number | null> {
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("credits_remaining, plan")
+    .select("credits, plan")
     .eq("id", user.id)
     .single();
 
   if (error || !data) return null;
 
   useAuthStore.getState().updateProfile({
-    credits_remaining: data.credits_remaining,
-    plan:              data.plan,
+    credits: data.credits,
+    plan:    data.plan,
   });
 
-  return data.credits_remaining;
+  return data.credits;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Credit usage history — for billing page
-// ─────────────────────────────────────────────────────────────────
+// ── Credit usage history ────────────────────────────────────────
 
 export async function fetchCreditHistory(limit = 50): Promise<Array<{
   id:         string;
@@ -218,9 +198,7 @@ export async function fetchCreditHistory(limit = 50): Promise<Array<{
   return data;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Check if BYOK is configured for a specific provider
-// ─────────────────────────────────────────────────────────────────
+// ── BYOK check ──────────────────────────────────────────────────
 
 export function isBYOKConfigured(
   model: PreferredAIModel,
@@ -231,11 +209,11 @@ export function isBYOKConfigured(
   switch (model) {
     case "gemini-flash":
     case "gemini-pro":
-      return !!profile.byok_gemini_key;
+      return !!profile.byok_gemini;
     case "gpt-4o":
-      return !!profile.byok_openai_key;
+      return !!profile.byok_openai;
     case "claude":
-      return !!profile.byok_anthropic_key;
+      return !!profile.byok_anthropic;
     default:
       return false;
   }

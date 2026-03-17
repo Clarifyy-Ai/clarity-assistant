@@ -1,6 +1,7 @@
 import { useCallback } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useHotkeys } from "./useHotkeys";
+import { PANIC_RESPONSE } from "@/types/session.types";
 
 // ─────────────────────────────────────────────────────────────────
 // useOverlayVisibility
@@ -15,7 +16,7 @@ export function useOverlayVisibility(enabled = true) {
     {
       toggle_overlay: () => store.is_visible ? store.hideOverlay() : store.showOverlay(),
       stealth_mode:   () => store.setStealthMode(!store.is_stealth_mode),
-      panic:          () => store.showPanic(),
+      panic:          () => store.showPanic(PANIC_RESPONSE),
       clear_hint:     () => store.clearHint(),
     },
     enabled
