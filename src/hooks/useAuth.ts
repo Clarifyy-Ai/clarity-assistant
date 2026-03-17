@@ -98,7 +98,7 @@ export function useAuth() {
       coach_tone:        "encouraging",
       hint_style:        "short_hints",
       preferred_model:   "gemini-flash",
-      onboarding_complete: false,
+      onboarding_completed: false,
       created_at:        new Date().toISOString(),
       updated_at:        new Date().toISOString(),
     };
