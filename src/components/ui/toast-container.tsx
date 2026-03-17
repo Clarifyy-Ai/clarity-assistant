@@ -3,17 +3,9 @@ import { CheckCircle, AlertCircle, Info, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────────
-// ToastContainer (legacy)
-// Kept for backward compat. App now uses Sonner toasts.
+// ToastContainer
+// Simple toast container — currently unused since we use sonner.
 // ─────────────────────────────────────────────────────────────────
-
-interface ToastItem {
-  id: string;
-  type: "success" | "error" | "info" | "warning";
-  title?: string;
-  message: string;
-  duration?: number;
-}
 
 export function ToastContainer() {
   return null;
