@@ -91,14 +91,14 @@ export function useAuth() {
       full_name:         user.user_metadata?.full_name ?? "",
       avatar_url:        user.user_metadata?.avatar_url ?? null,
       plan:              "free",
-      credits_remaining: 5,
-      role:              "interview_candidate",
+      credits: 5,
+      role:              "software_engineer" as const,
       experience_level:  "mid",
       domain:            "Technology",
       coach_tone:        "encouraging",
       hint_style:        "short_hints",
       preferred_model:   "gemini-flash",
-      onboarding_complete: false,
+      onboarding_completed: false,
       created_at:        new Date().toISOString(),
       updated_at:        new Date().toISOString(),
     };
@@ -119,7 +119,7 @@ export function useAuth() {
   async function handlePostSignIn(userId: string): Promise<void> {
     const profile = useAuthStore.getState().profile;
 
-    if (!profile?.onboarding_complete) {
+    if (!profile?.onboarding_completed) {
       navigate("/onboarding");
     } else {
       navigate("/dashboard");
@@ -247,16 +247,15 @@ export function useAuth() {
   const completeOnboarding = useCallback(async (
     data: Partial<UserProfile>
   ): Promise<void> => {
-    await updateProfile({ ...data, onboarding_complete: true });
+    await updateProfile({ ...data, onboarding_completed: true });
     navigate("/dashboard");
   }, [updateProfile, navigate]);
 
   // ── Role helpers ──────────────────────────────────────────────
 
-  const isAdmin = authStore.profile?.role === "admin" ||
-                  authStore.profile?.role === "super_admin";
+  const isAdmin = authStore.profile?.is_admin === true;
 
-  const isSuperAdmin = authStore.profile?.role === "super_admin";
+  const isSuperAdmin = authStore.profile?.is_admin === true;
 
   const canAccessFeature = useCallback((
     feature: "live_copilot" | "team_rooms" | "advanced_analytics" | "export_pdf" | "byok"

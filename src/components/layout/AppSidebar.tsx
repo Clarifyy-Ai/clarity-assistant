@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store/uiStore";
 import { useAuthStore } from "@/store/userStore";
@@ -50,7 +50,7 @@ const NAV_SECTIONS = [
 export function AppSidebar() {
   const uiStore   = useUIStore();
   const { profile } = useAuthStore();
-  const collapsed = uiStore.sidebarCollapsed;
+  const collapsed = uiStore.sidebar_collapsed;
 
   async function handleLogout() {
     await supabase.auth.signOut();

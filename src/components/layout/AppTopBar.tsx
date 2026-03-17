@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Bell, Zap, AlertTriangle, CreditCard } from "lucide-react";
+import { Bell, Zap, AlertTriangle } from "lucide-react";
 import { useAuthStore } from "@/store/userStore";
 import { useNotificationStore } from "@/store/notificationStore";
 import { useUIStore } from "@/store/uiStore";
@@ -15,7 +15,7 @@ export function AppTopBar() {
   const notifStore   = useNotificationStore();
   const uiStore      = useUIStore();
 
-  const credits  = profile?.credits_remaining ?? 0;
+  const credits  = profile?.credits ?? 0;
   const isLow    = credits <= 2;
   const isEmpty  = credits === 0;
 
@@ -57,7 +57,7 @@ export function AppTopBar() {
           className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-all"
         >
           <Bell className="w-4 h-4" />
-          {notifStore.unreadCount > 0 && (
+          {notifStore.unread_count > 0 && (
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-violet-500 rounded-full ring-2 ring-[#0a0a0f]" />
           )}
         </Link>

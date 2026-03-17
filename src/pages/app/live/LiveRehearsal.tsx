@@ -344,5 +344,25 @@ function TranscriptFeed({
 function HotkeysModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const KEYS = [
     { keys: "Ctrl+Shift+H", action: "Toggle overlay visibility" },
-    { keys: "Ctrl+Shift+S", action: "Stealth mode on/off"       },
-    { keys: "Ctrl+Shift+P", action: "Panic
+    { keys: "Ctrl+Shift+S", action: "Stealth mode on/off" },
+    { keys: "Ctrl+Shift+P", action: "Panic — hide everything" },
+    { keys: "Ctrl+Shift+M", action: "Mute/unmute microphone" },
+  ];
+
+  if (!open) return null;
+
+  return (
+    <Modal open={open} onClose={onClose} title="Keyboard Shortcuts">
+      <div className="space-y-2">
+        {KEYS.map((k) => (
+          <div key={k.keys} className="flex items-center justify-between py-2 border-b border-white/10 last:border-0">
+            <span className="text-sm text-gray-300">{k.action}</span>
+            <kbd className="px-2 py-1 bg-white/10 border border-white/20 rounded text-xs font-mono text-gray-300">
+              {k.keys}
+            </kbd>
+          </div>
+        ))}
+      </div>
+    </Modal>
+  );
+}

@@ -8,9 +8,9 @@ import { cn } from "@/lib/utils";
 // ─────────────────────────────────────────────────────────────────
 
 export function NetworkBanner() {
-  const { mode, rtt } = useNetworkMonitor();
+  const { mode, rttMs } = useNetworkMonitor();
 
-  if (mode === "fast") return null;
+  if (mode === "strong") return null;
 
   return (
     <div
@@ -24,7 +24,7 @@ export function NetworkBanner() {
       {mode === "offline" ? (
         <><WifiOff className="w-3.5 h-3.5" /> Offline — serving cached answers</>
       ) : (
-        <><AlertTriangle className="w-3.5 h-3.5" /> Slow network ({rtt}ms) — using fast mode</>
+        <><AlertTriangle className="w-3.5 h-3.5" /> Slow network ({rttMs}ms) — using fast mode</>
       )}
     </div>
   );

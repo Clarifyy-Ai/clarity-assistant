@@ -3,7 +3,7 @@ import { AppSidebar } from "./AppSidebar";
 import { AppTopBar } from "./AppTopBar";
 import { MobileNav } from "./MobileNav";
 import { NetworkBanner } from "./NetworkBanner";
-import { ToastContainer } from "@/components/ui/Toast";
+import { ToastContainer } from "@/components/ui/toast-container";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import { useUIStore } from "@/store/uiStore";
 import { cn } from "@/lib/utils";
@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 // ─────────────────────────────────────────────────────────────────
 
 export function AppLayout() {
-  const { sidebarCollapsed } = useUIStore();
+  const { sidebar_collapsed: sidebarCollapsed } = useUIStore();
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white">

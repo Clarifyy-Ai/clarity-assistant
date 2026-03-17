@@ -26,10 +26,10 @@ export function useNetworkMonitor() {
     if (network.mode === "offline") {
       ui.setShowNetworkBanner(true);
     } else if (network.mode === "strong") {
-      // Auto-hide banner after 3s when recovered
       const timer = setTimeout(() => ui.setShowNetworkBanner(false), 3000);
       return () => clearTimeout(timer);
     }
+    return undefined;
   }, [network.mode]);
 
   // ── Manual force probe ────────────────────────────────────────

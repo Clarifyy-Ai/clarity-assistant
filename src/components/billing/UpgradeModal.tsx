@@ -52,8 +52,8 @@ export function UpgradeModal() {
 
   return (
     <Modal
-      open={uiStore.upgradeModalOpen}
-      onClose={() => uiStore.closeUpgradeModal()}
+      open={uiStore.upgrade_modal_open}
+      onClose={() => uiStore.setUpgradeModalOpen(false)}
       title="Upgrade ConfideQ"
       size="lg"
     >
@@ -61,7 +61,7 @@ export function UpgradeModal() {
         {PLANS.map((plan) => {
           const isCurrentPlan = profile?.plan === plan.id;
           const Icon = plan.icon;
-          const isHighlighted = uiStore.upgradeModalTarget === plan.id;
+          const isHighlighted = uiStore.upgrade_modal_trigger === plan.id;
 
           return (
             <div

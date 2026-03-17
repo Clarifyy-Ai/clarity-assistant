@@ -27,7 +27,7 @@ export function useCredits() {
   const authStore = useAuthStore();
   const profile   = authStore.profile;
 
-  const balance   = profile?.credits_remaining ?? 0;
+  const balance   = profile?.credits ?? 0;
   const isLow     = balance <= 2;
   const isEmpty   = balance === 0;
 
@@ -64,7 +64,7 @@ export function useCredits() {
     }
 
     const newBalance = data?.new_balance ?? balance - cost;
-    authStore.updateProfile({ credits_remaining: newBalance });
+    authStore.updateProfile({ credits: newBalance });
 
     return { success: true, newBalance, error: null };
   }, [balance, authStore]);
@@ -79,7 +79,7 @@ export function useCredits() {
       p_cost: cost,
     });
     if (!error) {
-      authStore.updateProfile({ credits_remaining: balance + cost });
+      authStore.updateProfile({ credits: balance + cost });
     }
   }, [balance, authStore]);
 
@@ -90,11 +90,11 @@ export function useCredits() {
     if (!user) return;
     const { data } = await supabase
       .from("profiles")
-      .select("credits_remaining")
+      .select("credits")
       .eq("id", user.id)
       .single();
     if (data) {
-      authStore.updateProfile({ credits_remaining: data.credits_remaining });
+      authStore.updateProfile({ credits: data.credits });
     }
   }, [authStore]);
 
