@@ -66,7 +66,7 @@ export function composeHint(
     if (headerMatch) {
       lines.push({
         type:    "header",
-        content: headerMatch,
+        content: headerMatch[2],
         indent:  0,
         bold:    true,
       });
