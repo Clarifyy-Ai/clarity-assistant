@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Bell, Zap, AlertTriangle, CreditCard } from "lucide-react";
+import { Bell, Zap, AlertTriangle } from "lucide-react";
 import { useAuthStore } from "@/store/userStore";
 import { useNotificationStore } from "@/store/notificationStore";
 import { useUIStore } from "@/store/uiStore";
