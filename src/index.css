@@ -2,104 +2,427 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Definition of the design system. All colors, gradients, fonts, etc should be defined here. 
-All colors MUST be HSL.
-*/
-
+/* ─────────────────────────────────────────────────────────────────
+   CSS Custom Properties — Light & Dark Theme Tokens
+   ───────────────────────────────────────────────────────────────── */
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
+    /* Light mode */
+    --background:        0 0% 98%;
+    --foreground:        224 71% 4%;
 
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
+    --card:              0 0% 100%;
+    --card-foreground:   224 71% 4%;
 
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
+    --popover:           0 0% 100%;
+    --popover-foreground:224 71% 4%;
 
-    --primary: 222.2 47.4% 11.2%;
-    --primary-foreground: 210 40% 98%;
+    --primary:           239 84% 67%;
+    --primary-foreground:0 0% 100%;
 
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
+    --secondary:         220 14% 96%;
+    --secondary-foreground:224 71% 4%;
 
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
+    --muted:             220 14% 96%;
+    --muted-foreground:  220 9% 46%;
 
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
+    --accent:            189 94% 43%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive:       0 84% 60%;
+    --destructive-foreground:0 0% 100%;
 
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 222.2 84% 4.9%;
+    --border:            220 13% 91%;
+    --input:             220 13% 91%;
+    --ring:              239 84% 67%;
 
-    --radius: 0.5rem;
+    --radius:            0.625rem;
 
-    --sidebar-background: 0 0% 98%;
+    /* Chart colours */
+    --chart-1:           239 84% 67%;
+    --chart-2:           189 94% 43%;
+    --chart-3:           142 71% 45%;
+    --chart-4:           38 92% 50%;
+    --chart-5:           0 84% 60%;
 
-    --sidebar-foreground: 240 5.3% 26.1%;
+    /* Sidebar */
+    --sidebar-background:  220 20% 97%;
+    --sidebar-foreground:  224 71% 4%;
+    --sidebar-border:      220 13% 91%;
+    --sidebar-accent:      239 84% 67%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-ring:        239 84% 67%;
 
-    --sidebar-primary: 240 5.9% 10%;
-
-    --sidebar-primary-foreground: 0 0% 98%;
-
-    --sidebar-accent: 240 4.8% 95.9%;
-
-    --sidebar-accent-foreground: 240 5.9% 10%;
-
-    --sidebar-border: 220 13% 91%;
-
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    /* Live overlay — same in both modes (always dark glass) */
+    --overlay-bg:          rgba(10, 10, 20, 0.92);
+    --overlay-border:      rgba(99, 102, 241, 0.35);
+    --overlay-text:        #e0e7ff;
+    --overlay-hint-text:   #a5b4fc;
   }
 
   .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
+    --background:        224 71% 4%;
+    --foreground:        213 31% 91%;
 
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
+    --card:              224 71% 6%;
+    --card-foreground:   213 31% 91%;
 
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
+    --popover:           224 71% 6%;
+    --popover-foreground:213 31% 91%;
 
-    --primary: 210 40% 98%;
-    --primary-foreground: 222.2 47.4% 11.2%;
+    --primary:           239 84% 67%;
+    --primary-foreground:0 0% 100%;
 
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
+    --secondary:         215 28% 12%;
+    --secondary-foreground:213 31% 91%;
 
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
+    --muted:             215 28% 12%;
+    --muted-foreground:  218 11% 55%;
 
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
+    --accent:            189 94% 43%;
+    --accent-foreground: 0 0% 100%;
 
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
+    --destructive:       0 63% 31%;
+    --destructive-foreground:213 31% 91%;
 
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 212.7 26.8% 83.9%;
-    --sidebar-background: 240 5.9% 10%;
-    --sidebar-foreground: 240 4.8% 95.9%;
-    --sidebar-primary: 224.3 76.3% 48%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 240 3.7% 15.9%;
-    --sidebar-accent-foreground: 240 4.8% 95.9%;
-    --sidebar-border: 240 3.7% 15.9%;
-    --sidebar-ring: 217.2 91.2% 59.8%;
+    --border:            215 28% 14%;
+    --input:             215 28% 14%;
+    --ring:              239 84% 67%;
+
+    /* Chart colours — slightly brighter for dark bg */
+    --chart-1:           239 84% 72%;
+    --chart-2:           189 94% 50%;
+    --chart-3:           142 71% 52%;
+    --chart-4:           38 92% 58%;
+    --chart-5:           0 84% 65%;
+
+    /* Sidebar */
+    --sidebar-background:  224 71% 5%;
+    --sidebar-foreground:  213 31% 91%;
+    --sidebar-border:      215 28% 10%;
+    --sidebar-accent:      239 84% 67%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-ring:        239 84% 67%;
   }
 }
 
+/* ─────────────────────────────────────────────────────────────────
+   Base Resets & Typography
+   ───────────────────────────────────────────────────────────────── */
 @layer base {
   * {
-    @apply border-border;
+    @apply border-border box-border;
+  }
+
+  html {
+    @apply scroll-smooth;
+    text-rendering: optimizeLegibility;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground font-sans;
+    min-height: 100dvh;
+    overflow-x: hidden;
   }
+
+  /* Focus ring — keyboard accessible but clean */
+  :focus-visible {
+    @apply outline-none ring-2 ring-ring ring-offset-2 ring-offset-background;
+  }
+
+  /* Remove default focus ring for mouse users */
+  :focus:not(:focus-visible) {
+    @apply outline-none;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply bg-border rounded-full;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/40;
+  }
+
+  /* Selection */
+  ::selection {
+    @apply bg-primary/30 text-foreground;
+  }
+
+  /* Headings */
+  h1 { @apply text-3xl font-bold tracking-tight; }
+  h2 { @apply text-2xl font-semibold tracking-tight; }
+  h3 { @apply text-xl font-semibold; }
+  h4 { @apply text-lg font-medium; }
+  h5 { @apply text-base font-medium; }
+  h6 { @apply text-sm font-medium; }
+
+  /* Code */
+  code, kbd, pre {
+    @apply font-mono text-sm;
+  }
+
+  pre {
+    @apply bg-muted rounded-lg p-4 overflow-x-auto;
+  }
+
+  /* Links */
+  a {
+    @apply text-primary underline-offset-4 transition-colors;
+  }
+  a:hover {
+    @apply opacity-80;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Component Utilities
+   ───────────────────────────────────────────────────────────────── */
+@layer components {
+
+  /* Glass card — used in overlay, modal overlays */
+  .glass-card {
+    @apply rounded-xl border border-white/10 backdrop-blur-md;
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.05) 0%,
+      rgba(255, 255, 255, 0.02) 100%
+    );
+  }
+
+  .dark .glass-card {
+    background: linear-gradient(
+      135deg,
+      rgba(255, 255, 255, 0.04) 0%,
+      rgba(255, 255, 255, 0.01) 100%
+    );
+  }
+
+  /* Overlay glass panel — stealth overlay dark panel */
+  .overlay-panel {
+    background: var(--overlay-bg);
+    border: 1px solid var(--overlay-border);
+    @apply rounded-2xl backdrop-blur-xl shadow-overlay;
+    pointer-events: none;
+    user-select: none;
+  }
+
+  /* Gradient text */
+  .gradient-text {
+    @apply bg-clip-text text-transparent;
+    background-image: linear-gradient(135deg, #6366f1 0%, #06b6d4 100%);
+  }
+
+  /* Shimmer skeleton loading */
+  .skeleton {
+    @apply rounded-md bg-muted overflow-hidden relative;
+  }
+  .skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      rgba(255, 255, 255, 0.06) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    @apply animate-shimmer;
+  }
+
+  /* Streaming cursor */
+  .stream-cursor::after {
+    content: "▋";
+    @apply animate-stream-cursor text-primary ml-0.5;
+  }
+
+  /* Network status dots */
+  .net-dot {
+    @apply w-2 h-2 rounded-full inline-block;
+  }
+  .net-dot-green  { @apply bg-green-400; }
+  .net-dot-yellow { @apply bg-yellow-400; }
+  .net-dot-red    { @apply bg-red-500 animate-pulse; }
+
+  /* Credit warning pulse ring */
+  .credit-warning-ring {
+    @apply animate-pulse-ring rounded-full;
+  }
+
+  /* Page section padding */
+  .page-section {
+    @apply px-4 py-6 md:px-6 lg:px-8;
+  }
+
+  /* Sidebar nav item */
+  .nav-item {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium
+           text-muted-foreground transition-all duration-150
+           hover:bg-secondary hover:text-foreground;
+  }
+  .nav-item.active {
+    @apply bg-primary/10 text-primary;
+  }
+
+  /* Hotkey badge */
+  .hotkey-badge {
+    @apply inline-flex items-center justify-center rounded border border-border
+           bg-muted px-1.5 py-0.5 font-mono text-2xs text-muted-foreground;
+  }
+
+  /* Score pill */
+  .score-pill {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold;
+  }
+  .score-pill-high   { @apply bg-green-500/15 text-green-400; }
+  .score-pill-mid    { @apply bg-yellow-500/15 text-yellow-400; }
+  .score-pill-low    { @apply bg-red-500/15 text-red-400; }
+
+  /* Section divider */
+  .section-divider {
+    @apply my-6 border-t border-border;
+  }
+
+  /* Empty state */
+  .empty-state {
+    @apply flex flex-col items-center justify-center gap-3 py-16 text-center;
+  }
+  .empty-state-icon {
+    @apply text-4xl opacity-40;
+  }
+  .empty-state-title {
+    @apply text-base font-semibold text-foreground;
+  }
+  .empty-state-desc {
+    @apply max-w-xs text-sm text-muted-foreground;
+  }
+
+  /* Breathing animation circle — warmup */
+  .breathing-circle {
+    @apply rounded-full border-4 border-primary/40 bg-primary/10;
+    animation: breathing 4s ease-in-out infinite;
+  }
+
+  /* XP bar gradient fill */
+  .xp-bar-fill {
+    background: linear-gradient(90deg, #6366f1 0%, #06b6d4 100%);
+    @apply rounded-full h-full transition-all duration-700;
+  }
+
+  /* STAR tag colours */
+  .star-tag-s { @apply bg-blue-500/15 text-blue-400 border border-blue-500/20; }
+  .star-tag-t { @apply bg-violet-500/15 text-violet-400 border border-violet-500/20; }
+  .star-tag-a { @apply bg-amber-500/15 text-amber-400 border border-amber-500/20; }
+  .star-tag-r { @apply bg-green-500/15 text-green-400 border border-green-500/20; }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Overlay Compositor Layer
+   The overlay portal sits in #overlay-root which is intentionally
+   outside the React root to isolate it from screen-capture context.
+   ───────────────────────────────────────────────────────────────── */
+#overlay-root {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 0;
+  height: 0;
+  overflow: visible;
+  pointer-events: none;
+  z-index: 9999;
+  /* Compositor isolation */
+  isolation: isolate;
+  will-change: transform;
+  transform: translateZ(0);
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Print Styles — scorecard PDF export
+   ───────────────────────────────────────────────────────────────── */
+@media print {
+  body {
+    @apply bg-white text-black;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-page-break {
+    page-break-before: always;
+  }
+  .overlay-panel,
+  #overlay-root {
+    display: none !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Reduced Motion
+   ───────────────────────────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────────────
+   Utility Overrides
+   ───────────────────────────────────────────────────────────────── */
+@layer utilities {
+  /* Full height minus topbar (64px) */
+  .h-page {
+    height: calc(100vh - 4rem);
+  }
+
+  /* Scrollable container with custom scrollbar */
+  .scroll-container {
+    @apply overflow-y-auto;
+    scrollbar-gutter: stable;
+  }
+
+  /* Text truncation variants */
+  .truncate-2 {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .truncate-3 {
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  /* Prevent text selection — used in overlay */
+  .no-select {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* Hide scrollbar but keep scrollable */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* Safe area padding — mobile notch */
+  .safe-top    { padding-top:    env(safe-area-inset-top); }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom); }
 }
