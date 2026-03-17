@@ -297,4 +297,166 @@ export default function InterviewScheduler() {
                   </select>
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs text-gray-400 mb-1.5">Job
+                  <label className="block text-xs text-gray-400 mb-1.5">Job Posting URL</label>
+                  <input
+                    value={form.job_posting_url ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, job_posting_url: e.target.value }))}
+                    placeholder="https://…"
+                    className="w-full bg-white/5 border border-white/10 text-white placeholder-gray-500 rounded-xl px-4 py-2.5 focus:outline-none focus:border-violet-500 text-sm"
+                  />
+                </div>
+                <div className="col-span-2">
+                  <label className="block text-xs text-gray-400 mb-1.5">Notes</label>
+                  <textarea
+                    value={form.notes ?? ""}
+                    onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
+                    placeholder="Recruiter name, salary expectations, special notes…"
+                    rows={3}
+                    className="w-full bg-white/5 border border-white/10 text-white placeholder-gray-500 rounded-xl px-4 py-3 resize-none focus:outline-none focus:border-violet-500 text-sm"
+                  />
+                </div>
+              </div>
+
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.is_remote ?? true}
+                  onChange={(e) => setForm((f) => ({ ...f, is_remote: e.target.checked }))}
+                  className="rounded border-white/20 bg-white/5 text-violet-500"
+                />
+                <span className="text-sm text-gray-300">Remote position</span>
+              </label>
+
+              {formError && (
+                <p className="text-sm text-red-400">{formError}</p>
+              )}
+
+              <div className="flex gap-2 pt-1">
+                <button
+                  onClick={() => { setAddDialogOpen(false); setFormError(null); }}
+                  className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 text-sm rounded-xl transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleAdd}
+                  disabled={isSaving}
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-all"
+                >
+                  {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
+                  Add
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// KanbanCard
+// ─────────────────────────────────────────────────────────────────
+
+function KanbanCard({
+  interview, onDragStart, onClick, onDelete, onLaunchCopilot,
+}: {
+  interview: any; onDragStart: () => void; onClick: () => void;
+  onDelete: () => void; onLaunchCopilot: () => void;
+}) {
+  return (
+    <div
+      draggable
+      onDragStart={onDragStart}
+      onClick={onClick}
+      className="bg-[#0d0d14] border border-white/10 rounded-xl p-3 cursor-grab active:cursor-grabbing hover:border-white/20 transition-all group"
+    >
+      <div className="flex items-start justify-between gap-2 mb-1.5">
+        <p className="text-sm font-semibold text-white leading-snug">{interview.company_name}</p>
+        <span className={cn("text-xs shrink-0", PRIORITY_COLORS[interview.priority])}>
+          ●
+        </span>
+      </div>
+      <p className="text-xs text-gray-400 truncate">{interview.role_title}</p>
+
+      {interview.next_round && (
+        <div className="flex items-center gap-1 mt-2 text-xs text-violet-300">
+          <Clock className="w-3 h-3" />
+          {interview.next_round.round_label}
+          {interview.next_round.scheduled_at && (
+            <> · {new Date(interview.next_round.scheduled_at).toLocaleDateString("en-GB", {
+              day: "2-digit", month: "short",
+            })}</>
+          )}
+        </div>
+      )}
+
+      <div className="flex items-center justify-between mt-2 opacity-0 group-hover:opacity-100 transition-opacity">
+        <button
+          onClick={(e) => { e.stopPropagation(); onLaunchCopilot(); }}
+          className="text-xs text-emerald-400 hover:text-emerald-300"
+        >
+          Launch →
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDelete(); }}
+          className="text-gray-600 hover:text-red-400 transition-colors"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// ListInterviewRow
+// ─────────────────────────────────────────────────────────────────
+
+function ListInterviewRow({
+  interview, onDelete, onMoveStage, onLaunch,
+}: {
+  interview: any; onDelete: () => void;
+  onMoveStage: (stage: InterviewStage) => void;
+  onLaunch: () => void;
+}) {
+  const stage = STAGES.find((s) => s.value === interview.stage);
+  return (
+    <div className="bg-white/5 border border-white/10 hover:border-white/20 rounded-2xl px-5 py-4 flex items-center gap-4 transition-all">
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2 mb-0.5">
+          <p className="font-semibold text-white">{interview.company_name}</p>
+          <span className={cn("text-xs px-2 py-0.5 rounded-full border capitalize", stage?.color)}>
+            {stage?.label}
+          </span>
+          <span className={cn("text-xs", PRIORITY_COLORS[interview.priority])}>●</span>
+        </div>
+        <p className="text-sm text-gray-400">{interview.role_title}</p>
+        {interview.next_round?.scheduled_at && (
+          <p className="text-xs text-violet-300 mt-1 flex items-center gap-1">
+            <Calendar className="w-3 h-3" />
+            {new Date(interview.next_round.scheduled_at).toLocaleDateString("en-GB", {
+              weekday: "short", day: "2-digit", month: "short",
+              hour: "2-digit", minute: "2-digit",
+            })}
+          </p>
+        )}
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <button
+          onClick={onLaunch}
+          className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs rounded-lg transition-all"
+        >
+          Co-pilot
+        </button>
+        <button
+          onClick={onDelete}
+          className="p-1.5 text-gray-600 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10"
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+    </div>
+  );
+}
