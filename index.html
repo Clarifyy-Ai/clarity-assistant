@@ -1,26 +1,120 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="dark">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <!-- TODO: Set the document title to the name of your application -->
-    <title>Lovable App</title>
-    <meta name="description" content="Lovable Generated Project" />
-    <meta name="author" content="Lovable" />
 
-    <!-- TODO: Update og:title to match your application name -->
-    <meta property="og:title" content="Lovable App" />
-    <meta property="og:description" content="Lovable Generated Project" />
-    <meta property="og:type" content="website" />
-    <meta property="og:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+    <!-- Primary Meta -->
+    <title>ConfideQ — AI Interview Co-Pilot</title>
+    <meta
+      name="description"
+      content="Real-time AI-powered interview preparation and live assistance. Practice smarter, perform better, track your growth."
+    />
+    <meta name="theme-color" content="#6366f1" />
+    <meta name="color-scheme" content="dark light" />
 
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:site" content="@Lovable" />
-    <meta name="twitter:image" content="https://lovable.dev/opengraph-image-p98pqg.png" />
+    <!-- Favicon -->
+    <link rel="icon" type="image/svg+xml" href="/logo.svg" />
+    <link rel="alternate icon" href="/favicon.ico" />
+
+    <!-- PWA Manifest -->
+    <link rel="manifest" href="/manifest.json" />
+    <link rel="apple-touch-icon" href="/icons/icon-192.png" />
+
+    <!-- Open Graph -->
+    <meta property="og:type"        content="website" />
+    <meta property="og:title"       content="ConfideQ — AI Interview Co-Pilot" />
+    <meta
+      property="og:description"
+      content="Real-time AI hints during live interviews. Mock sessions, analytics, and a stealth overlay your interviewer cannot see."
+    />
+    <meta property="og:image"       content="/og-image.png" />
+    <meta property="og:url"         content="https://confideq.com" />
+    <meta property="og:site_name"   content="ConfideQ" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card"        content="summary_large_image" />
+    <meta name="twitter:title"       content="ConfideQ — AI Interview Co-Pilot" />
+    <meta
+      name="twitter:description"
+      content="Real-time AI hints during live interviews. Invisible to screen share."
+    />
+    <meta name="twitter:image"       content="/og-image.png" />
+    <meta name="twitter:site"        content="@confideq" />
+
+    <!-- Preconnect to external services -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+      rel="stylesheet"
+    />
+
+    <!-- Preconnect to Supabase and AI providers -->
+    <link rel="preconnect" href="https://api.deepgram.com" />
+
+    <!-- Security -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+        default-src 'self';
+        script-src 'self' 'unsafe-inline' https://js.posthog.com https://browser.sentry-cdn.com;
+        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
+        font-src 'self' https://fonts.gstatic.com;
+        img-src 'self' data: blob: https:;
+        media-src 'self' blob: mediastream:;
+        connect-src 'self' https: wss: blob:;
+        worker-src 'self' blob:;
+        frame-src 'none';
+        object-src 'none';
+        base-uri 'self';
+      "
+    />
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+
+    <!-- Prevent FOUC in dark mode -->
+    <script>
+      (function () {
+        try {
+          const stored = localStorage.getItem("confideq-theme");
+          const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+          const theme = stored ?? (prefersDark ? "dark" : "light");
+          document.documentElement.classList.toggle("dark", theme === "dark");
+          document.documentElement.setAttribute("data-theme", theme);
+        } catch (e) {
+          // Storage blocked — default to dark
+          document.documentElement.classList.add("dark");
+        }
+      })();
+    </script>
   </head>
 
-  <body>
+  <body class="bg-background text-foreground antialiased">
+    <!-- Root mount point -->
     <div id="root"></div>
+
+    <!--
+      Overlay compositor anchor — this element is intentionally separate from #root.
+      The stealth overlay mounts here so it lives in a different stacking context
+      from the screen-shared primary rendering context.
+    -->
+    <div
+      id="overlay-root"
+      aria-hidden="true"
+      style="
+        position: fixed;
+        top: 0; left: 0;
+        width: 0; height: 0;
+        overflow: visible;
+        pointer-events: none;
+        z-index: 9999;
+      "
+    ></div>
+
+    <!-- Toast portal anchor -->
+    <div id="toast-root" aria-live="polite" aria-atomic="false"></div>
+
+    <!-- App entry -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
