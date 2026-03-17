@@ -34,7 +34,7 @@ export function useAudioCapture() {
       return { error: null };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "System audio unavailable";
-      audioStore.setStreamError({ code: "system_audio_denied", message: msg });
+      audioStore.setStreamError({ code: "system_audio_denied" as any, message: msg });
       return { error: msg };
     }
   }, [audioStore]);
