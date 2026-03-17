@@ -27,7 +27,7 @@ export function useCredits() {
   const authStore = useAuthStore();
   const profile   = authStore.profile;
 
-  const balance   = profile?.credits_remaining ?? 0;
+  const balance   = profile?.credits ?? 0;
   const isLow     = balance <= 2;
   const isEmpty   = balance === 0;
 
