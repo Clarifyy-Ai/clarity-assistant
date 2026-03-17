@@ -91,7 +91,7 @@ export function composeHint(
     if (numberedMatch) {
       lines.push({
         type:    "bullet",
-        content: numberedMatch,
+        content: numberedMatch[2],
         indent:  0,
         bold:    false,
       });
