@@ -50,7 +50,7 @@ const NAV_SECTIONS = [
 export function AppSidebar() {
   const uiStore   = useUIStore();
   const { profile } = useAuthStore();
-  const collapsed = uiStore.sidebarCollapsed;
+  const collapsed = uiStore.sidebar_collapsed;
 
   async function handleLogout() {
     await supabase.auth.signOut();

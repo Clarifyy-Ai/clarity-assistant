@@ -57,7 +57,7 @@ export function AppTopBar() {
           className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-all"
         >
           <Bell className="w-4 h-4" />
-          {notifStore.unreadCount > 0 && (
+          {notifStore.unread_count > 0 && (
             <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-violet-500 rounded-full ring-2 ring-[#0a0a0f]" />
           )}
         </Link>

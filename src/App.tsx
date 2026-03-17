@@ -12,11 +12,11 @@ import { useAuthStore } from "@/store/userStore";
 import { useUIStore } from "@/store/uiStore";
 import { supabase } from "@/lib/supabase/client";
 
-import ProtectedRoute from "@/components/layout/ProtectedRoute";
-import AppSidebar from "@/components/layout/AppSidebar";
-import AppTopBar from "@/components/layout/AppTopBar";
-import MobileNav from "@/components/layout/MobileNav";
-import NetworkBanner from "@/components/layout/NetworkBanner";
+import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
+import { AppSidebar } from "@/components/layout/AppSidebar";
+import { AppTopBar } from "@/components/layout/AppTopBar";
+import { MobileNav } from "@/components/layout/MobileNav";
+import { NetworkBanner } from "@/components/layout/NetworkBanner";
 import { Toaster } from "sonner";
 
 // ── Pages: Auth ────────────────────────────────────────────────────

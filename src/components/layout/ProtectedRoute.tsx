@@ -29,7 +29,7 @@ export function ProtectedRoute({ requireOnboarding = true }: ProtectedRouteProps
     return <Navigate to="/login" state={{ from: location }} replace />;
   }
 
-  if (requireOnboarding && profile && !profile.onboarding_complete) {
+  if (requireOnboarding && profile && !profile.onboarding_completed) {
     const step = profile.onboarding_step ?? 1;
     return <Navigate to={`/onboarding/step-${step}`} replace />;
   }

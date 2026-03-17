@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 // ─────────────────────────────────────────────────────────────────
 
 export function AppLayout() {
-  const { sidebarCollapsed } = useUIStore();
+  const { sidebar_collapsed: sidebarCollapsed } = useUIStore();
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white">
