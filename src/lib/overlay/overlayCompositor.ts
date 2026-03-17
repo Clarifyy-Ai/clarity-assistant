@@ -122,7 +122,7 @@ export function composeHint(
   }
 
   // Remove leading/trailing blank lines
-  while (lines.length > 0 && lines.type === "blank") lines.shift();
+  while (lines.length > 0 && lines[0].type === "blank") lines.shift();
   while (lines.length > 0 && lines[lines.length - 1].type === "blank") lines.pop();
 
   // Estimate display rows for dynamic height
