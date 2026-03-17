@@ -122,7 +122,7 @@ export class NetworkMonitor {
     networkStore.activateOfflineFallback();
     networkStore.setMode("offline");
     useOverlayStore.getState().setNetworkColor("red");
-    useOverlayStore.getState().setShowNetworkBanner?.(true);
+    // Network banner is handled by the overlay's network_color
   }
 
   // ── Force probe ───────────────────────────────────────────────

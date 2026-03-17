@@ -99,7 +99,7 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
       keys:        ["ctrl", "shift", "e"],
       category:    "session",
       action:      () => useSessionStore.getState().setStatus("completed"),
-      isEnabled:   () => useSessionStore.getState().status === "in_progress",
+      isEnabled:   () => useSessionStore.getState().status === "active",
       showInHelp:  false,           // Hidden — prevent accidental triggers
     },
 

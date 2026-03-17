@@ -152,7 +152,8 @@ export function createTouchDragHandler(
     const target = e.target as HTMLElement;
     if (!target.closest("[data-drag-handle]")) return;
 
-    const touch = e.touches;
+    const touch = e.touches[0];
+    if (!touch) return;
     const rect  = overlayEl.getBoundingClientRect();
 
     startTouchX = touch.clientX;
@@ -163,7 +164,8 @@ export function createTouchDragHandler(
 
   function onTouchMove(e: TouchEvent): void {
     e.preventDefault();
-    const touch = e.touches;
+    const touch = e.touches[0];
+    if (!touch) return;
     const dx = touch.clientX - startTouchX;
     const dy = touch.clientY - startTouchY;
 

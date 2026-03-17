@@ -153,7 +153,7 @@ export function splitInlineCode(text: string): Array<{
     if (match.index > lastIndex) {
       parts.push({ text: text.slice(lastIndex, match.index), isCode: false });
     }
-    parts.push({ text: match, isCode: true });[1]
+    parts.push({ text: match[1], isCode: true });
     lastIndex = regex.lastIndex;
   }
 
