@@ -119,7 +119,7 @@ export function useAuth() {
   async function handlePostSignIn(userId: string): Promise<void> {
     const profile = useAuthStore.getState().profile;
 
-    if (!profile?.onboarding_complete) {
+    if (!profile?.onboarding_completed) {
       navigate("/onboarding");
     } else {
       navigate("/dashboard");

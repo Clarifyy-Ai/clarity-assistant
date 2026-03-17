@@ -90,11 +90,11 @@ export function useCredits() {
     if (!user) return;
     const { data } = await supabase
       .from("profiles")
-      .select("credits_remaining")
+      .select("credits")
       .eq("id", user.id)
       .single();
     if (data) {
-      authStore.updateProfile({ credits_remaining: data.credits_remaining });
+      authStore.updateProfile({ credits: data.credits });
     }
   }, [authStore]);
 

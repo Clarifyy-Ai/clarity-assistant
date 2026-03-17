@@ -17,26 +17,26 @@ export function SetupChecklist() {
     {
       id:   "resume",
       label: "Upload your resume",
-      done:  !!docStore.activeResume,
-      to:    "/app/documents",
+      done:  !!docStore.active_resume_id,
+      to:    "/documents",
     },
     {
       id:    "jd",
       label: "Add a target job description",
-      done:  !!docStore.activeJD,
-      to:    "/app/documents",
+      done:  !!docStore.active_jd_id,
+      to:    "/documents",
     },
     {
       id:    "mock",
       label: "Complete your first mock session",
-      done:  (profile?.total_sessions ?? 0) > 0,
-      to:    "/app/mock",
+      done:  (profile?.xp ?? 0) > 0,
+      to:    "/mock",
     },
     {
       id:    "audio",
       label: "Test your audio setup",
-      done:  profile?.audio_setup_verified ?? false,
-      to:    "/app/settings/audio",
+      done:  profile?.onboarding_completed ?? false,
+      to:    "/settings/audio",
     },
   ];
 

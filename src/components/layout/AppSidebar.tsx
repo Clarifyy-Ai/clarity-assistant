@@ -1,4 +1,4 @@
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store/uiStore";
 import { useAuthStore } from "@/store/userStore";
