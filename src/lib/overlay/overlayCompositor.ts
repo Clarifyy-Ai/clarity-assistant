@@ -76,10 +76,10 @@ export function composeHint(
     // ── Bullet points ─────────────────────────────────────
     const bulletMatch = raw.match(/^(\s*)[•\-\*]\s+(.+)$/);
     if (bulletMatch) {
-      const indent = Math.floor(bulletMatch.length / 2);[1]
+      const indent = Math.floor((bulletMatch[1]?.length ?? 0) / 2);
       lines.push({
         type:    "bullet",
-        content: bulletMatch,
+        content: bulletMatch[2],
         indent,
         bold:    false,
       });
