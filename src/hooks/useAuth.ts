@@ -247,7 +247,7 @@ export function useAuth() {
   const completeOnboarding = useCallback(async (
     data: Partial<UserProfile>
   ): Promise<void> => {
-    await updateProfile({ ...data, onboarding_complete: true });
+    await updateProfile({ ...data, onboarding_completed: true });
     navigate("/dashboard");
   }, [updateProfile, navigate]);
 
