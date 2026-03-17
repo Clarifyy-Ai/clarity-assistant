@@ -52,8 +52,8 @@ export function UpgradeModal() {
 
   return (
     <Modal
-      open={uiStore.upgradeModalOpen}
-      onClose={() => uiStore.closeUpgradeModal()}
+      open={uiStore.upgrade_modal_open}
+      onClose={() => uiStore.setUpgradeModalOpen(false)}
       title="Upgrade ConfideQ"
       size="lg"
     >
