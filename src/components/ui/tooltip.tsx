@@ -65,3 +65,8 @@ export function Tooltip({
     </div>
   );
 }
+
+// Compat exports for shadcn sidebar component
+export const TooltipProvider = ({ children }: { children: React.ReactNode }) => <>{children}</>;
+export const TooltipTrigger = ({ children, ...props }: { children: React.ReactNode; asChild?: boolean }) => <span {...props}>{children}</span>;
+export const TooltipContent = ({ children }: { children: React.ReactNode; side?: string }) => <span>{children}</span>;

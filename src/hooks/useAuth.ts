@@ -253,10 +253,9 @@ export function useAuth() {
 
   // ── Role helpers ──────────────────────────────────────────────
 
-  const isAdmin = authStore.profile?.role === "admin" ||
-                  authStore.profile?.role === "super_admin";
+  const isAdmin = authStore.profile?.is_admin === true;
 
-  const isSuperAdmin = authStore.profile?.role === "super_admin";
+  const isSuperAdmin = authStore.profile?.is_admin === true;
 
   const canAccessFeature = useCallback((
     feature: "live_copilot" | "team_rooms" | "advanced_analytics" | "export_pdf" | "byok"

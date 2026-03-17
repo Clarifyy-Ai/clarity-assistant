@@ -77,3 +77,14 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
 );
 
 Button.displayName = "Button";
+
+// Compat export for shadcn components that expect buttonVariants
+export const buttonVariants = (opts?: { variant?: string; size?: string }) => {
+  const v = (opts?.variant ?? "secondary") as keyof typeof VARIANTS;
+  const s = (opts?.size ?? "md") as keyof typeof SIZES;
+  return cn(
+    "inline-flex items-center justify-center font-medium border transition-all",
+    VARIANTS[v] ?? VARIANTS.secondary,
+    SIZES[s] ?? SIZES.md
+  );
+};
