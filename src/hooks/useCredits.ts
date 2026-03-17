@@ -64,7 +64,7 @@ export function useCredits() {
     }
 
     const newBalance = data?.new_balance ?? balance - cost;
-    authStore.updateProfile({ credits_remaining: newBalance });
+    authStore.updateProfile({ credits: newBalance });
 
     return { success: true, newBalance, error: null };
   }, [balance, authStore]);
