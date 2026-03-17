@@ -87,7 +87,7 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
         const result = useSessionStore.getState().triggerPanic();
         useOverlayStore.getState().showPanic(result);
       },
-      isEnabled:   () => useSessionStore.getState().status === "in_progress",
+      isEnabled:   () => useSessionStore.getState().status === "active",
       showInHelp:  true,
     },
 
