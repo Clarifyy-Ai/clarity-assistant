@@ -328,7 +328,7 @@ function ResumeCard({
   onSetActive: () => void; onDelete: () => void;
 }) {
   const activeVersion = resume.versions?.find((v: any) => v.id === resume.active_version_id)
-    ?? resume.versions?.;
+    ?? resume.versions?.[0];
 
   return (
     <div className={cn(

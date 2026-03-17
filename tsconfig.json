@@ -35,8 +35,7 @@
     "skipLibCheck": true,
 
     /* Source Maps */
-    "sourceMap": true,
-    "declarationMap": true
+    "sourceMap": true
   },
   "include": ["src", "vite.config.ts"],
   "exclude": ["node_modules", "dist", "coverage"]
