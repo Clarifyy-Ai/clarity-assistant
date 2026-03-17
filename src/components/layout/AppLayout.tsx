@@ -3,7 +3,7 @@ import { AppSidebar } from "./AppSidebar";
 import { AppTopBar } from "./AppTopBar";
 import { MobileNav } from "./MobileNav";
 import { NetworkBanner } from "./NetworkBanner";
-import { ToastContainer } from "@/components/ui/Toast";
+import { ToastContainer } from "@/components/ui/toast-container";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import { useUIStore } from "@/store/uiStore";
 import { cn } from "@/lib/utils";
