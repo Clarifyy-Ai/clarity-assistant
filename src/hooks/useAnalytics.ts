@@ -1,0 +1,263 @@
+import { useState, useEffect, useCallback } from "react";
+import { supabase } from "@/lib/supabase/client";
+import { useAuthStore } from "@/store/userStore";
+import type {
+  AnalyticsDashboardData,
+  AnalyticsFilter,
+  AnalyticsPeriod,
+  AnalyticsSessionFilter,
+  SessionComparisonData,
+  SessionAnalyticsSummary,
+  LeaderboardEntry,
+} from "@/types/analytics.types";
+import type { InterviewType } from "@/types/session.types";
+
+// ─────────────────────────────────────────────────────────────────
+// useAnalytics
+// Fetches, filters, and computes all analytics dashboard data.
+// ─────────────────────────────────────────────────────────────────
+
+export function useAnalytics() {
+  const { user } = useAuthStore();
+
+  const [data,         setData]         = useState<AnalyticsDashboardData | null>(null);
+  const [isLoading,    setIsLoading]    = useState(true);
+  const [error,        setError]        = useState<string | null>(null);
+  const [filter,       setFilterState]  = useState<AnalyticsFilter>({
+    period:         "30d",
+    session_filter: "all",
+    interview_type: "all",
+  });
+  const [comparison,   setComparison]   = useState<SessionComparisonData | null>(null);
+
+  // ── Load on mount + filter change ────────────────────────────
+
+  useEffect(() => {
+    if (!user) return;
+    loadAnalytics();
+  }, [user?.id, filter.period, filter.session_filter, filter.interview_type]);
+
+  async function loadAnalytics(): Promise<void> {
+    setIsLoading(true);
+    setError(null);
+
+    try {
+      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      const response  = await fetch(`${EDGE_BASE}/analytics-dashboard`, {
+        method: "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ filter }),
+      });
+
+      if (!response.ok) throw new Error(`Analytics fetch failed: ${response.status}`);
+
+      const result = await response.json();
+      setData(result as AnalyticsDashboardData);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load analytics");
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  // ── Filter setters ────────────────────────────────────────────
+
+  const setPeriod = useCallback((period: AnalyticsPeriod) => {
+    setFilterState((f) => ({ ...f, period }));
+  }, []);
+
+  const setSessionFilter = useCallback((session_filter: AnalyticsSessionFilter) => {
+    setFilterState((f) => ({ ...f, session_filter }));
+  }, []);
+
+  const setInterviewTypeFilter = useCallback((interview_type: InterviewType | "all") => {
+    setFilterState((f) => ({ ...f, interview_type }));
+  }, []);
+
+  // ── Session comparison ────────────────────────────────────────
+
+  const compareSessions = useCallback(async (
+    sessionAId: string,
+    sessionBId: string
+  ): Promise<void> => {
+    try {
+      const [a, b] = await Promise.all([
+        fetchSessionSummary(sessionAId),
+        fetchSessionSummary(sessionBId),
+      ]);
+      if (!a || !b) return;
+
+      const result: SessionComparisonData = {
+        session_a:         a,
+        session_b:         b,
+        score_delta:       b.overall_score   - a.overall_score,
+        filler_delta:      b.filler_rate     - a.filler_rate,
+        wpm_delta:         b.wpm_avg         - a.wpm_avg,
+        improvement_areas: computeImprovements(a, b),
+        regression_areas:  computeRegressions(a, b),
+      };
+
+      setComparison(result);
+    } catch { /* non-fatal */ }
+  }, []);
+
+  async function fetchSessionSummary(
+    sessionId: string
+  ): Promise<SessionAnalyticsSummary | null> {
+    const { data } = await supabase
+      .from("scorecards")
+      .select(`
+        session_id,
+        overall_score,
+        filler_rate,
+        wpm_avg,
+        sessions!inner(
+          created_at, mode, interview_type, company, duration_seconds,
+          session_questions(count)
+        )
+      `)
+      .eq("session_id", sessionId)
+      .single();
+
+    if (!data) return null;
+    const session = (data as any).sessions;
+
+    return {
+      session_id:       sessionId,
+      date:             session.created_at,
+      mode:             session.mode,
+      interview_type:   session.interview_type,
+      company:          session.company,
+      overall_score:    data.overall_score,
+      filler_rate:      data.filler_rate,
+      wpm_avg:          data.wpm_avg,
+      duration_minutes: Math.round(session.duration_seconds / 60),
+      question_count:   session.session_questions?.[0]?.count ?? 0,
+    };
+  }
+
+  // ── Leaderboard opt-in ────────────────────────────────────────
+
+  const toggleLeaderboardOptIn = useCallback(async (optIn: boolean): Promise<void> => {
+    if (!user) return;
+    await supabase
+      .from("profiles")
+      .update({ leaderboard_opt_in: optIn })
+      .eq("id", user.id);
+
+    // Reload analytics to refresh leaderboard
+    await loadAnalytics();
+  }, [user]);
+
+  // ── Download CSV ──────────────────────────────────────────────
+
+  const downloadCSV = useCallback(async (): Promise<void> => {
+    if (!data?.recent_sessions.length) return;
+
+    const headers = [
+      "Date", "Mode", "Interview Type", "Company",
+      "Overall Score", "Filler Rate", "WPM", "Duration (min)", "Questions",
+    ];
+
+    const rows = data.recent_sessions.map((s) => [
+      new Date(s.date).toLocaleDateString(),
+      s.mode,
+      s.interview_type,
+      s.company ?? "—",
+      s.overall_score,
+      s.filler_rate.toFixed(2),
+      s.wpm_avg,
+      s.duration_minutes,
+      s.question_count,
+    ]);
+
+    const csv = [headers, ...rows]
+      .map((row) => row.join(","))
+      .join("\n");
+
+    const blob = new Blob([csv], { type: "text/csv" });
+    const url  = URL.createObjectURL(blob);
+    const a    = document.createElement("a");
+    a.href     = url;
+    a.download = `confideq-analytics-${filter.period}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [data, filter.period]);
+
+  return {
+    // Data
+    data,
+    isLoading,
+    error,
+    filter,
+    comparison,
+
+    // Filter actions
+    setPeriod,
+    setSessionFilter,
+    setInterviewTypeFilter,
+
+    // Session comparison
+    compareSession: compareSession,
+    compareSessionIds: compareSession,
+    compareSessionsData: comparison,
+    compareSessionsFn: compareSessionFn,
+    clearComparison: () => setComparison(null),
+
+    // Actions
+    toggleLeaderboardOptIn,
+    downloadCSV,
+    reload: loadAnalytics,
+
+    // Shortcuts
+    summary: data
+      ? {
+          totalSessions:      data.total_sessions,
+          practiceHours:      data.total_practice_hours,
+          avgScore:           data.avg_confidence_score,
+          scoreDelta:         data.avg_confidence_delta_30d,
+          currentStreak:      data.current_streak,
+          longestStreak:      data.longest_streak,
+          avgFillerRate:      data.avg_filler_rate,
+          avgWPM:             data.avg_wpm,
+        }
+      : null,
+  };
+
+  function compareSession(a: string, b: string) {
+    compareSession(a, b);
+  }
+
+  function compareSessionFn(a: string, b: string) {
+    compareSessions(a, b);
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────
+
+function computeImprovements(
+  a: SessionAnalyticsSummary,
+  b: SessionAnalyticsSummary
+): string[] {
+  const improvements: string[] = [];
+  if (b.overall_score > a.overall_score + 5)  improvements.push("Overall score");
+  if (b.filler_rate   < a.filler_rate   - 0.5) improvements.push("Fewer filler words");
+  if (b.wpm_avg >= 110 && a.wpm_avg < 110)     improvements.push("Speaking pace");
+  return improvements;
+}
+
+function computeRegressions(
+  a: SessionAnalyticsSummary,
+  b: SessionAnalyticsSummary
+): string[] {
+  const regressions: string[] = [];
+  if (b.overall_score < a.overall_score - 5)   regressions.push("Overall score");
+  if (b.filler_rate   > a.filler_rate   + 0.5)  regressions.push("Filler word rate");
+  if (b.wpm_avg > 180 && a.wpm_avg <= 180)      regressions.push("Speaking too fast");
+  return regressions;
+}
