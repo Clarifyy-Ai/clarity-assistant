@@ -1,21 +1,103 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
 import path from "path";
-import { componentTagger } from "lovable-tagger";
+import { defineConfig, loadEnv } from "vite";
+import react from "@vitejs/plugin-react-swc";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 
-// https://vitejs.dev/config/
-export default defineConfig(({ mode }) => ({
-  server: {
-    host: "::",
-    port: 8080,
-    hmr: {
-      overlay: false,
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), "");
+
+  return {
+    plugins: [
+      react(),
+      // Sentry source maps — only in production builds
+      mode === "production" &&
+        sentryVitePlugin({
+          org: env.SENTRY_ORG,
+          project: env.SENTRY_PROJECT,
+          authToken: env.SENTRY_AUTH_TOKEN,
+          sourcemaps: {
+            assets: "./dist/**",
+          },
+          telemetry: false,
+        }),
+    ].filter(Boolean),
+
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "./src"),
+      },
     },
-  },
-  plugins: [react(), mode === "development" && componentTagger()].filter(Boolean),
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
+
+    build: {
+      sourcemap: true, // Required for Sentry
+      rollupOptions: {
+        output: {
+          manualChunks: {
+            // Split heavy vendor libs into separate chunks
+            "vendor-react": ["react", "react-dom", "react-router-dom"],
+            "vendor-ui": [
+              "@radix-ui/react-dialog",
+              "@radix-ui/react-dropdown-menu",
+              "@radix-ui/react-tabs",
+              "@radix-ui/react-toast",
+              "framer-motion",
+              "lucide-react",
+            ],
+            "vendor-charts": ["recharts"],
+            "vendor-supabase": ["@supabase/supabase-js"],
+            "vendor-query": ["@tanstack/react-query"],
+            "vendor-form": ["react-hook-form", "zod"],
+            "vendor-state": ["zustand"],
+            "vendor-audio": ["@deepgram/sdk"],
+          },
+        },
+      },
+      chunkSizeWarningLimit: 600,
     },
-  },
-}));
+
+    server: {
+      port: 8080,
+      host: true,
+      // Proxy Supabase edge functions during local dev
+      proxy: {
+        "/functions/v1": {
+          target: env.VITE_SUPABASE_URL,
+          changeOrigin: true,
+          rewrite: (p) => p.replace(/^\/functions\/v1/, "/functions/v1"),
+        },
+      },
+    },
+
+    preview: {
+      port: 8080,
+    },
+
+    test: {
+      globals: true,
+      environment: "jsdom",
+      setupFiles: ["./src/test/setup.ts"],
+      coverage: {
+        provider: "v8",
+        reporter: ["text", "lcov", "html"],
+        exclude: [
+          "node_modules/",
+          "src/test/",
+          "src/types/",
+          "**/*.d.ts",
+          "**/*.config.*",
+        ],
+      },
+    },
+
+    optimizeDeps: {
+      include: [
+        "react",
+        "react-dom",
+        "react-router-dom",
+        "@supabase/supabase-js",
+        "zustand",
+        "@tanstack/react-query",
+      ],
+    },
+  };
+});
