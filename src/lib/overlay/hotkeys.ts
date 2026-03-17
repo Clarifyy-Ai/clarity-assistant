@@ -71,7 +71,7 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
       category:    "coding",
       action:      () => captureAndAnalyseCodingProblem(),
       isEnabled:   () =>
-        useSessionStore.getState().status === "in_progress" &&
+        useSessionStore.getState().status === "active" &&
         useOverlayStore.getState().is_visible,
       showInHelp:  true,
     },
