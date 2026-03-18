@@ -6,15 +6,6 @@ import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────────
 // Tabs — compound component pattern
-// Usage:
-//   <Tabs defaultValue="builder">
-//     <TabsList>
-//       <TabsTrigger value="builder">Builder</TabsTrigger>
-//       <TabsTrigger value="bank">Bank</TabsTrigger>
-//     </TabsList>
-//     <TabsContent value="builder">…</TabsContent>
-//     <TabsContent value="bank">…</TabsContent>
-//   </Tabs>
 // ─────────────────────────────────────────────────────────────────
 
 interface TabsCtx {
