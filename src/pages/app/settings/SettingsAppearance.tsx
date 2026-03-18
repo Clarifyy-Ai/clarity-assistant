@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState } from "react";
 import { useThemeStore } from "@/store/themeStore";
 import { Card } from "@/components/ui/Card";

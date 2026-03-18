@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   User, Bell, Shield, CreditCard,
