@@ -224,6 +224,7 @@ const router = createBrowserRouter([
 
   // ── Main app shell (sidebar + topbar) ────────────────────────
   {
+    path: "/app",
     element: <ProtectedRoute />,
     children: [
       {
