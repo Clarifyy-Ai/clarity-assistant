@@ -99,6 +99,10 @@ import SettingsSecurity from "@/pages/app/settings/SettingsSecurity";
 import SettingsIntegrations from "@/pages/app/settings/SettingsIntegrations";
 import SettingsBYOK from "@/pages/app/settings/SettingsBYOK";
 import SettingsAppearance from "@/pages/app/settings/SettingsAppearance";
+import SettingsSubscription from "@/pages/app/settings/SettingsSubscription";
+import SettingsCredits from "@/pages/app/settings/SettingsCredits";
+import SettingsData from "@/pages/app/settings/SettingsData";
+import SettingsDanger from "@/pages/app/settings/SettingsDanger";
 
 // ── Pages: Marketing ──────────────────────────────────────────────
 import Landing from "@/pages/marketing/Landing";
