@@ -209,13 +209,13 @@ const router = createBrowserRouter([
   // ── Live overlay — minimal, no shell ─────────────────────────
   {
     element: <ProtectedRoute />,
-    children: [{ path: "/live/overlay", element: <LiveOverlay /> }],
+    children: [{ path: "/app/live/overlay", element: <LiveOverlay /> }],
   },
 
   // ── Room session — no sidebar during active room ──────────────
   {
     element: <ProtectedRoute />,
-    children: [{ path: "/rooms/:roomId/session", element: <RoomSession /> }],
+    children: [{ path: "/app/rooms/:roomId/session", element: <RoomSession /> }],
   },
 
   // ── Main app shell (sidebar + topbar) ────────────────────────
