@@ -53,23 +53,10 @@
     <!-- Preconnect to Supabase and AI providers -->
     <link rel="preconnect" href="https://api.deepgram.com" />
 
-    <!-- Security -->
-    <meta
-      http-equiv="Content-Security-Policy"
-      content="
-        default-src 'self';
-        script-src 'self' 'unsafe-inline' https://js.posthog.com https://browser.sentry-cdn.com;
-        style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
-        font-src 'self' https://fonts.gstatic.com;
-        img-src 'self' data: blob: https:;
-        media-src 'self' blob: mediastream:;
-        connect-src 'self' https: wss: blob:;
-        worker-src 'self' blob:;
-        frame-src 'none';
-        object-src 'none';
-        base-uri 'self';
-      "
-    />
+    <!--
+      CSP is handled by the deployment platform.
+      Inline CSP removed to avoid blocking preview/dev environments.
+    -->
     <meta name="referrer" content="strict-origin-when-cross-origin" />
 
     <!-- Prevent FOUC in dark mode -->

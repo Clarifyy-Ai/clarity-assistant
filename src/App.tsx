@@ -224,78 +224,86 @@ const router = createBrowserRouter([
 
   // ── Main app shell (sidebar + topbar) ────────────────────────
   {
+    path: "/app",
     element: <ProtectedRoute />,
     children: [
       {
         element: <AppShell />,
         children: [
           // Redirect /app → /app/dashboard
-          { index: true,                       element: <Navigate to="/app/dashboard" replace /> },
+          { index: true,                    element: <Navigate to="dashboard" replace /> },
 
           // Dashboard
-          { path: "/app/dashboard",            element: <Dashboard /> },
-          { path: "/app/interview-day",        element: <InterviewDay /> },
+          { path: "dashboard",              element: <Dashboard /> },
+          { path: "interview-day",          element: <InterviewDay /> },
 
           // Live
-          { path: "/app/live",                 element: <LiveRehearsal /> },
+          { path: "live",                   element: <LiveRehearsal /> },
 
           // Mock
-          { path: "/app/mock",                 element: <MockInterview /> },
-          { path: "/app/mock/warmup",          element: <MockWarmup /> },
-          { path: "/app/mock/session",         element: <MockSession /> },
+          { path: "mock",                   element: <MockInterview /> },
+          { path: "mock/warmup",            element: <MockWarmup /> },
+          { path: "mock/session",           element: <MockSession /> },
 
           // Prep Lab
-          { path: "/app/prep",                 element: <PrepLab /> },
-          { path: "/app/prep/star-builder",    element: <StarBuilder /> },
-          { path: "/app/prep/project-builder", element: <ProjectBuilder /> },
-          { path: "/app/prep/rephraser",       element: <Rephraser /> },
-          { path: "/app/prep/coding-hints",    element: <CodingHints /> },
-          { path: "/app/prep/system-design",   element: <SystemDesign /> },
+          { path: "prep",                   element: <PrepLab /> },
+          { path: "prep/star-builder",      element: <StarBuilder /> },
+          { path: "prep/project-builder",   element: <ProjectBuilder /> },
+          { path: "prep/rephraser",         element: <Rephraser /> },
+          { path: "prep/coding-hints",      element: <CodingHints /> },
+          { path: "prep/system-design",     element: <SystemDesign /> },
 
           // Sessions
-          { path: "/app/sessions",             element: <SessionHistory /> },
-          { path: "/app/sessions/:id",         element: <SessionDetail /> },
+          { path: "sessions",               element: <SessionHistory /> },
+          { path: "sessions/:id",           element: <SessionDetail /> },
 
           // Analytics
-          { path: "/app/analytics",            element: <Analytics /> },
+          { path: "analytics",              element: <Analytics /> },
 
           // Documents
-          { path: "/app/documents",            element: <Documents /> },
-          { path: "/app/documents/resume/:id", element: <ResumeDetail /> },
-          { path: "/app/documents/jd/:id",     element: <JDDetail /> },
+          { path: "documents",              element: <Documents /> },
+          { path: "documents/resume/:id",   element: <ResumeDetail /> },
+          { path: "documents/jd/:id",       element: <JDDetail /> },
 
           // Answer Bank
-          { path: "/app/answers",              element: <AnswerBank /> },
-          { path: "/app/answers/:id",          element: <AnswerDetail /> },
+          { path: "answers",                element: <AnswerBank /> },
+          { path: "answers/:id",            element: <AnswerDetail /> },
 
           // Interviews
-          { path: "/app/interviews",           element: <Interviews /> },
-          { path: "/app/interviews/new",       element: <NewInterview /> },
-          { path: "/app/interviews/:id",       element: <InterviewDetail /> },
+          { path: "interviews",             element: <Interviews /> },
+          { path: "interviews/new",         element: <NewInterview /> },
+          { path: "interviews/:id",         element: <InterviewDetail /> },
 
           // Company Research
-          { path: "/app/companies",            element: <CompanyResearch /> },
-          { path: "/app/companies/:id",        element: <CompanyProfile /> },
+          { path: "companies",              element: <CompanyResearch /> },
+          { path: "companies/:id",          element: <CompanyProfile /> },
 
           // Debrief
-          { path: "/app/debrief",              element: <Debrief /> },
-          { path: "/app/debrief/:id",          element: <DebriefDetail /> },
+          { path: "debrief",                element: <Debrief /> },
+          { path: "debrief/:id",            element: <DebriefDetail /> },
 
           // Practice Rooms
-          { path: "/app/rooms",                element: <PracticeRooms /> },
-          { path: "/app/rooms/new",            element: <NewRoom /> },
+          { path: "rooms",                  element: <PracticeRooms /> },
+          { path: "rooms/new",              element: <NewRoom /> },
 
           // Profile, Notifications, Referrals
-          { path: "/app/profile",              element: <Profile /> },
-          { path: "/app/notifications",        element: <Notifications /> },
-          { path: "/app/referrals",            element: <Referrals /> },
+          { path: "profile",                element: <Profile /> },
+          { path: "notifications",          element: <Notifications /> },
+          { path: "referrals",              element: <Referrals /> },
+
+          // Admin
+          { path: "admin",                  element: <Admin /> },
+          { path: "admin/users",            element: <AdminUsers /> },
+          { path: "admin/revenue",          element: <AdminRevenue /> },
+          { path: "admin/model-costs",      element: <AdminModelCosts /> },
+          { path: "admin/feature-flags",    element: <AdminFeatureFlags /> },
 
           // Settings hub + sub-pages
           {
-            path: "/app/settings",
+            path: "settings",
             element: <Settings />,
             children: [
-              { index: true,               element: <Navigate to="/app/settings/profile" replace /> },
+              { index: true,               element: <Navigate to="profile" replace /> },
               { path: "profile",           element: <SettingsProfile /> },
               { path: "audio",             element: <SettingsAudio /> },
               { path: "models",            element: <SettingsModels /> },
@@ -312,23 +320,6 @@ const router = createBrowserRouter([
               { path: "danger",            element: <SettingsDanger /> },
             ],
           },
-        ],
-      },
-    ],
-  },
-
-  // ── Admin (auth + admin role required) ───────────────────────
-  {
-    element: <ProtectedRoute requireAdmin />,
-    children: [
-      {
-        element: <AppShell />,
-        children: [
-          { path: "/app/admin",              element: <Admin /> },
-          { path: "/app/admin/users",        element: <AdminUsers /> },
-          { path: "/app/admin/revenue",      element: <AdminRevenue /> },
-          { path: "/app/admin/model-costs",  element: <AdminModelCosts /> },
-          { path: "/app/admin/feature-flags",element: <AdminFeatureFlags /> },
         ],
       },
     ],
