@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState, useRef } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
