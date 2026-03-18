@@ -291,6 +291,13 @@ const router = createBrowserRouter([
           { path: "notifications",          element: <Notifications /> },
           { path: "referrals",              element: <Referrals /> },
 
+          // Admin
+          { path: "admin",                  element: <Admin /> },
+          { path: "admin/users",            element: <AdminUsers /> },
+          { path: "admin/revenue",          element: <AdminRevenue /> },
+          { path: "admin/model-costs",      element: <AdminModelCosts /> },
+          { path: "admin/feature-flags",    element: <AdminFeatureFlags /> },
+
           // Settings hub + sub-pages
           {
             path: "settings",
@@ -313,23 +320,6 @@ const router = createBrowserRouter([
               { path: "danger",            element: <SettingsDanger /> },
             ],
           },
-        ],
-      },
-    ],
-  },
-
-  // ── Admin (auth + admin role required) ───────────────────────
-  {
-    element: <ProtectedRoute requireAdmin />,
-    children: [
-      {
-        element: <AppShell />,
-        children: [
-          { path: "/app/admin",              element: <Admin /> },
-          { path: "/app/admin/users",        element: <AdminUsers /> },
-          { path: "/app/admin/revenue",      element: <AdminRevenue /> },
-          { path: "/app/admin/model-costs",  element: <AdminModelCosts /> },
-          { path: "/app/admin/feature-flags",element: <AdminFeatureFlags /> },
         ],
       },
     ],
