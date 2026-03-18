@@ -320,11 +320,11 @@ const router = createBrowserRouter([
       {
         element: <AppShell />,
         children: [
-          { path: "/admin",                  element: <Admin /> },
-          { path: "/admin/users",            element: <AdminUsers /> },
-          { path: "/admin/revenue",          element: <AdminRevenue /> },
-          { path: "/admin/model-costs",      element: <AdminModelCosts /> },
-          { path: "/admin/feature-flags",    element: <AdminFeatureFlags /> },
+          { path: "/app/admin",              element: <Admin /> },
+          { path: "/app/admin/users",        element: <AdminUsers /> },
+          { path: "/app/admin/revenue",      element: <AdminRevenue /> },
+          { path: "/app/admin/model-costs",  element: <AdminModelCosts /> },
+          { path: "/app/admin/feature-flags",element: <AdminFeatureFlags /> },
         ],
       },
     ],
