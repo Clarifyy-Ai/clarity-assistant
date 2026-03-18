@@ -92,7 +92,7 @@ export function AppSidebar() {
                 icon={item.icon}
                 label={item.label}
                 collapsed={collapsed}
-                exact={item.exact}
+                exact={(item as any).exact}
               />
             ))}
           </div>
