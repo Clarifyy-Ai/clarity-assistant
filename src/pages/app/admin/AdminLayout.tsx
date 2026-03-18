@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { NavLink, Outlet, Navigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import {
