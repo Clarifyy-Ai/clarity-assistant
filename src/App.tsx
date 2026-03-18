@@ -99,6 +99,10 @@ import SettingsSecurity from "@/pages/app/settings/SettingsSecurity";
 import SettingsIntegrations from "@/pages/app/settings/SettingsIntegrations";
 import SettingsBYOK from "@/pages/app/settings/SettingsBYOK";
 import SettingsAppearance from "@/pages/app/settings/SettingsAppearance";
+import SettingsSubscription from "@/pages/app/settings/SettingsSubscription";
+import SettingsCredits from "@/pages/app/settings/SettingsCredits";
+import SettingsData from "@/pages/app/settings/SettingsData";
+import SettingsDanger from "@/pages/app/settings/SettingsDanger";
 
 // ── Pages: Marketing ──────────────────────────────────────────────
 import Landing from "@/pages/marketing/Landing";
@@ -209,13 +213,13 @@ const router = createBrowserRouter([
   // ── Live overlay — minimal, no shell ─────────────────────────
   {
     element: <ProtectedRoute />,
-    children: [{ path: "/live/overlay", element: <LiveOverlay /> }],
+    children: [{ path: "/app/live/overlay", element: <LiveOverlay /> }],
   },
 
   // ── Room session — no sidebar during active room ──────────────
   {
     element: <ProtectedRoute />,
-    children: [{ path: "/rooms/:roomId/session", element: <RoomSession /> }],
+    children: [{ path: "/app/rooms/:roomId/session", element: <RoomSession /> }],
   },
 
   // ── Main app shell (sidebar + topbar) ────────────────────────
@@ -225,70 +229,73 @@ const router = createBrowserRouter([
       {
         element: <AppShell />,
         children: [
+          // Redirect /app → /app/dashboard
+          { index: true,                       element: <Navigate to="/app/dashboard" replace /> },
+
           // Dashboard
-          { path: "/dashboard",      element: <Dashboard /> },
-          { path: "/interview-day",  element: <InterviewDay /> },
+          { path: "/app/dashboard",            element: <Dashboard /> },
+          { path: "/app/interview-day",        element: <InterviewDay /> },
 
           // Live
-          { path: "/live",           element: <LiveRehearsal /> },
+          { path: "/app/live",                 element: <LiveRehearsal /> },
 
           // Mock
-          { path: "/mock",           element: <MockInterview /> },
-          { path: "/mock/warmup",    element: <MockWarmup /> },
-          { path: "/mock/session",   element: <MockSession /> },
+          { path: "/app/mock",                 element: <MockInterview /> },
+          { path: "/app/mock/warmup",          element: <MockWarmup /> },
+          { path: "/app/mock/session",         element: <MockSession /> },
 
           // Prep Lab
-          { path: "/prep",                element: <PrepLab /> },
-          { path: "/prep/star-builder",   element: <StarBuilder /> },
-          { path: "/prep/project-builder",element: <ProjectBuilder /> },
-          { path: "/prep/rephraser",      element: <Rephraser /> },
-          { path: "/prep/coding-hints",   element: <CodingHints /> },
-          { path: "/prep/system-design",  element: <SystemDesign /> },
+          { path: "/app/prep",                 element: <PrepLab /> },
+          { path: "/app/prep/star-builder",    element: <StarBuilder /> },
+          { path: "/app/prep/project-builder", element: <ProjectBuilder /> },
+          { path: "/app/prep/rephraser",       element: <Rephraser /> },
+          { path: "/app/prep/coding-hints",    element: <CodingHints /> },
+          { path: "/app/prep/system-design",   element: <SystemDesign /> },
 
           // Sessions
-          { path: "/sessions",           element: <SessionHistory /> },
-          { path: "/sessions/:id",       element: <SessionDetail /> },
+          { path: "/app/sessions",             element: <SessionHistory /> },
+          { path: "/app/sessions/:id",         element: <SessionDetail /> },
 
           // Analytics
-          { path: "/analytics",          element: <Analytics /> },
+          { path: "/app/analytics",            element: <Analytics /> },
 
           // Documents
-          { path: "/documents",          element: <Documents /> },
-          { path: "/documents/resume/:id", element: <ResumeDetail /> },
-          { path: "/documents/jd/:id",     element: <JDDetail /> },
+          { path: "/app/documents",            element: <Documents /> },
+          { path: "/app/documents/resume/:id", element: <ResumeDetail /> },
+          { path: "/app/documents/jd/:id",     element: <JDDetail /> },
 
           // Answer Bank
-          { path: "/answer-bank",         element: <AnswerBank /> },
-          { path: "/answer-bank/:id",     element: <AnswerDetail /> },
+          { path: "/app/answers",              element: <AnswerBank /> },
+          { path: "/app/answers/:id",          element: <AnswerDetail /> },
 
           // Interviews
-          { path: "/interviews",          element: <Interviews /> },
-          { path: "/interviews/new",      element: <NewInterview /> },
-          { path: "/interviews/:id",      element: <InterviewDetail /> },
+          { path: "/app/interviews",           element: <Interviews /> },
+          { path: "/app/interviews/new",       element: <NewInterview /> },
+          { path: "/app/interviews/:id",       element: <InterviewDetail /> },
 
           // Company Research
-          { path: "/company-research",    element: <CompanyResearch /> },
-          { path: "/company-research/:id",element: <CompanyProfile /> },
+          { path: "/app/companies",            element: <CompanyResearch /> },
+          { path: "/app/companies/:id",        element: <CompanyProfile /> },
 
           // Debrief
-          { path: "/debrief",             element: <Debrief /> },
-          { path: "/debrief/:id",         element: <DebriefDetail /> },
+          { path: "/app/debrief",              element: <Debrief /> },
+          { path: "/app/debrief/:id",          element: <DebriefDetail /> },
 
           // Practice Rooms
-          { path: "/rooms",               element: <PracticeRooms /> },
-          { path: "/rooms/new",           element: <NewRoom /> },
+          { path: "/app/rooms",                element: <PracticeRooms /> },
+          { path: "/app/rooms/new",            element: <NewRoom /> },
 
           // Profile, Notifications, Referrals
-          { path: "/profile",             element: <Profile /> },
-          { path: "/notifications",       element: <Notifications /> },
-          { path: "/referrals",           element: <Referrals /> },
+          { path: "/app/profile",              element: <Profile /> },
+          { path: "/app/notifications",        element: <Notifications /> },
+          { path: "/app/referrals",            element: <Referrals /> },
 
           // Settings hub + sub-pages
           {
-            path: "/settings",
+            path: "/app/settings",
             element: <Settings />,
             children: [
-              { index: true,               element: <Navigate to="/settings/profile" replace /> },
+              { index: true,               element: <Navigate to="/app/settings/profile" replace /> },
               { path: "profile",           element: <SettingsProfile /> },
               { path: "audio",             element: <SettingsAudio /> },
               { path: "models",            element: <SettingsModels /> },
@@ -299,11 +306,12 @@ const router = createBrowserRouter([
               { path: "integrations",      element: <SettingsIntegrations /> },
               { path: "byok",              element: <SettingsBYOK /> },
               { path: "appearance",        element: <SettingsAppearance /> },
+              { path: "subscription",      element: <SettingsSubscription /> },
+              { path: "credits",           element: <SettingsCredits /> },
+              { path: "data",              element: <SettingsData /> },
+              { path: "danger",            element: <SettingsDanger /> },
             ],
           },
-
-          // Redirect /app → /dashboard
-          { path: "/app", element: <Navigate to="/dashboard" replace /> },
         ],
       },
     ],
@@ -316,11 +324,11 @@ const router = createBrowserRouter([
       {
         element: <AppShell />,
         children: [
-          { path: "/admin",                  element: <Admin /> },
-          { path: "/admin/users",            element: <AdminUsers /> },
-          { path: "/admin/revenue",          element: <AdminRevenue /> },
-          { path: "/admin/model-costs",      element: <AdminModelCosts /> },
-          { path: "/admin/feature-flags",    element: <AdminFeatureFlags /> },
+          { path: "/app/admin",              element: <Admin /> },
+          { path: "/app/admin/users",        element: <AdminUsers /> },
+          { path: "/app/admin/revenue",      element: <AdminRevenue /> },
+          { path: "/app/admin/model-costs",  element: <AdminModelCosts /> },
+          { path: "/app/admin/feature-flags",element: <AdminFeatureFlags /> },
         ],
       },
     ],

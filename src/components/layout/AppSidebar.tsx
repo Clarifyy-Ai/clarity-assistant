@@ -18,7 +18,7 @@ const NAV_SECTIONS = [
   {
     label: "Core",
     items: [
-      { to: "/app",          icon: LayoutDashboard, label: "Dashboard",       exact: true },
+      { to: "/app/dashboard", icon: LayoutDashboard, label: "Dashboard" },
       { to: "/app/live",     icon: Mic,             label: "Live Co-Pilot"  },
       { to: "/app/mock",     icon: ClipboardList,   label: "Mock Interview" },
       { to: "/app/prep",     icon: FlaskConical,    label: "Prep Lab"       },
@@ -92,7 +92,7 @@ export function AppSidebar() {
                 icon={item.icon}
                 label={item.label}
                 collapsed={collapsed}
-                exact={item.exact}
+                exact={(item as any).exact}
               />
             ))}
           </div>
