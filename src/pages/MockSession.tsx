@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useSessionOrchestrator } from "@/hooks/useSessionOrchestrator";

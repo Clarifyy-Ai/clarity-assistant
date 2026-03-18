@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";

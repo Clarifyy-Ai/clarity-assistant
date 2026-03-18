@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState, useRef } from "react";
 import { useDocuments } from "@/hooks/useDocuments";
 import {

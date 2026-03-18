@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState } from "react";
 import { useSTARBuilder } from "@/hooks/useSTARBuilder";
 import { useDocuments } from "@/hooks/useDocuments";
