@@ -1,31 +1,33 @@
 // @ts-nocheck
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
-import { useSessionOrchestrator } from "@/hooks/useSessionOrchestrator";
-import { useLiveCopilot } from "@/hooks/useLiveCopilot";
 import { useAudioCapture } from "@/hooks/useAudioCapture";
 import { useOverlayVisibility } from "@/hooks/useOverlayVisibility";
 import { useCredits } from "@/hooks/useCredits";
 import { useSessionContext } from "@/hooks/useSessionContext";
+import { useNetworkMonitor } from "@/hooks/useNetworkMonitor";
+import { useSessionStore } from "@/store/sessionStore";
+import { useOverlayStore } from "@/store/overlayStore";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
+import { OverlayWindow } from "@/components/overlay/OverlayWindow";
+import { LiveSessionController } from "@/components/live/LiveSessionController";
+import { LiveTranscriptStream } from "@/components/live/LiveTranscriptStream";
+import { LiveAnswerStream } from "@/components/live/LiveAnswerStream";
+import { LiveNetworkMonitor } from "@/components/live/LiveNetworkMonitor";
+import { LiveHotKeyListener } from "@/components/live/LiveHotKeyListener";
+import { LiveSessionTimer } from "@/components/live/LiveSessionTimer";
+import { LivePanicButton } from "@/components/live/LivePanicButton";
+import { LiveCodingProblemCapture } from "@/components/live/LiveCodingProblemCapture";
 import {
   Mic, MicOff, Monitor, Play, Square,
   Keyboard, Eye, EyeOff, AlertTriangle,
-  Wifi, WifiOff, Zap, Settings,
-  ChevronDown, ChevronUp,
+  ChevronDown, ChevronUp, Shield,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useNetworkMonitor } from "@/hooks/useNetworkMonitor";
-
-// ─────────────────────────────────────────────────────────────────
-// LiveRehearsal
-// Main live co-pilot page. Controls session start/stop,
-// audio setup, hint style, overlay visibility.
-// ─────────────────────────────────────────────────────────────────
 
 const HINT_STYLES = [
   { value: "full_answer",  label: "Full Answer",    icon: "📝" },
@@ -35,12 +37,13 @@ const HINT_STYLES = [
 
 export default function LiveRehearsal() {
   const navigate      = useNavigate();
-  const copilot       = useLiveCopilot();
   const audio         = useAudioCapture();
   const overlay       = useOverlayVisibility();
   const credits       = useCredits();
   const network       = useNetworkMonitor();
   const sessionCtx    = useSessionContext();
+  const sessionStore  = useSessionStore();
+  const overlayStore  = useOverlayStore();
 
   const [hintStyle,     setHintStyle]     = useState("short_hints");
   const [targetCompany, setTargetCompany] = useState("");
@@ -48,32 +51,32 @@ export default function LiveRehearsal() {
   const [hotkeysOpen,   setHotkeysOpen]   = useState(false);
   const [micError,      setMicError]      = useState<string | null>(null);
 
-  const isActive = copilot.isSessionActive;
+  const isActive = sessionStore.status === "active";
 
   // ── Start session ─────────────────────────────────────────────
-
   async function handleStart() {
-    if (!credits.canAfford("live_hint")) {
-      return;
-    }
+    if (!credits.canAfford("live_hint")) return;
 
     const { error } = await audio.startMic();
     if (error) { setMicError(error); return; }
 
     sessionCtx.initContext({
-      target_company:  targetCompany || null,
-      session_goals:   [`Using ${hintStyle} hints`],
+      target_company: targetCompany || null,
+      session_goals: [`Using ${hintStyle} hints`],
     });
 
-    await copilot.startSession({ hintStyle, targetCompany });
+    sessionStore.setMode("live");
+    sessionStore.setStatus("active");
+    sessionStore.setSessionId(crypto.randomUUID());
+    overlayStore.setHintStyle(hintStyle as any);
+
     setConfigOpen(false);
     overlay.show();
   }
 
   // ── Stop session ──────────────────────────────────────────────
-
   async function handleStop() {
-    await copilot.endSession();
+    sessionStore.setStatus("completed");
     audio.stopAll();
     overlay.hide();
     navigate("/app/sessions");
@@ -81,12 +84,17 @@ export default function LiveRehearsal() {
 
   return (
     <div className="space-y-5 max-w-4xl">
+      {/* Invisible overlay — renders into #overlay-root portal */}
+      <OverlayWindow />
+      <LiveSessionController isActive={isActive} />
+      <LiveHotKeyListener enabled={isActive} onToggleMute={() => audio.setMuted(!audio.isMuted)} />
+
       <PageHeader
         title="Live Co-Pilot"
         subtitle="Real-time AI assistance during your actual interview"
         action={
           <div className="flex items-center gap-2">
-            <NetworkPill mode={network.mode} rtt={network.rtt} />
+            <LiveNetworkMonitor />
             <Button
               variant="ghost"
               size="sm"
@@ -101,11 +109,11 @@ export default function LiveRehearsal() {
 
       {/* ── Credit warning ─────────────────────────────── */}
       {credits.isEmpty && (
-        <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/20 rounded-2xl">
-          <AlertTriangle className="w-5 h-5 text-red-400 shrink-0" />
+        <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-2xl">
+          <AlertTriangle className="w-5 h-5 text-destructive shrink-0" />
           <div className="flex-1">
-            <p className="text-sm font-semibold text-red-400">No credits remaining</p>
-            <p className="text-xs text-gray-400 mt-0.5">
+            <p className="text-sm font-semibold text-destructive">No credits remaining</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
               AI generation is paused. All other features still work.
             </p>
           </div>
@@ -122,10 +130,10 @@ export default function LiveRehearsal() {
             className="flex items-center justify-between cursor-pointer"
             onClick={() => setConfigOpen((p) => !p)}
           >
-            <h3 className="text-sm font-semibold text-white">Session setup</h3>
+            <h3 className="text-sm font-semibold text-foreground">Session setup</h3>
             {configOpen
-              ? <ChevronUp className="w-4 h-4 text-gray-500" />
-              : <ChevronDown className="w-4 h-4 text-gray-500" />
+              ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
+              : <ChevronDown className="w-4 h-4 text-muted-foreground" />
             }
           </div>
 
@@ -133,7 +141,7 @@ export default function LiveRehearsal() {
             <div className="mt-5 space-y-5">
               {/* Hint style */}
               <div>
-                <p className="text-xs font-medium text-gray-300 mb-2">Hint style</p>
+                <p className="text-xs font-medium text-muted-foreground mb-2">Hint style</p>
                 <div className="grid grid-cols-3 gap-2">
                   {HINT_STYLES.map((h) => (
                     <button
@@ -142,8 +150,8 @@ export default function LiveRehearsal() {
                       className={cn(
                         "flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-all",
                         hintStyle === h.value
-                          ? "bg-violet-600/20 border-violet-500/40 text-violet-200"
-                          : "bg-white/3 border-white/10 text-gray-400 hover:border-white/20"
+                          ? "bg-primary/20 border-primary/40 text-primary"
+                          : "bg-secondary/30 border-border text-muted-foreground hover:border-primary/20"
                       )}
                     >
                       <span className="text-lg">{h.icon}</span>
@@ -155,19 +163,32 @@ export default function LiveRehearsal() {
 
               {/* Target company */}
               <div>
-                <p className="text-xs font-medium text-gray-300 mb-2">
-                  Target company <span className="text-gray-600">(optional)</span>
+                <p className="text-xs font-medium text-muted-foreground mb-2">
+                  Target company <span className="text-muted-foreground/50">(optional)</span>
                 </p>
                 <input
                   value={targetCompany}
                   onChange={(e) => setTargetCompany(e.target.value)}
                   placeholder="e.g. Google, Stripe, Notion…"
-                  className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
+                  className="w-full bg-secondary/30 border border-border text-foreground placeholder-muted-foreground/40 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
                 />
               </div>
 
               {/* Audio status */}
-              <AudioSetupRow micError={micError} />
+              <div className="flex items-center gap-3 p-3 bg-secondary/30 rounded-xl border border-border">
+                <Mic className="w-4 h-4 text-muted-foreground shrink-0" />
+                <div className="flex-1">
+                  <p className="text-xs font-medium text-foreground">Microphone</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {micError ?? "Will be requested when you start"}
+                  </p>
+                </div>
+                <Monitor className="w-4 h-4 text-muted-foreground/50 shrink-0" />
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">System audio</p>
+                  <p className="text-[10px] text-muted-foreground/50">Optional</p>
+                </div>
+              </div>
 
               {/* Start button */}
               <Button
@@ -187,21 +208,106 @@ export default function LiveRehearsal() {
 
       {/* ── Active session controls ────────────────────── */}
       {isActive && (
-        <LiveSessionControls
-          copilot={copilot}
-          overlay={overlay}
-          hintStyle={hintStyle}
-          setHintStyle={setHintStyle}
-          onStop={handleStop}
-        />
-      )}
+        <div className="space-y-4">
+          {/* Top controls row */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {/* Status card */}
+            <Card className="flex items-center gap-4">
+              <div className="w-3 h-3 bg-destructive rounded-full animate-pulse shrink-0" />
+              <div className="flex-1">
+                <p className="text-sm font-semibold text-foreground">Session active</p>
+                <LiveSessionTimer />
+              </div>
+              <Button variant="danger" size="sm" onClick={handleStop} leftIcon={<Square className="w-3.5 h-3.5" />}>
+                End
+              </Button>
+            </Card>
 
-      {/* ── Transcript feed ────────────────────────────── */}
-      {isActive && (
-        <TranscriptFeed
-          transcript={copilot.transcript}
-          currentQuestion={copilot.currentQuestion}
-        />
+            {/* Overlay toggle */}
+            <Card className="flex items-center gap-4">
+              <div className={cn(
+                "w-9 h-9 rounded-xl flex items-center justify-center",
+                overlay.isVisible ? "bg-primary/20" : "bg-secondary/30"
+              )}>
+                {overlay.isVisible
+                  ? <Eye className="w-4 h-4 text-primary" />
+                  : <EyeOff className="w-4 h-4 text-muted-foreground" />
+                }
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium text-foreground">Overlay</p>
+                <p className="text-[10px] text-muted-foreground">Ctrl+Shift+H to toggle</p>
+              </div>
+              <button
+                onClick={overlay.toggle}
+                className={cn(
+                  "w-10 h-5 rounded-full border transition-all relative",
+                  overlay.isVisible
+                    ? "bg-primary border-primary"
+                    : "bg-secondary border-border"
+                )}
+              >
+                <span className={cn(
+                  "absolute top-0.5 w-4 h-4 bg-primary-foreground rounded-full transition-all",
+                  overlay.isVisible ? "left-5" : "left-0.5"
+                )} />
+              </button>
+            </Card>
+          </div>
+
+          {/* Action buttons row */}
+          <div className="flex flex-wrap gap-2">
+            <LivePanicButton />
+            <LiveCodingProblemCapture disabled={!isActive} />
+            <button
+              onClick={() => audio.setMuted(!audio.isMuted)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-all",
+                audio.isMuted
+                  ? "bg-warning/10 border-warning/20 text-warning"
+                  : "bg-secondary/30 border-border text-muted-foreground"
+              )}
+            >
+              {audio.isMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+              {audio.isMuted ? "Unmute" : "Mute"}
+            </button>
+            <button
+              onClick={() => overlayStore.setProctorSafe(!overlayStore.is_proctor_safe)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-all",
+                overlayStore.is_proctor_safe
+                  ? "bg-success/10 border-success/20 text-success"
+                  : "bg-secondary/30 border-border text-muted-foreground"
+              )}
+            >
+              <Shield className="w-3.5 h-3.5" />
+              Proctor Safe
+            </button>
+          </div>
+
+          {/* AI Answer stream (in-page view) */}
+          <Card>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-sm font-semibold text-foreground">AI Answer</h3>
+              {overlayStore.current_question && (
+                <Badge variant="violet" size="sm">Question detected</Badge>
+              )}
+            </div>
+            {overlayStore.current_question && (
+              <div className="mb-3 p-3 bg-primary/10 border border-primary/20 rounded-xl">
+                <p className="text-xs text-primary font-medium mb-1">Current question</p>
+                <p className="text-sm text-foreground">{overlayStore.current_question}</p>
+              </div>
+            )}
+            <LiveAnswerStream />
+          </Card>
+
+          {/* Transcript feed */}
+          <Card>
+            <h3 className="text-sm font-semibold text-foreground mb-3">Live Transcript</h3>
+            <LiveTranscriptStream />
+          </Card>
+        </div>
       )}
 
       {/* ── Hotkeys modal ──────────────────────────────── */}
@@ -210,144 +316,15 @@ export default function LiveRehearsal() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Sub-components
-// ─────────────────────────────────────────────────────────────────
-
-function NetworkPill({ mode, rtt }: { mode: string; rtt: number }) {
-  return (
-    <span className={cn(
-      "flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-medium border",
-      mode === "fast"
-        ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-        : mode === "slow"
-        ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
-        : "bg-red-500/10 border-red-500/20 text-red-400"
-    )}>
-      {mode === "offline"
-        ? <WifiOff className="w-3 h-3" />
-        : <Wifi className="w-3 h-3" />
-      }
-      {mode === "offline" ? "Offline" : `${rtt}ms`}
-    </span>
-  );
-}
-
-function AudioSetupRow({ micError }: { micError: string | null }) {
-  return (
-    <div className="flex items-center gap-3 p-3 bg-white/3 rounded-xl border border-white/8">
-      <Mic className="w-4 h-4 text-gray-400 shrink-0" />
-      <div className="flex-1">
-        <p className="text-xs font-medium text-white">Microphone</p>
-        <p className="text-[10px] text-gray-500">
-          {micError ?? "Will be requested when you start"}
-        </p>
-      </div>
-      <Monitor className="w-4 h-4 text-gray-600 shrink-0" />
-      <div>
-        <p className="text-xs font-medium text-gray-400">System audio</p>
-        <p className="text-[10px] text-gray-600">Optional</p>
-      </div>
-    </div>
-  );
-}
-
-function LiveSessionControls({
-  copilot, overlay, hintStyle, setHintStyle, onStop,
-}: any) {
-  return (
-    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-      {/* Status card */}
-      <Card className="flex items-center gap-4">
-        <div className="w-3 h-3 bg-red-500 rounded-full animate-pulse shrink-0" />
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-white">Session active</p>
-          <p className="text-xs text-gray-500">{copilot.sessionTimer ?? "00:00"}</p>
-        </div>
-        <Button variant="danger" size="sm" onClick={onStop} leftIcon={<Square className="w-3.5 h-3.5" />}>
-          End
-        </Button>
-      </Card>
-
-      {/* Overlay toggle */}
-      <Card className="flex items-center gap-4">
-        <div className={cn(
-          "w-9 h-9 rounded-xl flex items-center justify-center",
-          overlay.isVisible ? "bg-violet-600/20" : "bg-white/5"
-        )}>
-          {overlay.isVisible
-            ? <Eye className="w-4 h-4 text-violet-400" />
-            : <EyeOff className="w-4 h-4 text-gray-500" />
-          }
-        </div>
-        <div className="flex-1">
-          <p className="text-sm font-medium text-white">Overlay</p>
-          <p className="text-[10px] text-gray-500">Ctrl+Shift+H to toggle</p>
-        </div>
-        <button
-          onClick={overlay.toggle}
-          className={cn(
-            "w-10 h-5 rounded-full border transition-all relative",
-            overlay.isVisible
-              ? "bg-violet-600 border-violet-500"
-              : "bg-white/10 border-white/20"
-          )}
-        >
-          <span className={cn(
-            "absolute top-0.5 w-4 h-4 bg-white rounded-full transition-all",
-            overlay.isVisible ? "left-5" : "left-0.5"
-          )} />
-        </button>
-      </Card>
-    </div>
-  );
-}
-
-function TranscriptFeed({
-  transcript, currentQuestion,
-}: {
-  transcript: string[];
-  currentQuestion: string;
-}) {
-  const bottomRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [transcript]);
-
-  return (
-    <Card>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-semibold text-white">Live Transcript</h3>
-        {currentQuestion && (
-          <Badge variant="violet" size="sm">Question detected</Badge>
-        )}
-      </div>
-      {currentQuestion && (
-        <div className="mb-3 p-3 bg-violet-500/10 border border-violet-500/20 rounded-xl">
-          <p className="text-xs text-violet-300 font-medium mb-1">Current question</p>
-          <p className="text-sm text-white">{currentQuestion}</p>
-        </div>
-      )}
-      <div className="h-48 overflow-y-auto space-y-1 text-xs text-gray-400 font-mono leading-relaxed">
-        {transcript.length === 0 ? (
-          <p className="text-gray-600 italic">Waiting for speech…</p>
-        ) : (
-          transcript.map((line, i) => (
-            <p key={i} className="leading-relaxed">{line}</p>
-          ))
-        )}
-        <div ref={bottomRef} />
-      </div>
-    </Card>
-  );
-}
-
 function HotkeysModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const KEYS = [
     { keys: "Ctrl+Shift+H", action: "Toggle overlay visibility" },
-    { keys: "Ctrl+Shift+S", action: "Stealth mode on/off" },
-    { keys: "Ctrl+Shift+P", action: "Panic — hide everything" },
+    { keys: "Ctrl+Shift+S", action: "Toggle stealth mode" },
+    { keys: "Ctrl+Shift+P", action: "Panic — instant calming steps" },
     { keys: "Ctrl+Shift+M", action: "Mute/unmute microphone" },
+    { keys: "Ctrl+Shift+Y", action: "Cycle hint style" },
+    { keys: "Ctrl+Shift+C", action: "Capture coding problem" },
+    { keys: "Escape",       action: "Clear hint / dismiss panic" },
   ];
 
   if (!open) return null;
@@ -356,9 +333,9 @@ function HotkeysModal({ open, onClose }: { open: boolean; onClose: () => void })
     <Modal open={open} onClose={onClose} title="Keyboard Shortcuts">
       <div className="space-y-2">
         {KEYS.map((k) => (
-          <div key={k.keys} className="flex items-center justify-between py-2 border-b border-white/10 last:border-0">
-            <span className="text-sm text-gray-300">{k.action}</span>
-            <kbd className="px-2 py-1 bg-white/10 border border-white/20 rounded text-xs font-mono text-gray-300">
+          <div key={k.keys} className="flex items-center justify-between py-2 border-b border-border last:border-0">
+            <span className="text-sm text-foreground">{k.action}</span>
+            <kbd className="px-2 py-1 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
               {k.keys}
             </kbd>
           </div>
