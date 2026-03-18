@@ -14,13 +14,261 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      coaching_context: {
+        Row: {
+          avg_confidence_score: number
+          filler_words_to_watch: string[] | null
+          id: string
+          last_session_at: string | null
+          strong_areas: string[] | null
+          total_sessions: number
+          updated_at: string
+          user_id: string
+          weak_areas: string[] | null
+        }
+        Insert: {
+          avg_confidence_score?: number
+          filler_words_to_watch?: string[] | null
+          id?: string
+          last_session_at?: string | null
+          strong_areas?: string[] | null
+          total_sessions?: number
+          updated_at?: string
+          user_id: string
+          weak_areas?: string[] | null
+        }
+        Update: {
+          avg_confidence_score?: number
+          filler_words_to_watch?: string[] | null
+          id?: string
+          last_session_at?: string | null
+          strong_areas?: string[] | null
+          total_sessions?: number
+          updated_at?: string
+          user_id?: string
+          weak_areas?: string[] | null
+        }
+        Relationships: []
+      }
+      credit_transactions: {
+        Row: {
+          action: string
+          amount: number
+          created_at: string
+          id: string
+          model: string | null
+          session_id: string | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          amount: number
+          created_at?: string
+          id?: string
+          model?: string | null
+          session_id?: string | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          amount?: number
+          created_at?: string
+          id?: string
+          model?: string | null
+          session_id?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          badges: string[] | null
+          byok_anthropic: boolean
+          byok_gemini: boolean
+          byok_openai: boolean
+          coach_tone: string
+          created_at: string
+          credits: number
+          credits_reset_at: string | null
+          credits_used_this_month: number
+          data_retention_days: number | null
+          domain: string | null
+          email: string
+          experience_level: string | null
+          full_name: string | null
+          hint_style: string
+          id: string
+          interview_anxiety_score: number | null
+          is_admin: boolean
+          is_leaderboard_visible: boolean
+          onboarding_completed: boolean
+          onboarding_step: number
+          plan: string
+          preferred_model: string
+          privacy_mode_default: boolean
+          referral_code: string | null
+          referral_credits_earned: number
+          referred_by: string | null
+          role: string | null
+          streak_current: number
+          streak_last_activity_date: string | null
+          streak_longest: number
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          subscription_period_end: string | null
+          subscription_status: string | null
+          target_companies: string[] | null
+          updated_at: string
+          xp: number
+          years_of_experience: number | null
+        }
+        Insert: {
+          avatar_url?: string | null
+          badges?: string[] | null
+          byok_anthropic?: boolean
+          byok_gemini?: boolean
+          byok_openai?: boolean
+          coach_tone?: string
+          created_at?: string
+          credits?: number
+          credits_reset_at?: string | null
+          credits_used_this_month?: number
+          data_retention_days?: number | null
+          domain?: string | null
+          email: string
+          experience_level?: string | null
+          full_name?: string | null
+          hint_style?: string
+          id: string
+          interview_anxiety_score?: number | null
+          is_admin?: boolean
+          is_leaderboard_visible?: boolean
+          onboarding_completed?: boolean
+          onboarding_step?: number
+          plan?: string
+          preferred_model?: string
+          privacy_mode_default?: boolean
+          referral_code?: string | null
+          referral_credits_earned?: number
+          referred_by?: string | null
+          role?: string | null
+          streak_current?: number
+          streak_last_activity_date?: string | null
+          streak_longest?: number
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_period_end?: string | null
+          subscription_status?: string | null
+          target_companies?: string[] | null
+          updated_at?: string
+          xp?: number
+          years_of_experience?: number | null
+        }
+        Update: {
+          avatar_url?: string | null
+          badges?: string[] | null
+          byok_anthropic?: boolean
+          byok_gemini?: boolean
+          byok_openai?: boolean
+          coach_tone?: string
+          created_at?: string
+          credits?: number
+          credits_reset_at?: string | null
+          credits_used_this_month?: number
+          data_retention_days?: number | null
+          domain?: string | null
+          email?: string
+          experience_level?: string | null
+          full_name?: string | null
+          hint_style?: string
+          id?: string
+          interview_anxiety_score?: number | null
+          is_admin?: boolean
+          is_leaderboard_visible?: boolean
+          onboarding_completed?: boolean
+          onboarding_step?: number
+          plan?: string
+          preferred_model?: string
+          privacy_mode_default?: boolean
+          referral_code?: string | null
+          referral_credits_earned?: number
+          referred_by?: string | null
+          role?: string | null
+          streak_current?: number
+          streak_last_activity_date?: string | null
+          streak_longest?: number
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          subscription_period_end?: string | null
+          subscription_status?: string | null
+          target_companies?: string[] | null
+          updated_at?: string
+          xp?: number
+          years_of_experience?: number | null
+        }
+        Relationships: []
+      }
+      sessions: {
+        Row: {
+          config: Json | null
+          created_at: string
+          credits_consumed: number
+          duration_seconds: number
+          ended_at: string | null
+          id: string
+          is_privacy_mode: boolean
+          mode: string
+          model_used: string | null
+          room_id: string | null
+          started_at: string
+          status: string
+          transcript_full: string | null
+          user_id: string
+        }
+        Insert: {
+          config?: Json | null
+          created_at?: string
+          credits_consumed?: number
+          duration_seconds?: number
+          ended_at?: string | null
+          id?: string
+          is_privacy_mode?: boolean
+          mode?: string
+          model_used?: string | null
+          room_id?: string | null
+          started_at?: string
+          status?: string
+          transcript_full?: string | null
+          user_id: string
+        }
+        Update: {
+          config?: Json | null
+          created_at?: string
+          credits_consumed?: number
+          duration_seconds?: number
+          ended_at?: string | null
+          id?: string
+          is_privacy_mode?: boolean
+          mode?: string
+          model_used?: string | null
+          room_id?: string | null
+          started_at?: string
+          status?: string
+          transcript_full?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      deduct_credits: {
+        Args: { p_action: string; p_cost: number; p_session_id?: string }
+        Returns: Json
+      }
     }
     Enums: {
       [_ in never]: never
