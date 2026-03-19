@@ -1,18 +1,13 @@
-import { useTheme } from "next-themes";
 import { Toaster as SonnerToaster } from "sonner";
 
 type ToasterProps = React.ComponentProps<typeof SonnerToaster>;
 
 /**
- * Themed Sonner toaster — auto-syncs with the app's light/dark theme.
- * Drop this once in AppLayout and use toast() anywhere in the app.
+ * Themed Sonner toaster — drop this once in AppLayout and use toast() anywhere.
  */
 const Toaster = ({ ...props }: ToasterProps) => {
-  const { theme = "system" } = useTheme();
-
   return (
     <SonnerToaster
-      theme={theme as ToasterProps["theme"]}
       className="toaster group"
       position="bottom-right"
       richColors
