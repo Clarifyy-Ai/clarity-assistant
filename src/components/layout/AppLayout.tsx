@@ -3,17 +3,11 @@ import { AppSidebar } from "./AppSidebar";
 import { AppTopBar } from "./AppTopBar";
 import { MobileNav } from "./MobileNav";
 import { NetworkBanner } from "./NetworkBanner";
-import { ToastContainer } from "@/components/ui/toast-container";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import { useUIStore } from "@/store/uiStore";
 import { cn } from "@/lib/utils";
 
-// ─────────────────────────────────────────────────────────────────
-// AppLayout
-// Shell used by all authenticated app pages.
-// Sidebar + top bar + main content area + global modals.
-// ─────────────────────────────────────────────────────────────────
-
+// Authenticated layout shell
 export function AppLayout() {
   const { sidebar_collapsed: sidebarCollapsed } = useUIStore();
 
@@ -35,7 +29,7 @@ export function AppLayout() {
       </main>
 
       <MobileNav />
-      <ToastContainer />
+      {/* ToastContainer removed — handled by root <Toaster /> */}
       <UpgradeModal />
     </div>
   );
