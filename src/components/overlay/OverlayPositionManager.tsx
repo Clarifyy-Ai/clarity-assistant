@@ -1,7 +1,21 @@
-import { forwardRef, useEffect, useRef, type ReactNode } from "react";
+import {
+  forwardRef,
+  useEffect,
+  useRef,
+  useLayoutEffect,
+  type ReactNode,
+  type Ref,
+} from "react";
 import { createDragHandler, getProctorSafePosition } from "@/lib/overlay/stealthMouse";
 import type { OverlayPosition } from "@/store/overlayStore";
 
+/**
+ * Props:
+ * - position: current top-left coordinate (CSS pixels)
+ * - onPositionChange: callback when user drags or when we auto-adjust
+ * - isProctorSafe: when true, we enforce a "safe" position that avoids proctor-detectable areas
+ * - children: overlay content
+ */
 interface OverlayPositionManagerProps {
   position: OverlayPosition;
   onPositionChange: (pos: OverlayPosition) => void;
@@ -9,37 +23,76 @@ interface OverlayPositionManagerProps {
   children: ReactNode;
 }
 
-export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPositionManagerProps>(
-  function OverlayPositionManager({ position, onPositionChange, isProctorSafe, children }, ref) {
-    const internalRef = useRef<HTMLDivElement>(null);
-    const overlayRef = (ref as React.RefObject<HTMLDivElement>) || internalRef;
-    const cleanupRef = useRef<(() => void) | null>(null);
+// Utility: merge forwarded ref with local ref
+function setRefs<T>(...refs: (Ref<T> | undefined)[]) {
+  return (value: T | null) => {
+    refs.forEach((ref) => {
+      if (!ref) return;
+      if (typeof ref === "function") ref(value);
+      else {
+        // @ts-expect-error: writeable ref
+        ref.current = value;
+      }
+    });
+  };
+}
 
-    // Attach drag handler
+export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPositionManagerProps>(
+  function OverlayPositionManager(
+    { position, onPositionChange, isProctorSafe, children },
+    ref
+  ) {
+    const localRef = useRef<HTMLDivElement>(null);
+    const mergedRef = setRefs<HTMLDivElement>(ref, localRef);
+
+    // Attach drag handler to the current element; cleanup on unmount or element change
     useEffect(() => {
-      const el = overlayRef.current;
+      const el = localRef.current;
       if (!el) return;
 
-      cleanupRef.current = createDragHandler(el, onPositionChange);
-      return () => {
-        cleanupRef.current?.();
-      };
-    }, [overlayRef.current]);
+      const cleanup = createDragHandler(el, onPositionChange);
+      return () => cleanup?.();
+      // Depend only on callback identity; ref.current is read at runtime
+    }, [onPositionChange]);
 
-    // Proctor-safe position override
-    useEffect(() => {
-      if (isProctorSafe && overlayRef.current) {
-        const safePos = getProctorSafePosition(
-          overlayRef.current.offsetWidth,
-          overlayRef.current.offsetHeight
-        );
+    // Enforce proctor-safe position on:
+    // - toggle of isProctorSafe
+    // - element size changes
+    // - window resize (viewport change)
+    useLayoutEffect(() => {
+      const el = localRef.current;
+      if (!el) return;
+
+      // Handler to compute and set safe position
+      const applySafe = () => {
+        if (!isProctorSafe) return;
+        const safePos = getProctorSafePosition(el.offsetWidth, el.offsetHeight);
         onPositionChange(safePos);
-      }
-    }, [isProctorSafe]);
+      };
 
+      // Initial enforce (if enabled)
+      applySafe();
+
+      // Observe size changes
+      const ro = new ResizeObserver(() => {
+        applySafe();
+      });
+      ro.observe(el);
+
+      // Observe viewport changes
+      const onWinResize = () => applySafe();
+      window.addEventListener("resize", onWinResize);
+
+      return () => {
+        ro.disconnect();
+        window.removeEventListener("resize", onWinResize);
+      };
+    }, [isProctorSafe, onPositionChange]);
+
+    // Keep the overlay absolutely/fixed positioned with GPU hinting
     return (
       <div
-        ref={overlayRef}
+        ref={mergedRef}
         className="fixed animate-fade-in"
         style={{
           left: `${position.x}px`,
