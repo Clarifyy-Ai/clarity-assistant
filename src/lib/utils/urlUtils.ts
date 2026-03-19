@@ -140,7 +140,7 @@ export function joinPaths(...segments: string[]): string {
  * @example getExtension("/files/resume.pdf") → "pdf"
  */
 export function getExtension(url: string): string {
-  return url.split(".").pop()?.split("?")?.toLowerCase() ?? "";
+  return url.split(".").pop()?.split("?")[0]?.toLowerCase() ?? "";
 }
 
 /**
@@ -148,7 +148,7 @@ export function getExtension(url: string): string {
  * @example getFilename("/uploads/my-resume.pdf") → "my-resume.pdf"
  */
 export function getFilename(url: string): string {
-  return url.split("/").pop()?.split("?") ?? "";
+  return url.split("/").pop()?.split("?")[0] ?? "";
 }
 
 /**

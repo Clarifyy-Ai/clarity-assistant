@@ -83,5 +83,5 @@ export type {
   PresenceConfig,
 } from "./realtime";
 
-// ─── Utils ────────────────────────────────────────────────────────────────────
-export * from "./utils";
+// ─── Client ───────────────────────────────────────────────────────────────────
+export { supabase } from "./client";

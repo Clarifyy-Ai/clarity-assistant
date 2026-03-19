@@ -43,7 +43,7 @@ export function ScreenCaptureBlocker({
     const detectScreenShare = async () => {
       try {
         // Check if getDisplayMedia is available (indicates screen share capability)
-        if (navigator.mediaDevices?.getDisplayMedia) {
+        if (navigator.mediaDevices?.getDisplayMedia !== undefined) {
           // Try to enumerate display media
           const constraints = {
             video: {

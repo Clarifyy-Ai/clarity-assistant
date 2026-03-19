@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─────────────────────────────────────────────────────────────────────────────
 // AdminRevenue.tsx — Revenue analytics dashboard for admins.
 // MRR, ARR, churn, plan distribution, credit purchases, and

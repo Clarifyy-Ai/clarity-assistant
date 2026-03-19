@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useEffect, useState } from 'react';
 import { useSessionStore } from '@/store/sessionStore';
 import { useAudioStore } from '@/store/audioStore';

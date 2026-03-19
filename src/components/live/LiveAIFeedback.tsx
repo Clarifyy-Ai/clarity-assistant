@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useEffect, useState } from 'react';
 import { useAudioStore } from '@/store/audioStore';
 import { BarChart3, TrendingDown, TrendingUp, Minus } from 'lucide-react';

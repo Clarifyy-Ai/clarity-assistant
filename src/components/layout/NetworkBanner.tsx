@@ -17,7 +17,6 @@ export function NetworkBanner() {
 
   // Optional Network Information API (may be undefined in many browsers)
   const connection = useMemo(() => {
-    // @ts-expect-error: experimental API
     return typeof navigator !== "undefined" ? (navigator as any).connection ?? (navigator as any).mozConnection ?? (navigator as any).webkitConnection : undefined;
   }, []);
 

@@ -59,7 +59,7 @@ export { useOverlayStore }             from "./overlayStore";
 export { useSessionStore }             from "./sessionStore";
 export { useThemeStore }               from "./themeStore";
 export { useUIStore }                  from "./uiStore";
-export { useUserStore }                from "./userStore";
+export { useAuthStore as useUserStore }  from "./userStore";
 
 // ─── App Boot Sequence ────────────────────────────────────────────────────────
 //
@@ -107,11 +107,12 @@ if (import.meta.env.DEV) {
   if (typeof window !== "undefined") {
     import("./authStore").then(({ useAuthStore }) => {
       (window as Window & { __stores?: Record<string, unknown> }).__stores ??= {};
-      (window as Window & { __stores: Record<string, unknown> }).__stores.auth = useAuthStore;
+      (window as any).__stores ??= {};
+      (window as any).__stores.auth = useAuthStore;
     });
     import("./globalStore").then(({ useGlobalStore }) => {
-      (window as Window & { __stores?: Record<string, unknown> }).__stores ??= {};
-      (window as Window & { __stores: Record<string, unknown> }).__stores.global = useGlobalStore;
+      (window as any).__stores ??= {};
+      (window as any).__stores.global = useGlobalStore;
     });
   }
 }

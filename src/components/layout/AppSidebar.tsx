@@ -56,14 +56,14 @@ const NAV_SECTIONS: Array<{ label: string; items: NavItem[] }> = [
 
 export function AppSidebar() {
   const uiStore = useUIStore();
-  const { profile, clear: clearUserStore } = useAuthStore();
+  const { profile, clearAuth } = useAuthStore();
   const collapsed = uiStore.sidebar_collapsed;
 
   async function handleLogout() {
     try {
       await supabase.auth.signOut();
       // Optional: clear any local stores/session state
-      clearUserStore?.();
+      clearAuth?.();
       // Optional: also clear other stores if needed (sessionStore, etc.)
       window.location.href = "/auth/login"; // or use navigate('/auth/login')
     } catch (e) {

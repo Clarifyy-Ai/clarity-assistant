@@ -1,80 +1,30 @@
 // ─── Audio Capture ────────────────────────────────────────────────────────────
-export {
-  captureAudio,
-  stopAudioCapture,
-  getAudioDevices,
-} from "./audioCapture";
+export { enumerateAudioDevices, watchAudioDevices, captureMicrophone } from "./audioCapture";
 
 // ─── Mic Capture ─────────────────────────────────────────────────────────────
-export {
-  startMicCapture,
-  stopMicCapture,
-  getMicPermissionState,
-} from "./micCapture";
+export { startMicCapture, stopMicCapture } from "./micCapture";
 
 // ─── System Audio Capture ─────────────────────────────────────────────────────
-export {
-  startSystemAudioCapture,
-  stopSystemAudioCapture,
-  isSystemAudioSupported,
-} from "./systemAudioCapture";
+export { startSystemAudioCapture, stopSystemAudioCapture } from "./systemAudioCapture";
 
 // ─── Audio Mixer ──────────────────────────────────────────────────────────────
-export {
-  AudioMixer,
-  createAudioMixer,
-} from "./audioMixer";
+export { mixStreams } from "./audioMixer";
 
 // ─── Audio Processor (Central Pipeline) ──────────────────────────────────────
-export {
-  AudioProcessor,
-  createAudioProcessor,
-  processStaticBuffer,
-} from "./audioProcessor";
-
-export type {
-  AudioChunk,
-  AudioFormat,
-  AudioProcessorConfig,
-  AudioProcessorStats,
-} from "./audioProcessor";
+export { AudioProcessor, processStaticBuffer } from "./audioProcessor";
+export type { AudioChunk, AudioFormat, AudioProcessorConfig, AudioProcessorStats } from "./audioProcessor";
 
 // ─── Deepgram ─────────────────────────────────────────────────────────────────
-export {
-  createDeepgramClient,
-  getDeepgramToken,
-} from "./deepgramClient";
-
-export {
-  DeepgramStream,
-  createDeepgramStream,
-} from "./deepgramStream";
+export { DeepgramClient, deepgramClient } from "./deepgramClient";
+export { DeepgramStreamClient } from "./deepgramStream";
+export type { DeepgramStreamOptions } from "./deepgramStream";
 
 // ─── Speech Analysis ──────────────────────────────────────────────────────────
-export {
-  SpeakerDiarizer,
-  createDiarizer,
-} from "./diarization";
-
-export {
-  FillerDetector,
-  createFillerDetector,
-  FILLER_WORDS,
-} from "./fillerDetector";
-
-export {
-  VADDetector,
-  createVADDetector,
-} from "./vadDetector";
-
-export {
-  WPMTracker,
-  createWPMTracker,
-} from "./wpmTracker";
+export { classifySpeaker, extractLatestQuestion, detectSpeakerChange, buildDiarizationSegment, processUtteranceForDiarization, getTranscriptBySpeaker, getSpeakingTimeSummary } from "./diarization";
+export { detectFillersInText, FillerAccumulator, RealTimeFillerCounter, buildFillerSummary } from "./fillerDetector";
+export { VADDetector } from "./vadDetector";
+export { WPM_RANGES } from "./wpmTracker";
 
 // ─── Screenshot / Screen Capture ──────────────────────────────────────────────
-export {
-  captureScreenshot,
-  startScreenCapture,
-  stopScreenCapture,
-} from "./screenshotCapture";
+export { captureScreen, captureAndAnalyseCodingProblem, isScreenCaptureSupported, createRegionSelector } from "./screenshotCapture";
+export type { CaptureRegion, ScreenshotResult } from "./screenshotCapture";

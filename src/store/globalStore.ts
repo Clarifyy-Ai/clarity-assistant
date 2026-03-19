@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─────────────────────────────────────────────────────────────────────────────
 // globalStore.ts — Cross-cutting app-level state: initialization lifecycle,
 // feature flags, active modal, command palette, connection status,

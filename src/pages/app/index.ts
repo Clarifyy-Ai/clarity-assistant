@@ -50,7 +50,6 @@ export { Interviews, InterviewDetail, NewInterview } from "./interviews";
 export {
   LiveOverlay,
   LiveRehearsal,
-  MockSession as LiveMockSession,
 } from "./live";
 
 // ─── Mock ─────────────────────────────────────────────────────────────────────

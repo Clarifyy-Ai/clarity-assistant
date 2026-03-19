@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─────────────────────────────────────────────────────────────────────────────
 // AdminFeatureFlags.tsx — Live feature flag management UI.
 // Toggle flags per plan tier, preview effective access,

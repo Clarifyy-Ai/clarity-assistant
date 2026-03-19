@@ -1,10 +1,17 @@
 // ─── Credits Manager ──────────────────────────────────────────────────────────
 export {
-  getCredits,
+  checkCredits,
   deductCredits,
-  addCredits,
-  hasEnoughCredits,
-  resetMonthlyCredits,
+  openUpgradeFlow,
+  showLowCreditWarning,
+  refreshCredits,
+  fetchCreditHistory,
+  isBYOKConfigured,
+} from "./creditsManager";
+
+export type {
+  CreditCheckResult,
+  CreditDeductionResult,
 } from "./creditsManager";
 
 // ─── Subscription Manager ────────────────────────────────────────────────────

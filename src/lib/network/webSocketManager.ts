@@ -202,10 +202,10 @@ export class WebSocketManager {
 
   // ── Send ───────────────────────────────────────────────────────────────────
 
-  send(data: string | ArrayBufferLike | Blob | ArrayBufferView): boolean {
+  send(data: string | ArrayBuffer | Blob | ArrayBufferView): boolean {
     if (this.ws?.readyState === WebSocket.OPEN) {
       try {
-        this.ws.send(data);
+        this.ws.send(data as any);
         this.stats.totalMessagesSent++;
         return true;
       } catch (error) {
@@ -232,15 +232,15 @@ export class WebSocketManager {
     return this.send(JSON.stringify(payload));
   }
 
-  sendBinary(buffer: ArrayBufferLike | ArrayBufferView): boolean {
-    return this.send(buffer);
+  sendBinary(buffer: ArrayBuffer | ArrayBufferView): boolean {
+    return this.send(buffer as any);
   }
 
   // ── Queue Flush ────────────────────────────────────────────────────────────
   private flushQueue(): void {
     while (this.messageQueue.length > 0) {
       const msg = this.messageQueue.shift()!;
-      this.send(msg);
+      this.send(msg as any);
     }
     this.stats.queuedMessages = 0;
   }
