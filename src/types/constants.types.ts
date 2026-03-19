@@ -262,7 +262,7 @@ export interface AnswerRouteParams {
   answerId: string;
 }
 
-export interface SettingsTab =
+export type SettingsTab =
   | "profile"
   | "billing"
   | "audio"
