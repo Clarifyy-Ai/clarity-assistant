@@ -62,3 +62,8 @@ export function LiveCodingProblemCapture({
         <Loader2 className="h-3.5 w-3.5 animate-spin" />
       ) : (
         <Camera className="h-3.5 w-3.5" />
+      )}
+      {is_screenshot_loading ? "Analysing…" : "Capture Code"}
+    </button>
+  );
+}
