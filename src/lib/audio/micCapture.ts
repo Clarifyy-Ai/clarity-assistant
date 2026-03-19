@@ -1,11 +1,24 @@
-// Stub: mic capture utility
-export async function startMicCapture(deviceId?: string | null): Promise<MediaStream> {
+// ─────────────────────────────────────────────────────────────────
+// micCapture.ts
+// Minimal microphone capture utility — used in onboarding and tests
+// ─────────────────────────────────────────────────────────────────
+
+export async function startMicCapture(
+  deviceId?: string | null
+): Promise<MediaStream> {
   const constraints: MediaStreamConstraints = {
-    audio: deviceId ? { deviceId: { exact: deviceId } } : true,
+    audio: deviceId
+      ? { deviceId: { exact: deviceId } }
+      : { echoCancellation: true, noiseSuppression: true },
+    video: false,
   };
-  return navigator.mediaDevices.getUserMedia(constraints);
+
+  try {
+    return await navigator.mediaDevices.getUserMedia(constraints);
+  } catch (err) {
+    // Allow the caller to handle errors or map them centrally
+    throw err;
+  }
 }
 
-export function stopMicCapture(stream: MediaStream | null): void {
-  stream?.getTracks().forEach(t => t.stop());
-}
+export function stopMic
