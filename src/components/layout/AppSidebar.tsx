@@ -56,7 +56,7 @@ const NAV_SECTIONS: Array<{ label: string; items: NavItem[] }> = [
 
 export function AppSidebar() {
   const uiStore = useUIStore();
-  const { profile, clear: clearUserStore } = useAuthStore();
+  const { profile, clearAuth } = useAuthStore();
   const collapsed = uiStore.sidebar_collapsed;
 
   async function handleLogout() {
