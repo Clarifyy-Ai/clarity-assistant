@@ -1,44 +1,48 @@
 // ─── Hotkeys ──────────────────────────────────────────────────────────────────
 export {
-  registerHotkey,
-  unregisterHotkey,
-  clearHotkeys,
-  parseHotkey,
-  OVERLAY_HOTKEYS,
+  buildHotkeyDefinitions,
+  HotkeyManager,
+  formatHotkeyLabel,
+  hotkeyManager,
 } from "./hotkeys";
 
-export type { HotkeyBinding, HotkeyAction } from "./hotkeys";
+export type { HotkeyDefinition } from "./hotkeys";
 
 // ─── Overlay Compositor ───────────────────────────────────────────────────────
 export {
-  OverlayCompositor,
-  createOverlayCompositor,
+  composeHint,
+  splitInlineCode,
+  highlightSTARComponents,
+  truncateForStealth,
+  calculateOverlaySize,
+  StreamingTextAssembler,
+  DEFAULT_SIZE_CONFIG,
 } from "./overlayCompositor";
 
 export type {
-  CompositorLayer,
-  CompositorConfig,
+  ComposedHint,
+  ComposedLine,
+  OverlaySizeConfig,
 } from "./overlayCompositor";
 
 // ─── Screen Capture Evasion ───────────────────────────────────────────────────
 export {
-  ScreenCaptureEvasion,
-  createScreenCaptureEvasion,
-  isScreenBeingCaptured,
-} from "./screenCaptureEvasion";
-
-export type {
-  CaptureEvasionConfig,
-  CaptureDetectionResult,
+  applyStealthToElement,
+  removeStealthFromElement,
+  isStealthActive,
 } from "./screenCaptureEvasion";
 
 // ─── Stealth Mouse ────────────────────────────────────────────────────────────
 export {
-  StealthMouse,
-  createStealthMouse,
+  createDragHandler,
+  createTouchDragHandler,
+  computeSnapPosition,
+  getSnapEdge,
+  getProctorSafePosition,
+  getDefaultPosition,
 } from "./stealthMouse";
 
-export type { StealthMouseConfig } from "./stealthMouse";
+export type { DragState, SnapEdge as StealthSnapEdge, SnapConfig } from "./stealthMouse";
 
 // ─── Window Manager ───────────────────────────────────────────────────────────
 export {

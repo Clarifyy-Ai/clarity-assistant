@@ -1,14 +1,11 @@
 // ─── Network Monitor ─────────────────────────────────────────────────────────
 export {
   NetworkMonitor,
-  createNetworkMonitor,
-  getConnectionQuality,
-} from "./networkMonitor";
-
-export type {
-  NetworkQuality,
-  NetworkStatus,
-  NetworkMonitorConfig,
+  networkMonitor,
+  startNetworkMonitoring,
+  getConnectionQualityLabel,
+  getConnectionQualityColor,
+  shouldWarnAboutLatency,
 } from "./networkMonitor";
 
 // ─── WebSocket Manager ────────────────────────────────────────────────────────

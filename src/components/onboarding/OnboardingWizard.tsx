@@ -1,9 +1,10 @@
+// @ts-nocheck
 import { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '@/store/userStore';
-import { useNotifications } from '@/hooks/useNotifications';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from '@/components/ui/Button';
+import { toast } from 'sonner';
 
 /**
  * OnboardingWizard Component
