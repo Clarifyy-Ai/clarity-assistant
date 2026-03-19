@@ -1,19 +1,18 @@
-// Layout Components - Barrel Exports
-// Export all layout components for convenient importing
+// index.ts
 
-export { AppLayout } from './AppLayout';
-export { AppSidebar } from './AppSidebar';
-export { AppTopBar } from './AppTopBar';
-export { MobileNav } from './MobileNav';
-export { NetworkBanner } from './NetworkBanner';
-export { PageHeader } from './PageHeader';
-export { ProtectedRoute } from './ProtectedRoute';
-export { SetupChecklist } from './SetupChecklist';
-export { PlanGate } from './PlanGate';
-export { ErrorBoundary } from './ErrorBoundary';
+// Barrel export file for layout components
 
-// Type exports
-export type { ProtectedRouteProps } from './ProtectedRoute';
+export { default as AppLayout } from './AppLayout';
+export { default as AppSidebar } from './AppSidebar';
+export { default as AppTopBar } from './AppTopBar';
+export { default as MobileNav } from './MobileNav';
+export { default as NetworkBanner } from './NetworkBanner';
+export { default as PageHeader } from './PageHeader';
+export { default as ProtectedRoute } from './ProtectedRoute';
+export { default as SetupChecklist } from './SetupChecklist';
+export { default as PlanGate } from './PlanGate';
+export { default as ErrorBoundary } from './ErrorBoundary';
 
 // Usage Example:
-// import { AppLayout, ProtectedRoute, ErrorBoundary } from '@/components/layout';
+// import { AppLayout, AppSidebar } from 'src/components/layout';
+// <AppLayout><AppSidebar /></AppLayout>
