@@ -1,0 +1,68 @@
+// ─── Auth & User ──────────────────────────────────────────────────────────────
+export { useAuth } from "./useAuth";
+
+// ─── UI / Device ──────────────────────────────────────────────────────────────
+export { useIsMobile } from "./use-mobile";
+export { useToast } from "./use-toast";
+
+// ─── Storage ─────────────────────────────────────────────────────────────────
+export {
+  useLocalStorage,
+  useLocalStorageString,
+  useLocalStorageBoolean,
+  useLocalStorageNumber,
+} from "./useLocalStorage";
+
+// ─── Audio & Speech ───────────────────────────────────────────────────────────
+export { useAudioCapture } from "./useAudioCapture";
+export { useAudioSession } from "./useAudioSession";
+export { useDeepgramStream } from "./useDeepgramStream";
+export { useSpeechRecognition } from "./useSpeechRecognition";
+export { useSpeakerDiarization } from "./useSpeakerDiarization";
+export { useFillerWordDetection } from "./useFillerWordDetection";
+export { useSilenceBoundary } from "./useSilenceBoundary";
+export { useSystemAudio } from "./useSystemAudio";
+export { useWPMTracker } from "./useWPMTracker";
+
+// ─── Session & Live ───────────────────────────────────────────────────────────
+export { useLiveCopilot } from "./useLiveCopilot";
+export { useSessionContext } from "./useSessionContext";
+export { useSessionOrchestrator } from "./useSessionOrchestrator";
+export { useRoom } from "./useRoom";
+
+// ─── Overlay & Stealth ────────────────────────────────────────────────────────
+export { useOverlayVisibility } from "./useOverlayVisibility";
+export { useStealthMouse } from "./useStealthMouse";
+export { useHotkeys } from "./useHotkeys";
+export { useNetworkMonitor } from "./useNetworkMonitor";
+export { useOfflineFallback } from "./useOfflineFallback";
+
+// ─── AI & Analysis ────────────────────────────────────────────────────────────
+export { useConfidenceScore } from "./useConfidenceScore";
+export { useSentimentAnalysis } from "./useSentimentAnalysis";
+export { useModelSwitcher } from "./useModelSwitcher";
+
+// ─── Interview & Prep ─────────────────────────────────────────────────────────
+export { useInterviewScheduler } from "./useInterviewScheduler";
+export { useSTARBuilder } from "./useSTARBuilder";
+export { useScorecard } from "./useScorecard";
+export { useResumeContext } from "./useResumeContext";
+export { useCalendarSync } from "./useCalendarSync";
+
+// ─── Documents ────────────────────────────────────────────────────────────────
+export { useDocumentManager } from "./useDocumentManager";
+export { useDocuments } from "./useDocuments";
+
+// ─── Gamification & Engagement ────────────────────────────────────────────────
+export { useGamification } from "./useGamification";
+export { useXPSystem } from "./useXPSystem";
+export { useStreakTracker } from "./useStreakTracker";
+
+// ─── Billing ─────────────────────────────────────────────────────────────────
+export { useCredits } from "./useCredits";
+
+// ─── Notifications ───────────────────────────────────────────────────────────
+export { useNotifications } from "./useNotifications";
+
+// ─── Analytics ───────────────────────────────────────────────────────────────
+export { useAnalytics } from "./useAnalytics";
