@@ -80,7 +80,7 @@ export function OnboardingWizard({
   const navigate = useNavigate();
   const location = useLocation();
   const { user, profile } = useAuthStore();
-  const { toast } = useNotifications();
+  const toast = useToast();
 
   // Determine current step from URL
   const currentStepNumber = parseInt(
