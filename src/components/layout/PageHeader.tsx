@@ -1,15 +1,15 @@
-import type { ReactNode } from "react";
+import { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────────
 // PageHeader
-// Consistent page title + optional subtitle + action slot.
+// Consistent page title + optional subtitle + optional action area.
 // ─────────────────────────────────────────────────────────────────
 
 interface PageHeaderProps {
-  title:     string;
+  title: string;
   subtitle?: string;
-  action?:   ReactNode;
+  action?: ReactNode;
   className?: string;
 }
 
@@ -19,10 +19,11 @@ export function PageHeader({ title, subtitle, action, className }: PageHeaderPro
       <div>
         <h1 className="text-2xl font-bold text-white tracking-tight">{title}</h1>
         {subtitle && (
-          <p className="text-sm text-gray-400 mt-0.5">{subtitle}</p>
+          <p className="mt-0.5 text-sm text-gray-400">{subtitle}</p>
         )}
       </div>
-      {action && <div className="shrink-0 ml-4">{action}</div>}
+
+      {action && <div className="ml-4 shrink-0">{action}</div>}
     </div>
   );
 }
