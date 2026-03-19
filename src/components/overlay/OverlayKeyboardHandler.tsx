@@ -1,10 +1,10 @@
-import { useHotkey } from "@/hooks/useHotkeys";
-import { useOverlayStore } from "@/store/overlayStore";
-import { useSessionStore } from "@/store/sessionStore";
-import { PANIC_RESPONSE } from "@/types/session.types";
-import { captureAndAnalyseCodingProblem } from "@/lib/audio/screenshotCapture";
+import { useHotkey } from '@/hooks/useHotkeys';
+import { useOverlayStore } from '@/store/overlayStore';
+import { useSessionStore } from '@/store/sessionStore';
+import { PANIC_RESPONSE } from '@/types/session.types';
+import { captureAndAnalyseCodingProblem } from '@/lib/audio/screenshotCapture';
 
-// ─────────────────────────────────────────────────────────────────
+// ────────────────────���────────────────────────────────────────────
 // OverlayKeyboardHandler
 // Handles keyboard shortcuts for the overlay. Renders nothing.
 // ─────────────────────────────────────────────────────────────────
@@ -23,39 +23,39 @@ export function OverlayKeyboardHandler({
 
   // Toggle overlay: Ctrl+Shift+H
   useHotkey(
-    ["ctrl", "shift", "h"],
+    ['ctrl', 'shift', 'h'],
     () => {
-      overlay.toggleOverlay();
+      overlay.toggleOverlay?.();
     },
     enabled
   );
 
   // Stealth mode: Ctrl+Shift+S
   useHotkey(
-    ["ctrl", "shift", "s"],
+    ['ctrl', 'shift', 's'],
     () => {
-      overlay.setStealthMode(!overlay.is_stealth_mode);
+      overlay.setStealthMode?.(!overlay.is_stealth_mode);
     },
     enabled && overlay.is_visible
   );
 
   // Panic: Ctrl+Shift+P
   useHotkey(
-    ["ctrl", "shift", "p"],
+    ['ctrl', 'shift', 'p'],
     () => {
-      overlay.showPanic(PANIC_RESPONSE);
+      overlay.showPanic?.(PANIC_RESPONSE);
     },
     enabled
   );
 
   // Clear hint or hide panic: Escape
   useHotkey(
-    ["escape"],
+    ['escape'],
     () => {
       if (overlay.is_panic_visible) {
-        overlay.hidePanic();
+        overlay.hidePanic?.();
       } else {
-        overlay.clearHint();
+        overlay.clearHint?.();
       }
     },
     enabled && overlay.is_visible
@@ -63,26 +63,18 @@ export function OverlayKeyboardHandler({
 
   // Cycle hint style: Ctrl+Shift+Y
   useHotkey(
-    ["ctrl", "shift", "y"],
+    ['ctrl', 'shift', 'y'],
     () => {
-      overlay.cycleHintStyle();
+      overlay.cycleHintStyle?.();
     },
-   ", "m"],    enabled && overlay.is_visible
-    () => {
-      onToggleMute?.();
-    },
-    enabled
-  );
-
-  return null;
-}
+    enabled && overlay.is_visible
   );
 
   // Coding screenshot: Ctrl+Shift+C
   useHotkey(
-    ["ctrl", "shift", "c"],
+    ['ctrl', 'shift', 'c'],
     () => {
-      if (session.status === "active") {
+      if (session.status === 'active') {
         captureAndAnalyseCodingProblem();
       }
     },
@@ -91,3 +83,12 @@ export function OverlayKeyboardHandler({
 
   // Mute: Ctrl+Shift+M
   useHotkey(
+    ['ctrl', 'shift', 'm'],
+    () => {
+      onToggleMute?.();
+    },
+    enabled
+  );
+
+  return null;
+}
