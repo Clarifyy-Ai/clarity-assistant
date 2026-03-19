@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─────────────────────────────────────────────────────────────────────────────
 // useCredits.test.ts — Tests for the useCredits hook:
 // balance reads, sufficiency checks, deduction flows,

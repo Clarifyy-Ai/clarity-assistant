@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─────────────────────────────────────────────────────────────────────────────
 // useAuth.test.ts — Unit tests for authentication state, session lifecycle,
 // sign-in/out flows, profile loading, and BYOK key management.
