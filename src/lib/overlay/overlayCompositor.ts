@@ -89,19 +89,20 @@ export function composeHint(
     // ── Numbered list ─────────────────────────────────────
     const numberedMatch = raw.match(/^(\s*)\d+[.)]\s+(.+)$/);
     if (numberedMatch) {
+      const indent = Math.floor((numberedMatch[1]?.length ?? 0) / 2);
       lines.push({
         type:    "bullet",
         content: numberedMatch[2],
-        indent:  0,
+        indent,
         bold:    false,
       });
       continue;
     }
 
-    // ── Bold inline (** **) ───────────────────────────────
+    // ── Bold inline (entire line wrapped in ** **) ────────
     const isBold = /^\*\*.+\*\*$/.test(trimmed);
 
-    // ── Keywords-only style — each line is a keyword tag ──
+    // ── Keywords-only style — each non-empty line is a tag ─
     if (hintStyle === "keywords_only") {
       lines.push({
         type:    "keyword",
@@ -112,7 +113,7 @@ export function composeHint(
       continue;
     }
 
-    // ── Regular text ──────────────────────────────────────
+    // ── Regular text (strip bold markers, keep content) ───
     lines.push({
       type:    "text",
       content: trimmed.replace(/\*\*(.+?)\*\*/g, "$1"),
@@ -126,11 +127,14 @@ export function composeHint(
   while (lines.length > 0 && lines[lines.length - 1].type === "blank") lines.pop();
 
   // Estimate display rows for dynamic height
+  // Tweak charWidth for styles: keywords-only often uses short tags
+  const charWidth = hintStyle === "keywords_only" ? 24 : 38; // approx chars per line at overlay width
   const estimatedRows = lines.reduce((sum, line) => {
     if (line.type === "blank") return sum + 0.5;
     if (line.type === "code")  return sum + 1.2;
-    const charWidth = 38; // approx chars per line at overlay width
-    return sum + Math.ceil(line.content.length / charWidth);
+    // Header/keyword/bullet/text – rough wrap estimate
+    const len = line.content.length;
+    return sum + Math.max(1, Math.ceil(len / charWidth));
   }, 0);
 
   return { lines, hasCode, estimatedRows };
@@ -147,7 +151,7 @@ export function splitInlineCode(text: string): Array<{
   const parts: Array<{ text: string; isCode: boolean }> = [];
   const regex = /`([^`]+)`/g;
   let lastIndex = 0;
-  let match;
+  let match: RegExpExecArray | null;
 
   while ((match = regex.exec(text)) !== null) {
     if (match.index > lastIndex) {
@@ -184,14 +188,13 @@ export function truncateForStealth(
   lines: ComposedLine[],
   maxLines = 4
 ): ComposedLine[] {
-  const visible = lines
-    .filter((l) => l.type !== "blank")
-    .slice(0, maxLines);
+  const nonBlank = lines.filter((l) => l.type !== "blank");
+  const visible = nonBlank.slice(0, maxLines);
 
-  if (visible.length < lines.filter((l) => l.type !== "blank").length) {
+  if (visible.length < nonBlank.length) {
     visible.push({
       type:    "text",
-      content: `+${lines.length - maxLines} more lines…`,
+      content: `+${nonBlank.length - visible.length} more lines…`,
       indent:  0,
       bold:    false,
     });
@@ -213,7 +216,7 @@ export interface OverlaySizeConfig {
   padding:    number;
 }
 
-const DEFAULT_SIZE_CONFIG: OverlaySizeConfig = {
+export const DEFAULT_SIZE_CONFIG: OverlaySizeConfig = {
   minWidth:   280,
   maxWidth:   480,
   minHeight:  60,
