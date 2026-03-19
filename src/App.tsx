@@ -52,7 +52,6 @@ import Referrals           from "@/pages/app/Referrals";
 // ── Pages: Live ───────────────────────────────────────────────────────────────
 import LiveRehearsal       from "@/pages/app/live/LiveRehearsal";
 import LiveOverlay         from "@/pages/app/live/LiveOverlay";
-import LiveMockSession     from "@/pages/app/live/MockSession";     // ✅ NEW
 
 // ── Pages: Mock ───────────────────────────────────────────────────────────────
 import MockInterview       from "@/pages/app/mock/MockInterview";
