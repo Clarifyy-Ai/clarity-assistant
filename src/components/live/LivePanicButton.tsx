@@ -22,6 +22,7 @@ export function LivePanicButton({ className }: LivePanicButtonProps) {
 
   return (
     <button
+      type="button"
       onClick={handlePanic}
       className={cn(
         "flex items-center justify-center gap-1.5",
@@ -32,6 +33,7 @@ export function LivePanicButton({ className }: LivePanicButtonProps) {
         className
       )}
       title="Panic — show calming steps instantly (Ctrl+Shift+P)"
+      aria-label="Show panic guidance now"
     >
       🆘 Panic
     </button>
