@@ -10,52 +10,63 @@ import { cn } from "@/lib/utils";
 // ─────────────────────────────────────────────────────────────────
 
 export function SetupChecklist() {
-  const { profile }    = useAuthStore();
-  const docStore       = useDocumentStore();
+  const { profile } = useAuthStore();
+  const docStore = useDocumentStore();
 
   const steps = [
     {
-      id:   "resume",
+      id: "resume",
       label: "Upload your resume",
-      done:  !!docStore.active_resume_id,
-      to:    "/documents",
+      done: !!docStore.active_resume_id,
+      to: "/app/documents",
     },
     {
-      id:    "jd",
+      id: "jd",
       label: "Add a target job description",
-      done:  !!docStore.active_jd_id,
-      to:    "/documents",
+      done: !!docStore.active_jd_id,
+      to: "/app/documents",
     },
     {
-      id:    "mock",
+      id: "mock",
       label: "Complete your first mock session",
-      done:  (profile?.xp ?? 0) > 0,
-      to:    "/mock",
+      done: (profile?.xp ?? 0) > 0,
+      to: "/app/mock",
     },
     {
-      id:    "audio",
+      id: "audio",
       label: "Test your audio setup",
-      done:  profile?.onboarding_completed ?? false,
-      to:    "/settings/audio",
+      done: profile?.onboarding_completed ?? false,
+      to: "/app/settings/audio",
     },
-  ];
+  ] as const;
 
   const completed = steps.filter((s) => s.done).length;
   if (completed === steps.length) return null;
 
-  const pct = Math.round((completed / steps.length) * 100);
+  const pctRaw = Math.round((completed / steps.length) * 100);
+  const pct = Math.max(0, Math.min(100, pctRaw));
 
   return (
-    <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
-      <div className="flex items-center justify-between mb-3">
+    <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
+      <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-semibold text-white">Complete your setup</h3>
-        <span className="text-xs text-gray-500">{completed}/{steps.length}</span>
+        <span className="text-xs text-gray-500">
+          {completed}/{steps.length}
+        </span>
       </div>
 
       {/* Progress bar */}
-      <div className="h-1.5 bg-white/10 rounded-full overflow-hidden mb-4">
+      <div
+        className="mb-4 h-1.5 overflow-hidden rounded-full bg-white/10"
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={steps.length}
+        aria-valuenow={completed}
+        aria-label="Setup completion progress"
+        title={`${pct}% complete`}
+      >
         <div
-          className="h-full bg-violet-500 rounded-full transition-all duration-500"
+          className="h-full rounded-full bg-violet-500 transition-all duration-500"
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -66,23 +77,25 @@ export function SetupChecklist() {
             <Link
               to={step.to}
               className={cn(
-                "flex items-center gap-3 py-1.5 px-2 rounded-xl hover:bg-white/5 transition-all group",
+                "group flex items-center gap-3 rounded-xl px-2 py-1.5 transition-all hover:bg-white/5",
                 step.done && "opacity-50"
               )}
             >
               {step.done ? (
-                <CheckCircle className="w-4 h-4 text-emerald-400 shrink-0" />
+                <CheckCircle className="h-4 w-4 shrink-0 text-emerald-400" />
               ) : (
-                <Circle className="w-4 h-4 text-gray-600 shrink-0" />
+                <Circle className="h-4 w-4 shrink-0 text-gray-600" />
               )}
-              <span className={cn(
-                "text-xs flex-1",
-                step.done ? "text-gray-500 line-through" : "text-gray-300"
-              )}>
+              <span
+                className={cn(
+                  "flex-1 text-xs",
+                  step.done ? "text-gray-500 line-through" : "text-gray-300"
+                )}
+              >
                 {step.label}
               </span>
               {!step.done && (
-                <ChevronRight className="w-3.5 h-3.5 text-gray-600 group-hover:text-gray-400 transition-colors" />
+                <ChevronRight className="h-3.5 w-3.5 text-gray-600 transition-colors group-hover:text-gray-400" />
               )}
             </Link>
           </li>
