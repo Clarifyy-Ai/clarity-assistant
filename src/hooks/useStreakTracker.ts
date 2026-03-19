@@ -3,16 +3,9 @@ import { supabase } from "@/lib/supabase/client";
 import { useGamificationStore } from "@/hooks/useGamification";
 import { useAuthStore } from "@/store/userStore";
 
-// ─────────────────────────────────────────────────────────────────
-// useStreakTracker
-// Checks and updates the daily practice streak on session complete.
-// ─────────────────────────────────────────────────────────────────
-
 export function useStreakTracker() {
-  const { user }     = useAuthStore();
+  const { user } = useAuthStore();
   const gamification = useGamificationStore();
-
-  // ── Check streak on mount (once per day) ──────────────────────
 
   useEffect(() => {
     if (!user) return;
@@ -22,38 +15,32 @@ export function useStreakTracker() {
   async function checkAndHydrate(): Promise<void> {
     const { data } = await supabase
       .from("profiles")
-      .select("streak_current, streak_longest, last_practice_date, xp_total")
+      .select("streak_current, streak_longest, streak_last_activity_date, xp")
       .eq("id", user!.id)
       .single();
 
     if (!data) return;
 
-    gamification.setStreak(data.streak_current ?? 0, data.streak_longest ?? 0);
-    gamification.setXP(data.xp_total ?? 0);
+    gamification.setStreak(data.streak_current ?? 0, data.streak_longest ?? 0, data.streak_last_activity_date ?? null);
+    gamification.setXP(data.xp ?? 0);
   }
-
-  // ── Record practice activity (call after session complete) ────
 
   const recordActivity = useCallback(async (): Promise<void> => {
     if (!user) return;
 
-    const { data, error } = await supabase.rpc("record_practice_activity", {
+    const { data, error } = await supabase.rpc("record_practice_activity" as any, {
       p_user_id: user.id,
     });
 
     if (!error && data) {
-      gamification.setStreak(data.streak_current, data.streak_longest);
-
-      // Check if streak broke (reset to 1)
-      if (data.streak_broken) {
-        gamification.setStreakBroken(true);
-      }
+      const d = data as any;
+      gamification.setStreak(d.streak_current, d.streak_longest, d.last_activity ?? null);
     }
   }, [user, gamification]);
 
   return {
-    streak:        gamification.streakCurrent,
-    longestStreak: gamification.streakLongest,
+    streak:        gamification.streak_current,
+    longestStreak: gamification.streak_longest,
     recordActivity,
   };
 }

@@ -63,7 +63,7 @@ export function AppSidebar() {
     try {
       await supabase.auth.signOut();
       // Optional: clear any local stores/session state
-      clearUserStore?.();
+      clearAuth?.();
       // Optional: also clear other stores if needed (sessionStore, etc.)
       window.location.href = "/auth/login"; // or use navigate('/auth/login')
     } catch (e) {

@@ -1,14 +1,14 @@
 // ─── AI Clients ───────────────────────────────────────────────────────────────
-export { anthropic, callAnthropic, streamAnthropic } from "./anthropicClient";
-export { openai, callOpenAI, streamOpenAI } from "./openaiClient";
-export { gemini, callGemini, streamGemini } from "./geminiClient";
+export { streamClaudeHint } from "./anthropicClient";
+export type { ClaudeStreamOptions } from "./anthropicClient";
+export { streamOpenAIHint } from "./openaiClient";
+export type { OpenAIStreamOptions } from "./openaiClient";
+export { streamGeminiHint, consumeSSEStream } from "./geminiClient";
+export type { GeminiStreamOptions, GeminiModel } from "./geminiClient";
 
 // ─── Model Router ─────────────────────────────────────────────────────────────
-export {
-  routeToModel,
-  selectBestModel,
-  getModelConfig,
-} from "./modelRouter";
+export { routeHint, selectModel } from "./modelRouter";
+export type { RouteHintOptions } from "./modelRouter";
 
 // ─── Prompt Templates ─────────────────────────────────────────────────────────
 export {
@@ -34,14 +34,7 @@ export type {
 } from "./promptTemplates";
 
 // ─── Context Envelope Builder ─────────────────────────────────────────────────
-export {
-  buildContextEnvelope,
-  buildMinimalEnvelope,
-} from "./contextEnvelopeBuilder";
+export { buildCoachingContext, buildContextFromStores } from "./contextEnvelopeBuilder";
 
 // ─── Offline Templates ────────────────────────────────────────────────────────
-export {
-  getOfflineAnswer,
-  getOfflineHint,
-  OFFLINE_ANSWERS,
-} from "./offlineTemplates";
+export { getOfflineTemplate, getAllOfflineTemplates, getPanicResponse, OFFLINE_PANIC } from "./offlineTemplates";
