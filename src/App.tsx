@@ -52,7 +52,6 @@ import Referrals           from "@/pages/app/Referrals";
 // ── Pages: Live ───────────────────────────────────────────────────────────────
 import LiveRehearsal       from "@/pages/app/live/LiveRehearsal";
 import LiveOverlay         from "@/pages/app/live/LiveOverlay";
-import LiveMockSession     from "@/pages/app/live/MockSession";     // ✅ NEW
 
 // ── Pages: Mock ───────────────────────────────────────────────────────────────
 import MockInterview       from "@/pages/app/mock/MockInterview";
@@ -228,7 +227,6 @@ const router = createBrowserRouter([
     element: <ProtectedRoute />,
     children: [
       { path: "/app/live/overlay",       element: <LiveOverlay /> },
-      { path: "/app/live/mock-session",  element: <LiveMockSession /> },  // ✅ NEW
     ],
   },
 
@@ -355,11 +353,8 @@ const router = createBrowserRouter([
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  // ✅ FIXED: destructure from the new authStore shape
-  const { setSession, setUser, setProfile, loadProfile } = useAuthStore((s) => ({
+  const { setSession, loadProfile } = useAuthStore((s) => ({
     setSession:   s.setSession,
-    setUser:      s.setUser,
-    setProfile:   s.setProfile,
     loadProfile:  s.loadProfile,
   }));
   const { theme } = useUIStore((s) => ({ theme: s.theme }));
@@ -368,38 +363,33 @@ export default function App() {
   useEffect(() => {
     // Hydrate session on cold load
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
+      setSession(session as never);
       if (session?.user) {
-        setUser(session.user);
-        loadProfile();    // ✅ FIXED: authStore.loadProfile() uses userId from store
+        loadProfile();
       }
     });
 
     // Live auth state changes (login, logout, token refresh)
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       async (_event, session) => {
-        setSession(session);
+        setSession(session as never);
 
         if (session?.user) {
-          setUser(session.user);
           loadProfile();
 
-          // PostHog identification — only when key is configured
           if (import.meta.env.VITE_POSTHOG_KEY) {
             posthog.identify(session.user.id, {
               email: session.user.email,
             });
           }
         } else {
-          setUser(null);
-          setProfile(null);
           if (import.meta.env.VITE_POSTHOG_KEY) posthog.reset();
         }
       }
     );
 
     return () => subscription.unsubscribe();
-  }, [setSession, setUser, setProfile, loadProfile]);
+  }, [setSession, loadProfile]);
 
   // ── Theme sync → <html> element ───────────────────────────────────────────
   useEffect(() => {

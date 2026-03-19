@@ -21,4 +21,7 @@ export async function startMicCapture(
   }
 }
 
-export function stopMic
+export function stopMicCapture(stream: MediaStream | null): void {
+  if (!stream) return;
+  stream.getTracks().forEach((track) => track.stop());
+}

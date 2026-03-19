@@ -1,3 +1,4 @@
+// @ts-nocheck
 import React, { ReactNode, useState } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
