@@ -100,7 +100,7 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
       category:    "session",
       action:      () => useSessionStore.getState().setStatus("completed"),
       isEnabled:   () => useSessionStore.getState().status === "active",
-      showInHelp:  false,           // Hidden — prevent accidental triggers
+      showInHelp:  false, // Hidden — prevent accidental triggers
     },
 
     // ── Clear hint ─────────────────────────────────────────
@@ -139,34 +139,32 @@ export class HotkeyManager {
   }
 
   // ── Register all hotkeys ──────────────────────────────────────
-
   register(): void {
     if (this.isActive) return;
+    // Capture phase: useful for iframes and early interception
     document.addEventListener("keydown", this.boundHandler, { capture: true });
     this.isActive = true;
   }
 
   // ── Unregister all hotkeys ────────────────────────────────────
-
   unregister(): void {
     document.removeEventListener("keydown", this.boundHandler, { capture: true });
     this.isActive = false;
   }
 
   // ── Key event handler ─────────────────────────────────────────
-
   private handleKeyDown(e: KeyboardEvent): void {
-    // Never intercept inside text inputs / editable content
-    const target = e.target as HTMLElement;
-    if (
-      target.tagName === "INPUT" ||
-      target.tagName === "TEXTAREA" ||
-      target.isContentEditable
-    ) {
-      // Exception: Escape always works everywhere
-      if (e.key !== "Escape") return;
-    }
+    // Never intercept while typing (except Escape, which should always work)
+    const target = e.target as HTMLElement | null;
+    const tag = (target?.tagName || "").toUpperCase();
+    const isEditable =
+      tag === "INPUT" ||
+      tag === "TEXTAREA" ||
+      (target?.isContentEditable ?? false);
 
+    if (isEditable && e.key !== "Escape") return;
+
+    // Build a normalized set of pressed keys
     const pressed = buildPressedSet(e);
 
     for (const hotkey of this.definitions) {
@@ -174,14 +172,19 @@ export class HotkeyManager {
       if (matchesHotkey(pressed, hotkey.keys)) {
         e.preventDefault();
         e.stopPropagation();
-        hotkey.action();
+        try {
+          hotkey.action();
+        } catch (err) {
+          // Avoid breaking the global handler on action errors
+          // eslint-disable-next-line no-console
+          console.error(`[HotkeyManager:${hotkey.id}] action failed`, err);
+        }
         return;
       }
     }
   }
 
   // ── Get help definitions ──────────────────────────────────────
-
   getHelpItems(): Array<{ label: string; keys: string; description: string }> {
     return this.definitions
       .filter((d) => d.showInHelp)
@@ -197,15 +200,28 @@ export class HotkeyManager {
 // Helpers
 // ─────────────────────────────────────────────────────────────────
 
+/**
+ * Normalizes platform: treats Cmd (macOS) as "ctrl" so definitions like
+ * ["ctrl","shift","h"] work on both Win/Linux (Ctrl+Shift+H) and macOS (⌘+Shift+H).
+ */
 function buildPressedSet(e: KeyboardEvent): Set<string> {
   const set = new Set<string>();
   if (e.ctrlKey || e.metaKey) set.add("ctrl");
   if (e.shiftKey) set.add("shift");
   if (e.altKey)   set.add("alt");
-  set.add(e.key.toLowerCase());
+
+  // Normalize the primary key (letter/function/etc.)
+  // Note: e.key already respects layout (e.g. 'h'), and we keep lower-case.
+  set.add((e.key || "").toLowerCase());
   return set;
 }
 
+/**
+ * Exact-match helper:
+ * - Requires the same number of keys as the definition
+ * - Requires every defined key be present
+ * This prevents "extra" modifiers from triggering the shortcut.
+ */
 function matchesHotkey(pressed: Set<string>, required: string[]): boolean {
   if (pressed.size !== required.length) return false;
   return required.every((k) => pressed.has(k.toLowerCase()));
@@ -214,8 +230,8 @@ function matchesHotkey(pressed: Set<string>, required: string[]): boolean {
 export function formatHotkeyLabel(keys: string[]): string {
   return keys
     .map((k) => {
-      switch (k) {
-        case "ctrl":   return "⌃";
+      switch (k.toLowerCase()) {
+        case "ctrl":   return "⌃";  // (⌘ on mac also maps to ctrl here)
         case "shift":  return "⇧";
         case "alt":    return "⌥";
         case "escape": return "Esc";
