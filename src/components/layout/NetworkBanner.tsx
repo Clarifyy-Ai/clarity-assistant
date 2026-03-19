@@ -1,49 +1,161 @@
-import { NavLink } from "react-router-dom";
-import {
-  LayoutDashboard,
-  Mic,
-  ClipboardList,
-  FlaskConical,
-  BarChart2,
-} from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertTriangle, WifiOff, Wifi, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// ─────────────────────────────────────────────────────────────────
-// MobileNav
-// Bottom tab bar for <768px only
-// ─────────────────────────────────────────────────────────────────
+/**
+ * Lightweight network health detector using:
+ * - navigator.onLine
+ * - Network Information API (when available)
+ *
+ * Shows a small banner under the top bar when:
+ *  - Offline
+ *  - Connection appears degraded (very slow / high RTT / low downlink)
+ */
+export function NetworkBanner() {
+  // Basic "online" state from the browser
+  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== "undefined" ? navigator.onLine : true);
 
-const TABS = [
-  { to: "/app", icon: LayoutDashboard, label: "Home", exact: true },
-  { to: "/app/live", icon: Mic, label: "Live" },
-  { to: "/app/mock", icon: ClipboardList, label: "Mock" },
-  { to: "/app/prep", icon: FlaskConical, label: "Prep" },
-  { to: "/app/analytics", icon: BarChart2, label: "Stats" },
-];
+  // Optional Network Information API (may be undefined in many browsers)
+  const connection = useMemo(() => {
+    // @ts-expect-error: experimental API
+    return typeof navigator !== "undefined" ? (navigator as any).connection ?? (navigator as any).mozConnection ?? (navigator as any).webkitConnection : undefined;
+  }, []);
 
-export function MobileNav() {
+  const [effectiveType, setEffectiveType] = useState<string | undefined>(() => connection?.effectiveType);
+  const [downlink, setDownlink] = useState<number | undefined>(() => connection?.downlink);
+  const [rtt, setRtt] = useState<number | undefined>(() => connection?.rtt);
+  const [saveData, setSaveData] = useState<boolean | undefined>(() => connection?.saveData);
+
+  // Local dismiss so users can hide the banner temporarily
+  const [dismissed, setDismissed] = useState(false);
+
+  useEffect(() => {
+    function handleOnline() {
+      setIsOnline(true);
+    }
+    function handleOffline() {
+      setIsOnline(false);
+    }
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    let cleanupConn: (() => void) | undefined;
+
+    if (connection) {
+      const handleChange = () => {
+        setEffectiveType(connection.effectiveType);
+        setDownlink(connection.downlink);
+        setRtt(connection.rtt);
+        setSaveData(connection.saveData);
+      };
+      connection.addEventListener?.("change", handleChange);
+      cleanupConn = () => connection.removeEventListener?.("change", handleChange);
+    }
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+      cleanupConn?.();
+    };
+  }, [connection]);
+
+  // Heuristics for "poor" connection
+  const isPoor = useMemo(() => {
+    // If we don't have connection info, don't mark as poor—only show if offline.
+    if (!connection) return false;
+
+    const slowType = effectiveType === "slow-2g" || effectiveType === "2g";
+    const highLatency = typeof rtt === "number" && rtt > 500;              // >500ms RTT is quite laggy
+    const tinyDownlink = typeof downlink === "number" && downlink < 1;     // <1Mbps may struggle with live features
+
+    return slowType || highLatency || tinyDownlink || !!saveData;
+  }, [connection, effectiveType, rtt, downlink, saveData]);
+
+  // Decide whether to show the banner
+  const shouldShow = !dismissed && (!isOnline || isPoor);
+
+  if (!shouldShow) return null;
+
+  const isDegradedButOnline = isOnline && isPoor;
+
   return (
-    <nav className="fixed bottom-0 left-0 right-0 h-16 bg-[#0d0d14]/95 backdrop-blur border-t border-white/[0.08] z-40 flex items-center md:hidden">
-      {TABS.map((tab) => {
-        const Icon = tab.icon;
+    <div
+      className={cn(
+        "fixed top-14 left-0 right-0 z-30", // sits under your top bar (h-14)
+        "border-b border-white/[0.08] backdrop-blur"
+      )}
+      role="status"
+      aria-live="polite"
+    >
+      <div
+        className={cn(
+          "mx-auto flex max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8 py-2.5",
+          !isOnline
+            ? "bg-red-500/10 text-red-300"
+            : "bg-amber-500/10 text-amber-300"
+        )}
+      >
+        <div className="flex items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.04] p-1.5">
+          {!isOnline ? (
+            <WifiOff className="h-4 w-4" />
+          ) : (
+            <AlertTriangle className="h-4 w-4" />
+          )}
+        </div>
 
-        return (
-          <NavLink
-            key={tab.to}
-            to={tab.to}
-            end={tab.exact}
-            className={({ isActive }) =>
-              cn(
-                "flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-all",
-                isActive ? "text-violet-400" : "text-gray-600"
-              )
-            }
+        <div className="min-w-0 flex-1">
+          {!isOnline ? (
+            <>
+              <p className="text-sm font-semibold">You’re offline</p>
+              <p className="text-xs opacity-80">
+                Check your connection. Live features and transcript streaming are paused.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-sm font-semibold">Connection looks unstable</p>
+              <p className="text-xs opacity-80">
+                Live Co‑Pilot may lag on slow networks.{" "}
+                <span className="opacity-70">
+                  {effectiveType && `Type: ${effectiveType}`}
+                  {typeof downlink === "number" && ` · Downlink: ${downlink.toFixed(1)}Mbps`}
+                  {typeof rtt === "number" && ` · RTT: ${rtt}ms`}
+                  {saveData && " · Data saver on"}
+                </span>
+              </p>
+            </>
+          )}
+        </div>
+
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          className={cn(
+            "rounded-lg p-1.5 transition-colors",
+            !isOnline
+              ? "hover:bg-red-500/20 text-red-200"
+              : "hover:bg-amber-500/20 text-amber-200"
+          )}
+          aria-label="Dismiss network banner"
+          title="Dismiss"
+        >
+          <X className="h-4 w-4" />
+        </button>
+
+        {isDegradedButOnline && (
+          <a
+            href="https://fast.com/"
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.12] bg-white/5 px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-white/10"
+            title="Run a quick speed test"
           >
-            <Icon className="w-5 h-5" />
-            {tab.label}
-          </NavLink>
-        );
-      })}
-    </nav>
+            <Wifi className="h-3.5 w-3.5" />
+            Test speed
+          </a>
+        )}
+      </div>
+    </div>
   );
 }
