@@ -240,7 +240,7 @@ export class WebSocketManager {
   private flushQueue(): void {
     while (this.messageQueue.length > 0) {
       const msg = this.messageQueue.shift()!;
-      this.send(msg);
+      this.send(msg as any);
     }
     this.stats.queuedMessages = 0;
   }
