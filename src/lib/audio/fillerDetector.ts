@@ -18,7 +18,10 @@ const FILLER_PATTERNS: Array<{ word: FillerWord; patterns: RegExp[] }> = [
   },
   {
     word: "like",
-    patterns: [/\blike\b(?!\s+(to|that|how|when|where|what|which|a|an|the))/gi],
+    patterns: [
+      // Prevents “like to”, “like that”, etc.
+      /\blike\b(?!\s+(to|that|how|when|where|what|which|a|an|the))/gi,
+    ],
   },
   {
     word: "basically",
@@ -84,11 +87,11 @@ export function detectFillersInText(
     const allMatches: number[] = [];
 
     for (const pattern of patterns) {
-      // Reset lastIndex for global patterns
       pattern.lastIndex = 0;
-      let match;
+      let match: RegExpExecArray | null;
+
       while ((match = pattern.exec(text)) !== null) {
-        // Rough timestamp: character position / average chars per second (5 chars/sec estimate)
+        // Rough timestamp estimation: ~15 chars per second
         const approxTs = timestampOffsetSeconds + match.index / 15;
         allMatches.push(approxTs);
       }
@@ -97,7 +100,7 @@ export function detectFillersInText(
     if (allMatches.length > 0) {
       results.push({
         word,
-        count:      allMatches.length,
+        count: allMatches.length,
         timestamps: allMatches,
       });
     }
@@ -130,13 +133,11 @@ export class FillerAccumulator {
     }
 
     this.totalCount += newCount;
-    return newCount; // Returns count of new fillers in this text
+    return newCount;
   }
 
   getAll(): FillerWordOccurrence[] {
-    return Array.from(this.occurrences.values()).sort(
-      (a, b) => b.count - a.count
-    );
+    return Array.from(this.occurrences.values()).sort((a, b) => b.count - a.count);
   }
 
   getTotal(): number {
@@ -163,7 +164,10 @@ export class FillerAccumulator {
   }
 
   getSnapshot(): FillerWordOccurrence[] {
-    return this.getAll().map((o) => ({ ...o, timestamps: [...o.timestamps] }));
+    return this.getAll().map((o) => ({
+      ...o,
+      timestamps: [...o.timestamps],
+    }));
   }
 }
 
@@ -182,6 +186,7 @@ export class RealTimeFillerCounter {
   check(interimText: string): void {
     const found = detectFillersInText(interimText);
     const newFillers = found.reduce((sum, f) => sum + f.count, 0);
+
     if (newFillers > 0) {
       this.count += newFillers;
       this.onUpdate(this.count);
@@ -213,15 +218,16 @@ export function buildFillerSummary(
   const total = occurrences.reduce((sum, o) => sum + o.count, 0);
   const rate_per_minute =
     durationSeconds > 0 ? (total / durationSeconds) * 60 : 0;
+
   const top_3 = [...occurrences]
     .sort((a, b) => b.count - a.count)
     .slice(0, 3);
 
   let grade: "excellent" | "good" | "needs_work" | "poor";
-  if (rate_per_minute === 0)      grade = "excellent";
-  else if (rate_per_minute < 2)   grade = "good";
-  else if (rate_per_minute < 5)   grade = "needs_work";
-  else                             grade = "poor";
+  if (rate_per_minute === 0) grade = "excellent";
+  else if (rate_per_minute < 2) grade = "good";
+  else if (rate_per_minute < 5) grade = "needs_work";
+  else grade = "poor";
 
   return { total, rate_per_minute, top_3, grade };
 }
