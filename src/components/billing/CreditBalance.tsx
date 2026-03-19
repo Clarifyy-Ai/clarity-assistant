@@ -82,10 +82,11 @@ export function CreditBalance({
   const [creditStatus, setCreditStatus] = useState<CreditStatus | null>(null);
 
   useEffect(() => {
-    if (profile?.credits !== undefined && profile?.credit_limit) {
-      setCreditStatus(getCreditStatus(profile.credits, profile.credit_limit));
+    if (profile?.credits !== undefined) {
+      const limit = (profile as any).credit_limit ?? 100;
+      setCreditStatus(getCreditStatus(profile.credits, limit));
     }
-  }, [profile?.credits, profile?.credit_limit]);
+  }, [profile?.credits]);
 
   if (!creditStatus) {
     return (

@@ -237,34 +237,32 @@ export async function getUserSubscription(
 ): Promise<Subscription | null> {
   const [data, err] = await tryCatch(async () => {
     const { data, error } = await supabase
-      .from("subscriptions")
-      .select("*")
-      .eq("user_id", userId)
-      .in("status", ["active", "trialing", "past_due"])
-      .order("created_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
+      .from("profiles")
+      .select("plan, stripe_subscription_id, stripe_customer_id, subscription_status, subscription_period_end")
+      .eq("id", userId)
+      .single();
 
     if (error) throw error;
     return data;
   });
 
   if (err || !data) return null;
+  if (!data.subscription_status || data.subscription_status === "canceled") return null;
 
   return {
-    id:                   data.id,
-    userId:               data.user_id,
-    planId:               (data.plan_id as PlanId) ?? "free",
-    interval:             (data.interval as BillingInterval) ?? "monthly",
-    status:               data.status as SubscriptionStatus,
-    currentPeriodStart:   new Date(data.current_period_start),
-    currentPeriodEnd:     new Date(data.current_period_end),
-    cancelAtPeriodEnd:    data.cancel_at_period_end ?? false,
+    id:                   data.stripe_subscription_id ?? userId,
+    userId:               userId,
+    planId:               (data.plan as PlanId) ?? "free",
+    interval:             "monthly" as BillingInterval,
+    status:               (data.subscription_status ?? "active") as SubscriptionStatus,
+    currentPeriodStart:   new Date(),
+    currentPeriodEnd:     data.subscription_period_end ? new Date(data.subscription_period_end) : new Date(),
+    cancelAtPeriodEnd:    false,
     stripeSubscriptionId: data.stripe_subscription_id ?? undefined,
     stripeCustomerId:     data.stripe_customer_id ?? undefined,
-    trialEndsAt:          data.trial_ends_at ? new Date(data.trial_ends_at) : undefined,
-    createdAt:            new Date(data.created_at),
-    updatedAt:            new Date(data.updated_at),
+    trialEndsAt:          undefined,
+    createdAt:            new Date(),
+    updatedAt:            new Date(),
   };
 }
 

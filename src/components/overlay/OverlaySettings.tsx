@@ -303,7 +303,7 @@ export function OverlaySettings({
               stealthMode: false,
               proctorSafe: true,
               opacity: 90,
-              hintStyle: 'hints',
+              hintStyle: 'short_hints',
               autoHide: true,
               hotkeysEnabled: true,
               screenCaptureDetection: true,

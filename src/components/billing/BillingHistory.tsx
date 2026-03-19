@@ -53,7 +53,7 @@ export function BillingHistory({
   className,
 }: BillingHistoryProps) {
   const { profile } = useAuthStore();
-  const { toast } = useNotifications();
+  const toast = useToast();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);

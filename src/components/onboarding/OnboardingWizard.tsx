@@ -105,7 +105,7 @@ export function OnboardingWizard({
     }
 
     // Skip completed onboarding
-    if (profile?.onboarding_complete && currentStepNumber === 1) {
+    if (profile?.onboarding_completed && currentStepNumber === 1) {
       navigate('/dashboard');
       return;
     }
