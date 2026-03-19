@@ -14,9 +14,11 @@ export function OverlayNetworkBadge({ color }: OverlayNetworkBadgeProps) {
         color === "red" && "net-dot-red"
       )}
       title={
-        color === "green" ? "Strong connection" :
-        color === "yellow" ? "Degraded — using faster model" :
-        "Offline — using templates"
+        color === "green"
+          ? "Strong connection"
+          : color === "yellow"
+          ? "Degraded — using faster model"
+          : "Offline — using templates"
       }
     />
   );
