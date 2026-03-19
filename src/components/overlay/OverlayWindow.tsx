@@ -1,4 +1,4 @@
-import { useRef, useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useStealthMouse } from "@/hooks/useStealthMouse";
@@ -11,12 +11,20 @@ import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────────
 // OverlayWindow
-// The invisible floating overlay panel rendered via portal into
+// Invisible floating overlay panel rendered via a portal into
 // #overlay-root — separate compositor layer from screen capture.
 // ─────────────────────────────────────────────────────────────────
 
 export function OverlayWindow() {
-  const overlayRoot = document.getElementById("overlay-root");
+  // Guard for non-DOM contexts (SSR/hydration)
+  const overlayRootRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    if (typeof document !== "undefined") {
+      overlayRootRef.current = document.getElementById("overlay-root") as HTMLElement | null;
+    }
+  }, []);
+
   const panelRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -38,9 +46,11 @@ export function OverlayWindow() {
     setPosition,
   } = useOverlayStore();
 
+  // Attach stealth mouse behavior to the panel
   useStealthMouse(panelRef, is_stealth_mode);
 
-  if (!overlayRoot || !is_visible) return null;
+  // If root is missing or overlay is hidden, render nothing
+  if (!overlayRootRef.current || !is_visible) return null;
 
   const displayText = hint_state === "streaming" ? streaming_buffer : current_hint;
 
@@ -54,36 +64,40 @@ export function OverlayWindow() {
       >
         <div
           className={cn(
-            "overlay-panel w-[420px] max-h-[520px] flex flex-col gap-0 no-select transition-opacity duration-150",
+            "overlay-panel no-select flex max-h-[520px] w-[420px] flex-col gap-0 transition-opacity duration-150",
             is_stealth_mode && "opacity-90"
           )}
+          // Prevent accidental interactions in stealth
           style={{ pointerEvents: is_stealth_mode ? "none" : "auto" }}
+          role="dialog"
+          aria-label="ConfideQ Overlay"
         >
-          {/* Drag handle */}
+          {/* Top bar / drag handle */}
           <div
             data-drag-handle
-            className="flex items-center justify-between px-4 py-2 cursor-grab active:cursor-grabbing border-b border-white/5"
+            className="flex cursor-grab items-center justify-between border-b border-white/5 px-4 py-2 active:cursor-grabbing"
+            title="Drag to move"
           >
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-semibold tracking-widest uppercase text-brand-300/60">
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-brand-300/60">
                 ConfideQ
               </span>
               <OverlayNetworkBadge color={network_color} />
             </div>
             <div className="flex items-center gap-1">
               {is_stealth_mode && (
-                <span className="text-[9px] text-brand-400/50 font-mono">STEALTH</span>
+                <span className="font-mono text-[9px] text-brand-400/50">STEALTH</span>
               )}
               {is_proctor_safe && (
-                <span className="text-[9px] text-success/50 font-mono">SAFE</span>
+                <span className="font-mono text-[9px] text-success/50">SAFE</span>
               )}
             </div>
           </div>
 
-          {/* Panic overlay */}
+          {/* Panic overlay (blocking) */}
           {is_panic_visible && panic_content && (
-            <div className="px-4 py-3 bg-warning/10 border-b border-warning/20 animate-fade-in">
-              <p className="text-xs font-semibold text-warning mb-2">🆘 Breathe</p>
+            <div className="animate-fade-in border-b border-warning/20 bg-warning/10 px-4 py-3">
+              <p className="mb-2 text-xs font-semibold text-warning">🆘 Breathe</p>
               <ol className="space-y-1.5 text-xs text-overlay-text">
                 <li>1. {panic_content.step_1}</li>
                 <li>2. {panic_content.step_2}</li>
@@ -92,12 +106,12 @@ export function OverlayWindow() {
             </div>
           )}
 
-          {/* Question bar */}
+          {/* Question bar (hidden during panic) */}
           {current_question && !is_panic_visible && (
             <OverlayQuestionBar question={current_question} />
           )}
 
-          {/* Hint panel */}
+          {/* Hint panel (hidden during panic) */}
           {!is_panic_visible && (
             <OverlayHintPanel
               text={displayText}
@@ -110,13 +124,14 @@ export function OverlayWindow() {
           )}
 
           {/* Bottom status bar */}
-          <div className="flex items-center justify-between px-4 py-1.5 border-t border-white/5 text-[9px] text-muted-foreground/40 font-mono">
+          <div className="flex items-center justify-between border-t border-white/5 px-4 py-1.5 font-mono text-[9px] text-muted-foreground/40">
             <span>⌃⇧H hide · Esc clear · ⌃⇧P panic</span>
             <span className="capitalize">{hint_style.replace("_", " ")}</span>
           </div>
         </div>
       </OverlayPositionManager>
     </StealthMouseGuard>,
-    overlayRoot
+    overlayRootRef.current
   );
 }
+``
