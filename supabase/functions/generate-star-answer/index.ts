@@ -1,71 +1,135 @@
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
-import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
-import { geminiGenerate } from "../_shared/gemini.ts";
+// ─────────────────────────────────────────────────────────────────────────────
+// generate-star-answer/index.ts — Generate a full STAR-format answer
+// for a behavioural interview question, optionally grounded in the
+// user's resume and target role context.
+// ─────────────────────────────────────────────────────────────────────────────
 
-// ─────────────────────────────────────────────────────────────────
-// generate-star-answer — generate polished STAR answer from builder
-// ─────────────────────────────────────────────────────────────────
+import { corsHeaders }  from "../_shared/cors.ts";
+import {
+  handleCors, parseBody, requireAuth,
+  successResponse, errorResponse,
+  deductCredits, callAI,
+  requireFields, trimToMaxTokens, log,
+} from "../_shared/utils.ts";
+import type { STARAnswer, ModelId } from "../_shared/types.ts";
 
-Deno.serve(async (req) => {
+// ─── Handler ──────────────────────────────────────────────────────────────────
+
+Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
-  const db = createServiceClient();
+  const FN = "generate-star-answer";
 
   try {
-    const { user_id, question, star, resume_text } = await req.json();
+    // ── Auth ────────────────────────────────────────────────────────────────
+    const auth = await requireAuth(req);
 
-    if (!question || !star || !user_id) {
-      return new Response(
-        JSON.stringify({ error: "Missing required fields" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    // ── Body ────────────────────────────────────────────────────────────────
+    const body = await parseBody<{
+      questionText:   string;
+      resumeText?:    string;
+      jobDescription?: string;
+      company?:       string;
+      role?:          string;
+      model?:         ModelId;
+    }>(req);
+
+    const validation = requireFields(body as Record<string, unknown>, ["questionText"]);
+    if (!validation.valid) {
+      return errorResponse(validation.errors[0].message, "VALIDATION_ERROR", 400);
     }
 
-    // Deduct 3 credits
-    const ok = await deductCredits(db, user_id, 3, "prep_star_generate");
-    if (!ok) {
-      return new Response(
-        JSON.stringify({ error: "Insufficient credits" }),
-        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const {
+      questionText,
+      resumeText,
+      jobDescription,
+      company,
+      role,
+      model = "gpt-4o",
+    } = body;
+
+    // ── Credits ─────────────────────────────────────────────────────────────
+    const credit = await deductCredits(auth.userId, "generate_star");
+    if (!credit.success) {
+      return errorResponse(credit.error ?? "Insufficient credits.", "INSUFFICIENT_CREDITS", 402);
     }
 
-    const prompt = `
-You are an expert interview coach. Transform the raw STAR notes below
-into a polished, natural-sounding interview answer (150-350 words).
+    // ── Prompt ──────────────────────────────────────────────────────────────
+    const contextParts: string[] = [];
 
-**Question:** ${question}
-${resume_text ? `**Candidate background:** ${resume_text.slice(0, 500)}` : ""}
+    if (resumeText)     contextParts.push(`Resume:\n${trimToMaxTokens(resumeText, 4000)}`);
+    if (jobDescription) contextParts.push(`Job Description:\n${trimToMaxTokens(jobDescription, 2000)}`);
+    if (company)        contextParts.push(`Target Company: ${company}`);
+    if (role)           contextParts.push(`Target Role: ${role}`);
 
-**Raw STAR notes:**
-- Situation: ${star.situation}
-- Task: ${star.task}
-- Action: ${star.action}
-- Result: ${star.result}
+    const context = contextParts.length > 0
+      ? `\n\n## Candidate Context\n${contextParts.join("\n\n")}`
+      : "";
 
-Write a flowing, confident first-person answer that:
-- Sounds natural when spoken aloud
-- Highlights impact with specific metrics where possible
-- Uses "I" not "we" for actions
-- Ends with a clear, quantified result
-- Is between 150-350 words
-- Does NOT use "Situation:", "Task:" etc. as headers — flows naturally
+    const systemPrompt = `You are an expert interview coach specialising in the STAR method.
+Generate compelling, specific, and authentic STAR-format answers.
+Use concrete metrics and outcomes wherever possible.
+Keep each section concise but impactful.
+Return ONLY a valid JSON object — no markdown fences, no extra text.${context}`;
 
-Return ONLY the answer text, no preamble.`;
+    const userPrompt = `Generate a complete STAR answer for this behavioural interview question:
 
-    const answer = await geminiGenerate(prompt, undefined, 0.6, 600);
+"${questionText}"
 
-    return new Response(
-      JSON.stringify({ answer: answer.trim() }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+Return this exact JSON structure:
+{
+  "situation": "2–3 sentences setting the scene (context, team size, timeframe)",
+  "task": "1–2 sentences describing your specific responsibility or challenge",
+  "action": "3–5 sentences detailing the specific steps YOU took (use 'I', not 'we')",
+  "result": "2–3 sentences with measurable outcomes (%, $, time saved, promotions, etc.)",
+  "fullAnswer": "A smooth 3–4 paragraph narrative combining all four sections naturally"
+}`;
+
+    // ── AI call ─────────────────────────────────────────────────────────────
+    const aiResult = await callAI({
+      model,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user",   content: userPrompt   },
+      ],
+      maxTokens:   1200,
+      temperature: 0.72,
+    });
+
+    // ── Parse JSON ───────────────────────────────────────────────────────────
+    let star: STARAnswer;
+    try {
+      const cleaned = aiResult.text
+        .replace(/^```json\n?/, "")
+        .replace(/\n?```$/, "")
+        .trim();
+      star = JSON.parse(cleaned) as STARAnswer;
+    } catch {
+      // Fallback: return raw text as fullAnswer
+      star = {
+        situation:  "",
+        task:       "",
+        action:     "",
+        result:     "",
+        fullAnswer: aiResult.text,
+      };
+    }
+
+    log(FN, "info", "STAR answer generated", {
+      userId: auth.userId, model, tokens: aiResult.totalTokens,
+    });
+
+    return successResponse(star, {
+      model:          model,
+      tokensUsed:     aiResult.totalTokens,
+      creditsCharged: 2,
+      latencyMs:      aiResult.latencyMs,
+    });
 
   } catch (err) {
-    console.error("generate-star-answer error:", err);
-    return new Response(
-      JSON.stringify({ error: "Internal error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    if (err instanceof Response) return err;
+    log(FN, "error", "Unhandled error", err);
+    return errorResponse("Failed to generate STAR answer.", "INTERNAL_ERROR", 500);
   }
 });
