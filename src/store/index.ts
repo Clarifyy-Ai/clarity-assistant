@@ -59,7 +59,7 @@ export { useOverlayStore }             from "./overlayStore";
 export { useSessionStore }             from "./sessionStore";
 export { useThemeStore }               from "./themeStore";
 export { useUIStore }                  from "./uiStore";
-export { useUserStore }                from "./userStore";
+export { useAuthStore as useUserStore }  from "./userStore";
 
 // ─── App Boot Sequence ────────────────────────────────────────────────────────
 //

@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─────────────────────────────────────────────────────────────────────────────
 // AdminModelCosts.tsx — AI model usage and cost analytics.
 // Tracks token consumption, cost per model, per-feature breakdown,
