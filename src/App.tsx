@@ -227,7 +227,6 @@ const router = createBrowserRouter([
     element: <ProtectedRoute />,
     children: [
       { path: "/app/live/overlay",       element: <LiveOverlay /> },
-      { path: "/app/live/mock-session",  element: <LiveMockSession /> },  // ✅ NEW
     ],
   },
 
