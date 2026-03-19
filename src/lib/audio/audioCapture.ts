@@ -24,13 +24,31 @@ export async function enumerateAudioDevices(): Promise<AudioDevice[]> {
       .filter((d) => d.kind === "audioinput")
       .map((d, i) => ({
         deviceId: d.deviceId,
-        label:    d.label || `Microphone ${i + 1}`,
-        kind:     "audioinput" as const,
+        label: d.label || `Microphone ${i + 1}`,
+        kind: "audioinput" as const,
         isDefault: d.deviceId === "default" || i === 0,
       }));
   } catch (err) {
     throw buildAudioError("PERMISSION_DENIED", err);
   }
+}
+
+/**
+ * Optional: watch device changes and refresh store.
+ * Returns a cleanup function.
+ */
+export function watchAudioDevices(onChange: () => void): () => void {
+  const handler = async () => {
+    try {
+      await enumerateAudioDevices(); // ensure permissions path is exercised
+    } catch {
+      // ignore fetch errors; we only need to trigger UI refresh
+    } finally {
+      onChange();
+    }
+  };
+  navigator.mediaDevices?.addEventListener?.("devicechange", handler);
+  return () => navigator.mediaDevices?.removeEventListener?.("devicechange", handler);
 }
 
 // ── Microphone capture ────────────────────────────────────────────
@@ -40,12 +58,12 @@ export async function captureMicrophone(
 ): Promise<MediaStream> {
   const constraints: MediaStreamConstraints = {
     audio: {
-      deviceId:           deviceId ? { exact: deviceId } : undefined,
-      echoCancellation:   true,
-      noiseSuppression:   true,
-      autoGainControl:    true,
-      sampleRate:         16000,   // Deepgram optimal
-      channelCount:       1,
+      deviceId: deviceId ? { exact: deviceId } : undefined,
+      echoCancellation: true,
+      noiseSuppression: true,
+      autoGainControl: true,
+      sampleRate: 16000, // Deepgram optimal
+      channelCount: 1,
     },
     video: false,
   };
@@ -74,13 +92,13 @@ export async function captureSystemAudio(): Promise<MediaStream> {
   try {
     const stream = await navigator.mediaDevices.getDisplayMedia({
       audio: {
-        echoCancellation:  false,
-        noiseSuppression:  false,
-        autoGainControl:   false,
-        sampleRate:        16000,
+        echoCancellation: false,
+        noiseSuppression: false,
+        autoGainControl: false,
+        sampleRate: 16000,
       },
       video: {
-        width:  { ideal: 1 },  // Minimal video — user just shares the tab
+        width: { ideal: 1 }, // Minimal video — user just shares the tab
         height: { ideal: 1 },
       },
     });
@@ -97,7 +115,8 @@ export async function captureSystemAudio(): Promise<MediaStream> {
 
     return stream;
   } catch (err) {
-    if ((err as Error).name === "NotAllowedError") {
+    const name = (err as Error)?.name;
+    if (name === "NotAllowedError") {
       throw buildAudioError("PERMISSION_DENIED", err);
     }
     throw buildAudioError("SYSTEM_AUDIO_NOT_SUPPORTED", err);
@@ -118,7 +137,8 @@ export function mergeAudioStreams(
   micStream: MediaStream,
   systemStream: MediaStream
 ): MediaStream {
-  // Reuse existing AudioContext if available
+  // Some browsers require AudioContext to be created in a user gesture.
+  // Ensure call site is from a click or hotkey where possible.
   if (!_audioContext || _audioContext.state === "closed") {
     _audioContext = new AudioContext({ sampleRate: 16000 });
   }
@@ -157,10 +177,13 @@ export function createLevelAnalyser(
   const buffer = new Float32Array(analyser.fftSize);
 
   function getLevel(): number {
-    analyser.getFloatTimeDomainData(buffer);
-    const rms = Math.sqrt(
-      buffer.reduce((sum, v) => sum + v * v, 0) / buffer.length
-    );
+    try {
+      analyser.getFloatTimeDomainData(buffer);
+    } catch {
+      // If context was closed or node disconnected
+      return 0;
+    }
+    const rms = Math.sqrt(buffer.reduce((sum, v) => sum + v * v, 0) / buffer.length);
     return Math.min(1, rms * 8); // Scale to 0–1
   }
 
@@ -169,9 +192,12 @@ export function createLevelAnalyser(
   }
 
   function disconnect(): void {
-    source.disconnect();
-    analyser.disconnect();
-    ctx.close().catch(() => {});
+    try {
+      source.disconnect();
+      analyser.disconnect();
+    } finally {
+      ctx.close().catch(() => {});
+    }
   }
 
   return { getLevel, isSpeaking, disconnect };
@@ -264,7 +290,7 @@ function buildAudioError(code: AudioErrorCode, original: unknown): AudioError {
     code,
     message: (original as Error)?.message ?? code,
     recoverable: code !== "PERMISSION_DENIED" && code !== "DEVICE_NOT_FOUND",
-    suggestion:  suggestions[code],
+    suggestion: suggestions[code],
   };
 }
 
