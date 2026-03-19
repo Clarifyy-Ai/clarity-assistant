@@ -310,10 +310,6 @@ export function ordinal(n: number): string {
   return n + (s[(v - 20) % 10] || s[v] || s[0]);
 }
 
----
-
-### 1. `src/lib/utils/formatters.ts`
-
 ```typescript
 // ─────────────────────────────────────────────────────────────────────────────
 // formatters.ts — Display formatting for numbers, currency, duration,
