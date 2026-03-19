@@ -232,8 +232,8 @@ export class WebSocketManager {
     return this.send(JSON.stringify(payload));
   }
 
-  sendBinary(buffer: ArrayBufferLike | ArrayBufferView): boolean {
-    return this.send(buffer);
+  sendBinary(buffer: ArrayBuffer | ArrayBufferView): boolean {
+    return this.send(buffer as any);
   }
 
   // ── Queue Flush ────────────────────────────────────────────────────────────
