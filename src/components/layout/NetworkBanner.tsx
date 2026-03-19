@@ -1,31 +1,49 @@
-import { useNetworkMonitor } from "@/hooks/useNetworkMonitor";
-import { WifiOff, AlertTriangle } from "lucide-react";
+import { NavLink } from "react-router-dom";
+import {
+  LayoutDashboard,
+  Mic,
+  ClipboardList,
+  FlaskConical,
+  BarChart2,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────────
-// NetworkBanner
-// Full-width warning shown when network is degraded or offline.
+// MobileNav
+// Bottom tab bar for <768px only
 // ─────────────────────────────────────────────────────────────────
 
-export function NetworkBanner() {
-  const { mode, rttMs } = useNetworkMonitor();
+const TABS = [
+  { to: "/app", icon: LayoutDashboard, label: "Home", exact: true },
+  { to: "/app/live", icon: Mic, label: "Live" },
+  { to: "/app/mock", icon: ClipboardList, label: "Mock" },
+  { to: "/app/prep", icon: FlaskConical, label: "Prep" },
+  { to: "/app/analytics", icon: BarChart2, label: "Stats" },
+];
 
-  if (mode === "strong") return null;
-
+export function MobileNav() {
   return (
-    <div
-      className={cn(
-        "fixed top-14 left-0 right-0 z-50 flex items-center justify-center gap-2 px-4 py-2 text-xs font-medium",
-        mode === "offline"
-          ? "bg-red-600/90 text-white"
-          : "bg-amber-500/90 text-black"
-      )}
-    >
-      {mode === "offline" ? (
-        <><WifiOff className="w-3.5 h-3.5" /> Offline — serving cached answers</>
-      ) : (
-        <><AlertTriangle className="w-3.5 h-3.5" /> Slow network ({rttMs}ms) — using fast mode</>
-      )}
-    </div>
+    <nav className="fixed bottom-0 left-0 right-0 h-16 bg-[#0d0d14]/95 backdrop-blur border-t border-white/[0.08] z-40 flex items-center md:hidden">
+      {TABS.map((tab) => {
+        const Icon = tab.icon;
+
+        return (
+          <NavLink
+            key={tab.to}
+            to={tab.to}
+            end={tab.exact}
+            className={({ isActive }) =>
+              cn(
+                "flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-all",
+                isActive ? "text-violet-400" : "text-gray-600"
+              )
+            }
+          >
+            <Icon className="w-5 h-5" />
+            {tab.label}
+          </NavLink>
+        );
+      })}
+    </nav>
   );
 }
