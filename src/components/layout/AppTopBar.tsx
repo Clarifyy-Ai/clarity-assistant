@@ -5,31 +5,36 @@ import { useNotificationStore } from "@/store/notificationStore";
 import { useUIStore } from "@/store/uiStore";
 import { cn } from "@/lib/utils";
 
-// ─────────────────────────────────────────────────────────────────
-// AppTopBar
-// Fixed top bar with: credit meter, notification bell, user menu.
-// ─────────────────────────────────────────────────────────────────
-
 export function AppTopBar() {
-  const { profile }  = useAuthStore();
-  const notifStore   = useNotificationStore();
-  const uiStore      = useUIStore();
+  const { profile } = useAuthStore();
+  const notifStore  = useNotificationStore();
+  const uiStore     = useUIStore();
 
-  const credits  = profile?.credits ?? 0;
-  const isLow    = credits <= 2;
-  const isEmpty  = credits === 0;
+  const credits = profile?.credits ?? 0;
+  const isLow   = credits <= 2;
+  const isEmpty = credits === 0;
+
+  const initial = (
+    profile?.full_name?.trim()?.[0] ??
+    profile?.email?.trim()?.[0] ??
+    "U"
+  ).toUpperCase();
 
   return (
-    <header className="fixed top-0 right-0 left-0 h-14 bg-[#0a0a0f]/95 backdrop-blur border-b border-white/8 z-30 flex items-center justify-between px-4">
+    <header className="fixed top-0 right-0 left-0 h-14 bg-[#0a0a0f]/95 backdrop-blur border-b border-white/[0.08] z-30 flex items-center justify-between px-4">
 
-      {/* ── Left: breadcrumb placeholder ──────────────── */}
-      <div className="flex items-center gap-2 ml-[14rem]" id="topbar-breadcrumb" />
+      {/* Left: Breadcrumb placeholder */}
+      <div
+        className="flex items-center gap-2 ml-[14rem]"
+        id="topbar-breadcrumb"
+      ></div>
 
-      {/* ── Right: credit meter + bell + avatar ───────── */}
+      {/* Right */}
       <div className="flex items-center gap-3 ml-auto">
 
         {/* Credit meter */}
         <button
+          type="button"
           onClick={() => uiStore.openUpgradeModal("pro")}
           className={cn(
             "flex items-center gap-2 px-3 py-1.5 rounded-xl border text-xs font-semibold transition-all",
@@ -37,24 +42,24 @@ export function AppTopBar() {
               ? "bg-red-500/10 border-red-500/30 text-red-400 animate-pulse"
               : isLow
               ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
-              : "bg-white/5 border-white/10 text-gray-300 hover:bg-white/10"
+              : "bg-white/[0.05] border-white/[0.10] text-gray-300 hover:bg-white/[0.10]"
           )}
         >
-          {isEmpty ? (
-            <AlertTriangle className="w-3.5 h-3.5" />
-          ) : isLow ? (
+          {(isEmpty || isLow) ? (
             <AlertTriangle className="w-3.5 h-3.5" />
           ) : (
             <Zap className="w-3.5 h-3.5" />
           )}
+
           {credits} {credits === 1 ? "credit" : "credits"}
+
           {isEmpty && <span className="ml-1">· Upgrade</span>}
         </button>
 
         {/* Notification bell */}
         <Link
           to="/app/notifications"
-          className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-white/5 text-gray-400 hover:text-white transition-all"
+          className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-white/[0.05] text-gray-400 hover:text-white transition-all"
         >
           <Bell className="w-4 h-4" />
           {notifStore.unread_count > 0 && (
@@ -67,7 +72,7 @@ export function AppTopBar() {
           to="/app/profile"
           className="w-8 h-8 rounded-full bg-violet-700 flex items-center justify-center text-xs font-bold text-white hover:ring-2 hover:ring-violet-500 transition-all"
         >
-          {profile?.full_name?.[0]?.toUpperCase() ?? "U"}
+          {initial}
         </Link>
       </div>
     </header>
