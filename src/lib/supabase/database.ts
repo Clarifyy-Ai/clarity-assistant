@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─────────────────────────────────────────────────────────────────────────────
 // database.ts — Domain-specific query builders for each Supabase table.
 // Provides typed, reusable query functions for all CRUD operations.

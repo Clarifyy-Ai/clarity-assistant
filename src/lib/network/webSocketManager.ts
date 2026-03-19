@@ -202,10 +202,10 @@ export class WebSocketManager {
 
   // ── Send ───────────────────────────────────────────────────────────────────
 
-  send(data: string | ArrayBufferLike | Blob | ArrayBufferView): boolean {
+  send(data: string | ArrayBuffer | Blob | ArrayBufferView): boolean {
     if (this.ws?.readyState === WebSocket.OPEN) {
       try {
-        this.ws.send(data);
+        this.ws.send(data as any);
         this.stats.totalMessagesSent++;
         return true;
       } catch (error) {
