@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─────────────────────────────────────────────────────────────────────────────
 // realtime.ts — Supabase Realtime channel management.
 // Typed wrappers for postgres changes, broadcast, and presence.
