@@ -7,25 +7,30 @@ import type { ReactNode } from "react";
 // ─────────────────────────────────────────────────────────────────
 
 interface CardProps {
-  children:    ReactNode;
-  className?:  string;
-  padding?:    "none" | "sm" | "md" | "lg";
-  hover?:      boolean;
-  onClick?:    () => void;
+  children: ReactNode;
+  className?: string;
+  padding?: "none" | "sm" | "md" | "lg";
+  hover?: boolean;
+  onClick?: () => void;
+}
+
+interface CardSectionProps {
+  children: ReactNode;
+  className?: string;
 }
 
 const PADDING = {
   none: "",
-  sm:   "p-3",
-  md:   "p-5",
-  lg:   "p-6",
+  sm: "p-3",
+  md: "p-5",
+  lg: "p-6",
 };
 
 export function Card({
   children,
   className,
-  padding  = "md",
-  hover    = false,
+  padding = "md",
+  hover = false,
   onClick,
 }: CardProps) {
   return (
@@ -44,34 +49,26 @@ export function Card({
   );
 }
 
-// ── CardHeader ────────────────────────────────────────────────────
-
-export function CardHeader({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
+export function CardHeader({ children, className }: CardSectionProps) {
   return (
-    <div className={cn("flex items-center justify-between mb-4", className)}>
+    <div className={cn("mb-4 flex items-center justify-between", className)}>
       {children}
     </div>
   );
 }
 
-// ── CardTitle ─────────────────────────────────────────────────────
+export function CardTitle({ children, className }: CardSectionProps) {
+  return <h3 className={cn("text-sm font-semibold text-white", className)}>{children}</h3>;
+}
 
-export function CardTitle({
-  children,
-  className,
-}: {
-  children: ReactNode;
-  className?: string;
-}) {
-  return (
-    <h3 className={cn("text-sm font-semibold text-white", className)}>
-      {children}
-    </h3>
-  );
+export function CardDescription({ children, className }: CardSectionProps) {
+  return <p className={cn("text-sm text-muted-foreground", className)}>{children}</p>;
+}
+
+export function CardContent({ children, className }: CardSectionProps) {
+  return <div className={cn(className)}>{children}</div>;
+}
+
+export function CardFooter({ children, className }: CardSectionProps) {
+  return <div className={cn("mt-4 flex items-center", className)}>{children}</div>;
 }

@@ -19,8 +19,8 @@ import {
   getPasswordStrength,
 } from "@/lib/validators";
 
-import { Button }               from "@/components/ui/button";
-import { Input }                from "@/components/ui/input";
+import { Button }               from "@/components/ui/Button";
+import { Input }                from "@/components/ui/Input";
 import { Label }                from "@/components/ui/label";
 import {
   Card,
@@ -29,7 +29,7 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-}                               from "@/components/ui/card";
+}                               from "@/components/ui/Card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress }             from "@/components/ui/progress";
 import { cn }                   from "@/lib/utils";
