@@ -12,7 +12,7 @@ import { timeAgo }              from "@/lib/utils/dateUtils";
 
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
-} from "@/components/ui/card";
+} from "@/components/ui/Card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";

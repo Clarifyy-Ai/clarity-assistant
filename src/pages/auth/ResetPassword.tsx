@@ -29,7 +29,7 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-}                               from "@/components/ui/card";
+}                               from "@/components/ui/Card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress }             from "@/components/ui/progress";
 import { cn }                   from "@/lib/utils";
