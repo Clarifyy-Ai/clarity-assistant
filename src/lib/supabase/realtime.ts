@@ -1,13 +1,9 @@
-// @ts-nocheck
 // ─────────────────────────────────────────────────────────────────────────────
 // realtime.ts — Supabase Realtime channel management.
-// Typed wrappers for postgres changes, broadcast, and presence.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import {
-  supabase,
-  type RealtimeChannel,
-} from "@/integrations/supabase/client";
+import type { RealtimeChannel } from "@supabase/supabase-js"; // ✅ FIXED import source
+import { supabase }             from "@/integrations/supabase/client";
 import { DatabaseError, ErrorCode } from "@/lib/errors";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -32,7 +28,7 @@ export interface PostgresChangeConfig<T> extends ChannelConfig {
   table:    string;
   schema?:  string;
   event?:   RealtimeEvent;
-  filter?:  string;          // e.g. "user_id=eq.abc123"
+  filter?:  string;
   onChange: (change: PostgresChange<T>) => void;
 }
 
@@ -53,7 +49,6 @@ export interface PresenceConfig<T extends object> extends ChannelConfig {
 const activeChannels = new Map<string, RealtimeChannel>();
 
 function registerChannel(name: string, channel: RealtimeChannel): void {
-  // Remove existing channel with same name before registering new one
   if (activeChannels.has(name)) {
     removeChannel(name);
   }
@@ -78,20 +73,6 @@ export function getActiveChannelNames(): string[] {
 
 // ─── Postgres Changes ─────────────────────────────────────────────────────────
 
-/**
- * Subscribe to row-level changes on a Supabase table.
- * Returns a cleanup function — call it on component unmount.
- *
- * @example
- * const unsubscribe = subscribeToTable<Session>({
- *   channelName: "live-session",
- *   table: "sessions",
- *   filter: `id=eq.${sessionId}`,
- *   event: "UPDATE",
- *   onChange: (change) => setSession(change.new),
- * });
- * return () => unsubscribe();
- */
 export function subscribeToTable<T = Record<string, unknown>>(
   config: PostgresChangeConfig<T>
 ): () => void {
@@ -140,23 +121,11 @@ export function subscribeToTable<T = Record<string, unknown>>(
     });
 
   registerChannel(channelName, channel);
-
   return () => removeChannel(channelName);
 }
 
 // ─── Broadcast ────────────────────────────────────────────────────────────────
 
-/**
- * Subscribe to broadcast messages on a channel.
- * Used for live session sync between co-pilot and overlay.
- *
- * @example
- * const unsubscribe = subscribeToBroadcast<AnswerChunk>({
- *   channelName: "session-broadcast",
- *   event: "answer-chunk",
- *   onMessage: (chunk) => appendToAnswer(chunk),
- * });
- */
 export function subscribeToBroadcast<T>(
   config: BroadcastConfig<T>
 ): { unsubscribe: () => void; send: (payload: T) => Promise<void> } {
@@ -194,18 +163,6 @@ export function subscribeToBroadcast<T>(
 
 // ─── Presence ─────────────────────────────────────────────────────────────────
 
-/**
- * Track user presence in a shared channel.
- * Used for live session multiplayer awareness.
- *
- * @example
- * const presence = subscribeToPresence({
- *   channelName: `room-${roomId}`,
- *   userState: { userId, name, role: "candidate" },
- *   onSync: (state) => setParticipants(Object.values(state).flat()),
- * });
- * return () => presence.unsubscribe();
- */
 export function subscribeToPresence<T extends object>(
   config: PresenceConfig<T>
 ): {
@@ -251,9 +208,6 @@ export function subscribeToPresence<T extends object>(
 
 // ─── Domain-Specific Subscriptions ───────────────────────────────────────────
 
-/**
- * Subscribe to changes on the current user's session row.
- */
 export function subscribeToSession<T>(
   sessionId: string,
   onChange: (change: PostgresChange<T>) => void
@@ -267,9 +221,6 @@ export function subscribeToSession<T>(
   });
 }
 
-/**
- * Subscribe to incoming notifications for a user.
- */
 export function subscribeToNotifications(
   userId: string,
   onNotification: (row: Record<string, unknown>) => void
@@ -283,9 +234,6 @@ export function subscribeToNotifications(
   });
 }
 
-/**
- * Subscribe to credit balance changes.
- */
 export function subscribeToCredits(
   userId: string,
   onUpdate: (credits: Record<string, unknown>) => void
