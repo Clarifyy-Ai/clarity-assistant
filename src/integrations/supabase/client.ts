@@ -2,25 +2,47 @@
 // src/integrations/supabase/client.ts
 // SINGLE SOURCE OF TRUTH — createClient() called EXACTLY ONCE here.
 // ─────────────────────────────────────────────────────────────────────────────
-
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+const SUPABASE_URL     = import.meta.env.VITE_SUPABASE_URL     as string | undefined;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 
-// ── Hard fail if env vars are missing — never silently use placeholders ───────
-if (!SUPABASE_URL || SUPABASE_URL.includes("https://qzgvjrvtkwlzxpmlddkx.supabase.co")) {
+// ── Placeholder patterns — throw early so errors are obvious ─────────────────
+const URL_PLACEHOLDERS = [
+  "your-project-ref",
+  "your_project",
+  "placeholder",
+  "example.supabase.co",
+];
+
+const KEY_PLACEHOLDERS = [
+  "your-anon-key",
+  "your_anon",
+  "phc_your",       // also catches PostHog placeholder if mistakenly set here
+  "placeholder",
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlbXBsYXRlIn",
+];
+
+const urlIsMissing =
+  !SUPABASE_URL ||
+  URL_PLACEHOLDERS.some((p) => SUPABASE_URL.toLowerCase().includes(p));
+
+const keyIsMissing =
+  !SUPABASE_ANON_KEY ||
+  KEY_PLACEHOLDERS.some((p) => SUPABASE_ANON_KEY.toLowerCase().includes(p));
+
+if (urlIsMissing) {
   throw new Error(
     "[Clarity] VITE_SUPABASE_URL is missing or is a placeholder. " +
-    "Set it in Lovable Project Settings → Environment Variables."
+      "Set it in Lovable Project Settings → Environment Variables."
   );
 }
 
-if (!SUPABASE_ANON_KEY || SUPABASE_ANON_KEY === "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6Z3ZqcnZ0a3dsenhwbWxkZGt4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MDE4MzAsImV4cCI6MjA4OTM3NzgzMH0.hsDv4Sk7L8on5zlr9K6LT1FQe3bEEzmav5bCYes-0so") {
+if (keyIsMissing) {
   throw new Error(
     "[Clarity] VITE_SUPABASE_PUBLISHABLE_KEY is missing or is a placeholder. " +
-    "Set it in Lovable Project Settings → Environment Variables."
+      "Set it in Lovable Project Settings → Environment Variables."
   );
 }
 
@@ -46,10 +68,11 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, 
   db: { schema: "public" },
 });
 
-export const auth              = supabase.auth;
-export const table             = <T extends keyof Database["public"]["Tables"]>(name: T) => supabase.from(name);
-export const bucket            = (name: string) => supabase.storage.from(name);
-export const realtimeChannel   = (name: string) => supabase.channel(name);
+export const auth            = supabase.auth;
+export const table           = <T extends keyof Database["public"]["Tables"]>(name: T) =>
+  supabase.from(name);
+export const bucket          = (name: string) => supabase.storage.from(name);
+export const realtimeChannel = (name: string) => supabase.channel(name);
 
 export async function checkSupabaseConnection(): Promise<boolean> {
   try {
