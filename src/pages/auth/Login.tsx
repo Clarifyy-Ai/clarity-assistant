@@ -4,12 +4,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { Mic, Eye, EyeOff, AlertCircle } from "lucide-react";
-
-// ─────────────────────────────────────────────────────────────────
-// Login
-// Email + password sign-in. Redirects to intended page after auth.
-// ─────────────────────────────────────────────────────────────────
+import { Eye, EyeOff, AlertCircle } from "lucide-react";
 
 export default function Login() {
   const navigate   = useNavigate();
@@ -54,11 +49,9 @@ export default function Login() {
 
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-12 h-12 bg-violet-600 rounded-2xl flex items-center justify-center mb-3">
-            <Mic className="w-6 h-6 text-white" />
-          </div>
+          <img src="/images/clarify-logo.png" alt="Clarify AI" className="h-12 w-auto mb-3" />
           <h1 className="text-2xl font-bold text-white">Welcome back</h1>
-          <p className="text-gray-500 text-sm mt-1">Sign in to ConfideQ</p>
+          <p className="text-gray-500 text-sm mt-1">Sign in to Clarify AI</p>
         </div>
 
         {/* Form */}
