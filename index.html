@@ -63,7 +63,7 @@
     <script>
       (function () {
         try {
-          const stored = localStorage.getItem("confideq-theme");
+          const stored = localStorage.getItem("clarity-theme");
           const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
           const theme = stored ?? (prefersDark ? "dark" : "light");
           document.documentElement.classList.toggle("dark", theme === "dark");
