@@ -1,0 +1,744 @@
+clarity-assistant/
+│
+├── 📁 public/
+│   ├── favicon.ico ✅
+│   └── robots.txt ✅
+│
+├── 📁 src/
+│   │
+│   ├── 📁 components/
+│   │   ├── 📁 auth/ ✅ ALL COMPLETE
+│   │   │   ├── LoginForm.tsx ✅
+│   │   │   ├── SignupForm.tsx ✅
+│   │   │   ├── OAuthButton.tsx ✅
+│   │   │   ├── VerifyEmailModal.tsx ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   ├── 📁 billing/ ✅ ALL COMPLETE
+│   │   │   ├── BillingHistory.tsx ✅
+│   │   │   ├── CreditBalance.tsx ✅
+│   │   │   ├── PricingCard.tsx ✅
+│   │   │   ├── UpgradeModal.tsx ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   ├── 📁 common/ ✅ ALL COMPLETE
+│   │   │   ├── ConfirmDialog.tsx ✅
+│   │   │   ├── EmptyState.tsx ✅
+│   │   │   ├── ErrorFallback.tsx ✅
+│   │   │   ├── LoadingScreen.tsx ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   ├── 📁 layout/ ✅ ALL COMPLETE
+│   │   │   ├── AppLayout.tsx ✅
+│   │   │   ├── AppSidebar.tsx ✅
+│   │   │   ├── AppTopBar.tsx ✅
+│   │   │   ├── ErrorBoundary.tsx ✅
+│   │   │   ├── MobileNav.tsx ✅
+│   │   │   ├── NetworkBanner.tsx ✅
+│   │   │   ├── PageHeader.tsx ✅
+│   │   │   ├── PlanGate.tsx ✅
+│   │   │   ├── ProtectedRoute.tsx ✅
+│   │   │   ├── SetupChecklist.tsx ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   ├── 📁 live/ ✅ ALL COMPLETE
+│   │   │   ├── LiveAIFeedback.tsx ✅
+│   │   │   ├── LiveAnswerStream.tsx ✅
+│   │   │   ├── LiveCodingProblemCapture.tsx ✅
+│   │   │   ├── LiveHotKeyListener.tsx ✅
+│   │   │   ├── LiveMetricsPanel.tsx ✅
+│   │   │   ├── LiveNetworkMonitor.tsx ✅
+│   │   │   ├── LivePanicButton.tsx ✅
+│   │   │   ├── LiveSessionController.tsx ✅
+│   │   │   ├── LiveSessionTimer.tsx ✅
+│   │   │   ├── LiveTranscriptStream.tsx ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   ├── 📁 onboarding/ ✅ ALL COMPLETE
+│   │   │   ├── OnboardingProgress.tsx ✅
+│   │   │   ├── OnboardingWizard.tsx ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   ├── 📁 overlay/ ✅ ALL COMPLETE
+│   │   │   ├── OverlayHintPanel.tsx ✅
+│   │   │   ├── OverlayKeyboardHandler.tsx ✅
+│   │   │   ├── OverlayNetworkBadge.tsx ✅
+│   │   │   ├── OverlayPositionManager.tsx ✅
+│   │   │   ├── OverlayQuestionBar.tsx ✅
+│   │   │   ├── OverlaySettings.tsx ✅
+│   │   │   ├── OverlayWindow.tsx ✅
+│   │   │   ├── ScreenCaptureBlocker.tsx ✅
+│   │   │   ├── StealthMouseGuard.tsx ✅
+│   │   │   ├── WindowVisibilityManager.tsx ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   └── 📁 ui/ 
+│   │       ├── ... (all shadcn files) ✅
+│   │       ├── index.ts ✅
+│   │       ├── sonner.tsx ✅
+│   │       ├── toast-container.tsx ✅
+│   │       └── use-toast.ts ✅
+│   │
+│   ├── 📁 hooks/ ✅ ALL COMPLETE
+│   │   ├── index.ts ✅
+│   │   ├── use-mobile.tsx ✅
+│   │   ├── use-toast.ts ✅
+│   │   ├── useLocalStorage.ts ✅
+│   │   └── ... (all 38 hooks) ✅
+│   │
+│   ├── 📁 integrations/
+│   │   └── 📁 supabase/ 
+│   │       ├── types.ts ✅
+│   │       ├── client.ts ✅
+│   │       └── index.ts ✅
+│   │
+│   ├── 📁 lib/
+│   │   ├── utils.ts ✅
+│   │   ├── errors.ts ✅
+│   │   │
+│   │   ├── 📁 ai/ 
+│   │   │   ├── anthropicClient.ts ✅
+│   │   │   ├── contextEnvelopeBuilder.ts ✅
+│   │   │   ├── geminiClient.ts ✅
+│   │   │   ├── modelRouter.ts ✅
+│   │   │   ├── offlineTemplates.ts ✅
+│   │   │   ├── openaiClient.ts ✅
+│   │   │   ├── promptTemplates.ts ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   ├── 📁 audio/ 
+│   │   │   ├── audioCapture.ts ✅
+│   │   │   ├── audioMixer.ts ✅
+│   │   │   ├── deepgramClient.ts ✅
+│   │   │   ├── deepgramStream.ts ✅
+│   │   │   ├── diarization.ts ✅
+│   │   │   ├── fillerDetector.ts ✅
+│   │   │   ├── micCapture.ts ✅
+│   │   │   ├── screenshotCapture.ts ✅
+│   │   │   ├── systemAudioCapture.ts ✅
+│   │   │   ├── vadDetector.ts ✅
+│   │   │   ├── wpmTracker.ts ✅
+│   │   │   ├── audioProcessor.ts ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   ├── 📁 billing/ 
+│   │   │   ├── creditsManager.ts ✅
+│   │   │   ├── subscriptionManager.ts ✅
+│   │   │   ├── priceCalculator.ts ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   ├── 📁 network/ 
+│   │   │   ├── networkMonitor.ts ✅
+│   │   │   ├── webSocketManager.ts ✅
+│   │   │   ├── apiClient.ts ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   ├── 📁 overlay/ 
+│   │   │   ├── hotkeys.ts ✅
+│   │   │   ├── overlayCompositor.ts ✅
+│   │   │   ├── screenCaptureEvasion.ts ✅
+│   │   │   ├── stealthMouse.ts ✅
+│   │   │   ├── windowManager.ts ✅
+│   │   │   ├── zIndexManager.ts ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   ├── 📁 supabase/ ⚠️ 5 
+│   │   │   ├── client.ts ✅
+│   │   │   ├── utils.ts ✅
+│   │   │   ├── auth.ts ✅
+│   │   │   ├── database.ts ✅
+│   │   │   ├── storage.ts ✅
+│   │   │   ├── realtime.ts ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   ├── 📁 storage/ ✅ ENTIRE FOLDER  (4 files)
+│   │   │   ├── localStorage.ts ✅
+│   │   │   ├── sessionStorage.ts ✅
+│   │   │   ├── indexedDB.ts ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   ├── 📁 validators/ ✅ ENTIRE FOLDER  (4 files)
+│   │   │   ├── emailValidator.ts ✅
+│   │   │   ├── audioValidator.ts ✅
+│   │   │   ├── resumeValidator.ts ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   ├── 📁 constants/ ✅ ENTIRE FOLDER  (6 files)
+│   │   │   ├── apiEndpoints.ts ✅
+│   │   │   ├── hotkeys.ts ✅
+│   │   │   ├── colors.ts ✅
+│   │   │   ├── errorMessages.ts ✅
+│   │   │   ├── features.ts ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   └── 📁 utils/ ✅ ENTIRE FOLDER  (9 files)
+│   │       ├── formatters.ts ✅
+│   │       ├── dateUtils.ts ✅
+│   │       ├── stringUtils.ts ✅
+│   │       ├── arrayUtils.ts ✅
+│   │       ├── objectUtils.ts ✅
+│   │       ├── urlUtils.ts ✅
+│   │       ├── fileUtils.ts ✅
+│   │       ├── hashUtils.ts ✅
+│   │       └── index.ts ✅
+│   │
+│   ├── 📁 types/ ⚠️ 6 
+│   │   ├── ai.types.ts ✅
+│   │   ├── analytics.types.ts ✅
+│   │   ├── audio.types.ts ✅
+│   │   ├── billing.types.ts ✅
+│   │   ├── document.types.ts ✅
+│   │   ├── gamification.types.ts ✅
+│   │   ├── interview.types.ts ✅
+│   │   ├── notification.types.ts ✅
+│   │   ├── room.types.ts ✅
+│   │   ├── session.types.ts ✅
+│   │   ├── user.types.ts ✅
+│   │   ├── api.types.ts ✅
+│   │   ├── error.types.ts ✅
+│   │   ├── overlay.types.ts ✅ (CRITICAL)
+│   │   ├── constants.types.ts ✅
+│   │   ├── supabase.types.ts ✅
+│   │   └── index.ts ✅
+│   │
+│   ├── 📁 store/ 
+│   │   ├── answerBankStore.ts ✅
+│   │   ├── audioStore.ts ✅
+│   │   ├── coachStore.ts ✅
+│   │   ├── documentStore.ts ✅
+│   │   ├── interviewSchedulerStore.ts ✅
+│   │   ├── networkStore.ts ✅
+│   │   ├── notificationStore.ts ✅
+│   │   ├── overlayStore.ts ✅
+│   │   ├── sessionStore.ts ✅
+│   │   ├── themeStore.ts ✅
+│   │   ├── uiStore.ts ✅
+│   │   ├── userStore.ts ✅
+│   │   ├── authStore.ts ✅ (CRITICAL)
+│   │   ├── globalStore.ts ✅
+│   │   └── index.ts ✅
+│   │
+│   ├── 📁 pages/
+│   │   ├── 📁 auth/ 
+│   │   │   ├── Login.tsx ✅
+│   │   │   ├── Signup.tsx ✅
+│   │   │   ├── VerifyEmail.tsx ✅
+│   │   │   ├── ResetPassword.tsx ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   ├── 📁 onboarding/ 
+│   │   │   ├── OnboardingStep1Role.tsx ✅
+│   │   │   ├── OnboardingStep2Experience.tsx ✅
+│   │   │   ├── OnboardingStep3Preferences.tsx ✅
+│   │   │   ├── OnboardingStep4AudioSetup.tsx ✅
+│   │   │   ├── OnboardingStep5ResumeUpload.tsx ✅
+│   │   │   ├── OnboardingIndex.tsx ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   ├── 📁 marketing/ 
+│   │   │   ├── Blog.tsx ✅
+│   │   │   ├── BlogPost.tsx ✅
+│   │   │   ├── Help.tsx ✅
+│   │   │   ├── HelpArticle.tsx ✅
+│   │   │   ├── Landing.tsx ✅
+│   │   │   ├── Pricing.tsx ✅
+│   │   │   ├── Shortcuts.tsx ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   ├── 📁 admin/ [⚠️ RESTRUCTURE NOTE]
+│   │   │   ├── Admin.tsx ✅ (should be in app/admin/)
+│   │   │   ├── AdminFeatureFlags.tsx ✅ (should be in app/admin/)
+│   │   │   ├── AdminModelCosts.tsx ✅ (should be in app/admin/)
+│   │   │   ├── AdminRevenue.tsx ✅ (should be in app/admin/)
+│   │   │   └── AdminUsers.tsx ✅ (should be in app/admin/)
+│   │   │
+│   │   ├── 📁 app/
+│   │   │   ├── 📁 admin/ ⚠️ 4 
+│   │   │   │   ├── AdminAnalytics.tsx ✅
+│   │   │   │   ├── AdminDashboard.tsx ✅
+│   │   │   │   ├── AdminFlags.tsx ✅
+│   │   │   │   ├── AdminLayout.tsx ✅
+│   │   │   │   ├── AdminUsers.tsx ✅
+│   │   │   │   ├── AdminRevenue.tsx ✅ (exists in /pages/admin/)
+│   │   │   │   ├── AdminFeatureFlags.tsx ✅ (exists in /pages/admin/)
+│   │   │   │   ├── AdminModelCosts.tsx ✅ (exists in /pages/admin/)
+│   │   │   │   └── index.ts ✅
+│   │   │   │
+│   │   │   ├── 📁 answer-bank/ 
+│   │   │   │   ├── AnswerBank.tsx ✅
+│   │   │   │   ├── AnswerDetail.tsx ✅
+│   │   │   │   └── index.ts ✅
+│   │   │   │
+│   │   │   ├── 📁 company-research/ 
+│   │   │   │   ├── CompanyProfile.tsx ✅
+│   │   │   │   ├── CompanyResearch.tsx ✅
+│   │   │   │   └── index.ts ✅
+│   │   │   │
+│   │   │   ├── 📁 debrief/ 
+│   │   │   │   ├── Debrief.tsx ✅
+│   │   │   │   ├── DebriefDetail.tsx ✅
+│   │   │   │   └── index.ts ✅
+│   │   │   │
+│   │   │   ├── 📁 documents/ 
+│   │   │   │   ├── Documents.tsx ✅
+│   │   │   │   ├── JDDetail.tsx ✅
+│   │   │   │   ├── ResumeDetail.tsx ✅
+│   │   │   │   └── index.ts ✅
+│   │   │   │
+│   │   │   ├── 📁 interviews/ 
+│   │   │   │   ├── InterviewDetail.tsx ✅
+│   │   │   │   ├── Interviews.tsx ✅
+│   │   │   │   ├── NewInterview.tsx ✅
+│   │   │   │   └── index.ts ✅
+│   │   │   │
+│   │   │   ├── 📁 live/ 
+│   │   │   │   ├── LiveOverlay.tsx ✅
+│   │   │   │   ├── LiveRehearsal.tsx ✅
+│   │   │   │   ├── MockSession.tsx ✅
+│   │   │   │   └── index.ts ✅
+│   │   │   │
+│   │   │   ├── 📁 mock/ 
+│   │   │   │   ├── MockInterview.tsx ✅
+│   │   │   │   ├── MockSession.tsx ✅
+│   │   │   │   ├── MockWarmup.tsx ✅
+│   │   │   │   └── index.ts ✅
+│   │   │   │
+│   │   │   ├── 📁 practice/ 
+│   │   │   │   ├── PracticeRooms.tsx ✅
+│   │   │   │   ├── NewRoom.tsx ✅ (exists in rooms/)
+│   │   │   │   ├── RoomSession.tsx ✅ (exists in rooms/)
+│   │   │   │   └── index.ts ✅
+│   │   │   │
+│   │   │   ├── 📁 prep/ 
+│   │   │   │   ├── CodingHints.tsx ✅
+│   │   │   │   ├── PrepLab.tsx ✅
+│   │   │   │   ├── ProjectBuilder.tsx ✅
+│   │   │   │   ├── Rephraser.tsx ✅
+│   │   │   │   ├── StarBuilder.tsx ✅
+│   │   │   │   ├── SystemDesign.tsx ✅
+│   │   │   │   └── index.ts ✅
+│   │   │   │
+│   │   │   ├── 📁 rooms/ 
+│   │   │   │   ├── NewRoom.tsx ✅
+│   │   │   │   ├── PracticeRooms.tsx ✅
+│   │   │   │   ├── RoomSession.tsx ✅
+│   │   │   │   └── index.ts ✅
+│   │   │   │
+│   │   │   ├── 📁 sessions/ 
+│   │   │   │   ├── SessionDetail.tsx ✅
+│   │   │   │   ├── SessionHistory.tsx ✅
+│   │   │   │   └── index.ts ✅
+│   │   │   │
+│   │   │   ├── 📁 settings/ 
+│   │   │   │   ├── Settings.tsx ✅
+│   │   │   │   ├── SettingsAppearance.tsx ✅
+│   │   │   │   ├── SettingsAudio.tsx ✅
+│   │   │   │   ├── SettingsBYOK.tsx ✅
+│   │   │   │   ├── SettingsBilling.tsx ✅
+│   │   │   │   ├── SettingsCredits.tsx ✅
+│   │   │   │   ├── SettingsDanger.tsx ✅
+│   │   │   │   ├── SettingsData.tsx ✅
+│   │   │   │   ├── SettingsIntegrations.tsx ✅
+│   │   │   │   ├── SettingsModels.tsx ✅
+│   │   │   │   ├── SettingsNotifications.tsx ✅
+│   │   │   │   ├── SettingsPrivacy.tsx ✅
+│   │   │   │   ├── SettingsProfile.tsx ✅
+│   │   │   │   ├── SettingsSecurity.tsx ✅
+│   │   │   │   ├── SettingsSubscription.tsx ✅
+│   │   │   │   └── index.ts ✅
+│   │   │   │
+│   │   │   ├── Analytics.tsx ✅
+│   │   │   ├── Dashboard.tsx ✅
+│   │   │   ├── InterviewDay.tsx ✅
+│   │   │   ├── Notifications.tsx ✅
+│   │   │   ├── Profile.tsx ✅
+│   │   │   ├── Referrals.tsx ✅
+│   │   │   └── index.ts ✅
+│   │   │
+│   │   ├── Analytics.tsx ✅
+│   │   ├── Dashboard.tsx ✅
+│   │   ├── DocumentVault.tsx ✅
+│   │   ├── Index.tsx ✅
+│   │   ├── InterviewScheduler.tsx ✅
+│   │   ├── LiveCopilot.tsx ✅
+│   │   ├── MockSession.tsx ✅
+│   │   ├── NotFound.tsx ✅
+│   │   ├── PrepLab.tsx ✅
+│   │   ├── Scorecard.tsx ✅
+│   │   └── index.ts ✅
+│   │
+│   ├── 📁 test/
+│   │   ├── setup.ts ✅
+│   │   ├── example.test.ts ✅
+│   │   └── 📁 hooks/ ✅ FOLDER 
+│   │       ├── useAuth.test.ts ✅
+│   │       ├── useLocalStorage.test.ts ✅
+│   │       └── useCredits.test.ts ✅
+│   │
+│   ├── App.tsx ✅
+│   ├── App.css ✅
+│   ├── main.tsx ✅
+│   ├── index.css ✅
+│   └── vite-env.d.ts ✅
+│
+├── 📁 supabase/
+│   ├── config.toml ✅
+│   │
+│   ├── 📁 migrations/
+│   │   └── 20260318032847_....sql ✅ (1 combined migration)
+│   │
+│   └── 📁 functions/
+│       ├── 📁 _shared/ 
+│       │   ├── cors.ts ✅
+│       │   ├── gemini.ts ✅
+│       │   ├── supabase.ts ✅
+│       │   ├── types.ts ✅
+│       │   └── utils.ts ✅
+│       │
+│       ├── 📁 ai-coach-chat/
+│       │   └── index.ts ✅
+│       ├── 📁 ai-feedback/
+│       │   └── index.ts ✅
+│       ├── 📁 company-research/
+│       │   └── index.ts ✅
+│       ├── 📁 delete-account/
+│       │   └── index.ts ✅
+│       ├── 📁 export-user-data/
+│       │   └── index.ts ✅
+│       ├── 📁 generate-debrief/
+│       │   └── index.ts ✅
+│       ├── 📁 generate-hint/
+│       │   └── index.ts ✅
+│       ├── 📁 generate-star-answer/ 
+│       │   └── index.ts ✅
+│       ├── 📁 polish-star-section/ 
+│       │   └── index.ts ✅
+│       ├── 📁 prep-tool/
+│       │   └── index.ts ✅
+│       ├── 📁 send-email/
+│       │   └── index.ts ✅
+│       └── 📁 schedule-interview/ ✅ ENTIRE FOLDER 
+│           └── index.ts ✅
+│
+├── 📁 docs/ ✅ ENTIRE FOLDER  (6 files)
+│   ├── ARCHITECTURE.md ✅
+│   ├── API.md ✅
+│   ├── INSTALLATION.md ✅
+│   ├── STEALTH_FEATURES.md ✅
+│   ├── DATABASE.md ✅
+│   └── README.md ✅
+│
+├── .env ✅
+├── .env.local ✅
+├── .env.example ✅
+├── .gitignore ✅
+├── bun.lock ✅
+├── components.json ✅
+├── eslint.config.js ✅
+├── index.html ✅
+├── package.json ✅
+├── package-lock.json ✅
+├── playwright-fixture.ts ✅
+├── playwright.config.ts ✅
+├── postcss.config.js ✅
+├── prettier.config.js ✅
+├── tailwind.config.ts ✅
+├── tsconfig.json ✅
+├── tsconfig.app.json ✅
+├── tsconfig.node.json ✅
+├── vite.config.ts ✅
+├── vitest.config.ts ✅
+└── README.md ✅
+
+
+
+Based on your repository structure and description, here's a comprehensive summary of your application:
+
+## **Clarity Assistant - Interview Preparation & Real-time Call Assistant**
+
+### **Core Purpose**
+A comprehensive AI-powered platform designed to help students and job seekers **overcome interview anxiety and perform better** by providing real-time assistance during mock interviews and actual interviews, with advanced stealth features that remain invisible during screen sharing.
+
+---
+
+## **Key Features**
+
+### 🎯 **1. Live Interview Assistance (Real-time)**
+- **Real-time AI Answers**: Instant answer generation using Claude, OpenAI, or Gemini
+- **Live Transcription**: Speech-to-text conversion using Deepgram
+- **Answer Streaming**: Continuous answer display without lag
+- **Hotkey System**: Quick access to hints and answers via keyboard shortcuts
+- **Panic Button**: Hide all overlays instantly if needed
+- **Session Timer**: Track interview duration
+- **Network Monitoring**: Real-time connection quality checks
+
+### 👻 **2. Stealth Overlay Technology (Anti-Detection)**
+- **Invisible to Screen Capture**: Won't appear in OBS, Zoom screen share, or recording software
+- **Smart Mouse Hiding**: Mouse cursor won't be tracked or visible
+- **Screen Capture Detection**: Detects when recording is happening
+- **Window Visibility Manager**: Toggle visibility with hotkeys
+- **Anti-Detection Features**: Similar to Parakeet AI with enhanced capabilities
+- **Positioned Overlays**: Smart positioning to avoid suspicion
+
+### 🎤 **3. Audio & Speech Analysis**
+- **Speech Recognition**: Convert speech to text in real-time
+- **Filler Word Detection**: Identify and count "um", "uh", "like"
+- **Speaker Diarization**: Identify who's speaking
+- **Sentiment Analysis**: Detect emotional tone
+- **Silence Detection**: Identify pauses and gaps
+- **WPM Tracking**: Words per minute measurement
+- **System Audio Capture**: Capture interview audio
+- **Deepgram Integration**: Professional-grade speech-to-text
+
+### 💡 **4. Interview Preparation Tools**
+- **STAR Method Builder**: Structure behavioral answers using STAR framework
+- **Company Research**: Research company profiles and culture
+- **Resume Builder**: Create and optimize resumes
+- **Answer Bank**: Store and review previous answers
+- **Coding Problem Prep**: Practice coding problems with hints
+- **System Design Practice**: Learn system design concepts
+- **Rephraser**: Improve answer wording and clarity
+- **Project Builder**: Showcase projects effectively
+
+### 🏆 **5. Performance Analytics & Gamification**
+- **Confidence Score**: Track confidence levels across sessions
+- **Scorecard System**: Grade performance on multiple metrics
+- **XP System**: Earn experience points for practice
+- **Streak Tracker**: Maintain practice streaks
+- **Performance Metrics**: Track improvement over time
+- **Analytics Dashboard**: Visual performance data
+- **Referral System**: Incentivize user growth
+
+### 🤖 **6. AI Coaching Features**
+- **AI Feedback**: Instant feedback on answers
+- **Hint Generation**: Smart hints based on problem context
+- **Answer Generation**: AI-powered answer suggestions
+- **Code Analysis**: Real-time code review
+- **Personalized Coaching**: Tailored improvement suggestions
+
+### 📅 **7. Interview Scheduling & Management**
+- **Interview Scheduler**: Book practice sessions
+- **Google Calendar Sync**: Integrate with calendar
+- **Mock Interviews**: Full mock interview simulations
+- **Warm-up Sessions**: Quick 5-minute practice
+- **Interview History**: Track past interviews
+- **Debrief System**: Post-interview analysis and feedback
+
+### 📚 **8. Document Management**
+- **Resume Storage**: Secure resume vault
+- **Job Description Management**: Store and organize JDs
+- **Document Sharing**: Upload and manage documents
+- **Supabase Integration**: Cloud storage for files
+
+### 💳 **9. Billing & Monetization**
+- **Credit System**: Pay-per-use model
+- **Subscription Plans**: Monthly/yearly plans
+- **Stripe Integration**: Payment processing
+- **Credit Balance Tracking**: Monitor usage
+- **Upgrade Modal**: Tier management
+
+### 🔐 **10. Security & Privacy**
+- **Authentication**: Secure login with email verification
+- **OAuth Integration**: Social login options
+- **Data Privacy**: GDPR-compliant data handling
+- **Account Deletion**: User data export and deletion
+- **Private Mode**: Offline capability
+- **Bring Your Own Key (BYOK)**: Use personal API keys
+
+---
+
+## **Tech Stack**
+
+### **Frontend**
+- **React + TypeScript**: Type-safe component development
+- **Vite**: Fast build tooling
+- **Tailwind CSS**: Modern styling
+- **shadcn/ui**: Pre-built UI components
+- **Zustand**: Lightweight state management
+- **React Router**: Page navigation
+
+### **Backend & Database**
+- **Supabase**: PostgreSQL database + Auth + Storage
+- **Supabase Edge Functions**: Serverless functions
+- **Real-time Subscriptions**: Live data syncing
+
+### **AI/ML Services**
+- **OpenAI (GPT-4)**: Primary AI model
+- **Anthropic Claude**: Alternative AI model
+- **Google Gemini**: Third AI option
+- **Deepgram**: Speech-to-text (professional)
+- **Model Router**: Intelligent model selection based on task
+
+### **Audio Processing**
+- **Deepgram API**: Real-time transcription
+- **Web Audio API**: Browser audio capture
+- **VAD (Voice Activity Detection)**: Silence detection
+- **Audio Mixing**: Combine multiple audio streams
+
+### **Third-party Integrations**
+- **Google Calendar**: Schedule synchronization
+- **Stripe**: Payment processing
+- **Sentry**: Error tracking & monitoring
+- **PostHog**: Analytics & feature flags
+- **Lovable**: Deployment platform
+
+### **Testing**
+- **Playwright**: E2E testing
+- **Vitest**: Unit testing
+- **ESLint**: Code quality
+
+---
+
+## **User Personas**
+
+### 👨‍🎓 **1. Students**
+- Preparing for tech/corporate interviews
+- Want to practice without judgment
+- Need real-time guidance
+- Limited budget
+
+### 👨‍💼 **2. Job Seekers**
+- Career changers
+- Experienced professionals
+- Want to refresh interview skills
+- Can afford premium features
+
+### 🏢 **3. Interview Coaches**
+- Could use platform for client practice
+- Might want admin features
+- Could integrate into coaching business
+
+---
+
+## **Key Differentiators vs. Competitors**
+
+| Feature | Clarity | ParakeetAI | Others |
+|---------|---------|-----------|--------|
+| **Stealth Overlay** | ✅ Advanced | ✅ Basic | ❌ None |
+| **Real-time AI Answers** | ✅ Yes | ✅ Yes | ⚠️ Limited |
+| **Multi-AI Support** | ✅ 3 Models | ❌ 1 Model | ⚠️ Varies |
+| **Audio Analysis** | ✅ Comprehensive | ⚠️ Basic | ⚠️ Limited |
+| **Stealth Detection** | ✅ Advanced | ❌ No | ❌ No |
+| **STAR Builder** | ✅ Yes | ❌ No | ⚠️ Varies |
+| **Company Research** | ✅ Yes | ❌ No | ⚠️ Limited |
+| **Offline Mode** | ✅ Yes | ❌ No | ❌ No |
+
+---
+
+## **Revenue Model**
+
+### 💰 **Monetization Streams**
+1. **Credits** - Pay per session/feature usage
+2. **Subscription Plans** - Monthly/yearly subscriptions
+3. **Premium Features** - Unlocks (BYOK, advanced analytics)
+4. **API Access** - For coaches integrating into their platforms
+5. **Enterprise Plans** - For corporate training teams
+
+---
+
+## **Deployment & Operations**
+
+- **Frontend**: Deployed on Lovable
+- **Backend**: Supabase Edge Functions
+- **Database**: Supabase PostgreSQL
+- **File Storage**: Supabase Storage
+- **Monitoring**: Sentry for errors, PostHog for analytics
+
+---
+
+## **Current Status**
+
+✅ **Frontend Structure**: Complete file organization  
+✅ **Core Features**: Architected  
+⚠️ **Implementation**: In progress  
+⚠️ **Testing**: Needs coverage  
+⚠️ **Deployment**: Ready for Lovable  
+
+---
+
+## **Next Steps Priority**
+
+1. **Implement Overlay System** - Core differentiator
+2. **Build AI Integration** - Connect to Claude/OpenAI/Gemini
+3. **Audio Processing** - Deepgram integration
+4. **Authentication** - Supabase auth flow
+5. **Real-time Features** - WebSocket/Supabase subscriptions
+6. **Payment Integration** - Stripe setup
+7. **Testing & QA** - E2E and unit tests
+8. **Launch MVP** - Core features only
+
+---
+
+This is essentially a **sophisticated EdTech platform combining exam prep software, AI coaching, and anti-detection technology** - positioned at the intersection of interview preparation, AI assistance, and stealth technology. The target market is students/professionals who want **unfair advantage during interviews with minimal detection risk**.
+
+
+
+above is my application structure and summary of my application there are many issues in my Application
+
+
+client.ts:12 GoTrueClient@confideq-auth:1 (2.99.3) 2026-03-20T13:33:53.600Z Multiple GoTrueClient instances detected in the same browser context. It is not an error, but this should be avoided as it may produce undefined behavior when used concurrently under the same storage key.
+ye @ GoTrueClient.js:111
+fn @ index.mjs:163
+_initSupabaseAuthClient @ index.mjs:508
+pn @ index.mjs:385
+yn @ index.mjs:559
+(anonymous) @ client.ts:12Understand this warning
+lovable.js:126 ❤️ Lovable Script — v1.4.0
+main.tsx:36  GET [https://us-assets.i.posthog.com/array/phc_your_posthog_key/config.js](https://us-assets.i.posthog.com/array/phc_your_posthog_key/config.js) net::ERR_ABORTED 404 (Not Found)
+l @ module.js:1
+Jc @ module.js:1
+H.__PosthogExtensions__.loadExternalDependency @ module.js:1
+vt @ module.js:1
+load @ module.js:1
+Ri @ module.js:1
+_init @ module.js:1
+init @ module.js:1
+(anonymous) @ main.tsx:36Understand this error
+(index):1 Refused to execute script from 'https://us-assets.i.posthog.com/array/phc_your_posthog_key/config.js' because its MIME type ('application/json') is not executable, and strict MIME type checking is enabled.Understand this error
+lovable.js:14 Failed to execute 'postMessage' on 'DOMWindow': The target origin provided ('https://lovable.dev') does not match the recipient window's origin ('https://preview--clarify-aii.lovable.app').
+C @ lovable.js:14
+t @ lovable.js:14
+Promise.then
+n @ lovable.js:14
+(anonymous) @ lovable.js:14
+(anonymous) @ lovable.js:14Understand this warning
+(index):67  GET [https://preview--clarify-aii.lovable.app/manifest.json](https://preview--clarify-aii.lovable.app/manifest.json) 404 (Not Found)Understand this error
+(index):1 Manifest fetch from [https://preview--clarify-aii.lovable.app/manifest.json](https://preview--clarify-aii.lovable.app/manifest.json) failed, code 404Understand this error
+main.tsx:36  GET [https://us-assets.i.posthog.com/array/phc_your_posthog_key/config?ip=0&_=1774013633864&ver=1.363.1](https://us-assets.i.posthog.com/array/phc_your_posthog_key/config?ip=0&_=1774013633864&ver=1.363.1) 404 (Not Found)
+method @ module.js:1
+(anonymous) @ module.js:1
+_send_request @ module.js:1
+ct @ module.js:1
+(anonymous) @ module.js:1
+(anonymous) @ module.js:1
+c.onerror @ module.js:1
+script
+l @ module.js:1
+Jc @ module.js:1
+H.__PosthogExtensions__.loadExternalDependency @ module.js:1
+vt @ module.js:1
+load @ module.js:1
+Ri @ module.js:1
+_init @ module.js:1
+init @ module.js:1
+(anonymous) @ main.tsx:36Understand this error
+App.tsx:384  POST [https://us.i.posthog.com/flags/?v=2&ip=0&_=1774013634170&ver=1.363.1&compression=base64](https://us.i.posthog.com/flags/?v=2&ip=0&_=1774013634170&ver=1.363.1&compression=base64) 401 (Unauthorized)
+method @ module.js:1
+(anonymous) @ module.js:1
+_send_request @ module.js:1
+Ue @ module.js:1
+(anonymous) @ module.js:1
+setTimeout
+reloadFeatureFlags @ module.js:1
+reloadFeatureFlags @ module.js:1
+reset @ module.js:1
+(anonymous) @ App.tsx:384
+(anonymous) @ GoTrueClient.js:1805
+_useSession @ GoTrueClient.js:1340
+await in _useSession
+_emitInitialSession @ GoTrueClient.js:1799
+(anonymous) @ GoTrueClient.js:1793
+(anonymous) @ GoTrueClient.js:1301
+(anonymous) @ locks.js:135Understand this error
+manifest.json:1  GET [https://preview--clarify-aii.lovable.app/manifest.json](https://preview--clarify-aii.lovable.app/manifest.json) 404 (Not Found)Understand this error
+(index):1 Manifest fetch from [https://preview--clarify-aii.lovable.app/manifest.json](https://preview--clarify-aii.lovable.app/manifest.json) failed, code 404
