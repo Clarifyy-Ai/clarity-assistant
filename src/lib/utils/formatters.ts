@@ -96,6 +96,31 @@ export function formatMonthlyPrice(cents: number): string {
   return `${formatCents(cents, true)}/mo`;
 }
 
+/**
+ * Format a Date or ISO string for display.
+ * @example formatDate("2025-03-15T10:30:00Z") → "Mar 15, 2025"
+ */
+export function formatDate(
+  date: Date | string,
+  options?: Intl.DateTimeFormatOptions
+): string {
+  const d = typeof date === "string" ? new Date(date) : date;
+  return d.toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    ...options,
+  });
+}
+
+/**
+ * Format seconds as mm:ss.
+ * @example formatDurationSec(90) → "1:30"
+ */
+export function formatDurationSec(seconds: number): string {
+  return formatDurationMs(seconds * 1000);
+}
+
 // ─── Duration & Time ──────────────────────────────────────────────────────────
 
 /**

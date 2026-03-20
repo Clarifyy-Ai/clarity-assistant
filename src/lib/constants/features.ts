@@ -79,6 +79,9 @@ export const FEATURE_PLAN_GATE: Record<FeatureFlag, PlanId> = {
   [FEATURE_FLAGS.BETA_MODELS]:        "pro",
 } as const;
 
+/** Alias used in some admin pages */
+export const FEATURE_PLAN_GATES = FEATURE_PLAN_GATE;
+
 // ─── AI Model Catalogue ───────────────────────────────────────────────────────
 
 export type AIProvider = "openai" | "anthropic" | "gemini";
