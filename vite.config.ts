@@ -1,7 +1,11 @@
-import path from "path";
+import { fileURLToPath } from "url";
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
+
+// __dirname is not available in ESM ("type": "module" in package.json)
+// This polyfill is required or Vite will throw a ReferenceError
+const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
@@ -24,7 +28,7 @@ export default defineConfig(({ mode }) => {
 
     resolve: {
       alias: {
-        "@": path.resolve(__dirname, "./src"),
+        "@": `${__dirname}src`,
       },
     },
 
@@ -33,8 +37,7 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         output: {
           manualChunks: {
-            // Split heavy vendor libs into separate chunks
-            "vendor-react": ["react", "react-dom", "react-router-dom"],
+            "vendor-react":    ["react", "react-dom", "react-router-dom"],
             "vendor-ui": [
               "@radix-ui/react-dialog",
               "@radix-ui/react-dropdown-menu",
@@ -43,12 +46,12 @@ export default defineConfig(({ mode }) => {
               "framer-motion",
               "lucide-react",
             ],
-            "vendor-charts": ["recharts"],
+            "vendor-charts":   ["recharts"],
             "vendor-supabase": ["@supabase/supabase-js"],
-            "vendor-query": ["@tanstack/react-query"],
-            "vendor-form": ["react-hook-form", "zod"],
-            "vendor-state": ["zustand"],
-            "vendor-audio": ["@deepgram/sdk"],
+            "vendor-query":    ["@tanstack/react-query"],
+            "vendor-form":     ["react-hook-form", "zod"],
+            "vendor-state":    ["zustand"],
+            "vendor-audio":    ["@deepgram/sdk"],
           },
         },
       },
@@ -58,11 +61,11 @@ export default defineConfig(({ mode }) => {
     server: {
       port: 8080,
       host: true,
-      // Proxy Supabase edge functions during local dev
       proxy: {
         "/functions/v1": {
           target: env.VITE_SUPABASE_URL,
           changeOrigin: true,
+          // rewrite is a no-op here — kept for future path remapping
           rewrite: (p) => p.replace(/^\/functions\/v1/, "/functions/v1"),
         },
       },
