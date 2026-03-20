@@ -19,8 +19,8 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Badge }   from "@/components/ui/badge";
-import { Button }  from "@/components/ui/button";
+import { Badge }   from "@/components/ui/Badge";
+import { Button }  from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   DollarSign, TrendingUp, TrendingDown, Users,
