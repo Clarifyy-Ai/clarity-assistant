@@ -10,14 +10,14 @@ const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
 
 // ── Hard fail if env vars are missing — never silently use placeholders ───────
-if (!SUPABASE_URL || SUPABASE_URL.includes("your-project-ref")) {
+if (!SUPABASE_URL || SUPABASE_URL.includes("https://qzgvjrvtkwlzxpmlddkx.supabase.co")) {
   throw new Error(
     "[Clarity] VITE_SUPABASE_URL is missing or is a placeholder. " +
     "Set it in Lovable Project Settings → Environment Variables."
   );
 }
 
-if (!SUPABASE_ANON_KEY || SUPABASE_ANON_KEY === "your-anon-key") {
+if (!SUPABASE_ANON_KEY || SUPABASE_ANON_KEY === "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6Z3ZqcnZ0a3dsenhwbWxkZGt4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MDE4MzAsImV4cCI6MjA4OTM3NzgzMH0.hsDv4Sk7L8on5zlr9K6LT1FQe3bEEzmav5bCYes-0so") {
   throw new Error(
     "[Clarity] VITE_SUPABASE_PUBLISHABLE_KEY is missing or is a placeholder. " +
     "Set it in Lovable Project Settings → Environment Variables."
