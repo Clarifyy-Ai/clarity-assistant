@@ -5,23 +5,24 @@
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
 
-const SUPABASE_URL     = import.meta.env.VITE_SUPABASE_URL     as string | undefined;
+// ── Read env vars — names must match exactly what's in .env ──────────────────
+// .env defines: VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY
+const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL            as string | undefined;
 const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
 
-// ── Placeholder patterns — throw early so errors are obvious ─────────────────
+// ── Placeholder detection — only matches obvious placeholder strings ───────────
+// Do NOT add real project refs here — that was the original crash bug
 const URL_PLACEHOLDERS = [
+  "your-project-id",
   "your-project-ref",
   "your_project",
-  "placeholder",
   "example.supabase.co",
 ];
 
 const KEY_PLACEHOLDERS = [
   "your-anon-key",
-  "your_anon",
-  "phc_your",       // also catches PostHog placeholder if mistakenly set here
-  "placeholder",
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRlbXBsYXRlIn",
+  "your_anon_key",
+  "your-publishable-key",
 ];
 
 const urlIsMissing =
@@ -83,4 +84,6 @@ export async function checkSupabaseConnection(): Promise<boolean> {
   }
 }
 
+// Export under both names for compatibility
 export { SUPABASE_URL, SUPABASE_ANON_KEY };
+export { SUPABASE_ANON_KEY as SUPABASE_PUBLISHABLE_KEY };
