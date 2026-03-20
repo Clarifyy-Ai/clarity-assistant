@@ -59,8 +59,9 @@ export default defineConfig(({ mode }) => {
     },
 
     server: {
-      port: 8080,
-      host: true,
+      port: 5000,
+      host: "0.0.0.0",
+      allowedHosts: true,
       proxy: {
         "/functions/v1": {
           target: env.VITE_SUPABASE_URL,
@@ -72,7 +73,8 @@ export default defineConfig(({ mode }) => {
     },
 
     preview: {
-      port: 8080,
+      port: 5000,
+      host: "0.0.0.0",
     },
 
     test: {
