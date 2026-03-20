@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Mic, Brain, BarChart2, Shield, Zap, Users, ArrowRight, CheckCircle2 } from "lucide-react";
+import { Brain, BarChart2, Shield, Zap, Users, ArrowRight, CheckCircle2, Mic } from "lucide-react";
 import { motion } from "framer-motion";
 
 const FEATURES = [
@@ -50,10 +50,7 @@ export default function Landing() {
       <nav className="fixed top-0 inset-x-0 z-50 border-b border-white/[0.06] bg-[#07070d]/80 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-6 h-16">
           <Link to="/" className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-lg bg-primary flex items-center justify-center">
-              <Mic className="w-4 h-4 text-primary-foreground" />
-            </div>
-            <span className="font-bold text-lg tracking-tight">ConfideQ</span>
+            <img src="/images/clarify-logo.png" alt="Clarify AI" className="h-8 w-auto" />
           </Link>
           <div className="hidden md:flex items-center gap-8 text-sm text-gray-400">
             <Link to="/pricing" className="hover:text-white transition-colors">Pricing</Link>
@@ -79,7 +76,6 @@ export default function Landing() {
 
       {/* ── Hero ───────────────────────────────────────────── */}
       <section className="relative pt-40 pb-28 px-6">
-        {/* Glow */}
         <div className="absolute top-20 left-1/2 -translate-x-1/2 w-[600px] h-[400px] bg-primary/20 rounded-full blur-[140px] pointer-events-none" />
 
         <div className="max-w-3xl mx-auto text-center relative z-10">
@@ -123,7 +119,6 @@ export default function Landing() {
             </Link>
           </motion.div>
 
-          {/* Proof points */}
           <motion.div
             className="mt-14 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 text-sm text-gray-500"
             initial={{ opacity: 0 }}
@@ -194,7 +189,7 @@ export default function Landing() {
       {/* ── Footer ─────────────────────────────────────────── */}
       <footer className="border-t border-white/[0.06] py-10 px-6">
         <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-600">
-          <span>© {new Date().getFullYear()} ConfideQ. All rights reserved.</span>
+          <span>© {new Date().getFullYear()} Clarify AI. All rights reserved.</span>
           <div className="flex gap-6">
             <Link to="/pricing" className="hover:text-gray-400 transition-colors">Pricing</Link>
             <Link to="/help" className="hover:text-gray-400 transition-colors">Help</Link>

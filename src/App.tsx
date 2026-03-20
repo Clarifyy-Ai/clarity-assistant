@@ -353,11 +353,9 @@ const router = createBrowserRouter([
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function App() {
-  const { setSession, loadProfile } = useAuthStore((s) => ({
-    setSession:   s.setSession,
-    loadProfile:  s.loadProfile,
-  }));
-  const { theme } = useUIStore((s) => ({ theme: s.theme }));
+  const setSession  = useAuthStore((s) => s.setSession);
+  const loadProfile = useAuthStore((s) => s.loadProfile);
+  const theme       = useUIStore((s) => s.theme);
 
   // ── Supabase auth listener ─────────────────────────────────────────────────
   useEffect(() => {
