@@ -50,6 +50,26 @@ Key variables (set in `.env`):
 
 See `.env.local` for the full list of optional variables (Stripe, Sentry, PostHog, Deepgram, etc.).
 
+## Auth Architecture (Critical)
+
+The app uses **two coexisting auth-related stores** which were previously broken:
+
+- `src/store/authStore.ts` — **Single source of truth**. Initialized by `App.tsx` via `authStore.initialize()`. Handles session loading, profile fetching, and auth state transitions.
+- `src/store/userStore.ts` — **Compatibility wrapper** that proxies `useAuthStore` from `authStore.ts`. Adds computed `isLoading`/`isAuthenticated` and shims (`clearAuth`, `setProfile`, `setUser`). The 50+ components that import from this file now read live data.
+
+### Key rules:
+- Never add a second `supabase.auth.onAuthStateChange` listener. `authStore.initialize()` owns the single listener.
+- Never recreate `.env.local` with placeholder values (it would shadow the real `.env`).
+- `src/hooks/useAuth.ts` provides auth action helpers (sign in, sign up, etc.) for form components. It does NOT own an auth listener.
+
+## Supabase Setup
+
+- **Client singleton**: `src/integrations/supabase/client.ts` — only file that calls `createClient()`
+- **Wrapper library**: `src/lib/supabase/` — re-exports the singleton + domain helpers (auth, database, storage, realtime)
+- **Migration**: `supabase/migrations/` — one migration file defining all tables (profiles, sessions, interviews, etc.)
+- **Edge functions**: `supabase/functions/` — deployed separately to Supabase (ai-coach-chat, generate-debrief, etc.)
+- **Column name**: profiles table uses `plan` (not `plan_id`) — authStore.loadProfile fixed accordingly
+
 ## Deployment
 
 Configured as a **static** deployment:

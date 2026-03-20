@@ -1,59 +1,66 @@
 import { create } from "zustand";
-import { persist, subscribeWithSelector } from "zustand/middleware";
-import type { Session, User } from "@supabase/supabase-js";
-import type { UserProfile, AppNotification } from "@/types/user.types";
+import { subscribeWithSelector } from "zustand/middleware";
+import type { AppNotification } from "@/types/user.types";
+import { useAuthStore as _useAuthStore } from "./authStore";
+import type { ProfileRow, SupabaseUser, SupabaseSession } from "@/types";
 
 // ─────────────────────────────────────────────────────────────────
-// Auth Slice
+// Auth Store — compatibility wrapper around the primary authStore.
+//
+// All 50+ components that import useAuthStore from this file now
+// read from the single source of truth (authStore.ts), which is
+// properly initialised by App.tsx via authStore.initialize().
+//
+// Added shims:
+//   isLoading        – computed from status
+//   isAuthenticated  – computed from status
+//   clearAuth        – alias for signOut
+//   setProfile       – direct state patch (local-only)
+//   setUser          – direct state patch (local-only)
+//   setSession       – delegates to authStore.setSession
+//   setIsLoading     – no-op (status is source of truth)
+//   updateProfile    – local-only patch (useAuth.ts owns the DB write)
 // ─────────────────────────────────────────────────────────────────
 
-interface AuthSlice {
-  session: Session | null;
-  user: User | null;
-  profile: UserProfile | null;
-  isLoading: boolean;
-  isAuthenticated: boolean;
+export function useAuthStore() {
+  const state = _useAuthStore();
 
-  setSession: (session: Session | null) => void;
-  setUser: (user: User | null) => void;
-  setProfile: (profile: UserProfile | null) => void;
-  updateProfile: (patch: Partial<UserProfile>) => void;
-  setIsLoading: (loading: boolean) => void;
-  clearAuth: () => void;
+  return {
+    ...state,
+
+    // Computed
+    isLoading:       state.status === "idle" || state.status === "loading",
+    isAuthenticated: state.status === "authenticated",
+
+    // Compatibility aliases / shims
+    clearAuth:   state.signOut,
+    setSession:  state.setSession,
+    setIsLoading: (_loading: boolean) => { /* status-driven, no-op */ },
+
+    setProfile: (profile: ProfileRow | null) =>
+      _useAuthStore.setState({ profile } as any),
+
+    setUser: (user: SupabaseUser | null) =>
+      _useAuthStore.setState({ user } as any),
+
+    // Local-only patch so useAuth.ts can update profile state after
+    // its own DB write without triggering a second DB call.
+    updateProfile: (patch: Partial<ProfileRow>) =>
+      _useAuthStore.setState((s) => ({
+        profile: s.profile ? ({ ...s.profile, ...patch } as ProfileRow) : null,
+      })),
+  };
 }
 
-export const useAuthStore = create<AuthSlice>()(
-  subscribeWithSelector((set) => ({
-    session: null,
-    user: null,
-    profile: null,
-    isLoading: true,
-    isAuthenticated: false,
-
-    setSession: (session) =>
-      set({ session, isAuthenticated: !!session, isLoading: false }),
-
-    setUser: (user) => set({ user }),
-
-    setProfile: (profile) => set({ profile }),
-
-    updateProfile: (patch) =>
-      set((state) => ({
-        profile: state.profile ? { ...state.profile, ...patch } : null,
-      })),
-
-    setIsLoading: (isLoading) => set({ isLoading }),
-
-    clearAuth: () =>
-      set({
-        session: null,
-        user: null,
-        profile: null,
-        isAuthenticated: false,
-        isLoading: false,
-      }),
-  }))
-);
+// Expose getState for non-hook call-sites (e.g. useAuth.ts)
+(useAuthStore as any).getState = () => {
+  const s = _useAuthStore.getState();
+  return {
+    ...s,
+    isLoading:       s.status === "idle" || s.status === "loading",
+    isAuthenticated: s.status === "authenticated",
+  };
+};
 
 // ─────────────────────────────────────────────────────────────────
 // Notification Store
