@@ -2,25 +2,36 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import * as Sentry from "@sentry/react";
 import posthog from "posthog-js";
-
 import App from "./App";
 import "./index.css";
 
-// ── Sentry — error monitoring ──────────────────────────────────────
-if (import.meta.env.VITE_SENTRY_DSN && import.meta.env.VITE_APP_ENV !== "development") {
+// ── Helpers ────────────────────────────────────────────────────────────────
+/** Returns true only when a key is present AND not a known placeholder */
+function isRealKey(value: string | undefined, placeholderPrefixes: string[]): boolean {
+  if (!value) return false;
+  return !placeholderPrefixes.some((prefix) =>
+    value.toLowerCase().startsWith(prefix.toLowerCase())
+  );
+}
+
+// ── Sentry — error monitoring ──────────────────────────────────────────────
+if (
+  isRealKey(import.meta.env.VITE_SENTRY_DSN, ["your-sentry", "https://your"]) &&
+  import.meta.env.VITE_APP_ENV !== "development"
+) {
   Sentry.init({
     dsn: import.meta.env.VITE_SENTRY_DSN,
     environment: import.meta.env.VITE_APP_ENV ?? "production",
     integrations: [
       Sentry.browserTracingIntegration(),
       Sentry.replayIntegration({
-        maskAllText: true,       // Privacy — mask PII in replays
+        maskAllText:   true,   // Privacy — mask PII in replays
         blockAllMedia: false,
       }),
     ],
-    tracesSampleRate: import.meta.env.VITE_APP_ENV === "production" ? 0.2 : 1.0,
-    replaysSessionSampleRate: 0.05,
-    replaysOnErrorSampleRate: 1.0,
+    tracesSampleRate:           import.meta.env.VITE_APP_ENV === "production" ? 0.2 : 1.0,
+    replaysSessionSampleRate:   0.05,
+    replaysOnErrorSampleRate:   1.0,
     beforeSend(event) {
       // Strip any audio stream data from error payloads
       if (event.extra && "audioStream" in event.extra) {
@@ -31,19 +42,21 @@ if (import.meta.env.VITE_SENTRY_DSN && import.meta.env.VITE_APP_ENV !== "develop
   });
 }
 
-// ── PostHog — product analytics ────────────────────────────────────
-if (import.meta.env.VITE_POSTHOG_KEY) {
+// ── PostHog — product analytics ───────────────────────────────────────────
+// Guard against the placeholder key "phc_your_posthog_key" which is truthy
+// but causes a 404 when PostHog tries to load its config script.
+if (isRealKey(import.meta.env.VITE_POSTHOG_KEY, ["phc_your", "your_posthog", "placeholder"])) {
   posthog.init(import.meta.env.VITE_POSTHOG_KEY, {
-    api_host: import.meta.env.VITE_POSTHOG_HOST ?? "https://app.posthog.com",
-    person_profiles: "identified_only",
-    capture_pageview: false,      // We handle this manually in router
+    api_host:         import.meta.env.VITE_POSTHOG_HOST ?? "https://app.posthog.com",
+    person_profiles:  "identified_only",
+    capture_pageview: false,   // We handle this manually in router
     capture_pageleave: true,
-    autocapture: false,           // Manual events only — avoid noise
+    autocapture:      false,   // Manual events only — avoid noise
     session_recording: {
       maskAllInputs: true,
       maskInputOptions: {
         password: true,
-        email: true,
+        email:    true,
       },
     },
     loaded(ph) {
@@ -54,7 +67,7 @@ if (import.meta.env.VITE_POSTHOG_KEY) {
   });
 }
 
-// ── Service Worker — PWA support ───────────────────────────────────
+// ── Service Worker — PWA support ──────────────────────────────────────────
 if ("serviceWorker" in navigator && import.meta.env.VITE_APP_ENV === "production") {
   window.addEventListener("load", () => {
     navigator.serviceWorker
@@ -63,9 +76,8 @@ if ("serviceWorker" in navigator && import.meta.env.VITE_APP_ENV === "production
   });
 }
 
-// ── Mount React ────────────────────────────────────────────────────
+// ── Mount React ───────────────────────────────────────────────────────────
 const rootEl = document.getElementById("root");
-
 if (!rootEl) {
   throw new Error(
     "[ConfideQ] Could not find #root element. Check your index.html."
