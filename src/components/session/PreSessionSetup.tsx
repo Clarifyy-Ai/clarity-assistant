@@ -33,14 +33,12 @@ const INTERVIEW_TYPES = [
   { value: "leadership",     label: "Leadership" },
 ];
 
-export function PreSessionSetup({ onStart, sessionType: initialSessionType = "live" }: PreSessionSetupProps) {
+export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSetupProps) {
   const { profile } = useAuthStore();
   const resumes     = useDocumentStore((s) => s.resumes);
   const jds         = useDocumentStore((s) => s.jds);
   const activeResumeId = useDocumentStore((s) => s.active_resume_id);
   const activeJdId     = useDocumentStore((s) => s.active_jd_id);
-
-  const [sessionType,       setSessionType]       = useState<"live" | "mock">(initialSessionType);
   const [interviewType,     setInterviewType]     = useState("behavioral");
   const [resumeId,          setResumeId]          = useState<string | null>(activeResumeId);
   const [jdId,              setJdId]              = useState<string | null>(activeJdId);
@@ -132,28 +130,6 @@ export function PreSessionSetup({ onStart, sessionType: initialSessionType = "li
         </div>
 
         <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-5">
-
-          <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
-              Session Mode
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {(["live", "mock"] as const).map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setSessionType(t)}
-                  className={cn(
-                    "px-3 py-2 rounded-xl border text-sm font-medium transition-all",
-                    sessionType === t
-                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                      : "bg-white/5 border-white/10 text-gray-400 hover:border-white/20"
-                  )}
-                >
-                  {t === "live" ? "Live Co-pilot" : "Mock Interview"}
-                </button>
-              ))}
-            </div>
-          </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">

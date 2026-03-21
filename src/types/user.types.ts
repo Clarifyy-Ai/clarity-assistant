@@ -36,7 +36,12 @@ export type PreferredAIModel =
   | "gemini-flash"
   | "gemini-pro"
   | "gpt-4o"
-  | "claude";
+  | "gpt-4o-mini"
+  | "claude"
+  | "claude-3-5-sonnet"
+  | "claude-3-haiku"
+  | "gemini-1-5-pro"
+  | "gemini-1-5-flash";
 
 export interface UserProfile {
   id: string;

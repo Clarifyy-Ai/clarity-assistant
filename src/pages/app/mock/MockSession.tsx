@@ -10,10 +10,14 @@ import { useCredits } from "@/hooks/useCredits";
 import { useHotkeys } from "@/hooks/useHotkeys";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";
+import { useAuthStore } from "@/store/userStore";
 import { useAudioStore } from "@/store/audioStore";
 import { OverlayWindow } from "@/components/overlay/OverlayWindow";
 import { LiveSessionController } from "@/components/live/LiveSessionController";
 import { PreSessionSetup } from "@/components/session/PreSessionSetup";
+import { sessionsDB } from "@/lib/supabase/database";
+import { supabase } from "@/integrations/supabase/client";
+import { toDbModel } from "@/lib/ai/modelMapping";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
@@ -26,12 +30,14 @@ import type { LiveSessionConfig } from "@/types/session.types";
 
 export default function MockSession() {
   const navigate      = useNavigate();
+  const { profile }   = useAuthStore();
   const orchestrator  = useSessionOrchestrator();
   const stt           = useSpeechRecognition();
   const fillerHook    = useFillerWordDetection(stt.interimTranscript);
   const wpmHook       = useWPMTracker(stt.transcript);
   const sentimentHook = useSentimentAnalysis(stt.transcript);
   const credits       = useCredits();
+  const startTimeRef  = useRef<string>(new Date().toISOString());
 
   const [phase,        setPhase]       = useState<"setup" | "active">("setup");
   const [panicMode,    setPanicMode]   = useState(false);
@@ -95,6 +101,7 @@ export default function MockSession() {
 
   async function handleSetup(config: LiveSessionConfig) {
     sessionConfigRef.current = config;
+    startTimeRef.current = new Date().toISOString();
 
     const overlay = useOverlayStore.getState();
     overlay.setActiveModel(config.model);
@@ -110,6 +117,23 @@ export default function MockSession() {
       jd_id:           config.jd_id,
     });
 
+    const userId = profile?.id;
+    const sessionId = useSessionStore.getState().session_id;
+    if (userId && sessionId) {
+      try {
+        await sessionsDB.create({
+          id:         sessionId,
+          user_id:    userId,
+          type:       "mock",
+          status:     "active",
+          started_at: startTimeRef.current,
+          model_used: toDbModel(config.model),
+        });
+      } catch (err) {
+        console.error("[MockSession] Failed to create session record:", err);
+      }
+    }
+
     setPhase("active");
     stt.start();
   }
@@ -120,6 +144,7 @@ export default function MockSession() {
 
     if (isLastQ) {
       useOverlayStore.getState().hideOverlay();
+      await persistMockSession();
       await orchestrator.completeSession();
     } else {
       orchestrator.nextQuestion();
@@ -136,10 +161,61 @@ export default function MockSession() {
     }
   }
 
+  async function persistMockSession() {
+    const session = useSessionStore.getState();
+    const overlay = useOverlayStore.getState();
+    const userId  = profile?.id;
+    const sessionId = session.session_id;
+
+    if (!userId || !sessionId) return;
+
+    try {
+      const dbModel = toDbModel(overlay.active_model);
+      const transcript = stt.transcript || "";
+      const questionCount = orchestrator.totalQuestions ?? 0;
+
+      await sessionsDB.update(sessionId, {
+        status:            "completed",
+        credits_used:      session.credits_consumed,
+        model_used:        dbModel,
+        ended_at:          new Date().toISOString(),
+        filler_words:      fillerHook.totalCount,
+        avg_wpm:           wpmHook.wpm,
+        hints_used:        overlay.hint_history.length,
+        answers_generated: overlay.hint_history.length,
+        questions_asked:   questionCount,
+        notes:             transcript || null,
+      });
+
+      if (transcript) {
+        await supabase.from("session_transcripts").insert({
+          session_id: sessionId,
+          content:    transcript,
+          speaker:    "candidate",
+          is_final:   true,
+        });
+      }
+
+      if (overlay.hint_history.length > 0) {
+        const interactions = overlay.hint_history.map((h) => ({
+          session_id: sessionId,
+          type:       "hint" as const,
+          prompt:     h.question,
+          response:   h.hint,
+          model:      dbModel,
+        }));
+        await supabase.from("session_ai_interactions").insert(interactions);
+      }
+    } catch (err) {
+      console.error("[MockSession] Failed to persist session:", err);
+    }
+  }
+
   async function handleEndSession() {
     clearInterval(timerRef.current!);
     stt.stop();
     useOverlayStore.getState().hideOverlay();
+    await persistMockSession();
     await orchestrator.completeSession();
   }
 

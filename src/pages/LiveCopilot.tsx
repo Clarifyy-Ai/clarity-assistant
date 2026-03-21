@@ -16,6 +16,7 @@ const DEFAULT_CONFIG: LiveSessionConfig = {
   role: null,
   hint_style: "short_hints",
   model: "gemini-flash",
+  smart_routing: false,
   stealth_mode: true,
   resume_id: null,
   jd_id: null,

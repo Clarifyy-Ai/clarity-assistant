@@ -15,6 +15,7 @@ import { createDragHandler } from "@/lib/overlay/stealthMouse";
 import { generateId } from "@/lib/utils";
 import { sessionsDB } from "@/lib/supabase/database";
 import { supabase } from "@/integrations/supabase/client";
+import { toDbModel } from "@/lib/ai/modelMapping";
 import type { LiveSessionConfig } from "@/types/session.types";
 
 // ─────────────────────────────────────────────────────────────────
@@ -26,22 +27,6 @@ import type { LiveSessionConfig } from "@/types/session.types";
 // This prevents the full-store-object anti-pattern that causes
 // re-render loops when audio/session state ticks every second.
 // ─────────────────────────────────────────────────────────────────
-
-const APP_TO_DB_MODEL: Record<string, string> = {
-  "gemini-flash":      "gemini-1-5-flash",
-  "gemini-pro":        "gemini-1-5-pro",
-  "gpt-4o":            "gpt-4o",
-  "claude":            "claude-3-5-sonnet",
-  "claude-3-5-sonnet": "claude-3-5-sonnet",
-  "gemini-1-5-pro":    "gemini-1-5-pro",
-  "gemini-1-5-flash":  "gemini-1-5-flash",
-  "gpt-4o-mini":       "gpt-4o-mini",
-  "claude-3-haiku":    "claude-3-haiku",
-};
-
-function toDbModel(appModel: string): string {
-  return APP_TO_DB_MODEL[appModel] ?? appModel;
-}
 
 interface UseLiveCopilotOptions {
   config:     LiveSessionConfig;

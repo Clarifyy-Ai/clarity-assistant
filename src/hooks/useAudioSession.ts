@@ -275,37 +275,82 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       cleanupSysRef.current = null;
       stopStream(currentSysStream);
       store.setSystemStream(null);
-
-      const micStream = store.streams.mic_stream;
-      if (micStream) {
-        store.setCombinedStream(micStream);
-        deepgramRef.current?.replaceStream?.(micStream);
-      }
     } else {
       if (!isSystemAudioSupported()) return;
       try {
         const sysStream = await captureSystemAudio();
         store.setSystemStream(sysStream);
-
-        const micStream = store.streams.mic_stream;
-        if (micStream) {
-          const merged = mergeAudioStreams(micStream, sysStream);
-          store.setCombinedStream(merged);
-          deepgramRef.current?.replaceStream?.(merged);
-        }
-
         cleanupSysRef.current = watchStreamEnded(sysStream, () => {
           store.setSystemStream(null);
-          const mic = useAudioStore.getState().streams.mic_stream;
-          if (mic) {
-            store.setCombinedStream(mic);
-            deepgramRef.current?.replaceStream?.(mic);
-          }
         });
       } catch {
         store.setSystemAudioAvailable(false);
+        return;
       }
     }
+
+    deepgramRef.current?.disconnect();
+    deepgramRef.current = null;
+
+    cleanupMicRef.current?.();
+    cleanupMicRef.current = null;
+
+    const micStream = store.streams.mic_stream;
+    const sysStream = store.streams.system_stream;
+
+    if (!micStream) return;
+
+    const combined = sysStream
+      ? mergeAudioStreams(micStream, sysStream)
+      : micStream;
+
+    store.setCombinedStream(combined);
+
+    const levelAnalyser = createLevelAnalyser(combined);
+    levelAnalyserRef.current?.disconnect();
+    levelAnalyserRef.current = levelAnalyser;
+
+    const deepgram = new DeepgramStreamClient({
+      stream: combined,
+      config: {
+        model:           "nova-2-meeting",
+        diarize:         true,
+        filler_words:    true,
+        interim_results: true,
+        utterance_end_ms: 1200,
+      },
+      onUtterance: (utterance: TranscriptUtterance) => {
+        handleUtterance(utterance);
+      },
+      onInterim: (text) => {
+        store.updateInterimText(text);
+        fillerRTRef.current?.check(text);
+      },
+      onError: (error) => {
+        store.setStreamError({
+          code:        "DEEPGRAM_CONNECTION_FAILED",
+          message:     error.message,
+          recoverable: true,
+          suggestion:  "Check your internet connection.",
+        });
+      },
+      onStatusChange: (status) => {
+        store.setDeepgramStatus(status);
+      },
+    });
+
+    deepgramRef.current = deepgram;
+    await deepgram.connect();
+
+    cleanupMicRef.current = watchStreamEnded(micStream, () => {
+      store.setStreamError({
+        code:        "STREAM_ENDED",
+        message:     "Microphone stream ended",
+        recoverable: true,
+        suggestion:  "Click Reconnect to resume.",
+      });
+      store.setIsCapturing(false);
+    });
   }, []);
 
   const isSystemAudioActive = useAudioStore(
