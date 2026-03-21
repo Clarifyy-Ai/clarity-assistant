@@ -257,7 +257,7 @@ function JDManager() {
   const [saving,   setSaving]   = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const jds = docStore.jobDescriptions;
+  const jds = docStore.jds ?? [];
 
   async function handleAdd() {
     if (!title.trim() || !text.trim()) return;

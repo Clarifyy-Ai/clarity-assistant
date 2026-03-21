@@ -9,13 +9,6 @@ import {
 import { createDragHandler, getProctorSafePosition } from "@/lib/overlay/stealthMouse";
 import type { OverlayPosition } from "@/store/overlayStore";
 
-/**
- * Props:
- * - position: current top-left coordinate (CSS pixels)
- * - onPositionChange: callback when user drags or when we auto-adjust
- * - isProctorSafe: when true, we enforce a "safe" position that avoids proctor-detectable areas
- * - children: overlay content
- */
 interface OverlayPositionManagerProps {
   position: OverlayPosition;
   onPositionChange: (pos: OverlayPosition) => void;
@@ -23,7 +16,6 @@ interface OverlayPositionManagerProps {
   children: ReactNode;
 }
 
-// Utility: merge forwarded ref with local ref
 function setRefs<T>(...refs: (Ref<T> | undefined)[]) {
   return (value: T | null) => {
     refs.forEach((ref) => {
@@ -44,42 +36,36 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
   ) {
     const localRef = useRef<HTMLDivElement>(null);
     const mergedRef = setRefs<HTMLDivElement>(ref, localRef);
+    const lastSafePos = useRef<OverlayPosition | null>(null);
 
-    // Attach drag handler to the current element; cleanup on unmount or element change
     useEffect(() => {
       const el = localRef.current;
       if (!el) return;
 
       const cleanup = createDragHandler(el, onPositionChange);
       return () => cleanup?.();
-      // Depend only on callback identity; ref.current is read at runtime
     }, [onPositionChange]);
 
-    // Enforce proctor-safe position on:
-    // - toggle of isProctorSafe
-    // - element size changes
-    // - window resize (viewport change)
     useLayoutEffect(() => {
       const el = localRef.current;
-      if (!el) return;
+      if (!el || !isProctorSafe) {
+        lastSafePos.current = null;
+        return;
+      }
 
-      // Handler to compute and set safe position
       const applySafe = () => {
-        if (!isProctorSafe) return;
         const safePos = getProctorSafePosition(el.offsetWidth, el.offsetHeight);
+        const prev = lastSafePos.current;
+        if (prev && prev.x === safePos.x && prev.y === safePos.y) return;
+        lastSafePos.current = safePos;
         onPositionChange(safePos);
       };
 
-      // Initial enforce (if enabled)
       applySafe();
 
-      // Observe size changes
-      const ro = new ResizeObserver(() => {
-        applySafe();
-      });
+      const ro = new ResizeObserver(() => applySafe());
       ro.observe(el);
 
-      // Observe viewport changes
       const onWinResize = () => applySafe();
       window.addEventListener("resize", onWinResize);
 
@@ -89,7 +75,6 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
       };
     }, [isProctorSafe, onPositionChange]);
 
-    // Keep the overlay absolutely/fixed positioned with GPU hinting
     return (
       <div
         ref={mergedRef}
