@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveCopilot } from "@/hooks/useLiveCopilot";
 import { useCredits } from "@/hooks/useCredits";
@@ -56,6 +56,7 @@ export default function LiveRehearsal() {
 
   const [phase, setPhase]   = useState<"setup" | "active">("setup");
   const [config, setConfig] = useState<LiveSessionConfig>(DEFAULT_CONFIG);
+  const hasStartedRef       = useRef(false);
 
   const copilot = useLiveCopilot({ config });
 
@@ -67,7 +68,8 @@ export default function LiveRehearsal() {
   }, []);
 
   useEffect(() => {
-    if (phase === "active" && sessionStatus !== "active") {
+    if (phase === "active" && !hasStartedRef.current && sessionStatus === "idle") {
+      hasStartedRef.current = true;
       copilot.startLiveSession();
     }
   }, [phase, copilot.startLiveSession, sessionStatus]);
