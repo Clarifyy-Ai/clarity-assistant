@@ -121,7 +121,7 @@ export default function SystemDesign() {
     <div className="space-y-5 max-w-5xl">
       <PageHeader
         title="System Design"
-        subtitle="Practice system design interviews with AI-guided breakdowns"
+        description="Practice system design interviews with AI-guided breakdowns"
       />
 
       <div className="flex flex-col lg:flex-row gap-5">

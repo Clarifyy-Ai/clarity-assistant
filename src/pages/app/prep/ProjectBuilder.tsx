@@ -105,7 +105,7 @@ export default function ProjectBuilder() {
     <div className="space-y-5 max-w-4xl">
       <PageHeader
         title="Project Builder"
-        subtitle="Turn your project experience into polished interview showcases"
+        description="Turn your project experience into polished interview showcases"
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

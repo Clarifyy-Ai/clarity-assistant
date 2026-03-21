@@ -173,7 +173,7 @@ export default function CodingHints() {
     <div className="space-y-5 max-w-5xl">
       <PageHeader
         title="Coding Problems"
-        subtitle="Browse interview coding problems, get AI hints and solution explanations"
+        description="Browse interview coding problems, get AI hints and solution explanations"
       />
 
       <div className="flex flex-col lg:flex-row gap-5">

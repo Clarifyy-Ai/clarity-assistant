@@ -98,7 +98,7 @@ export default function Rephraser() {
     <div className="space-y-5 max-w-5xl">
       <PageHeader
         title="Answer Rephraser"
-        subtitle="Paste an interview answer, choose a style, and get an AI-improved version"
+        description="Paste an interview answer, choose a style, and get an AI-improved version"
       />
 
       <div className="flex flex-wrap gap-2">

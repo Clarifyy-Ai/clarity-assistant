@@ -29,7 +29,7 @@ export default function PrepLab() {
     <div className="space-y-5 max-w-5xl">
       <PageHeader
         title="Prep Lab"
-        subtitle="Build STAR answers, study questions, and use AI tools"
+        description="Build STAR answers, study questions, and use AI tools"
       />
       <Tabs defaultValue="star">
         <TabsList>
