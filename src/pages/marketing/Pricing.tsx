@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { PLANS, PLAN_ORDER, type PlanId } from "@/lib/billing/subscriptionManager";
+import { PLANS, type PlanId } from "@/lib/billing/subscriptionManager";
 import { Check, X, ArrowRight, Zap } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";

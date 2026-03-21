@@ -1,5 +1,5 @@
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, Calendar, Tag, User } from "lucide-react";
+import { ArrowLeft, Calendar, User } from "lucide-react";
 import { motion } from "framer-motion";
 
 interface BlogPostData {
