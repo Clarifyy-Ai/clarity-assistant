@@ -32,6 +32,8 @@ export function OverlayHintPanel({
 
   const historyLen   = useOverlayStore((s) => s.hint_history.length);
   const historyIndex = useOverlayStore((s) => s.hint_history_index);
+  const viewedQuestion = useOverlayStore((s) => s.viewed_question);
+  const isViewingHistory = historyLen > 1 && historyIndex < historyLen - 1;
 
   const isStreaming = hintState === "streaming";
   const isGenerating = hintState === "generating";
@@ -150,6 +152,12 @@ export function OverlayHintPanel({
       )}
 
       {/* Hint content */}
+      {isViewingHistory && viewedQuestion && (
+        <div className="mb-1.5 rounded bg-white/5 px-2 py-1 text-[9px] text-muted-foreground/60 italic truncate">
+          Q: {viewedQuestion}
+        </div>
+      )}
+
       {!!composed?.lines?.length && (
         <div className="space-y-1">
           {composed.lines.map((line, i) => {
