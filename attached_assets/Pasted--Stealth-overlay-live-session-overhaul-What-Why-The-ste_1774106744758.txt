@@ -1,0 +1,29 @@
+ Stealth overlay & live session overhaul
+What & Why
+The stealth overlay and live session experience is the core differentiator of the product but is missing critical controls and features. The pre-session setup lacks resume/JD selection, instructions input, and model selection. The active session lacks working controls for mic toggle, answer generation, auto-generate mode, chat/manual input, system audit display, and transcript viewing. The overlay layout needs to be resizable. All mock and live interview sessions should use the stealth overlay as the unified session interface.
+
+Done looks like
+Pre-session setup panel with: resume selector (from user's uploaded resumes), JD selector (from user's job descriptions), free-text instructions field, AI model selector (preferred model + smart routing toggle), system audio + mic permission checks, session type selector (live vs mock)
+Active session controls toolbar with working buttons/toggles for: mic on/off, system audio capture, generate answer (manual trigger), auto-generate toggle (automatically generate when silence detected), stealth mode toggle, panic button, end session
+Transcript panel showing real-time transcription with speaker labels (interviewer vs candidate), scrolling feed of utterances
+Answer/hint display area showing AI-generated answers with streaming text, expandable detail, copy-to-clipboard
+Chat/manual input for typing questions manually when audio detection misses something
+System audit panel showing network status, STT connection status, model in use, credits consumed, session timer
+Resizable overlay — user can drag edges/corners to resize the overlay window, size persists in overlayStore
+Mock sessions use stealth overlay — MockSession page launches the same stealth overlay interface for consistency
+Session history integration — sessions are saved to Supabase with transcript, answers generated, and metrics (WPM, filler count, duration)
+Out of scope
+Deepgram API key provisioning (uses existing edge function)
+Actual screen capture blocking CSS (already implemented)
+Calendar sync / scheduling features
+Practice rooms integration (separate collaborative feature)
+Tasks
+Pre-session setup panel — Build a configuration step before starting a session with resume/JD selection from Supabase, instructions textarea, model picker, audio device checks, and session type toggle. This replaces the current minimal "start" flow in LiveCopilot.
+Session controls toolbar — Build a floating toolbar within the overlay with mic toggle, system audio toggle, generate button, auto-generate switch, stealth toggle, panic button, and end session. Wire each to existing hooks/stores (audioStore, overlayStore, sessionStore).
+Transcript panel — Build a scrollable transcript view showing real-time utterances from useSpeechRecognition/useDeepgramStream with speaker diarization labels and timestamps.
+Answer display area — Build the AI answer/hint display with streaming text output from the model router, expandable sections, copy button, and "save to answer bank" action.
+Chat/manual input — Add a text input at the bottom of the overlay for manually typing questions to send to the AI when audio detection fails.
+System audit panel — Build a collapsible status panel showing network quality, STT status, active AI model, credits used this session, and session duration timer.
+Resizable overlay — Add resize handles to the overlay window (edges and corners), persist width/height in overlayStore, enforce min/max size constraints.
+Unify mock sessions with stealth — Update MockSession to launch the stealth overlay as the session interface instead of its own separate UI, passing mock-specific config (question set, timer mode).
+Session persistence — On session end, save the full transcript, generated answers, metrics (duration, WPM, filler count, credits consumed) to the sessions table in Supabase.
