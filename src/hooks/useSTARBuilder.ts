@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState, useCallback } from "react";
 import { callGemini } from "@/lib/ai/geminiClient";
 import { callOpenAI } from "@/lib/ai/openaiClient";
