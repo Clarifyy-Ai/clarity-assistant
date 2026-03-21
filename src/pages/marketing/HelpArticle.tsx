@@ -1,6 +1,7 @@
 import { useParams, Link } from "react-router-dom";
-import { ArrowLeft, HelpCircle } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
+import { MarketingLayout } from "@/components/layout/MarketingLayout";
 
 interface Article {
   id: string;
@@ -37,12 +38,14 @@ export default function HelpArticle() {
 
   if (!article) {
     return (
-      <div className="min-h-screen bg-[#07070d] text-white flex items-center justify-center">
-        <div className="text-center">
-          <p className="text-gray-400 mb-4">Article not found</p>
-          <Link to="/help" className="text-primary hover:underline text-sm">Back to Help Center</Link>
+      <MarketingLayout>
+        <div className="pt-32 pb-24 flex items-center justify-center">
+          <div className="text-center">
+            <p className="text-muted-foreground mb-4">Article not found</p>
+            <Link to="/help" className="text-primary hover:underline text-sm">Back to Help Center</Link>
+          </div>
         </div>
-      </div>
+      </MarketingLayout>
     );
   }
 
@@ -51,47 +54,30 @@ export default function HelpArticle() {
     .filter(Boolean) as Article[];
 
   return (
-    <div className="min-h-screen bg-[#07070d] text-white overflow-x-hidden">
-      <nav className="fixed top-0 inset-x-0 z-50 border-b border-white/[0.06] bg-[#07070d]/80 backdrop-blur-xl">
-        <div className="max-w-6xl mx-auto flex items-center justify-between px-6 h-16">
-          <Link to="/" className="flex items-center gap-2.5">
-            <img src="/images/clarify-logo.png" alt="Clarify AI" className="h-8 w-auto" />
-          </Link>
-          <div className="hidden md:flex items-center gap-8 text-sm text-gray-400">
-            <Link to="/pricing" className="hover:text-white transition-colors">Pricing</Link>
-            <Link to="/blog" className="hover:text-white transition-colors">Blog</Link>
-            <Link to="/help" className="text-white">Help</Link>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link to="/login" className="text-sm text-gray-300 hover:text-white transition-colors hidden sm:inline-block">Log in</Link>
-            <Link to="/signup" className="text-sm font-semibold px-5 py-2 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity">Get started free</Link>
-          </div>
-        </div>
-      </nav>
-
+    <MarketingLayout>
       <section className="pt-32 pb-20 px-6">
         <div className="max-w-2xl mx-auto">
-          <Link to="/help" className="inline-flex items-center gap-1.5 text-sm text-gray-400 hover:text-white transition-colors mb-6">
+          <Link to="/help" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6">
             <ArrowLeft className="w-4 h-4" /> Back to Help Center
           </Link>
 
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
             <span className="text-xs text-primary font-medium">{article.category}</span>
             <h1 className="text-3xl font-bold mt-2 mb-6">{article.q}</h1>
-            <div className="prose prose-invert prose-sm max-w-none text-gray-300 leading-relaxed whitespace-pre-wrap">
+            <div className="prose dark:prose-invert prose-sm max-w-none text-muted-foreground leading-relaxed whitespace-pre-wrap">
               {article.a}
             </div>
           </motion.div>
 
           {relatedArticles.length > 0 && (
-            <div className="mt-12 pt-8 border-t border-white/[0.06]">
-              <h3 className="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Related Articles</h3>
+            <div className="mt-12 pt-8 border-t border-border">
+              <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-4">Related Articles</h3>
               <div className="space-y-2">
                 {relatedArticles.map((ra) => (
                   <Link
                     key={ra.id}
                     to={`/help/${ra.id}`}
-                    className="block p-3 rounded-xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/[0.12] transition-all text-sm text-gray-300 hover:text-white"
+                    className="block p-3 rounded-xl border border-border bg-card hover:bg-card/80 hover:border-primary/30 transition-all text-sm text-muted-foreground hover:text-foreground"
                   >
                     {ra.q}
                   </Link>
@@ -101,18 +87,6 @@ export default function HelpArticle() {
           )}
         </div>
       </section>
-
-      <footer className="border-t border-white/[0.06] py-10 px-6">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-600">
-          <span>&copy; {new Date().getFullYear()} Clarify AI. All rights reserved.</span>
-          <div className="flex gap-6">
-            <Link to="/pricing" className="hover:text-gray-400 transition-colors">Pricing</Link>
-            <Link to="/help" className="hover:text-gray-400 transition-colors">Help</Link>
-            <Link to="/shortcuts" className="hover:text-gray-400 transition-colors">Shortcuts</Link>
-            <Link to="/blog" className="hover:text-gray-400 transition-colors">Blog</Link>
-          </div>
-        </div>
-      </footer>
-    </div>
+    </MarketingLayout>
   );
 }

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { Search, ChevronDown, ChevronUp, HelpCircle, Mail } from "lucide-react";
 import { motion } from "framer-motion";
+import { MarketingLayout } from "@/components/layout/MarketingLayout";
 
 interface FaqItem {
   id: string;
@@ -90,40 +91,23 @@ export default function Help() {
     : FAQ_DATA;
 
   return (
-    <div className="min-h-screen bg-[#07070d] text-white overflow-x-hidden">
-      <nav className="fixed top-0 inset-x-0 z-50 border-b border-white/[0.06] bg-[#07070d]/80 backdrop-blur-xl">
-        <div className="max-w-6xl mx-auto flex items-center justify-between px-6 h-16">
-          <Link to="/" className="flex items-center gap-2.5">
-            <img src="/images/clarify-logo.png" alt="Clarify AI" className="h-8 w-auto" />
-          </Link>
-          <div className="hidden md:flex items-center gap-8 text-sm text-gray-400">
-            <Link to="/pricing" className="hover:text-white transition-colors">Pricing</Link>
-            <Link to="/blog" className="hover:text-white transition-colors">Blog</Link>
-            <Link to="/help" className="text-white">Help</Link>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link to="/login" className="text-sm text-gray-300 hover:text-white transition-colors hidden sm:inline-block">Log in</Link>
-            <Link to="/signup" className="text-sm font-semibold px-5 py-2 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity">Get started free</Link>
-          </div>
-        </div>
-      </nav>
-
+    <MarketingLayout>
       <section className="pt-36 pb-16 px-6">
         <div className="max-w-3xl mx-auto text-center">
           <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
             <HelpCircle className="w-10 h-10 text-primary mx-auto mb-4" />
             <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight">Help Center</h1>
-            <p className="mt-4 text-lg text-gray-400">Find answers to common questions about Clarify AI</p>
+            <p className="mt-4 text-lg text-muted-foreground">Find answers to common questions about Clarify AI</p>
           </motion.div>
 
           <div className="mt-8 relative max-w-md mx-auto">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search help articles..."
-              className="w-full pl-11 pr-4 py-3 rounded-xl bg-white/[0.06] border border-white/[0.06] text-sm text-white placeholder:text-gray-500 focus:outline-none focus:border-primary/40"
+              className="w-full pl-11 pr-4 py-3 rounded-xl bg-secondary/60 border border-border text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/40"
             />
           </div>
         </div>
@@ -144,17 +128,17 @@ export default function Help() {
                 {category.items.map((item) => {
                   const isOpen = openItems.has(item.id);
                   return (
-                    <div key={item.id} className="rounded-xl border border-white/[0.06] bg-white/[0.02] overflow-hidden">
+                    <div key={item.id} className="rounded-xl border border-border bg-card overflow-hidden">
                       <button
                         onClick={() => toggleItem(item.id)}
-                        className="w-full flex items-center justify-between p-4 text-left hover:bg-white/[0.02] transition-all"
+                        className="w-full flex items-center justify-between p-4 text-left hover:bg-secondary/40 transition-all"
                       >
-                        <span className="text-sm font-medium text-gray-200 pr-4">{item.q}</span>
-                        {isOpen ? <ChevronUp className="w-4 h-4 text-gray-400 flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-gray-400 flex-shrink-0" />}
+                        <span className="text-sm font-medium pr-4">{item.q}</span>
+                        {isOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
                       </button>
                       {isOpen && (
                         <div className="px-4 pb-4">
-                          <p className="text-sm text-gray-400 leading-relaxed">{item.a}</p>
+                          <p className="text-sm text-muted-foreground leading-relaxed">{item.a}</p>
                           <Link
                             to={`/help/${item.id}`}
                             className="inline-block mt-2 text-xs text-primary hover:underline"
@@ -172,37 +156,25 @@ export default function Help() {
 
           {filtered.length === 0 && (
             <div className="text-center py-12">
-              <p className="text-gray-400">No articles found for "{search}"</p>
+              <p className="text-muted-foreground">No articles found for "{search}"</p>
             </div>
           )}
         </div>
       </section>
 
       <section className="pb-24 px-6">
-        <div className="max-w-xl mx-auto text-center rounded-2xl border border-white/[0.06] bg-white/[0.02] p-8">
+        <div className="max-w-xl mx-auto text-center rounded-2xl border border-border bg-card p-8">
           <Mail className="w-8 h-8 text-primary mx-auto mb-3" />
           <h3 className="text-lg font-bold">Still need help?</h3>
-          <p className="text-sm text-gray-400 mt-2">Our support team is here to help you get the most out of Clarify AI.</p>
+          <p className="text-sm text-muted-foreground mt-2">Our support team is here to help you get the most out of Clarify AI.</p>
           <a
             href="mailto:support@clarifyai.com"
-            className="inline-flex items-center gap-2 mt-5 px-6 py-2.5 rounded-xl bg-white/10 text-sm font-semibold hover:bg-white/15 transition-all"
+            className="inline-flex items-center gap-2 mt-5 px-6 py-2.5 rounded-xl bg-secondary text-sm font-semibold hover:bg-secondary/80 transition-all"
           >
             <Mail className="w-4 h-4" /> Contact Support
           </a>
         </div>
       </section>
-
-      <footer className="border-t border-white/[0.06] py-10 px-6">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-600">
-          <span>&copy; {new Date().getFullYear()} Clarify AI. All rights reserved.</span>
-          <div className="flex gap-6">
-            <Link to="/pricing" className="hover:text-gray-400 transition-colors">Pricing</Link>
-            <Link to="/help" className="hover:text-gray-400 transition-colors">Help</Link>
-            <Link to="/shortcuts" className="hover:text-gray-400 transition-colors">Shortcuts</Link>
-            <Link to="/blog" className="hover:text-gray-400 transition-colors">Blog</Link>
-          </div>
-        </div>
-      </footer>
-    </div>
+    </MarketingLayout>
   );
 }

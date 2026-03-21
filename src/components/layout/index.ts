@@ -7,3 +7,4 @@ export { ProtectedRoute } from './ProtectedRoute';
 export { SetupChecklist } from './SetupChecklist';
 export { PlanGate } from './PlanGate';
 export { ErrorBoundary } from './ErrorBoundary';
+export { MarketingLayout } from './MarketingLayout';

@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import { Calendar, Tag, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
+import { MarketingLayout } from "@/components/layout/MarketingLayout";
 
 interface BlogPostMeta {
   slug: string;
@@ -87,29 +88,12 @@ function formatDate(dateStr: string) {
 
 export default function Blog() {
   return (
-    <div className="min-h-screen bg-[#07070d] text-white overflow-x-hidden">
-      <nav className="fixed top-0 inset-x-0 z-50 border-b border-white/[0.06] bg-[#07070d]/80 backdrop-blur-xl">
-        <div className="max-w-6xl mx-auto flex items-center justify-between px-6 h-16">
-          <Link to="/" className="flex items-center gap-2.5">
-            <img src="/images/clarify-logo.png" alt="Clarify AI" className="h-8 w-auto" />
-          </Link>
-          <div className="hidden md:flex items-center gap-8 text-sm text-gray-400">
-            <Link to="/pricing" className="hover:text-white transition-colors">Pricing</Link>
-            <Link to="/blog" className="text-white">Blog</Link>
-            <Link to="/help" className="hover:text-white transition-colors">Help</Link>
-          </div>
-          <div className="flex items-center gap-3">
-            <Link to="/login" className="text-sm text-gray-300 hover:text-white transition-colors hidden sm:inline-block">Log in</Link>
-            <Link to="/signup" className="text-sm font-semibold px-5 py-2 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity">Get started free</Link>
-          </div>
-        </div>
-      </nav>
-
+    <MarketingLayout>
       <section className="pt-36 pb-16 px-6">
         <div className="max-w-3xl mx-auto text-center">
           <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
             <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight">Blog</h1>
-            <p className="mt-4 text-lg text-gray-400">Insights, guides, and tips to help you ace every interview</p>
+            <p className="mt-4 text-lg text-muted-foreground">Insights, guides, and tips to help you ace every interview</p>
           </motion.div>
         </div>
       </section>
@@ -126,20 +110,20 @@ export default function Blog() {
             >
               <Link
                 to={`/blog/${post.slug}`}
-                className="group flex flex-col h-full p-6 rounded-2xl border border-white/[0.06] bg-white/[0.02] hover:bg-white/[0.04] hover:border-white/[0.12] transition-all"
+                className="group flex flex-col h-full p-6 rounded-2xl border border-border bg-card hover:bg-card/80 hover:border-primary/30 transition-all"
               >
                 <div className="flex items-center gap-3 mb-3">
-                  <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md border ${CATEGORY_COLORS[post.category] ?? "text-gray-400 bg-gray-500/10 border-gray-500/20"}`}>
+                  <span className={`inline-flex items-center gap-1 text-[11px] font-medium px-2 py-0.5 rounded-md border ${CATEGORY_COLORS[post.category] ?? "text-muted-foreground bg-secondary border-border"}`}>
                     <Tag className="w-3 h-3" /> {post.category}
                   </span>
-                  <span className="text-[11px] text-gray-500">{post.readTime}</span>
+                  <span className="text-[11px] text-muted-foreground/70">{post.readTime}</span>
                 </div>
 
                 <h2 className="text-lg font-bold mb-2 group-hover:text-primary transition-colors">{post.title}</h2>
-                <p className="text-sm text-gray-400 leading-relaxed flex-1">{post.excerpt}</p>
+                <p className="text-sm text-muted-foreground leading-relaxed flex-1">{post.excerpt}</p>
 
-                <div className="flex items-center justify-between mt-4 pt-4 border-t border-white/[0.06]">
-                  <div className="flex items-center gap-1.5 text-xs text-gray-500">
+                <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
+                  <div className="flex items-center gap-1.5 text-xs text-muted-foreground/70">
                     <Calendar className="w-3 h-3" /> {formatDate(post.date)}
                   </div>
                   <span className="flex items-center gap-1 text-xs text-primary opacity-0 group-hover:opacity-100 transition-opacity">
@@ -151,18 +135,6 @@ export default function Blog() {
           ))}
         </div>
       </section>
-
-      <footer className="border-t border-white/[0.06] py-10 px-6">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-gray-600">
-          <span>&copy; {new Date().getFullYear()} Clarify AI. All rights reserved.</span>
-          <div className="flex gap-6">
-            <Link to="/pricing" className="hover:text-gray-400 transition-colors">Pricing</Link>
-            <Link to="/help" className="hover:text-gray-400 transition-colors">Help</Link>
-            <Link to="/shortcuts" className="hover:text-gray-400 transition-colors">Shortcuts</Link>
-            <Link to="/blog" className="hover:text-gray-400 transition-colors">Blog</Link>
-          </div>
-        </div>
-      </footer>
-    </div>
+    </MarketingLayout>
   );
 }

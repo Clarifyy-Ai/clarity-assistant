@@ -26,7 +26,7 @@ src/
   components/
     auth/                     # LoginForm, SignupForm, OAuthButton, VerifyEmailModal
     billing/                  # BillingHistory, CreditBalance, PricingCard, UpgradeModal
-    layout/                   # AppSidebar, AppTopBar, ProtectedRoute, etc. (AppShell in App.tsx)
+    layout/                   # AppSidebar, AppTopBar, MarketingLayout, ProtectedRoute, etc. (AppShell in App.tsx)
     live/                     # LiveSessionController, LiveTranscriptStream, etc.
     overlay/                  # OverlayWindow, StealthMouseGuard, etc.
     ui/                       # shadcn/ui components
