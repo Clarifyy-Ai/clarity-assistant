@@ -30,7 +30,7 @@ export default function Interviews() {
 
   const [filter, setFilter] = useState<StatusFilter>("all");
 
-  useEffect(() => { scheduler.fetchInterviews(); }, []);
+  useEffect(() => { scheduler.reload(); }, []);
 
   const filtered = store.interviews.filter((iv) => {
     const d = new Date(iv.scheduled_at);

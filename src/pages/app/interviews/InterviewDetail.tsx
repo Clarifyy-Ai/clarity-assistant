@@ -43,7 +43,7 @@ export default function InterviewDetail() {
   useEffect(() => {
     if (!id) return;
     if (!store.interviews.find((iv) => iv.id === id)) {
-      scheduler.fetchInterviews();
+      scheduler.reload();
     }
   }, [id]);
 
@@ -80,7 +80,7 @@ export default function InterviewDetail() {
   }
 
   async function handleComplete() {
-    await scheduler.updateInterviewStatus(iv.id, "completed");
+    await scheduler.updateInterview(iv.id, { status: "completed" });
   }
 
   return (
