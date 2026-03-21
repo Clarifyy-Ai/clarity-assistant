@@ -1,5 +1,5 @@
 import { createPortal } from "react-dom";
-import { useRef } from "react";
+import { useRef, useCallback } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useStealthMouse } from "@/hooks/useStealthMouse";
 import { OverlayHintPanel } from "./OverlayHintPanel";
@@ -53,6 +53,11 @@ export function OverlayWindow({
   const is_screenshot_loading = useOverlayStore((s) => s.is_screenshot_loading);
   const active_tab            = useOverlayStore((s) => s.active_tab);
 
+  const handlePositionChange = useCallback(
+    (pos: import("@/store/overlayStore").OverlayPosition) => useOverlayStore.getState().setPosition(pos),
+    []
+  );
+
   useStealthMouse(panelRef, is_stealth_mode);
 
   const overlayRoot =
@@ -69,7 +74,7 @@ export function OverlayWindow({
       <OverlayPositionManager
         ref={panelRef}
         position={position}
-        onPositionChange={(pos) => useOverlayStore.getState().setPosition(pos)}
+        onPositionChange={handlePositionChange}
         isProctorSafe={is_proctor_safe}
       >
         <div
