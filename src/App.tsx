@@ -408,7 +408,6 @@ export default function App() {
     const root = document.documentElement;
     root.classList.toggle("dark", resolvedTheme === "dark");
     root.setAttribute("data-theme", resolvedTheme);
-    localStorage.setItem("clarity-theme", resolvedTheme);
   }, [resolvedTheme]);
 
   return (
