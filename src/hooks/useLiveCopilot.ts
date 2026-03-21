@@ -12,6 +12,7 @@ import { checkCredits, deductCredits } from "@/lib/billing/creditsManager";
 import { hotkeyManager } from "@/lib/overlay/hotkeys";
 import { createDragHandler } from "@/lib/overlay/stealthMouse";
 import { generateId } from "@/lib/utils";
+import { sessionsDB } from "@/lib/supabase/database";
 import type { LiveSessionConfig } from "@/types/session.types";
 
 // ─────────────────────────────────────────────────────────────────
@@ -58,23 +59,28 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     },
   });
 
-  // ── Initialise session ─────────────────────────────────────────
-  useEffect(() => {
+  const configRef = useRef(config);
+  configRef.current = config;
+
+  const initSessionFromConfig = useCallback(() => {
     if (!profile) return;
+    const cfg = configRef.current;
 
     const { active_context } = useDocumentStore.getState();
-    const context = buildCoachingContext(profile, config, active_context);
+    const context = buildCoachingContext(profile, cfg, active_context);
     coachStore.initContext(context);
 
     const sessionStore = useSessionStore.getState();
     sessionStore.setSessionId(sessionIdRef.current);
     sessionStore.setMode("live");
-    sessionStore.setConfig(config);
+    sessionStore.setConfig(cfg);
     sessionStore.setStatus("active");
+  }, [profile]);
 
+  useEffect(() => {
     hotkeyManager.register();
     return () => { hotkeyManager.unregister(); };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   // ── Overlay drag ───────────────────────────────────────────────
   useEffect(() => {
@@ -154,16 +160,37 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
   }, [requestLiveHint]);
 
   const startLiveSession = useCallback(async () => {
+    initSessionFromConfig();
     useOverlayStore.getState().showOverlay();
     await audio.start();
-  }, [audio.start]);
+  }, [audio.start, initSessionFromConfig]);
 
   const endLiveSession = useCallback(async () => {
     abortRef.current?.abort();
     audio.stop();
+
+    const session  = useSessionStore.getState();
+    const overlay  = useOverlayStore.getState();
+    const userId   = profile?.id;
+
+    if (userId && session.session_id) {
+      try {
+        await sessionsDB.update(session.session_id, {
+          status:           "ended",
+          duration_seconds: session.elapsed_seconds,
+          credits_used:     session.credits_consumed,
+          transcript:       session.transcript ?? null,
+          model_used:       overlay.active_model,
+          ended_at:         new Date().toISOString(),
+        });
+      } catch (err) {
+        console.error("[useLiveCopilot] Failed to persist session:", err);
+      }
+    }
+
     useSessionStore.getState().setStatus("completed");
     useOverlayStore.getState().hideOverlay();
-  }, [audio.stop]);
+  }, [audio.stop, profile?.id]);
 
   const toggleProctorSafe = useCallback(() => {
     const { is_proctor_safe, setProctorSafe } = useOverlayStore.getState();

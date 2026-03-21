@@ -8,10 +8,13 @@ import { useWPMTracker } from "@/hooks/useWPMTracker";
 import { useSentimentAnalysis } from "@/hooks/useSentimentAnalysis";
 import { useCredits } from "@/hooks/useCredits";
 import { useHotkeys } from "@/hooks/useHotkeys";
+import { useOverlayStore } from "@/store/overlayStore";
+import { useSessionStore } from "@/store/sessionStore";
+import { OverlayWindow } from "@/components/overlay/OverlayWindow";
+import { LiveSessionController } from "@/components/live/LiveSessionController";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Modal } from "@/components/ui/Modal";
 import {
   Mic, MicOff, Square, ChevronRight,
@@ -22,12 +25,6 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// ─────────────────────────────────────────────────────────────────
-// MockSession — active interview session
-// Real-time: filler counter, WPM, sentiment, STT transcript,
-// AI hint panel, question timer, coach chat, panic hide
-// ─────────────────────────────────────────────────────────────────
-
 export default function MockSession() {
   const navigate      = useNavigate();
   const orchestrator  = useSessionOrchestrator();
@@ -37,17 +34,25 @@ export default function MockSession() {
   const sentimentHook = useSentimentAnalysis(stt.transcript);
   const credits       = useCredits();
 
-  // ── Local state ───────────────────────────────────────────────
   const [panicMode,     setPanicMode]     = useState(false);
   const [hintVisible,   setHintVisible]   = useState(true);
   const [coachOpen,     setCoachOpen]     = useState(false);
   const [skipConfirm,   setSkipConfirm]   = useState(false);
   const [endConfirm,    setEndConfirm]    = useState(false);
   const [feedbackQ,     setFeedbackQ]     = useState<null | "up" | "down">(null);
+  const [useOverlay,    setUseOverlay]    = useState(true);
 
-  // ── Question timer ────────────────────────────────────────────
   const [timeLeft,      setTimeLeft]      = useState(orchestrator.currentTimeLimit ?? 180);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (useOverlay) {
+      useOverlayStore.getState().showOverlay();
+    }
+    return () => {
+      useOverlayStore.getState().hideOverlay();
+    };
+  }, [useOverlay]);
 
   useEffect(() => {
     timerRef.current = setInterval(() => {
@@ -63,7 +68,6 @@ export default function MockSession() {
     return () => clearInterval(timerRef.current!);
   }, [orchestrator.currentQuestionIndex]);
 
-  // ── Reset timer on new question ───────────────────────────────
   useEffect(() => {
     setTimeLeft(orchestrator.currentTimeLimit ?? 180);
     stt.resetTranscript();
@@ -72,7 +76,6 @@ export default function MockSession() {
     setFeedbackQ(null);
   }, [orchestrator.currentQuestionIndex]);
 
-  // ── Hotkeys ───────────────────────────────────────────────────
   useHotkeys([
     { keys: "ctrl+shift+h", handler: () => setHintVisible((p) => !p) },
     { keys: "ctrl+shift+p", handler: () => setPanicMode((p) => !p)   },
@@ -80,7 +83,6 @@ export default function MockSession() {
     { keys: "ctrl+shift+n", handler: () => setSkipConfirm(true)      },
   ]);
 
-  // ── Derived ───────────────────────────────────────────────────
   const question      = orchestrator.currentQuestion;
   const hint          = orchestrator.currentHint;
   const qIndex        = orchestrator.currentQuestionIndex ?? 0;
@@ -91,8 +93,6 @@ export default function MockSession() {
     timeLeft > 20  ? "amber"   : "red";
   const timePct = ((orchestrator.currentTimeLimit ?? 180) - timeLeft)
     / (orchestrator.currentTimeLimit ?? 180) * 100;
-
-  // ── Actions ───────────────────────────────────────────────────
 
   async function handleNextQuestion() {
     clearInterval(timerRef.current!);
@@ -115,18 +115,21 @@ export default function MockSession() {
 
   async function handleRequestHint() {
     if (!credits.canAfford("live_hint")) return;
-    await orchestrator.requestHint();
+    const q = typeof question === "string" ? question : question?.question_text;
+    if (q) {
+      await orchestrator.requestHint(q);
+    }
     setHintVisible(true);
   }
 
   async function handleEndSession() {
     clearInterval(timerRef.current!);
     stt.stop();
+    useOverlayStore.getState().hideOverlay();
     await orchestrator.finaliseSession();
     navigate(`/app/scorecard/${orchestrator.sessionId}`);
   }
 
-  // ── Panic mode — hide everything ─────────────────────────────
   if (panicMode) {
     return (
       <div
@@ -157,13 +160,14 @@ export default function MockSession() {
     );
   }
 
+  const questionText = typeof question === "string" ? question : question?.question_text ?? "";
+
   return (
     <div className="max-w-4xl space-y-4">
+      <LiveSessionController isActive={true} />
 
-      {/* ── Top bar ───────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          {/* Question progress */}
           <span className="text-xs text-muted-foreground font-medium">
             Question <span className="text-foreground font-bold">{qIndex + 1}</span> / {totalQ}
           </span>
@@ -199,7 +203,6 @@ export default function MockSession() {
         </div>
       </div>
 
-      {/* ── Question progress bar ──────────────────────── */}
       <div className="w-full h-1 bg-white/8 rounded-full overflow-hidden">
         <div
           className="h-full bg-violet-500 rounded-full transition-all duration-500"
@@ -209,12 +212,9 @@ export default function MockSession() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
 
-        {/* ── Left: question + transcript ───────────────── */}
         <div className="lg:col-span-2 space-y-4">
 
-          {/* Question card */}
           <Card className="relative overflow-hidden">
-            {/* Timer bar */}
             <div className="absolute top-0 left-0 right-0 h-1">
               <div
                 className={cn(
@@ -227,7 +227,6 @@ export default function MockSession() {
             </div>
 
             <div className="pt-2">
-              {/* Timer */}
               <div className="flex items-center justify-between mb-3">
                 <div className={cn(
                   "flex items-center gap-1.5 text-sm font-bold tabular-nums",
@@ -246,12 +245,10 @@ export default function MockSession() {
                 </button>
               </div>
 
-              {/* Question text */}
               <p className="text-foreground text-base font-medium leading-relaxed">
-                {question}
+                {questionText}
               </p>
 
-              {/* Question category tags */}
               {orchestrator.currentQuestionMeta?.tags?.map((tag: string) => (
                 <Badge key={tag} variant="gray" size="sm" className="mt-2 mr-1">
                   {tag}
@@ -260,7 +257,6 @@ export default function MockSession() {
             </div>
           </Card>
 
-          {/* Live transcript */}
           <Card>
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -290,7 +286,6 @@ export default function MockSession() {
               </div>
             </div>
 
-            {/* Transcript text */}
             <div className="min-h-[80px] text-sm text-foreground leading-relaxed">
               {stt.transcript || (
                 <span className="text-muted-foreground italic">Start speaking…</span>
@@ -300,7 +295,6 @@ export default function MockSession() {
               )}
             </div>
 
-            {/* Filler words inline highlight */}
             {fillerHook.totalCount > 0 && (
               <div className="mt-3 flex items-center gap-2 flex-wrap">
                 <span className="text-[10px] text-muted-foreground">Fillers detected:</span>
@@ -308,14 +302,13 @@ export default function MockSession() {
                   .filter(([, count]) => (count as number) > 0)
                   .map(([word, count]) => (
                     <Badge key={word} variant="amber" size="sm">
-                      "{word}" ×{count as number}
+                      "{word}" x{count as number}
                     </Badge>
                   ))}
               </div>
             )}
           </Card>
 
-          {/* Next / submit button */}
           <Button
             variant="primary"
             size="lg"
@@ -326,14 +319,12 @@ export default function MockSession() {
               : <ChevronRight className="w-4 h-4" />
             }
           >
-            {isLastQ ? "Finish & see scorecard" : "Next question →"}
+            {isLastQ ? "Finish & see scorecard" : "Next question"}
           </Button>
         </div>
 
-        {/* ── Right: metrics + hint ─────────────────────── */}
         <div className="space-y-3">
 
-          {/* Live metrics */}
           <Card padding="sm">
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-3">
               Live metrics
@@ -362,7 +353,6 @@ export default function MockSession() {
               />
             </div>
 
-            {/* Sentiment label */}
             <div className="mt-3 flex items-center gap-2">
               <Brain className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
               <span className="text-xs text-muted-foreground capitalize">
@@ -380,7 +370,6 @@ export default function MockSession() {
             </div>
           </Card>
 
-          {/* AI Hint panel */}
           <Card padding="sm">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
@@ -410,7 +399,6 @@ export default function MockSession() {
                     {hint}
                   </p>
 
-                  {/* Hint feedback */}
                   <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/8">
                     <span className="text-[10px] text-muted-foreground">Helpful?</span>
                     <div className="flex gap-2">
@@ -464,12 +452,11 @@ export default function MockSession() {
               )
             ) : (
               <p className="text-xs text-muted-foreground italic">
-                Hint hidden — click 👁 to show
+                Hint hidden
               </p>
             )}
           </Card>
 
-          {/* Coach chat button */}
           <Button
             variant="secondary"
             size="sm"
@@ -482,9 +469,6 @@ export default function MockSession() {
         </div>
       </div>
 
-      {/* ── Modals ────────────────────────────────────── */}
-
-      {/* Skip confirm */}
       <Modal
         open={skipConfirm}
         onClose={() => setSkipConfirm(false)}
@@ -518,7 +502,6 @@ export default function MockSession() {
         </div>
       </Modal>
 
-      {/* End session confirm */}
       <Modal
         open={endConfirm}
         onClose={() => setEndConfirm(false)}
@@ -548,21 +531,17 @@ export default function MockSession() {
         </div>
       </Modal>
 
-      {/* Coach chat modal */}
-      <CoachChatModal
-        open={coachOpen}
-        onClose={() => setCoachOpen(false)}
-        question={question}
-        transcript={stt.transcript}
-        sessionId={orchestrator.sessionId}
-      />
+      {useOverlay && (
+        <OverlayWindow
+          onToggleMic={stt.toggleMute}
+          onGenerate={handleRequestHint}
+          onEndSession={handleEndSession}
+          onManualQuestion={(q) => orchestrator.requestHint(q)}
+        />
+      )}
     </div>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────
-// MetricRow
-// ─────────────────────────────────────────────────────────────────
 
 function MetricRow({
   label, value, max, color, unit,
@@ -578,7 +557,7 @@ function MetricRow({
       <div className="flex items-center justify-between mb-1">
         <span className="text-[11px] text-muted-foreground">{label}</span>
         <span className={cn(
-          "text-[11px] font-bold tabular-nums",
+          "text-xs font-bold",
           color === "emerald" ? "text-emerald-400" :
           color === "amber"   ? "text-amber-400"   :
           color === "red"     ? "text-red-400"      : "text-blue-400"
@@ -586,139 +565,17 @@ function MetricRow({
           {value}{unit}
         </span>
       </div>
-      <ProgressBar value={value} max={max} color={color} size="xs" />
-    </div>
-  );
-}
-
-// ─────────────────────────────────────────────────────────────────
-// CoachChatModal
-// ─────────────────────────────────────────────────────────────────
-
-function CoachChatModal({
-  open, onClose, question, transcript, sessionId,
-}: {
-  open:       boolean;
-  onClose:    () => void;
-  question:   string;
-  transcript: string;
-  sessionId:  string | null;
-}) {
-  const [messages, setMessages] = useState<{ role: "user" | "coach"; text: string }[]>([]);
-  const [input,    setInput]    = useState("");
-  const [loading,  setLoading]  = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
-
-  // Seed coach with current context on first open
-  useEffect(() => {
-    if (open && messages.length === 0) {
-      setMessages([{
-        role: "coach",
-        text: `I can see you're answering: "${question.slice(0, 80)}…"\n\nWhat would you like help with?`,
-      }]);
-    }
-  }, [open]);
-
-  async function sendMessage() {
-    if (!input.trim() || loading) return;
-    const userMsg = input.trim();
-    setInput("");
-    setMessages((p) => [...p, { role: "user", text: userMsg }]);
-    setLoading(true);
-
-    try {
-      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-      const res = await fetch(`${EDGE_BASE}/ai-coach-chat`, {
-        method:  "POST",
-        headers: {
-          "Content-Type":  "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          session_id:  sessionId,
-          question,
-          transcript,
-          user_message: userMsg,
-          history: messages,
-        }),
-      });
-
-      const data = await res.json();
-      setMessages((p) => [...p, { role: "coach", text: data.reply ?? "Sorry, I couldn't respond." }]);
-    } catch {
-      setMessages((p) => [...p, { role: "coach", text: "Connection error. Please try again." }]);
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <Modal open={open} onClose={onClose} title="AI Coach" size="md">
-      <div className="flex flex-col h-80">
-        {/* Messages */}
-        <div className="flex-1 overflow-y-auto space-y-3 pr-1 mb-3">
-          {messages.map((m, i) => (
-            <div
-              key={i}
-              className={cn(
-                "flex gap-2",
-                m.role === "user" ? "justify-end" : "justify-start"
-              )}
-            >
-              {m.role === "coach" && (
-                <div className="w-6 h-6 bg-violet-600 rounded-full flex items-center justify-center text-[10px] shrink-0 mt-0.5">
-                  AI
-                </div>
-              )}
-              <div className={cn(
-                "max-w-[80%] px-3 py-2 rounded-2xl text-xs leading-relaxed",
-                m.role === "coach"
-                  ? "bg-white/8 text-gray-200 rounded-tl-none"
-                  : "bg-violet-600/30 text-violet-100 rounded-tr-none"
-              )}>
-                {m.text}
-              </div>
-            </div>
-          ))}
-          {loading && (
-            <div className="flex gap-2">
-              <div className="w-6 h-6 bg-violet-600 rounded-full flex items-center justify-center text-[10px] shrink-0">AI</div>
-              <div className="bg-white/8 rounded-2xl rounded-tl-none px-3 py-2">
-                <div className="flex gap-1">
-                  {[0,1,2].map((i) => (
-                    <div key={i} className="w-1.5 h-1.5 bg-gray-500 rounded-full animate-bounce"
-                      style={{ animationDelay: `${i * 0.15}s` }} />
-                  ))}
-                </div>
-              </div>
-            </div>
+      <div className="h-1 bg-white/8 rounded-full overflow-hidden">
+        <div
+          className={cn(
+            "h-full rounded-full transition-all duration-500",
+            color === "emerald" ? "bg-emerald-500" :
+            color === "amber"   ? "bg-amber-500"   :
+            color === "red"     ? "bg-red-500"      : "bg-blue-500"
           )}
-          <div ref={bottomRef} />
-        </div>
-
-        {/* Input */}
-        <div className="flex gap-2">
-          <input
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
-            placeholder="Ask anything about this question…"
-            className="flex-1 bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-violet-500"
-          />
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={sendMessage}
-            disabled={!input.trim() || loading}
-          >
-            Send
-          </Button>
-        </div>
+          style={{ width: `${Math.min(100, (value / max) * 100)}%` }}
+        />
       </div>
-    </Modal>
+    </div>
   );
 }

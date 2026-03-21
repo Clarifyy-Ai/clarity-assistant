@@ -45,8 +45,14 @@ interface OverlayStore {
   hint_style: HintStyle;
   active_model: PreferredAIModel;
 
-  // Position (persisted)
+  // Position & size (persisted)
   position: OverlayPosition;
+  overlay_width: number;
+  overlay_height: number;
+
+  // Session controls
+  auto_generate: boolean;
+  active_tab: "answer" | "transcript" | "audit";
 
   // Network indicator shown in overlay
   network_color: "green" | "yellow" | "red";
@@ -80,9 +86,14 @@ interface OverlayStore {
   cycleHintStyle: () => void;
   setActiveModel: (model: PreferredAIModel) => void;
 
-  // Actions — position
+  // Actions — position & size
   setPosition: (position: OverlayPosition) => void;
   resetPosition: () => void;
+  setOverlaySize: (width: number, height: number) => void;
+
+  // Actions — session controls
+  setAutoGenerate: (enabled: boolean) => void;
+  setActiveTab: (tab: "answer" | "transcript" | "audit") => void;
 
   // Actions — network
   setNetworkColor: (color: "green" | "yellow" | "red") => void;
@@ -97,6 +108,12 @@ interface OverlayStore {
 }
 
 const DEFAULT_POSITION: OverlayPosition = { x: 24, y: 80 };
+const DEFAULT_WIDTH  = 420;
+const DEFAULT_HEIGHT = 520;
+const MIN_WIDTH      = 320;
+const MIN_HEIGHT     = 280;
+const MAX_WIDTH      = 800;
+const MAX_HEIGHT     = 900;
 
 const HINT_STYLE_CYCLE: HintStyle[] = [
   "full_answer",
@@ -122,6 +139,12 @@ export const useOverlayStore = create<OverlayStore>()(
       active_model: "gemini-flash",
 
       position: DEFAULT_POSITION,
+      overlay_width: DEFAULT_WIDTH,
+      overlay_height: DEFAULT_HEIGHT,
+
+      auto_generate: true,
+      active_tab: "answer" as const,
+
       network_color: "green",
 
       is_panic_visible: false,
@@ -188,9 +211,17 @@ export const useOverlayStore = create<OverlayStore>()(
 
       setActiveModel: (active_model) => set({ active_model }),
 
-      // ── Position ───────────────────────────────────────────
+      // ── Position & Size ────────────────────────────────────
       setPosition: (position) => set({ position }),
       resetPosition: () => set({ position: DEFAULT_POSITION }),
+      setOverlaySize: (width, height) => set({
+        overlay_width:  Math.max(MIN_WIDTH,  Math.min(MAX_WIDTH,  width)),
+        overlay_height: Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, height)),
+      }),
+
+      // ── Session Controls ─────────────────────────────────
+      setAutoGenerate: (auto_generate) => set({ auto_generate }),
+      setActiveTab: (active_tab) => set({ active_tab }),
 
       // ── Network ────────────────────────────────────────────
       setNetworkColor: (network_color) => set({ network_color }),
@@ -210,9 +241,12 @@ export const useOverlayStore = create<OverlayStore>()(
       // Only persist position and hint_style — not content
       partialize: (state) => ({
         position: state.position,
+        overlay_width: state.overlay_width,
+        overlay_height: state.overlay_height,
         hint_style: state.hint_style,
         is_stealth_mode: state.is_stealth_mode,
         is_proctor_safe: state.is_proctor_safe,
+        auto_generate: state.auto_generate,
       }),
     }
   )
