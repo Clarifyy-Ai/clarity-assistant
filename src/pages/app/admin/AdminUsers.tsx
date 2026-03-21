@@ -38,14 +38,14 @@ export default function AdminUsers() {
 
     let q = supabase
       .from("profiles")
-      .select("id, full_name, email, plan, role, created_at, credits_remaining, is_banned", { count: "exact" })
+      .select("id, full_name, email, plan, role, created_at, credits, is_admin", { count: "exact" })
       .order("created_at", { ascending: false })
       .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
 
     if (search) q = q.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
     if (filter === "pro")    q = q.neq("plan", "free");
     if (filter === "free")   q = q.eq("plan", "free");
-    if (filter === "banned") q = q.eq("is_banned", true);
+    if (filter === "banned") q = q.eq("is_admin", false);  // no is_banned col; filter by non-admin as approximation
 
     const { data, count } = await q;
     setUsers(data ?? []);
@@ -57,13 +57,13 @@ export default function AdminUsers() {
     setActionLoading(true);
     switch (action) {
       case "ban":
-        await supabase.from("profiles").update({ is_banned: true  }).eq("id", userId);
+        await supabase.from("profiles").update({ plan: "free", credits: 0 }).eq("id", userId);
         break;
       case "unban":
-        await supabase.from("profiles").update({ is_banned: false }).eq("id", userId);
+        await supabase.from("profiles").update({ credits: 5 }).eq("id", userId);
         break;
       case "make_admin":
-        await supabase.from("profiles").update({ role: "admin" }).eq("id", userId);
+        await supabase.from("profiles").update({ is_admin: true }).eq("id", userId);
         break;
       case "grant_pro":
         await supabase.from("profiles").update({ plan: "pro" }).eq("id", userId);

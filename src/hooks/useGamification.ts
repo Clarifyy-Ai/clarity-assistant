@@ -56,7 +56,7 @@ export const useGamificationStore = create<GamificationStore>()(
       xp_progress_percent: 0,
       streak_current: 0,
       streak_longest: 0,
-      streak_last_activity: null,
+      streak_last_activity_date: null,
       unlocked_badges: [],
       recent_xp_events: [],
       weekly_challenge: null,
@@ -70,8 +70,8 @@ export const useGamificationStore = create<GamificationStore>()(
           return { xp: newXP, ...computeLevel(newXP) };
         }),
 
-      setStreak: (streak_current, streak_longest, streak_last_activity) =>
-        set({ streak_current, streak_longest, streak_last_activity }),
+      setStreak: (streak_current, streak_longest, streak_last_activity_date) =>
+        set({ streak_current, streak_longest, streak_last_activity_date }),
 
       unlockBadge: (id) =>
         set((s) =>
@@ -90,7 +90,7 @@ export const useGamificationStore = create<GamificationStore>()(
           xp_to_next_level: XP_LEVELS[1].xp_required,
           xp_progress_percent: 0,
           streak_current: 0, streak_longest: 0,
-          streak_last_activity: null, unlocked_badges: [],
+          streak_last_activity_date: null, unlocked_badges: [],
           recent_xp_events: [], weekly_challenge: null,
           pending_badge_unlock: null,
         }),
@@ -120,7 +120,7 @@ export function useGamification() {
     const [profileRes, badgesRes, challengeRes] = await Promise.all([
       supabase
         .from("profiles")
-        .select("xp, streak_current, streak_longest, streak_last_activity")
+        .select("xp, streak_current, streak_longest, streak_last_activity_date")
         .eq("id", user.id)
         .single(),
       supabase
@@ -141,7 +141,7 @@ export function useGamification() {
       store.setStreak(
         p.streak_current ?? 0,
         p.streak_longest ?? 0,
-        p.streak_last_activity ?? null
+        p.streak_last_activity_date ?? null
       );
     }
 
@@ -244,14 +244,14 @@ export function useGamification() {
 
     const { data } = await supabase
       .from("profiles")
-      .select("streak_current, streak_longest, streak_last_activity")
+      .select("streak_current, streak_longest, streak_last_activity_date")
       .eq("id", user.id)
       .single();
 
     if (!data) return;
 
-    const lastActivity = data.streak_last_activity
-      ? new Date(data.streak_last_activity)
+    const lastActivity = data.streak_last_activity_date
+      ? new Date(data.streak_last_activity_date)
       : null;
     const now          = new Date();
     const daysDiff     = lastActivity
