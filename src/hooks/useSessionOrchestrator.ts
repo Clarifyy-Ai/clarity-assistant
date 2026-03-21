@@ -39,11 +39,18 @@ interface CreateSessionInput {
 }
 
 export function useSessionOrchestrator() {
-  const navigate     = useNavigate();
-  const sessionStore = useSessionStore();
-  const coachStore   = useCoachStore();
-  const overlayStore = useOverlayStore();
-  const { profile }  = useAuthStore();
+  const navigate = useNavigate();
+  const { profile } = useAuthStore();
+  const coachStore  = useCoachStore(); // methods are stable — ok to subscribe
+
+  // Reactive state — individual selectors only
+  const status               = useSessionStore((s) => s.status);
+  const current_question     = useSessionStore((s) => s.current_question);
+  const current_question_index = useSessionStore((s) => s.current_question_index);
+  const questions_length     = useSessionStore((s) => s.questions?.length ?? 0);
+  const credits_consumed     = useSessionStore((s) => s.credits_consumed);
+  const elapsed_seconds      = useSessionStore((s) => s.elapsed_seconds);
+  const config               = useSessionStore((s) => s.config);
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const hintRequestIdRef   = useRef<string | null>(null);
@@ -79,11 +86,12 @@ export function useSessionOrchestrator() {
   const initSession = useCallback(async (config: SessionConfig) => {
     if (!profile) return;
 
+    const ss = useSessionStore.getState();
     const sessionId = generateId();
-    sessionStore.setSessionId(sessionId);
-    sessionStore.setMode("mock");
-    sessionStore.setConfig(config);
-    sessionStore.setStatus("warming_up");
+    ss.setSessionId(sessionId);
+    ss.setMode("mock");
+    ss.setConfig(config);
+    ss.setStatus("warming_up");
 
     const { active_context } = useDocumentStore.getState();
     const context = buildCoachingContext(profile, config, active_context);
@@ -91,8 +99,8 @@ export function useSessionOrchestrator() {
 
     try {
       const questions = await fetchQuestions(config, sessionId);
-      sessionStore.setQuestions(questions);
-      sessionStore.setStatus("active");
+      useSessionStore.getState().setQuestions(questions);
+      useSessionStore.getState().setStatus("active");
     } catch (err) {
       // Edge Function unavailable or not yet deployed — use local question bank
       console.warn("[SessionOrchestrator] Edge function unavailable, using local questions:", err);
@@ -101,10 +109,10 @@ export function useSessionOrchestrator() {
         config.question_count,
         config.company,
       );
-      sessionStore.setQuestions(fallback);
-      sessionStore.setStatus("active");
+      useSessionStore.getState().setQuestions(fallback);
+      useSessionStore.getState().setStatus("active");
     }
-  }, [profile]);
+  }, [profile, coachStore]);
 
   // ── Request a hint ─────────────────────────────────────────────
 
@@ -119,7 +127,7 @@ export function useSessionOrchestrator() {
 
     const creditCheck = checkCredits(preferredModel as any);
     if (!creditCheck.canProceed) {
-      overlayStore.setError(creditCheck.reason ?? "Insufficient credits");
+      useOverlayStore.getState().setError(creditCheck.reason ?? "Insufficient credits");
       return;
     }
 
@@ -130,8 +138,8 @@ export function useSessionOrchestrator() {
     const requestId = generateId();
     hintRequestIdRef.current = requestId;
 
-    overlayStore.setCurrentQuestion(question);
-    overlayStore.setHintState("generating");
+    useOverlayStore.getState().setCurrentQuestion(question);
+    useOverlayStore.getState().setHintState("generating");
 
     const { session_id } = useSessionStore.getState();
 
@@ -143,41 +151,40 @@ export function useSessionOrchestrator() {
       isLive:          false,
       sessionId:       session_id ?? "unknown",
       questionId:      requestId,
-      onChunk:         (chunk) => {
+      onChunk: (chunk) => {
         if (hintRequestIdRef.current === requestId) {
-          overlayStore.appendStreamChunk(chunk);
+          useOverlayStore.getState().appendStreamChunk(chunk);
         }
       },
-      onDone:          async () => {
+      onDone: async () => {
         if (hintRequestIdRef.current !== requestId) return;
-        overlayStore.commitStreamedHint();
+        useOverlayStore.getState().commitStreamedHint();
         await deductCredits(preferredModel as any, session_id ?? "unknown");
-        sessionStore.consumeCredit(creditCheck.creditsRequired);
+        useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
         coachStore.incrementQuestionNumber();
       },
-      onError:         (error) => {
+      onError: (error) => {
         if (hintRequestIdRef.current === requestId) {
-          overlayStore.setError(error.message);
+          useOverlayStore.getState().setError(error.message);
         }
       },
-      signal:          controller.signal,
+      signal: controller.signal,
     });
-  }, [profile]);
+  }, [profile, coachStore]);
 
   const nextQuestion = useCallback(() => {
-    overlayStore.clearHint();
+    useOverlayStore.getState().clearHint();
     coachStore.incrementQuestionNumber();
-    sessionStore.advanceQuestion();
-  }, []);
+    useSessionStore.getState().advanceQuestion();
+  }, [coachStore]);
 
   const completeSession = useCallback(async () => {
     abortControllerRef.current?.abort();
-    sessionStore.setStatus("completed");
+    useSessionStore.getState().setStatus("completed");
 
     const { session_id } = useSessionStore.getState();
     if (!session_id) return;
 
-    // Award XP
     try {
       const gamStore = useGamificationStore.getState();
       gamStore.addXP(50);
@@ -189,17 +196,15 @@ export function useSessionOrchestrator() {
   const abortHint = useCallback(() => {
     abortControllerRef.current?.abort();
     abortControllerRef.current = null;
-    overlayStore.clearHint();
+    useOverlayStore.getState().clearHint();
   }, []);
 
   const resetSession = useCallback(() => {
     abortHint();
-    sessionStore.resetSession();
+    useSessionStore.getState().resetSession();
     coachStore.clearContext();
-    overlayStore.clearHint();
-  }, []);
-
-  const config = sessionStore.config;
+    useOverlayStore.getState().clearHint();
+  }, [abortHint, coachStore]);
 
   return {
     // Actions
@@ -211,16 +216,16 @@ export function useSessionOrchestrator() {
     abortHint,
     resetSession,
 
-    // State — canonical names
-    status:              sessionStore.status,
-    currentQuestion:     sessionStore.current_question,
-    currentIndex:        sessionStore.current_question_index,
-    totalQuestions:      sessionStore.questions.length,
-    creditsConsumed:     sessionStore.credits_consumed,
-    elapsedSeconds:      sessionStore.elapsed_seconds,
+    // Reactive state — from individual selectors above
+    status,
+    currentQuestion:      current_question,
+    currentIndex:         current_question_index,
+    totalQuestions:       questions_length,
+    creditsConsumed:      credits_consumed,
+    elapsedSeconds:       elapsed_seconds,
 
     // Aliases used by older page code
-    currentQuestionIndex: sessionStore.current_question_index,
+    currentQuestionIndex: current_question_index,
     currentTimeLimit:     config?.time_per_question_seconds ?? 180,
   };
 }

@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { useOverlayStore } from '@/store/overlayStore';
 
 /**
- * WindowVisibilityManager Component
+ * WindowVisibilityManager
  *
  * Monitors browser tab/window visibility and:
  * - Hides overlay when tab is not focused (prevents proctor detection)
@@ -10,12 +10,16 @@ import { useOverlayStore } from '@/store/overlayStore';
  * - Detects screen lock/unlock
  * - Tracks idle time
  * - Prevents audio/recording in background
+ *
+ * Uses individual action selectors so the stable function references
+ * don't end up in useEffect dependency arrays as full-store objects
+ * (which would cause constant event-listener churn every render).
  */
 
 interface WindowVisibilityManagerProps {
   autoHideOnBlur?: boolean;
   trackIdleTime?: boolean;
-  idleThreshold?: number; // milliseconds
+  idleThreshold?: number;
   onVisibilityChange?: (isVisible: boolean) => void;
   onIdleStateChange?: (isIdle: boolean) => void;
 }
@@ -23,30 +27,24 @@ interface WindowVisibilityManagerProps {
 export function WindowVisibilityManager({
   autoHideOnBlur = true,
   trackIdleTime = true,
-  idleThreshold = 30000, // 30 seconds
+  idleThreshold = 30000,
   onVisibilityChange,
   onIdleStateChange,
 }: WindowVisibilityManagerProps) {
-  const overlay = useOverlayStore();
-  const idleTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const lastActivityRef = useRef<number>(Date.now());
-  const isIdleRef = useRef<boolean>(false);
+  // Only pull the action — stable reference, won't cause churn
+  const hideOverlay = useOverlayStore((s) => s.hideOverlay);
 
-  // Monitor document visibility (tab focused/blurred)
+  const idleTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastActivityRef = useRef<number>(Date.now());
+  const isIdleRef       = useRef<boolean>(false);
+
+  // Monitor document visibility (tab focused / blurred)
   useEffect(() => {
     const handleVisibilityChange = () => {
       const isVisible = document.visibilityState === 'visible';
-
       onVisibilityChange?.(isVisible);
-
-      if (autoHideOnBlur) {
-        if (!isVisible) {
-          // Tab is hidden - hide overlay for safety
-          overlay.hideOverlay?.();
-        } else {
-          // Tab regained focus - can show overlay again
-          // Don't auto-show, let user control it
-        }
+      if (autoHideOnBlur && !isVisible) {
+        hideOverlay?.();
       }
     };
 
@@ -54,7 +52,7 @@ export function WindowVisibilityManager({
     return () => {
       document.removeEventListener('visibilitychange', handleVisibilityChange);
     };
-  }, [autoHideOnBlur, overlay, onVisibilityChange]);
+  }, [autoHideOnBlur, hideOverlay, onVisibilityChange]);
 
   // Monitor idle time (no user activity)
   useEffect(() => {
@@ -63,116 +61,69 @@ export function WindowVisibilityManager({
     const resetIdleTimer = () => {
       lastActivityRef.current = Date.now();
 
-      // Clear previous timer
-      if (idleTimerRef.current) {
-        clearTimeout(idleTimerRef.current);
-      }
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
 
-      // If was idle, mark as active again
       if (isIdleRef.current) {
         isIdleRef.current = false;
         onIdleStateChange?.(false);
       }
 
-      // Set new idle timer
       idleTimerRef.current = setTimeout(() => {
         isIdleRef.current = true;
         onIdleStateChange?.(true);
-
-        // Auto-pause audio/recording when idle
-        const audioStore = (window as any).audioStore;
-        if (audioStore?.pauseRecording) {
-          audioStore.pauseRecording();
-        }
       }, idleThreshold);
     };
 
-    // Track various user activities
-    const events = [
-      'mousedown',
-      'mousemove',
-      'keypress',
-      'scroll',
-      'touchstart',
-      'click',
-    ];
-
-    events.forEach((event) => {
-      document.addEventListener(event, resetIdleTimer);
-    });
-
-    // Initial setup
+    const events = ['mousedown', 'mousemove', 'keypress', 'scroll', 'touchstart', 'click'];
+    events.forEach((e) => document.addEventListener(e, resetIdleTimer));
     resetIdleTimer();
 
     return () => {
-      events.forEach((event) => {
-        document.removeEventListener(event, resetIdleTimer);
-      });
-
-      if (idleTimerRef.current) {
-        clearTimeout(idleTimerRef.current);
-      }
+      events.forEach((e) => document.removeEventListener(e, resetIdleTimer));
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     };
   }, [trackIdleTime, idleThreshold, onIdleStateChange]);
 
-  // Monitor page visibility API (more accurate)
+  // pageshow / pagehide
   useEffect(() => {
-    const handlePageShow = () => {
-      onVisibilityChange?.(true);
-    };
-
+    const handlePageShow = () => onVisibilityChange?.(true);
     const handlePageHide = () => {
       onVisibilityChange?.(false);
-      if (autoHideOnBlur) {
-        overlay.hideOverlay?.();
-      }
+      if (autoHideOnBlur) hideOverlay?.();
     };
 
     window.addEventListener('pageshow', handlePageShow);
     window.addEventListener('pagehide', handlePageHide);
-
     return () => {
       window.removeEventListener('pageshow', handlePageShow);
       window.removeEventListener('pagehide', handlePageHide);
     };
-  }, [autoHideOnBlur, overlay, onVisibilityChange]);
+  }, [autoHideOnBlur, hideOverlay, onVisibilityChange]);
 
-  // Monitor fullscreen changes (proctor might enable fullscreen)
+  // Fullscreen changes (proctor detection)
   useEffect(() => {
     const handleFullscreenChange = () => {
-      const isFullscreen = document.fullscreenElement !== null;
-
-      if (isFullscreen) {
-        // Fullscreen activated - might be proctor tool
-        overlay.hideOverlay?.();
-      }
+      if (document.fullscreenElement !== null) hideOverlay?.();
     };
 
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => {
       document.removeEventListener('fullscreenchange', handleFullscreenChange);
     };
-  }, [overlay]);
+  }, [hideOverlay]);
 
-  // Monitor screen lock (browser-level)
+  // Orientation change (best-effort screen-lock detection)
   useEffect(() => {
-    // This is a best-effort detection
-    // Not all browsers support this
-
-    const handleScreenChange = () => {
-      // If screen changes or becomes unavailable
-      if ((window.screen as any).lockOrientation) {
-        overlay.hideOverlay?.();
-      }
+    const handleOrientationChange = () => {
+      if ((window.screen as any).lockOrientation) hideOverlay?.();
     };
 
-    window.addEventListener('orientationchange', handleScreenChange);
+    window.addEventListener('orientationchange', handleOrientationChange);
     return () => {
-      window.removeEventListener('orientationchange', handleScreenChange);
+      window.removeEventListener('orientationchange', handleOrientationChange);
     };
-  }, [overlay]);
+  }, [hideOverlay]);
 
-  // Cleanup function - return null as this is a controller component
   return null;
 }
 

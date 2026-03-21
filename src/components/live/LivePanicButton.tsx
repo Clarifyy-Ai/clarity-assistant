@@ -13,11 +13,13 @@ interface LivePanicButtonProps {
 }
 
 export function LivePanicButton({ className }: LivePanicButtonProps) {
-  const overlay = useOverlayStore();
+  // Only pull actions — stable references, no re-renders from state changes
+  const showPanic  = useOverlayStore((s) => s.showPanic);
+  const showOverlay = useOverlayStore((s) => s.showOverlay);
 
   function handlePanic() {
-    overlay.showPanic(PANIC_RESPONSE);
-    overlay.showOverlay();
+    showPanic(PANIC_RESPONSE);
+    showOverlay();
   }
 
   return (

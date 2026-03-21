@@ -42,8 +42,10 @@ export default function LiveRehearsal() {
   const credits       = useCredits();
   const network       = useNetworkMonitor();
   const sessionCtx    = useSessionContext();
-  const sessionStore  = useSessionStore();
-  const overlayStore  = useOverlayStore();
+  // Individual selectors — prevents re-renders from store churn during live sessions
+  const sessionStatus      = useSessionStore((s) => s.status);
+  const is_proctor_safe    = useOverlayStore((s) => s.is_proctor_safe);
+  const current_question   = useOverlayStore((s) => s.current_question);
 
   const [hintStyle,     setHintStyle]     = useState("short_hints");
   const [targetCompany, setTargetCompany] = useState("");
@@ -51,7 +53,7 @@ export default function LiveRehearsal() {
   const [hotkeysOpen,   setHotkeysOpen]   = useState(false);
   const [micError,      setMicError]      = useState<string | null>(null);
 
-  const isActive = sessionStore.status === "active";
+  const isActive = sessionStatus === "active";
 
   // ── Start session ─────────────────────────────────────────────
   async function handleStart() {
@@ -65,10 +67,11 @@ export default function LiveRehearsal() {
       session_goals: [`Using ${hintStyle} hints`],
     });
 
-    sessionStore.setMode("live");
-    sessionStore.setStatus("active");
-    sessionStore.setSessionId(crypto.randomUUID());
-    overlayStore.setHintStyle(hintStyle as any);
+    const ss = useSessionStore.getState();
+    ss.setMode("live");
+    ss.setStatus("active");
+    ss.setSessionId(crypto.randomUUID());
+    useOverlayStore.getState().setHintStyle(hintStyle as any);
 
     setConfigOpen(false);
     overlay.show();
@@ -76,7 +79,7 @@ export default function LiveRehearsal() {
 
   // ── Stop session ──────────────────────────────────────────────
   async function handleStop() {
-    sessionStore.setStatus("completed");
+    useSessionStore.getState().setStatus("completed");
     audio.stopAll();
     overlay.hide();
     navigate("/app/sessions");
@@ -272,10 +275,10 @@ export default function LiveRehearsal() {
               {audio.isMuted ? "Unmute" : "Mute"}
             </button>
             <button
-              onClick={() => overlayStore.setProctorSafe(!overlayStore.is_proctor_safe)}
+              onClick={() => useOverlayStore.getState().setProctorSafe(!is_proctor_safe)}
               className={cn(
                 "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-all",
-                overlayStore.is_proctor_safe
+                is_proctor_safe
                   ? "bg-success/10 border-success/20 text-success"
                   : "bg-secondary/30 border-border text-muted-foreground"
               )}
@@ -289,14 +292,14 @@ export default function LiveRehearsal() {
           <Card>
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-foreground">AI Answer</h3>
-              {overlayStore.current_question && (
+              {current_question && (
                 <Badge variant="violet" size="sm">Question detected</Badge>
               )}
             </div>
-            {overlayStore.current_question && (
+            {current_question && (
               <div className="mb-3 p-3 bg-primary/10 border border-primary/20 rounded-xl">
                 <p className="text-xs text-primary font-medium mb-1">Current question</p>
-                <p className="text-sm text-foreground">{overlayStore.current_question}</p>
+                <p className="text-sm text-foreground">{current_question}</p>
               </div>
             )}
             <LiveAnswerStream />
