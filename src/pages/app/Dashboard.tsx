@@ -303,11 +303,23 @@ function StatCard({
 
 function RecentSessions() {
   const stealth = useUIStore((s) => s.stealth_mode);
-  const placeholder = [
-    { id: "1", type: "Mock",    score: 74, date: "Today, 9:41 AM",    company: "Google"  },
-    { id: "2", type: "Mock",    score: 68, date: "Yesterday, 3:12 PM", company: "Stripe"  },
-    { id: "3", type: "Prep Lab",score: null,date: "2 days ago",        company: null      },
-  ];
+  const { user } = useAuthStore();
+  const [sessions, setSessions] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!user?.id) { setLoading(false); return; }
+    supabase
+      .from("sessions")
+      .select("id, type, status, overall_score, target_company, created_at")
+      .eq("user_id", user.id)
+      .order("created_at", { ascending: false })
+      .limit(5)
+      .then(({ data }) => {
+        setSessions(data ?? []);
+        setLoading(false);
+      });
+  }, [user?.id]);
 
   return (
     <Card>
@@ -322,43 +334,68 @@ function RecentSessions() {
           View all <ChevronRight className="w-3 h-3" />
         </Link>
       </div>
-      <div className="space-y-2">
-        {placeholder.map((s) => (
+      {loading ? (
+        <div className="space-y-2">
+          {[...Array(3)].map((_, i) => (
+            <div key={i} className="h-12 bg-accent/5 rounded-xl animate-pulse" />
+          ))}
+        </div>
+      ) : sessions.length === 0 ? (
+        <div className="text-center py-6">
+          <ClipboardList className="w-8 h-8 text-gray-700 mx-auto mb-2" />
+          <p className="text-muted-foreground text-xs">No sessions yet.</p>
           <Link
-            key={s.id}
-            to={`/app/sessions/${s.id}`}
-            className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-accent/5 transition-all group"
+            to="/app/mock"
+            className="text-xs text-violet-400 hover:text-violet-300 mt-1 inline-block transition-colors"
           >
-            <div className={cn(
-              "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold",
-              s.type === "Mock"
-                ? "bg-blue-500/10 text-blue-400"
-                : "bg-violet-500/10 text-violet-400"
-            )}>
-              {s.type === "Mock" ? <ClipboardList className="w-3.5 h-3.5" /> : <FlaskConical className="w-3.5 h-3.5" />}
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm text-foreground font-medium">
-                {s.type}{s.company ? ` — ${s.company}` : ""}
-              </p>
-              <p className="text-xs text-muted-foreground">{s.date}</p>
-            </div>
-            {s.score !== null && (
-              <span className={cn(
-                "text-xs font-bold px-2 py-0.5 rounded-lg",
-                s.score >= 75
-                  ? "bg-emerald-500/10 text-emerald-400"
-                  : s.score >= 50
-                  ? "bg-amber-500/10 text-amber-400"
-                  : "bg-red-500/10 text-red-400"
-              )}>
-                {s.score}
-              </span>
-            )}
-            <ChevronRight className="w-3.5 h-3.5 text-gray-700 group-hover:text-muted-foreground transition-colors" />
+            Start your first mock →
           </Link>
-        ))}
-      </div>
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {sessions.map((s) => {
+            const isMock = s.type === "mock";
+            const score = s.overall_score;
+            return (
+              <Link
+                key={s.id}
+                to={`/app/sessions/${s.id}`}
+                className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-accent/5 transition-all group"
+              >
+                <div className={cn(
+                  "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold",
+                  isMock
+                    ? "bg-blue-500/10 text-blue-400"
+                    : "bg-violet-500/10 text-violet-400"
+                )}>
+                  {isMock ? <ClipboardList className="w-3.5 h-3.5" /> : <FlaskConical className="w-3.5 h-3.5" />}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-foreground font-medium capitalize">
+                    {s.type ?? "Session"}{s.target_company ? ` — ${s.target_company}` : ""}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {format(new Date(s.created_at), "MMM d, h:mm a")}
+                  </p>
+                </div>
+                {score !== null && score !== undefined && (
+                  <span className={cn(
+                    "text-xs font-bold px-2 py-0.5 rounded-lg",
+                    score >= 75
+                      ? "bg-emerald-500/10 text-emerald-400"
+                      : score >= 50
+                      ? "bg-amber-500/10 text-amber-400"
+                      : "bg-red-500/10 text-red-400"
+                  )}>
+                    {score}
+                  </span>
+                )}
+                <ChevronRight className="w-3.5 h-3.5 text-gray-700 group-hover:text-muted-foreground transition-colors" />
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </Card>
   );
 }

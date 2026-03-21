@@ -195,7 +195,6 @@ export default function MockSession() {
   }
 
   async function handleRequestHint() {
-    if (!credits.canAfford("live_hint")) return;
     const q = typeof question === "string" ? question : question?.question_text;
     if (q) {
       useOverlayStore.getState().setCurrentQuestion(q);

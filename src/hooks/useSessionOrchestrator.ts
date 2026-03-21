@@ -127,10 +127,14 @@ export function useSessionOrchestrator() {
     const preferredModel = overlayModel || (profile as any).preferred_model || "gemini-flash";
     const interviewType  = context.session_type as InterviewType;
 
-    const creditCheck = checkCredits(preferredModel as any);
-    if (!creditCheck.canProceed) {
-      useOverlayStore.getState().setError(creditCheck.reason ?? "Insufficient credits");
-      return;
+    const isMock = useSessionStore.getState().mode === "mock";
+
+    if (!isMock) {
+      const creditCheck = checkCredits(preferredModel as any);
+      if (!creditCheck.canProceed) {
+        useOverlayStore.getState().setError(creditCheck.reason ?? "Insufficient credits");
+        return;
+      }
     }
 
     abortControllerRef.current?.abort();
@@ -161,8 +165,11 @@ export function useSessionOrchestrator() {
       onDone: async () => {
         if (hintRequestIdRef.current !== requestId) return;
         useOverlayStore.getState().commitStreamedHint();
-        await deductCredits(preferredModel as any, session_id ?? "unknown");
-        useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
+        if (!isMock) {
+          await deductCredits(preferredModel as any, session_id ?? "unknown");
+          const creditCheck = checkCredits(preferredModel as any);
+          useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
+        }
         coachStore.incrementQuestionNumber();
       },
       onError: (error) => {
