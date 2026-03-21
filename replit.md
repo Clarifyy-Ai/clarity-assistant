@@ -185,6 +185,18 @@ DEEPGRAM_API_KEY=...      # Speech-to-text for live sessions
 - `useOverlayVisibility.ts` — bare `useOverlayStore()` → individual selectors for reactive return values; all hotkey callbacks and `useCallback` wrappers use `.getState()` to read state at call-time (prevents stale closure bugs)
 - `useDeepgramStream.ts` — removed `audioStore` reactive subscription entirely; all `setDeepgramStatus` calls use `useAudioStore.getState()` inside callbacks
 
+## Replit Environment Setup
+
+- **Runtime**: Node.js 20 via Vite dev server on port 5000
+- **Workflow**: "Start application" runs `npm run dev` (configured in `.replit`)
+- **Dependencies**: Installed via `npm install` — `node_modules/` is populated automatically
+- **Environment Variables**: Set in `.env` at the project root:
+  - `VITE_SUPABASE_URL` — your Supabase project URL
+  - `VITE_SUPABASE_PUBLISHABLE_KEY` — Supabase anon key (also aliased as `VITE_SUPABASE_ANON_KEY`)
+  - Optional: `VITE_STRIPE_PUBLISHABLE_KEY`, `VITE_POSTHOG_KEY`, `VITE_SENTRY_DSN`
+- **Architecture**: Pure frontend SPA — no Replit-side server. All backend logic lives in Supabase Edge Functions.
+- **Database**: Supabase PostgreSQL (external). Run migrations via Supabase Dashboard SQL Editor (see "What User Must Do" below).
+
 ## GitHub Sync Notes
 
 - The stale `.git/index.lock` file that was blocking git operations has been removed.
