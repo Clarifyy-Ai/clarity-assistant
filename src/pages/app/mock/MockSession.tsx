@@ -93,16 +93,22 @@ export default function MockSession() {
     timeLeft > 60  ? "emerald" :
     timeLeft > 20  ? "amber"   : "red";
 
-  function handleSetup(config: LiveSessionConfig) {
+  async function handleSetup(config: LiveSessionConfig) {
     sessionConfigRef.current = config;
 
     const overlay = useOverlayStore.getState();
     overlay.setActiveModel(config.model);
     overlay.setHintStyle(config.hint_style);
     overlay.setProctorSafe(config.stealth_mode);
-    if (config.company) overlay.setCurrentQuestion(`Mock interview for ${config.company}${config.role ? ` — ${config.role}` : ""}`);
 
-    useSessionStore.getState().setConfig(config);
+    await orchestrator.createSession({
+      session_type:    "mock",
+      interview_type:  config.interview_type,
+      hint_style:      config.hint_style,
+      model:           config.model,
+      resume_id:       config.resume_id,
+      jd_id:           config.jd_id,
+    });
 
     setPhase("active");
     stt.start();

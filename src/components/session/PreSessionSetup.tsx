@@ -57,6 +57,10 @@ export function PreSessionSetup({ onStart, sessionType: initialSessionType = "li
   const [stealthMode,       setStealthMode]       = useState(true);
   const [showAdvanced,      setShowAdvanced]      = useState(false);
 
+  const systemAudioSupported = typeof navigator !== "undefined"
+    && !!navigator.mediaDevices
+    && "getDisplayMedia" in navigator.mediaDevices;
+
   const [micPermission, setMicPermission] = useState<"unknown" | "granted" | "denied" | "checking">("unknown");
 
   useEffect(() => {
@@ -93,7 +97,8 @@ export function PreSessionSetup({ onStart, sessionType: initialSessionType = "li
       company:             null,
       role:                null,
       hint_style:          hintStyle,
-      model,
+      model:               smartRouting ? "gemini-flash" : model,
+      smart_routing:       smartRouting,
       stealth_mode:        stealthMode,
       resume_id:           resumeId,
       jd_id:               jdId,
@@ -102,9 +107,10 @@ export function PreSessionSetup({ onStart, sessionType: initialSessionType = "li
       enable_system_audio: enableSystemAudio,
     };
 
-    useOverlayStore.getState().setActiveModel(model);
-    useOverlayStore.getState().setHintStyle(hintStyle);
-    useOverlayStore.getState().setStealthMode(stealthMode);
+    const overlay = useOverlayStore.getState();
+    overlay.setActiveModel(smartRouting ? "gemini-flash" : model);
+    overlay.setHintStyle(hintStyle);
+    overlay.setStealthMode(stealthMode);
 
     onStart(config);
   }
@@ -254,13 +260,13 @@ export function PreSessionSetup({ onStart, sessionType: initialSessionType = "li
           <div className="flex items-center gap-4">
             <label className={cn(
               "flex items-center gap-3 flex-1",
-              !!(navigator.mediaDevices as any)?.getDisplayMedia ? "cursor-pointer" : "cursor-not-allowed opacity-50"
+              systemAudioSupported ? "cursor-pointer" : "cursor-not-allowed opacity-50"
             )}>
               <input
                 type="checkbox"
                 checked={enableSystemAudio}
                 onChange={(e) => setEnableSystemAudio(e.target.checked)}
-                disabled={!(navigator.mediaDevices as any)?.getDisplayMedia}
+                disabled={!systemAudioSupported}
                 className="rounded border-white/20 bg-white/5 text-emerald-500"
               />
               <div>
@@ -268,7 +274,7 @@ export function PreSessionSetup({ onStart, sessionType: initialSessionType = "li
                   <Volume2 className="w-3.5 h-3.5" /> System Audio
                 </p>
                 <p className="text-[10px] text-gray-400 mt-0.5">
-                  {(navigator.mediaDevices as any)?.getDisplayMedia
+                  {systemAudioSupported
                     ? "Capture interviewer audio"
                     : "Not supported in this browser"}
                 </p>

@@ -27,6 +27,22 @@ import type { LiveSessionConfig } from "@/types/session.types";
 // re-render loops when audio/session state ticks every second.
 // ─────────────────────────────────────────────────────────────────
 
+const APP_TO_DB_MODEL: Record<string, string> = {
+  "gemini-flash":      "gemini-1-5-flash",
+  "gemini-pro":        "gemini-1-5-pro",
+  "gpt-4o":            "gpt-4o",
+  "claude":            "claude-3-5-sonnet",
+  "claude-3-5-sonnet": "claude-3-5-sonnet",
+  "gemini-1-5-pro":    "gemini-1-5-pro",
+  "gemini-1-5-flash":  "gemini-1-5-flash",
+  "gpt-4o-mini":       "gpt-4o-mini",
+  "claude-3-haiku":    "claude-3-haiku",
+};
+
+function toDbModel(appModel: string): string {
+  return APP_TO_DB_MODEL[appModel] ?? appModel;
+}
+
 interface UseLiveCopilotOptions {
   config:     LiveSessionConfig;
   overlayRef: React.RefObject<HTMLDivElement>;
@@ -168,7 +184,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
           type:       "live",
           status:     "active",
           started_at: new Date().toISOString(),
-          model_used: useOverlayStore.getState().active_model as any,
+          model_used: toDbModel(useOverlayStore.getState().active_model),
         });
       } catch (err) {
         console.error("[useLiveCopilot] Failed to create session record:", err);
@@ -191,12 +207,14 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
         const audioState = useAudioStore.getState();
         const fullTranscript = audioState.transcript?.full_transcript ?? "";
         const utterances = audioState.transcript?.utterances ?? [];
-        const questionCount = utterances.filter((u: any) => u.is_interviewer_question).length;
+        const questionCount = utterances.filter((u) => u.is_interviewer_question).length;
+
+        const dbModel = toDbModel(overlay.active_model);
 
         await sessionsDB.update(session.session_id, {
           status:            "completed",
           credits_used:      session.credits_consumed,
-          model_used:        overlay.active_model as any,
+          model_used:        dbModel,
           ended_at:          new Date().toISOString(),
           filler_words:      session.filler_count,
           avg_wpm:           session.current_wpm,
@@ -227,7 +245,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
               type:       "hint",
               prompt:     hint.question,
               response:   hint.hint,
-              model:      overlay.active_model as any,
+              model:      dbModel,
             });
           } catch {
           }

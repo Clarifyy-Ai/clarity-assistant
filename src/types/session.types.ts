@@ -49,6 +49,7 @@ export interface LiveSessionConfig {
   role: string | null;
   hint_style: HintStyle;
   model: PreferredAIModel;
+  smart_routing: boolean;
   stealth_mode: boolean;
   resume_id: string | null;
   jd_id: string | null;
