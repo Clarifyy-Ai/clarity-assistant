@@ -26,24 +26,15 @@ export type { DeepgramStreamOptions };
 export function useDeepgramStream(
   callbacks: Pick<DeepgramStreamOptions, "onUtterance" | "onInterim" | "onError" | "onStatusChange">
 ) {
-  // This hook only WRITES to the audio store (never reads reactive state),
-  // so we use useAudioStore merely to satisfy the import; all actual calls
-  // go through .getState() inside callbacks to avoid stale closures and
-  // unnecessary re-renders on every audio level update.
-  useAudioStore; // keeps the import alive for tree-shaking awareness
-
   const [status, setStatus] = useState<DeepgramStatus>("idle");
   const clientRef = useRef<DeepgramStreamClient | null>(null);
 
   const connect = useCallback(async (stream: MediaStream): Promise<void> => {
-    // Tear down any existing connection first
     clientRef.current?.disconnect();
     clientRef.current = null;
 
     const handleStatus = (s: string) => {
-      const mapped = s as DeepgramStatus;
-      setStatus(mapped);
-      // Use .getState() — avoids stale closure over an audioStore snapshot
+      setStatus(s as DeepgramStatus);
       useAudioStore.getState().setDeepgramStatus(
         s === "connected"    ? "connected" :
         s === "reconnecting" ? "reconnecting" :
@@ -57,7 +48,6 @@ export function useDeepgramStream(
       onUtterance:   callbacks.onUtterance,
       onInterim:     callbacks.onInterim,
       onError:       (err) => {
-        // If token fetch failed (edge function not deployed), mark as unavailable
         if (err.message.includes("Token fetch failed") || err.message.includes("Failed to obtain")) {
           setStatus("unavailable");
           useAudioStore.getState().setDeepgramStatus("disconnected");
@@ -86,8 +76,6 @@ export function useDeepgramStream(
   }, []);
 
   const keepAlive = useCallback((): (() => void) => {
-    // DeepgramStreamClient handles keepalive internally via ping interval
-    // This no-op return satisfies the interface
     return () => {};
   }, []);
 
