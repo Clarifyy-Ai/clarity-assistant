@@ -77,7 +77,7 @@ export function AppTopBar() {
           ) : (
             <ShieldOff className="w-3.5 h-3.5" />
           )}
-          {stealthMode ? "Stealth" : "Stealth"}
+          Stealth
         </button>
 
         <ThemeToggle />

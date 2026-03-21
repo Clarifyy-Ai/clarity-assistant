@@ -2,6 +2,7 @@
 import { useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
+import { useUIStore } from "@/store/uiStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
 import { useGamification } from "@/hooks/useGamification";
@@ -16,9 +17,11 @@ import {
   CalendarDays, Flame, Zap, ChevronRight,
   Star, TrendingUp, Trophy, Clock,
   Building2, AlertTriangle,
+  ListTodo, PenTool, FolderOpen, BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { getStealthLabel } from "@/lib/stealth/stealthConfig";
 
 // ─────────────────────────────────────────────────────────────────
 // Dashboard
@@ -27,6 +30,7 @@ import { format } from "date-fns";
 
 export default function Dashboard() {
   const { profile, isLoading } = useAuthStore();
+  const stealth    = useUIStore((s) => s.stealth_mode);
   const docStore     = useDocumentStore();
   const scheduler    = useInterviewSchedulerStore();
   const gamification = useGamification();
@@ -99,11 +103,11 @@ export default function Dashboard() {
           </div>
           <div className="flex-1">
             <p className="text-foreground font-semibold text-sm">
-              🎯 Interview today — {todayInterview.company_name}
+              {stealth ? "📅 Meeting today" : `🎯 Interview today — ${todayInterview.company_name}`}
             </p>
             <p className="text-muted-foreground text-xs mt-0.5">
               {format(new Date(todayInterview.scheduled_at), "h:mm a")} ·{" "}
-              {todayInterview.role_title} · Tap to enter focus mode
+              {stealth ? "Tap to enter focus mode" : `${todayInterview.role_title} · Tap to enter focus mode`}
             </p>
           </div>
           <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
@@ -112,41 +116,46 @@ export default function Dashboard() {
 
       {/* ── Quick Actions ─────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {QUICK_ACTIONS.map((action) => (
-          <Link
-            key={action.to}
-            to={action.to}
-            className={cn(
-              "flex flex-col gap-3 p-4 rounded-2xl border transition-all group",
-              "hover:border-white/20",
-              action.highlight
-                ? "bg-violet-600/10 border-violet-500/30 hover:bg-violet-600/15"
-                : "bg-accent/5 border-white/10 hover:bg-white/8"
-            )}
-          >
-            <div className={cn(
-              "w-9 h-9 rounded-xl flex items-center justify-center",
-              action.highlight
-                ? "bg-violet-600/30"
-                : "bg-white/8"
-            )}>
-              <action.icon className={cn(
-                "w-4 h-4",
-                action.highlight ? "text-violet-300" : "text-muted-foreground"
-              )} />
-            </div>
-            <div>
-              <p className={cn(
-                "text-sm font-semibold",
-                action.highlight ? "text-violet-200" : "text-foreground"
+        {QUICK_ACTIONS.map((action) => {
+          const Icon = stealth ? (action.stealthIcon ?? action.icon) : action.icon;
+          const label = getStealthLabel(action.label, stealth);
+          const sub = stealth ? (action.stealthSub ?? action.sub) : action.sub;
+          return (
+            <Link
+              key={action.to}
+              to={action.to}
+              className={cn(
+                "flex flex-col gap-3 p-4 rounded-2xl border transition-all group",
+                "hover:border-white/20",
+                action.highlight
+                  ? "bg-violet-600/10 border-violet-500/30 hover:bg-violet-600/15"
+                  : "bg-accent/5 border-white/10 hover:bg-white/8"
+              )}
+            >
+              <div className={cn(
+                "w-9 h-9 rounded-xl flex items-center justify-center",
+                action.highlight
+                  ? "bg-violet-600/30"
+                  : "bg-white/8"
               )}>
-                {action.label}
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-0.5">{action.sub}</p>
-            </div>
-            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-muted-foreground transition-colors mt-auto" />
-          </Link>
-        ))}
+                <Icon className={cn(
+                  "w-4 h-4",
+                  action.highlight ? "text-violet-300" : "text-muted-foreground"
+                )} />
+              </div>
+              <div>
+                <p className={cn(
+                  "text-sm font-semibold",
+                  action.highlight ? "text-violet-200" : "text-foreground"
+                )}>
+                  {label}
+                </p>
+                <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>
+              </div>
+              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-muted-foreground transition-colors mt-auto" />
+            </Link>
+          );
+        })}
       </div>
 
       {/* ── Stats row ─────────────────────────────────── */}
@@ -220,29 +229,37 @@ const QUICK_ACTIONS = [
   {
     to:        "/app/live",
     icon:      Mic,
+    stealthIcon: ListTodo,
     label:     "Live Co-Pilot",
     sub:       "Real interview mode",
+    stealthSub: "Join your standup",
     highlight: true,
   },
   {
     to:        "/app/mock",
     icon:      ClipboardList,
+    stealthIcon: PenTool,
     label:     "Mock Interview",
     sub:       "Practice session",
+    stealthSub: "Review session",
     highlight: false,
   },
   {
     to:        "/app/prep",
     icon:      FlaskConical,
+    stealthIcon: FolderOpen,
     label:     "Prep Lab",
     sub:       "STAR builder + tools",
+    stealthSub: "Document templates",
     highlight: false,
   },
   {
     to:        "/app/analytics",
     icon:      BarChart2,
+    stealthIcon: BarChart3,
     label:     "Analytics",
     sub:       "Progress trends",
+    stealthSub: "Team reports",
     highlight: false,
   },
 ];
@@ -279,7 +296,7 @@ function StatCard({
 // ─────────────────────────────────────────────────────────────────
 
 function RecentSessions() {
-  // In production this would read from sessionStore or a hook
+  const stealth = useUIStore((s) => s.stealth_mode);
   const placeholder = [
     { id: "1", type: "Mock",    score: 74, date: "Today, 9:41 AM",    company: "Google"  },
     { id: "2", type: "Mock",    score: 68, date: "Yesterday, 3:12 PM", company: "Stripe"  },
@@ -289,7 +306,9 @@ function RecentSessions() {
   return (
     <Card>
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-foreground">Recent Sessions</h3>
+        <h3 className="text-sm font-semibold text-foreground">
+          {stealth ? "Recent Activity" : "Recent Sessions"}
+        </h3>
         <Link
           to="/app/sessions"
           className="text-xs text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1"
@@ -343,12 +362,13 @@ function RecentSessions() {
 // ─────────────────────────────────────────────────────────────────
 
 function UpcomingInterviews({ interviews }: { interviews: any[] }) {
+  const stealth = useUIStore((s) => s.stealth_mode);
   return (
     <Card>
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
           <CalendarDays className="w-4 h-4 text-violet-400" />
-          Upcoming Interviews
+          {stealth ? "Upcoming Meetings" : "Upcoming Interviews"}
         </h3>
         <Link
           to="/app/interviews"
@@ -360,12 +380,14 @@ function UpcomingInterviews({ interviews }: { interviews: any[] }) {
       {interviews.length === 0 ? (
         <div className="text-center py-6">
           <CalendarDays className="w-8 h-8 text-gray-700 mx-auto mb-2" />
-          <p className="text-muted-foreground text-xs">No upcoming interviews scheduled.</p>
+          <p className="text-muted-foreground text-xs">
+            {stealth ? "No upcoming meetings scheduled." : "No upcoming interviews scheduled."}
+          </p>
           <Link
             to="/app/interviews/new"
             className="text-xs text-violet-400 hover:text-violet-300 mt-1 inline-block transition-colors"
           >
-            + Add interview
+            {stealth ? "+ Add meeting" : "+ Add interview"}
           </Link>
         </div>
       ) : (
