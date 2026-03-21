@@ -20,6 +20,11 @@ export const CREDIT_COSTS = {
   company_brief:      3,
   debrief_analyse:    2,
   screenshot_analyse: 2,
+  coding_hint:        1,
+  coding_solution:    2,
+  system_design:      2,
+  rephrase:           1,
+  project_build:      2,
 } as const;
 
 export type CreditAction = keyof typeof CREDIT_COSTS;

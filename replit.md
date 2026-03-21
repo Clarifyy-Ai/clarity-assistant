@@ -26,14 +26,14 @@ src/
   components/
     auth/                     # LoginForm, SignupForm, OAuthButton, VerifyEmailModal
     billing/                  # BillingHistory, CreditBalance, PricingCard, UpgradeModal
-    layout/                   # AppLayout, AppSidebar, AppTopBar, ProtectedRoute, etc.
+    layout/                   # AppSidebar, AppTopBar, ProtectedRoute, etc. (AppShell in App.tsx)
     live/                     # LiveSessionController, LiveTranscriptStream, etc.
     overlay/                  # OverlayWindow, StealthMouseGuard, etc.
     ui/                       # shadcn/ui components
   hooks/
     useSessionOrchestrator.ts # Mock/live session state machine (FIXED)
     useGamification.ts        # XP, badges, streaks (persisted in localStorage)
-    useCredits.ts             # Credit balance + deductions
+    useCredits.ts             # Credit balance + deductions (actions: coding_hint, coding_solution, system_design, rephrase, project_build)
     useDeepgramStream.ts      # STT stub (connect real key when available)
     ...
   lib/
