@@ -264,6 +264,54 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     store.setIsMuted(muted);
   }, []);
 
+  // ── Toggle system audio at runtime ───────────────────────────
+
+  const toggleSystemAudio = useCallback(async () => {
+    const store = useAudioStore.getState();
+    const currentSysStream = store.streams.system_stream;
+
+    if (currentSysStream) {
+      cleanupSysRef.current?.();
+      cleanupSysRef.current = null;
+      stopStream(currentSysStream);
+      store.setSystemStream(null);
+
+      const micStream = store.streams.mic_stream;
+      if (micStream) {
+        store.setCombinedStream(micStream);
+        deepgramRef.current?.replaceStream?.(micStream);
+      }
+    } else {
+      if (!isSystemAudioSupported()) return;
+      try {
+        const sysStream = await captureSystemAudio();
+        store.setSystemStream(sysStream);
+
+        const micStream = store.streams.mic_stream;
+        if (micStream) {
+          const merged = mergeAudioStreams(micStream, sysStream);
+          store.setCombinedStream(merged);
+          deepgramRef.current?.replaceStream?.(merged);
+        }
+
+        cleanupSysRef.current = watchStreamEnded(sysStream, () => {
+          store.setSystemStream(null);
+          const mic = useAudioStore.getState().streams.mic_stream;
+          if (mic) {
+            store.setCombinedStream(mic);
+            deepgramRef.current?.replaceStream?.(mic);
+          }
+        });
+      } catch {
+        store.setSystemAudioAvailable(false);
+      }
+    }
+  }, []);
+
+  const isSystemAudioActive = useAudioStore(
+    (s) => s.streams.system_stream !== null
+  );
+
   // ── Reconnect ─────────────────────────────────────────────────
 
   const reconnect = useCallback(async () => {
@@ -299,6 +347,8 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     stop,
     reconnect,
     toggleMute,
+    toggleSystemAudio,
+    isSystemAudioActive,
     getFillerSnapshot,
     getWPMDataPoints,
     getAverageWPM,

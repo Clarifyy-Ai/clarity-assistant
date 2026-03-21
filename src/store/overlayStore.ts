@@ -61,6 +61,9 @@ interface OverlayStore {
   is_panic_visible: boolean;
   panic_content: { step_1: string; step_2: string; step_3: string } | null;
 
+  // Hint history for session persistence
+  hint_history: Array<{ question: string; hint: string; timestamp: number }>;
+
   // Coding problem capture
   is_screenshot_loading: boolean;
   screenshot_hint: string | null;
@@ -150,6 +153,8 @@ export const useOverlayStore = create<OverlayStore>()(
       is_panic_visible: false,
       panic_content: null,
 
+      hint_history: [],
+
       is_screenshot_loading: false,
       screenshot_hint: null,
 
@@ -177,6 +182,14 @@ export const useOverlayStore = create<OverlayStore>()(
           current_hint: state.streaming_buffer,
           streaming_buffer: "",
           hint_state: "ready",
+          hint_history: [
+            ...state.hint_history,
+            {
+              question: state.current_question,
+              hint: state.streaming_buffer,
+              timestamp: Date.now(),
+            },
+          ],
         })),
 
       clearHint: () =>

@@ -6,7 +6,6 @@ import { useCoachStore } from "@/store/coachStore";
 import { useAuthStore } from "@/store/userStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { useAudioSession } from "./useAudioSession";
-import { useSystemAudio } from "./useSystemAudio";
 import { useAudioStore } from "@/store/audioStore";
 import { buildCoachingContext } from "@/lib/ai/contextEnvelopeBuilder";
 import { routeHint } from "@/lib/ai/modelRouter";
@@ -60,8 +59,6 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
       useSessionStore.getState().setCurrentWPM(wpm);
     },
   });
-
-  const systemAudio = useSystemAudio();
 
   const configRef = useRef(config);
   configRef.current = config;
@@ -202,13 +199,14 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
           model_used:       overlay.active_model,
           ended_at:         new Date().toISOString(),
           metadata: {
-            filler_count:       session.filler_count,
-            avg_wpm:            session.current_wpm,
-            hint_style:         overlay.hint_style,
-            last_question:      overlay.current_question,
+            filler_count:        session.filler_count,
+            avg_wpm:             session.current_wpm,
+            hint_style:          overlay.hint_style,
+            last_question:       overlay.current_question,
             last_generated_hint: overlay.current_hint,
-            utterance_count:    utterances.length,
-            question_count:     utterances.filter((u) => u.is_interviewer_question).length,
+            utterance_count:     utterances.length,
+            question_count:      utterances.filter((u) => u.is_interviewer_question).length,
+            generated_hints:     overlay.hint_history,
           },
         });
       } catch (err) {
@@ -226,12 +224,8 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
   }, []);
 
   const toggleSystemAudio = useCallback(async () => {
-    if (systemAudio.isActive) {
-      systemAudio.stop();
-    } else {
-      await systemAudio.start();
-    }
-  }, [systemAudio]);
+    await audio.toggleSystemAudio();
+  }, [audio.toggleSystemAudio]);
 
   return {
     startLiveSession,

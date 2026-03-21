@@ -22,6 +22,7 @@ import {
   SkipForward, Eye, EyeOff, Timer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { LiveSessionConfig } from "@/types/session.types";
 
 export default function MockSession() {
   const navigate      = useNavigate();
@@ -36,6 +37,7 @@ export default function MockSession() {
   const [panicMode,    setPanicMode]   = useState(false);
   const [skipConfirm,  setSkipConfirm] = useState(false);
   const [endConfirm,   setEndConfirm]  = useState(false);
+  const sessionConfigRef = useRef<LiveSessionConfig | null>(null);
 
   const [timeLeft,     setTimeLeft]    = useState(orchestrator.currentTimeLimit ?? 180);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -91,7 +93,17 @@ export default function MockSession() {
     timeLeft > 60  ? "emerald" :
     timeLeft > 20  ? "amber"   : "red";
 
-  function handleSetup(config: any) {
+  function handleSetup(config: LiveSessionConfig) {
+    sessionConfigRef.current = config;
+
+    const overlay = useOverlayStore.getState();
+    overlay.setActiveModel(config.model);
+    overlay.setHintStyle(config.hint_style);
+    overlay.setProctorSafe(config.stealth_mode);
+    if (config.company) overlay.setCurrentQuestion(`Mock interview for ${config.company}${config.role ? ` — ${config.role}` : ""}`);
+
+    useSessionStore.getState().setConfig(config);
+
     setPhase("active");
     stt.start();
   }
@@ -99,19 +111,12 @@ export default function MockSession() {
   async function handleNextQuestion() {
     clearInterval(timerRef.current!);
     stt.stop();
-    await orchestrator.submitAnswer({
-      transcript:   stt.transcript,
-      wpm:          wpmHook.wpm,
-      fillerCount:  fillerHook.totalCount,
-      sentiment:    sentimentHook.label,
-    });
 
     if (isLastQ) {
-      await orchestrator.finaliseSession();
       useOverlayStore.getState().hideOverlay();
-      navigate(`/app/scorecard/${orchestrator.sessionId}`);
+      await orchestrator.completeSession();
     } else {
-      await orchestrator.loadNextQuestion();
+      orchestrator.nextQuestion();
       stt.start();
     }
   }
@@ -129,8 +134,7 @@ export default function MockSession() {
     clearInterval(timerRef.current!);
     stt.stop();
     useOverlayStore.getState().hideOverlay();
-    await orchestrator.finaliseSession();
-    navigate(`/app/scorecard/${orchestrator.sessionId}`);
+    await orchestrator.completeSession();
   }
 
   if (phase === "setup") {
@@ -331,8 +335,11 @@ export default function MockSession() {
           </Button>
           <Button variant="danger" size="sm" fullWidth onClick={() => {
             setSkipConfirm(false);
-            orchestrator.skipQuestion();
-            if (isLastQ) navigate(`/app/scorecard/${orchestrator.sessionId}`);
+            if (isLastQ) {
+              orchestrator.completeSession();
+            } else {
+              orchestrator.nextQuestion();
+            }
           }}>
             Skip
           </Button>
