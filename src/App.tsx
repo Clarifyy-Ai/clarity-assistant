@@ -177,11 +177,13 @@ function AppShell() {
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
       <AppSidebar />
-      <div className="flex flex-1 flex-col overflow-hidden">
+      <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         <AppTopBar />
         <NetworkBanner />
-        <main className="flex-1 overflow-y-auto">
-          <Outlet />
+        <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
+          <div className="p-4 md:p-6">
+            <Outlet />
+          </div>
         </main>
       </div>
       <MobileNav />
@@ -202,6 +204,9 @@ const router = createBrowserRouter([
   { path: "/shortcuts", element: <Page component={Shortcuts} /> },
   { path: "/blog",      element: <Page component={Blog} /> },
   { path: "/blog/:slug",element: <Page component={BlogPost} /> },
+
+  // ── Convenience redirects ──────────────────────────────────────────────────
+  { path: "/dashboard", element: <Navigate to="/app/dashboard" replace /> },
 
   // ── Auth ───────────────────────────────────────────────────────────────────
   { path: "/login",          element: <Page component={Login} /> },
