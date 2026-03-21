@@ -82,14 +82,14 @@ export default function OnboardingStep3Preferences() {
       <div className="w-full max-w-lg">
 
         <div className="w-9 h-9 bg-violet-600 rounded-xl flex items-center justify-center mb-8">
-          <span className="text-white text-sm font-bold">CQ</span>
+          <span className="text-white text-sm font-bold">CA</span>
         </div>
 
         <OnboardingProgress current={3} />
 
         <h2 className="text-2xl font-bold text-white mb-1">Your preferences</h2>
         <p className="text-gray-400 text-sm mb-8">
-          Customise how ConfideQ coaches you. You can change these any time in settings.
+          Customise how Clarify AI coaches you. You can change these any time in settings.
         </p>
 
         <div className="space-y-7">

@@ -17,7 +17,7 @@ const config: Config = {
     },
     extend: {
       colors: {
-        /* ConfideQ Brand Palette */
+        /* Clarify AI Brand Palette */
         brand: {
           50:  "#eef2ff",
           100: "#e0e7ff",
@@ -122,7 +122,7 @@ const config: Config = {
           from: { height: "var(--radix-accordion-content-height)" },
           to:   { height: "0" },
         },
-        /* Custom ConfideQ */
+        /* Custom Clarify AI */
         "fade-in": {
           from: { opacity: "0", transform: "translateY(4px)" },
           to:   { opacity: "1", transform: "translateY(0)" },

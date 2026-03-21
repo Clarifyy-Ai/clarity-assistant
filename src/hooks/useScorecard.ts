@@ -210,7 +210,7 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
     a.href     = url;
-    a.download = `confideq-scorecard-${sessionId.slice(0, 8)}.pdf`;
+    a.download = `clarify-ai-scorecard-${sessionId.slice(0, 8)}.pdf`;
     a.click();
     URL.revokeObjectURL(url);
   }, [state.scorecard, sessionId]);

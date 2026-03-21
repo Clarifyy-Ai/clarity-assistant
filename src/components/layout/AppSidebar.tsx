@@ -81,7 +81,7 @@ export function AppSidebar() {
         </div>
         {!collapsed && (
           <span className="text-base font-bold tracking-tight text-sidebar-foreground">
-            ConfideQ
+            Clarify AI
           </span>
         )}
       </div>

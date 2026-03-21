@@ -77,7 +77,7 @@ export default function OnboardingStep1Role() {
           <div className="w-9 h-9 bg-violet-600 rounded-xl flex items-center justify-center">
             <Mic className="w-4 h-4 text-white" />
           </div>
-          <span className="text-white font-bold text-lg">ConfideQ</span>
+          <span className="text-white font-bold text-lg">Clarify AI</span>
         </div>
 
         <OnboardingProgress current={1} />

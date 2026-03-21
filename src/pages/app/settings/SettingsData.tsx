@@ -89,7 +89,7 @@ export default function SettingsData() {
       const url  = URL.createObjectURL(blob);
       const a    = document.createElement("a");
       a.href     = url;
-      a.download = `confideq-${type}-${new Date().toISOString().slice(0, 10)}.${ext}`;
+      a.download = `clarify-ai-${type}-${new Date().toISOString().slice(0, 10)}.${ext}`;
       a.click();
       URL.revokeObjectURL(url);
       setDone((p) => [...p, type]);

@@ -65,7 +65,7 @@ const INTEGRATIONS = [
     id:       "zapier",
     icon:     Zap,
     label:    "Zapier",
-    desc:     "Connect Confideq to 5,000+ apps via Zapier workflows.",
+    desc:     "Connect Clarify AI to 5,000+ apps via Zapier workflows.",
     status:   "coming_soon",
     color:    "text-orange-400",
     bg:       "bg-orange-500/10",
@@ -175,13 +175,13 @@ export default function SettingsIntegrations() {
           <Badge variant="amber" size="sm">Pro</Badge>
         </div>
         <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
-          Use the Confideq API to build integrations, automate workflows,
+          Use the Clarify AI API to build integrations, automate workflows,
           or pull data into your own tools.
         </p>
         <div className="flex gap-3">
           <input
             readOnly
-            value="sk-confideq-••••••••••••••••••••••"
+            value="sk-clarify-••••••••••••••••••••••"
             className="flex-1 bg-black/30 border border-white/10 text-muted-foreground rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none"
           />
           <Button variant="secondary" size="sm">

@@ -36,7 +36,7 @@ export default function AdminLayout() {
             <Shield className="w-5 h-5 text-red-400" />
             <span className="text-sm font-bold text-foreground">Admin</span>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-0.5">Confideq control panel</p>
+          <p className="text-[10px] text-muted-foreground mt-0.5">Clarify AI control panel</p>
         </div>
 
         <nav className="flex-1 p-3 space-y-0.5">

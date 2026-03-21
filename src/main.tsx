@@ -80,7 +80,7 @@ if ("serviceWorker" in navigator && import.meta.env.VITE_APP_ENV === "production
 const rootEl = document.getElementById("root");
 if (!rootEl) {
   throw new Error(
-    "[ConfideQ] Could not find #root element. Check your index.html."
+    "[Clarify AI] Could not find #root element. Check your index.html."
   );
 }
 

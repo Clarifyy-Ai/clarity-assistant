@@ -109,7 +109,7 @@ export function UpgradeModal() {
     <Modal
       open={uiStore.upgrade_modal_open}
       onClose={() => uiStore.setUpgradeModalOpen(false)}
-      title="Upgrade ConfideQ"
+      title="Upgrade Clarify AI"
       size="lg"
     >
       {!STRIPE_CONFIGURED && (

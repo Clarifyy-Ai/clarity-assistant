@@ -109,7 +109,7 @@ export default function SettingsBYOK() {
             <p className="text-sm font-medium text-foreground">Use your own API keys</p>
             <p className="text-xs text-muted-foreground mt-0.5">
               When you provide your own keys, AI calls are billed directly to your provider account
-              instead of using ConfideQ credits. Keys are encrypted and stored securely.
+              instead of using Clarify AI credits. Keys are encrypted and stored securely.
             </p>
           </div>
         </div>

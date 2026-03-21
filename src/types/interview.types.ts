@@ -51,7 +51,7 @@ export interface InterviewRound {
   status: RoundStatus;
   outcome: RoundOutcome | null;
   notes: string | null;
-  session_id: string | null;       // linked ConfideQ session
+  session_id: string | null;       // linked Clarify AI session
   debrief_id: string | null;       // linked debrief
   created_at: string;
   updated_at: string;
@@ -135,7 +135,7 @@ export interface CalendarEvent {
   description: string | null;
   meeting_link: string | null;
   attendees: string[];
-  is_mapped: boolean;              // mapped to a ConfideQ interview
+  is_mapped: boolean;              // mapped to a Clarify AI interview
   mapped_interview_id: string | null;
 }
 

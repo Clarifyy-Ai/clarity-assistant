@@ -96,14 +96,14 @@ export default function OnboardingStep4AudioSetup() {
       <div className="w-full max-w-lg">
 
         <div className="w-9 h-9 bg-violet-600 rounded-xl flex items-center justify-center mb-8">
-          <span className="text-white text-sm font-bold">CQ</span>
+          <span className="text-white text-sm font-bold">CA</span>
         </div>
 
         <OnboardingProgress current={4} />
 
         <h2 className="text-2xl font-bold text-white mb-1">Audio setup</h2>
         <p className="text-gray-400 text-sm mb-8">
-          ConfideQ needs your microphone to transcribe interview questions in real time.
+          Clarify AI needs your microphone to transcribe interview questions in real time.
           System audio capture enables it to hear the interviewer through Zoom or Teams.
         </p>
 
@@ -171,7 +171,7 @@ export default function OnboardingStep4AudioSetup() {
               </span>
             </div>
             <p className="text-xs text-gray-400 leading-relaxed mb-3">
-              When enabled, ConfideQ captures sound from your Zoom / Google Meet /
+              When enabled, Clarify AI captures sound from your Zoom / Google Meet /
               Teams tab so it can hear the interviewer's questions automatically.
               You'll be prompted to share your screen audio when you start a live session.
             </p>
@@ -179,7 +179,7 @@ export default function OnboardingStep4AudioSetup() {
               <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
               <p className="text-[11px] text-blue-300 leading-relaxed">
                 The overlay is invisible to screen sharing. The interviewer cannot see
-                ConfideQ even when you share your screen.
+                Clarify AI even when you share your screen.
               </p>
             </div>
           </div>

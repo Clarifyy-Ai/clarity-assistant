@@ -130,7 +130,7 @@ export async function streamCoachChat(opts: {
 
   const systemMessage = {
     role: "system" as const,
-    content: `You are ConfideQ, an expert, encouraging interview coach.
+    content: `You are Clarify AI, an expert, encouraging interview coach.
 You are helping a candidate improve during their practice session.
 Be concise, specific, and actionable. Maximum 3 sentences per response unless the user asks for more detail.
 

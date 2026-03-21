@@ -29,7 +29,7 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
     {
       id:          "toggle_overlay",
       label:       "Toggle Overlay",
-      description: "Show or hide the ConfideQ overlay",
+      description: "Show or hide the Clarify AI overlay",
       keys:        ["ctrl", "shift", "h"],
       category:    "overlay",
       action:      () => useOverlayStore.getState().toggleOverlay(),

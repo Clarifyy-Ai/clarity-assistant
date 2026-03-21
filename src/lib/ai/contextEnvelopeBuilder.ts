@@ -149,7 +149,7 @@ export function buildSystemPrompt(
     ? "This is a LIVE interview. Speed is critical. Start with the most important point immediately."
     : "This is a practice session. Be thorough and educational.";
 
-  return `You are ConfideQ, an expert interview coach AI.
+  return `You are Clarify AI, an expert interview coach AI.
 
 ${urgencyInstruction}
 

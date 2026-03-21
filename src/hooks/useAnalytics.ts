@@ -183,7 +183,7 @@ export function useAnalytics() {
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
     a.href     = url;
-    a.download = `confideq-analytics-${filter.period}.csv`;
+    a.download = `clarify-ai-analytics-${filter.period}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   }, [data, filter.period]);

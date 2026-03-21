@@ -8,7 +8,7 @@ import { createServiceClient } from "../_shared/supabase.ts";
 // ─────────────────────────────────────────────────────────────────
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
-const FROM_EMAIL     = "Confideq <hello@confideq.app>";
+const FROM_EMAIL     = "Clarify AI <hello@clarifyai.app>";
 
 interface EmailPayload {
   to:      string;
@@ -53,10 +53,10 @@ function buildEmailHtml(type: string, data: any): { subject: string; html: strin
 </head>
 <body>
   <div class="container">
-    <div class="logo">⚡ Confideq</div>
+    <div class="logo">⚡ Clarify AI</div>
     ${content}
     <div class="footer">
-      © 2025 Confideq · <a href="https://confideq.app/unsubscribe" style="color:#4b5563;">Unsubscribe</a>
+      © 2025 Clarify AI · <a href="https://clarifyai.app/unsubscribe" style="color:#4b5563;">Unsubscribe</a>
     </div>
   </div>
 </body>
@@ -75,7 +75,7 @@ function buildEmailHtml(type: string, data: any): { subject: string; html: strin
   <strong style="color:#8b5cf6">${data.time_until}</strong>.</p>
   <p>📅 ${data.time} &nbsp;·&nbsp; 🖥️ ${data.platform ?? "TBD"}</p>
   ${data.meeting_link ? `<p><a href="${data.meeting_link}" style="color:#8b5cf6;">Open meeting link →</a></p>` : ""}
-  <a href="https://confideq.app/app/interview-day" class="btn">Open Focus Mode →</a>
+  <a href="https://clarifyai.app/app/interview-day" class="btn">Open Focus Mode →</a>
 </div>
 <div class="card">
   <p style="font-size:13px; color:#6b7280;">Quick tips for ${data.company}:</p>
@@ -97,13 +97,13 @@ function buildEmailHtml(type: string, data: any): { subject: string; html: strin
   <p>You scored <strong style="color:#8b5cf6">${data.score}/100</strong> on your
   ${data.session_type} interview${data.company ? ` for ${data.company}` : ""}.</p>
   <p>${data.summary ?? "Great session! Check your full debrief for detailed feedback."}</p>
-  <a href="https://confideq.app/app/debrief/${data.debrief_id}" class="btn">View full debrief →</a>
+  <a href="https://clarifyai.app/app/debrief/${data.debrief_id}" class="btn">View full debrief →</a>
 </div>`),
       };
 
     case "weekly_report":
       return {
-        subject: `📈 Your weekly Confideq report — ${data.sessions_this_week} sessions`,
+        subject: `📈 Your weekly Clarify AI report — ${data.sessions_this_week} sessions`,
         html:    base(`
 <div class="card">
   <h1>This week's progress</h1>
@@ -122,7 +122,7 @@ function buildEmailHtml(type: string, data: any): { subject: string; html: strin
       <td style="padding:8px; color:#f59e0b; font-weight:700; text-align:right;">${data.streak} days 🔥</td>
     </tr>
   </table>
-  <a href="https://confideq.app/app/analytics" class="btn">View full analytics →</a>
+  <a href="https://clarifyai.app/app/analytics" class="btn">View full analytics →</a>
 </div>`),
       };
 
@@ -134,30 +134,30 @@ function buildEmailHtml(type: string, data: any): { subject: string; html: strin
   <h1>You're running low on credits</h1>
   <p>You have <strong style="color:#f59e0b">${data.remaining} credits</strong> remaining.
   Top up to keep your AI coaching uninterrupted.</p>
-  <a href="https://confideq.app/app/settings/credits" class="btn">Buy credits →</a>
+  <a href="https://clarifyai.app/app/settings/credits" class="btn">Buy credits →</a>
 </div>`),
       };
 
     case "welcome":
       return {
-        subject: "🎉 Welcome to Confideq — let's ace your next interview!",
+        subject: "🎉 Welcome to Clarify AI — let's ace your next interview!",
         html:    base(`
 <div class="card">
   <h1>Welcome, ${data.name ?? "there"}! 👋</h1>
-  <p>You're all set to start practising. Here's how to get the most out of Confideq:</p>
+  <p>You're all set to start practising. Here's how to get the most out of Clarify AI:</p>
   <ol style="color:#9ca3af; font-size:14px; padding-left:16px; line-height:2;">
     <li>Upload your resume in <strong style="color:#e2e2e2">Documents</strong></li>
     <li>Run your first <strong style="color:#8b5cf6">mock session</strong></li>
     <li>Review your <strong style="color:#e2e2e2">AI debrief</strong></li>
     <li>Build STAR answers in <strong style="color:#e2e2e2">Prep Lab</strong></li>
   </ol>
-  <a href="https://confideq.app/app/dashboard" class="btn">Start practising →</a>
+  <a href="https://clarifyai.app/app/dashboard" class="btn">Start practising →</a>
 </div>`),
       };
 
     default:
       return {
-        subject: "Notification from Confideq",
+        subject: "Notification from Clarify AI",
         html:    base(`<div class="card"><p>${JSON.stringify(data)}</p></div>`),
       };
   }
