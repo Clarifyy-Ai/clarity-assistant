@@ -3,25 +3,18 @@ import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useNetworkColor } from "@/hooks/useNetworkMonitor";
 
-// ─────────────────────────────────────────────────────────────────
-// LiveSessionController
-// State machine: manages session lifecycle, elapsed timer,
-// syncs network color to overlay.
-// ─────────────────────────────────────────────────────────────────
-
 interface LiveSessionControllerProps {
   isActive: boolean;
 }
 
 export function LiveSessionController({ isActive }: LiveSessionControllerProps) {
-  const session = useSessionStore();
-  const overlay = useOverlayStore();
+  const sessionStatus = useSessionStore((s) => s.status);
+  const tickElapsed = useSessionStore((s) => s.tickElapsed);
+  const setNetworkColor = useOverlayStore((s) => s.setNetworkColor);
   const networkColor = useNetworkColor();
 
-  // Keep a ref to the active interval id
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Helper to safely clear the timer and null it out
   const clearTimer = () => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -29,49 +22,30 @@ export function LiveSessionController({ isActive }: LiveSessionControllerProps) 
     }
   };
 
-  // Tick elapsed seconds when session is active
   useEffect(() => {
-    // Guard conditions
-    const shouldRun =
-      isActive &&
-      session.status === "active";
-
-    // Always clear any existing timer first
+    const shouldRun = isActive && sessionStatus === "active";
     clearTimer();
+    if (!shouldRun) return;
 
-    if (!shouldRun) {
-      return; // Nothing to do
-    }
-
-    // (Optional) avoid ticking while tab is hidden to save resources
     let docHidden = false;
-    const onVisibility = () => {
-      docHidden = document.hidden;
-    };
+    const onVisibility = () => { docHidden = document.hidden; };
     document.addEventListener("visibilitychange", onVisibility);
 
-    // Start the timer
     timerRef.current = setInterval(() => {
-      // Skip ticking when hidden (optional behaviour)
-      if (!docHidden) {
-        session.tickElapsed?.();
-      }
+      if (!docHidden) tickElapsed?.();
     }, 1000);
 
-    // Cleanup
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       clearTimer();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive, session.status]); // we intentionally avoid depending on the store function identity
+  }, [isActive, sessionStatus, tickElapsed]);
 
-  // Sync network color to overlay
+  // Sync network color — use stable selector to prevent infinite loop
   useEffect(() => {
-    overlay.setNetworkColor?.(networkColor);
-  }, [networkColor, overlay]);
+    setNetworkColor?.(networkColor);
+  }, [networkColor, setNetworkColor]);
 
-  // Cleanup on unmount as a final safety
   useEffect(() => clearTimer, []);
 
   return null;
