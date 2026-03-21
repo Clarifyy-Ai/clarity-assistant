@@ -205,6 +205,24 @@ DEEPGRAM_API_KEY=...      # Speech-to-text for live sessions
 - `LiveCopilot.tsx` at root (not currently routed) — minimal session page with overlay-only UI
 - `MockSession.tsx` at `/app/mock/session` — timed mock session with overlay
 
+## Stealth Overlay Feature Completeness (Session 4)
+
+### New Overlay Features
+- **Stealth mode resize**: Resize handles now visible in stealth mode with 20% opacity, pointer events enabled so users can resize during live interviews
+- **Hint style cycle button**: Toolbar button cycles between Full/Short/Keywords with visible label
+- **Quick model switch**: Dropdown in toolbar to switch AI model mid-session (GPT-4o, Claude, Gemini Pro, Flash)
+- **Hint history navigation**: Back/next arrows in hint panel with "2/5" counter to browse previous AI responses
+- **Session stats bar**: Compact stats strip showing elapsed time, questions detected, hints generated, credits used
+- **Keyboard shortcut reference**: "?" keyboard icon in toolbar showing popover with all hotkey shortcuts
+- **Mock session autogenerate**: When auto-generate is enabled, mock sessions auto-request hints when questions change
+
+### New Store State
+- `overlayStore.hint_history_index` — tracks current position in hint history for navigation
+- `overlayStore.navigateHintHistory(direction)` — action to navigate prev/next through hint history
+
+### New Components
+- `OverlaySessionStats.tsx` — compact session metrics bar (time, questions, hints, credits)
+
 ## Replit Environment Setup
 
 - **Runtime**: Node.js 20 via Vite dev server on port 5000

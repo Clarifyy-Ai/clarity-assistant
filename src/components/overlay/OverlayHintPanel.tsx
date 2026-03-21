@@ -6,7 +6,7 @@ import type { HintStyle } from "@/types/user.types";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
-import { Loader2, Copy, Check, BookmarkPlus, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, Copy, Check, BookmarkPlus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface OverlayHintPanelProps {
   text: string;
@@ -29,6 +29,9 @@ export function OverlayHintPanel({
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
   const [expanded, setExpanded] = useState(false);
+
+  const historyLen   = useOverlayStore((s) => s.hint_history.length);
+  const historyIndex = useOverlayStore((s) => s.hint_history_index);
 
   const isStreaming = hintState === "streaming";
   const isGenerating = hintState === "generating";
@@ -256,6 +259,31 @@ export function OverlayHintPanel({
             {saved ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <BookmarkPlus className="w-2.5 h-2.5" />}
             {saved ? "Saved" : "Save"}
           </button>
+
+          {historyLen > 1 && (
+            <div className="flex items-center gap-0.5 ml-1">
+              <button
+                onClick={() => useOverlayStore.getState().navigateHintHistory("prev")}
+                disabled={historyIndex <= 0}
+                className="p-0.5 rounded hover:bg-white/5 text-muted-foreground/50 hover:text-muted-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                title="Previous hint"
+              >
+                <ChevronLeft className="w-3 h-3" />
+              </button>
+              <span className="text-[9px] font-mono text-muted-foreground/50 min-w-[24px] text-center">
+                {historyIndex + 1}/{historyLen}
+              </span>
+              <button
+                onClick={() => useOverlayStore.getState().navigateHintHistory("next")}
+                disabled={historyIndex >= historyLen - 1}
+                className="p-0.5 rounded hover:bg-white/5 text-muted-foreground/50 hover:text-muted-foreground disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                title="Next hint"
+              >
+                <ChevronRight className="w-3 h-3" />
+              </button>
+            </div>
+          )}
+
           <div className="flex-1" />
           <button
             onClick={() => setExpanded((p) => !p)}

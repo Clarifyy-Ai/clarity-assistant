@@ -13,6 +13,7 @@ import { OverlayResizeHandles } from "./OverlayResizeHandles";
 import { StealthMouseGuard } from "./StealthMouseGuard";
 import { OverlayPositionManager } from "./OverlayPositionManager";
 import { LiveTranscriptStream } from "@/components/live/LiveTranscriptStream";
+import { OverlaySessionStats } from "./OverlaySessionStats";
 import { cn } from "@/lib/utils";
 
 interface OverlayWindowProps {
@@ -174,14 +175,16 @@ export function OverlayWindow({
             </>
           )}
 
+          <OverlaySessionStats />
+
           <div className="flex items-center justify-between border-t border-white/5 px-4 py-1 font-mono text-[9px] text-muted-foreground/40 shrink-0">
             <span>⌃⇧H hide · Esc clear · ⌃⇧P panic</span>
             <span className="capitalize">{hint_style.replace("_", " ")}</span>
           </div>
 
-          {!is_stealth_mode && (
+          <div className={cn(is_stealth_mode && "opacity-20")} style={is_stealth_mode ? { pointerEvents: "auto" } : undefined}>
             <OverlayResizeHandles containerRef={resizeContainerRef} />
-          )}
+          </div>
         </div>
       </OverlayPositionManager>
     </StealthMouseGuard>,

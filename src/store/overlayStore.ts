@@ -63,6 +63,7 @@ interface OverlayStore {
 
   // Hint history for session persistence
   hint_history: Array<{ question: string; hint: string; timestamp: number }>;
+  hint_history_index: number;
 
   // Coding problem capture
   is_screenshot_loading: boolean;
@@ -88,6 +89,9 @@ interface OverlayStore {
   setHintStyle: (style: HintStyle) => void;
   cycleHintStyle: () => void;
   setActiveModel: (model: PreferredAIModel) => void;
+
+  // Actions — hint history navigation
+  navigateHintHistory: (direction: "prev" | "next") => void;
 
   // Actions — position & size
   setPosition: (position: OverlayPosition) => void;
@@ -154,6 +158,7 @@ export const useOverlayStore = create<OverlayStore>()(
       panic_content: null,
 
       hint_history: [],
+      hint_history_index: -1,
 
       is_screenshot_loading: false,
       screenshot_hint: null,
@@ -178,19 +183,23 @@ export const useOverlayStore = create<OverlayStore>()(
         })),
 
       commitStreamedHint: () =>
-        set((state) => ({
-          current_hint: state.streaming_buffer,
-          streaming_buffer: "",
-          hint_state: "ready",
-          hint_history: [
+        set((state) => {
+          const newHistory = [
             ...state.hint_history,
             {
               question: state.current_question,
               hint: state.streaming_buffer,
               timestamp: Date.now(),
             },
-          ],
-        })),
+          ];
+          return {
+            current_hint: state.streaming_buffer,
+            streaming_buffer: "",
+            hint_state: "ready",
+            hint_history: newHistory,
+            hint_history_index: newHistory.length - 1,
+          };
+        }),
 
       clearHint: () =>
         set({
@@ -223,6 +232,24 @@ export const useOverlayStore = create<OverlayStore>()(
         }),
 
       setActiveModel: (active_model) => set({ active_model }),
+
+      // ── Hint History Navigation ─────────────────────────────
+      navigateHintHistory: (direction) =>
+        set((state) => {
+          if (state.hint_history.length === 0) return {};
+          const newIndex = direction === "prev"
+            ? Math.max(0, state.hint_history_index - 1)
+            : Math.min(state.hint_history.length - 1, state.hint_history_index + 1);
+          if (newIndex === state.hint_history_index) return {};
+          const entry = state.hint_history[newIndex];
+          return {
+            hint_history_index: newIndex,
+            current_hint: entry.hint,
+            current_question: entry.question,
+            hint_state: "ready",
+            streaming_buffer: "",
+          };
+        }),
 
       // ── Position & Size ────────────────────────────────────
       setPosition: (position) => set({ position }),

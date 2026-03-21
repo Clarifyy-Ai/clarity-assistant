@@ -98,7 +98,12 @@ export default function MockSession() {
   useEffect(() => {
     if (phase !== "active" || !question) return;
     const qText = typeof question === "string" ? question : question.question_text ?? "";
-    if (qText) useOverlayStore.getState().setCurrentQuestion(qText);
+    if (qText) {
+      useOverlayStore.getState().setCurrentQuestion(qText);
+      if (useOverlayStore.getState().auto_generate) {
+        handleRequestHint();
+      }
+    }
   }, [phase, question]);
 
   const timeColor =

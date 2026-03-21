@@ -123,7 +123,8 @@ export function useSessionOrchestrator() {
     const context = coachStore.getContext();
     if (!context) return;
 
-    const preferredModel = (profile as any).preferred_model ?? "gemini-flash";
+    const overlayModel = useOverlayStore.getState().active_model;
+    const preferredModel = overlayModel || (profile as any).preferred_model || "gemini-flash";
     const interviewType  = context.session_type as InterviewType;
 
     const creditCheck = checkCredits(preferredModel as any);
