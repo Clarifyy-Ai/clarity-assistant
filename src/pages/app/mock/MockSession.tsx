@@ -106,7 +106,7 @@ export default function MockSession() {
 
     if (isLastQ) {
       await orchestrator.finaliseSession();
-      navigate(`/app/sessions/${orchestrator.sessionId}`);
+      navigate(`/app/scorecard/${orchestrator.sessionId}`);
     } else {
       await orchestrator.loadNextQuestion();
       stt.start();
@@ -114,7 +114,7 @@ export default function MockSession() {
   }
 
   async function handleRequestHint() {
-    if (!credits.canAfford("hint")) return;
+    if (!credits.canAfford("live_hint")) return;
     await orchestrator.requestHint();
     setHintVisible(true);
   }
@@ -123,7 +123,7 @@ export default function MockSession() {
     clearInterval(timerRef.current!);
     stt.stop();
     await orchestrator.finaliseSession();
-    navigate(`/app/sessions/${orchestrator.sessionId}`);
+    navigate(`/app/scorecard/${orchestrator.sessionId}`);
   }
 
   // ── Panic mode — hide everything ─────────────────────────────
@@ -451,11 +451,11 @@ export default function MockSession() {
                     variant="secondary"
                     size="xs"
                     fullWidth
-                    disabled={!credits.canAfford("hint")}
+                    disabled={!credits.canAfford("live_hint")}
                     onClick={handleRequestHint}
                     leftIcon={<Zap className="w-3 h-3" />}
                   >
-                    {credits.canAfford("hint")
+                    {credits.canAfford("live_hint")
                       ? "Get AI hint"
                       : "No credits"
                     }
@@ -510,7 +510,7 @@ export default function MockSession() {
             onClick={() => {
               setSkipConfirm(false);
               orchestrator.skipQuestion();
-              if (isLastQ) navigate(`/app/sessions/${orchestrator.sessionId}`);
+              if (isLastQ) navigate(`/app/scorecard/${orchestrator.sessionId}`);
             }}
           >
             Skip question

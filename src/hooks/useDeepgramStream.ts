@@ -1,49 +1,96 @@
 import { useCallback, useRef, useState } from "react";
 import { useAudioStore } from "@/store/audioStore";
+import { DeepgramStreamClient } from "@/lib/audio/deepgramStream";
+import type { DeepgramStreamOptions } from "@/lib/audio/deepgramStream";
 
-export type DeepgramStatus = "idle" | "connecting" | "connected" | "reconnecting" | "error" | "closed";
+// ─────────────────────────────────────────────────────────────────
+// useDeepgramStream
+// React hook wrapping DeepgramStreamClient for live transcription.
+// Manages connection lifecycle (connect → stream → reconnect → close).
+// When the DEEPGRAM_API_KEY edge function is not yet deployed, the
+// hook gracefully falls back — transcription is unavailable but
+// the rest of the session continues normally.
+// ─────────────────────────────────────────────────────────────────
 
-export interface TranscriptSegment {
-  speaker:    0 | 1;
-  text:       string;
-  confidence: number;
-  is_final:   boolean;
-  timestamp:  number;
-}
+export type DeepgramStatus =
+  | "idle"
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  | "error"
+  | "closed"
+  | "unavailable";
+
+export type { DeepgramStreamOptions };
 
 export function useDeepgramStream(
-  onSegment: (segment: TranscriptSegment) => void
+  callbacks: Pick<DeepgramStreamOptions, "onUtterance" | "onInterim" | "onError" | "onStatusChange">
 ) {
   const audioStore = useAudioStore();
   const [status, setStatus] = useState<DeepgramStatus>("idle");
+  const clientRef = useRef<DeepgramStreamClient | null>(null);
 
-  const connect = useCallback(async (): Promise<void> => {
+  const connect = useCallback(async (stream: MediaStream): Promise<void> => {
+    // Tear down any existing connection first
+    clientRef.current?.disconnect();
+    clientRef.current = null;
+
+    const handleStatus = (s: string) => {
+      const mapped = s as DeepgramStatus;
+      setStatus(mapped);
+      audioStore.setDeepgramStatus(
+        s === "connected"    ? "connected" :
+        s === "reconnecting" ? "reconnecting" :
+        s === "error"        ? "error" : "disconnected"
+      );
+      callbacks.onStatusChange?.(s as any);
+    };
+
+    const client = new DeepgramStreamClient({
+      stream,
+      onUtterance:   callbacks.onUtterance,
+      onInterim:     callbacks.onInterim,
+      onError:       (err) => {
+        // If token fetch failed (edge function not deployed), mark as unavailable
+        if (err.message.includes("Token fetch failed") || err.message.includes("Failed to obtain")) {
+          setStatus("unavailable");
+          audioStore.setDeepgramStatus("disconnected");
+        }
+        callbacks.onError(err);
+      },
+      onStatusChange: handleStatus,
+    });
+
+    clientRef.current = client;
     setStatus("connecting");
-    // Stub - actual Deepgram integration would go here
-    setStatus("connected");
-    audioStore.setDeepgramStatus("connected");
-  }, [audioStore, onSegment]);
 
-  const sendAudio = useCallback((_chunk: ArrayBuffer | Blob): void => {
-    // Stub
-  }, []);
+    try {
+      await client.connect();
+    } catch (err) {
+      setStatus("error");
+      callbacks.onError(err instanceof Error ? err : new Error(String(err)));
+    }
+  }, [audioStore, callbacks]);
 
   const disconnect = useCallback((): void => {
-    setStatus("idle");
+    clientRef.current?.disconnect();
+    clientRef.current = null;
+    setStatus("closed");
     audioStore.setDeepgramStatus("disconnected");
   }, [audioStore]);
 
   const keepAlive = useCallback((): (() => void) => {
-    const id = setInterval(() => {}, 8_000);
-    return () => clearInterval(id);
+    // DeepgramStreamClient handles keepalive internally via ping interval
+    // This no-op return satisfies the interface
+    return () => {};
   }, []);
 
   return {
     connect,
     disconnect,
-    sendAudio,
     keepAlive,
     status,
-    isConnected: status === "connected",
+    isConnected:   status === "connected",
+    isUnavailable: status === "unavailable",
   };
 }

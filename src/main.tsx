@@ -76,6 +76,14 @@ if ("serviceWorker" in navigator && import.meta.env.VITE_APP_ENV === "production
   });
 }
 
+// ── Suppress known benign third-party warnings ────────────────────────────
+const _origWarn = console.warn.bind(console);
+console.warn = (...args: unknown[]) => {
+  const msg = typeof args[0] === "string" ? args[0] : "";
+  if (msg.includes("React Router Future Flag Warning")) return;
+  _origWarn(...args);
+};
+
 // ── Mount React ───────────────────────────────────────────────────────────
 const rootEl = document.getElementById("root");
 if (!rootEl) {

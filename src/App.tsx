@@ -339,7 +339,7 @@ const router = createBrowserRouter([
   },
 
   { path: "*", element: <Page component={NotFound} /> },
-]);
+], { future: { v7_startTransition: true } as any });
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Root App component
