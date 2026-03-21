@@ -21,10 +21,13 @@ export default function SettingsModels() {
   async function handleSave() {
     setSaving(true);
     try {
-      await updateProfile({ preferred_model: preferred });
-      toast.success("Model preference saved");
+      await updateProfile({
+        preferred_model: preferred,
+        auto_model_routing: autoRoute,
+      } as Record<string, unknown>);
+      toast.success("Model preferences saved");
     } catch {
-      toast.error("Failed to save preference");
+      toast.error("Failed to save preferences");
     } finally {
       setSaving(false);
     }

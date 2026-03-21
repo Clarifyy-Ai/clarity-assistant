@@ -23,9 +23,11 @@ export default function NewRoom() {
   const navigate = useNavigate();
   const { user, profile } = useAuthStore();
 
+  const [name, setName] = useState("");
   const [type, setType] = useState("behavioral");
   const [difficulty, setDifficulty] = useState("Medium");
   const [duration, setDuration] = useState(30);
+  const [maxParticipants, setMaxParticipants] = useState(2);
   const [creating, setCreating] = useState(false);
 
   async function handleCreate() {
@@ -36,11 +38,12 @@ export default function NewRoom() {
         .from("practice_rooms")
         .insert({
           host_id: user.id,
-          title: `${type.replace("_", " ")} Practice`,
+          title: name || `${type.replace("_", " ")} Practice`,
           type,
           difficulty: difficulty.toLowerCase(),
           duration_minutes: duration,
-          status: "active",
+          capacity: maxParticipants,
+          status: "in_progress",
         })
         .select("id")
         .single();
@@ -67,6 +70,17 @@ export default function NewRoom() {
       />
 
       <div className="max-w-2xl space-y-6">
+        <Card>
+          <label className="block text-sm font-semibold text-foreground mb-1.5">Room Name</label>
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="e.g. Frontend Interview Prep"
+            className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+          />
+        </Card>
+
         <Card>
           <h3 className="text-sm font-semibold text-foreground mb-3">Session Type</h3>
           <div className="grid grid-cols-2 gap-2">
@@ -126,6 +140,26 @@ export default function NewRoom() {
                 )}
               >
                 {d} min
+              </button>
+            ))}
+          </div>
+        </Card>
+
+        <Card>
+          <h3 className="text-sm font-semibold text-foreground mb-3">Max Participants</h3>
+          <div className="flex gap-2">
+            {[1, 2, 3, 4, 6].map((n) => (
+              <button
+                key={n}
+                onClick={() => setMaxParticipants(n)}
+                className={cn(
+                  "px-4 py-2 rounded-xl border text-sm font-medium transition-all",
+                  maxParticipants === n
+                    ? "border-violet-500/40 bg-violet-500/10 text-foreground"
+                    : "border-border text-muted-foreground hover:bg-accent/5"
+                )}
+              >
+                {n}
               </button>
             ))}
           </div>

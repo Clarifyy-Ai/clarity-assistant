@@ -17,6 +17,8 @@ interface Answer {
   tags: string[];
   created_at: string;
   star_breakdown?: { situation?: string; task?: string; action?: string; result?: string };
+  score?: number;
+  ai_feedback?: string;
 }
 
 export default function AnswerDetail() {
@@ -155,6 +157,22 @@ export default function AnswerDetail() {
                 </div>
               ))}
             </div>
+          </Card>
+        )}
+
+        {answer.ai_feedback && (
+          <Card>
+            <h3 className="text-sm font-semibold text-foreground mb-2">AI Feedback</h3>
+            <div className="text-sm text-muted-foreground whitespace-pre-wrap leading-relaxed">
+              {answer.ai_feedback}
+            </div>
+          </Card>
+        )}
+
+        {answer.score != null && (
+          <Card className="text-center">
+            <p className="text-[10px] text-muted-foreground uppercase mb-1">Quality Score</p>
+            <p className="text-2xl font-bold text-foreground">{answer.score}<span className="text-sm text-muted-foreground">/100</span></p>
           </Card>
         )}
 

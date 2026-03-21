@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useAuthStore } from "@/store/userStore";
+import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Key, Eye, EyeOff, CheckCircle, AlertTriangle, Loader2 } from "lucide-react";
+import { Key, Eye, EyeOff, CheckCircle, AlertTriangle, Loader2, FlaskConical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -29,6 +30,8 @@ export default function SettingsBYOK() {
   });
   const [visible, setVisible] = useState<Record<string, boolean>>({});
   const [saving, setSaving] = useState(false);
+  const [testing, setTesting] = useState<Record<string, boolean>>({});
+  const [testResults, setTestResults] = useState<Record<string, "pass" | "fail" | null>>({});
 
   function hasKey(field: string): boolean {
     if (!profile) return false;
@@ -56,6 +59,33 @@ export default function SettingsBYOK() {
       toast.error("Failed to save keys");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleTestKey(providerId: string) {
+    const key = keys[providerId];
+    if (!key) {
+      toast.error("Enter a key first to test it.");
+      return;
+    }
+    setTesting((prev) => ({ ...prev, [providerId]: true }));
+    setTestResults((prev) => ({ ...prev, [providerId]: null }));
+    try {
+      const { data, error } = await supabase.functions.invoke("validate-api-key", {
+        body: { provider: providerId, api_key: key },
+      });
+      if (error || !data?.valid) {
+        setTestResults((prev) => ({ ...prev, [providerId]: "fail" }));
+        toast.error(`${providerId} key validation failed`);
+      } else {
+        setTestResults((prev) => ({ ...prev, [providerId]: "pass" }));
+        toast.success(`${providerId} key is valid!`);
+      }
+    } catch {
+      setTestResults((prev) => ({ ...prev, [providerId]: "fail" }));
+      toast.error("Key validation failed");
+    } finally {
+      setTesting((prev) => ({ ...prev, [providerId]: false }));
     }
   }
 
@@ -117,6 +147,21 @@ export default function SettingsBYOK() {
                   {visible[field.id] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
+              {keys[field.id] && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => handleTestKey(field.id)}
+                  disabled={testing[field.id]}
+                  leftIcon={testing[field.id] ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FlaskConical className="w-3.5 h-3.5" />}
+                  className={cn(
+                    testResults[field.id] === "pass" && "text-emerald-500",
+                    testResults[field.id] === "fail" && "text-red-400"
+                  )}
+                >
+                  {testing[field.id] ? "Testing..." : testResults[field.id] === "pass" ? "Valid" : testResults[field.id] === "fail" ? "Invalid" : "Test"}
+                </Button>
+              )}
               {saved && (
                 <Button
                   variant="ghost"

@@ -5,12 +5,27 @@ import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import {
   User, Mail, MapPin, Briefcase, Trophy, Flame, Zap,
-  Star, Settings, Calendar, Edit,
+  Star, Settings, Calendar, Edit, Video,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase/client";
 
 export default function Profile() {
-  const { profile } = useAuthStore();
+  const { profile, user } = useAuthStore();
+  const [sessionsCompleted, setSessionsCompleted] = useState(0);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    (async () => {
+      const { count } = await supabase
+        .from("sessions")
+        .select("*", { count: "exact", head: true })
+        .eq("user_id", user.id)
+        .eq("status", "completed");
+      setSessionsCompleted(count ?? 0);
+    })();
+  }, [user?.id]);
 
   const initial = (
     profile?.full_name?.trim()?.[0] ??
@@ -21,7 +36,7 @@ export default function Profile() {
   const stats = [
     { label: "XP Earned", value: profile?.xp ?? 0, icon: Zap, color: "text-amber-500" },
     { label: "Current Streak", value: `${profile?.streak_current ?? 0}d`, icon: Flame, color: "text-orange-500" },
-    { label: "Longest Streak", value: `${profile?.streak_longest ?? 0}d`, icon: Trophy, color: "text-yellow-500" },
+    { label: "Sessions", value: sessionsCompleted, icon: Video, color: "text-blue-500" },
     { label: "Badges", value: (profile?.badges as string[])?.length ?? 0, icon: Star, color: "text-violet-500" },
   ];
 

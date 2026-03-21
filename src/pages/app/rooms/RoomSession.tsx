@@ -132,6 +132,10 @@ export default function RoomSession() {
                   className="text-red-400 hover:text-red-300">
                   End Session
                 </Button>
+                <Button variant="ghost" size="sm" onClick={() => navigate("/app/rooms")}
+                  className="text-muted-foreground hover:text-foreground">
+                  Leave Room
+                </Button>
               </div>
             </Card>
           )}

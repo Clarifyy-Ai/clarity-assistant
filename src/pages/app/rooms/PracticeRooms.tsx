@@ -15,6 +15,8 @@ interface Room {
   status: string;
   difficulty: string;
   duration_minutes: number;
+  capacity: number;
+  participant_count?: number;
   created_at: string;
 }
 
@@ -111,6 +113,9 @@ export default function PracticeRooms() {
                     <p className="text-sm font-medium text-foreground truncate">{room.title || "Practice Session"}</p>
                     <div className="flex items-center gap-3 text-[11px] text-muted-foreground mt-0.5">
                       <span className="capitalize">{room.type ?? "Behavioral"}</span>
+                      <span className="flex items-center gap-0.5">
+                        <Users className="w-3 h-3" /> {room.participant_count ?? 1}/{room.capacity ?? 2}
+                      </span>
                       {room.duration_minutes > 0 && (
                         <span className="flex items-center gap-0.5">
                           <Clock className="w-3 h-3" /> {room.duration_minutes}m
