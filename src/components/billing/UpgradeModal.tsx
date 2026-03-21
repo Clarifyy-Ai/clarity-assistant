@@ -6,7 +6,7 @@ import {
   PLANS,
   type PlanId,
 } from "@/lib/billing/subscriptionManager"
-import { formatPrice } from "@/lib/billing/priceCalculator"
+import { formatPrice, CREDIT_PACKS } from "@/lib/billing/priceCalculator"
 import { Check, Zap, Crown } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase/client"
@@ -65,6 +65,8 @@ export function UpgradeModal() {
     }
   }
 
+  const defaultPack = CREDIT_PACKS[0]
+
   const handleBuyCredits = async () => {
     if (!STRIPE_CONFIGURED) {
       toast.error("Stripe is not configured. Visit Settings > Billing for details.")
@@ -72,15 +74,14 @@ export function UpgradeModal() {
       return
     }
 
+    const priceId = defaultPack?.stripePriceId
+    if (!priceId) {
+      toast.error("No credit pack price configured.")
+      return
+    }
+
     setLoading("credits")
     try {
-      const priceId = import.meta.env.VITE_STRIPE_PRICE_CREDITS_10 as string | undefined
-      if (!priceId) {
-        toast.error("No credit pack price configured.")
-        setLoading(null)
-        return
-      }
-
       const { data, error } = await supabase.functions.invoke("create-checkout", {
         body: {
           price_id: priceId,
@@ -205,7 +206,11 @@ export function UpgradeModal() {
       <div className="mt-4 flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-4">
         <div>
           <p className="text-sm font-medium text-white">Pay as you go</p>
-          <p className="text-xs text-gray-400">10 credits for $3 — no subscription</p>
+          <p className="text-xs text-gray-400">
+            {defaultPack
+              ? `${defaultPack.credits} credits for ${formatPrice(defaultPack.priceUsdCents)} — no subscription`
+              : "Credit packs — no subscription"}
+          </p>
         </div>
         <button
           type="button"

@@ -250,6 +250,19 @@ export async function getUserSubscription(
   if (err || !data) return null;
   if (!data.subscription_status || data.subscription_status === "canceled") return null;
 
+  let cancelAtPeriodEnd = false;
+  if (data.stripe_subscription_id) {
+    const subRow = await tryCatch(async () => {
+      const { data: sub } = await supabase
+        .from("subscriptions")
+        .select("cancel_at_period_end")
+        .eq("stripe_subscription_id", data.stripe_subscription_id)
+        .maybeSingle();
+      return sub;
+    });
+    if (subRow[0]?.cancel_at_period_end) cancelAtPeriodEnd = true;
+  }
+
   return {
     id:                   data.stripe_subscription_id ?? userId,
     userId:               userId,
@@ -258,7 +271,7 @@ export async function getUserSubscription(
     status:               (data.subscription_status ?? "active") as SubscriptionStatus,
     currentPeriodStart:   new Date(),
     currentPeriodEnd:     data.subscription_period_end ? new Date(data.subscription_period_end) : new Date(),
-    cancelAtPeriodEnd:    false,
+    cancelAtPeriodEnd,
     stripeSubscriptionId: data.stripe_subscription_id ?? undefined,
     stripeCustomerId:     data.stripe_customer_id ?? undefined,
     trialEndsAt:          undefined,

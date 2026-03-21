@@ -204,7 +204,7 @@ export default function SettingsBilling() {
                 <Crown className="w-5 h-5 text-violet-400" />
                 <p className="text-2xl font-black text-white">{currentPlan.name}</p>
                 {statusInfo && (
-                  <Badge variant="outline" size="sm">
+                  <Badge variant="default" size="sm">
                     <span className={statusInfo.color}>{statusInfo.label}</span>
                   </Badge>
                 )}
@@ -349,7 +349,7 @@ export default function SettingsBilling() {
                 badge={plan.isPopular ? "Most Popular" : undefined}
                 subtitle={plan.tagline}
                 size="sm"
-                onUpgrade={() => handleUpgrade(id)}
+                onUpgrade={STRIPE_CONFIGURED ? () => handleUpgrade(id) : undefined}
                 ctaLabel={
                   isCurrent
                     ? undefined
