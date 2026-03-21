@@ -63,16 +63,18 @@ export default function LiveRehearsal() {
   const isActive = sessionStatus === "active";
 
   const handleSetup = useCallback((sessionConfig: LiveSessionConfig) => {
+    useSessionStore.getState().resetSession();
+    hasStartedRef.current = false;
     setConfig(sessionConfig);
     setPhase("active");
   }, []);
 
   useEffect(() => {
-    if (phase === "active" && !hasStartedRef.current && sessionStatus === "idle") {
+    if (phase === "active" && !hasStartedRef.current) {
       hasStartedRef.current = true;
       copilot.startLiveSession();
     }
-  }, [phase, copilot.startLiveSession, sessionStatus]);
+  }, [phase, copilot.startLiveSession]);
 
   const handleStop = useCallback(async () => {
     await copilot.endLiveSession();

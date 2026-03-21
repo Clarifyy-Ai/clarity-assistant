@@ -54,8 +54,8 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     enableSystemAudio: config.enable_system_audio ?? false,
     micDeviceId:       null,
     onQuestionDetected: handleQuestionDetected,
-    onFillerDetected:   (_count: number) => {
-      useSessionStore.getState().incrementFillerCount();
+    onFillerDetected:   (count: number) => {
+      useSessionStore.getState().setFillerCount(count);
     },
     onWPMUpdate: (wpm: number) => {
       useSessionStore.getState().setCurrentWPM(wpm);

@@ -27,6 +27,7 @@ interface SessionStore extends ActiveSessionState {
 
   // Real-time metrics
   incrementFillerCount: () => void;
+  setFillerCount: (count: number) => void;
   resetFillerCount: () => void;
   setCurrentWPM: (wpm: number) => void;
   setIsAnswering: (answering: boolean) => void;
@@ -118,6 +119,8 @@ export const useSessionStore = create<SessionStore>()(
 
     incrementFillerCount: () =>
       set((state) => ({ filler_count: state.filler_count + 1 })),
+
+    setFillerCount: (count) => set({ filler_count: count }),
 
     resetFillerCount: () => set({ filler_count: 0 }),
 
