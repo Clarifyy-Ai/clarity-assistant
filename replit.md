@@ -44,6 +44,8 @@ src/
       geminiClient.ts         # Calls generate-hints Edge Function
       openaiClient.ts         # Calls ai-coach-chat Edge Function
       anthropicClient.ts      # Calls ai-coach-chat Edge Function
+    stealth/
+      stealthConfig.ts        # Stealth mode label mappings, icon mappings, brand config
     billing/
       creditsManager.ts       # checkCredits / deductCredits (via Supabase RPC)
       subscriptionManager.ts  # Stripe subscription management
@@ -63,7 +65,8 @@ src/
     userStore.ts              # Re-export of authStore (backward compatibility)
     sessionStore.ts           # Active session state
     gamificationStore         # Inline in useGamification.ts (persisted)
-    overlayStore.ts           # Overlay/stealth mode state
+    overlayStore.ts           # Overlay/stealth mode state (synced with uiStore.stealth_mode)
+    uiStore.ts                # Theme (default: light), stealth_mode, sidebar state
     ...
   types/                      # TypeScript types
 supabase/

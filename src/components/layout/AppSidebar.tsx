@@ -7,12 +7,21 @@ import {
   BarChart2, FileText, BookOpen, CalendarDays,
   Building2, Settings, ChevronLeft, ChevronRight,
   LogOut, Star, Users, Bell,
+  Briefcase, ListTodo, PenTool, FolderOpen,
+  FileSpreadsheet, BarChart3, Calendar, Building,
+  Inbox, Wrench,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
+import {
+  STEALTH_NAV_LABELS,
+  STEALTH_SECTION_LABELS,
+  STEALTH_BRAND,
+} from "@/lib/stealth/stealthConfig";
 
 type NavItem = {
   to: string;
   icon: React.ElementType;
+  stealthIcon: React.ElementType;
   label: string;
   exact?: boolean;
 };
@@ -21,27 +30,27 @@ const NAV_SECTIONS: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "Core",
     items: [
-      { to: "/app/dashboard", icon: LayoutDashboard, label: "Dashboard" },
-      { to: "/app/live", icon: Mic, label: "Live Co-Pilot" },
-      { to: "/app/mock", icon: ClipboardList, label: "Mock Interview" },
-      { to: "/app/prep", icon: FlaskConical, label: "Prep Lab" },
+      { to: "/app/dashboard", icon: LayoutDashboard, stealthIcon: Briefcase, label: "Dashboard" },
+      { to: "/app/live", icon: Mic, stealthIcon: ListTodo, label: "Live Co-Pilot" },
+      { to: "/app/mock", icon: ClipboardList, stealthIcon: PenTool, label: "Mock Interview" },
+      { to: "/app/prep", icon: FlaskConical, stealthIcon: FolderOpen, label: "Prep Lab" },
     ],
   },
   {
     label: "Growth",
     items: [
-      { to: "/app/sessions", icon: Star, label: "Sessions" },
-      { to: "/app/analytics", icon: BarChart2, label: "Analytics" },
-      { to: "/app/documents", icon: FileText, label: "Documents" },
-      { to: "/app/answers", icon: BookOpen, label: "Answer Bank" },
+      { to: "/app/sessions", icon: Star, stealthIcon: FileSpreadsheet, label: "Sessions" },
+      { to: "/app/analytics", icon: BarChart2, stealthIcon: BarChart3, label: "Analytics" },
+      { to: "/app/documents", icon: FileText, stealthIcon: FileText, label: "Documents" },
+      { to: "/app/answers", icon: BookOpen, stealthIcon: FolderOpen, label: "Answer Bank" },
     ],
   },
   {
     label: "Planner",
     items: [
-      { to: "/app/interviews", icon: CalendarDays, label: "Interviews" },
-      { to: "/app/companies", icon: Building2, label: "Companies" },
-      { to: "/app/rooms", icon: Users, label: "Practice Rooms" },
+      { to: "/app/interviews", icon: CalendarDays, stealthIcon: Calendar, label: "Interviews" },
+      { to: "/app/companies", icon: Building2, stealthIcon: Building, label: "Companies" },
+      { to: "/app/rooms", icon: Users, stealthIcon: Users, label: "Practice Rooms" },
     ],
   },
 ];
@@ -50,6 +59,7 @@ export function AppSidebar() {
   const uiStore = useUIStore();
   const { profile, clearAuth } = useAuthStore();
   const collapsed = uiStore.sidebar_collapsed;
+  const stealth = uiStore.stealth_mode;
 
   async function handleLogout() {
     try {
@@ -76,12 +86,19 @@ export function AppSidebar() {
       )}
     >
       <div className="flex min-h-[56px] items-center gap-3 border-b border-sidebar-border px-4 py-4">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-600">
-          <Mic className="h-4 w-4 text-white" />
+        <div className={cn(
+          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+          stealth ? "bg-blue-600" : "bg-violet-600"
+        )}>
+          {stealth ? (
+            <Briefcase className="h-4 w-4 text-white" />
+          ) : (
+            <Mic className="h-4 w-4 text-white" />
+          )}
         </div>
         {!collapsed && (
           <span className="text-base font-bold tracking-tight text-sidebar-foreground">
-            Clarify AI
+            {stealth ? STEALTH_BRAND.name : "Clarify AI"}
           </span>
         )}
       </div>
@@ -91,17 +108,18 @@ export function AppSidebar() {
           <div key={section.label}>
             {!collapsed && (
               <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                {section.label}
+                {stealth ? (STEALTH_SECTION_LABELS[section.label] ?? section.label) : section.label}
               </p>
             )}
             {section.items.map((item) => (
               <SidebarLink
                 key={item.to}
                 to={item.to}
-                icon={item.icon}
-                label={item.label}
+                icon={stealth ? item.stealthIcon : item.icon}
+                label={stealth ? (STEALTH_NAV_LABELS[item.label] ?? item.label) : item.label}
                 collapsed={collapsed}
                 exact={item.exact}
+                stealth={stealth}
               />
             ))}
           </div>
@@ -111,15 +129,17 @@ export function AppSidebar() {
       <div className="space-y-1 border-t border-sidebar-border py-3">
         <SidebarLink
           to="/app/notifications"
-          icon={Bell}
-          label="Notifications"
+          icon={stealth ? Inbox : Bell}
+          label={stealth ? "Inbox" : "Notifications"}
           collapsed={collapsed}
+          stealth={stealth}
         />
         <SidebarLink
           to="/app/settings"
-          icon={Settings}
-          label="Settings"
+          icon={stealth ? Wrench : Settings}
+          label={stealth ? "Preferences" : "Settings"}
           collapsed={collapsed}
+          stealth={stealth}
         />
 
         <div
@@ -128,7 +148,10 @@ export function AppSidebar() {
             collapsed && "justify-center"
           )}
         >
-          <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-violet-700 text-xs font-bold text-white">
+          <div className={cn(
+            "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white",
+            stealth ? "bg-blue-600" : "bg-violet-700"
+          )}>
             {initial}
           </div>
           {!collapsed && (
@@ -176,12 +199,14 @@ function SidebarLink({
   label,
   collapsed,
   exact,
+  stealth,
 }: {
   to: string;
   icon: React.ElementType;
   label: string;
   collapsed: boolean;
   exact?: boolean;
+  stealth?: boolean;
 }) {
   return (
     <NavLink
@@ -192,7 +217,9 @@ function SidebarLink({
         cn(
           "mx-1 flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all",
           isActive
-            ? "border border-violet-500/20 bg-violet-600/15 text-violet-600 dark:text-violet-300"
+            ? stealth
+              ? "border border-blue-500/20 bg-blue-600/15 text-blue-600 dark:text-blue-300"
+              : "border border-violet-500/20 bg-violet-600/15 text-violet-600 dark:text-violet-300"
             : "text-muted-foreground hover:bg-accent/10 hover:text-foreground",
           collapsed && "justify-center"
         )

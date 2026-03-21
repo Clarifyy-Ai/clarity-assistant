@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { useAuthStore } from "@/store/authStore";
 import { useUIStore } from "@/store/uiStore";
+import { useOverlayStore } from "@/store/overlayStore";
 
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { AppSidebar } from "@/components/layout/AppSidebar";
@@ -404,11 +405,19 @@ export default function App() {
     return () => mq.removeEventListener("change", handler);
   }, [theme]);
 
+  const stealthMode = useUIStore((s) => s.stealth_mode);
+
   useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle("dark", resolvedTheme === "dark");
     root.setAttribute("data-theme", resolvedTheme);
   }, [resolvedTheme]);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.setAttribute("data-stealth", stealthMode ? "true" : "false");
+    useOverlayStore.getState().setStealthMode(stealthMode);
+  }, [stealthMode]);
 
   return (
     <ErrorBoundary>

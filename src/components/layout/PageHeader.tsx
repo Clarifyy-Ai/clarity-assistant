@@ -1,24 +1,8 @@
 import { ReactNode } from "react";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-/**
- * PageHeader Component
- * Displays page title, breadcrumbs, and action buttons
- * 
- * Usage:
- * ```
- * <PageHeader
- *   title="Mock Interview"
- *   description="Practice your interview skills"
- *   breadcrumbs={[
- *     { label: "Home", href: "/app" },
- *     { label: "Mock Interview" }
- *   ]}
- *   actions={<Button>Start Interview</Button>}
- * />
- * ```
- */
+import { useUIStore } from "@/store/uiStore";
+import { getStealthLabel } from "@/lib/stealth/stealthConfig";
 
 interface Breadcrumb {
   label: string;
@@ -44,12 +28,19 @@ export function PageHeader({
   icon,
   badge,
 }: PageHeaderProps) {
+  const stealth = useUIStore((s) => s.stealth_mode);
+  const displayTitle = getStealthLabel(title, stealth);
+
+  const displayBreadcrumbs = breadcrumbs?.map((b) => ({
+    ...b,
+    label: getStealthLabel(b.label, stealth),
+  }));
+
   return (
     <div className={cn("space-y-4 mb-6 md:mb-8", className)}>
-      {/* Breadcrumbs */}
-      {breadcrumbs && breadcrumbs.length > 0 && (
+      {displayBreadcrumbs && displayBreadcrumbs.length > 0 && (
         <nav className="flex items-center gap-1 text-xs sm:text-sm">
-          {breadcrumbs.map((breadcrumb, index) => (
+          {displayBreadcrumbs.map((breadcrumb, index) => (
             <div key={index} className="flex items-center gap-1">
               {index > 0 && (
                 <ChevronRight className="h-3.5 w-3.5 text-muted-foreground mx-0.5" />
@@ -69,20 +60,22 @@ export function PageHeader({
         </nav>
       )}
 
-      {/* Title Section */}
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-start gap-3 flex-1">
           {icon && (
-            <div className="mt-1 p-2 bg-violet-500/10 rounded-lg">
+            <div className={cn(
+              "mt-1 p-2 rounded-lg",
+              stealth ? "bg-blue-500/10" : "bg-violet-500/10"
+            )}>
               {icon}
             </div>
           )}
           <div className="flex-1">
             <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground">
-                {title}
+                {displayTitle}
               </h1>
-              {badge && (
+              {badge && !stealth && (
                 <span className="px-2 py-1 text-xs font-semibold bg-violet-500/20 text-violet-300 rounded-full">
                   {badge}
                 </span>
@@ -96,7 +89,6 @@ export function PageHeader({
           </div>
         </div>
 
-        {/* Actions */}
         {actions && (
           <div className="flex gap-2 flex-shrink-0 flex-wrap sm:flex-nowrap">
             {actions}

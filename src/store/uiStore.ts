@@ -9,6 +9,11 @@ interface UIStore {
   resolved_theme: "dark" | "light";
   setTheme: (theme: Theme) => void;
 
+  // Stealth mode (app-wide)
+  stealth_mode: boolean;
+  setStealthMode: (enabled: boolean) => void;
+  toggleStealthMode: () => void;
+
   // Sidebar
   sidebar_collapsed: boolean;
   setSidebarCollapsed: (collapsed: boolean) => void;
@@ -45,8 +50,8 @@ export const useUIStore = create<UIStore>()(
   persist(
     subscribeWithSelector((set) => ({
       // ── Theme ─────────────────────────────────────────────
-      theme: "dark",
-      resolved_theme: "dark",
+      theme: "light",
+      resolved_theme: "light",
 
       setTheme: (theme) => {
         const resolved =
@@ -57,6 +62,11 @@ export const useUIStore = create<UIStore>()(
             : theme;
         set({ theme, resolved_theme: resolved });
       },
+
+      // ── Stealth mode ────────────────────────────────────────
+      stealth_mode: false,
+      setStealthMode: (stealth_mode) => set({ stealth_mode }),
+      toggleStealthMode: () => set((s) => ({ stealth_mode: !s.stealth_mode })),
 
       // ── Sidebar ───────────────────────────────────────────
       sidebar_collapsed: false,
@@ -102,6 +112,7 @@ export const useUIStore = create<UIStore>()(
         resolved_theme: s.resolved_theme,
         sidebar_collapsed: s.sidebar_collapsed,
         onboarding_checklist_dismissed: s.onboarding_checklist_dismissed,
+        stealth_mode: s.stealth_mode,
       }),
     }
   )

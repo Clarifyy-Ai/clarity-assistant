@@ -138,7 +138,7 @@ export const useOverlayStore = create<OverlayStore>()(
     subscribeWithSelector((set, get) => ({
       // ── Initial State ──────────────────────────────────────
       is_visible: false,
-      is_stealth_mode: true,
+      is_stealth_mode: false,
       is_proctor_safe: false,
 
       current_question: "",

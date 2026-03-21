@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useOverlayStore } from '@/store/overlayStore';
+import { useUIStore } from '@/store/uiStore';
 import { Settings, X, Eye, EyeOff, Shield, AlertCircle } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -68,6 +69,7 @@ export function OverlaySettings({
     switch (key) {
       case 'stealthMode':
         os.setStealthMode?.(value);
+        useUIStore.getState().setStealthMode(value);
         break;
       case 'proctorSafe':
         os.setProctorSafe?.(value);
