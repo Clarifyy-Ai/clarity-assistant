@@ -194,6 +194,19 @@ function AppShell() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Suppress the React Router v6→v7 future-flag deprecation warning.
+// createBrowserRouter emits it at call time, so the suppressor must be
+// installed here (in the same module, before the call) not in main.tsx.
+// ─────────────────────────────────────────────────────────────────────────────
+{
+  const _w = console.warn.bind(console);
+  console.warn = (...a: unknown[]) => {
+    if (typeof a[0] === "string" && a[0].includes("React Router Future Flag Warning")) return;
+    _w(...a);
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Router
 // ─────────────────────────────────────────────────────────────────────────────
 
