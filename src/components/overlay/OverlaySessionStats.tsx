@@ -1,18 +1,15 @@
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
+import { useAuthStore } from "@/store/authStore";
 import { Clock, MessageSquare, Zap, CreditCard } from "lucide-react";
 
 export function OverlaySessionStats() {
   const elapsed = useSessionStore((s) => s.elapsed_seconds);
-  const credits = useSessionStore((s) => s.credits_consumed);
+  const creditsConsumed = useSessionStore((s) => s.credits_consumed);
+  const totalCredits = useAuthStore((s) => s.profile?.credits ?? 0);
+  const creditsRemaining = Math.max(0, totalCredits - creditsConsumed);
   const hintCount = useOverlayStore((s) => s.hint_history.length);
-  const questionCount = useOverlayStore((s) => {
-    const seen = new Set<string>();
-    for (const h of s.hint_history) {
-      if (h.question) seen.add(h.question);
-    }
-    return seen.size;
-  });
+  const questionCount = useOverlayStore((s) => s.questions_detected);
 
   const minutes = Math.floor(elapsed / 60);
   const seconds = elapsed % 60;
@@ -23,7 +20,7 @@ export function OverlaySessionStats() {
       <StatItem icon={Clock} value={timeStr} />
       <StatItem icon={MessageSquare} value={String(questionCount)} label="Q" />
       <StatItem icon={Zap} value={String(hintCount)} label="hints" />
-      <StatItem icon={CreditCard} value={String(credits)} label="cr" />
+      <StatItem icon={CreditCard} value={String(creditsRemaining)} label="cr" />
     </div>
   );
 }

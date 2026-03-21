@@ -106,6 +106,26 @@ export default function MockSession() {
     }
   }, [phase, question]);
 
+  useEffect(() => {
+    if (phase !== "active" || !stt.transcript) return;
+    const text = stt.transcript.trim();
+    if (!text) return;
+    useAudioStore.getState().addUtterance({
+      id: `mock-${Date.now()}`,
+      text,
+      speaker: "user",
+      is_final: true,
+      timestamp: Date.now(),
+    });
+  }, [phase, stt.transcript]);
+
+  useEffect(() => {
+    if (phase !== "active") return;
+    if (stt.interimTranscript) {
+      useAudioStore.getState().updateInterimText(stt.interimTranscript);
+    }
+  }, [phase, stt.interimTranscript]);
+
   const timeColor =
     timeLeft > 60  ? "emerald" :
     timeLeft > 20  ? "amber"   : "red";

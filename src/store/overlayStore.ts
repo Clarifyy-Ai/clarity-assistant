@@ -64,6 +64,7 @@ interface OverlayStore {
   // Hint history for session persistence
   hint_history: Array<{ question: string; hint: string; timestamp: number }>;
   hint_history_index: number;
+  questions_detected: number;
 
   // Coding problem capture
   is_screenshot_loading: boolean;
@@ -159,6 +160,7 @@ export const useOverlayStore = create<OverlayStore>()(
 
       hint_history: [],
       hint_history_index: -1,
+      questions_detected: 0,
 
       is_screenshot_loading: false,
       screenshot_hint: null,
@@ -172,7 +174,7 @@ export const useOverlayStore = create<OverlayStore>()(
 
       // ── Content ────────────────────────────────────────────
       setCurrentQuestion: (current_question) =>
-        set({ current_question, hint_state: "listening", current_hint: "", streaming_buffer: "" }),
+        set((s) => ({ current_question, hint_state: "listening" as const, current_hint: "", streaming_buffer: "", questions_detected: s.questions_detected + 1 })),
 
       setHintState: (hint_state) => set({ hint_state }),
 
