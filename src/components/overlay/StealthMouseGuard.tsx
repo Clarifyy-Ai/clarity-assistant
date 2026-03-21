@@ -2,10 +2,9 @@ import type { ReactNode } from "react";
 
 // ─────────────────────────────────────────────────────────────────
 // StealthMouseGuard
-// Wraps overlay content. When stealth is active:
-//   - pointer-events: none (cursor passes through)
-//   - user-select: none
-//   - No mouse event listeners fire inside
+// Wraps overlay content with a data-stealth-active attribute for
+// CSS-based capture evasion selectors. Interaction (clicks, drag,
+// resize) remains fully enabled in stealth mode.
 // ─────────────────────────────────────────────────────────────────
 
 interface StealthMouseGuardProps {

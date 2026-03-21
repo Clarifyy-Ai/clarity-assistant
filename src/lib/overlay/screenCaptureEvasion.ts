@@ -7,11 +7,9 @@
 // ─────────────────────────────────────────────────────────────────
 
 /**
- * Applies stealth mode to an overlay element.
- * This reduces the likelihood of capture by:
- *  - disabling pointer events
- *  - marking element with a dataset flag
- * Additional CSS selectors can be used to apply special filters.
+ * Applies stealth mode to an overlay element by setting a dataset flag.
+ * CSS selectors can target [data-stealth-active="true"] to apply
+ * capture-evasion styles. Pointer events remain enabled for interactivity.
  */
 export function applyStealthToElement(el: HTMLElement): void {
   el.dataset.stealthActive = "true";
