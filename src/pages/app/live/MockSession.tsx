@@ -112,14 +112,11 @@ export default function MockSession() {
   const [params]       = useSearchParams();
   const sessionId      = params.get("sessionId") ?? "mock";
 
-  const { user }       = useAuthStore((s) => ({ user: s.user }));
-  const { isMicActive, startMic, stopMic, rmsLevel } =
-    useAudioStore((s) => ({
-      isMicActive: s.isRecording,
-      startMic:    s.startRecording,
-      stopMic:     s.stopRecording,
-      rmsLevel:    s.rmsLevel ?? 0,
-    }));
+  const user       = useAuthStore((s) => s.user);
+  const isMicActive = useAudioStore((s) => s.isRecording);
+  const startMic    = useAudioStore((s) => s.startRecording);
+  const stopMic     = useAudioStore((s) => s.stopRecording);
+  const rmsLevel    = useAudioStore((s) => s.rmsLevel ?? 0);
 
   const [questions,    setQuestions]    = useState<MockQuestion[]>(FALLBACK_QUESTIONS);
   const [questionIdx,  setQuestionIdx]  = useState(0);
