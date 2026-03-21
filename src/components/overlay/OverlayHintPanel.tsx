@@ -1,8 +1,11 @@
 import { useMemo, useState, useCallback } from "react";
 import { composeHint, splitInlineCode } from "@/lib/overlay/overlayCompositor";
+import { useOverlayStore } from "@/store/overlayStore";
 import type { HintState } from "@/store/overlayStore";
 import type { HintStyle } from "@/types/user.types";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase/client";
+import { useAuthStore } from "@/store/userStore";
 import { Loader2, Copy, Check, BookmarkPlus, ChevronDown, ChevronUp } from "lucide-react";
 
 interface OverlayHintPanelProps {
@@ -51,10 +54,38 @@ export function OverlayHintPanel({
     }
   }, [text]);
 
-  const handleSaveToBank = useCallback(() => {
+  const handleSaveToBank = useCallback(async () => {
+    if (!text) return;
+    const question = useOverlayStore.getState().current_question ?? "Untitled";
+    const userId = useAuthStore.getState().profile?.id;
+
+    const entry = {
+      question,
+      answer: text,
+      saved_at: new Date().toISOString(),
+    };
+
+    if (userId) {
+      try {
+        await supabase.from("answer_bank").insert({
+          user_id:       userId,
+          question_text: question,
+          answer_text:   text,
+        });
+      } catch {
+        const existing = JSON.parse(localStorage.getItem("clarify:answer_bank") ?? "[]");
+        existing.push(entry);
+        localStorage.setItem("clarify:answer_bank", JSON.stringify(existing));
+      }
+    } else {
+      const existing = JSON.parse(localStorage.getItem("clarify:answer_bank") ?? "[]");
+      existing.push(entry);
+      localStorage.setItem("clarify:answer_bank", JSON.stringify(existing));
+    }
+
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-  }, []);
+  }, [text]);
 
   return (
     <div className={cn(

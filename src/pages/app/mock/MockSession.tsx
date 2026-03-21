@@ -10,18 +10,16 @@ import { useCredits } from "@/hooks/useCredits";
 import { useHotkeys } from "@/hooks/useHotkeys";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";
+import { useAudioStore } from "@/store/audioStore";
 import { OverlayWindow } from "@/components/overlay/OverlayWindow";
 import { LiveSessionController } from "@/components/live/LiveSessionController";
-import { Card } from "@/components/ui/Card";
+import { PreSessionSetup } from "@/components/session/PreSessionSetup";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import {
   Mic, MicOff, Square, ChevronRight,
-  SkipForward, AlertTriangle, MessageSquare,
-  Zap, Timer, BarChart2, RefreshCw,
-  ThumbsUp, ThumbsDown, Eye, EyeOff,
-  Volume2, Brain,
+  SkipForward, Eye, EyeOff, Timer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -34,27 +32,25 @@ export default function MockSession() {
   const sentimentHook = useSentimentAnalysis(stt.transcript);
   const credits       = useCredits();
 
-  const [panicMode,     setPanicMode]     = useState(false);
-  const [hintVisible,   setHintVisible]   = useState(true);
-  const [coachOpen,     setCoachOpen]     = useState(false);
-  const [skipConfirm,   setSkipConfirm]   = useState(false);
-  const [endConfirm,    setEndConfirm]    = useState(false);
-  const [feedbackQ,     setFeedbackQ]     = useState<null | "up" | "down">(null);
-  const [useOverlay,    setUseOverlay]    = useState(true);
+  const [phase,        setPhase]       = useState<"setup" | "active">("setup");
+  const [panicMode,    setPanicMode]   = useState(false);
+  const [skipConfirm,  setSkipConfirm] = useState(false);
+  const [endConfirm,   setEndConfirm]  = useState(false);
 
-  const [timeLeft,      setTimeLeft]      = useState(orchestrator.currentTimeLimit ?? 180);
+  const [timeLeft,     setTimeLeft]    = useState(orchestrator.currentTimeLimit ?? 180);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
-    if (useOverlay) {
+    if (phase === "active") {
       useOverlayStore.getState().showOverlay();
     }
     return () => {
       useOverlayStore.getState().hideOverlay();
     };
-  }, [useOverlay]);
+  }, [phase]);
 
   useEffect(() => {
+    if (phase !== "active") return;
     timerRef.current = setInterval(() => {
       setTimeLeft((t) => {
         if (t <= 1) {
@@ -66,33 +62,39 @@ export default function MockSession() {
       });
     }, 1000);
     return () => clearInterval(timerRef.current!);
-  }, [orchestrator.currentQuestionIndex]);
+  }, [orchestrator.currentQuestionIndex, phase]);
 
   useEffect(() => {
+    if (phase !== "active") return;
     setTimeLeft(orchestrator.currentTimeLimit ?? 180);
     stt.resetTranscript();
     fillerHook.reset();
     wpmHook.reset();
-    setFeedbackQ(null);
   }, [orchestrator.currentQuestionIndex]);
 
   useHotkeys([
-    { keys: "ctrl+shift+h", handler: () => setHintVisible((p) => !p) },
-    { keys: "ctrl+shift+p", handler: () => setPanicMode((p) => !p)   },
-    { keys: "ctrl+shift+s", handler: () => stt.toggleMute()          },
-    { keys: "ctrl+shift+n", handler: () => setSkipConfirm(true)      },
+    { keys: "ctrl+shift+h", handler: () => {
+      const overlay = useOverlayStore.getState();
+      overlay.is_visible ? overlay.hideOverlay() : overlay.showOverlay();
+    }},
+    { keys: "ctrl+shift+p", handler: () => setPanicMode((p) => !p) },
+    { keys: "ctrl+shift+s", handler: () => stt.toggleMute() },
+    { keys: "ctrl+shift+n", handler: () => setSkipConfirm(true) },
   ]);
 
-  const question      = orchestrator.currentQuestion;
-  const hint          = orchestrator.currentHint;
-  const qIndex        = orchestrator.currentQuestionIndex ?? 0;
-  const totalQ        = orchestrator.totalQuestions ?? 5;
-  const isLastQ       = qIndex >= totalQ - 1;
-  const timeColor     =
+  const question = orchestrator.currentQuestion;
+  const qIndex   = orchestrator.currentQuestionIndex ?? 0;
+  const totalQ   = orchestrator.totalQuestions ?? 5;
+  const isLastQ  = qIndex >= totalQ - 1;
+
+  const timeColor =
     timeLeft > 60  ? "emerald" :
     timeLeft > 20  ? "amber"   : "red";
-  const timePct = ((orchestrator.currentTimeLimit ?? 180) - timeLeft)
-    / (orchestrator.currentTimeLimit ?? 180) * 100;
+
+  function handleSetup(config: any) {
+    setPhase("active");
+    stt.start();
+  }
 
   async function handleNextQuestion() {
     clearInterval(timerRef.current!);
@@ -106,6 +108,7 @@ export default function MockSession() {
 
     if (isLastQ) {
       await orchestrator.finaliseSession();
+      useOverlayStore.getState().hideOverlay();
       navigate(`/app/scorecard/${orchestrator.sessionId}`);
     } else {
       await orchestrator.loadNextQuestion();
@@ -117,9 +120,9 @@ export default function MockSession() {
     if (!credits.canAfford("live_hint")) return;
     const q = typeof question === "string" ? question : question?.question_text;
     if (q) {
+      useOverlayStore.getState().setCurrentQuestion(q);
       await orchestrator.requestHint(q);
     }
-    setHintVisible(true);
   }
 
   async function handleEndSession() {
@@ -128,6 +131,15 @@ export default function MockSession() {
     useOverlayStore.getState().hideOverlay();
     await orchestrator.finaliseSession();
     navigate(`/app/scorecard/${orchestrator.sessionId}`);
+  }
+
+  if (phase === "setup") {
+    return (
+      <PreSessionSetup
+        onStart={handleSetup}
+        sessionType="mock"
+      />
+    );
   }
 
   if (panicMode) {
@@ -163,101 +175,71 @@ export default function MockSession() {
   const questionText = typeof question === "string" ? question : question?.question_text ?? "";
 
   return (
-    <div className="max-w-4xl space-y-4">
+    <div className="min-h-screen bg-[#0a0a0f] text-white">
       <LiveSessionController isActive={true} />
 
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-muted-foreground font-medium">
-            Question <span className="text-foreground font-bold">{qIndex + 1}</span> / {totalQ}
-          </span>
-          <Badge variant={
-            orchestrator.interviewType === "behavioural" ? "blue" :
-            orchestrator.interviewType === "technical"   ? "emerald" :
-            "violet"
-          } size="sm">
-            {orchestrator.interviewType ?? "mock"}
-          </Badge>
-          {orchestrator.targetCompany && (
-            <Badge variant="default" size="sm">{orchestrator.targetCompany}</Badge>
-          )}
-        </div>
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="w-full max-w-lg space-y-6 p-6">
 
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="xs"
-            onClick={() => setPanicMode(true)}
-            leftIcon={<EyeOff className="w-3 h-3" />}
-          >
-            Panic
-          </Button>
-          <Button
-            variant="danger"
-            size="xs"
-            onClick={() => setEndConfirm(true)}
-            leftIcon={<Square className="w-3 h-3" />}
-          >
-            End session
-          </Button>
-        </div>
-      </div>
-
-      <div className="w-full h-1 bg-white/8 rounded-full overflow-hidden">
-        <div
-          className="h-full bg-violet-500 rounded-full transition-all duration-500"
-          style={{ width: `${((qIndex + 1) / totalQ) * 100}%` }}
-        />
-      </div>
-
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-
-        <div className="lg:col-span-2 space-y-4">
-
-          <Card className="relative overflow-hidden">
-            <div className="absolute top-0 left-0 right-0 h-1">
-              <div
-                className={cn(
-                  "h-full transition-all",
-                  timeColor === "emerald" ? "bg-emerald-500" :
-                  timeColor === "amber"   ? "bg-amber-500"   : "bg-red-500 animate-pulse"
-                )}
-                style={{ width: `${100 - timePct}%` }}
-              />
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-muted-foreground font-medium">
+                Question <span className="text-foreground font-bold">{qIndex + 1}</span> / {totalQ}
+              </span>
+              <Badge variant="violet" size="sm">mock</Badge>
             </div>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={() => setPanicMode(true)}
+                leftIcon={<EyeOff className="w-3 h-3" />}
+              >
+                Panic
+              </Button>
+              <Button
+                variant="danger"
+                size="xs"
+                onClick={() => setEndConfirm(true)}
+                leftIcon={<Square className="w-3 h-3" />}
+              >
+                End
+              </Button>
+            </div>
+          </div>
 
-            <div className="pt-2">
-              <div className="flex items-center justify-between mb-3">
-                <div className={cn(
-                  "flex items-center gap-1.5 text-sm font-bold tabular-nums",
-                  timeColor === "emerald" ? "text-emerald-400" :
-                  timeColor === "amber"   ? "text-amber-400"   : "text-red-400"
-                )}>
-                  <Timer className="w-3.5 h-3.5" />
-                  {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, "0")}
-                </div>
-                <button
-                  onClick={() => setSkipConfirm(true)}
-                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-muted-foreground transition-colors"
-                >
-                  <SkipForward className="w-3 h-3" />
-                  Skip
-                </button>
+          <div className="w-full h-1 bg-white/8 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-violet-500 rounded-full transition-all duration-500"
+              style={{ width: `${((qIndex + 1) / totalQ) * 100}%` }}
+            />
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <div className={cn(
+                "flex items-center gap-1.5 text-sm font-bold tabular-nums",
+                timeColor === "emerald" ? "text-emerald-400" :
+                timeColor === "amber"   ? "text-amber-400"   : "text-red-400"
+              )}>
+                <Timer className="w-3.5 h-3.5" />
+                {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, "0")}
               </div>
-
-              <p className="text-foreground text-base font-medium leading-relaxed">
-                {questionText}
-              </p>
-
-              {orchestrator.currentQuestionMeta?.tags?.map((tag: string) => (
-                <Badge key={tag} variant="gray" size="sm" className="mt-2 mr-1">
-                  {tag}
-                </Badge>
-              ))}
+              <button
+                onClick={() => setSkipConfirm(true)}
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-white transition-colors"
+              >
+                <SkipForward className="w-3 h-3" />
+                Skip
+              </button>
             </div>
-          </Card>
 
-          <Card>
+            <p className="text-foreground text-base font-medium leading-relaxed">
+              {questionText}
+            </p>
+          </div>
+
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className={cn(
@@ -265,8 +247,6 @@ export default function MockSession() {
                   stt.isListening ? "bg-red-500 animate-pulse" : "bg-gray-700"
                 )} />
                 <span className="text-xs font-medium text-foreground">Your answer</span>
-              </div>
-              <div className="flex items-center gap-3">
                 <span className={cn(
                   "text-xs font-medium",
                   wpmHook.wpm > 160 ? "text-amber-400" :
@@ -274,19 +254,19 @@ export default function MockSession() {
                 )}>
                   {wpmHook.wpm} WPM
                 </span>
-                <button
-                  onClick={stt.toggleMute}
-                  className="p-1.5 rounded-lg hover:bg-accent/10 transition-all"
-                >
-                  {stt.isMuted
-                    ? <MicOff className="w-3.5 h-3.5 text-red-400" />
-                    : <Mic className="w-3.5 h-3.5 text-emerald-400" />
-                  }
-                </button>
               </div>
+              <button
+                onClick={stt.toggleMute}
+                className="p-1.5 rounded-lg hover:bg-accent/10 transition-all"
+              >
+                {stt.isMuted
+                  ? <MicOff className="w-3.5 h-3.5 text-red-400" />
+                  : <Mic className="w-3.5 h-3.5 text-emerald-400" />
+                }
+              </button>
             </div>
 
-            <div className="min-h-[80px] text-sm text-foreground leading-relaxed">
+            <div className="min-h-[60px] text-sm text-foreground leading-relaxed">
               {stt.transcript || (
                 <span className="text-muted-foreground italic">Start speaking…</span>
               )}
@@ -297,7 +277,7 @@ export default function MockSession() {
 
             {fillerHook.totalCount > 0 && (
               <div className="mt-3 flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] text-muted-foreground">Fillers detected:</span>
+                <span className="text-[10px] text-muted-foreground">Fillers:</span>
                 {Object.entries(fillerHook.counts)
                   .filter(([, count]) => (count as number) > 0)
                   .map(([word, count]) => (
@@ -307,7 +287,7 @@ export default function MockSession() {
                   ))}
               </div>
             )}
-          </Card>
+          </div>
 
           <Button
             variant="primary"
@@ -321,153 +301,20 @@ export default function MockSession() {
           >
             {isLastQ ? "Finish & see scorecard" : "Next question"}
           </Button>
-        </div>
 
-        <div className="space-y-3">
-
-          <Card padding="sm">
-            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-3">
-              Live metrics
-            </p>
-            <div className="space-y-3">
-              <MetricRow
-                label="Filler words"
-                value={fillerHook.totalCount}
-                max={20}
-                color={fillerHook.totalCount <= 3 ? "emerald" : fillerHook.totalCount <= 8 ? "amber" : "red"}
-                unit=""
-              />
-              <MetricRow
-                label="Speaking pace"
-                value={wpmHook.wpm}
-                max={200}
-                color={wpmHook.wpm >= 80 && wpmHook.wpm <= 160 ? "emerald" : "amber"}
-                unit=" WPM"
-              />
-              <MetricRow
-                label="Confidence"
-                value={sentimentHook.confidence}
-                max={100}
-                color={sentimentHook.confidence >= 65 ? "emerald" : "amber"}
-                unit="%"
-              />
-            </div>
-
-            <div className="mt-3 flex items-center gap-2">
-              <Brain className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              <span className="text-xs text-muted-foreground capitalize">
-                Tone: {sentimentHook.label ?? "neutral"}
-              </span>
-              <Badge
-                variant={
-                  sentimentHook.label === "positive"  ? "emerald" :
-                  sentimentHook.label === "negative"  ? "red"     : "default"
-                }
-                size="sm"
-              >
-                {sentimentHook.score ?? 0}
-              </Badge>
-            </div>
-          </Card>
-
-          <Card padding="sm">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <Zap className="w-3.5 h-3.5 text-violet-400" />
-                <span className="text-xs font-semibold text-foreground">AI Hint</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                {credits.isLow && (
-                  <AlertTriangle className="w-3 h-3 text-amber-400" />
-                )}
-                <button
-                  onClick={() => setHintVisible((p) => !p)}
-                  className="text-muted-foreground hover:text-muted-foreground transition-colors"
-                >
-                  {hintVisible
-                    ? <EyeOff className="w-3.5 h-3.5" />
-                    : <Eye className="w-3.5 h-3.5" />
-                  }
-                </button>
-              </div>
-            </div>
-
-            {hintVisible ? (
-              hint ? (
-                <>
-                  <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">
-                    {hint}
-                  </p>
-
-                  <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/8">
-                    <span className="text-[10px] text-muted-foreground">Helpful?</span>
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => { setFeedbackQ("up"); orchestrator.submitHintFeedback("up"); }}
-                        className={cn(
-                          "p-1 rounded-lg transition-colors",
-                          feedbackQ === "up" ? "text-emerald-400" : "text-muted-foreground hover:text-muted-foreground"
-                        )}
-                      >
-                        <ThumbsUp className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => { setFeedbackQ("down"); orchestrator.submitHintFeedback("down"); }}
-                        className={cn(
-                          "p-1 rounded-lg transition-colors",
-                          feedbackQ === "down" ? "text-red-400" : "text-muted-foreground hover:text-muted-foreground"
-                        )}
-                      >
-                        <ThumbsDown className="w-3 h-3" />
-                      </button>
-                      <button
-                        onClick={() => orchestrator.requestHint(true)}
-                        title="Regenerate hint"
-                        className="p-1 rounded-lg text-muted-foreground hover:text-muted-foreground transition-colors"
-                      >
-                        <RefreshCw className="w-3 h-3" />
-                      </button>
-                    </div>
-                  </div>
-                </>
-              ) : (
-                <div className="space-y-2">
-                  <p className="text-xs text-muted-foreground italic">
-                    No hint loaded yet.
-                  </p>
-                  <Button
-                    variant="secondary"
-                    size="xs"
-                    fullWidth
-                    disabled={!credits.canAfford("live_hint")}
-                    onClick={handleRequestHint}
-                    leftIcon={<Zap className="w-3 h-3" />}
-                  >
-                    {credits.canAfford("live_hint")
-                      ? "Get AI hint"
-                      : "No credits"
-                    }
-                  </Button>
-                </div>
-              )
-            ) : (
-              <p className="text-xs text-muted-foreground italic">
-                Hint hidden
-              </p>
-            )}
-          </Card>
-
-          <Button
-            variant="secondary"
-            size="sm"
-            fullWidth
-            onClick={() => setCoachOpen(true)}
-            leftIcon={<MessageSquare className="w-3.5 h-3.5" />}
-          >
-            Ask AI coach
-          </Button>
+          <p className="text-center text-xs text-muted-foreground/40">
+            The overlay window provides AI hints, transcript, and session status.
+            Use <kbd className="px-1 py-0.5 bg-white/10 rounded font-mono">Ctrl+Shift+H</kbd> to toggle it.
+          </p>
         </div>
       </div>
+
+      <OverlayWindow
+        onToggleMic={stt.toggleMute}
+        onGenerate={handleRequestHint}
+        onEndSession={handleEndSession}
+        onManualQuestion={(q) => orchestrator.requestHint(q)}
+      />
 
       <Modal
         open={skipConfirm}
@@ -476,28 +323,18 @@ export default function MockSession() {
         size="sm"
       >
         <p className="text-sm text-muted-foreground mb-5">
-          This question will be marked as skipped. You won't receive a score for it.
+          This question will be marked as skipped.
         </p>
         <div className="flex gap-3">
-          <Button
-            variant="secondary"
-            size="sm"
-            fullWidth
-            onClick={() => setSkipConfirm(false)}
-          >
+          <Button variant="secondary" size="sm" fullWidth onClick={() => setSkipConfirm(false)}>
             Cancel
           </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            fullWidth
-            onClick={() => {
-              setSkipConfirm(false);
-              orchestrator.skipQuestion();
-              if (isLastQ) navigate(`/app/scorecard/${orchestrator.sessionId}`);
-            }}
-          >
-            Skip question
+          <Button variant="danger" size="sm" fullWidth onClick={() => {
+            setSkipConfirm(false);
+            orchestrator.skipQuestion();
+            if (isLastQ) navigate(`/app/scorecard/${orchestrator.sessionId}`);
+          }}>
+            Skip
           </Button>
         </div>
       </Modal>
@@ -509,73 +346,17 @@ export default function MockSession() {
         size="sm"
       >
         <p className="text-sm text-muted-foreground mb-5">
-          Your progress will be saved and you'll receive a partial scorecard.
+          Your progress will be saved.
         </p>
         <div className="flex gap-3">
-          <Button
-            variant="secondary"
-            size="sm"
-            fullWidth
-            onClick={() => setEndConfirm(false)}
-          >
-            Continue session
+          <Button variant="secondary" size="sm" fullWidth onClick={() => setEndConfirm(false)}>
+            Continue
           </Button>
-          <Button
-            variant="danger"
-            size="sm"
-            fullWidth
-            onClick={handleEndSession}
-          >
+          <Button variant="danger" size="sm" fullWidth onClick={handleEndSession}>
             End & save
           </Button>
         </div>
       </Modal>
-
-      {useOverlay && (
-        <OverlayWindow
-          onToggleMic={stt.toggleMute}
-          onGenerate={handleRequestHint}
-          onEndSession={handleEndSession}
-          onManualQuestion={(q) => orchestrator.requestHint(q)}
-        />
-      )}
-    </div>
-  );
-}
-
-function MetricRow({
-  label, value, max, color, unit,
-}: {
-  label: string;
-  value: number;
-  max:   number;
-  color: "emerald" | "amber" | "red" | "blue";
-  unit:  string;
-}) {
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-1">
-        <span className="text-[11px] text-muted-foreground">{label}</span>
-        <span className={cn(
-          "text-xs font-bold",
-          color === "emerald" ? "text-emerald-400" :
-          color === "amber"   ? "text-amber-400"   :
-          color === "red"     ? "text-red-400"      : "text-blue-400"
-        )}>
-          {value}{unit}
-        </span>
-      </div>
-      <div className="h-1 bg-white/8 rounded-full overflow-hidden">
-        <div
-          className={cn(
-            "h-full rounded-full transition-all duration-500",
-            color === "emerald" ? "bg-emerald-500" :
-            color === "amber"   ? "bg-amber-500"   :
-            color === "red"     ? "bg-red-500"      : "bg-blue-500"
-          )}
-          style={{ width: `${Math.min(100, (value / max) * 100)}%` }}
-        />
-      </div>
     </div>
   );
 }

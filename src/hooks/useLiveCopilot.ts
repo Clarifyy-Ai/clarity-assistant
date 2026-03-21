@@ -6,6 +6,7 @@ import { useCoachStore } from "@/store/coachStore";
 import { useAuthStore } from "@/store/userStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { useAudioSession } from "./useAudioSession";
+import { useSystemAudio } from "./useSystemAudio";
 import { useAudioStore } from "@/store/audioStore";
 import { buildCoachingContext } from "@/lib/ai/contextEnvelopeBuilder";
 import { routeHint } from "@/lib/ai/modelRouter";
@@ -59,6 +60,8 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
       useSessionStore.getState().setCurrentWPM(wpm);
     },
   });
+
+  const systemAudio = useSystemAudio();
 
   const configRef = useRef(config);
   configRef.current = config;
@@ -157,8 +160,25 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
   const startLiveSession = useCallback(async () => {
     initSessionFromConfig();
     useOverlayStore.getState().showOverlay();
+
+    const userId = profile?.id;
+    if (userId) {
+      try {
+        await sessionsDB.create({
+          id:         sessionIdRef.current,
+          user_id:    userId,
+          mode:       "live",
+          status:     "active",
+          started_at: new Date().toISOString(),
+          model_used: useOverlayStore.getState().active_model,
+        } as Parameters<typeof sessionsDB.create>[0]);
+      } catch (err) {
+        console.error("[useLiveCopilot] Failed to create session record:", err);
+      }
+    }
+
     await audio.start();
-  }, [audio.start, initSessionFromConfig]);
+  }, [audio.start, initSessionFromConfig, profile?.id]);
 
   const endLiveSession = useCallback(async () => {
     abortRef.current?.abort();
@@ -205,9 +225,13 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     setProctorSafe(!is_proctor_safe);
   }, []);
 
-  const toggleSystemAudio = useCallback(() => {
-    audio.reconnect();
-  }, [audio.reconnect]);
+  const toggleSystemAudio = useCallback(async () => {
+    if (systemAudio.isActive) {
+      systemAudio.stop();
+    } else {
+      await systemAudio.start();
+    }
+  }, [systemAudio]);
 
   return {
     startLiveSession,
