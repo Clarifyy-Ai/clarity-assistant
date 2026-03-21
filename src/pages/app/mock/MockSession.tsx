@@ -460,7 +460,7 @@ export default function MockSession() {
           <Button variant="danger" size="sm" fullWidth onClick={() => {
             setSkipConfirm(false);
             if (isLastQ) {
-              orchestrator.completeSession();
+              handleEndSession();
             } else {
               orchestrator.nextQuestion();
             }
