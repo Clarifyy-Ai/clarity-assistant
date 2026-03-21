@@ -1,5 +1,6 @@
 import { captureAndAnalyseCodingProblem } from "@/lib/audio/screenshotCapture";
 import { useOverlayStore } from "@/store/overlayStore";
+import { useUIStore } from "@/store/uiStore";
 import { useSessionStore } from "@/store/sessionStore";
 
 // ─────────────────────────────────────────────────────────────────
@@ -44,7 +45,9 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
       category:    "overlay",
       action:      () => {
         const { is_stealth_mode, setStealthMode } = useOverlayStore.getState();
-        setStealthMode(!is_stealth_mode);
+        const next = !is_stealth_mode;
+        setStealthMode(next);
+        useUIStore.getState().setStealthMode(next);
       },
       isEnabled:   () => useOverlayStore.getState().is_visible,
       showInHelp:  true,

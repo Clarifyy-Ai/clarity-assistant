@@ -4,6 +4,7 @@ import { useLiveCopilot } from "@/hooks/useLiveCopilot";
 import { useCredits } from "@/hooks/useCredits";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
+import { useUIStore } from "@/store/uiStore";
 import { useAudioStore } from "@/store/audioStore";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -190,7 +191,11 @@ export default function LiveRehearsal() {
               <LivePanicButton />
               <LiveCodingProblemCapture disabled={!isActive} />
               <button
-                onClick={() => useOverlayStore.getState().setStealthMode(!is_stealth_mode)}
+                onClick={() => {
+                  const next = !is_stealth_mode;
+                  useOverlayStore.getState().setStealthMode(next);
+                  useUIStore.getState().setStealthMode(next);
+                }}
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all",
                   is_stealth_mode

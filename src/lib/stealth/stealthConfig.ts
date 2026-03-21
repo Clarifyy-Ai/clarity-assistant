@@ -1,12 +1,3 @@
-import {
-  LayoutDashboard, Mic, ClipboardList, FlaskConical,
-  BarChart2, FileText, BookOpen, CalendarDays,
-  Building2, Settings, Star, Users, Bell,
-  Briefcase, FileSpreadsheet, FolderOpen, Calendar,
-  Building, UserCircle, BarChart3, Inbox,
-  Wrench, PenTool, ListTodo,
-} from "lucide-react";
-
 export const STEALTH_NAV_LABELS: Record<string, string> = {
   "Dashboard": "Home",
   "Live Co-Pilot": "Daily Standup",
@@ -27,22 +18,6 @@ export const STEALTH_SECTION_LABELS: Record<string, string> = {
   "Core": "Workspace",
   "Growth": "Resources",
   "Planner": "Projects",
-};
-
-export const STEALTH_NAV_ICONS: Record<string, React.ElementType> = {
-  "Dashboard": Briefcase,
-  "Live Co-Pilot": ListTodo,
-  "Mock Interview": PenTool,
-  "Prep Lab": FolderOpen,
-  "Sessions": FileSpreadsheet,
-  "Analytics": BarChart3,
-  "Documents": FileText,
-  "Answer Bank": FolderOpen,
-  "Interviews": Calendar,
-  "Companies": Building,
-  "Practice Rooms": Users,
-  "Notifications": Inbox,
-  "Settings": Wrench,
 };
 
 export const STEALTH_PAGE_TITLES: Record<string, string> = {

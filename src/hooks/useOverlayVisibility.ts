@@ -1,5 +1,6 @@
 import { useCallback } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
+import { useUIStore } from "@/store/uiStore";
 import { useHotkeys } from "./useHotkeys";
 import { PANIC_RESPONSE } from "@/types/session.types";
 
@@ -26,7 +27,9 @@ export function useOverlayVisibility(enabled = true) {
       },
       stealth_mode: () => {
         const s = useOverlayStore.getState();
-        s.setStealthMode(!s.is_stealth_mode);
+        const next = !s.is_stealth_mode;
+        s.setStealthMode(next);
+        useUIStore.getState().setStealthMode(next);
       },
       panic:      () => useOverlayStore.getState().showPanic(PANIC_RESPONSE),
       clear_hint: () => useOverlayStore.getState().clearHint(),
@@ -50,9 +53,11 @@ export function useOverlayVisibility(enabled = true) {
     show,
     hide,
     toggle,
-    // Zustand actions are stable references — safe to pull from getState()
     setPosition: useOverlayStore.getState().setPosition,
-    setStealth:  useOverlayStore.getState().setStealthMode,
+    setStealth:  (enabled: boolean) => {
+      useOverlayStore.getState().setStealthMode(enabled);
+      useUIStore.getState().setStealthMode(enabled);
+    },
     showPanic:   useOverlayStore.getState().showPanic,
     hidePanic:   useOverlayStore.getState().hidePanic,
   };
