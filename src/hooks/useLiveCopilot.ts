@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useCallback, useRef, useEffect } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";

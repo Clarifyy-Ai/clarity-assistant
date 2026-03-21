@@ -3,12 +3,6 @@ import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useNetworkColor } from "@/hooks/useNetworkMonitor";
 
-// ─────────────────────────────────────────────────────────────────
-// LiveSessionController
-// State machine: manages session lifecycle, elapsed timer,
-// syncs network color to overlay.
-// ─────────────────────────────────────────────────────────────────
-
 interface LiveSessionControllerProps {
   isActive: boolean;
 }
@@ -22,10 +16,8 @@ export function LiveSessionController({ isActive }: LiveSessionControllerProps) 
 
   const networkColor = useNetworkColor();
 
-  // Keep a ref to the active interval id
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Helper to safely clear the timer and null it out
   const clearTimer = () => {
     if (timerRef.current) {
       clearInterval(timerRef.current);
@@ -33,12 +25,10 @@ export function LiveSessionController({ isActive }: LiveSessionControllerProps) 
     }
   };
 
-  // Tick elapsed seconds when session is active
   useEffect(() => {
     const shouldRun = isActive && status === "active";
 
     clearTimer();
-
     if (!shouldRun) return;
 
     let docHidden = false;
@@ -53,10 +43,9 @@ export function LiveSessionController({ isActive }: LiveSessionControllerProps) 
       document.removeEventListener("visibilitychange", onVisibility);
       clearTimer();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive, status]);
+  }, [isActive, status, tickElapsed]);
 
-  // Sync network color to overlay
+  // Sync network color — use stable selector to prevent infinite loop
   useEffect(() => {
     setNetworkColor?.(networkColor);
   }, [networkColor, setNetworkColor]);

@@ -21,13 +21,13 @@ export function AppTopBar() {
   ).toUpperCase();
 
   return (
-    <header className="fixed top-0 right-0 left-0 h-14 bg-[#0a0a0f]/95 backdrop-blur border-b border-white/[0.08] z-30 flex items-center justify-between px-4">
+    <header className="sticky top-0 z-30 h-14 w-full flex-shrink-0 bg-[#0a0a0f]/95 backdrop-blur border-b border-white/[0.08] flex items-center justify-between px-4">
 
-      {/* Left: Breadcrumb placeholder */}
+      {/* Left: breadcrumb portal target */}
       <div
-        className="flex items-center gap-2 ml-[14rem]"
+        className="flex items-center gap-2"
         id="topbar-breadcrumb"
-      ></div>
+      />
 
       {/* Right */}
       <div className="flex items-center gap-3 ml-auto">
@@ -50,9 +50,7 @@ export function AppTopBar() {
           ) : (
             <Zap className="w-3.5 h-3.5" />
           )}
-
           {credits} {credits === 1 ? "credit" : "credits"}
-
           {isEmpty && <span className="ml-1">· Upgrade</span>}
         </button>
 

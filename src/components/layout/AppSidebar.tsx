@@ -10,10 +10,6 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 
-// ─────────────────────────────────────────────────────────────────
-// Nav structure
-// ─────────────────────────────────────────────────────────────────
-
 type NavItem = {
   to: string;
   icon: React.ElementType;
@@ -50,10 +46,6 @@ const NAV_SECTIONS: Array<{ label: string; items: NavItem[] }> = [
   },
 ];
 
-// ─────────────────────────────────────────────────────────────────
-// AppSidebar
-// ─────────────────────────────────────────────────────────────────
-
 export function AppSidebar() {
   const uiStore = useUIStore();
   const { profile, clearAuth } = useAuthStore();
@@ -62,12 +54,9 @@ export function AppSidebar() {
   async function handleLogout() {
     try {
       await supabase.auth.signOut();
-      // Optional: clear any local stores/session state
       clearAuth?.();
-      // Optional: also clear other stores if needed (sessionStore, etc.)
-      window.location.href = "/auth/login"; // or use navigate('/auth/login')
+      window.location.href = "/login";
     } catch (e) {
-      // Optionally trigger a toast error
       console.error("Sign out failed:", e);
     }
   }
@@ -80,13 +69,14 @@ export function AppSidebar() {
   return (
     <aside
       className={cn(
-        "fixed left-0 top-0 z-40 h-screen bg-[#0d0d14] border-r border-white/[0.08]",
-        "flex flex-col transition-all duration-200",
+        "hidden md:flex flex-col flex-shrink-0",
+        "h-screen bg-[#0d0d14] border-r border-white/[0.08]",
+        "transition-all duration-200 relative z-40",
         collapsed ? "w-16" : "w-56"
       )}
     >
-      {/* ── Logo ──────────────────────────────────────── */}
-      <div className="flex min-h-[64px] items-center gap-3 border-b border-white/[0.08] px-4 py-5">
+      {/* Logo */}
+      <div className="flex min-h-[56px] items-center gap-3 border-b border-white/[0.08] px-4 py-4">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-600">
           <Mic className="h-4 w-4 text-white" />
         </div>
@@ -97,7 +87,7 @@ export function AppSidebar() {
         )}
       </div>
 
-      {/* ── Nav sections ──────────────────────────────── */}
+      {/* Nav sections */}
       <nav className="flex-1 space-y-4 overflow-y-auto py-3">
         {NAV_SECTIONS.map((section) => (
           <div key={section.label}>
@@ -120,7 +110,7 @@ export function AppSidebar() {
         ))}
       </nav>
 
-      {/* ── Bottom: user + settings ───────────────────── */}
+      {/* Bottom: user + settings */}
       <div className="space-y-1 border-t border-white/[0.08] py-3">
         <SidebarLink
           to="/app/notifications"
@@ -151,7 +141,7 @@ export function AppSidebar() {
                 {profile?.full_name ?? "User"}
               </p>
               <p className="text-[10px] capitalize text-gray-500">
-                {profile?.plan ?? "free"}
+                {(profile as any)?.plan ?? "free"}
               </p>
             </div>
           )}
@@ -168,7 +158,7 @@ export function AppSidebar() {
         </div>
       </div>
 
-      {/* ── Collapse toggle ───────────────────────────── */}
+      {/* Collapse toggle */}
       <button
         type="button"
         onClick={() => uiStore.toggleSidebar()}
@@ -184,10 +174,6 @@ export function AppSidebar() {
     </aside>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────
-// SidebarLink
-// ─────────────────────────────────────────────────────────────────
 
 function SidebarLink({
   to,

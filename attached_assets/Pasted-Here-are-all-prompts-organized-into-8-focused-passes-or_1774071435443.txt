@@ -1,0 +1,1697 @@
+Here are all prompts organized into **8 focused passes** — ordered from most critical to enhancement:
+
+***
+
+## 🔴 Pass 1 — Critical Security & Data Fixes
+
+```
+Fix the following critical security and data issues in Zyra immediately.
+These must be applied before any UI changes.
+
+---
+
+1. REMOVE PERSONAL PII FROM PUBLIC FOOTER
+File: src/components/layout/Footer.tsx
+
+Find the "Contact Us" section rendering:
+- Owner name "Kalpana.P"
+- WhatsApp number "8374226244"
+- Personal email "lucky.fashions999@gmail.com"
+- Full home address "Ainvolu, Thullur Mandal, Guntur District, 522237, AP"
+
+Replace entirely with a professional contact section:
+
+
+
+    Support
+  
+
+
+     support@zyra.in
+  
+  
+     Chat on WhatsApp
+  
+
+Andhra Pradesh, India
+
+
+
+
+Remove all personal name, full address, and personal email from footer.
+Move full contact details to /contact page only (already there).
+
+---
+
+2. HIDE COUPON CODES FROM PUBLIC CART
+File: src/pages/Cart.tsx (or ShoppingBag.tsx)
+
+Find the section rendering clickable coupon chips:
+"LUCKY10", "LUCKY20", "WELCOME15"
+
+Wrap with auth check:
+import { useAuth } from "@/contexts/AuthContext";
+const { user } = useAuth();
+
+{user ? (
+  // Existing coupon chips list
+  
+
+
+    
+
+Available for you:
+
+
+    {/* existing coupon chips */}
+  
+
+
+) : (
+  
+
+
+    
+    
+      
+        Login
+       to see exclusive coupon codes
+    
+
+
+)}
+
+Keep the coupon INPUT field and Apply button visible to all users.
+Only the pre-populated clickable coupon suggestions go behind auth.
+
+---
+
+3. PAYMENT BEFORE DELIVERY ENFORCEMENT
+Files: src/pages/admin/AdminOrders.tsx, Supabase SQL
+
+STEP A — Admin Orders UI:
+In the admin orders table, for any row where:
+  delivery_status IN ('shipped','delivered') AND payment_status = 'pending'
+  AND payment_method != 'cod'
+
+Show a red warning badge next to the row:
+ Payment Pending
+
+
+Add a "Mark Paid" button in the actions column for these orders.
+
+STEP B — Disable Status Escalation:
+In the order status update handler, add validation:
+const canChangeToShipped = 
+  order.payment_status === 'paid' || order.payment_method === 'cod';
+
+if (!canChangeToShipped && 
+    ['shipped','out_for_delivery','delivered'].includes(newStatus)) {
+  toast.error("Cannot ship — payment not received. 
+               Mark as paid first or change to COD.");
+  return;
+}
+
+STEP C — Supabase SQL (run in SQL editor):
+-- Add constraint to prevent shipping unpaid non-COD orders
+CREATE OR REPLACE FUNCTION check_payment_before_ship()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF NEW.delivery_status IN ('shipped','out_for_delivery','delivered')
+     AND NEW.payment_status = 'pending'
+     AND NEW.payment_method != 'cod' THEN
+    RAISE EXCEPTION 
+      'Cannot ship order — payment not completed for non-COD order';
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER enforce_payment_before_ship
+  BEFORE UPDATE ON orders
+  FOR EACH ROW
+  EXECUTE FUNCTION check_payment_before_ship();
+
+---
+
+4. FIX LOGIN — PREVENT CREDENTIAL RETENTION
+File: src/pages/Login.tsx (or Auth.tsx)
+
+A) On component mount, clear all form fields:
+useEffect(() => {
+  setEmail('');
+  setPassword('');
+  setPhone('');
+}, []);
+
+B) Set autocomplete attributes:
+
+
+C) After logout, force full page reload to clear React state:
+// In logout handler:
+await signOut();
+localStorage.removeItem('announcement_dismissed');
+window.location.href = '/login'; // hard redirect, not navigate()
+
+D) Rate limiting after 3 failed attempts:
+const [failCount, setFailCount] = useState(0);
+const [lockout, setLockout] = useState(0);
+
+// In catch block of login:
+const newCount = failCount + 1;
+setFailCount(newCount);
+if (newCount >= 3) {
+  setLockout(30);
+  const timer = setInterval(() => {
+    setLockout(prev => {
+      if (prev <= 1) { clearInterval(timer); setFailCount(0); return 0; }
+      return prev - 1;
+    });
+  }, 1000);
+}
+
+// On submit button:
+ 0}>
+  {lockout > 0 ? `Try again in ${lockout}s` : 'Sign In'}
+
+
+Do not break: OTP flow, Google auth, existing session management.
+```
+
+***
+
+## 🏠 Pass 2 — Homepage Layout
+
+```
+Apply the following layout improvements to the Zyra Homepage (Index.tsx 
+and HeroSection.tsx). Do not break any existing data fetching or routing.
+
+---
+
+1. ANNOUNCEMENT BAR — ADD AT TOP OF ALL PAGES
+Create: src/components/layout/AnnouncementBar.tsx
+
+import { useState, useEffect } from "react";
+import { X } from "lucide-react";
+
+const messages = [
+  "🚚 Free delivery on all orders above ₹999",
+  "✨ Use code WELCOME15 for 15% off your first order",
+  "💍 New Bridal Collection 2026 — Explore Now",
+  "↩ Easy 30-day returns on all products",
+];
+
+export const AnnouncementBar = () => {
+  const [visible, setVisible] = useState(true);
+  const [index, setIndex] = useState(0);
+
+  useEffect(() => {
+    if (localStorage.getItem('zyra_announcement_dismissed')) {
+      setVisible(false);
+      return;
+    }
+    const timer = setInterval(() => 
+      setIndex(i => (i + 1) % messages.length), 4000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const dismiss = () => {
+    localStorage.setItem('zyra_announcement_dismissed', 'true');
+    setVisible(false);
+  };
+
+  if (!visible) return null;
+
+  return (
+    
+
+
+      
+
+
+        {messages[index]}
+      
+
+
+      
+        
+      
+    
+
+
+  );
+};
+
+Add  as the FIRST element inside the PublicLayout, 
+above the Header component.
+
+---
+
+2. HERO SECTION — SPLIT LAYOUT + CAROUSEL
+File: src/components/home/HeroSection.tsx
+
+Replace the current single-column hero with a 3-slide carousel:
+
+const slides = [
+  {
+    headline: "Dress Like Royalty.",
+    subheadline: "Discover the Zyra Prestige Collection 2026",
+    cta1: { label: "Shop Women's", href: "/shop/womens-clothing" },
+    cta2: { label: "Discover Zyra Picks ✨", href: "/zyra-picks" },
+    image: "https://images.unsplash.com/photo-1610030469983-98e550d6193c?w=600",
+    // Indian woman in elegant saree
+  },
+  {
+    headline: "Jewellery That Speaks.",
+    subheadline: "Handcrafted pieces for every occasion",
+    cta1: { label: "Shop Jewellery", href: "/shop/jewellery" },
+    cta2: { label: "Style Guide ✨", href: "/style-guide" },
+    image: "https://images.unsplash.com/photo-1599643478518-a784e5dc4c8f?w=600",
+    // jewellery closeup
+  },
+  {
+    headline: "Beauty, Redefined.",
+    subheadline: "Curated beauty picks by Zyra AI",
+    cta1: { label: "Beauty Room", href: "/beauty-room" },
+    cta2: { label: "Shop Beauty", href: "/shop/beauty" },
+    image: "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?w=600",
+    // beauty/cosmetics
+  },
+];
+
+Layout per slide: grid grid-cols-1 md:grid-cols-2 gap-8 items-center
+- Left: headline + subheadline + 2 CTA buttons
+- Right: product/model image with rounded-2xl overflow-hidden
+
+Auto-rotate every 5 seconds with a smooth fade transition.
+Add slide dots at bottom center for manual navigation.
+Add prev/next arrow buttons on sides.
+
+Hero minimum height: min-h-[70vh] on desktop, min-h-[60vh] on mobile.
+Background: Keep existing dark gradient.
+
+FIX: The second CTA "Discover Zyra Picks" must link to /zyra-picks 
+(not /style-guide).
+
+---
+
+3. CATEGORY GRID — FEATURED MASONRY LAYOUT
+File: src/components/home/CategoryShowcase.tsx
+
+Fix the uneven last row and make "Women's Clothing" a featured large tile:
+
+Use CSS Grid with named template areas:
+grid-template-areas:
+  "women women mens"
+  "jewellery beauty accessories"
+
+On mobile: stack all cards in 2 columns
+
+Women's Clothing card: col-span-2, taller (aspect-[2/1])
+All other cards: col-span-1, square (aspect-[1/1])
+
+Each card:
+- Background: category image with dark overlay gradient
+- Category name: bottom-left, white, bold, 16px
+- Hover: scale(1.02) + brighter overlay
+- Click: navigate to /shop/{category-slug}
+
+Add a "Sale" or "New Arrivals" 6th card if only 5 categories exist 
+to complete the 3×2 grid evenly.
+
+Remove excessive margin between category grid and products section:
+Change any mb-16 or pb-16 between sections to mb-6 or mb-8.
+
+---
+
+4. PRODUCTS SECTION — HORIZONTAL SCROLL ON MOBILE
+File: src/pages/Index.tsx
+
+In "Zyra's Latest Picks" section:
+- Increase product fetch limit from 8 to 12
+- Desktop: 4-column grid (grid-cols-4)
+- Mobile: horizontal scroll row with snap:
+  
+
+
+    {products.map(p => (
+      
+
+
+        
+      
+
+
+    ))}
+  
+
+
+
+Add "View All →" button (links to /shop) top-right of the section header.
+
+---
+
+5. TRUST BADGES — GOLD CARD STYLE
+File: src/components/home/TrustBadges.tsx (or wherever badges render)
+
+Wrap each badge in a card:
+
+
+
+    {icon}
+  
+
+{title}
+
+{subtitle}
+
+
+
+Layout: grid grid-cols-2 md:grid-cols-4 gap-4
+
+---
+
+6. REVIEWS SECTION — COMPACT GOLD CARDS
+File: src/components/home/Testimonials.tsx
+
+Each review card:
+- Max width: 280px, min-height: auto
+- Gold top border accent (border-t-2 border-[#C9A84C])
+- 5 gold star icons (★★★★★) 12px
+- Quote headline: bold, 14px, 2 lines max (line-clamp-2)
+- Quote body: 13px muted gray, 3 lines max (line-clamp-3)
+- Reviewer: initials avatar (gold bg) + name 13px + 
+            small product tag chip (e.g., "Silk Saree")
+- Card padding: p-4 (reduced from current)
+
+Layout: 3 columns desktop (grid-cols-3), horizontal scroll mobile
+No white background — use subtle dark card: bg-[#0f0f0f] border border-white/5
+
+---
+
+7. NEWSLETTER SECTION — ADD ABOVE FOOTER
+Create: src/components/home/NewsletterSection.tsx
+Add it in Index.tsx just above the footer.
+
+
+
+
+    
+
+
+      Join the Circle
+    
+
+
+    
+
+
+      The Zyra Circle
+    
+
+
+    
+
+
+      Style tips, early access to sales, and exclusive offers. 
+      Only for Zyra members.
+    
+
+
+    
+
+
+      @email.com"
+        className="flex-1 bg-white/5 border border-white/10 rounded-full 
+                   px-4 py-2 text-sm text-white placeholder:text-gray-500
+                   focus:border-[#C9A84C]/50 outline-none"
+      />
+      
+        Join Now
+      
+    
+    
+
+No spam. Unsubscribe anytime.
+
+
+  
+
+
+Save email submissions to a Supabase table: newsletter_subscribers
+(id, email, subscribed_at, is_active)
+
+Do not break: existing home page data fetching, routing, cart, auth.
+```
+
+***
+
+## 🛍️ Pass 3 — Shop & Product Listing Page
+
+```
+Apply the following improvements to the Shop page (/shop) in Zyra.
+
+---
+
+1. SHOP PAGE HEADER BANNER
+File: src/pages/Shop.tsx
+
+Add a thin category banner at the top of the shop page (above filters):
+
+
+
+    
+      Home › 
+       {activeCategory || 'All Products'}
+    
+    
+
+
+      {activeCategory || 'All Products'}
+    
+
+
+    
+
+
+      {totalCount} products
+    
+
+
+
+---
+
+2. SORT OPTIONS AS VISIBLE PILLS
+File: src/pages/Shop.tsx
+
+Replace the dropdown sort with visible pill buttons:
+const sortOptions = [
+  { label: "Trending", value: "trending" },
+  { label: "Price ↑", value: "price_asc" },
+  { label: "Price ↓", value: "price_desc" },
+  { label: "Newest", value: "newest" },
+  { label: "Rating", value: "rating" },
+];
+
+
+
+
+  {sortOptions.map(opt => (
+     setSort(opt.value)}
+      className={`px-3 py-1.5 rounded-full text-xs border transition-colors
+        ${sort === opt.value 
+          ? 'bg-[#C9A84C] text-black border-[#C9A84C] font-medium'
+          : 'border-white/10 text-gray-400 hover:border-[#C9A84C]/50'
+        }`}
+    >
+      {opt.label}
+    
+  ))}
+
+
+
+
+Apply sort to Supabase query:
+if (sort === 'price_asc') query = query.order('price', { ascending: true });
+if (sort === 'price_desc') query = query.order('price', { ascending: false });
+if (sort === 'newest') query = query.order('created_at', { ascending: false });
+if (sort === 'rating') query = query.order('rating', { ascending: false });
+if (sort === 'trending') query = query.order('sales_count', { ascending: false });
+
+---
+
+3. FILTER SIDEBAR — ENHANCED
+File: src/components/shop/ShopFilters.tsx
+
+Add the following filter types:
+
+PRICE RANGE SLIDER:
+
+
+Price Range
+
+
+    ₹{priceRange[0]}
+    —
+    ₹{priceRange[1]}
+
+ setPriceRange([priceRange[0], +e.target.value])}
+    className="w-full accent-[#C9A84C]"
+  />
+
+
+
+
+SIZE CHIPS (for clothing):
+
+
+
+  {['XS','S','M','L','XL','XXL','Free Size'].map(size => (
+     toggleSize(size)}
+      className={`px-3 py-1 rounded-full text-xs border transition-colors
+        ${selectedSizes.includes(size)
+          ? 'bg-[#C9A84C] text-black border-[#C9A84C]'
+          : 'border-white/10 text-gray-400 hover:border-[#C9A84C]/40'
+        }`}>
+      {size}
+    
+  ))}
+
+
+
+
+Add "Clear All Filters" button at top of sidebar when any filter is active:
+{hasActiveFilters && (
+  
+     Clear All Filters
+  
+)}
+
+Add "Apply" sticky button at bottom of filter sidebar on mobile:
+
+
+
+    Apply Filters
+  
+
+
+
+---
+
+4. MOBILE FILTER DRAWER
+File: src/pages/Shop.tsx
+
+On mobile (hidden on md+), show a "Filters" button that opens a bottom sheet:
+ setFilterDrawerOpen(true)}
+  className="md:hidden flex items-center gap-2 px-4 py-2 border 
+             border-white/10 rounded-full text-sm text-gray-300">
+   Filters
+  {hasActiveFilters && (
+    
+      {activeFilterCount}
+    
+  )}
+
+
+Use a Sheet or Dialog component from shadcn for the bottom drawer.
+Place the full ShopFilters component inside the drawer.
+
+---
+
+5. PRODUCT CARD — HOVER QUICK ACTIONS
+File: src/components/shop/ProductCard.tsx
+
+Add hover overlay on product image:
+
+
+
+  
+  {/* Hover overlay */}
+  
+
+
+     { e.preventDefault(); openQuickView(product); }}
+      className="bg-white/90 text-black rounded-full p-2 hover:bg-white">
+      
+    
+     { e.preventDefault(); addToWishlist(product); }}
+      className="bg-white/90 text-black rounded-full p-2 hover:bg-white">
+      
+    
+
+
+  
+  {/* Badges */}
+  {product.discount_percentage > 0 && (
+    
+      -{product.discount_percentage}%
+    
+  )}
+  {product.is_zyra_pick && (
+    
+      ✦ Zyra Pick
+    
+  )}
+
+
+
+
+Add brand name below product name:
+
+
+{product.brand_name}
+
+
+
+Change discount badge from red to gold brand palette (as above).
+
+---
+
+6. EMPTY STATE — NO RESULTS
+File: src/components/shop/EmptyShopState.tsx (create if not exists)
+
+Show when filtered products count === 0:
+
+
+🔍
+
+Nothing found here
+
+
+    We couldn't find products matching your current filters. 
+    Try adjusting or clearing them.
+  
+
+
+    Clear All Filters
+  
+
+
+
+Do not break: existing filter logic, pagination, Supabase queries, routing.
+```
+
+***
+
+## 📦 Pass 4 — Product Detail Page
+
+```
+Apply the following improvements to the Product Detail page in Zyra.
+
+---
+
+1. IMAGE GALLERY WITH THUMBNAILS + ZOOM
+File: src/pages/ProductDetail.tsx (and ProductImageGallery.tsx)
+
+Replace the single image with a gallery:
+- Main image: large, left column (md:col-span-7)
+- Thumbnails: vertical strip on the left of main image OR horizontal row below
+- 4-5 thumbnail slots (use product.image_urls array if it exists, 
+  otherwise repeat main image with slight variations for now)
+- Selected thumbnail: gold border ring
+- Click thumbnail → swap main image with smooth crossfade
+- Click main image → open lightbox/zoom modal (full screen, 
+  close with X or Escape key, arrows to navigate)
+
+Lightbox: use a simple div with fixed positioning and backdrop-blur:
+
+
+---
+
+2. SIZE CHIPS + COLOR SWATCHES
+File: src/pages/ProductDetail.tsx
+
+Read from product.sizes array (already in DB).
+For clothing categories show size chips:
+
+
+
+    
+
+Select Size
+
+
+    Size Guide
+
+
+    {product.sizes.map(size => (
+       setSelectedSize(size)}
+        className={`w-12 h-10 rounded-lg border text-sm font-medium transition-all
+          ${selectedSize === size
+            ? 'border-[#C9A84C] bg-[#C9A84C]/10 text-[#C9A84C]'
+            : 'border-white/10 text-gray-300 hover:border-[#C9A84C]/40'
+          }`}>
+        {size}
+      
+    ))}
+  
+
+
+
+For jewellery/accessories: hide size selector entirely.
+
+Size Guide button opens a modal with a table:
+Size | Chest | Waist | Hip
+XS   | 32"   | 24"   | 34"
+S    | 34"   | 26"   | 36"
+(etc.)
+
+---
+
+3. STOCK URGENCY + OUT OF STOCK STATE
+File: src/pages/ProductDetail.tsx
+
+Below the price, add:
+{product.stock > 0 && product.stock < 10 && (
+  
+
+
+     Only {product.stock} left in stock!
+  
+
+
+)}
+
+{product.stock === 0 && (
+  
+
+
+    
+
+Out of Stock
+
+
+    
+      🔔 Notify When Available
+    
+
+
+)}
+
+// Disable Add to Cart when out of stock
+
+  {product.stock === 0 ? 'Out of Stock' : 'Add to Bag'}
+
+
+---
+
+4. PIN CODE DELIVERY CHECK
+File: src/pages/ProductDetail.tsx
+
+Add below stock/size section:
+const checkDelivery = (pinCode: string) => {
+  const pin = parseInt(pinCode);
+  if (pinCode.length !== 6) return;
+  // Andhra Pradesh / Telangana
+  if ((pin >= 500000 && pin <= 534999) || (pin >= 516000 && pin <= 516999)) {
+    setDeliveryMsg("✅ Delivery in 2–3 business days");
+  } else if ([400000,110000,560000,600000,700000,411000].some(
+    prefix => Math.floor(pin/1000) === Math.floor(prefix/1000))) {
+    setDeliveryMsg("✅ Delivery in 3–5 business days");
+  } else if (pinCode.length === 6) {
+    setDeliveryMsg("✅ Delivery in 5–7 business days");
+  } else {
+    setDeliveryMsg("❌ Delivery not available to this pin code");
+  }
+};
+
+UI:
+
+
+Check Delivery
+
+
+     setPinCode(e.target.value)}
+      className="flex-1 bg-white/5 border border-white/10 rounded-full 
+                 px-4 py-2 text-sm text-white placeholder:text-gray-500 
+                 outline-none focus:border-[#C9A84C]/50"
+    />
+     checkDelivery(pinCode)}
+      className="bg-[#C9A84C]/10 border border-[#C9A84C]/30 text-[#C9A84C] 
+                 rounded-full px-4 py-2 text-sm hover:bg-[#C9A84C]/20">
+      Check
+    
+
+
+  {deliveryMsg && (
+    
+
+{deliveryMsg}
+
+
+  )}
+
+
+
+
+---
+
+5. PRODUCT TABS — DESCRIPTION / SPECS / REVIEWS
+File: src/pages/ProductDetail.tsx
+
+Below the buy section, add tabbed content:
+const tabs = ['Description', 'Details & Care', 'Reviews'];
+
+Tab content:
+- Description: product.description rendered with ReactMarkdown
+- Details & Care: bullet list from product.highlights array or hardcoded defaults:
+  • Material: {product.material || 'Premium fabric'}
+  • Occasion: {product.occasion || 'Festive, Casual'}
+  • Care: Hand wash or dry clean recommended
+  • Origin: Made in India
+- Reviews: See Review section below
+
+---
+
+6. REVIEWS SECTION
+File: src/components/product/ReviewsSection.tsx (create)
+
+Create reviews table in Supabase:
+CREATE TABLE IF NOT EXISTS product_reviews (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  product_id UUID REFERENCES products(id) ON DELETE CASCADE,
+  user_id UUID REFERENCES auth.users(id),
+  rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+  title TEXT,
+  body TEXT NOT NULL,
+  verified_purchase BOOLEAN DEFAULT false,
+  helpful_count INTEGER DEFAULT 0,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+ALTER TABLE product_reviews ENABLE ROW LEVEL SECURITY;
+CREATE POLICY "Public read reviews" ON product_reviews FOR SELECT USING (true);
+CREATE POLICY "Auth users write reviews" ON product_reviews 
+  FOR INSERT WITH CHECK (auth.uid() = user_id);
+
+DISPLAY:
+- Aggregate bar: "4.8 ★ (156 reviews)" + 5-bar breakdown
+- Each review card: initials avatar, name, star rating, date, 
+  title (bold), body (14px), "✓ Verified Purchase" badge (green)
+- Sort: Most Recent | Most Helpful | Highest Rating
+- "Write a Review" button (auth required — redirect to login if not logged in)
+
+Review form (modal):
+- Star selector (click to rate)
+- Title input
+- Body textarea
+- Submit → INSERT to product_reviews table
+
+---
+
+7. RETURN POLICY + SHARE ROW
+File: src/pages/ProductDetail.tsx
+
+Add a small icon row below the CTA buttons:
+
+
+
+     30-day returns
+  
+     Secure payment
+  
+     Free delivery ₹999+
+  
+  {/* Share */}
+   {
+      const text = `Check out ${product.name} on Zyra! ${window.location.href}`;
+      window.open(`https://wa.me/?text=${encodeURIComponent(text)}`);
+    }}
+    className="flex items-center gap-1 text-xs text-[#C9A84C] 
+               hover:underline ml-auto">
+     Share
+  
+
+
+
+Do not break: existing cart add, wishlist, breadcrumb, routing.
+```
+
+***
+
+## 🛒 Pass 5 — Cart, Account & Auth Pages
+
+```
+Apply the following improvements to Cart, Account, and Login pages in Zyra.
+
+---
+
+1. CART PAGE — COMPLETE IMPROVEMENTS
+File: src/pages/Cart.tsx
+
+EMPTY CART STATE:
+
+
+
+    
+
+Your Bag is Empty
+
+
+    Looks like you haven't added anything yet. 
+    Let's find you something beautiful.
+  
+
+
+    Start Shopping
+  
+
+
+
+
+SAVE BUTTON — RENAME:
+Find any "Save" button next to cart items.
+Replace with a heart icon button labeled "Save to Wishlist":
+ moveToWishlist(item)}
+  className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#C9A84C]">
+   Save
+
+
+TRUST ICONS NEAR CHECKOUT:
+Above the "Proceed to Checkout" button:
+
+
+
+     Secure Checkout
+  
+     Easy Returns
+  
+     Free Delivery ₹999+
+  
+
+
+
+UPSELL STRIP BELOW CART ITEMS:
+
+
+
+    Complete the Look
+  
+
+
+  {/* Horizontal scroll of 4 products from same category as cart items */}
+  
+
+
+    {upsellProducts.map(p => )}
+  
+
+
+
+Fetch upsellProducts from Supabase using the category of the first cart item:
+SELECT * FROM products WHERE category = {firstCartItemCategory} 
+AND id != {cartItemId} ORDER BY rating DESC LIMIT 4
+
+---
+
+2. ACCOUNT PAGE — PROFILE IMPROVEMENTS
+File: src/pages/account/Profile.tsx
+
+PROFILE COMPLETION BAR:
+Calculate completion score (each filled field = points):
+const completion = [
+  profile.full_name,
+  profile.phone,
+  profile.avatar_url,
+  profile.default_address,
+  profile.date_of_birth,
+].filter(Boolean).length;
+const percent = (completion / 5) * 100;
+
+Show at top of profile page:
+
+
+
+    
+
+Profile {percent}% complete
+
+
+    
+
+
+      {percent < 100 ? 'Complete to unlock rewards' : '✦ Profile Complete!'}
+    
+
+
+    
+
+
+
+NAME FALLBACK:
+If profile.full_name is empty:
+
+
+
+  {profile.full_name || user?.email?.split('@')[0] || 'Welcome!'}
+
+
+
+
+
+{!profile.full_name && (
+  
+
+
+    Add your name to personalize your experience →
+  
+
+
+)}
+
+ORDER STATUS TIMELINE in My Orders tab:
+For each order, show a horizontal step indicator:
+Placed ●—— Confirmed ●—— Shipped ○—— Delivered ○
+Use gray for incomplete steps, gold for completed steps.
+
+---
+
+3. LOGIN PAGE — SPLIT LAYOUT
+File: src/pages/Login.tsx
+
+Replace the centered card with a 2-column split layout on desktop:
+
+
+
+
+  
+  {/* LEFT — Login Form */}
+  
+
+
+    
+
+
+      {/* Logo */}
+      
+        ✦
+        ZYRA
+      
+      
+
+
+        
+
+Welcome back
+
+
+        
+
+Sign in to your Zyra account
+
+
+      
+
+
+      {/* Existing form */}
+    
+
+
+
+  {/* RIGHT — Brand Visual */}
+  
+
+
+    
+    
+
+
+      
+
+
+        Zyra Collection 2026
+      
+
+
+      
+
+"Dress Like Royalty."
+
+
+    
+
+
+
+
+
+
+
+On Register page, add below the form:
+
+
+
+  Join 10,000+ Zyra members enjoying exclusive deals
+
+
+
+
+Do not break: OTP flow, Google auth, password auth, existing redirects.
+```
+
+***
+
+## 🧑‍💼 Pass 6 — Admin Panel Improvements
+
+```
+Apply the following improvements to the Zyra Admin Dashboard.
+Do not break any existing admin functionality.
+
+---
+
+1. SKELETON LOADERS FOR STAT CARDS
+File: src/pages/admin/AdminDashboard.tsx
+
+Replace blank render during data load with skeletons:
+{statsLoading ? (
+  
+
+
+    {[...Array(4)].map((_, i) => (
+      
+
+
+        
+
+
+        
+
+
+        
+
+
+      
+
+
+    ))}
+  
+
+
+) : (
+  // existing stat cards
+)}
+
+---
+
+2. HUMAN-READABLE ORDER IDs
+File: src/pages/admin/AdminOrders.tsx
+
+Replace raw UUID or cryptic ID display with:
+// Generate from created_at + row index
+const formatOrderId = (order: Order, index: number) => 
+  `#ZYR-${String(index + 1).padStart(4, '0')}`;
+
+OR if orders have a sequential number field:
+`#ZYR-${order.order_number?.toString().padStart(4, '0') || order.id.slice(-4).toUpperCase()}`
+
+Show in orders table as a bold, copyable badge:
+ { navigator.clipboard.writeText(order.id); toast.success('Copied!'); }}
+  className="font-mono text-sm text-[#C9A84C] hover:underline">
+  {formatOrderId(order, index)}
+
+
+---
+
+3. COLLAPSIBLE SIDEBAR GROUPS
+File: src/components/admin/AdminSidebar.tsx
+
+Group sidebar items into collapsible sections:
+const sidebarGroups = [
+  {
+    label: "Catalog",
+    icon: ,
+    items: [
+      { label: "Products", href: "/admin/products", icon:  },
+      { label: "Categories", href: "/admin/categories", icon:  },
+      { label: "Brands", href: "/admin/brands", icon:  },
+      { label: "Prestige Collection", href: "/admin/prestige-collection", icon:  },
+    ]
+  },
+  {
+    label: "Orders",
+    icon: ,
+    items: [
+      { label: "All Orders", href: "/admin/orders" },
+      { label: "Fulfillment", href: "/admin/fulfillment" },
+    ]
+  },
+  {
+    label: "People",
+    icon: ,
+    items: [
+      { label: "Customers", href: "/admin/customers" },
+      { label: "Vendors", href: "/admin/vendors" },
+      { label: "Staff", href: "/admin/staff" },
+      { label: "Delivery Partners", href: "/admin/delivery" },
+    ]
+  },
+  {
+    label: "Analytics",
+    icon: ,
+    items: [
+      { label: "Dashboard", href: "/admin/analytics" },
+      { label: "Revenue", href: "/admin/revenue" },
+    ]
+  },
+];
+
+Each group: clicking the group header toggles open/close with 
+chevron rotation animation (ChevronDown rotates 180deg when open).
+Active page's group stays open by default.
+Store open/closed state per group in localStorage.
+
+---
+
+4. REVENUE CHART ON DASHBOARD
+File: src/pages/admin/AdminDashboard.tsx
+
+Add a line chart showing last 30 days revenue:
+
+// Fetch from Supabase:
+const { data: revenueData } = await supabase
+  .from('orders')
+  .select('created_at, total_amount')
+  .eq('payment_status', 'paid')
+  .gte('created_at', thirtyDaysAgo.toISOString())
+  .order('created_at');
+
+// Group by date:
+const dailyRevenue = groupBy(revenueData, 
+  item => item.created_at.slice(0, 10));
+
+// Render using recharts (already likely installed):
+import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
+
+
+    
+    
+    
+    
+
+Card title: "Revenue — Last 30 Days"
+Show total period revenue and % change vs previous 30 days above chart.
+
+---
+
+5. PRODUCT TABLE — LARGER THUMBNAILS
+File: src/pages/admin/Products.tsx (or AdminProducts.tsx)
+
+Change product thumbnail size in the table from 48px to 64px:
+
+
+Do not break: existing product CRUD, filters, pagination, vendor filters.
+```
+
+***
+
+## 🔴 Pass 7 — Global Search + Missing Critical Features
+
+```
+Implement the following missing critical features in Zyra.
+
+---
+
+1. GLOBAL SEARCH WITH REAL-TIME SUGGESTIONS
+File: src/components/layout/SearchOverlay.tsx (or SearchBar.tsx)
+
+STEP A — Search overlay real-time suggestions:
+const [query, setQuery] = useState('');
+const [suggestions, setSuggestions] = useState([]);
+
+// Debounced search
+useEffect(() => {
+  if (query.length < 2) { setSuggestions([]); return; }
+  const timer = setTimeout(async () => {
+    const { data } = await supabase
+      .from('products')
+      .select('id, name, image_url, price, category')
+      .ilike('name', `%${query}%`)
+      .limit(5);
+    setSuggestions(data || []);
+  }, 300);
+  return () => clearTimeout(timer);
+}, [query]);
+
+Suggestion dropdown UI:
+
+
+
+  {suggestions.map(product => (
+    
+      
+      
+
+
+        
+
+{product.name}
+
+
+        
+
+{product.category}
+
+
+      
+
+
+      
+
+₹{product.price}
+
+
+    
+  ))}
+   navigate(`/shop?q=${encodeURIComponent(query)}`)}
+    className="w-full p-3 text-center text-[#C9A84C] text-sm 
+               hover:bg-white/5 border-t border-white/5">
+    See all results for "{query}" →
+  
+
+
+
+STEP B — Shop page reads ?q= param:
+File: src/pages/Shop.tsx
+
+const [searchParams] = useSearchParams();
+const searchQuery = searchParams.get('q') || '';
+
+// Add to Supabase query:
+if (searchQuery) {
+  query = query.or(
+    `name.ilike.%${searchQuery}%,description.ilike.%${searchQuery}%,tags.cs.{${searchQuery}}`
+  );
+}
+
+// Show search context banner:
+{searchQuery && (
+  
+
+
+    
+
+
+      Results for: 
+        "{searchQuery}"
+       ({totalCount} found)
+    
+
+
+     navigate('/shop')}
+      className="text-xs text-gray-400 hover:text-white flex items-center gap-1">
+       Clear
+    
+
+
+)}
+
+---
+
+2. FLASH SALE COUNTDOWN TIMER
+File: src/components/product/SaleBadge.tsx (or ProductCard.tsx)
+
+For products with an active sale, show a countdown timer if 
+product.sale_ends_at is set:
+
+const useCountdown = (endDate: string) => {
+  const [timeLeft, setTimeLeft] = useState('');
+  useEffect(() => {
+    const tick = () => {
+      const diff = new Date(endDate).getTime() - Date.now();
+      if (diff <= 0) { setTimeLeft('Ended'); return; }
+      const h = Math.floor(diff / 3600000);
+      const m = Math.floor((diff % 3600000) / 60000);
+      const s = Math.floor((diff % 60000) / 1000);
+      setTimeLeft(`${h}h ${m}m ${s}s`);
+    };
+    tick();
+    const t = setInterval(tick, 1000);
+    return () => clearInterval(t);
+  }, [endDate]);
+  return timeLeft;
+};
+
+On product cards for sale items:
+{product.sale_ends_at && (
+  
+
+
+    
+
+
+      ⏱ {countdown} left
+    
+
+
+)}
+
+Add sale_ends_at TIMESTAMPTZ column to products table:
+ALTER TABLE products ADD COLUMN IF NOT EXISTS sale_ends_at TIMESTAMPTZ;
+
+---
+
+3. ORDER CANCELLATION BY USER
+File: src/pages/account/Orders.tsx
+
+For orders with status 'placed' or 'confirmed' (not yet shipped):
+ handleCancelOrder(order.id)}
+  className="text-xs text-red-400 border border-red-400/30 
+             rounded-full px-3 py-1 hover:bg-red-400/10">
+  Cancel Order
+
+
+Cancel handler:
+const handleCancelOrder = async (orderId: string) => {
+  const confirmed = window.confirm(
+    'Are you sure you want to cancel this order?'
+  );
+  if (!confirmed) return;
+  
+  const { error } = await supabase
+    .from('orders')
+    .update({ 
+      status: 'cancelled',
+      cancelled_at: new Date().toISOString(),
+      cancellation_reason: 'Customer requested cancellation'
+    })
+    .eq('id', orderId)
+    .eq('user_id', user.id) // Security: user can only cancel own orders
+    .in('status', ['placed', 'confirmed']); // Can't cancel if shipped
+    
+  if (error) {
+    toast.error('Unable to cancel — order may already be processing');
+  } else {
+    toast.success('Order cancelled successfully');
+    refetchOrders();
+  }
+};
+
+Hide cancel button for orders with status: shipped, delivered, cancelled.
+
+---
+
+4. WHATSAPP FLOAT CHAT WIDGET
+File: src/components/layout/WhatsAppWidget.tsx (create)
+
+Add to PublicLayout — fixed bottom-right corner:
+export const WhatsAppWidget = () => (
+  
+    
+      
+      {/* Use the standard WhatsApp SVG path */}
+    
+);
+
+Import MessageCircle from lucide-react as fallback if SVG unavailable.
+Add  in PublicLayout.tsx after the 
+
+.
+Ensure it doesn't overlap the mobile bottom navigation bar 
+(bottom-20 on mobile to clear the nav bar).
+
+Do not break: any existing routing, cart, auth, or page features.
+```
+
+***
+
+## 🟡 Pass 8 — Skeleton Loaders + Remaining Enhancements
+
+```
+Add skeleton loading states sitewide and implement remaining 
+medium-priority features in Zyra.
+
+---
+
+1. GLOBAL SKELETON LOADER SYSTEM
+Create: src/components/ui/skeletons/index.tsx
+
+// Base shimmer animation
+const shimmer = `relative overflow-hidden before:absolute before:inset-0 
+  before:-translate-x-full before:animate-[shimmer_1.5s_infinite] 
+  before:bg-gradient-to-r before:from-transparent 
+  before:via-white/5 before:to-transparent`;
+
+// Add to tailwind config or index.css:
+@keyframes shimmer {
+  100% { transform: translateX(100%); }
+}
+
+// Skeleton components:
+export const SkeletonBox = ({ className }: { className?: string }) => (
+  
+
+
+);
+
+export const ProductCardSkeleton = () => (
+  
+
+
+    
+    
+    
+    
+
+
+);
+
+export const HeroSkeleton = () => (
+  
+
+
+    
+
+
+      
+      
+      
+      
+
+
+        
+        
+      
+
+
+    
+
+
+    
+
+
+);
+
+export const PageSkeleton = () => (
+  
+
+
+    
+    
+
+
+      {[...Array(8)].map((_, i) => )}
+    
+
+
+);
+
+USE SKELETONS:
+- Index.tsx: Show  while home data loads
+- Shop.tsx: Show grid of 8  while products load
+- ProductDetail.tsx: Show left/right skeleton while product loads
+- Account: Show form skeletons while profile data loads
+
+Also add a thin gold NProgress-style bar at top during page transitions:
+File: src/components/layout/PageProgress.tsx
+
+import { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
+
+export const PageProgress = () => {
+  const location = useLocation();
+  const [progress, setProgress] = useState(0);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    setVisible(true);
+    setProgress(20);
+    const t1 = setTimeout(() => setProgress(70), 100);
+    const t2 = setTimeout(() => setProgress(100), 400);
+    const t3 = setTimeout(() => setVisible(false), 600);
+    return () => [t1, t2, t3].forEach(clearTimeout);
+  }, [location.pathname]);
+
+  if (!visible) return null;
+  return (
+    
+
+
+  );
+};
+
+Add  inside  in App.tsx.
+
+---
+
+2. GIFT WRAPPING OPTION IN CART
+File: src/pages/Cart.tsx
+
+Add a toggleable gift wrap option:
+
+
+ setGiftWrap(!giftWrap)}>
+  
+
+
+    
+
+
+      {giftWrap && }
+    
+
+
+    
+
+
+      
+
+🎁 Add Gift Wrapping
+
+
+      
+
+Premium Zyra gift box + ribbon
+
+
+    
+
++₹49
+
+
+
+When giftWrap is true:
+- Add ₹49 to order total in the summary
+- Save gift_wrap: true in the order record to Supabase
+- Show gift wrap note in Admin order detail
+
+---
+
+3. RETURN REQUEST FLOW
+File: src/pages/account/Orders.tsx
+
+For orders with status 'delivered' (within 30 days):
+ openReturnModal(order)}
+  className="text-xs text-yellow-400 border border-yellow-400/30 
+             rounded-full px-3 py-1 hover:bg-yellow-400/10">
+  Request Return
+
+
+Return modal form:
+- Select items to return (checkboxes per order item)
+- Reason dropdown: Wrong item / Damaged / Quality issue / Size issue / Other
+- Description textarea (optional)
+- Submit → INSERT to return_requests table
+
+Create Supabase table:
+CREATE TABLE IF NOT EXISTS return_requests (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  order_id UUID REFERENCES orders(id),
+  user_id UUID REFERENCES auth.users(id),
+  items JSONB NOT NULL,
+  reason TEXT NOT NULL,
+  description TEXT,
+  status TEXT DEFAULT 'pending',
+  -- 'pending' | 'approved' | 'rejected' | 'pickup_scheduled' | 'refunded'
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+Show in Admin under Orders > Return Requests tab.
+
+---
+
+4. SOCIAL PROOF POPUP (NON-INTRUSIVE)
+Create: src/components/ui/SocialProofToast.tsx
+
+Show every 30-60 seconds on Shop and Product pages:
+const events = [
+  "Priya from Hyderabad just bought Banarasi Silk Saree 🛍️",
+  "Meera from Chennai added Bridal Choker Set to wishlist ❤️",
+  "Divya from Bangalore just ordered Anarkali 

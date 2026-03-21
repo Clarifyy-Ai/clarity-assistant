@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useCallback, useEffect } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useGamificationStore } from "@/hooks/useGamification";

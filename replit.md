@@ -101,7 +101,12 @@ Optional (needed for full feature set):
 VITE_POSTHOG_KEY=phc_...               # Analytics (optional)
 VITE_STRIPE_PUBLISHABLE_KEY=pk_...     # Billing (optional)
 VITE_SENTRY_DSN=https://...            # Error tracking (optional)
+SENTRY_ORG=...                         # Sentry source maps — production only
+SENTRY_PROJECT=...
+SENTRY_AUTH_TOKEN=...
 ```
+
+Note: AI provider keys (`GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) are stored as Supabase Edge Function secrets — NOT in Replit env vars.
 
 Edge Function secrets (set in Supabase Dashboard → Project Settings → Edge Functions):
 ```
