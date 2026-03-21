@@ -101,11 +101,11 @@ export default function SettingsPrivacy() {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-lg font-bold text-white">Privacy</h2>
+      <h2 className="text-lg font-bold text-foreground">Privacy</h2>
 
       {PRIVACY_SETTINGS.map((group) => (
         <Card key={group.group}>
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4 flex items-center gap-2">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4 flex items-center gap-2">
             {group.group === "Data & AI"  && <Database className="w-3.5 h-3.5" />}
             {group.group === "Visibility" && <Eye      className="w-3.5 h-3.5" />}
             {group.group === "Security"   && <Lock     className="w-3.5 h-3.5" />}
@@ -116,12 +116,12 @@ export default function SettingsPrivacy() {
               <div key={item.key} className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-2">
-                    <p className="text-sm text-white">{item.label}</p>
+                    <p className="text-sm text-foreground">{item.label}</p>
                     {(item as any).badge && (
                       <Badge variant="default" size="sm">{(item as any).badge}</Badge>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
                     {item.desc}
                   </p>
                 </div>
@@ -139,7 +139,7 @@ export default function SettingsPrivacy() {
       {/* GDPR note */}
       <Card className="flex items-start gap-3 border-blue-500/15 bg-blue-500/3">
         <Shield className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
-        <p className="text-xs text-gray-400 leading-relaxed">
+        <p className="text-xs text-muted-foreground leading-relaxed">
           Under GDPR and CCPA you have the right to access, correct, or delete your
           personal data at any time. Visit{" "}
           <a href="/privacy" className="text-blue-400 underline" target="_blank">

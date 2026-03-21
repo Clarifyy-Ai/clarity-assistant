@@ -52,7 +52,7 @@ export function PageHeader({
           {breadcrumbs.map((breadcrumb, index) => (
             <div key={index} className="flex items-center gap-1">
               {index > 0 && (
-                <ChevronRight className="h-3.5 w-3.5 text-gray-600 mx-0.5" />
+                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground mx-0.5" />
               )}
               {breadcrumb.href ? (
                 <a
@@ -62,7 +62,7 @@ export function PageHeader({
                   {breadcrumb.label}
                 </a>
               ) : (
-                <span className="text-gray-400">{breadcrumb.label}</span>
+                <span className="text-muted-foreground">{breadcrumb.label}</span>
               )}
             </div>
           ))}
@@ -79,7 +79,7 @@ export function PageHeader({
           )}
           <div className="flex-1">
             <div className="flex items-center gap-2 flex-wrap">
-              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-white">
+              <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold text-foreground">
                 {title}
               </h1>
               {badge && (
@@ -89,7 +89,7 @@ export function PageHeader({
               )}
             </div>
             {description && (
-              <p className="text-gray-400 text-sm sm:text-base mt-1">
+              <p className="text-muted-foreground text-sm sm:text-base mt-1">
                 {description}
               </p>
             )}

@@ -44,7 +44,7 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   canceled:   { label: "Canceled",   color: "text-red-400" },
   unpaid:     { label: "Unpaid",     color: "text-red-400" },
   incomplete: { label: "Incomplete", color: "text-amber-400" },
-  paused:     { label: "Paused",     color: "text-gray-400" },
+  paused:     { label: "Paused",     color: "text-muted-foreground" },
 };
 
 const PLAN_COLORS: Record<string, "violet" | "amber" | "emerald" | "blue"> = {
@@ -185,7 +185,7 @@ export default function SettingsBilling() {
             <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
             <div>
               <p className="text-sm font-semibold text-amber-300">Stripe Not Configured</p>
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Payment processing is not set up yet. Set the VITE_STRIPE_* environment
                 variables and deploy the create-checkout edge function to enable upgrades
                 and credit purchases.
@@ -199,26 +199,26 @@ export default function SettingsBilling() {
         <Card className="lg:col-span-2 bg-gradient-to-br from-violet-600/10 to-blue-600/10 border-violet-500/20">
           <div className="flex items-start justify-between mb-4">
             <div>
-              <p className="text-xs text-gray-500 uppercase tracking-widest">Current Plan</p>
+              <p className="text-xs text-muted-foreground uppercase tracking-widest">Current Plan</p>
               <div className="flex items-center gap-2 mt-1">
                 <Crown className="w-5 h-5 text-violet-400" />
-                <p className="text-2xl font-black text-white">{currentPlan.name}</p>
+                <p className="text-2xl font-black text-foreground">{currentPlan.name}</p>
                 {statusInfo && (
                   <Badge variant="default" size="sm">
                     <span className={statusInfo.color}>{statusInfo.label}</span>
                   </Badge>
                 )}
               </div>
-              <p className="text-xs text-gray-400 mt-1">{currentPlan.tagline}</p>
+              <p className="text-xs text-muted-foreground mt-1">{currentPlan.tagline}</p>
             </div>
             <div className="text-right">
-              <p className="text-2xl font-black text-white">
+              <p className="text-2xl font-black text-foreground">
                 {currentPlan.monthlyPrice === 0
                   ? "Free"
                   : formatPrice(currentPlan.monthlyPrice, true)}
               </p>
               {currentPlan.monthlyPrice > 0 && (
-                <p className="text-xs text-gray-500">/month</p>
+                <p className="text-xs text-muted-foreground">/month</p>
               )}
             </div>
           </div>
@@ -244,8 +244,8 @@ export default function SettingsBilling() {
           <div className="space-y-3">
             <div>
               <div className="flex items-center justify-between mb-1">
-                <p className="text-xs text-gray-400">Credits used this period</p>
-                <p className="text-xs text-gray-400">
+                <p className="text-xs text-muted-foreground">Credits used this period</p>
+                <p className="text-xs text-muted-foreground">
                   {creditsUsed} / {currentPlan.creditsPerMonth === -1 ? "∞" : creditsMonthly}
                 </p>
               </div>
@@ -293,28 +293,28 @@ export default function SettingsBilling() {
 
         <Card>
           <div className="flex items-center gap-2 mb-4">
-            <Shield className="w-4 h-4 text-gray-500" />
-            <h3 className="text-sm font-semibold text-white">Account Details</h3>
+            <Shield className="w-4 h-4 text-muted-foreground" />
+            <h3 className="text-sm font-semibold text-foreground">Account Details</h3>
           </div>
           <div className="space-y-3 text-xs">
             <div className="flex justify-between">
-              <span className="text-gray-500">Email</span>
-              <span className="text-gray-300 truncate ml-2">{user?.email ?? "—"}</span>
+              <span className="text-muted-foreground">Email</span>
+              <span className="text-foreground truncate ml-2">{user?.email ?? "—"}</span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">Customer ID</span>
-              <span className="text-gray-300 font-mono text-[10px]">
+              <span className="text-muted-foreground">Customer ID</span>
+              <span className="text-foreground font-mono text-[10px]">
                 {profile?.stripe_customer_id ?? "Not linked"}
               </span>
             </div>
             <div className="flex justify-between">
-              <span className="text-gray-500">Plan</span>
-              <span className="text-gray-300">{currentPlan.name}</span>
+              <span className="text-muted-foreground">Plan</span>
+              <span className="text-foreground">{currentPlan.name}</span>
             </div>
             {subscription?.currentPeriodEnd && (
               <div className="flex justify-between">
-                <span className="text-gray-500">Renews</span>
-                <span className="text-gray-300">
+                <span className="text-muted-foreground">Renews</span>
+                <span className="text-foreground">
                   {subscription.currentPeriodEnd.toLocaleDateString()}
                 </span>
               </div>
@@ -324,7 +324,7 @@ export default function SettingsBilling() {
       </div>
 
       <div>
-        <h3 className="text-sm font-semibold text-white mb-3">Available Plans</h3>
+        <h3 className="text-sm font-semibold text-foreground mb-3">Available Plans</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
           {PLAN_ORDER.filter((id) => id !== "enterprise").map((id) => {
             const plan = PLANS[id];
@@ -364,7 +364,7 @@ export default function SettingsBilling() {
       </div>
 
       <div>
-        <h3 className="text-sm font-semibold text-white mb-3">Buy Credit Packs</h3>
+        <h3 className="text-sm font-semibold text-foreground mb-3">Buy Credit Packs</h3>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {TOPUP_PACKS.map((pack) => (
             <Card
@@ -381,12 +381,12 @@ export default function SettingsBilling() {
               )}
               <div className="flex items-baseline justify-between">
                 <div>
-                  <p className="text-lg font-black text-white">
+                  <p className="text-lg font-black text-foreground">
                     {pack.credits}
                   </p>
-                  <p className="text-xs text-gray-500">credits</p>
+                  <p className="text-xs text-muted-foreground">credits</p>
                 </div>
-                <p className="text-lg font-bold text-white">
+                <p className="text-lg font-bold text-foreground">
                   {formatPrice(pack.priceUsdCents)}
                 </p>
               </div>

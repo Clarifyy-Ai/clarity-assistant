@@ -65,7 +65,7 @@ export default function AdminFlags() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white flex items-center gap-2">
+        <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
           <Flag className="w-5 h-5 text-amber-400" />
           Feature Flags
         </h1>
@@ -96,7 +96,7 @@ export default function AdminFlags() {
             <div key={flag.key} className="flex items-center justify-between py-4 first:pt-0 last:pb-0">
               <div className="flex-1">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-white">{flag.label}</p>
+                  <p className="text-sm font-medium text-foreground">{flag.label}</p>
                   <Badge
                     variant={flag.plan === "pro" ? "violet" : "default"}
                     size="sm"
@@ -111,7 +111,7 @@ export default function AdminFlags() {
                     {flags[flag.key] ? "On" : "Off"}
                   </Badge>
                 </div>
-                <p className="text-xs text-gray-500 mt-0.5">{flag.desc}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{flag.desc}</p>
                 <p className="text-[10px] text-gray-700 font-mono mt-0.5">{flag.key}</p>
               </div>
               <Toggle

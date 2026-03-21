@@ -131,11 +131,11 @@ export default function PracticeRooms() {
               padding="sm"
             >
               {locked && (
-                <Lock className="absolute top-3 right-3 w-3.5 h-3.5 text-gray-600" />
+                <Lock className="absolute top-3 right-3 w-3.5 h-3.5 text-muted-foreground" />
               )}
               <span className="text-2xl">{rt.icon}</span>
-              <p className="text-xs font-bold text-white">{rt.label}</p>
-              <p className="text-[10px] text-gray-500 leading-relaxed">
+              <p className="text-xs font-bold text-foreground">{rt.label}</p>
+              <p className="text-[10px] text-muted-foreground leading-relaxed">
                 {rt.desc}
               </p>
               {rt.plan === "pro" && (
@@ -149,7 +149,7 @@ export default function PracticeRooms() {
       {/* Live + available rooms */}
       <div>
         <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
             Available rooms
           </p>
           <div className="flex items-center gap-1.5">
@@ -183,7 +183,7 @@ export default function PracticeRooms() {
 
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-medium text-white">{room.topic}</p>
+                    <p className="text-sm font-medium text-foreground">{room.topic}</p>
                     {room.live && (
                       <Badge variant="red" size="sm" dot>Live</Badge>
                     )}
@@ -191,7 +191,7 @@ export default function PracticeRooms() {
                       <Badge variant="amber" size="sm">Pro</Badge>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     Hosted by {room.host} · {room.joined}/{room.max} joined
                   </p>
                 </div>
@@ -251,7 +251,7 @@ function CreateRoomModal({
       <div className="space-y-5">
         {/* Type picker */}
         <div>
-          <p className="text-xs font-medium text-gray-300 mb-2">Room type</p>
+          <p className="text-xs font-medium text-foreground mb-2">Room type</p>
           <div className="grid grid-cols-2 gap-2">
             {ROOM_TYPES.map((rt) => {
               const locked = rt.plan === "pro" && !isPro;
@@ -270,7 +270,7 @@ function CreateRoomModal({
                 >
                   <span>{rt.icon}</span>
                   <div>
-                    <p className="text-xs font-medium text-white">{rt.label}</p>
+                    <p className="text-xs font-medium text-foreground">{rt.label}</p>
                     {locked && (
                       <p className="text-[10px] text-amber-400">Pro only</p>
                     )}
@@ -283,12 +283,12 @@ function CreateRoomModal({
 
         {/* Topic */}
         <div>
-          <p className="text-xs font-medium text-gray-300 mb-1.5">Room topic</p>
+          <p className="text-xs font-medium text-foreground mb-1.5">Room topic</p>
           <input
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
             placeholder="e.g. Google Behavioural · FAANG SWE"
-            className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
+            className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
           />
         </div>
 

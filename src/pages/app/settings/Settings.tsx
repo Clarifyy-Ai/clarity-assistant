@@ -33,7 +33,7 @@ export default function Settings() {
 
       {/* Sidebar */}
       <aside className="w-52 shrink-0 hidden md:block">
-        <p className="text-[10px] font-semibold text-gray-600 uppercase tracking-widest px-3 mb-3">
+        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest px-3 mb-3">
           Settings
         </p>
         <nav className="space-y-0.5">
@@ -50,7 +50,7 @@ export default function Settings() {
                       : "bg-violet-600/15 text-violet-300"
                     : item.danger
                     ? "text-red-500 hover:bg-red-500/5"
-                    : "text-gray-400 hover:text-white hover:bg-white/5"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/5"
                 )
               }
             >
@@ -72,7 +72,7 @@ export default function Settings() {
                 to={item.to}
                 className={cn(
                   "flex items-center gap-3 p-4 rounded-2xl bg-white/3 border border-white/8",
-                  "hover:bg-white/5 transition-all",
+                  "hover:bg-accent/5 transition-all",
                   item.danger && "border-red-500/15"
                 )}
               >
@@ -80,20 +80,20 @@ export default function Settings() {
                   "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
                   item.danger
                     ? "bg-red-500/10"
-                    : "bg-white/5"
+                    : "bg-accent/5"
                 )}>
                   <item.icon className={cn(
                     "w-4 h-4",
-                    item.danger ? "text-red-400" : "text-gray-400"
+                    item.danger ? "text-red-400" : "text-muted-foreground"
                   )} />
                 </div>
                 <span className={cn(
                   "text-sm font-medium flex-1",
-                  item.danger ? "text-red-400" : "text-white"
+                  item.danger ? "text-red-400" : "text-foreground"
                 )}>
                   {item.label}
                 </span>
-                <ChevronRight className="w-4 h-4 text-gray-600" />
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
               </NavLink>
             ))}
           </div>

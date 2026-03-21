@@ -78,14 +78,14 @@ export default function AdminAnalytics() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-xl font-bold text-white flex items-center gap-2">
+      <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
         <BarChart2 className="w-5 h-5 text-violet-400" />
         Platform Analytics
       </h1>
 
       {/* Signups chart */}
       <Card>
-        <h3 className="text-sm font-semibold text-white mb-4">
+        <h3 className="text-sm font-semibold text-foreground mb-4">
           Daily signups — last 14 days
         </h3>
         <div className="flex items-end gap-1.5 h-28">
@@ -101,7 +101,7 @@ export default function AdminAnalytics() {
               <span className="text-[9px] text-gray-700">
                 {format(new Date(d.day), "d")}
               </span>
-              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-[#1a1a2e] border border-white/15 rounded-lg px-2 py-1 text-[10px] text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none">
+              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-[#1a1a2e] border border-white/15 rounded-lg px-2 py-1 text-[10px] text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none">
                 {d.count} signups · {format(new Date(d.day), "MMM d")}
               </div>
             </div>
@@ -113,7 +113,7 @@ export default function AdminAnalytics() {
 
         {/* Plan distribution */}
         <Card>
-          <h3 className="text-sm font-semibold text-white mb-4">Plan distribution</h3>
+          <h3 className="text-sm font-semibold text-foreground mb-4">Plan distribution</h3>
           <div className="space-y-3">
             {[
               { key: "free", label: "Free",  color: "gray"   as const },
@@ -125,8 +125,8 @@ export default function AdminAnalytics() {
               return (
                 <div key={p.key}>
                   <div className="flex items-center justify-between mb-1">
-                    <span className="text-xs text-gray-400 capitalize">{p.label}</span>
-                    <span className="text-xs font-bold text-white">
+                    <span className="text-xs text-muted-foreground capitalize">{p.label}</span>
+                    <span className="text-xs font-bold text-foreground">
                       {count?.toLocaleString()} ({pct}%)
                     </span>
                   </div>
@@ -144,17 +144,17 @@ export default function AdminAnalytics() {
 
         {/* Top companies */}
         <Card>
-          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
             <Globe className="w-4 h-4 text-blue-400" />
             Top companies practised for
           </h3>
           <div className="space-y-2">
             {topCompanies.map((c, i) => (
               <div key={c.name} className="flex items-center gap-3">
-                <span className="text-[10px] text-gray-600 w-4 text-right">
+                <span className="text-[10px] text-muted-foreground w-4 text-right">
                   {i + 1}
                 </span>
-                <span className="text-xs text-gray-300 w-24 truncate">{c.name}</span>
+                <span className="text-xs text-foreground w-24 truncate">{c.name}</span>
                 <ProgressBar
                   value={c.count}
                   max={maxCompany}
@@ -162,7 +162,7 @@ export default function AdminAnalytics() {
                   size="xs"
                   className="flex-1"
                 />
-                <span className="text-xs text-gray-500 w-6 text-right">
+                <span className="text-xs text-muted-foreground w-6 text-right">
                   {c.count}
                 </span>
               </div>

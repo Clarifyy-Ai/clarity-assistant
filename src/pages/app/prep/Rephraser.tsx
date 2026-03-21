@@ -110,14 +110,14 @@ export default function Rephraser() {
               "px-4 py-2.5 rounded-xl border text-left transition-all",
               style === s.id
                 ? "bg-violet-600/15 border-violet-500/30"
-                : "bg-white/[0.02] border-white/8 hover:bg-white/5 hover:border-white/15"
+                : "bg-white/[0.02] border-white/8 hover:bg-accent/5 hover:border-white/15"
             )}
           >
             <div className="flex items-center gap-2">
               <span className="text-base">{s.icon}</span>
-              <span className={cn("text-sm font-medium", style === s.id ? "text-violet-300" : "text-white")}>{s.label}</span>
+              <span className={cn("text-sm font-medium", style === s.id ? "text-violet-300" : "text-foreground")}>{s.label}</span>
             </div>
-            <p className="text-[11px] text-gray-500 mt-0.5 ml-7">{s.desc}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5 ml-7">{s.desc}</p>
           </button>
         ))}
       </div>
@@ -125,8 +125,8 @@ export default function Rephraser() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
           <div className="flex items-center justify-between mb-2">
-            <p className="text-xs font-semibold text-gray-300 uppercase tracking-widest">Original</p>
-            <span className="text-[10px] text-gray-600">{wordCount} words</span>
+            <p className="text-xs font-semibold text-foreground uppercase tracking-widest">Original</p>
+            <span className="text-[10px] text-muted-foreground">{wordCount} words</span>
           </div>
           <textarea
             value={original}
@@ -135,7 +135,7 @@ export default function Rephraser() {
 
 Example: 'In my previous role, I was basically responsible for kind of leading the migration to microservices. We sort of had some issues with the monolith and I think I helped make things better.'"
             rows={10}
-            className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
+            className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
           />
         </Card>
 
@@ -143,11 +143,11 @@ Example: 'In my previous role, I was basically responsible for kind of leading t
           <div className="flex items-center justify-between mb-2">
             <p className={cn(
               "text-xs font-semibold uppercase tracking-widest",
-              rephrased ? "text-emerald-400" : "text-gray-300"
+              rephrased ? "text-emerald-400" : "text-foreground"
             )}>
               Improved
             </p>
-            {rephrased && <span className="text-[10px] text-gray-600">{rephrasedWordCount} words</span>}
+            {rephrased && <span className="text-[10px] text-muted-foreground">{rephrasedWordCount} words</span>}
           </div>
           {rephrased ? (
             <div className="space-y-3">
@@ -157,7 +157,7 @@ Example: 'In my previous role, I was basically responsible for kind of leading t
               <div className="flex gap-2 pt-2 border-t border-white/5">
                 <button
                   onClick={() => { navigator.clipboard.writeText(rephrased); toast.success("Copied!"); }}
-                  className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-white transition-colors"
+                  className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
                 >
                   <Copy className="w-3 h-3" /> Copy
                 </button>
@@ -165,7 +165,7 @@ Example: 'In my previous role, I was basically responsible for kind of leading t
                   onClick={saveToBank}
                   className={cn(
                     "flex items-center gap-1.5 text-xs transition-colors",
-                    saved ? "text-emerald-400" : "text-gray-400 hover:text-white"
+                    saved ? "text-emerald-400" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {saved ? <CheckCircle className="w-3 h-3" /> : <Save className="w-3 h-3" />}
@@ -174,7 +174,7 @@ Example: 'In my previous role, I was basically responsible for kind of leading t
               </div>
             </div>
           ) : (
-            <div className="flex items-center justify-center min-h-[200px] text-gray-600">
+            <div className="flex items-center justify-center min-h-[200px] text-muted-foreground">
               <div className="text-center">
                 <Wand2 className="w-8 h-8 mx-auto mb-2 opacity-30" />
                 <p className="text-xs">Your improved answer will appear here</p>
@@ -207,18 +207,18 @@ Example: 'In my previous role, I was basically responsible for kind of leading t
 
       {rephrased && original && (
         <Card>
-          <p className="text-xs font-semibold text-gray-300 uppercase tracking-widest mb-3">Changes summary</p>
+          <p className="text-xs font-semibold text-foreground uppercase tracking-widest mb-3">Changes summary</p>
           <div className="grid grid-cols-3 gap-4 text-center">
             <div>
-              <p className="text-2xl font-bold text-white">{wordCount}</p>
-              <p className="text-[10px] text-gray-500 mt-0.5">Original words</p>
+              <p className="text-2xl font-bold text-foreground">{wordCount}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Original words</p>
             </div>
             <div className="flex items-center justify-center">
               <ArrowRight className="w-5 h-5 text-violet-500" />
             </div>
             <div>
               <p className="text-2xl font-bold text-emerald-400">{rephrasedWordCount}</p>
-              <p className="text-[10px] text-gray-500 mt-0.5">Improved words</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">Improved words</p>
             </div>
           </div>
         </Card>

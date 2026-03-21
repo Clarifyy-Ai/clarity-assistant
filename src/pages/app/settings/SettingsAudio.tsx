@@ -110,28 +110,28 @@ export default function SettingsAudio() {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-lg font-bold text-white">Audio & Speech</h2>
+      <h2 className="text-lg font-bold text-foreground">Audio & Speech</h2>
 
       {/* Mic test */}
       <Card>
-        <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
           <Mic className="w-4 h-4 text-violet-400" />
           Microphone
         </h3>
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-300">Auto gain control</span>
+            <span className="text-sm text-foreground">Auto gain control</span>
             <Toggle checked={autoGain} onChange={() => setAutoGain((p) => !p)} />
           </div>
           <div className="flex items-center justify-between">
-            <span className="text-sm text-gray-300">Noise suppression</span>
+            <span className="text-sm text-foreground">Noise suppression</span>
             <Toggle checked={noiseSup} onChange={() => setNoiseSup((p) => !p)} />
           </div>
 
           {/* Mic level meter */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-gray-400">Input level</span>
+              <span className="text-xs text-muted-foreground">Input level</span>
               <Button
                 variant={testing ? "danger" : "secondary"}
                 size="xs"
@@ -148,7 +148,7 @@ export default function SettingsAudio() {
               size="md"
             />
             {testing && (
-              <p className="text-[10px] text-gray-600 mt-1">
+              <p className="text-[10px] text-muted-foreground mt-1">
                 Speak into your mic — the bar should rise
               </p>
             )}
@@ -158,7 +158,7 @@ export default function SettingsAudio() {
 
       {/* STT language */}
       <Card>
-        <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
           <Volume2 className="w-4 h-4 text-blue-400" />
           Speech recognition language
         </h3>
@@ -171,7 +171,7 @@ export default function SettingsAudio() {
                 "px-3 py-2.5 rounded-xl border text-xs font-medium text-left transition-all",
                 language === lang.code
                   ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                  : "bg-white/3 border-white/10 text-gray-400 hover:text-gray-200"
+                  : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
               )}
             >
               {lang.label}
@@ -182,7 +182,7 @@ export default function SettingsAudio() {
 
       {/* Filler words */}
       <Card>
-        <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
           <Settings2 className="w-4 h-4 text-amber-400" />
           Filler word tracking
         </h3>
@@ -204,7 +204,7 @@ export default function SettingsAudio() {
             onChange={(e) => setNewFiller(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addFiller()}
             placeholder="Add a filler word…"
-            className="flex-1 bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-violet-500"
+            className="flex-1 bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-violet-500"
           />
           <Button variant="secondary" size="sm" onClick={addFiller}>
             Add

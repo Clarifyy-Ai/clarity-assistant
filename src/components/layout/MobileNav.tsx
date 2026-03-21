@@ -23,7 +23,7 @@ const TABS = [
 
 export function MobileNav() {
   return (
-    <nav className="fixed bottom-0 left-0 right-0 h-16 bg-[#0d0d14]/95 backdrop-blur border-t border-white/[0.08] z-40 flex items-center md:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 h-16 bg-background/95 backdrop-blur border-t border-border z-40 flex items-center md:hidden">
       {TABS.map((tab) => {
         const Icon = tab.icon;
 
@@ -35,7 +35,7 @@ export function MobileNav() {
             className={({ isActive }) =>
               cn(
                 "flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-all",
-                isActive ? "text-violet-400" : "text-gray-600"
+                isActive ? "text-violet-500 dark:text-violet-400" : "text-muted-foreground"
               )
             }
           >

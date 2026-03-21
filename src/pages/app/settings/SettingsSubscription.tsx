@@ -79,10 +79,10 @@ export default function SettingsSubscription() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg font-bold text-white">Subscription</h2>
+        <h2 className="text-lg font-bold text-foreground">Subscription</h2>
 
         {/* Billing toggle */}
-        <div className="flex items-center gap-2 bg-white/5 border border-white/10 rounded-xl p-1">
+        <div className="flex items-center gap-2 bg-accent/5 border border-white/10 rounded-xl p-1">
           {(["monthly", "annual"] as const).map((b) => (
             <button
               key={b}
@@ -91,7 +91,7 @@ export default function SettingsSubscription() {
                 "px-3 py-1.5 rounded-lg text-xs font-medium transition-all capitalize",
                 billing === b
                   ? "bg-violet-600/30 text-violet-300"
-                  : "text-gray-500 hover:text-gray-300"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
               {b}
@@ -108,11 +108,11 @@ export default function SettingsSubscription() {
         <Card className="flex items-center gap-4 border-violet-500/20 bg-violet-500/5">
           <Crown className="w-5 h-5 text-violet-400 shrink-0" />
           <div className="flex-1">
-            <p className="text-sm font-semibold text-white capitalize">
+            <p className="text-sm font-semibold text-foreground capitalize">
               {currentPlan} plan active
             </p>
             {renewDate && (
-              <p className="text-xs text-gray-400 mt-0.5">
+              <p className="text-xs text-muted-foreground mt-0.5">
                 Renews {format(new Date(renewDate), "MMMM d, yyyy")}
               </p>
             )}
@@ -144,12 +144,12 @@ export default function SettingsSubscription() {
               )}
 
               <div className="mb-4">
-                <p className="text-sm font-bold text-white">{plan.label}</p>
+                <p className="text-sm font-bold text-foreground">{plan.label}</p>
                 <div className="flex items-baseline gap-0.5 mt-1">
-                  <span className="text-3xl font-black text-white">
+                  <span className="text-3xl font-black text-foreground">
                     ${price}
                   </span>
-                  <span className="text-xs text-gray-500">{plan.billing}</span>
+                  <span className="text-xs text-muted-foreground">{plan.billing}</span>
                 </div>
                 {billing === "annual" && price > 0 && (
                   <p className="text-[10px] text-emerald-400 mt-0.5">
@@ -160,7 +160,7 @@ export default function SettingsSubscription() {
 
               <ul className="space-y-2 flex-1">
                 {plan.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2 text-xs text-gray-300">
+                  <li key={f} className="flex items-start gap-2 text-xs text-foreground">
                     <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
                     {f}
                   </li>
@@ -189,7 +189,7 @@ export default function SettingsSubscription() {
           <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
           <div>
             <p className="text-xs font-semibold text-red-300">Cancel anytime</p>
-            <p className="text-[11px] text-gray-500 mt-0.5">
+            <p className="text-[11px] text-muted-foreground mt-0.5">
               You can cancel your subscription at any time. Access continues until
               the end of your billing period.
             </p>

@@ -69,13 +69,13 @@ export default function CompanyResearch() {
       <Card>
         <div className="flex gap-3">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               placeholder="Enter a company name…"
-              className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-violet-500"
+              className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-violet-500"
               autoFocus
             />
           </div>
@@ -93,13 +93,13 @@ export default function CompanyResearch() {
 
         {/* Popular companies */}
         <div className="mt-4">
-          <p className="text-xs text-gray-500 mb-2">Popular companies</p>
+          <p className="text-xs text-muted-foreground mb-2">Popular companies</p>
           <div className="flex flex-wrap gap-2">
             {POPULAR.map((c) => (
               <button
                 key={c}
                 onClick={() => handleSearch(c)}
-                className="px-3 py-1.5 bg-white/3 hover:bg-white/8 border border-white/10 hover:border-white/20 rounded-xl text-xs text-gray-400 hover:text-white transition-all"
+                className="px-3 py-1.5 bg-white/3 hover:bg-white/8 border border-white/10 hover:border-white/20 rounded-xl text-xs text-muted-foreground hover:text-foreground transition-all"
               >
                 {c}
               </button>
@@ -115,7 +115,7 @@ export default function CompanyResearch() {
         </div>
       ) : saved.length > 0 && (
         <div>
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-3">
+          <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
             Recent briefs
           </p>
           <div className="space-y-2">
@@ -131,13 +131,13 @@ export default function CompanyResearch() {
                     <Building2 className="w-4 h-4 text-violet-400" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-semibold text-white">{s.company_name}</p>
-                    <p className="text-xs text-gray-500 mt-0.5">
+                    <p className="text-sm font-semibold text-foreground">{s.company_name}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">
                       {s.role_title && `${s.role_title} · `}
                       {format(new Date(s.created_at), "MMM d, yyyy")}
                     </p>
                   </div>
-                  <ChevronRight className="w-4 h-4 text-gray-600 shrink-0" />
+                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
                 </div>
               </Card>
             ))}

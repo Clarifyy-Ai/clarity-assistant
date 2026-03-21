@@ -86,7 +86,7 @@ export default function MockInterview() {
 
       {/* Interview type */}
       <Card>
-        <h3 className="text-sm font-semibold text-white mb-4">Interview type</h3>
+        <h3 className="text-sm font-semibold text-foreground mb-4">Interview type</h3>
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
           {INTERVIEW_TYPES.map((t) => (
             <button
@@ -102,11 +102,11 @@ export default function MockInterview() {
               <span className="text-xl">{t.icon}</span>
               <span className={cn(
                 "text-xs font-semibold",
-                type === t.value ? "text-violet-200" : "text-gray-300"
+                type === t.value ? "text-violet-200" : "text-foreground"
               )}>
                 {t.label}
               </span>
-              <span className="text-[10px] text-gray-600">{t.desc}</span>
+              <span className="text-[10px] text-muted-foreground">{t.desc}</span>
             </button>
           ))}
         </div>
@@ -116,14 +116,14 @@ export default function MockInterview() {
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {/* Target company */}
         <Card>
-          <h3 className="text-sm font-semibold text-white mb-3">
-            Target company <span className="text-gray-600 font-normal">(optional)</span>
+          <h3 className="text-sm font-semibold text-foreground mb-3">
+            Target company <span className="text-muted-foreground font-normal">(optional)</span>
           </h3>
           <input
             value={company}
             onChange={(e) => setCompany(e.target.value)}
             placeholder="e.g. Google, Stripe…"
-            className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500 mb-3"
+            className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500 mb-3"
           />
           <div className="flex flex-wrap gap-1.5">
             {COMPANIES.slice(0, 6).map((c) => (
@@ -134,7 +134,7 @@ export default function MockInterview() {
                   "px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-all",
                   company === c
                     ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                    : "bg-white/3 border-white/10 text-gray-500 hover:text-gray-300"
+                    : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
                 )}
               >
                 {c}
@@ -145,10 +145,10 @@ export default function MockInterview() {
 
         {/* Questions + time */}
         <Card>
-          <h3 className="text-sm font-semibold text-white mb-3">Session length</h3>
+          <h3 className="text-sm font-semibold text-foreground mb-3">Session length</h3>
 
           <div className="mb-4">
-            <p className="text-xs text-gray-400 mb-2">Number of questions</p>
+            <p className="text-xs text-muted-foreground mb-2">Number of questions</p>
             <div className="flex gap-2">
               {QUESTION_COUNTS.map((n) => (
                 <button
@@ -158,7 +158,7 @@ export default function MockInterview() {
                     "flex-1 py-2 rounded-lg border text-xs font-medium transition-all",
                     numQ === n
                       ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                      : "bg-white/3 border-white/10 text-gray-500 hover:text-gray-300"
+                      : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {n}
@@ -168,7 +168,7 @@ export default function MockInterview() {
           </div>
 
           <div>
-            <p className="text-xs text-gray-400 mb-2">Minutes per question</p>
+            <p className="text-xs text-muted-foreground mb-2">Minutes per question</p>
             <div className="flex gap-2">
               {TIME_PER_Q.map((t) => (
                 <button
@@ -178,7 +178,7 @@ export default function MockInterview() {
                     "flex-1 py-2 rounded-lg border text-xs font-medium transition-all",
                     timePerQ === t
                       ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                      : "bg-white/3 border-white/10 text-gray-500 hover:text-gray-300"
+                      : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {t}m
@@ -187,7 +187,7 @@ export default function MockInterview() {
             </div>
           </div>
 
-          <div className="mt-4 flex items-center justify-between text-xs text-gray-400 bg-white/3 rounded-xl px-3 py-2">
+          <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground bg-white/3 rounded-xl px-3 py-2">
             <span className="flex items-center gap-1.5">
               <Timer className="w-3.5 h-3.5" />
               Est. {numQ * timePerQ} min total
@@ -206,8 +206,8 @@ export default function MockInterview() {
           🧘
         </div>
         <div className="flex-1">
-          <p className="text-sm font-semibold text-white">Pre-session warmup</p>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="text-sm font-semibold text-foreground">Pre-session warmup</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
             30s breathing exercise + 2 easy non-scored warmup questions
           </p>
         </div>
@@ -217,7 +217,7 @@ export default function MockInterview() {
             "w-10 h-5 rounded-full border transition-all relative shrink-0",
             warmup
               ? "bg-violet-600 border-violet-500"
-              : "bg-white/10 border-white/20"
+              : "bg-accent/10 border-white/20"
           )}
         >
           <span className={cn(

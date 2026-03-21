@@ -179,12 +179,12 @@ export default function CodingHints() {
       <div className="flex flex-col lg:flex-row gap-5">
         <div className="lg:w-[380px] space-y-4 flex-shrink-0">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search problems…"
-              className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
+              className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
             />
           </div>
 
@@ -197,7 +197,7 @@ export default function CodingHints() {
                   "px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-all",
                   category === c.id
                     ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                    : "bg-white/3 border-white/10 text-gray-500 hover:text-gray-300"
+                    : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
                 )}
               >
                 {c.icon} {c.label}
@@ -217,7 +217,7 @@ export default function CodingHints() {
                     : d === "medium" ? "bg-amber-500/20 border-amber-500/30 text-amber-300"
                     : d === "hard" ? "bg-red-500/20 border-red-500/30 text-red-300"
                     : "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                    : "bg-white/3 border-white/10 text-gray-500 hover:text-gray-300"
+                    : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
                 )}
               >
                 {d}
@@ -234,12 +234,12 @@ export default function CodingHints() {
                   "w-full text-left px-4 py-3 rounded-xl border transition-all",
                   selected === p.id
                     ? "bg-violet-600/10 border-violet-500/30"
-                    : "bg-white/[0.02] border-white/8 hover:bg-white/5 hover:border-white/15"
+                    : "bg-white/[0.02] border-white/8 hover:bg-accent/5 hover:border-white/15"
                 )}
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-sm font-medium text-white truncate pr-2">{p.title}</span>
-                  <ChevronRight className="w-3.5 h-3.5 text-gray-600 shrink-0" />
+                  <span className="text-sm font-medium text-foreground truncate pr-2">{p.title}</span>
+                  <ChevronRight className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
                 </div>
                 <div className="flex items-center gap-2 mt-1.5">
                   <Badge
@@ -248,14 +248,14 @@ export default function CodingHints() {
                   >
                     {p.difficulty}
                   </Badge>
-                  <span className="text-[10px] text-gray-600">{CATEGORIES.find((c) => c.id === p.category)?.label}</span>
+                  <span className="text-[10px] text-muted-foreground">{CATEGORIES.find((c) => c.id === p.category)?.label}</span>
                 </div>
               </button>
             ))}
             {filtered.length === 0 && (
               <div className="text-center py-8">
                 <Code2 className="w-8 h-8 text-gray-700 mx-auto mb-2" />
-                <p className="text-sm text-gray-500">No problems match your filters.</p>
+                <p className="text-sm text-muted-foreground">No problems match your filters.</p>
               </div>
             )}
           </div>
@@ -267,7 +267,7 @@ export default function CodingHints() {
               <Card>
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <h2 className="text-lg font-semibold text-white">{activeProblem.title}</h2>
+                    <h2 className="text-lg font-semibold text-foreground">{activeProblem.title}</h2>
                     <div className="flex items-center gap-2 mt-1.5">
                       <Badge variant={DIFFICULTY_COLORS[activeProblem.difficulty] as "emerald" | "amber" | "red"} size="sm">
                         {activeProblem.difficulty}
@@ -278,8 +278,8 @@ export default function CodingHints() {
                     </div>
                   </div>
                 </div>
-                <p className="text-sm text-gray-300 leading-relaxed">{activeProblem.description}</p>
-                <div className="mt-4 bg-black/40 rounded-xl p-4 font-mono text-xs text-gray-300 whitespace-pre-wrap">
+                <p className="text-sm text-foreground leading-relaxed">{activeProblem.description}</p>
+                <div className="mt-4 bg-black/40 rounded-xl p-4 font-mono text-xs text-foreground whitespace-pre-wrap">
                   {activeProblem.examples}
                 </div>
               </Card>
@@ -326,7 +326,7 @@ export default function CodingHints() {
                     </p>
                     <button
                       onClick={() => { navigator.clipboard.writeText(hintText); toast.success("Copied!"); }}
-                      className="text-gray-500 hover:text-gray-300"
+                      className="text-muted-foreground hover:text-foreground"
                     >
                       <Copy className="w-3.5 h-3.5" />
                     </button>
@@ -343,7 +343,7 @@ export default function CodingHints() {
                     </p>
                     <button
                       onClick={() => { navigator.clipboard.writeText(solutionText); toast.success("Copied!"); }}
-                      className="text-gray-500 hover:text-gray-300"
+                      className="text-muted-foreground hover:text-foreground"
                     >
                       <Copy className="w-3.5 h-3.5" />
                     </button>
@@ -355,8 +355,8 @@ export default function CodingHints() {
           ) : (
             <Card className="text-center py-20">
               <Code2 className="w-12 h-12 text-gray-700 mx-auto mb-3" />
-              <p className="text-gray-400 text-sm">Select a problem to view details</p>
-              <p className="text-gray-600 text-xs mt-1">Get AI-powered hints and solution explanations</p>
+              <p className="text-muted-foreground text-sm">Select a problem to view details</p>
+              <p className="text-muted-foreground text-xs mt-1">Get AI-powered hints and solution explanations</p>
             </Card>
           )}
         </div>

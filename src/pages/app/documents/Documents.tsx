@@ -95,15 +95,15 @@ function ResumeManager() {
         {uploading ? (
           <div className="flex flex-col items-center gap-2">
             <RefreshCw className="w-8 h-8 text-violet-400 animate-spin" />
-            <p className="text-sm text-gray-400">Uploading and parsing…</p>
+            <p className="text-sm text-muted-foreground">Uploading and parsing…</p>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2">
-            <Upload className="w-8 h-8 text-gray-600" />
-            <p className="text-sm font-medium text-gray-300">
+            <Upload className="w-8 h-8 text-muted-foreground" />
+            <p className="text-sm font-medium text-foreground">
               Drop resume here or <span className="text-violet-400 underline">browse</span>
             </p>
-            <p className="text-xs text-gray-600">PDF or DOCX · Max 5 MB</p>
+            <p className="text-xs text-muted-foreground">PDF or DOCX · Max 5 MB</p>
           </div>
         )}
       </div>
@@ -119,7 +119,7 @@ function ResumeManager() {
       {resumes.length === 0 ? (
         <Card className="text-center py-10">
           <FileText className="w-8 h-8 text-gray-700 mx-auto mb-2" />
-          <p className="text-gray-500 text-sm">No resumes uploaded yet.</p>
+          <p className="text-muted-foreground text-sm">No resumes uploaded yet.</p>
         </Card>
       ) : (
         <div className="space-y-2">
@@ -134,7 +134,7 @@ function ResumeManager() {
                 {/* Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-medium text-white truncate">
+                    <p className="text-sm font-medium text-foreground truncate">
                       {r.file_name}
                     </p>
                     {r.is_active && (
@@ -147,7 +147,7 @@ function ResumeManager() {
                       <Badge variant="red" size="sm">Parse failed</Badge>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     {format(new Date(r.created_at), "MMM d, yyyy")} ·{" "}
                     {(r.file_size / 1024).toFixed(0)} KB
                   </p>
@@ -167,21 +167,21 @@ function ResumeManager() {
                   )}
                   <button
                     onClick={() => setPreviewId(r.id)}
-                    className="p-1.5 rounded-lg text-gray-600 hover:text-gray-300 hover:bg-white/5 transition-all"
+                    className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/5 transition-all"
                   >
                     <Eye className="w-3.5 h-3.5" />
                   </button>
                   {r.parse_status === "failed" && (
                     <button
                       onClick={() => docMgr.retryParse(r.id)}
-                      className="p-1.5 rounded-lg text-amber-600 hover:text-amber-400 hover:bg-white/5 transition-all"
+                      className="p-1.5 rounded-lg text-amber-600 hover:text-amber-400 hover:bg-accent/5 transition-all"
                     >
                       <RefreshCw className="w-3.5 h-3.5" />
                     </button>
                   )}
                   <button
                     onClick={() => setDeleteId(r.id)}
-                    className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-white/5 transition-all"
+                    className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-accent/5 transition-all"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -201,12 +201,12 @@ function ResumeManager() {
       >
         {preview?.parsed_text ? (
           <div className="max-h-96 overflow-y-auto bg-black/30 rounded-xl p-4">
-            <pre className="text-xs text-gray-300 whitespace-pre-wrap leading-relaxed font-mono">
+            <pre className="text-xs text-foreground whitespace-pre-wrap leading-relaxed font-mono">
               {preview.parsed_text}
             </pre>
           </div>
         ) : (
-          <p className="text-gray-400 text-sm">No parsed text available.</p>
+          <p className="text-muted-foreground text-sm">No parsed text available.</p>
         )}
       </Modal>
 
@@ -217,7 +217,7 @@ function ResumeManager() {
         title="Delete resume?"
         size="sm"
       >
-        <p className="text-sm text-gray-400 mb-5">
+        <p className="text-sm text-muted-foreground mb-5">
           This will permanently delete the resume. This action cannot be undone.
         </p>
         <div className="flex gap-3">
@@ -286,8 +286,8 @@ function JDManager() {
       {jds.length === 0 ? (
         <Card className="text-center py-10">
           <ClipboardList className="w-8 h-8 text-gray-700 mx-auto mb-2" />
-          <p className="text-gray-500 text-sm">No job descriptions added yet.</p>
-          <p className="text-gray-600 text-xs mt-1">
+          <p className="text-muted-foreground text-sm">No job descriptions added yet.</p>
+          <p className="text-muted-foreground text-xs mt-1">
             Add a JD to improve AI answer relevance.
           </p>
         </Card>
@@ -301,12 +301,12 @@ function JDManager() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-white truncate">{jd.title}</p>
+                    <p className="text-sm font-medium text-foreground truncate">{jd.title}</p>
                     {jd.is_active && (
                       <Badge variant="emerald" size="sm" dot>Active</Badge>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5">
+                  <p className="text-xs text-muted-foreground mt-0.5">
                     {jd.company && `${jd.company} · `}
                     {format(new Date(jd.created_at), "MMM d, yyyy")}
                   </p>
@@ -324,7 +324,7 @@ function JDManager() {
                   )}
                   <button
                     onClick={() => setDeleteId(jd.id)}
-                    className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-white/5 transition-all"
+                    className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-accent/5 transition-all"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                   </button>
@@ -340,32 +340,32 @@ function JDManager() {
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <p className="text-xs text-gray-400 mb-1.5">Job title</p>
+              <p className="text-xs text-muted-foreground mb-1.5">Job title</p>
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Senior Software Engineer"
-                className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
+                className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
               />
             </div>
             <div>
-              <p className="text-xs text-gray-400 mb-1.5">Company</p>
+              <p className="text-xs text-muted-foreground mb-1.5">Company</p>
               <input
                 value={company}
                 onChange={(e) => setCompany(e.target.value)}
                 placeholder="e.g. Google"
-                className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
+                className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
               />
             </div>
           </div>
           <div>
-            <p className="text-xs text-gray-400 mb-1.5">Job description text</p>
+            <p className="text-xs text-muted-foreground mb-1.5">Job description text</p>
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
               placeholder="Paste the full job description here…"
               rows={8}
-              className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
+              className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
             />
           </div>
           <div className="flex gap-3">
@@ -388,7 +388,7 @@ function JDManager() {
 
       {/* Delete confirm */}
       <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Delete JD?" size="sm">
-        <p className="text-sm text-gray-400 mb-5">
+        <p className="text-sm text-muted-foreground mb-5">
           This will permanently remove this job description.
         </p>
         <div className="flex gap-3">

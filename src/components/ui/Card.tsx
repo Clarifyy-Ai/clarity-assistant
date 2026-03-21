@@ -37,9 +37,9 @@ export function Card({
     <div
       onClick={onClick}
       className={cn(
-        "bg-white/5 border border-white/10 rounded-2xl",
+        "bg-card border border-border rounded-2xl",
         PADDING[padding],
-        hover && "hover:bg-white/8 hover:border-white/15 transition-all cursor-pointer",
+        hover && "hover:bg-accent/10 hover:border-accent/20 transition-all cursor-pointer",
         onClick && "cursor-pointer",
         className
       )}
@@ -58,7 +58,7 @@ export function CardHeader({ children, className }: CardSectionProps) {
 }
 
 export function CardTitle({ children, className }: CardSectionProps) {
-  return <h3 className={cn("text-sm font-semibold text-white", className)}>{children}</h3>;
+  return <h3 className={cn("text-sm font-semibold text-foreground", className)}>{children}</h3>;
 }
 
 export function CardDescription({ children, className }: CardSectionProps) {

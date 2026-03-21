@@ -82,7 +82,7 @@ export function NetworkBanner() {
     <div
       className={cn(
         "w-full flex-shrink-0",
-        "border-b border-white/[0.08] backdrop-blur"
+        "border-b border-border backdrop-blur"
       )}
       role="status"
       aria-live="polite"

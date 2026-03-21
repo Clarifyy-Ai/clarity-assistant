@@ -79,6 +79,14 @@ const config: Config = {
           foreground: "hsl(var(--card-foreground))",
         },
 
+        /* Sidebar — CSS variable driven */
+        "sidebar-background": "hsl(var(--sidebar-background))",
+        "sidebar-foreground": "hsl(var(--sidebar-foreground))",
+        "sidebar-border": "hsl(var(--sidebar-border))",
+        "sidebar-accent": "hsl(var(--sidebar-accent))",
+        "sidebar-accent-foreground": "hsl(var(--sidebar-accent-foreground))",
+        "sidebar-ring": "hsl(var(--sidebar-ring))",
+
         /* Overlay-specific — glass dark panel */
         overlay: {
           bg:     "rgba(10, 10, 20, 0.88)",

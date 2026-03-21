@@ -61,7 +61,7 @@ export default function InterviewDetail() {
   if (!iv) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <p className="text-gray-400">Interview not found.</p>
+        <p className="text-muted-foreground">Interview not found.</p>
         <Button variant="secondary" size="sm" onClick={() => navigate("/app/interviews")}>
           ← Back
         </Button>
@@ -90,7 +90,7 @@ export default function InterviewDetail() {
       <div className="flex items-center justify-between">
         <button
           onClick={() => navigate("/app/interviews")}
-          className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
+          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
         >
           <ChevronLeft className="w-4 h-4" />
           Interviews
@@ -126,8 +126,8 @@ export default function InterviewDetail() {
         >
           <div className="text-2xl">🎯</div>
           <div className="flex-1">
-            <p className="text-sm font-semibold text-white">This interview is today!</p>
-            <p className="text-xs text-gray-400 mt-0.5">
+            <p className="text-sm font-semibold text-foreground">This interview is today!</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
               Enter focus mode for final prep and real-time co-pilot.
             </p>
           </div>
@@ -141,8 +141,8 @@ export default function InterviewDetail() {
       <Card>
         <div className="flex items-start justify-between mb-5">
           <div>
-            <h1 className="text-xl font-bold text-white">{iv.company_name}</h1>
-            <p className="text-gray-400 text-sm mt-0.5">{iv.role_title}</p>
+            <h1 className="text-xl font-bold text-foreground">{iv.company_name}</h1>
+            <p className="text-muted-foreground text-sm mt-0.5">{iv.role_title}</p>
           </div>
           <Badge
             variant={
@@ -181,14 +181,14 @@ export default function InterviewDetail() {
             },
           ].map((item) => (
             <div key={item.label} className="flex items-start gap-3">
-              <div className="w-8 h-8 bg-white/5 rounded-lg flex items-center justify-center shrink-0">
+              <div className="w-8 h-8 bg-accent/5 rounded-lg flex items-center justify-center shrink-0">
                 {item.icon}
               </div>
               <div>
-                <p className="text-[10px] text-gray-500 uppercase tracking-widest">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
                   {item.label}
                 </p>
-                <p className="text-sm text-white mt-0.5 capitalize">{item.value}</p>
+                <p className="text-sm text-foreground mt-0.5 capitalize">{item.value}</p>
               </div>
             </div>
           ))}
@@ -197,10 +197,10 @@ export default function InterviewDetail() {
         {/* Interviewer */}
         {iv.interviewer_name && (
           <div className="flex items-center gap-3 mt-4 pt-4 border-t border-white/8">
-            <User className="w-4 h-4 text-gray-400 shrink-0" />
+            <User className="w-4 h-4 text-muted-foreground shrink-0" />
             <div>
-              <p className="text-[10px] text-gray-500">Interviewer</p>
-              <p className="text-sm text-white">{iv.interviewer_name}</p>
+              <p className="text-[10px] text-muted-foreground">Interviewer</p>
+              <p className="text-sm text-foreground">{iv.interviewer_name}</p>
             </div>
           </div>
         )}
@@ -209,8 +209,8 @@ export default function InterviewDetail() {
         {iv.meeting_link && (
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/8">
             <div className="flex items-center gap-2">
-              <ExternalLink className="w-4 h-4 text-gray-400 shrink-0" />
-              <p className="text-xs text-gray-400 truncate">{iv.meeting_link}</p>
+              <ExternalLink className="w-4 h-4 text-muted-foreground shrink-0" />
+              <p className="text-xs text-muted-foreground truncate">{iv.meeting_link}</p>
             </div>
             <a
               href={iv.meeting_link}
@@ -226,10 +226,10 @@ export default function InterviewDetail() {
         {/* Notes */}
         {iv.notes && (
           <div className="mt-4 pt-4 border-t border-white/8">
-            <p className="text-[10px] text-gray-500 uppercase tracking-widest mb-1.5">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">
               Notes
             </p>
-            <p className="text-sm text-gray-300 leading-relaxed">{iv.notes}</p>
+            <p className="text-sm text-foreground leading-relaxed">{iv.notes}</p>
           </div>
         )}
       </Card>
@@ -237,7 +237,7 @@ export default function InterviewDetail() {
       {/* Prep checklist */}
       {!isPassed && (
         <Card>
-          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
             <CheckCircle className="w-4 h-4 text-emerald-400" />
             Pre-interview checklist
           </h3>
@@ -252,7 +252,7 @@ export default function InterviewDetail() {
                     return next;
                   })
                 }
-                className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-white/5 transition-all text-left group"
+                className="w-full flex items-center gap-3 p-2 rounded-xl hover:bg-accent/5 transition-all text-left group"
               >
                 <div className={cn(
                   "w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all",
@@ -261,12 +261,12 @@ export default function InterviewDetail() {
                     : "border-white/20 group-hover:border-white/40"
                 )}>
                   {checklist[i] && (
-                    <CheckCircle className="w-3 h-3 text-white" />
+                    <CheckCircle className="w-3 h-3 text-foreground" />
                   )}
                 </div>
                 <span className={cn(
                   "text-xs",
-                  checklist[i] ? "text-gray-500 line-through" : "text-gray-300"
+                  checklist[i] ? "text-muted-foreground line-through" : "text-foreground"
                 )}>
                   {item}
                 </span>
@@ -282,7 +282,7 @@ export default function InterviewDetail() {
                 }}
               />
             </div>
-            <span className="text-xs text-gray-500">
+            <span className="text-xs text-muted-foreground">
               {checklist.filter(Boolean).length}/{checklist.length}
             </span>
           </div>
@@ -298,8 +298,8 @@ export default function InterviewDetail() {
         >
           <ClipboardList className="w-5 h-5 text-blue-400 shrink-0" />
           <div>
-            <p className="text-xs font-semibold text-white">Mock session</p>
-            <p className="text-[10px] text-gray-500">Practise for this interview</p>
+            <p className="text-xs font-semibold text-foreground">Mock session</p>
+            <p className="text-[10px] text-muted-foreground">Practise for this interview</p>
           </div>
         </Card>
         <Card
@@ -309,8 +309,8 @@ export default function InterviewDetail() {
         >
           <Building2 className="w-5 h-5 text-violet-400 shrink-0" />
           <div>
-            <p className="text-xs font-semibold text-white">Company research</p>
-            <p className="text-[10px] text-gray-500">AI brief for {iv.company_name}</p>
+            <p className="text-xs font-semibold text-foreground">Company research</p>
+            <p className="text-[10px] text-muted-foreground">AI brief for {iv.company_name}</p>
           </div>
         </Card>
       </div>

@@ -89,7 +89,7 @@ export default function AdminDashboard() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white">Admin Dashboard</h1>
+        <h1 className="text-xl font-bold text-foreground">Admin Dashboard</h1>
         <Badge variant="red" size="sm">Admin only</Badge>
       </div>
 
@@ -116,9 +116,9 @@ export default function AdminDashboard() {
                   </span>
                 )}
               </div>
-              <p className="text-2xl font-black text-white">{kpi.value}</p>
-              <p className="text-[10px] text-gray-500 mt-0.5">{kpi.label}</p>
-              <p className="text-[10px] text-gray-600 mt-0.5">{kpi.sub}</p>
+              <p className="text-2xl font-black text-foreground">{kpi.value}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{kpi.label}</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">{kpi.sub}</p>
             </Card>
           ))}
         </div>
@@ -126,7 +126,7 @@ export default function AdminDashboard() {
 
       {/* Recent signups table */}
       <Card>
-        <h3 className="text-sm font-semibold text-white mb-4">
+        <h3 className="text-sm font-semibold text-foreground mb-4">
           Recent signups
         </h3>
         <RecentSignups />
@@ -134,7 +134,7 @@ export default function AdminDashboard() {
 
       {/* Session volume last 7 days */}
       <Card>
-        <h3 className="text-sm font-semibold text-white mb-4">
+        <h3 className="text-sm font-semibold text-foreground mb-4">
           Session volume — last 7 days
         </h3>
         <SessionVolumeChart />
@@ -165,7 +165,7 @@ function RecentSignups() {
         <thead>
           <tr className="border-b border-white/8">
             {["Name", "Email", "Plan", "Joined"].map((h) => (
-              <th key={h} className="text-left text-[10px] text-gray-500 uppercase tracking-widest pb-3 pr-4">
+              <th key={h} className="text-left text-[10px] text-muted-foreground uppercase tracking-widest pb-3 pr-4">
                 {h}
               </th>
             ))}
@@ -174,10 +174,10 @@ function RecentSignups() {
         <tbody className="divide-y divide-white/5">
           {rows.map((row) => (
             <tr key={row.id}>
-              <td className="py-3 pr-4 text-white font-medium">
+              <td className="py-3 pr-4 text-foreground font-medium">
                 {row.full_name ?? "—"}
               </td>
-              <td className="py-3 pr-4 text-gray-400 text-xs">
+              <td className="py-3 pr-4 text-muted-foreground text-xs">
                 {row.email}
               </td>
               <td className="py-3 pr-4">
@@ -188,7 +188,7 @@ function RecentSignups() {
                   {row.plan}
                 </Badge>
               </td>
-              <td className="py-3 text-gray-500 text-xs">
+              <td className="py-3 text-muted-foreground text-xs">
                 {format(new Date(row.created_at), "MMM d, yyyy")}
               </td>
             </tr>
@@ -234,11 +234,11 @@ function SessionVolumeChart() {
             className="w-full bg-violet-500/60 hover:bg-violet-500 rounded-sm transition-all"
             style={{ height: `${(d.count / max) * 100}%`, minHeight: "4px" }}
           />
-          <span className="text-[9px] text-gray-600">
+          <span className="text-[9px] text-muted-foreground">
             {format(new Date(d.day), "EEE")}
           </span>
           {/* Tooltip */}
-          <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-[#1a1a2e] border border-white/15 rounded-lg px-2 py-1 text-[10px] text-white whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none">
+          <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-[#1a1a2e] border border-white/15 rounded-lg px-2 py-1 text-[10px] text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none">
             {d.count} sessions
           </div>
         </div>

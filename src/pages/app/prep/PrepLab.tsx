@@ -161,14 +161,14 @@ function STARBuilder() {
     <div className="space-y-5">
       {/* Question input */}
       <Card>
-        <p className="text-xs font-medium text-gray-300 mb-2">
+        <p className="text-xs font-medium text-foreground mb-2">
           Interview question you're preparing for
         </p>
         <input
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           placeholder="e.g. Tell me about a time you resolved a conflict at work."
-          className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
+          className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
         />
       </Card>
 
@@ -187,10 +187,10 @@ function STARBuilder() {
                 )}>
                   {key[0].toUpperCase()}
                 </span>
-                <span className="text-sm font-semibold text-white capitalize">{key}</span>
+                <span className="text-sm font-semibold text-foreground capitalize">{key}</span>
               </div>
               <div className="flex items-center gap-2">
-                <span className="text-[10px] text-gray-600">
+                <span className="text-[10px] text-muted-foreground">
                   {wordCounts[key]}w
                 </span>
                 {star[key].trim().length > 10 && (
@@ -209,20 +209,20 @@ function STARBuilder() {
                 )}
               </div>
             </div>
-            <p className="text-[11px] text-gray-500 mb-2">{STAR_PROMPTS[key]}</p>
+            <p className="text-[11px] text-muted-foreground mb-2">{STAR_PROMPTS[key]}</p>
             <textarea
               value={star[key]}
               onChange={(e) => setStar((p) => ({ ...p, [key]: e.target.value }))}
               placeholder={`Write your ${key}…`}
               rows={3}
-              className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-violet-500"
+              className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-violet-500"
             />
           </Card>
         ))}
       </div>
 
       {/* Word count bar */}
-      <div className="flex items-center justify-between text-xs text-gray-500">
+      <div className="flex items-center justify-between text-xs text-muted-foreground">
         <span>{totalWords} words total</span>
         <span className={cn(
           totalWords >= 150 && totalWords <= 400
@@ -272,7 +272,7 @@ function STARBuilder() {
             </p>
             <button
               onClick={() => navigator.clipboard.writeText(generated)}
-              className="text-gray-500 hover:text-gray-300 transition-colors"
+              className="text-muted-foreground hover:text-foreground transition-colors"
             >
               <Copy className="w-3.5 h-3.5" />
             </button>
@@ -328,7 +328,7 @@ function QuestionBank() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search questions…"
-          className="w-full sm:w-64 bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-violet-500"
+          className="w-full sm:w-64 bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-violet-500"
         />
         <div className="flex flex-wrap gap-1.5">
           {BANK_CATEGORIES.map((c) => (
@@ -339,7 +339,7 @@ function QuestionBank() {
                 "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
                 category === c
                   ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                  : "bg-white/3 border-white/10 text-gray-500 hover:text-gray-300"
+                  : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
               )}
             >
               {c}
@@ -358,7 +358,7 @@ function QuestionBank() {
             className="flex items-start gap-4"
           >
             <div className="flex-1">
-              <p className="text-sm text-white leading-relaxed">{q.text}</p>
+              <p className="text-sm text-foreground leading-relaxed">{q.text}</p>
               <div className="flex items-center gap-2 mt-2">
                 <Badge variant="default" size="sm">{q.category}</Badge>
                 <Badge
@@ -402,8 +402,8 @@ function QuestionBank() {
       >
         {activeQ && (
           <div className="space-y-4">
-            <div className="bg-white/5 rounded-xl p-4">
-              <p className="text-sm font-medium text-white">{activeQ.text}</p>
+            <div className="bg-accent/5 rounded-xl p-4">
+              <p className="text-sm font-medium text-foreground">{activeQ.text}</p>
               <div className="flex gap-2 mt-2">
                 <Badge variant="default" size="sm">{activeQ.category}</Badge>
                 <Badge
@@ -422,7 +422,7 @@ function QuestionBank() {
               onChange={(e) => setAnswer(e.target.value)}
               placeholder="Type your answer using STAR format…"
               rows={6}
-              className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
+              className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
             />
             <div className="flex gap-3">
               <Button
@@ -525,8 +525,8 @@ function AITools() {
             )}
             <span className="text-3xl">{tool.icon}</span>
             <div>
-              <p className="text-sm font-semibold text-white">{tool.label}</p>
-              <p className="text-xs text-gray-400 mt-1 leading-relaxed">{tool.desc}</p>
+              <p className="text-sm font-semibold text-foreground">{tool.label}</p>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{tool.desc}</p>
             </div>
             <Button
               variant={locked ? "ghost" : "secondary"}
@@ -591,13 +591,13 @@ function AIToolModal({
   return (
     <Modal open={!!toolId} onClose={onClose} title={tool.label} size="lg">
       <div className="space-y-4">
-        <p className="text-sm text-gray-400">{tool.desc}</p>
+        <p className="text-sm text-muted-foreground">{tool.desc}</p>
         <textarea
           value={input}
           onChange={(e) => setInput(e.target.value)}
           placeholder="Paste your resume, job description, or context here…"
           rows={5}
-          className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
+          className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
         />
         <Button
           variant="primary"
@@ -618,7 +618,7 @@ function AIToolModal({
               </p>
               <button
                 onClick={() => navigator.clipboard.writeText(output)}
-                className="text-gray-600 hover:text-gray-400 transition-colors"
+                className="text-muted-foreground hover:text-muted-foreground transition-colors"
               >
                 <Copy className="w-3.5 h-3.5" />
               </button>
@@ -665,26 +665,26 @@ function CompanyPrep() {
   return (
     <div className="space-y-5">
       <Card>
-        <h3 className="text-sm font-semibold text-white mb-4">
+        <h3 className="text-sm font-semibold text-foreground mb-4">
           Generate company prep brief
         </h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           <div>
-            <p className="text-xs text-gray-400 mb-1.5">Company name</p>
+            <p className="text-xs text-muted-foreground mb-1.5">Company name</p>
             <input
               value={company}
               onChange={(e) => setCompany(e.target.value)}
               placeholder="e.g. Google"
-              className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
+              className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
             />
           </div>
           <div>
-            <p className="text-xs text-gray-400 mb-1.5">Role you're applying for</p>
+            <p className="text-xs text-muted-foreground mb-1.5">Role you're applying for</p>
             <input
               value={role}
               onChange={(e) => setRole(e.target.value)}
               placeholder="e.g. Senior Software Engineer"
-              className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
+              className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
             />
           </div>
         </div>
@@ -705,25 +705,25 @@ function CompanyPrep() {
           {/* Overview */}
           {brief.overview && (
             <Card>
-              <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
                 <Building2 className="w-4 h-4 text-violet-400" />
                 Company overview
               </h3>
-              <p className="text-sm text-gray-300 leading-relaxed">{brief.overview}</p>
+              <p className="text-sm text-foreground leading-relaxed">{brief.overview}</p>
             </Card>
           )}
 
           {/* Likely questions */}
           {brief.questions?.length > 0 && (
             <Card>
-              <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
                 <Target className="w-4 h-4 text-emerald-400" />
                 Likely interview questions
               </h3>
               <ul className="space-y-2">
                 {brief.questions.map((q: string, i: number) => (
-                  <li key={i} className="flex items-start gap-3 text-sm text-gray-300">
-                    <span className="text-gray-600 shrink-0 tabular-nums">{i + 1}.</span>
+                  <li key={i} className="flex items-start gap-3 text-sm text-foreground">
+                    <span className="text-muted-foreground shrink-0 tabular-nums">{i + 1}.</span>
                     {q}
                   </li>
                 ))}
@@ -734,7 +734,7 @@ function CompanyPrep() {
           {/* Values + culture */}
           {brief.values?.length > 0 && (
             <Card>
-              <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
                 <Star className="w-4 h-4 text-amber-400" />
                 Company values to reference
               </h3>
@@ -749,13 +749,13 @@ function CompanyPrep() {
           {/* Tips */}
           {brief.tips?.length > 0 && (
             <Card>
-              <h3 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+              <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
                 <Brain className="w-4 h-4 text-blue-400" />
                 Pro tips for this company
               </h3>
               <ul className="space-y-2">
                 {brief.tips.map((t: string, i: number) => (
-                  <li key={i} className="flex items-start gap-2 text-xs text-gray-300">
+                  <li key={i} className="flex items-start gap-2 text-xs text-foreground">
                     <span className="text-blue-400 shrink-0 mt-0.5">→</span>
                     {t}
                   </li>

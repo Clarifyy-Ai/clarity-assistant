@@ -2,19 +2,23 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
 interface ThemeState {
-  theme: "dark" | "light" | "system";
   accentColor: string;
-  setTheme: (t: "dark" | "light" | "system") => void;
+  fontSize: string;
+  density: string;
   setAccentColor: (c: string) => void;
+  setFontSize: (f: string) => void;
+  setDensity: (d: string) => void;
 }
 
 export const useThemeStore = create<ThemeState>()(
   persist(
     (set) => ({
-      theme: "dark",
       accentColor: "violet",
-      setTheme: (theme) => set({ theme }),
+      fontSize: "Default",
+      density: "Default",
       setAccentColor: (accentColor) => set({ accentColor }),
+      setFontSize: (fontSize) => set({ fontSize }),
+      setDensity: (density) => set({ density }),
     }),
     { name: "confideq-theme" }
   )

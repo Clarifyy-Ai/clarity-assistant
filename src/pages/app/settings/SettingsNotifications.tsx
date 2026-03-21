@@ -70,16 +70,16 @@ export default function SettingsNotifications() {
 
   const channelIcon = (ch: string) =>
     ch === "email"
-      ? <Mail className="w-3 h-3 text-gray-600" />
-      : <Smartphone className="w-3 h-3 text-gray-600" />;
+      ? <Mail className="w-3 h-3 text-muted-foreground" />
+      : <Smartphone className="w-3 h-3 text-muted-foreground" />;
 
   return (
     <div className="space-y-5">
-      <h2 className="text-lg font-bold text-white">Notifications</h2>
+      <h2 className="text-lg font-bold text-foreground">Notifications</h2>
 
       {NOTIFICATION_GROUPS.map((group) => (
         <Card key={group.label}>
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
             {group.label}
           </h3>
           <div className="space-y-4">
@@ -87,7 +87,7 @@ export default function SettingsNotifications() {
               <div key={item.key} className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   {channelIcon(item.channel)}
-                  <span className="text-sm text-gray-300">{item.label}</span>
+                  <span className="text-sm text-foreground">{item.label}</span>
                 </div>
                 <Toggle
                   checked={prefs[item.key] ?? false}

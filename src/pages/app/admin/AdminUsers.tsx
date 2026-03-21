@@ -82,7 +82,7 @@ export default function AdminUsers() {
   return (
     <div className="space-y-5">
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-bold text-white flex items-center gap-2">
+        <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
           <Users className="w-5 h-5 text-violet-400" />
           Users
           <Badge variant="default" size="sm">{total.toLocaleString()}</Badge>
@@ -108,7 +108,7 @@ export default function AdminUsers() {
                 "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all capitalize",
                 filter === f
                   ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                  : "bg-white/3 border-white/10 text-gray-500 hover:text-gray-300"
+                  : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
               )}
             >
               {f}
@@ -126,7 +126,7 @@ export default function AdminUsers() {
                 {["Name", "Email", "Plan", "Credits", "Role", "Joined", ""].map((h) => (
                   <th
                     key={h}
-                    className="text-left text-[10px] text-gray-500 uppercase tracking-widest px-4 py-3"
+                    className="text-left text-[10px] text-muted-foreground uppercase tracking-widest px-4 py-3"
                   >
                     {h}
                   </th>
@@ -139,7 +139,7 @@ export default function AdminUsers() {
                   <tr key={i}>
                     {[...Array(7)].map((_, j) => (
                       <td key={j} className="px-4 py-3">
-                        <div className="h-3 bg-white/5 rounded animate-pulse" />
+                        <div className="h-3 bg-accent/5 rounded animate-pulse" />
                       </td>
                     ))}
                   </tr>
@@ -152,13 +152,13 @@ export default function AdminUsers() {
                     u.is_banned && "opacity-50"
                   )}
                 >
-                  <td className="px-4 py-3 font-medium text-white">
+                  <td className="px-4 py-3 font-medium text-foreground">
                     {u.full_name ?? "—"}
                     {u.is_banned && (
                       <Badge variant="red" size="sm" className="ml-2">Banned</Badge>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-400 text-xs">{u.email}</td>
+                  <td className="px-4 py-3 text-muted-foreground text-xs">{u.email}</td>
                   <td className="px-4 py-3">
                     <Badge
                       variant={u.plan === "free" ? "default" : "violet"}
@@ -167,7 +167,7 @@ export default function AdminUsers() {
                       {u.plan}
                     </Badge>
                   </td>
-                  <td className="px-4 py-3 text-gray-400">
+                  <td className="px-4 py-3 text-muted-foreground">
                     {u.credits_remaining ?? 0}
                   </td>
                   <td className="px-4 py-3">
@@ -175,13 +175,13 @@ export default function AdminUsers() {
                       <Badge variant="red" size="sm">{u.role}</Badge>
                     )}
                   </td>
-                  <td className="px-4 py-3 text-gray-500 text-xs">
+                  <td className="px-4 py-3 text-muted-foreground text-xs">
                     {format(new Date(u.created_at), "MMM d, yyyy")}
                   </td>
                   <td className="px-4 py-3">
                     <button
                       onClick={() => setSelected(u)}
-                      className="p-1.5 rounded-lg text-gray-600 hover:text-gray-300 hover:bg-white/5 transition-all"
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/5 transition-all"
                     >
                       <MoreHorizontal className="w-4 h-4" />
                     </button>
@@ -194,7 +194,7 @@ export default function AdminUsers() {
 
         {/* Pagination */}
         <div className="flex items-center justify-between px-4 py-3 border-t border-white/8">
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-muted-foreground">
             {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
           </p>
           <div className="flex gap-2">
@@ -229,11 +229,11 @@ export default function AdminUsers() {
       >
         {selected && (
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-2 text-xs text-gray-400">
-              <span>Plan: <strong className="text-white">{selected.plan}</strong></span>
-              <span>Credits: <strong className="text-white">{selected.credits_remaining}</strong></span>
-              <span>Role: <strong className="text-white">{selected.role ?? "user"}</strong></span>
-              <span>Banned: <strong className="text-white">{selected.is_banned ? "Yes" : "No"}</strong></span>
+            <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
+              <span>Plan: <strong className="text-foreground">{selected.plan}</strong></span>
+              <span>Credits: <strong className="text-foreground">{selected.credits_remaining}</strong></span>
+              <span>Role: <strong className="text-foreground">{selected.role ?? "user"}</strong></span>
+              <span>Banned: <strong className="text-foreground">{selected.is_banned ? "Yes" : "No"}</strong></span>
             </div>
 
             <div className="space-y-2 pt-2 border-t border-white/8">

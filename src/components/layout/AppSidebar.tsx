@@ -70,29 +70,27 @@ export function AppSidebar() {
     <aside
       className={cn(
         "hidden md:flex flex-col flex-shrink-0",
-        "h-screen bg-[#0d0d14] border-r border-white/[0.08]",
+        "h-screen bg-sidebar-background border-r border-sidebar-border",
         "transition-all duration-200 relative z-30",
         collapsed ? "w-16" : "w-56"
       )}
     >
-      {/* Logo */}
-      <div className="flex min-h-[56px] items-center gap-3 border-b border-white/[0.08] px-4 py-4">
+      <div className="flex min-h-[56px] items-center gap-3 border-b border-sidebar-border px-4 py-4">
         <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-violet-600">
           <Mic className="h-4 w-4 text-white" />
         </div>
         {!collapsed && (
-          <span className="text-base font-bold tracking-tight text-white">
+          <span className="text-base font-bold tracking-tight text-sidebar-foreground">
             ConfideQ
           </span>
         )}
       </div>
 
-      {/* Nav sections */}
       <nav className="flex-1 space-y-4 overflow-y-auto py-3">
         {NAV_SECTIONS.map((section) => (
           <div key={section.label}>
             {!collapsed && (
-              <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-gray-600">
+              <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                 {section.label}
               </p>
             )}
@@ -110,8 +108,7 @@ export function AppSidebar() {
         ))}
       </nav>
 
-      {/* Bottom: user + settings */}
-      <div className="space-y-1 border-t border-white/[0.08] py-3">
+      <div className="space-y-1 border-t border-sidebar-border py-3">
         <SidebarLink
           to="/app/notifications"
           icon={Bell}
@@ -125,10 +122,9 @@ export function AppSidebar() {
           collapsed={collapsed}
         />
 
-        {/* User pill */}
         <div
           className={cn(
-            "mx-1 flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 transition-all hover:bg-white/[0.05]",
+            "mx-1 flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 transition-all hover:bg-accent/10",
             collapsed && "justify-center"
           )}
         >
@@ -137,10 +133,10 @@ export function AppSidebar() {
           </div>
           {!collapsed && (
             <div className="min-w-0 flex-1">
-              <p className="truncate text-xs font-medium text-white">
+              <p className="truncate text-xs font-medium text-sidebar-foreground">
                 {profile?.full_name ?? "User"}
               </p>
-              <p className="text-[10px] capitalize text-gray-500">
+              <p className="text-[10px] capitalize text-muted-foreground">
                 {(profile as any)?.plan ?? "free"}
               </p>
             </div>
@@ -150,7 +146,7 @@ export function AppSidebar() {
               type="button"
               onClick={handleLogout}
               title="Sign out"
-              className="p-1 text-gray-600 transition-colors hover:text-red-400"
+              className="p-1 text-muted-foreground transition-colors hover:text-red-400"
             >
               <LogOut className="h-3.5 w-3.5" />
             </button>
@@ -158,11 +154,10 @@ export function AppSidebar() {
         </div>
       </div>
 
-      {/* Collapse toggle */}
       <button
         type="button"
         onClick={() => uiStore.toggleSidebar()}
-        className="absolute -right-3 top-20 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-white/[0.10] bg-[#0d0d14] text-gray-500 transition-colors hover:text-white"
+        className="absolute -right-3 top-20 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-sidebar-background text-muted-foreground transition-colors hover:text-foreground"
         aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
       >
         {collapsed ? (
@@ -197,8 +192,8 @@ function SidebarLink({
         cn(
           "mx-1 flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all",
           isActive
-            ? "border border-violet-500/20 bg-violet-600/15 text-violet-300"
-            : "text-gray-500 hover:bg-white/[0.05] hover:text-gray-200",
+            ? "border border-violet-500/20 bg-violet-600/15 text-violet-600 dark:text-violet-300"
+            : "text-muted-foreground hover:bg-accent/10 hover:text-foreground",
           collapsed && "justify-center"
         )
       }

@@ -59,7 +59,7 @@ const EXPORT_TYPES = [
     label:  "Full data export",
     desc:   "Everything — profile, sessions, answers, settings.",
     format: "ZIP",
-    color:  "text-gray-300",
+    color:  "text-foreground",
     bg:     "bg-white/8",
   },
 ];
@@ -103,11 +103,11 @@ export default function SettingsData() {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-lg font-bold text-white">Data & Export</h2>
+      <h2 className="text-lg font-bold text-foreground">Data & Export</h2>
 
       {/* Storage summary */}
       <Card>
-        <h3 className="text-sm font-semibold text-white mb-4">Storage usage</h3>
+        <h3 className="text-sm font-semibold text-foreground mb-4">Storage usage</h3>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {[
             { label: "Sessions",   value: "—", icon: "🎤" },
@@ -120,8 +120,8 @@ export default function SettingsData() {
               className="flex flex-col items-center gap-1.5 p-3 bg-white/3 border border-white/8 rounded-xl"
             >
               <span className="text-xl">{item.icon}</span>
-              <p className="text-sm font-bold text-white">{item.value}</p>
-              <p className="text-[10px] text-gray-500">{item.label}</p>
+              <p className="text-sm font-bold text-foreground">{item.value}</p>
+              <p className="text-[10px] text-muted-foreground">{item.label}</p>
             </div>
           ))}
         </div>
@@ -129,7 +129,7 @@ export default function SettingsData() {
 
       {/* Export types */}
       <div>
-        <h3 className="text-sm font-semibold text-white mb-3">Export data</h3>
+        <h3 className="text-sm font-semibold text-foreground mb-3">Export data</h3>
         <div className="space-y-2">
           {EXPORT_TYPES.map((exp) => {
             const isDone      = done.includes(exp.id);
@@ -147,10 +147,10 @@ export default function SettingsData() {
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      <p className="text-sm font-medium text-white">{exp.label}</p>
+                      <p className="text-sm font-medium text-foreground">{exp.label}</p>
                       <Badge variant="gray" size="sm">{exp.format}</Badge>
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5">{exp.desc}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">{exp.desc}</p>
                   </div>
 
                   <Button
@@ -180,7 +180,7 @@ export default function SettingsData() {
           <FileText className="w-4 h-4 text-blue-400 shrink-0 mt-0.5" />
           <div>
             <p className="text-xs font-semibold text-blue-300">Data retention policy</p>
-            <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
               Free plan: data retained for 6 months of inactivity.
               Pro plan: data retained indefinitely. Transcripts can be disabled
               in Privacy settings.

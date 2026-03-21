@@ -106,7 +106,7 @@ export default function DebriefDetail() {
   if (!debrief) {
     return (
       <div className="text-center py-20 space-y-4">
-        <p className="text-gray-400">Debrief not found.</p>
+        <p className="text-muted-foreground">Debrief not found.</p>
         <Button variant="secondary" size="sm" onClick={() => navigate("/app/debrief")}>
           ← Back to debriefs
         </Button>
@@ -125,7 +125,7 @@ export default function DebriefDetail() {
       {/* Back nav */}
       <button
         onClick={() => navigate("/app/debrief")}
-        className="flex items-center gap-2 text-sm text-gray-400 hover:text-white transition-colors"
+        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
       >
         <ChevronLeft className="w-4 h-4" />
         Debriefs
@@ -145,21 +145,21 @@ export default function DebriefDetail() {
           </div>
 
           <div className="flex-1">
-            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
               AI Debrief
             </p>
-            <h1 className="text-xl font-bold text-white mt-1">
+            <h1 className="text-xl font-bold text-foreground mt-1">
               {session?.session_type
                 ? `${session.session_type.charAt(0).toUpperCase() + session.session_type.slice(1)} Interview`
                 : "Session Debrief"}
               {session?.target_company && ` — ${session.target_company}`}
             </h1>
-            <p className="text-xs text-gray-500 mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               {format(new Date(debrief.created_at), "EEEE, MMMM d yyyy")}
             </p>
 
             {debrief.summary && (
-              <p className="text-sm text-gray-300 leading-relaxed mt-3">
+              <p className="text-sm text-foreground leading-relaxed mt-3">
                 {debrief.summary}
               </p>
             )}
@@ -175,7 +175,7 @@ export default function DebriefDetail() {
             <p className="text-sm font-semibold text-amber-300">
               Priority focus area
             </p>
-            <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+            <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
               {debrief.priority_focus}
             </p>
           </div>
@@ -187,18 +187,18 @@ export default function DebriefDetail() {
         <Card>
           <div className="flex items-center gap-2 mb-4">
             <Target className="w-4 h-4 text-red-400" />
-            <h3 className="text-sm font-semibold text-white">Skill gap analysis</h3>
+            <h3 className="text-sm font-semibold text-foreground">Skill gap analysis</h3>
           </div>
           <div className="space-y-4">
             {debrief.skill_gaps.map((gap: any, i: number) => (
               <div key={i}>
                 <div className="flex items-center justify-between mb-1">
-                  <p className="text-xs font-medium text-white">{gap.skill}</p>
+                  <p className="text-xs font-medium text-foreground">{gap.skill}</p>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-gray-500">
+                    <span className="text-[10px] text-muted-foreground">
                       Current: {gap.current}/10
                     </span>
-                    <span className="text-[10px] text-gray-500">
+                    <span className="text-[10px] text-muted-foreground">
                       Target: {gap.target}/10
                     </span>
                   </div>
@@ -220,7 +220,7 @@ export default function DebriefDetail() {
                   />
                 </div>
                 {gap.note && (
-                  <p className="text-[10px] text-gray-600 mt-1">{gap.note}</p>
+                  <p className="text-[10px] text-muted-foreground mt-1">{gap.note}</p>
                 )}
               </div>
             ))}
@@ -234,11 +234,11 @@ export default function DebriefDetail() {
           <Card>
             <div className="flex items-center gap-2 mb-3">
               <CheckCircle className="w-4 h-4 text-emerald-400" />
-              <h3 className="text-sm font-semibold text-white">What went well</h3>
+              <h3 className="text-sm font-semibold text-foreground">What went well</h3>
             </div>
             <ul className="space-y-2">
               {debrief.strengths.map((s: string, i: number) => (
-                <li key={i} className="flex items-start gap-2 text-xs text-gray-300">
+                <li key={i} className="flex items-start gap-2 text-xs text-foreground">
                   <span className="text-emerald-500 shrink-0 mt-0.5">✓</span>
                   {s}
                 </li>
@@ -251,11 +251,11 @@ export default function DebriefDetail() {
           <Card>
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="w-4 h-4 text-amber-400" />
-              <h3 className="text-sm font-semibold text-white">To improve</h3>
+              <h3 className="text-sm font-semibold text-foreground">To improve</h3>
             </div>
             <ul className="space-y-2">
               {debrief.improvements.map((s: string, i: number) => (
-                <li key={i} className="flex items-start gap-2 text-xs text-gray-300">
+                <li key={i} className="flex items-start gap-2 text-xs text-foreground">
                   <span className="text-amber-500 shrink-0 mt-0.5">→</span>
                   {s}
                 </li>
@@ -270,7 +270,7 @@ export default function DebriefDetail() {
         <Card>
           <div className="flex items-center gap-2 mb-4">
             <Calendar className="w-4 h-4 text-blue-400" />
-            <h3 className="text-sm font-semibold text-white">7-day action plan</h3>
+            <h3 className="text-sm font-semibold text-foreground">7-day action plan</h3>
           </div>
           <div className="space-y-3">
             {debrief.action_plan.map((step: any, i: number) => (
@@ -282,16 +282,16 @@ export default function DebriefDetail() {
                   D{step.day ?? i + 1}
                 </div>
                 <div>
-                  <p className="text-xs font-semibold text-white">{step.title}</p>
+                  <p className="text-xs font-semibold text-foreground">{step.title}</p>
                   {step.description && (
-                    <p className="text-[11px] text-gray-500 mt-0.5 leading-relaxed">
+                    <p className="text-[11px] text-muted-foreground mt-0.5 leading-relaxed">
                       {step.description}
                     </p>
                   )}
                   {step.time_estimate && (
                     <div className="flex items-center gap-1 mt-1">
-                      <Clock className="w-3 h-3 text-gray-600" />
-                      <span className="text-[10px] text-gray-600">
+                      <Clock className="w-3 h-3 text-muted-foreground" />
+                      <span className="text-[10px] text-muted-foreground">
                         {step.time_estimate}
                       </span>
                     </div>
@@ -308,7 +308,7 @@ export default function DebriefDetail() {
         <Card>
           <div className="flex items-center gap-2 mb-4">
             <BookOpen className="w-4 h-4 text-violet-400" />
-            <h3 className="text-sm font-semibold text-white">Recommended resources</h3>
+            <h3 className="text-sm font-semibold text-foreground">Recommended resources</h3>
           </div>
           <div className="space-y-2">
             {debrief.resources.map((r: any, i: number) => (
@@ -324,9 +324,9 @@ export default function DebriefDetail() {
                     r.type === "course"  ? "🎓" : "🔗"
                   }</span>
                   <div>
-                    <p className="text-xs font-medium text-white">{r.title}</p>
+                    <p className="text-xs font-medium text-foreground">{r.title}</p>
                     {r.description && (
-                      <p className="text-[10px] text-gray-500 mt-0.5">{r.description}</p>
+                      <p className="text-[10px] text-muted-foreground mt-0.5">{r.description}</p>
                     )}
                   </div>
                 </div>
@@ -351,11 +351,11 @@ export default function DebriefDetail() {
         <Card className="border-emerald-500/20 bg-emerald-500/5">
           <div className="flex items-center gap-2 mb-4">
             <Star className="w-4 h-4 text-emerald-400" />
-            <h3 className="text-sm font-semibold text-white">Goals for your next session</h3>
+            <h3 className="text-sm font-semibold text-foreground">Goals for your next session</h3>
           </div>
           <ul className="space-y-2">
             {debrief.next_session_goals.map((g: string, i: number) => (
-              <li key={i} className="flex items-start gap-2 text-xs text-gray-300">
+              <li key={i} className="flex items-start gap-2 text-xs text-foreground">
                 <span className="text-emerald-500 shrink-0 tabular-nums mt-0.5">
                   {i + 1}.
                 </span>
@@ -374,7 +374,7 @@ export default function DebriefDetail() {
             <p className="text-xs font-semibold text-violet-300 mb-1">
               AI insight
             </p>
-            <p className="text-sm text-gray-300 leading-relaxed italic">
+            <p className="text-sm text-foreground leading-relaxed italic">
               "{debrief.insight}"
             </p>
           </div>

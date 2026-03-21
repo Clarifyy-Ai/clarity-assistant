@@ -134,11 +134,11 @@ export default function MockSession() {
         onClick={() => setPanicMode(false)}
       >
         <div className="text-center space-y-3">
-          <div className="w-16 h-16 bg-white/5 rounded-2xl flex items-center justify-center mx-auto">
-            <Eye className="w-7 h-7 text-gray-600" />
+          <div className="w-16 h-16 bg-accent/5 rounded-2xl flex items-center justify-center mx-auto">
+            <Eye className="w-7 h-7 text-muted-foreground" />
           </div>
-          <p className="text-gray-600 text-sm">Click anywhere to restore</p>
-          <kbd className="text-[10px] text-gray-700 bg-white/5 px-2 py-1 rounded">
+          <p className="text-muted-foreground text-sm">Click anywhere to restore</p>
+          <kbd className="text-[10px] text-gray-700 bg-accent/5 px-2 py-1 rounded">
             Ctrl+Shift+P
           </kbd>
         </div>
@@ -151,7 +151,7 @@ export default function MockSession() {
       <div className="flex items-center justify-center min-h-[50vh]">
         <div className="text-center space-y-3">
           <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-gray-400 text-sm">Loading question…</p>
+          <p className="text-muted-foreground text-sm">Loading question…</p>
         </div>
       </div>
     );
@@ -164,8 +164,8 @@ export default function MockSession() {
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           {/* Question progress */}
-          <span className="text-xs text-gray-400 font-medium">
-            Question <span className="text-white font-bold">{qIndex + 1}</span> / {totalQ}
+          <span className="text-xs text-muted-foreground font-medium">
+            Question <span className="text-foreground font-bold">{qIndex + 1}</span> / {totalQ}
           </span>
           <Badge variant={
             orchestrator.interviewType === "behavioural" ? "blue" :
@@ -239,7 +239,7 @@ export default function MockSession() {
                 </div>
                 <button
                   onClick={() => setSkipConfirm(true)}
-                  className="flex items-center gap-1 text-xs text-gray-600 hover:text-gray-400 transition-colors"
+                  className="flex items-center gap-1 text-xs text-muted-foreground hover:text-muted-foreground transition-colors"
                 >
                   <SkipForward className="w-3 h-3" />
                   Skip
@@ -247,7 +247,7 @@ export default function MockSession() {
               </div>
 
               {/* Question text */}
-              <p className="text-white text-base font-medium leading-relaxed">
+              <p className="text-foreground text-base font-medium leading-relaxed">
                 {question}
               </p>
 
@@ -268,7 +268,7 @@ export default function MockSession() {
                   "w-2 h-2 rounded-full",
                   stt.isListening ? "bg-red-500 animate-pulse" : "bg-gray-700"
                 )} />
-                <span className="text-xs font-medium text-white">Your answer</span>
+                <span className="text-xs font-medium text-foreground">Your answer</span>
               </div>
               <div className="flex items-center gap-3">
                 <span className={cn(
@@ -280,7 +280,7 @@ export default function MockSession() {
                 </span>
                 <button
                   onClick={stt.toggleMute}
-                  className="p-1.5 rounded-lg hover:bg-white/10 transition-all"
+                  className="p-1.5 rounded-lg hover:bg-accent/10 transition-all"
                 >
                   {stt.isMuted
                     ? <MicOff className="w-3.5 h-3.5 text-red-400" />
@@ -291,19 +291,19 @@ export default function MockSession() {
             </div>
 
             {/* Transcript text */}
-            <div className="min-h-[80px] text-sm text-gray-300 leading-relaxed">
+            <div className="min-h-[80px] text-sm text-foreground leading-relaxed">
               {stt.transcript || (
-                <span className="text-gray-600 italic">Start speaking…</span>
+                <span className="text-muted-foreground italic">Start speaking…</span>
               )}
               {stt.interimTranscript && (
-                <span className="text-gray-500 italic"> {stt.interimTranscript}</span>
+                <span className="text-muted-foreground italic"> {stt.interimTranscript}</span>
               )}
             </div>
 
             {/* Filler words inline highlight */}
             {fillerHook.totalCount > 0 && (
               <div className="mt-3 flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] text-gray-500">Fillers detected:</span>
+                <span className="text-[10px] text-muted-foreground">Fillers detected:</span>
                 {Object.entries(fillerHook.counts)
                   .filter(([, count]) => (count as number) > 0)
                   .map(([word, count]) => (
@@ -335,7 +335,7 @@ export default function MockSession() {
 
           {/* Live metrics */}
           <Card padding="sm">
-            <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-3">
+            <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-3">
               Live metrics
             </p>
             <div className="space-y-3">
@@ -364,8 +364,8 @@ export default function MockSession() {
 
             {/* Sentiment label */}
             <div className="mt-3 flex items-center gap-2">
-              <Brain className="w-3.5 h-3.5 text-gray-500 shrink-0" />
-              <span className="text-xs text-gray-400 capitalize">
+              <Brain className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
+              <span className="text-xs text-muted-foreground capitalize">
                 Tone: {sentimentHook.label ?? "neutral"}
               </span>
               <Badge
@@ -385,7 +385,7 @@ export default function MockSession() {
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <Zap className="w-3.5 h-3.5 text-violet-400" />
-                <span className="text-xs font-semibold text-white">AI Hint</span>
+                <span className="text-xs font-semibold text-foreground">AI Hint</span>
               </div>
               <div className="flex items-center gap-1.5">
                 {credits.isLow && (
@@ -393,7 +393,7 @@ export default function MockSession() {
                 )}
                 <button
                   onClick={() => setHintVisible((p) => !p)}
-                  className="text-gray-600 hover:text-gray-400 transition-colors"
+                  className="text-muted-foreground hover:text-muted-foreground transition-colors"
                 >
                   {hintVisible
                     ? <EyeOff className="w-3.5 h-3.5" />
@@ -406,19 +406,19 @@ export default function MockSession() {
             {hintVisible ? (
               hint ? (
                 <>
-                  <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-wrap">
+                  <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">
                     {hint}
                   </p>
 
                   {/* Hint feedback */}
                   <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/8">
-                    <span className="text-[10px] text-gray-600">Helpful?</span>
+                    <span className="text-[10px] text-muted-foreground">Helpful?</span>
                     <div className="flex gap-2">
                       <button
                         onClick={() => { setFeedbackQ("up"); orchestrator.submitHintFeedback("up"); }}
                         className={cn(
                           "p-1 rounded-lg transition-colors",
-                          feedbackQ === "up" ? "text-emerald-400" : "text-gray-600 hover:text-gray-400"
+                          feedbackQ === "up" ? "text-emerald-400" : "text-muted-foreground hover:text-muted-foreground"
                         )}
                       >
                         <ThumbsUp className="w-3 h-3" />
@@ -427,7 +427,7 @@ export default function MockSession() {
                         onClick={() => { setFeedbackQ("down"); orchestrator.submitHintFeedback("down"); }}
                         className={cn(
                           "p-1 rounded-lg transition-colors",
-                          feedbackQ === "down" ? "text-red-400" : "text-gray-600 hover:text-gray-400"
+                          feedbackQ === "down" ? "text-red-400" : "text-muted-foreground hover:text-muted-foreground"
                         )}
                       >
                         <ThumbsDown className="w-3 h-3" />
@@ -435,7 +435,7 @@ export default function MockSession() {
                       <button
                         onClick={() => orchestrator.requestHint(true)}
                         title="Regenerate hint"
-                        className="p-1 rounded-lg text-gray-600 hover:text-gray-400 transition-colors"
+                        className="p-1 rounded-lg text-muted-foreground hover:text-muted-foreground transition-colors"
                       >
                         <RefreshCw className="w-3 h-3" />
                       </button>
@@ -444,7 +444,7 @@ export default function MockSession() {
                 </>
               ) : (
                 <div className="space-y-2">
-                  <p className="text-xs text-gray-600 italic">
+                  <p className="text-xs text-muted-foreground italic">
                     No hint loaded yet.
                   </p>
                   <Button
@@ -463,7 +463,7 @@ export default function MockSession() {
                 </div>
               )
             ) : (
-              <p className="text-xs text-gray-600 italic">
+              <p className="text-xs text-muted-foreground italic">
                 Hint hidden — click 👁 to show
               </p>
             )}
@@ -491,7 +491,7 @@ export default function MockSession() {
         title="Skip question?"
         size="sm"
       >
-        <p className="text-sm text-gray-400 mb-5">
+        <p className="text-sm text-muted-foreground mb-5">
           This question will be marked as skipped. You won't receive a score for it.
         </p>
         <div className="flex gap-3">
@@ -525,7 +525,7 @@ export default function MockSession() {
         title="End session early?"
         size="sm"
       >
-        <p className="text-sm text-gray-400 mb-5">
+        <p className="text-sm text-muted-foreground mb-5">
           Your progress will be saved and you'll receive a partial scorecard.
         </p>
         <div className="flex gap-3">
@@ -576,7 +576,7 @@ function MetricRow({
   return (
     <div>
       <div className="flex items-center justify-between mb-1">
-        <span className="text-[11px] text-gray-500">{label}</span>
+        <span className="text-[11px] text-muted-foreground">{label}</span>
         <span className={cn(
           "text-[11px] font-bold tabular-nums",
           color === "emerald" ? "text-emerald-400" :
@@ -707,7 +707,7 @@ function CoachChatModal({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && sendMessage()}
             placeholder="Ask anything about this question…"
-            className="flex-1 bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-violet-500"
+            className="flex-1 bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-violet-500"
           />
           <Button
             variant="primary"

@@ -62,8 +62,8 @@ export default function Debrief() {
       ) : debriefs.length === 0 ? (
         <Card className="text-center py-16">
           <Brain className="w-10 h-10 text-gray-700 mx-auto mb-3" />
-          <p className="text-gray-400 text-sm">No debriefs yet.</p>
-          <p className="text-gray-600 text-xs mt-1">
+          <p className="text-muted-foreground text-sm">No debriefs yet.</p>
+          <p className="text-muted-foreground text-xs mt-1">
             Complete a mock session to get your first debrief.
           </p>
           <Button
@@ -100,7 +100,7 @@ export default function Debrief() {
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold text-white capitalize">
+                      <p className="text-sm font-semibold text-foreground capitalize">
                         {sess?.session_type ?? "Session"} Interview
                         {sess?.target_company && ` — ${sess.target_company}`}
                       </p>
@@ -117,7 +117,7 @@ export default function Debrief() {
                       )}
                     </div>
 
-                    <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                    <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                       <CalendarDays className="w-3 h-3" />
                       {format(new Date(d.created_at), "MMM d, yyyy · h:mm a")}
                     </p>
@@ -132,7 +132,7 @@ export default function Debrief() {
                     )}
                   </div>
 
-                  <ChevronRight className="w-4 h-4 text-gray-600 shrink-0 mt-1" />
+                  <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 mt-1" />
                 </div>
               </Card>
             );

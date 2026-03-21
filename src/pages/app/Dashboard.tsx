@@ -65,10 +65,10 @@ export default function Dashboard() {
       {/* ── Header ───────────────────────────────────── */}
       <div className="flex items-start justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-white">
+          <h1 className="text-2xl font-bold text-foreground">
             {greeting}, {firstName} 👋
           </h1>
-          <p className="text-gray-400 text-sm mt-0.5">
+          <p className="text-muted-foreground text-sm mt-0.5">
             {format(new Date(), "EEEE, MMMM d")}
           </p>
         </div>
@@ -95,18 +95,18 @@ export default function Dashboard() {
           className="flex items-center gap-4 p-4 bg-gradient-to-r from-violet-600/20 to-blue-600/20 border border-violet-500/30 rounded-2xl cursor-pointer hover:border-violet-500/50 transition-all"
         >
           <div className="w-10 h-10 bg-violet-600 rounded-xl flex items-center justify-center shrink-0">
-            <CalendarDays className="w-5 h-5 text-white" />
+            <CalendarDays className="w-5 h-5 text-foreground" />
           </div>
           <div className="flex-1">
-            <p className="text-white font-semibold text-sm">
+            <p className="text-foreground font-semibold text-sm">
               🎯 Interview today — {todayInterview.company_name}
             </p>
-            <p className="text-gray-400 text-xs mt-0.5">
+            <p className="text-muted-foreground text-xs mt-0.5">
               {format(new Date(todayInterview.scheduled_at), "h:mm a")} ·{" "}
               {todayInterview.role_title} · Tap to enter focus mode
             </p>
           </div>
-          <ChevronRight className="w-4 h-4 text-gray-400 shrink-0" />
+          <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
         </div>
       )}
 
@@ -121,7 +121,7 @@ export default function Dashboard() {
               "hover:border-white/20",
               action.highlight
                 ? "bg-violet-600/10 border-violet-500/30 hover:bg-violet-600/15"
-                : "bg-white/5 border-white/10 hover:bg-white/8"
+                : "bg-accent/5 border-white/10 hover:bg-white/8"
             )}
           >
             <div className={cn(
@@ -132,19 +132,19 @@ export default function Dashboard() {
             )}>
               <action.icon className={cn(
                 "w-4 h-4",
-                action.highlight ? "text-violet-300" : "text-gray-400"
+                action.highlight ? "text-violet-300" : "text-muted-foreground"
               )} />
             </div>
             <div>
               <p className={cn(
                 "text-sm font-semibold",
-                action.highlight ? "text-violet-200" : "text-white"
+                action.highlight ? "text-violet-200" : "text-foreground"
               )}>
                 {action.label}
               </p>
-              <p className="text-[11px] text-gray-500 mt-0.5">{action.sub}</p>
+              <p className="text-[11px] text-muted-foreground mt-0.5">{action.sub}</p>
             </div>
-            <ChevronRight className="w-3.5 h-3.5 text-gray-600 group-hover:text-gray-400 transition-colors mt-auto" />
+            <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-muted-foreground transition-colors mt-auto" />
           </Link>
         ))}
       </div>
@@ -268,8 +268,8 @@ function StatCard({
           <span className="text-[10px] text-emerald-400">↑ improving</span>
         )}
       </div>
-      <p className="text-2xl font-black text-white">{value}</p>
-      <p className="text-xs text-gray-500">{label}</p>
+      <p className="text-2xl font-black text-foreground">{value}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
     </Card>
   );
 }
@@ -289,7 +289,7 @@ function RecentSessions() {
   return (
     <Card>
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-white">Recent Sessions</h3>
+        <h3 className="text-sm font-semibold text-foreground">Recent Sessions</h3>
         <Link
           to="/app/sessions"
           className="text-xs text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1"
@@ -302,7 +302,7 @@ function RecentSessions() {
           <Link
             key={s.id}
             to={`/app/sessions/${s.id}`}
-            className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/5 transition-all group"
+            className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-accent/5 transition-all group"
           >
             <div className={cn(
               "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold",
@@ -313,10 +313,10 @@ function RecentSessions() {
               {s.type === "Mock" ? <ClipboardList className="w-3.5 h-3.5" /> : <FlaskConical className="w-3.5 h-3.5" />}
             </div>
             <div className="flex-1 min-w-0">
-              <p className="text-sm text-white font-medium">
+              <p className="text-sm text-foreground font-medium">
                 {s.type}{s.company ? ` — ${s.company}` : ""}
               </p>
-              <p className="text-xs text-gray-500">{s.date}</p>
+              <p className="text-xs text-muted-foreground">{s.date}</p>
             </div>
             {s.score !== null && (
               <span className={cn(
@@ -330,7 +330,7 @@ function RecentSessions() {
                 {s.score}
               </span>
             )}
-            <ChevronRight className="w-3.5 h-3.5 text-gray-700 group-hover:text-gray-500 transition-colors" />
+            <ChevronRight className="w-3.5 h-3.5 text-gray-700 group-hover:text-muted-foreground transition-colors" />
           </Link>
         ))}
       </div>
@@ -346,7 +346,7 @@ function UpcomingInterviews({ interviews }: { interviews: any[] }) {
   return (
     <Card>
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
           <CalendarDays className="w-4 h-4 text-violet-400" />
           Upcoming Interviews
         </h3>
@@ -360,7 +360,7 @@ function UpcomingInterviews({ interviews }: { interviews: any[] }) {
       {interviews.length === 0 ? (
         <div className="text-center py-6">
           <CalendarDays className="w-8 h-8 text-gray-700 mx-auto mb-2" />
-          <p className="text-gray-500 text-xs">No upcoming interviews scheduled.</p>
+          <p className="text-muted-foreground text-xs">No upcoming interviews scheduled.</p>
           <Link
             to="/app/interviews/new"
             className="text-xs text-violet-400 hover:text-violet-300 mt-1 inline-block transition-colors"
@@ -374,14 +374,14 @@ function UpcomingInterviews({ interviews }: { interviews: any[] }) {
             <Link
               key={iv.id}
               to={`/app/interviews/${iv.id}`}
-              className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/5 transition-all"
+              className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-accent/5 transition-all"
             >
               <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
                 <Building2 className="w-3.5 h-3.5 text-violet-400" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-white font-medium truncate">{iv.company_name}</p>
-                <p className="text-xs text-gray-500">
+                <p className="text-sm text-foreground font-medium truncate">{iv.company_name}</p>
+                <p className="text-xs text-muted-foreground">
                   {format(new Date(iv.scheduled_at), "EEE, MMM d · h:mm a")}
                 </p>
               </div>
@@ -411,10 +411,10 @@ function XPLevelCard({ gamification }: { gamification: any }) {
             {gamification.level}
           </div>
           <div>
-            <p className="text-xs font-semibold text-white">
+            <p className="text-xs font-semibold text-foreground">
               {gamification.levelLabel ?? `Level ${gamification.level}`}
             </p>
-            <p className="text-[10px] text-gray-500">
+            <p className="text-[10px] text-muted-foreground">
               {gamification.xp.toLocaleString()} XP total
             </p>
           </div>
@@ -445,7 +445,7 @@ function DocumentsStatusCard() {
   return (
     <Card>
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-semibold text-white">AI Context</h3>
+        <h3 className="text-xs font-semibold text-foreground">AI Context</h3>
         <Link
           to="/app/documents"
           className="text-[10px] text-violet-400 hover:text-violet-300 transition-colors"
@@ -473,7 +473,7 @@ function DocumentsStatusCard() {
             </span>
             <span className={cn(
               "flex-1",
-              item.ok ? "text-gray-300" : "text-amber-400"
+              item.ok ? "text-foreground" : "text-amber-400"
             )}>
               {item.label}
             </span>

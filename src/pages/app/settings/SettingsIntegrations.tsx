@@ -40,7 +40,7 @@ const INTEGRATIONS = [
     label:    "GitHub",
     desc:     "Link your repos for technical interview context.",
     status:   "available",
-    color:    "text-gray-300",
+    color:    "text-foreground",
     bg:       "bg-white/8",
   },
   {
@@ -81,7 +81,7 @@ export default function SettingsIntegrations() {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-lg font-bold text-white">Integrations</h2>
+      <h2 className="text-lg font-bold text-foreground">Integrations</h2>
 
       <div className="space-y-3">
         {INTEGRATIONS.map((int) => {
@@ -105,7 +105,7 @@ export default function SettingsIntegrations() {
                 {/* Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold text-white">{int.label}</p>
+                    <p className="text-sm font-semibold text-foreground">{int.label}</p>
                     {isComingSoon && (
                       <Badge variant="default" size="sm">Coming soon</Badge>
                     )}
@@ -113,7 +113,7 @@ export default function SettingsIntegrations() {
                       <Badge variant="emerald" size="sm" dot>Connected</Badge>
                     )}
                   </div>
-                  <p className="text-xs text-gray-500 mt-0.5 leading-relaxed">
+                  <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
                     {int.desc}
                   </p>
                 </div>
@@ -138,7 +138,7 @@ export default function SettingsIntegrations() {
               {/* Permissions shown when connected */}
               {isConnected && (
                 <div className="mt-3 pt-3 border-t border-white/8">
-                  <p className="text-[10px] text-gray-600 mb-1.5">
+                  <p className="text-[10px] text-muted-foreground mb-1.5">
                     Permissions granted:
                   </p>
                   <div className="flex flex-wrap gap-1.5">
@@ -171,10 +171,10 @@ export default function SettingsIntegrations() {
       <Card>
         <div className="flex items-center gap-2 mb-4">
           <Zap className="w-4 h-4 text-violet-400" />
-          <h3 className="text-sm font-semibold text-white">API access</h3>
+          <h3 className="text-sm font-semibold text-foreground">API access</h3>
           <Badge variant="amber" size="sm">Pro</Badge>
         </div>
-        <p className="text-xs text-gray-400 mb-4 leading-relaxed">
+        <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
           Use the Confideq API to build integrations, automate workflows,
           or pull data into your own tools.
         </p>
@@ -182,7 +182,7 @@ export default function SettingsIntegrations() {
           <input
             readOnly
             value="sk-confideq-••••••••••••••••••••••"
-            className="flex-1 bg-black/30 border border-white/10 text-gray-500 rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none"
+            className="flex-1 bg-black/30 border border-white/10 text-muted-foreground rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none"
           />
           <Button variant="secondary" size="sm">
             Reveal

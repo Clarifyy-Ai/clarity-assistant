@@ -80,10 +80,10 @@ export default function MockWarmup() {
         {phase === "breathing" && (
           <div className="space-y-8">
             <div>
-              <h2 className="text-2xl font-bold text-white mb-2">
+              <h2 className="text-2xl font-bold text-foreground mb-2">
                 Let's calm your nerves
               </h2>
-              <p className="text-gray-400 text-sm">
+              <p className="text-muted-foreground text-sm">
                 One breathing cycle before your session
               </p>
             </div>
@@ -119,13 +119,13 @@ export default function MockWarmup() {
                 )}>
                   {currentBreath.label}
                 </p>
-                <p className="text-gray-500 text-sm mt-1">
+                <p className="text-muted-foreground text-sm mt-1">
                   {Math.ceil(currentBreath.duration - (breathPct / 100) * currentBreath.duration)}s
                 </p>
               </div>
             </div>
 
-            <p className="text-xs text-gray-600">
+            <p className="text-xs text-muted-foreground">
               Breathe in through your nose, hold, breathe out through your mouth
             </p>
           </div>
@@ -135,7 +135,7 @@ export default function MockWarmup() {
         {phase === "warmup" && (
           <div className="space-y-6">
             <div>
-              <p className="text-xs text-gray-500 mb-2">
+              <p className="text-xs text-muted-foreground mb-2">
                 Warmup question {qIdx + 1} of {WARMUP_QUESTIONS.length}
               </p>
               <ProgressBar
@@ -145,10 +145,10 @@ export default function MockWarmup() {
                 size="xs"
                 className="mb-4"
               />
-              <h2 className="text-xl font-bold text-white">
+              <h2 className="text-xl font-bold text-foreground">
                 {WARMUP_QUESTIONS[qIdx]}
               </h2>
-              <p className="text-xs text-gray-500 mt-2">
+              <p className="text-xs text-muted-foreground mt-2">
                 No score — just warm up your voice 🎤
               </p>
             </div>
@@ -158,7 +158,7 @@ export default function MockWarmup() {
               onChange={(e) => setAnswer(e.target.value)}
               placeholder="Type or just speak naturally…"
               rows={4}
-              className="w-full bg-white/5 border border-white/10 text-white placeholder-gray-600 rounded-2xl px-4 py-3 resize-none focus:outline-none focus:border-violet-500 text-sm"
+              className="w-full bg-accent/5 border border-white/10 text-foreground placeholder-gray-600 rounded-2xl px-4 py-3 resize-none focus:outline-none focus:border-violet-500 text-sm"
             />
 
             <Button
@@ -177,8 +177,8 @@ export default function MockWarmup() {
           <div className="space-y-6">
             <div className="text-5xl">🚀</div>
             <div>
-              <h2 className="text-2xl font-bold text-white">You're warmed up!</h2>
-              <p className="text-gray-400 text-sm mt-2">
+              <h2 className="text-2xl font-bold text-foreground">You're warmed up!</h2>
+              <p className="text-muted-foreground text-sm mt-2">
                 Your voice is ready. The real questions start now.
               </p>
             </div>

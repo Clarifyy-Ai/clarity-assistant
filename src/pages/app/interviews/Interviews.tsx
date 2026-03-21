@@ -76,7 +76,7 @@ export default function Interviews() {
               "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all capitalize",
               filter === f
                 ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                : "bg-white/3 border-white/10 text-gray-500 hover:text-gray-300"
+                : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
             )}
           >
             {f}
@@ -97,7 +97,7 @@ export default function Interviews() {
       ) : filtered.length === 0 ? (
         <Card className="text-center py-16">
           <CalendarDays className="w-10 h-10 text-gray-700 mx-auto mb-3" />
-          <p className="text-gray-400 text-sm">No interviews found.</p>
+          <p className="text-muted-foreground text-sm">No interviews found.</p>
           <Button
             variant="secondary"
             size="sm"
@@ -112,7 +112,7 @@ export default function Interviews() {
         /* Grouped list */
         Object.entries(grouped).map(([month, ivs]) => (
           <div key={month}>
-            <p className="text-xs font-semibold text-gray-500 uppercase tracking-widest mb-2">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">
               {month}
             </p>
             <div className="space-y-2">
@@ -164,24 +164,24 @@ function InterviewRow({
         ? "bg-violet-600/10 border-violet-500/30"
         : isCancelled
         ? "bg-white/2 border-white/6 opacity-60"
-        : "bg-white/3 border-white/8 hover:bg-white/5 hover:border-white/15"
+        : "bg-white/3 border-white/8 hover:bg-accent/5 hover:border-white/15"
     )}>
       {/* Date block */}
       <div className={cn(
         "w-12 h-14 rounded-xl flex flex-col items-center justify-center shrink-0 border",
         isNow
           ? "bg-violet-600 border-violet-500"
-          : "bg-white/5 border-white/10"
+          : "bg-accent/5 border-white/10"
       )}>
         <p className={cn(
           "text-[10px] font-semibold uppercase",
-          isNow ? "text-violet-200" : "text-gray-500"
+          isNow ? "text-violet-200" : "text-muted-foreground"
         )}>
           {format(d, "MMM")}
         </p>
         <p className={cn(
           "text-xl font-black leading-none",
-          isNow ? "text-white" : "text-gray-300"
+          isNow ? "text-foreground" : "text-foreground"
         )}>
           {format(d, "d")}
         </p>
@@ -191,10 +191,10 @@ function InterviewRow({
       <div className="flex-1 min-w-0">
         <div className="flex items-start justify-between gap-2">
           <div>
-            <p className="text-sm font-semibold text-white">
+            <p className="text-sm font-semibold text-foreground">
               {iv.company_name}
             </p>
-            <p className="text-xs text-gray-400 mt-0.5">
+            <p className="text-xs text-muted-foreground mt-0.5">
               {iv.role_title}
               {iv.interview_type && ` · ${iv.interview_type}`}
             </p>
@@ -204,7 +204,7 @@ function InterviewRow({
           </Badge>
         </div>
 
-        <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+        <div className="flex items-center gap-4 mt-2 text-xs text-muted-foreground">
           <span className="flex items-center gap-1">
             <Clock className="w-3 h-3" />
             {format(d, "h:mm a")}
@@ -220,7 +220,7 @@ function InterviewRow({
 
         {/* Notes preview */}
         {iv.notes && (
-          <p className="text-xs text-gray-600 mt-1 truncate">{iv.notes}</p>
+          <p className="text-xs text-muted-foreground mt-1 truncate">{iv.notes}</p>
         )}
 
         {/* Action buttons */}
@@ -257,7 +257,7 @@ function InterviewRow({
       {/* Delete */}
       <button
         onClick={onDelete}
-        className="p-1.5 rounded-lg text-gray-700 hover:text-red-400 hover:bg-white/5 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+        className="p-1.5 rounded-lg text-gray-700 hover:text-red-400 hover:bg-accent/5 opacity-0 group-hover:opacity-100 transition-all shrink-0"
       >
         <Trash2 className="w-3.5 h-3.5" />
       </button>

@@ -95,11 +95,11 @@ export default function SettingsProfile() {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-lg font-bold text-white">Profile</h2>
+      <h2 className="text-lg font-bold text-foreground">Profile</h2>
 
       {/* Avatar */}
       <Card>
-        <h3 className="text-sm font-semibold text-white mb-4">Profile picture</h3>
+        <h3 className="text-sm font-semibold text-foreground mb-4">Profile picture</h3>
         <div className="flex items-center gap-5">
           <div className="relative">
             {avatarUrl ? (
@@ -109,7 +109,7 @@ export default function SettingsProfile() {
                 className="w-16 h-16 rounded-2xl object-cover"
               />
             ) : (
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-600/40 to-blue-600/40 border border-white/10 flex items-center justify-center text-xl font-black text-white">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-600/40 to-blue-600/40 border border-white/10 flex items-center justify-center text-xl font-black text-foreground">
                 {initials || <User className="w-6 h-6" />}
               </div>
             )}
@@ -120,7 +120,7 @@ export default function SettingsProfile() {
             >
               {uploading
                 ? <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
-                : <Camera className="w-3.5 h-3.5 text-white" />
+                : <Camera className="w-3.5 h-3.5 text-foreground" />
               }
             </button>
             <input
@@ -132,8 +132,8 @@ export default function SettingsProfile() {
             />
           </div>
           <div>
-            <p className="text-sm text-white font-medium">{name || "Your name"}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{user?.email}</p>
+            <p className="text-sm text-foreground font-medium">{name || "Your name"}</p>
+            <p className="text-xs text-muted-foreground mt-0.5">{user?.email}</p>
             <Badge variant="violet" size="sm" className="mt-1.5">
               {profile?.plan ?? "free"}
             </Badge>
@@ -143,7 +143,7 @@ export default function SettingsProfile() {
 
       {/* Basic info */}
       <Card>
-        <h3 className="text-sm font-semibold text-white mb-4">Basic info</h3>
+        <h3 className="text-sm font-semibold text-foreground mb-4">Basic info</h3>
         <div className="space-y-4">
           <Input
             label="Full name"
@@ -152,16 +152,16 @@ export default function SettingsProfile() {
             placeholder="Your name"
           />
           <div>
-            <p className="text-xs font-medium text-gray-300 mb-1.5">Bio</p>
+            <p className="text-xs font-medium text-foreground mb-1.5">Bio</p>
             <textarea
               value={bio}
               onChange={(e) => setBio(e.target.value)}
               placeholder="A short bio about your background…"
               rows={3}
               maxLength={280}
-              className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
+              className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
             />
-            <p className="text-[10px] text-gray-600 text-right mt-1">
+            <p className="text-[10px] text-muted-foreground text-right mt-1">
               {bio.length}/280
             </p>
           </div>
@@ -186,13 +186,13 @@ export default function SettingsProfile() {
 
       {/* Career info */}
       <Card>
-        <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
           <Briefcase className="w-4 h-4 text-violet-400" />
           Career info
         </h3>
         <div className="space-y-4">
           <div>
-            <p className="text-xs font-medium text-gray-300 mb-2">
+            <p className="text-xs font-medium text-foreground mb-2">
               Experience level
             </p>
             <div className="flex flex-wrap gap-2">
@@ -204,7 +204,7 @@ export default function SettingsProfile() {
                     "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
                     experience === lvl
                       ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                      : "bg-white/3 border-white/10 text-gray-500 hover:text-gray-300"
+                      : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {lvl}
@@ -213,7 +213,7 @@ export default function SettingsProfile() {
             </div>
           </div>
           <div>
-            <p className="text-xs font-medium text-gray-300 mb-2">
+            <p className="text-xs font-medium text-foreground mb-2">
               Target role
             </p>
             <div className="flex flex-wrap gap-2">
@@ -225,7 +225,7 @@ export default function SettingsProfile() {
                     "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
                     targetRole === role
                       ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                      : "bg-white/3 border-white/10 text-gray-500 hover:text-gray-300"
+                      : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {role}

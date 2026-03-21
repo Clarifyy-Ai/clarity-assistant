@@ -124,7 +124,7 @@ export default function InterviewDay() {
         <p className="text-xs font-semibold text-violet-400 uppercase tracking-widest mb-2">
           Interview Day
         </p>
-        <h1 className="text-3xl font-black text-white">
+        <h1 className="text-3xl font-black text-foreground">
           You've got this, {firstName} 🎯
         </h1>
       </div>
@@ -135,16 +135,16 @@ export default function InterviewDay() {
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
               <div className="w-12 h-12 bg-violet-600 rounded-2xl flex items-center justify-center shrink-0">
-                <Building2 className="w-6 h-6 text-white" />
+                <Building2 className="w-6 h-6 text-foreground" />
               </div>
               <div>
-                <p className="text-lg font-bold text-white">
+                <p className="text-lg font-bold text-foreground">
                   {todayIv.company_name}
                 </p>
-                <p className="text-sm text-gray-400">
+                <p className="text-sm text-muted-foreground">
                   {todayIv.role_title}
                 </p>
-                <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                   <Clock className="w-3 h-3" />
                   {format(new Date(todayIv.scheduled_at), "h:mm a")}
                   {todayIv.duration_minutes && ` · ${todayIv.duration_minutes}min`}
@@ -153,7 +153,7 @@ export default function InterviewDay() {
             </div>
             {timeLeft && (
               <div className="text-right">
-                <p className="text-[10px] text-gray-500 uppercase tracking-widest">
+                <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
                   Starts in
                 </p>
                 <p className="text-2xl font-black text-violet-400">
@@ -168,9 +168,9 @@ export default function InterviewDay() {
               href={todayIv.meeting_link}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-4 flex items-center justify-between p-3 bg-white/5 hover:bg-white/10 border border-white/10 rounded-xl transition-all"
+              className="mt-4 flex items-center justify-between p-3 bg-accent/5 hover:bg-accent/10 border border-white/10 rounded-xl transition-all"
             >
-              <span className="text-xs text-gray-300">
+              <span className="text-xs text-foreground">
                 🔗 {todayIv.meeting_link.slice(0, 50)}…
               </span>
               <span className="text-xs text-violet-400 shrink-0 ml-2">Open ↗</span>
@@ -179,8 +179,8 @@ export default function InterviewDay() {
         </Card>
       ) : (
         <Card className="text-center py-6">
-          <CalendarDays className="w-8 h-8 text-gray-600 mx-auto mb-2" />
-          <p className="text-gray-400 text-sm">No interview scheduled for today.</p>
+          <CalendarDays className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+          <p className="text-muted-foreground text-sm">No interview scheduled for today.</p>
           <Button
             variant="secondary"
             size="sm"
@@ -218,7 +218,7 @@ export default function InterviewDay() {
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
             <Wind className="w-4 h-4 text-blue-400" />
-            <h3 className="text-sm font-semibold text-white">Box breathing</h3>
+            <h3 className="text-sm font-semibold text-foreground">Box breathing</h3>
             <Badge variant="blue" size="sm">Calms nerves</Badge>
           </div>
           {!breathing ? (
@@ -259,7 +259,7 @@ export default function InterviewDay() {
                  breathPhase === "hold" ? "Hold"   : "Exhale"}
               </p>
             </div>
-            <p className="text-xs text-gray-500">
+            <p className="text-xs text-muted-foreground">
               Cycle {breathCount + 1} of 4
             </p>
             <ProgressBar
@@ -271,7 +271,7 @@ export default function InterviewDay() {
             />
           </div>
         ) : (
-          <p className="text-xs text-gray-500 leading-relaxed">
+          <p className="text-xs text-muted-foreground leading-relaxed">
             4-4-4 box breathing: inhale for 4 seconds, hold for 4,
             exhale for 4. Repeat 4 times to reduce anxiety.
           </p>
@@ -281,11 +281,11 @@ export default function InterviewDay() {
       {/* Final checklist */}
       <Card>
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
             <CheckCircle className="w-4 h-4 text-emerald-400" />
             Final checklist
           </h3>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-muted-foreground">
             {checklistDone}/{FINAL_CHECKLIST.length}
           </span>
         </div>
@@ -296,7 +296,7 @@ export default function InterviewDay() {
               onClick={() =>
                 setChecklist((p) => ({ ...p, [item.id]: !p[item.id] }))
               }
-              className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/5 transition-all text-left"
+              className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-accent/5 transition-all text-left"
             >
               <div className={cn(
                 "w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all",
@@ -305,15 +305,15 @@ export default function InterviewDay() {
                   : "border-white/20"
               )}>
                 {checklist[item.id] && (
-                  <CheckCircle className="w-3 h-3 text-white" />
+                  <CheckCircle className="w-3 h-3 text-foreground" />
                 )}
               </div>
               <span className="text-base">{item.icon}</span>
               <span className={cn(
                 "text-sm",
                 checklist[item.id]
-                  ? "text-gray-500 line-through"
-                  : "text-gray-300"
+                  ? "text-muted-foreground line-through"
+                  : "text-foreground"
               )}>
                 {item.label}
               </span>
@@ -342,7 +342,7 @@ export default function InterviewDay() {
         >
           Launch Live Co-Pilot
         </Button>
-        <p className="text-center text-xs text-gray-600">
+        <p className="text-center text-xs text-muted-foreground">
           The overlay is invisible to your interviewer even when screen sharing
         </p>
       </div>

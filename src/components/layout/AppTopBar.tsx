@@ -3,6 +3,7 @@ import { Bell, Zap, AlertTriangle } from "lucide-react";
 import { useAuthStore } from "@/store/userStore";
 import { useNotificationStore } from "@/store/notificationStore";
 import { useUIStore } from "@/store/uiStore";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { cn } from "@/lib/utils";
 
 export function AppTopBar() {
@@ -21,18 +22,15 @@ export function AppTopBar() {
   ).toUpperCase();
 
   return (
-    <header className="sticky top-0 z-40 h-14 w-full flex-shrink-0 bg-[#0a0a0f]/95 backdrop-blur border-b border-white/[0.08] flex items-center justify-between px-4">
+    <header className="sticky top-0 z-40 h-14 w-full flex-shrink-0 bg-background/95 backdrop-blur border-b border-border flex items-center justify-between px-4">
 
-      {/* Left: breadcrumb portal target */}
       <div
         className="flex items-center gap-2"
         id="topbar-breadcrumb"
       />
 
-      {/* Right */}
       <div className="flex items-center gap-3 ml-auto">
 
-        {/* Credit meter */}
         <button
           type="button"
           onClick={() => uiStore.openUpgradeModal("pro")}
@@ -42,7 +40,7 @@ export function AppTopBar() {
               ? "bg-red-500/10 border-red-500/30 text-red-400 animate-pulse"
               : isLow
               ? "bg-amber-500/10 border-amber-500/30 text-amber-400"
-              : "bg-white/[0.05] border-white/[0.10] text-gray-300 hover:bg-white/[0.10]"
+              : "bg-secondary/60 border-border text-muted-foreground hover:bg-secondary"
           )}
         >
           {(isEmpty || isLow) ? (
@@ -54,18 +52,18 @@ export function AppTopBar() {
           {isEmpty && <span className="ml-1">· Upgrade</span>}
         </button>
 
-        {/* Notification bell */}
+        <ThemeToggle />
+
         <Link
           to="/app/notifications"
-          className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-white/[0.05] text-gray-400 hover:text-white transition-all"
+          className="relative w-9 h-9 flex items-center justify-center rounded-xl hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-all"
         >
           <Bell className="w-4 h-4" />
           {notifStore.unread_count > 0 && (
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-violet-500 rounded-full ring-2 ring-[#0a0a0f]" />
+            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-violet-500 rounded-full ring-2 ring-background" />
           )}
         </Link>
 
-        {/* Avatar */}
         <Link
           to="/app/profile"
           className="w-8 h-8 rounded-full bg-violet-700 flex items-center justify-center text-xs font-bold text-white hover:ring-2 hover:ring-violet-500 transition-all"

@@ -84,14 +84,14 @@ export default function SettingsDanger() {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-lg font-bold text-white">Danger zone</h2>
+      <h2 className="text-lg font-bold text-foreground">Danger zone</h2>
 
       {/* Export */}
       <Card className="flex items-start gap-4 border-blue-500/15">
         <Download className="w-5 h-5 text-blue-400 shrink-0 mt-0.5" />
         <div className="flex-1">
-          <p className="text-sm font-semibold text-white">Export your data</p>
-          <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+          <p className="text-sm font-semibold text-foreground">Export your data</p>
+          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
             Download all your sessions, answers, and profile data as JSON.
           </p>
           <Button
@@ -112,7 +112,7 @@ export default function SettingsDanger() {
         <RefreshCw className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
         <div className="flex-1">
           <p className="text-sm font-semibold text-amber-300">Reset progress</p>
-          <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
             Delete all sessions, answers, and analytics. Your account and
             subscription remain intact.
           </p>
@@ -133,7 +133,7 @@ export default function SettingsDanger() {
         <Trash2 className="w-5 h-5 text-red-400 shrink-0 mt-0.5" />
         <div className="flex-1">
           <p className="text-sm font-semibold text-red-300">Delete account</p>
-          <p className="text-xs text-gray-400 mt-1 leading-relaxed">
+          <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
             Permanently delete your account and all data. This cannot be undone.
             Your subscription will be cancelled immediately.
           </p>
@@ -199,8 +199,8 @@ export default function SettingsDanger() {
           </p>
         </div>
         <div className="mb-5">
-          <p className="text-xs text-gray-400 mb-1.5">
-            Type your email <span className="text-white font-mono">{user?.email}</span> to confirm
+          <p className="text-xs text-muted-foreground mb-1.5">
+            Type your email <span className="text-foreground font-mono">{user?.email}</span> to confirm
           </p>
           <Input
             value={confirm}

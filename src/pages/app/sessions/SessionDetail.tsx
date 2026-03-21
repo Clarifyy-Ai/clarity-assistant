@@ -78,7 +78,7 @@ export default function SessionDetail() {
   if (!session) {
     return (
       <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <p className="text-gray-400">Session not found.</p>
+        <p className="text-muted-foreground">Session not found.</p>
         <Button variant="secondary" size="sm" onClick={() => navigate("/app/sessions")}>
           ← Back to sessions
         </Button>
@@ -107,16 +107,16 @@ export default function SessionDetail() {
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate("/app/sessions")}
-          className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all"
+          className="p-2 rounded-xl bg-accent/5 hover:bg-accent/10 text-muted-foreground hover:text-foreground transition-all"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
         <div className="flex-1">
-          <h1 className="text-xl font-bold text-white capitalize">
+          <h1 className="text-xl font-bold text-foreground capitalize">
             {session.session_type} Interview
             {session.target_company && ` — ${session.target_company}`}
           </h1>
-          <p className="text-gray-400 text-xs mt-0.5">
+          <p className="text-muted-foreground text-xs mt-0.5">
             {format(new Date(session.created_at), "EEEE, MMMM d yyyy · h:mm a")}
           </p>
         </div>
@@ -152,8 +152,8 @@ export default function SessionDetail() {
           )}>
             {score}
           </div>
-          <p className="text-gray-300 text-sm font-medium">{scoreTier}</p>
-          <p className="text-gray-600 text-xs mt-1">Overall score</p>
+          <p className="text-foreground text-sm font-medium">{scoreTier}</p>
+          <p className="text-muted-foreground text-xs mt-1">Overall score</p>
           <ProgressBar
             value={score}
             max={100}
@@ -165,7 +165,7 @@ export default function SessionDetail() {
 
         {/* Dimension scores */}
         <Card className="sm:col-span-2">
-          <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-widest mb-4">
+          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
             Dimension breakdown
           </h3>
           <div className="space-y-3">
@@ -179,7 +179,7 @@ export default function SessionDetail() {
               const c   = val >= 75 ? "emerald" : val >= 50 ? "amber" : "red";
               return (
                 <div key={dim.key} className="flex items-center gap-3">
-                  <span className="text-xs text-gray-400 w-40 shrink-0">{dim.label}</span>
+                  <span className="text-xs text-muted-foreground w-40 shrink-0">{dim.label}</span>
                   <ProgressBar value={val} max={100} color={c} size="sm" className="flex-1" />
                   <span className={cn(
                     "text-xs font-bold w-8 text-right tabular-nums",
@@ -222,8 +222,8 @@ export default function SessionDetail() {
           <Card key={stat.label} padding="sm" className="flex items-center gap-3">
             {stat.icon}
             <div>
-              <p className="text-sm font-bold text-white">{stat.value}</p>
-              <p className="text-[10px] text-gray-500">{stat.label}</p>
+              <p className="text-sm font-bold text-foreground">{stat.value}</p>
+              <p className="text-[10px] text-muted-foreground">{stat.label}</p>
             </div>
           </Card>
         ))}
@@ -234,9 +234,9 @@ export default function SessionDetail() {
         <Card>
           <div className="flex items-center gap-2 mb-3">
             <Brain className="w-4 h-4 text-violet-400" />
-            <h3 className="text-sm font-semibold text-white">AI Feedback Summary</h3>
+            <h3 className="text-sm font-semibold text-foreground">AI Feedback Summary</h3>
           </div>
-          <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
+          <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
             {session.ai_feedback}
           </p>
 
@@ -249,7 +249,7 @@ export default function SessionDetail() {
                 </p>
                 <ul className="space-y-1.5">
                   {session.strengths.map((s: string, i: number) => (
-                    <li key={i} className="text-xs text-gray-300 flex items-start gap-2">
+                    <li key={i} className="text-xs text-foreground flex items-start gap-2">
                       <span className="text-emerald-500 mt-0.5 shrink-0">✓</span>
                       {s}
                     </li>
@@ -262,7 +262,7 @@ export default function SessionDetail() {
                 </p>
                 <ul className="space-y-1.5">
                   {(session.improvements ?? []).map((s: string, i: number) => (
-                    <li key={i} className="text-xs text-gray-300 flex items-start gap-2">
+                    <li key={i} className="text-xs text-foreground flex items-start gap-2">
                       <span className="text-amber-500 mt-0.5 shrink-0">→</span>
                       {s}
                     </li>
@@ -276,7 +276,7 @@ export default function SessionDetail() {
 
       {/* ── Per-question review ────────────────────────── */}
       <div>
-        <h2 className="text-sm font-semibold text-white mb-3 flex items-center gap-2">
+        <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
           <MessageSquare className="w-4 h-4 text-violet-400" />
           Question-by-question review
         </h2>
@@ -297,13 +297,13 @@ export default function SessionDetail() {
                   onClick={() => setExpanded((p) => ({ ...p, [ans.id]: !p[ans.id] }))}
                 >
                   {/* Index bubble */}
-                  <div className="w-7 h-7 bg-white/8 rounded-lg flex items-center justify-center text-xs font-bold text-gray-400 shrink-0 mt-0.5">
+                  <div className="w-7 h-7 bg-white/8 rounded-lg flex items-center justify-center text-xs font-bold text-muted-foreground shrink-0 mt-0.5">
                     {i + 1}
                   </div>
 
                   {/* Question */}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white line-clamp-2">
+                    <p className="text-sm font-medium text-foreground line-clamp-2">
                       {ans.question_text}
                     </p>
                     {ans.question_tags?.length > 0 && (
@@ -323,14 +323,14 @@ export default function SessionDetail() {
                         qColor === "emerald" ? "bg-emerald-500/10 text-emerald-400" :
                         qColor === "amber"   ? "bg-amber-500/10 text-amber-400"     :
                         qColor === "red"     ? "bg-red-500/10 text-red-400"         :
-                                              "bg-white/8 text-gray-400"
+                                              "bg-white/8 text-muted-foreground"
                       )}>
                         {qScore}
                       </span>
                     )}
                     {isOpen
-                      ? <ChevronUp className="w-4 h-4 text-gray-500" />
-                      : <ChevronDown className="w-4 h-4 text-gray-500" />
+                      ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
+                      : <ChevronDown className="w-4 h-4 text-muted-foreground" />
                     }
                   </div>
                 </button>
@@ -342,10 +342,10 @@ export default function SessionDetail() {
                     {/* Transcript */}
                     {ans.transcript && (
                       <div>
-                        <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-widest mb-1.5">
+                        <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest mb-1.5">
                           Your answer
                         </p>
-                        <p className="text-sm text-gray-300 leading-relaxed">
+                        <p className="text-sm text-foreground leading-relaxed">
                           {ans.transcript}
                         </p>
                       </div>
@@ -362,7 +362,7 @@ export default function SessionDetail() {
                         ].filter((d) => d.val !== null && d.val !== undefined)
                           .map((d) => (
                             <div key={d.label} className="flex items-center gap-2">
-                              <span className="text-xs text-gray-500 w-20 shrink-0">{d.label}</span>
+                              <span className="text-xs text-muted-foreground w-20 shrink-0">{d.label}</span>
                               <ProgressBar
                                 value={d.val}
                                 max={100}
@@ -370,14 +370,14 @@ export default function SessionDetail() {
                                 size="xs"
                                 className="flex-1"
                               />
-                              <span className="text-xs font-bold text-white w-6 text-right">{d.val}</span>
+                              <span className="text-xs font-bold text-foreground w-6 text-right">{d.val}</span>
                             </div>
                           ))}
                       </div>
                     )}
 
                     {/* Metrics row */}
-                    <div className="flex flex-wrap gap-3 text-xs text-gray-500">
+                    <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
                       {ans.wpm        && <span className="flex items-center gap-1"><Mic className="w-3 h-3" />{ans.wpm} WPM</span>}
                       {ans.filler_count !== null && <span className="flex items-center gap-1"><AlertTriangle className="w-3 h-3" />{ans.filler_count} fillers</span>}
                       {ans.duration_seconds && <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{ans.duration_seconds}s</span>}
@@ -389,7 +389,7 @@ export default function SessionDetail() {
                         <p className="text-[10px] font-semibold text-violet-400 uppercase tracking-widest mb-2">
                           AI feedback
                         </p>
-                        <p className="text-xs text-gray-300 leading-relaxed">
+                        <p className="text-xs text-foreground leading-relaxed">
                           {ans.ai_feedback}
                         </p>
                       </div>
@@ -401,7 +401,7 @@ export default function SessionDetail() {
                         <p className="text-[10px] font-semibold text-emerald-400 uppercase tracking-widest mb-2">
                           Model answer
                         </p>
-                        <p className="text-xs text-gray-300 leading-relaxed whitespace-pre-wrap">
+                        <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap">
                           {ans.model_answer}
                         </p>
                       </div>
@@ -413,7 +413,7 @@ export default function SessionDetail() {
                         {Object.entries(ans.star_breakdown).map(([key, val]) => (
                           <div key={key} className="bg-white/3 border border-white/8 rounded-xl p-3">
                             <p className="text-[10px] font-bold text-violet-400 uppercase mb-1">{key}</p>
-                            <p className="text-xs text-gray-400">{val as string}</p>
+                            <p className="text-xs text-muted-foreground">{val as string}</p>
                           </div>
                         ))}
                       </div>
@@ -460,8 +460,8 @@ export default function SessionDetail() {
           <Brain className="w-5 h-5 text-violet-400" />
         </div>
         <div className="flex-1">
-          <p className="text-sm font-semibold text-white">Deep-dive debrief</p>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="text-sm font-semibold text-foreground">Deep-dive debrief</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
             AI-generated action plan, gap analysis, and what to study next.
           </p>
         </div>
@@ -480,14 +480,14 @@ export default function SessionDetail() {
       {/* Share modal */}
       <Modal open={shareOpen} onClose={() => setShareOpen(false)} title="Share scorecard" size="sm">
         <div className="space-y-3">
-          <p className="text-sm text-gray-400">
+          <p className="text-sm text-muted-foreground">
             Share a public read-only link to this scorecard.
           </p>
           <div className="flex gap-2">
             <input
               readOnly
               value={`https://confideq.app/share/${session.id}`}
-              className="flex-1 bg-black/30 border border-white/10 text-gray-300 rounded-xl px-3 py-2 text-xs focus:outline-none"
+              className="flex-1 bg-black/30 border border-white/10 text-foreground rounded-xl px-3 py-2 text-xs focus:outline-none"
             />
             <Button
               variant="secondary"

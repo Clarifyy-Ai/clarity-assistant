@@ -134,15 +134,15 @@ export default function SystemDesign() {
                 "w-full text-left px-4 py-3 rounded-xl border transition-all",
                 selected === topic.id
                   ? "bg-violet-600/10 border-violet-500/30"
-                  : "bg-white/[0.02] border-white/8 hover:bg-white/5 hover:border-white/15"
+                  : "bg-white/[0.02] border-white/8 hover:bg-accent/5 hover:border-white/15"
               )}
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-400">{CATEGORY_ICONS[topic.category]}</span>
-                  <span className="text-sm font-medium text-white">{topic.title}</span>
+                  <span className="text-muted-foreground">{CATEGORY_ICONS[topic.category]}</span>
+                  <span className="text-sm font-medium text-foreground">{topic.title}</span>
                 </div>
-                <ChevronRight className="w-3.5 h-3.5 text-gray-600" />
+                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
               </div>
               <div className="flex items-center gap-2 mt-1.5 ml-6">
                 <Badge variant="default" size="sm">{topic.category}</Badge>
@@ -158,8 +158,8 @@ export default function SystemDesign() {
           {activeTopic ? (
             <>
               <Card>
-                <h2 className="text-lg font-semibold text-white mb-2">{activeTopic.title}</h2>
-                <p className="text-sm text-gray-300 leading-relaxed mb-4">{activeTopic.prompt}</p>
+                <h2 className="text-lg font-semibold text-foreground mb-2">{activeTopic.title}</h2>
+                <p className="text-sm text-foreground leading-relaxed mb-4">{activeTopic.prompt}</p>
                 <div className="flex flex-wrap gap-2">
                   {activeTopic.keyAreas.map((area) => (
                     <Badge key={area} variant="default" size="sm">{area}</Badge>
@@ -168,13 +168,13 @@ export default function SystemDesign() {
               </Card>
 
               <Card>
-                <p className="text-xs font-medium text-gray-300 mb-2">Your design notes</p>
+                <p className="text-xs font-medium text-foreground mb-2">Your design notes</p>
                 <textarea
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Sketch your approach here — components, data flow, scaling strategy…"
                   rows={5}
-                  className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
+                  className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
                 />
               </Card>
 
@@ -219,7 +219,7 @@ export default function SystemDesign() {
                     </p>
                     <button
                       onClick={() => { navigator.clipboard.writeText(breakdown); toast.success("Copied!"); }}
-                      className="text-gray-500 hover:text-gray-300"
+                      className="text-muted-foreground hover:text-foreground"
                     >
                       <Copy className="w-3.5 h-3.5" />
                     </button>
@@ -231,8 +231,8 @@ export default function SystemDesign() {
           ) : (
             <Card className="text-center py-20">
               <Server className="w-12 h-12 text-gray-700 mx-auto mb-3" />
-              <p className="text-gray-400 text-sm">Select a system design topic</p>
-              <p className="text-gray-600 text-xs mt-1">Get AI-powered component breakdowns and scaling strategies</p>
+              <p className="text-muted-foreground text-sm">Select a system design topic</p>
+              <p className="text-muted-foreground text-xs mt-1">Get AI-powered component breakdowns and scaling strategies</p>
             </Card>
           )}
         </div>

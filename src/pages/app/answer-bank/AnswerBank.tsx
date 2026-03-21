@@ -119,7 +119,7 @@ export default function AnswerBank() {
                 "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
                 category === c
                   ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                  : "bg-white/3 border-white/10 text-gray-500 hover:text-gray-300"
+                  : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
               )}
             >
               {c}
@@ -136,8 +136,8 @@ export default function AnswerBank() {
       ) : filtered.length === 0 ? (
         <Card className="text-center py-16">
           <BookOpen className="w-10 h-10 text-gray-700 mx-auto mb-3" />
-          <p className="text-gray-400 text-sm">No saved answers yet.</p>
-          <p className="text-gray-600 text-xs mt-1">
+          <p className="text-muted-foreground text-sm">No saved answers yet.</p>
+          <p className="text-muted-foreground text-xs mt-1">
             Save answers from sessions or build them in Prep Lab.
           </p>
         </Card>
@@ -155,7 +155,7 @@ export default function AnswerBank() {
                     <Star className="w-3.5 h-3.5 text-violet-400" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-white leading-snug">
+                    <p className="text-sm font-medium text-foreground leading-snug">
                       {ans.question_text}
                     </p>
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
@@ -170,7 +170,7 @@ export default function AnswerBank() {
                           {ans.score}/100
                         </Badge>
                       )}
-                      <span className="text-[10px] text-gray-600">
+                      <span className="text-[10px] text-muted-foreground">
                         {format(new Date(ans.created_at), "MMM d, yyyy")}
                       </span>
                       {ans.source === "prep_lab" && (
@@ -183,7 +183,7 @@ export default function AnswerBank() {
                   <div className="flex items-center gap-1.5 shrink-0">
                     <button
                       onClick={() => navigator.clipboard.writeText(ans.answer_text ?? "")}
-                      className="p-1.5 rounded-lg text-gray-600 hover:text-gray-300 hover:bg-white/5 transition-all"
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/5 transition-all"
                       title="Copy answer"
                     >
                       <Copy className="w-3.5 h-3.5" />
@@ -194,19 +194,19 @@ export default function AnswerBank() {
                         setEditText(ans.answer_text ?? "");
                         setExpanded((p) => ({ ...p, [ans.id]: true }));
                       }}
-                      className="p-1.5 rounded-lg text-gray-600 hover:text-gray-300 hover:bg-white/5 transition-all"
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/5 transition-all"
                     >
                       <Edit2 className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => setDeleteId(ans.id)}
-                      className="p-1.5 rounded-lg text-gray-600 hover:text-red-400 hover:bg-white/5 transition-all"
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-accent/5 transition-all"
                     >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                     <button
                       onClick={() => setExpanded((p) => ({ ...p, [ans.id]: !p[ans.id] }))}
-                      className="p-1.5 rounded-lg text-gray-600 hover:text-gray-300 hover:bg-white/5 transition-all"
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/5 transition-all"
                     >
                       {isOpen
                         ? <ChevronUp className="w-3.5 h-3.5" />
@@ -225,7 +225,7 @@ export default function AnswerBank() {
                           value={editText}
                           onChange={(e) => setEditText(e.target.value)}
                           rows={6}
-                          className="w-full bg-black/30 border border-violet-500/50 text-white rounded-xl px-4 py-3 text-sm resize-none focus:outline-none"
+                          className="w-full bg-black/30 border border-violet-500/50 text-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none"
                         />
                         <div className="flex gap-2">
                           <Button
@@ -246,7 +246,7 @@ export default function AnswerBank() {
                         </div>
                       </>
                     ) : (
-                      <p className="text-sm text-gray-300 leading-relaxed whitespace-pre-wrap">
+                      <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
                         {ans.answer_text}
                       </p>
                     )}
@@ -262,7 +262,7 @@ export default function AnswerBank() {
                             <p className="text-[10px] font-bold text-violet-400 uppercase mb-1">
                               {k}
                             </p>
-                            <p className="text-xs text-gray-400">{v as string}</p>
+                            <p className="text-xs text-muted-foreground">{v as string}</p>
                           </div>
                         ))}
                       </div>
@@ -277,7 +277,7 @@ export default function AnswerBank() {
 
       {/* Delete confirm */}
       <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Delete answer?" size="sm">
-        <p className="text-sm text-gray-400 mb-5">
+        <p className="text-sm text-muted-foreground mb-5">
           This will permanently delete this saved answer.
         </p>
         <div className="flex gap-3">
@@ -345,26 +345,26 @@ function AddAnswerModal({
     <Modal open={open} onClose={onClose} title="Add answer to bank" size="lg">
       <div className="space-y-4">
         <div>
-          <p className="text-xs text-gray-400 mb-1.5">Question</p>
+          <p className="text-xs text-muted-foreground mb-1.5">Question</p>
           <input
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             placeholder="e.g. Tell me about a time you failed…"
-            className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
+            className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
           />
         </div>
         <div>
-          <p className="text-xs text-gray-400 mb-1.5">Your answer</p>
+          <p className="text-xs text-muted-foreground mb-1.5">Your answer</p>
           <textarea
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
             placeholder="Write your STAR answer here…"
             rows={6}
-            className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
+            className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
           />
         </div>
         <div>
-          <p className="text-xs text-gray-400 mb-1.5">Category</p>
+          <p className="text-xs text-muted-foreground mb-1.5">Category</p>
           <div className="flex flex-wrap gap-2">
             {CATEGORIES.filter((c) => c !== "All").map((c) => (
               <button
@@ -374,7 +374,7 @@ function AddAnswerModal({
                   "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
                   category === c
                     ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                    : "bg-white/3 border-white/10 text-gray-500 hover:text-gray-300"
+                    : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
                 )}
               >
                 {c}

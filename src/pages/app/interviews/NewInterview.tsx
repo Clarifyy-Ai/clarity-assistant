@@ -85,7 +85,7 @@ export default function NewInterview() {
       <div className="flex items-center gap-3">
         <button
           onClick={() => navigate("/app/interviews")}
-          className="p-2 rounded-xl bg-white/5 hover:bg-white/10 text-gray-400 hover:text-white transition-all"
+          className="p-2 rounded-xl bg-accent/5 hover:bg-accent/10 text-muted-foreground hover:text-foreground transition-all"
         >
           <ChevronLeft className="w-4 h-4" />
         </button>
@@ -100,7 +100,7 @@ export default function NewInterview() {
 
         {/* Company + role */}
         <Card>
-          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
             <Building2 className="w-4 h-4 text-violet-400" />
             Company & Role
           </h3>
@@ -124,12 +124,12 @@ export default function NewInterview() {
 
         {/* Type + round */}
         <Card>
-          <h3 className="text-sm font-semibold text-white mb-4">Interview details</h3>
+          <h3 className="text-sm font-semibold text-foreground mb-4">Interview details</h3>
 
           <div className="space-y-4">
             {/* Type */}
             <div>
-              <p className="text-xs font-medium text-gray-300 mb-2">Interview type</p>
+              <p className="text-xs font-medium text-foreground mb-2">Interview type</p>
               <div className="flex flex-wrap gap-2">
                 {INTERVIEW_TYPES.map((t) => (
                   <button
@@ -140,7 +140,7 @@ export default function NewInterview() {
                       "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
                       interviewType === t
                         ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                        : "bg-white/3 border-white/10 text-gray-500 hover:text-gray-300"
+                        : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
                     )}
                   >
                     {t}
@@ -151,7 +151,7 @@ export default function NewInterview() {
 
             {/* Round */}
             <div>
-              <p className="text-xs font-medium text-gray-300 mb-2">Round number</p>
+              <p className="text-xs font-medium text-foreground mb-2">Round number</p>
               <div className="flex gap-2">
                 {ROUND_NUMBERS.map((r) => (
                   <button
@@ -162,7 +162,7 @@ export default function NewInterview() {
                       "w-9 h-9 rounded-xl border text-xs font-bold transition-all",
                       roundNumber === r
                         ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                        : "bg-white/3 border-white/10 text-gray-500 hover:text-gray-300"
+                        : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
                     )}
                   >
                     {r}
@@ -175,13 +175,13 @@ export default function NewInterview() {
 
         {/* Date + time + duration */}
         <Card>
-          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
             <Clock className="w-4 h-4 text-blue-400" />
             Schedule
           </h3>
           <div className="space-y-4">
             <div>
-              <p className="text-xs font-medium text-gray-300 mb-1.5">
+              <p className="text-xs font-medium text-foreground mb-1.5">
                 Date & time
               </p>
               <input
@@ -189,12 +189,12 @@ export default function NewInterview() {
                 value={scheduledAt}
                 onChange={(e) => setScheduledAt(e.target.value)}
                 required
-                className="w-full bg-black/30 border border-white/10 text-white rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500 [color-scheme:dark]"
+                className="w-full bg-black/30 border border-white/10 text-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500 [color-scheme:dark]"
               />
             </div>
 
             <div>
-              <p className="text-xs font-medium text-gray-300 mb-2">
+              <p className="text-xs font-medium text-foreground mb-2">
                 Duration (minutes)
               </p>
               <div className="flex gap-2">
@@ -207,7 +207,7 @@ export default function NewInterview() {
                       "flex-1 py-2 rounded-xl border text-xs font-medium transition-all",
                       duration === d
                         ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                        : "bg-white/3 border-white/10 text-gray-500 hover:text-gray-300"
+                        : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
                     )}
                   >
                     {d}m
@@ -220,7 +220,7 @@ export default function NewInterview() {
 
         {/* Platform + link */}
         <Card>
-          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
             <Globe className="w-4 h-4 text-emerald-400" />
             Platform
           </h3>
@@ -235,7 +235,7 @@ export default function NewInterview() {
                     "py-2.5 px-3 rounded-xl border text-xs font-medium transition-all",
                     platform === p.value
                       ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                      : "bg-white/3 border-white/10 text-gray-500 hover:text-gray-300"
+                      : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {p.label}
@@ -254,7 +254,7 @@ export default function NewInterview() {
 
         {/* Interviewer + notes */}
         <Card>
-          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
             <User className="w-4 h-4 text-amber-400" />
             Additional info
           </h3>
@@ -266,7 +266,7 @@ export default function NewInterview() {
               placeholder="e.g. Sarah Chen"
             />
             <div>
-              <p className="text-xs font-medium text-gray-300 mb-1.5">
+              <p className="text-xs font-medium text-foreground mb-1.5">
                 Notes (optional)
               </p>
               <textarea
@@ -274,7 +274,7 @@ export default function NewInterview() {
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Any reminders, prep notes, or links…"
                 rows={3}
-                className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
+                className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
               />
             </div>
           </div>

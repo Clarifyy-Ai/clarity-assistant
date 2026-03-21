@@ -195,7 +195,7 @@ function AppShell() {
   }, []);
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-gradient-to-br from-[#0a0a0f] to-[#1a1a2e]">
+    <div className="flex h-screen w-full overflow-hidden bg-background">
       <AppSidebar />
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         <AppTopBar />
@@ -388,19 +388,28 @@ const router = createBrowserRouter([
 export default function App() {
   const initialize = useAuthStore((s) => s.initialize);
   const theme = useUIStore((s) => s.theme);
+  const resolvedTheme = useUIStore((s) => s.resolved_theme);
 
   // Single initialize() call — authStore owns ALL auth logic
   useEffect(() => {
     initialize();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Theme sync → <html>
+  useEffect(() => {
+    if (theme !== "system") return;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const handler = (e: MediaQueryListEvent) =>
+      useUIStore.getState().setTheme("system");
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, [theme]);
+
   useEffect(() => {
     const root = document.documentElement;
-    root.classList.toggle("dark", theme === "dark");
-    root.setAttribute("data-theme", theme);
-    localStorage.setItem("clarity-theme", theme);
-  }, [theme]);
+    root.classList.toggle("dark", resolvedTheme === "dark");
+    root.setAttribute("data-theme", resolvedTheme);
+    localStorage.setItem("clarity-theme", resolvedTheme);
+  }, [resolvedTheme]);
 
   return (
     <ErrorBoundary>

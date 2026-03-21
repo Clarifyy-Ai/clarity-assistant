@@ -145,8 +145,8 @@ function KPICard({
           </span>
         )}
       </div>
-      <p className="text-2xl font-black text-white">{value}</p>
-      <p className="text-xs text-gray-500">{label}</p>
+      <p className="text-2xl font-black text-foreground">{value}</p>
+      <p className="text-xs text-muted-foreground">{label}</p>
     </Card>
   );
 }
@@ -160,7 +160,7 @@ function ScoreTrendChart({ data }: { data: { date: string; score: number }[] }) 
     return (
       <Card className="text-center py-10">
         <BarChart2 className="w-8 h-8 text-gray-700 mx-auto mb-2" />
-        <p className="text-gray-500 text-sm">No session data yet.</p>
+        <p className="text-muted-foreground text-sm">No session data yet.</p>
       </Card>
     );
   }
@@ -170,7 +170,7 @@ function ScoreTrendChart({ data }: { data: { date: string; score: number }[] }) 
   return (
     <Card>
       <div className="flex items-center justify-between mb-5">
-        <h3 className="text-sm font-semibold text-white">Score over time</h3>
+        <h3 className="text-sm font-semibold text-foreground">Score over time</h3>
         <Badge variant="violet" size="sm">Last 30 sessions</Badge>
       </div>
 
@@ -188,7 +188,7 @@ function ScoreTrendChart({ data }: { data: { date: string; score: number }[] }) 
                 style={{ height: `${pct}%` }}
               />
               {/* Tooltip */}
-              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-[#1a1a2e] border border-white/15 rounded-lg px-2 py-1 text-[10px] text-white whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-[#1a1a2e] border border-white/15 rounded-lg px-2 py-1 text-[10px] text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                 {d.score} · {format(new Date(d.date), "MMM d")}
               </div>
             </div>
@@ -197,7 +197,7 @@ function ScoreTrendChart({ data }: { data: { date: string; score: number }[] }) 
       </div>
 
       {/* X-axis labels */}
-      <div className="flex justify-between mt-2 text-[10px] text-gray-600">
+      <div className="flex justify-between mt-2 text-[10px] text-muted-foreground">
         <span>{data.length >= 20 ? format(new Date(data[data.length - 20]?.date ?? new Date()), "MMM d") : "Start"}</span>
         <span>Today</span>
       </div>
@@ -223,7 +223,7 @@ function DimensionRadar({
 
   return (
     <Card>
-      <h3 className="text-sm font-semibold text-white mb-4">Average by dimension</h3>
+      <h3 className="text-sm font-semibold text-foreground mb-4">Average by dimension</h3>
       <div className="space-y-3">
         {Object.entries(dims).map(([key, val]) => {
           const c =
@@ -259,7 +259,7 @@ function CategoryBreakdown({
     return (
       <Card className="text-center py-10">
         <Target className="w-8 h-8 text-gray-700 mx-auto mb-2" />
-        <p className="text-gray-500 text-sm">No category data yet.</p>
+        <p className="text-muted-foreground text-sm">No category data yet.</p>
       </Card>
     );
   }
@@ -276,7 +276,7 @@ function CategoryBreakdown({
           <Card key={cat.category} padding="sm">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
-                <span className="text-sm font-medium text-white capitalize">
+                <span className="text-sm font-medium text-foreground capitalize">
                   {cat.category}
                 </span>
                 <Badge variant="gray" size="sm">{cat.count} sessions</Badge>
@@ -303,7 +303,7 @@ function CategoryBreakdown({
               <p className="text-sm font-semibold text-amber-300">
                 Focus area: {sorted[sorted.length - 1].category}
               </p>
-              <p className="text-xs text-gray-400 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Your weakest category. Consider drilling{" "}
                 {sorted[sorted.length - 1].category} questions in Prep Lab.
               </p>
@@ -326,11 +326,11 @@ function SpeechMetrics({ analytics }: { analytics: any }) {
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="text-center">
-          <div className="text-3xl font-black text-white mb-1">
+          <div className="text-3xl font-black text-foreground mb-1">
             {analytics.avgWpm ?? "—"}
           </div>
-          <p className="text-xs text-gray-500">Avg WPM</p>
-          <p className="text-[10px] text-gray-600 mt-1">
+          <p className="text-xs text-muted-foreground">Avg WPM</p>
+          <p className="text-[10px] text-muted-foreground mt-1">
             Ideal: 100 – 150 WPM
           </p>
           <ProgressBar
@@ -349,15 +349,15 @@ function SpeechMetrics({ analytics }: { analytics: any }) {
           <div className="text-3xl font-black text-amber-400 mb-1">
             {analytics.avgFillers ?? "—"}
           </div>
-          <p className="text-xs text-gray-500">Avg fillers per session</p>
-          <p className="text-[10px] text-gray-600 mt-1">Target: under 5</p>
+          <p className="text-xs text-muted-foreground">Avg fillers per session</p>
+          <p className="text-[10px] text-muted-foreground mt-1">Target: under 5</p>
         </Card>
 
         <Card className="text-center">
           <div className="text-3xl font-black text-violet-400 mb-1">
             {analytics.avgConfidence ?? "—"}%
           </div>
-          <p className="text-xs text-gray-500">Avg confidence score</p>
+          <p className="text-xs text-muted-foreground">Avg confidence score</p>
           <ProgressBar
             value={analytics.avgConfidence ?? 0}
             max={100}
@@ -371,7 +371,7 @@ function SpeechMetrics({ analytics }: { analytics: any }) {
       {/* Filler word breakdown */}
       {Object.keys(fillerBreakdown).length > 0 && (
         <Card>
-          <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
             <Volume2 className="w-4 h-4 text-amber-400" />
             Filler word breakdown
           </h3>
@@ -390,7 +390,7 @@ function SpeechMetrics({ analytics }: { analytics: any }) {
                     size="sm"
                     className="flex-1"
                   />
-                  <span className="text-xs text-gray-500 w-8 text-right">
+                  <span className="text-xs text-muted-foreground w-8 text-right">
                     {count as number}×
                   </span>
                 </div>
@@ -424,7 +424,7 @@ function ActivityHeatmap({ data }: { data: Record<string, number> }) {
 
   return (
     <Card>
-      <h3 className="text-sm font-semibold text-white mb-4 flex items-center gap-2">
+      <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
         <Flame className="w-4 h-4 text-amber-400" />
         Practice activity — last 12 weeks
       </h3>
@@ -451,7 +451,7 @@ function ActivityHeatmap({ data }: { data: Record<string, number> }) {
         ))}
       </div>
       <div className="flex items-center justify-end gap-2 mt-2">
-        <span className="text-[10px] text-gray-600">Less</span>
+        <span className="text-[10px] text-muted-foreground">Less</span>
         {[0.1, 0.3, 0.5, 0.75, 1].map((a) => (
           <div
             key={a}
@@ -459,7 +459,7 @@ function ActivityHeatmap({ data }: { data: Record<string, number> }) {
             style={{ backgroundColor: `rgba(139,92,246,${a})` }}
           />
         ))}
-        <span className="text-[10px] text-gray-600">More</span>
+        <span className="text-[10px] text-muted-foreground">More</span>
       </div>
     </Card>
   );
