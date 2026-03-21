@@ -10,35 +10,50 @@ import { PANIC_RESPONSE } from "@/types/session.types";
 // ─────────────────────────────────────────────────────────────────
 
 export function useOverlayVisibility(enabled = true) {
-  const store = useOverlayStore();
+  // Individual selectors — reactive state returned to callers
+  const is_visible       = useOverlayStore((s) => s.is_visible);
+  const is_stealth_mode  = useOverlayStore((s) => s.is_stealth_mode);
+  const is_panic_visible = useOverlayStore((s) => s.is_panic_visible);
+  const position         = useOverlayStore((s) => s.position);
 
+  // Hotkey callbacks use .getState() — reads current value at call time,
+  // avoiding stale closure issues when the callbacks are long-lived
   useHotkeys(
     {
-      toggle_overlay: () => store.is_visible ? store.hideOverlay() : store.showOverlay(),
-      stealth_mode:   () => store.setStealthMode(!store.is_stealth_mode),
-      panic:          () => store.showPanic(PANIC_RESPONSE),
-      clear_hint:     () => store.clearHint(),
+      toggle_overlay: () => {
+        const s = useOverlayStore.getState();
+        s.is_visible ? s.hideOverlay() : s.showOverlay();
+      },
+      stealth_mode: () => {
+        const s = useOverlayStore.getState();
+        s.setStealthMode(!s.is_stealth_mode);
+      },
+      panic:      () => useOverlayStore.getState().showPanic(PANIC_RESPONSE),
+      clear_hint: () => useOverlayStore.getState().clearHint(),
     },
     enabled
   );
 
-  const show = useCallback(() => store.showOverlay(), [store]);
-  const hide = useCallback(() => store.hideOverlay(), [store]);
+  // Stable action callbacks — .getState() inside body, empty dep array
+  const show   = useCallback(() => useOverlayStore.getState().showOverlay(),  []);
+  const hide   = useCallback(() => useOverlayStore.getState().hideOverlay(),  []);
   const toggle = useCallback(() => {
-    store.is_visible ? store.hideOverlay() : store.showOverlay();
-  }, [store]);
+    const s = useOverlayStore.getState();
+    s.is_visible ? s.hideOverlay() : s.showOverlay();
+  }, []);
 
   return {
-    isVisible:    store.is_visible,
-    isStealth:    store.is_stealth_mode,
-    isPanic:      store.is_panic_visible,
-    position:     store.position,
+    isVisible:   is_visible,
+    isStealth:   is_stealth_mode,
+    isPanic:     is_panic_visible,
+    position,
     show,
     hide,
     toggle,
-    setPosition:  store.setPosition,
-    setStealth:   store.setStealthMode,
-    showPanic:    store.showPanic,
-    hidePanic:    store.hidePanic,
+    // Zustand actions are stable references — safe to pull from getState()
+    setPosition: useOverlayStore.getState().setPosition,
+    setStealth:  useOverlayStore.getState().setStealthMode,
+    showPanic:   useOverlayStore.getState().showPanic,
+    hidePanic:   useOverlayStore.getState().hidePanic,
   };
 }

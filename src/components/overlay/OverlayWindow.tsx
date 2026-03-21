@@ -19,24 +19,24 @@ import { cn } from "@/lib/utils";
 export function OverlayWindow() {
   const panelRef = useRef<HTMLDivElement>(null);
 
-  const {
-    is_visible,
-    is_stealth_mode,
-    is_proctor_safe,
-    is_panic_visible,
-    panic_content,
-    position,
-    current_question,
-    current_hint,
-    streaming_buffer,
-    hint_state,
-    hint_style,
-    network_color,
-    error_message,
-    screenshot_hint,
-    is_screenshot_loading,
-    setPosition,
-  } = useOverlayStore();
+  // Individual selectors — prevents re-renders from unrelated store churn
+  // (streaming_buffer is updated on every token; without selectors every
+  //  component subscribed to the full store would re-render on each token)
+  const is_visible            = useOverlayStore((s) => s.is_visible);
+  const is_stealth_mode       = useOverlayStore((s) => s.is_stealth_mode);
+  const is_proctor_safe       = useOverlayStore((s) => s.is_proctor_safe);
+  const is_panic_visible      = useOverlayStore((s) => s.is_panic_visible);
+  const panic_content         = useOverlayStore((s) => s.panic_content);
+  const position              = useOverlayStore((s) => s.position);
+  const current_question      = useOverlayStore((s) => s.current_question);
+  const current_hint          = useOverlayStore((s) => s.current_hint);
+  const streaming_buffer      = useOverlayStore((s) => s.streaming_buffer);
+  const hint_state            = useOverlayStore((s) => s.hint_state);
+  const hint_style            = useOverlayStore((s) => s.hint_style);
+  const network_color         = useOverlayStore((s) => s.network_color);
+  const error_message         = useOverlayStore((s) => s.error_message);
+  const screenshot_hint       = useOverlayStore((s) => s.screenshot_hint);
+  const is_screenshot_loading = useOverlayStore((s) => s.is_screenshot_loading);
 
   useStealthMouse(panelRef, is_stealth_mode);
 
@@ -55,7 +55,7 @@ export function OverlayWindow() {
       <OverlayPositionManager
         ref={panelRef}
         position={position}
-        onPositionChange={setPosition}
+        onPositionChange={(pos) => useOverlayStore.getState().setPosition(pos)}
         isProctorSafe={is_proctor_safe}
       >
         <div

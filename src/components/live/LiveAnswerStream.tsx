@@ -11,13 +11,12 @@ import { Loader2 } from "lucide-react";
 // ─────────────────────────────────────────────────────────────────
 
 export function LiveAnswerStream() {
-  const {
-    current_hint,
-    streaming_buffer,
-    hint_state,
-    hint_style,
-    error_message,
-  } = useOverlayStore();
+  // Individual selectors — avoids re-renders from unrelated store ticks
+  const current_hint     = useOverlayStore((s) => s.current_hint);
+  const streaming_buffer = useOverlayStore((s) => s.streaming_buffer);
+  const hint_state       = useOverlayStore((s) => s.hint_state);
+  const hint_style       = useOverlayStore((s) => s.hint_style);
+  const error_message    = useOverlayStore((s) => s.error_message);
 
   const text = hint_state === "streaming" ? streaming_buffer : current_hint;
 
@@ -27,7 +26,7 @@ export function LiveAnswerStream() {
     [text, hint_style]
   );
 
-  const isStreaming = hint_state === "streaming";
+  const isStreaming  = hint_state === "streaming";
   const isGenerating = hint_state === "generating";
 
   // Idle / waiting state

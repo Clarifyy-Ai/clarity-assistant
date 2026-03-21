@@ -19,10 +19,8 @@ export function LiveCodingProblemCapture({
   disabled,
   className,
 }: LiveCodingProblemCaptureProps) {
-  const { is_screenshot_loading, setErrorMessage } = useOverlayStore() as {
-    is_screenshot_loading: boolean;
-    setErrorMessage?: (msg: string) => void;
-  };
+  // Individual selector — only re-renders when loading state changes
+  const is_screenshot_loading = useOverlayStore((s) => s.is_screenshot_loading);
 
   const handleCapture = useCallback(async () => {
     if (is_screenshot_loading || disabled) return;
@@ -34,12 +32,12 @@ export function LiveCodingProblemCapture({
       const message =
         err?.message ||
         "Could not capture the screen. Please allow screen capture and try again.";
-      setErrorMessage?.(message);
-      // Optional: console for diagnostics
+      // Use .getState() to call action inside callback — avoids stale closure
+      useOverlayStore.getState().setError(message);
       // eslint-disable-next-line no-console
       console.error("[CaptureCodingProblem] failed:", err);
     }
-  }, [disabled, is_screenshot_loading, setErrorMessage]);
+  }, [disabled, is_screenshot_loading]);
 
   return (
     <button

@@ -174,6 +174,18 @@ DEEPGRAM_API_KEY=...      # Speech-to-text for live sessions
 - `MockSession.tsx` — `useOverlayStore()` → individual selectors for `hint_state` / `current_hint_text`
 - `LiveRehearsal.tsx` — `useSessionStore()` / `useOverlayStore()` → individual selectors; all actions via `.getState()`
 - `LiveCopilot.tsx` — `useOverlayStore()` → 7 individual selectors; all actions via `.getState()`
+- `LiveAnswerStream.tsx` — `useOverlayStore()` → 5 individual selectors (`current_hint`, `streaming_buffer`, `hint_state`, `hint_style`, `error_message`)
+- `LiveCodingProblemCapture.tsx` — `useOverlayStore()` → selector for `is_screenshot_loading`; `setErrorMessage` cast removed, uses `useOverlayStore.getState().setError()` in callback
+- `OverlayWindow.tsx` — 13-field destructure from `useOverlayStore()` → 15 individual selectors; `setPosition` passed via inline arrow calling `.getState().setPosition()`
+- `useOverlayVisibility.ts` — bare `useOverlayStore()` → individual selectors for reactive return values; all hotkey callbacks and `useCallback` wrappers use `.getState()` to read state at call-time (prevents stale closure bugs)
+- `useDeepgramStream.ts` — removed `audioStore` reactive subscription entirely; all `setDeepgramStatus` calls use `useAudioStore.getState()` inside callbacks
+
+## GitHub Sync Notes
+
+- The stale `.git/index.lock` file that was blocking git operations has been removed.
+- All local changes are committed by Replit's checkpoint system after each build session.
+- To push to GitHub: use the Replit **Git** panel (⌘K → Git, or the Version Control icon in the sidebar). Click **Pull** first (to merge any remote commits), then **Push**.
+- The shell cannot reach GitHub directly (network is restricted in the agent container) — always use the Git panel for GitHub sync.
 
 ## What User Must Do for Full Features
 
