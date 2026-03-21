@@ -22,6 +22,7 @@ const Login          = lazy(() => import("@/pages/auth/Login"));
 const Signup         = lazy(() => import("@/pages/auth/Signup"));
 const VerifyEmail    = lazy(() => import("@/pages/auth/VerifyEmail"));
 const ResetPassword  = lazy(() => import("@/pages/auth/ResetPassword"));
+const AuthCallback   = lazy(() => import("@/pages/auth/AuthCallback"));
 
 // Onboarding
 const OnboardingIndex = lazy(() => import("@/pages/onboarding/OnboardingIndex"));
@@ -118,6 +119,9 @@ const AdminModelCosts   = lazy(() => import("@/pages/app/admin/AdminModelCosts")
 const AdminFeatureFlags = lazy(() => import("@/pages/app/admin/AdminFeatureFlags"));
 const AdminLayout       = lazy(() => import("@/pages/app/admin/AdminLayout"));
 
+// Scorecard
+const Scorecard = lazy(() => import("@/pages/Scorecard"));
+
 // 404
 const NotFound = lazy(() => import("@/pages/NotFound"));
 
@@ -209,6 +213,7 @@ const router = createBrowserRouter([
   { path: "/verify-email",   element: <Page component={VerifyEmail} /> },
   { path: "/forgot-password",element: <Page component={ResetPassword} /> },
   { path: "/reset-password", element: <Page component={ResetPassword} /> },
+  { path: "/auth/callback",  element: <Page component={AuthCallback} /> },
 
   // ── Onboarding (protected, no shell) ───────────────────────────────────────
   {
@@ -278,6 +283,8 @@ const router = createBrowserRouter([
 
           { path: "companies",    element: <Page component={CompanyResearch} /> },
           { path: "companies/:id",element: <Page component={CompanyProfile} /> },
+
+          { path: "scorecard/:sessionId", element: <Page component={Scorecard} /> },
 
           { path: "debrief",    element: <Page component={Debrief} /> },
           { path: "debrief/:id",element: <Page component={DebriefDetail} /> },
