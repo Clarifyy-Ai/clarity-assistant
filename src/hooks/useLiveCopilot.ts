@@ -87,7 +87,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
 
   // ── Overlay drag ───────────────────────────────────────────────
   useEffect(() => {
-    if (!overlayRef.current) return;
+    if (!overlayRef?.current) return;
 
     dragCleanupRef.current = createDragHandler(
       overlayRef.current,
