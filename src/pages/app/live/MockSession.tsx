@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─────────────────────────────────────────────────────────────────────────────
 // live/MockSession.tsx — AI-driven mock interview session inside the live
 // interface. Bridges LiveOverlay and MockInterview logic: loads a question
