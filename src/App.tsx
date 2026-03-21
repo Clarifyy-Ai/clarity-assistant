@@ -181,7 +181,7 @@ const queryClient = new QueryClient({
 
 function AppShell() {
   const profile = useAuthStore((s) => s.profile);
-  const showSetupChecklist = profile && !(profile as any).onboarding_completed;
+  const showSetupChecklist = profile && !profile.onboarding_completed;
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {

@@ -39,22 +39,27 @@ export function ScreenCaptureBlocker({
     };
     document.addEventListener('visibilitychange', handleVisChange);
 
-    const onDisplayCapture = (e: Event) => {
-      const track = (e as any).track;
-      if (track?.kind === 'video') {
-        notify('recording');
-      }
+    const checkActiveDisplayCapture = () => {
+      try {
+        if (!navigator.mediaDevices?.enumerateDevices) return;
+        navigator.mediaDevices.enumerateDevices().then((devices) => {
+          const hasActiveCapture = devices.some(
+            (d) =>
+              d.kind === 'videoinput' &&
+              d.label &&
+              /screen|display|monitor|window|tab/i.test(d.label)
+          );
+          if (hasActiveCapture) notify('sharing');
+        }).catch(() => {});
+      } catch (_) {}
     };
 
-    try {
-      navigator.mediaDevices?.addEventListener?.('devicechange', onDisplayCapture);
-    } catch (_) {}
+    checkActiveDisplayCapture();
+    const interval = setInterval(checkActiveDisplayCapture, 15000);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisChange);
-      try {
-        navigator.mediaDevices?.removeEventListener?.('devicechange', onDisplayCapture);
-      } catch (_) {}
+      clearInterval(interval);
     };
   }, [isActive, notify]);
 
