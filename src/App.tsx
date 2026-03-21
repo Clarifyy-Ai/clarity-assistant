@@ -397,9 +397,9 @@ export default function App() {
 
   useEffect(() => {
     if (theme !== "system") return;
+    useUIStore.getState().setTheme("system");
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
-    const handler = (e: MediaQueryListEvent) =>
-      useUIStore.getState().setTheme("system");
+    const handler = () => useUIStore.getState().setTheme("system");
     mq.addEventListener("change", handler);
     return () => mq.removeEventListener("change", handler);
   }, [theme]);

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useUIStore } from "@/store/uiStore";
+import { useUIStore, type Theme } from "@/store/uiStore";
 import { useThemeStore } from "@/store/themeStore";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -29,14 +29,16 @@ export default function SettingsAppearance() {
   const setUITheme   = useUIStore((s) => s.setTheme);
   const extras       = useThemeStore();
 
-  const [theme,    setTheme]    = useState(currentTheme);
   const [accent,   setAccent]   = useState(extras.accentColor ?? "violet");
   const [fontSize, setFontSize] = useState(extras.fontSize ?? "Default");
   const [density,  setDensity]  = useState(extras.density ?? "Default");
   const [saved,    setSaved]    = useState(false);
 
+  function handleThemeClick(t: Theme) {
+    setUITheme(t);
+  }
+
   function handleSave() {
-    setUITheme(theme);
     extras.setAccentColor(accent);
     extras.setFontSize(fontSize);
     extras.setDensity(density);
@@ -54,10 +56,10 @@ export default function SettingsAppearance() {
           {THEMES.map((t) => (
             <button
               key={t.id}
-              onClick={() => setTheme(t.id)}
+              onClick={() => handleThemeClick(t.id)}
               className={cn(
                 "relative overflow-hidden rounded-xl border-2 aspect-video transition-all",
-                theme === t.id
+                currentTheme === t.id
                   ? "border-violet-500"
                   : "border-border hover:border-muted-foreground/30"
               )}
@@ -69,7 +71,7 @@ export default function SettingsAppearance() {
                   <p className="text-[10px] font-medium text-white">{t.label}</p>
                 </div>
               </div>
-              {theme === t.id && (
+              {currentTheme === t.id && (
                 <div className="absolute top-2 right-2 w-4 h-4 bg-violet-500 rounded-full flex items-center justify-center">
                   <CheckCircle className="w-3 h-3 text-white" />
                 </div>
