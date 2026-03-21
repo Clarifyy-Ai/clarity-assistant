@@ -1,30 +1,30 @@
 import { fileURLToPath } from "url";
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
-import { sentryVitePlugin } from "@sentry/vite-plugin";
 
-// __dirname is not available in ESM ("type": "module" in package.json)
-// This polyfill is required or Vite will throw a ReferenceError
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
 
-  return {
-    plugins: [
-      react(),
-      // Sentry source maps — only in production builds
-      mode === "production" &&
+  const plugins = [react()];
+
+  if (mode === "production" && env.SENTRY_ORG && env.SENTRY_PROJECT && env.SENTRY_AUTH_TOKEN) {
+    import("@sentry/vite-plugin").then(({ sentryVitePlugin }) => {
+      plugins.push(
         sentryVitePlugin({
           org: env.SENTRY_ORG,
           project: env.SENTRY_PROJECT,
           authToken: env.SENTRY_AUTH_TOKEN,
-          sourcemaps: {
-            assets: "./dist/**",
-          },
+          sourcemaps: { assets: "./dist/**" },
           telemetry: false,
-        }),
-    ].filter(Boolean),
+        }) as never
+      );
+    });
+  }
+
+  return {
+    plugins,
 
     resolve: {
       alias: {
@@ -33,7 +33,7 @@ export default defineConfig(({ mode }) => {
     },
 
     build: {
-      sourcemap: true, // Required for Sentry
+      sourcemap: true,
       rollupOptions: {
         output: {
           manualChunks: {
@@ -64,9 +64,8 @@ export default defineConfig(({ mode }) => {
       allowedHosts: true,
       proxy: {
         "/functions/v1": {
-          target: env.VITE_SUPABASE_URL,
+          target: env.VITE_SUPABASE_URL || "https://qzgvjrvtkwlzxpmlddkx.supabase.co",
           changeOrigin: true,
-          // rewrite is a no-op here — kept for future path remapping
           rewrite: (p) => p.replace(/^\/functions\/v1/, "/functions/v1"),
         },
       },

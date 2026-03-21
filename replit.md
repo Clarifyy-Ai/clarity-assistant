@@ -43,12 +43,19 @@ npm test           # Vitest unit tests
 
 ## Environment Variables
 
-Key variables (set in `.env`):
+Key variables (set as Replit shared env vars):
 - `VITE_SUPABASE_URL` — Supabase project URL
-- `VITE_SUPABASE_PUBLISHABLE_KEY` — Supabase anon key
+- `VITE_SUPABASE_PUBLISHABLE_KEY` — Supabase anon key (public)
 - `VITE_SUPABASE_PROJECT_ID` — Supabase project ID
 
-See `.env.local` for the full list of optional variables (Stripe, Sentry, PostHog, Deepgram, etc.).
+Optional variables (add in Replit Secrets if needed):
+- `VITE_STRIPE_PUBLISHABLE_KEY` — Stripe public key (for billing)
+- `VITE_POSTHOG_KEY` — PostHog analytics key
+- `VITE_SENTRY_DSN` — Sentry error monitoring
+- `SENTRY_ORG`, `SENTRY_PROJECT`, `SENTRY_AUTH_TOKEN` — Sentry source maps (production only)
+
+AI provider keys (stored as Supabase edge function secrets, NOT in Replit):
+- `GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY` — handled by Supabase edge functions
 
 ## Auth Architecture (Critical)
 
