@@ -9,17 +9,20 @@ import { useOverlayStore } from "@/store/overlayStore";
 // ─────────────────────────────────────────────────────────────────
 
 export function useOfflineFallback() {
-  const { mode }    = useNetworkMonitor();
-  const overlayStore = useOverlayStore();
-
+  const { mode } = useNetworkMonitor();
   const isOffline = mode === "offline";
 
   const serveFallback = useCallback((questionText: string): boolean => {
-    if (mode !== "offline") return false;
+    const { mode: currentMode } = useOverlayStore.getState();
+    if (currentMode !== undefined && mode !== "offline") return false;
 
-    const template = `Consider this question: "${questionText.slice(0, 100)}"\n\nYou're offline. Use the STAR framework: Situation → Task → Action → Result.`;
-    overlayStore.setOfflineFallback(template);
-    return true;
+    // Use getState() so the callback stays stable (no store object in dep array)
+    const store = useOverlayStore.getState();
+    const template =
+      `Consider this question: "${questionText.slice(0, 100)}"\n\n` +
+      `You're offline. Use the STAR framework:\nSituation → Task → Action → Result.`;
+    store.setOfflineFallback?.(template);
+    return mode === "offline";
   }, [mode]);
 
   return {

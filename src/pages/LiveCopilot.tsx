@@ -35,7 +35,14 @@ export default function LiveCopilot() {
   const [manualQuestion, setManualQuestion] = useState("");
   const [showHotkeyHelp, setShowHotkeyHelp] = useState(false);
 
-  const overlayStore = useOverlayStore();
+  // Individual selectors — prevents global re-renders on every store tick
+  const current_hint_text  = useOverlayStore((s) => s.current_hint_text);
+  const hint_state         = useOverlayStore((s) => s.hint_state);
+  const is_visible         = useOverlayStore((s) => s.is_visible);
+  const is_stealth_mode    = useOverlayStore((s) => s.is_stealth_mode);
+  const position           = useOverlayStore((s) => s.position);
+  const overlayError       = useOverlayStore((s) => s.error);
+  const is_panic_visible   = useOverlayStore((s) => s.is_panic_visible);
   const network      = useNetworkMonitor();
 
   const copilot = useLiveCopilot({
@@ -139,11 +146,10 @@ export default function LiveCopilot() {
 
   // ── Active phase — full overlay UI ────────────────────────────
 
-  const hintText   = overlayStore.current_hint_text;
-  const hintState  = overlayStore.hint_state;
-  const isVisible  = overlayStore.is_visible;
-  const isStealth  = overlayStore.is_stealth_mode;
-  const position   = overlayStore.position;
+  const hintText   = current_hint_text;
+  const hintState  = hint_state;
+  const isVisible  = is_visible;
+  const isStealth  = is_stealth_mode;
   const composed   = hintText
     ? composeHint(hintText, profile?.hint_style ?? "short_hints")
     : null;
@@ -313,13 +319,13 @@ export default function LiveCopilot() {
             </div>
             <div className="flex items-center gap-1">
               <button
-                onClick={() => overlayStore.setStealthMode(!isStealth)}
+                onClick={() => useOverlayStore.getState().setStealthMode(!isStealth)}
                 className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors"
               >
                 {isStealth ? <Maximize2 className="w-3 h-3" /> : <Minimize2 className="w-3 h-3" />}
               </button>
               <button
-                onClick={() => overlayStore.hideOverlay()}
+                onClick={() => useOverlayStore.getState().hideOverlay()}
                 className="p-1 text-gray-500 hover:text-gray-300 rounded transition-colors"
               >
                 <X className="w-3 h-3" />
@@ -347,10 +353,10 @@ export default function LiveCopilot() {
                 })}
               </div>
             )}
-            {overlayStore.error && (
+            {overlayError && (
               <div className="flex items-center gap-1.5 text-xs text-red-400">
                 <AlertCircle className="w-3.5 h-3.5" />
-                {overlayStore.error}
+                {overlayError}
               </div>
             )}
             {!hintText && hintState === "idle" && (
@@ -361,7 +367,7 @@ export default function LiveCopilot() {
           </div>
 
           {/* Panic overlay */}
-          {overlayStore.is_panic_visible && (
+          {is_panic_visible && (
             <div className="absolute inset-0 bg-black/90 rounded-xl flex flex-col items-center justify-center p-4 text-center">
               <p className="text-sm font-semibold text-white mb-2">🧘 Take a breath</p>
               <ul className="text-xs text-gray-300 space-y-1 text-left">
@@ -370,7 +376,7 @@ export default function LiveCopilot() {
                 <li>3. Recall your strongest example</li>
               </ul>
               <button
-                onClick={() => overlayStore.hidePanic()}
+                onClick={() => useOverlayStore.getState().hidePanic()}
                 className="mt-3 text-xs text-violet-400 hover:text-violet-300"
               >
                 I'm ready — continue

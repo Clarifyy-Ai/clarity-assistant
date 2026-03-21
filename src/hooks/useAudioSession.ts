@@ -34,8 +34,15 @@ interface UseAudioSessionOptions {
 }
 
 export function useAudioSession(opts: UseAudioSessionOptions) {
-  const audioStore   = useAudioStore();
-  const sessionStore = useSessionStore();
+  // Individual selectors for reactive state returned to callers.
+  // Callbacks use useAudioStore.getState() / useSessionStore.getState()
+  // so they stay stable — no full-store object in dependency arrays.
+  const isCapturing    = useAudioStore((s) => s.streams?.is_capturing    ?? false);
+  const isMuted        = useAudioStore((s) => s.is_muted                 ?? false);
+  const deepgramStatus = useAudioStore((s) => s.deepgram_status          ?? "idle");
+  const currentLevel   = useAudioStore((s) => s.levels?.current_level    ?? 0);
+  const isSpeaking     = useAudioStore((s) => s.levels?.is_speaking      ?? false);
+  const streamError    = useAudioStore((s) => s.streams?.error           ?? null);
 
   // ── Refs — persist across renders without causing re-renders ──
   const deepgramRef     = useRef<DeepgramStreamClient | null>(null);
@@ -295,11 +302,11 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     getFillerSnapshot,
     getWPMDataPoints,
     getAverageWPM,
-    isCapturing:   audioStore.streams.is_capturing,
-    isMuted:       audioStore.is_muted,
-    deepgramStatus: audioStore.deepgram_status,
-    currentLevel:  audioStore.levels.current_level,
-    isSpeaking:    audioStore.levels.is_speaking,
-    streamError:   audioStore.streams.error,
+    isCapturing,
+    isMuted,
+    deepgramStatus,
+    currentLevel,
+    isSpeaking,
+    streamError,
   };
 }

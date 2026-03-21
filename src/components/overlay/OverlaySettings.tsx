@@ -40,12 +40,15 @@ export function OverlaySettings({
   onClose,
   className,
 }: OverlaySettingsProps) {
-  const overlay = useOverlayStore();
+  const is_stealth_mode = useOverlayStore((s) => s.is_stealth_mode);
+  const is_proctor_safe = useOverlayStore((s) => s.is_proctor_safe);
+  const hint_style      = useOverlayStore((s) => s.hint_style);
+
   const [settings, setSettings] = useState({
-    stealthMode: overlay.is_stealth_mode,
-    proctorSafe: overlay.is_proctor_safe,
+    stealthMode: is_stealth_mode,
+    proctorSafe: is_proctor_safe,
     opacity: 90,
-    hintStyle: overlay.hint_style,
+    hintStyle: hint_style,
     autoHide: true,
     hotkeysEnabled: true,
     screenCaptureDetection: true,
@@ -60,16 +63,17 @@ export function OverlaySettings({
       [key]: value,
     }));
 
-    // Apply settings immediately
+    // Apply settings immediately via getState() — avoids re-render loop
+    const os = useOverlayStore.getState();
     switch (key) {
       case 'stealthMode':
-        overlay.setStealthMode?.(value);
+        os.setStealthMode?.(value);
         break;
       case 'proctorSafe':
-        overlay.setProctorSafe?.(value);
+        os.setProctorSafe?.(value);
         break;
       case 'hintStyle':
-        overlay.setHintStyle?.(value);
+        os.setHintStyle?.(value);
         break;
       case 'opacity':
         // Would need overlay store method

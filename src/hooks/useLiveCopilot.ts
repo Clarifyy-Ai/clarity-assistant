@@ -13,32 +13,51 @@ import { createDragHandler } from "@/lib/overlay/stealthMouse";
 import { generateId } from "@/lib/utils";
 import type { LiveSessionConfig } from "@/types/session.types";
 
+// ─────────────────────────────────────────────────────────────────
+// useLiveCopilot
+// Master hook for live AI co-pilot sessions.
+//
+// Pattern:  reactive state → individual selectors
+//           store actions  → useXxxStore.getState() inside callbacks
+// This prevents the full-store-object anti-pattern that causes
+// re-render loops when audio/session state ticks every second.
+// ─────────────────────────────────────────────────────────────────
+
 interface UseLiveCopilotOptions {
-  config:      LiveSessionConfig;
-  overlayRef:  React.RefObject<HTMLDivElement>;
+  config:     LiveSessionConfig;
+  overlayRef: React.RefObject<HTMLDivElement>;
 }
 
 export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
-  const overlayStore = useOverlayStore();
-  const sessionStore = useSessionStore();
-  const coachStore   = useCoachStore();
-  const { profile }  = useAuthStore();
+  // ── Reactive state: individual selectors only ──────────────────
+  const { profile }        = useAuthStore();
+  const sessionStatus      = useSessionStore((s) => s.status);
+  const elapsedSeconds     = useSessionStore((s) => s.elapsed_seconds);
+  const creditsConsumed    = useSessionStore((s) => s.credits_consumed);
 
-  const abortRef      = useRef<AbortController | null>(null);
+  // ── Non-reactive stores accessed via ref to keep callbacks stable
+  const coachStore  = useCoachStore();
+
+  // ── Refs ───────────────────────────────────────────────────────
+  const abortRef        = useRef<AbortController | null>(null);
   const lastQuestionRef = useRef<string | null>(null);
   const dragCleanupRef  = useRef<(() => void) | null>(null);
   const sessionIdRef    = useRef<string>(generateId());
 
-  // ── Audio session
+  // ── Audio session ──────────────────────────────────────────────
   const audio = useAudioSession({
     enableSystemAudio: config.stealth_mode ?? false,
     micDeviceId:       null,
     onQuestionDetected: handleQuestionDetected,
-    onFillerDetected:   (count: number) => sessionStore.setCurrentWPM(count),
-    onWPMUpdate:        (wpm: number)   => sessionStore.setCurrentWPM(wpm),
+    onFillerDetected:   (count: number) => {
+      useSessionStore.getState().setCurrentWPM(count);
+    },
+    onWPMUpdate: (wpm: number) => {
+      useSessionStore.getState().setCurrentWPM(wpm);
+    },
   });
 
-  // ── Initialise
+  // ── Initialise session ─────────────────────────────────────────
   useEffect(() => {
     if (!profile) return;
 
@@ -46,51 +65,48 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     const context = buildCoachingContext(profile, config, active_context);
     coachStore.initContext(context);
 
+    const sessionStore = useSessionStore.getState();
     sessionStore.setSessionId(sessionIdRef.current);
     sessionStore.setMode("live");
     sessionStore.setConfig(config);
     sessionStore.setStatus("active");
 
     hotkeyManager.register();
+    return () => { hotkeyManager.unregister(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-    return () => {
-      hotkeyManager.unregister();
-    };
-  }, []);
-
-  // ── Overlay drag
+  // ── Overlay drag ───────────────────────────────────────────────
   useEffect(() => {
     if (!overlayRef.current) return;
 
     dragCleanupRef.current = createDragHandler(
       overlayRef.current,
-      (pos) => overlayStore.setPosition(pos)
+      (pos) => useOverlayStore.getState().setPosition(pos)
     );
 
-    return () => {
-      dragCleanupRef.current?.();
-    };
-  }, [overlayRef.current]);
+    return () => { dragCleanupRef.current?.(); };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Session ticker
+  // ── Session ticker ─────────────────────────────────────────────
   useEffect(() => {
-    if (sessionStore.status !== "active") return;
+    if (sessionStatus !== "active") return;
 
     const tick = setInterval(() => {
-      sessionStore.tickElapsed();
+      // getState() avoids stale closure — always calls the live action
+      useSessionStore.getState().tickElapsed();
     }, 1000);
 
     return () => clearInterval(tick);
-  }, [sessionStore.status]);
+  }, [sessionStatus]);
 
-  // ── Handle detected question
+  // ── Handle detected question ───────────────────────────────────
   function handleQuestionDetected(question: string): void {
     if (question === lastQuestionRef.current) return;
     lastQuestionRef.current = question;
     requestLiveHint(question);
   }
 
-  // ── Request live hint
+  // ── Request live hint ──────────────────────────────────────────
   const requestLiveHint = useCallback(async (question: string) => {
     if (!profile) return;
 
@@ -99,7 +115,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
 
     const creditCheck = checkCredits(profile.preferred_model);
     if (!creditCheck.canProceed) {
-      overlayStore.setError(creditCheck.reason ?? "Out of credits");
+      useOverlayStore.getState().setError(creditCheck.reason ?? "Out of credits");
       return;
     }
 
@@ -108,9 +124,9 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     abortRef.current = controller;
 
     const requestId = generateId();
-
-    overlayStore.setCurrentQuestion(question);
-    overlayStore.setHintState("generating");
+    const overlay = useOverlayStore.getState();
+    overlay.setCurrentQuestion(question);
+    overlay.setHintState("generating");
 
     await routeHint({
       question,
@@ -120,16 +136,16 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
       isLive:         true,
       sessionId:      sessionIdRef.current,
       questionId:     requestId,
-      onChunk:        (chunk) => overlayStore.appendStreamChunk(chunk),
-      onDone:         async (_fullText) => {
-        overlayStore.commitStreamedHint();
+      onChunk:  (chunk) => useOverlayStore.getState().appendStreamChunk(chunk),
+      onDone:   async (_fullText) => {
+        useOverlayStore.getState().commitStreamedHint();
         await deductCredits(profile.preferred_model, sessionIdRef.current);
-        sessionStore.consumeCredit(creditCheck.creditsRequired);
+        useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
       },
-      onError:        (error) => overlayStore.setError(error.message),
-      signal:         controller.signal,
+      onError:  (error) => useOverlayStore.getState().setError(error.message),
+      signal:   controller.signal,
     });
-  }, [profile]);
+  }, [profile, coachStore]);
 
   const submitManualQuestion = useCallback((question: string) => {
     lastQuestionRef.current = question;
@@ -137,15 +153,15 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
   }, [requestLiveHint]);
 
   const startLiveSession = useCallback(async () => {
-    overlayStore.showOverlay();
+    useOverlayStore.getState().showOverlay();
     await audio.start();
   }, [audio.start]);
 
   const endLiveSession = useCallback(async () => {
     abortRef.current?.abort();
     audio.stop();
-    sessionStore.setStatus("completed");
-    overlayStore.hideOverlay();
+    useSessionStore.getState().setStatus("completed");
+    useOverlayStore.getState().hideOverlay();
   }, [audio.stop]);
 
   const toggleProctorSafe = useCallback(() => {
@@ -156,24 +172,24 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
   return {
     startLiveSession,
     endLiveSession,
-    toggleMute:        audio.toggleMute,
-    reconnectAudio:    audio.reconnect,
-    isCapturing:       audio.isCapturing,
-    isMuted:           audio.isMuted,
-    deepgramStatus:    audio.deepgramStatus,
-    currentLevel:      audio.currentLevel,
-    isSpeaking:        audio.isSpeaking,
-    streamError:       audio.streamError,
+    toggleMute:     audio.toggleMute,
+    reconnectAudio: audio.reconnect,
+    isCapturing:    audio.isCapturing,
+    isMuted:        audio.isMuted,
+    deepgramStatus: audio.deepgramStatus,
+    currentLevel:   audio.currentLevel,
+    isSpeaking:     audio.isSpeaking,
+    streamError:    audio.streamError,
     requestLiveHint,
     submitManualQuestion,
-    abortHint:         () => {
+    abortHint: () => {
       abortRef.current?.abort();
-      overlayStore.clearHint();
+      useOverlayStore.getState().clearHint();
     },
     toggleProctorSafe,
-    hotkeyHelp:        hotkeyManager.getHelpItems(),
-    elapsedSeconds:    sessionStore.elapsed_seconds,
-    creditsConsumed:   sessionStore.credits_consumed,
-    status:            sessionStore.status,
+    hotkeyHelp:     hotkeyManager.getHelpItems(),
+    elapsedSeconds,
+    creditsConsumed,
+    status: sessionStatus,
   };
 }

@@ -78,7 +78,8 @@ export function LiveAIFeedback({
   compact = false,
   showTrends = true,
 }: LiveAIFeedbackProps) {
-  const audioStore = useAudioStore();
+  const transcript  = useAudioStore((s) => s.transcript);
+  const elapsedTime = useAudioStore((s) => s.elapsedTime);
   const [metrics, setMetrics] = useState<FeedbackMetrics>({
     sentiment: { label: 'neutral', score: 50, emoji: '😐' },
     fillerWords: {
@@ -112,7 +113,6 @@ export function LiveAIFeedback({
 
   // Calculate metrics from audio store
   useEffect(() => {
-    const transcript = audioStore.transcript;
     if (!transcript?.utterances) return;
 
     const text = transcript.utterances
@@ -123,7 +123,7 @@ export function LiveAIFeedback({
     const totalWords = words.length;
 
     // Calculate WPM (rough estimate: 5 characters = 1 word)
-    const elapsedSeconds = audioStore.elapsedTime || 1;
+    const elapsedSeconds = elapsedTime || 1;
     const wpm = Math.round((totalWords / elapsedSeconds) * 60);
 
     // Count filler words
@@ -226,7 +226,7 @@ export function LiveAIFeedback({
         threshold: PAUSE_THRESHOLD,
       },
     });
-  }, [audioStore.transcript, audioStore.elapsedTime]);
+  }, [transcript, elapsedTime]);
 
   const TrendIcon = ({ trend }: { trend: 'up' | 'down' | 'stable' }) => {
     switch (trend) {

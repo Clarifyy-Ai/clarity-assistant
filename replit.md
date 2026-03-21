@@ -154,6 +154,27 @@ DEEPGRAM_API_KEY=...      # Speech-to-text for live sessions
 15. React Router v7 `startTransition` warning suppressed in `main.tsx`
 16. `userStore.ts` confirmed as a re-export of `authStore` (no duplicate state)
 
+## Zustand Anti-Pattern Fixes (Session 2)
+
+**Rule**: NEVER call `useStore()` without a selector in components that re-render frequently (live sessions, timer ticks, audio updates). Always use `useStore((s) => s.field)` for reactive state, and `useStore.getState().action()` inside callbacks/effects.
+
+**Files fixed** (bare `useStore()` replaced with individual selectors):
+- `LiveSessionController.tsx` — `useSessionStore()` / `useOverlayStore()` → individual selectors (was causing infinite re-render / Maximum update depth)
+- `useSessionOrchestrator.ts` — all actions now call `.getState()` inside callbacks
+- `useLiveCopilot.ts` — same pattern
+- `useAudioCapture.ts` — stable callbacks via `.getState()`
+- `useAudioSession.ts` — individual selectors for return values
+- `OverlayKeyboardHandler.tsx` — individual selectors
+- `WindowVisibilityManager.tsx` — individual selectors
+- `LivePanicButton.tsx` — individual selectors
+- `LiveMetricsPanel.tsx` — individual selectors
+- `useOfflineFallback.ts` — individual selectors
+- `LiveAIFeedback.tsx` — fixed `audioStore.transcript` / `audioStore.elapsedTime` references → individual selectors
+- `OverlaySettings.tsx` — `useOverlayStore()` → individual selectors; actions use `.getState()`
+- `MockSession.tsx` — `useOverlayStore()` → individual selectors for `hint_state` / `current_hint_text`
+- `LiveRehearsal.tsx` — `useSessionStore()` / `useOverlayStore()` → individual selectors; all actions via `.getState()`
+- `LiveCopilot.tsx` — `useOverlayStore()` → 7 individual selectors; all actions via `.getState()`
+
 ## What User Must Do for Full Features
 
 ### Required (database)

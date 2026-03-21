@@ -26,7 +26,8 @@ export default function MockSession() {
   const [searchParams]           = useSearchParams();
   const { profile, canAccessFeature } = useAuth();
   const orchestrator             = useSessionOrchestrator();
-  const overlayStore             = useOverlayStore();
+  const hint_state               = useOverlayStore((s) => s.hint_state);
+  const current_hint_text        = useOverlayStore((s) => s.current_hint_text);
   const [phase, setPhase]        = useState<SessionPhase>("setup");
   const [config, setConfig]      = useState<Partial<SessionConfig>>({
     interview_type:   "behavioral",
@@ -42,7 +43,7 @@ export default function MockSession() {
     if (hintContainerRef.current) {
       hintContainerRef.current.scrollTop = hintContainerRef.current.scrollHeight;
     }
-  }, [overlayStore.current_hint_text]);
+  }, [current_hint_text]);
 
   // ── Start session ─────────────────────────────────────────────
 
@@ -198,8 +199,8 @@ export default function MockSession() {
 
   if (phase === "in_progress") {
     const currentQ    = orchestrator.currentQuestion;
-    const isLoading   = overlayStore.hint_state === "generating";
-    const hintText    = overlayStore.current_hint_text;
+    const isLoading   = hint_state === "generating";
+    const hintText    = current_hint_text;
     const composed    = hintText
       ? composeHint(hintText, profile?.hint_style ?? "short_hints")
       : null;
