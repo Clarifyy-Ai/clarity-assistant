@@ -58,6 +58,8 @@ export default function ProjectBuilder() {
 
     try {
       const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      const techList = techStack.length > 0 ? techStack.join(", ") : "not specified";
+      const input = `Project: ${projectName}\nRole: ${role}\nTech Stack: ${techList}\n\nWhat I did:\n${description}${impact ? `\n\nImpact & Metrics:\n${impact}` : ""}`;
       const res = await fetch(`${EDGE_BASE}/prep-tool`, {
         method: "POST",
         headers: {
@@ -65,18 +67,14 @@ export default function ProjectBuilder() {
           "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({
-          tool: "project_build",
-          project_name: projectName,
-          role,
-          tech_stack: techStack,
-          description,
-          impact: impact || undefined,
+          tool_id: "project_build",
+          input,
         }),
       });
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
-      setShowcase(data.result ?? data.showcase ?? "Showcase generation unavailable.");
+      setShowcase(data.result ?? "Showcase generation unavailable.");
     } catch (err) {
       await credits.refund("project_build");
       setShowcase(getOfflineShowcase(projectName, role, techStack, description, impact));

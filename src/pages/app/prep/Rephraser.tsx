@@ -52,6 +52,8 @@ export default function Rephraser() {
 
     try {
       const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      const styleLabel = REPHRASE_STYLES.find((s) => s.id === style)?.label ?? style;
+      const input = `Style: ${styleLabel}\n\nOriginal answer:\n${original}`;
       const res = await fetch(`${EDGE_BASE}/prep-tool`, {
         method: "POST",
         headers: {
@@ -59,15 +61,14 @@ export default function Rephraser() {
           "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({
-          tool: "rephrase",
-          original_text: original,
-          style,
+          tool_id: "rephrase",
+          input,
         }),
       });
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
-      setRephrased(data.result ?? data.rephrased ?? "Rephrasing unavailable.");
+      setRephrased(data.result ?? "Rephrasing unavailable.");
     } catch (err) {
       await credits.refund("rephrase");
       setRephrased(getOfflineRephrase(original, style));

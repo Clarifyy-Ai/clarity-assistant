@@ -75,6 +75,7 @@ export default function SystemDesign() {
 
     try {
       const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      const input = `Topic: ${activeTopic.title}\n\nPrompt: ${activeTopic.prompt}\n\nKey areas: ${activeTopic.keyAreas.join(", ")}${notes ? `\n\nCandidate notes:\n${notes}` : ""}`;
       const res = await fetch(`${EDGE_BASE}/prep-tool`, {
         method: "POST",
         headers: {
@@ -82,17 +83,14 @@ export default function SystemDesign() {
           "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({
-          tool: "system_design",
-          topic_title: activeTopic.title,
-          topic_prompt: activeTopic.prompt,
-          key_areas: activeTopic.keyAreas,
-          user_notes: notes || undefined,
+          tool_id: "system_design",
+          input,
         }),
       });
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
-      setBreakdown(data.result ?? data.breakdown ?? "Breakdown unavailable.");
+      setBreakdown(data.result ?? "Breakdown unavailable.");
     } catch (err) {
       await credits.refund("system_design");
       setBreakdown(getOfflineBreakdown(activeTopic));

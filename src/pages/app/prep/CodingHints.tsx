@@ -1,6 +1,5 @@
 import { useState, useMemo } from "react";
 import { useCredits } from "@/hooks/useCredits";
-import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -68,7 +67,6 @@ const DIFFICULTY_COLORS: Record<Difficulty, string> = {
 
 export default function CodingHints() {
   const credits = useCredits();
-  const { user } = useAuthStore();
 
   const [category, setCategory]     = useState("all");
   const [difficulty, setDifficulty] = useState<Difficulty | "all">("all");
@@ -108,6 +106,7 @@ export default function CodingHints() {
 
     try {
       const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      const input = `Problem: ${activeProblem.title}\n\n${activeProblem.description}\n\nExamples:\n${activeProblem.examples}\n\nTags: ${activeProblem.tags.join(", ")}`;
       const res = await fetch(`${EDGE_BASE}/prep-tool`, {
         method: "POST",
         headers: {
@@ -115,17 +114,14 @@ export default function CodingHints() {
           "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({
-          tool: "coding_hint",
-          problem_title: activeProblem.title,
-          problem_description: activeProblem.description,
-          problem_examples: activeProblem.examples,
-          tags: activeProblem.tags,
+          tool_id: "coding_hint",
+          input,
         }),
       });
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
-      setHintText(data.result ?? data.hint ?? "Think about the data structures that would help here. Consider time and space complexity tradeoffs.");
+      setHintText(data.result ?? "Think about the data structures that would help here. Consider time and space complexity tradeoffs.");
     } catch (err) {
       await credits.refund("coding_hint");
       setHintText(getOfflineHint(activeProblem));
@@ -149,6 +145,7 @@ export default function CodingHints() {
 
     try {
       const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      const input = `Problem: ${activeProblem.title}\n\n${activeProblem.description}\n\nExamples:\n${activeProblem.examples}\n\nTags: ${activeProblem.tags.join(", ")}`;
       const res = await fetch(`${EDGE_BASE}/prep-tool`, {
         method: "POST",
         headers: {
@@ -156,17 +153,14 @@ export default function CodingHints() {
           "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({
-          tool: "coding_solution",
-          problem_title: activeProblem.title,
-          problem_description: activeProblem.description,
-          problem_examples: activeProblem.examples,
-          tags: activeProblem.tags,
+          tool_id: "coding_solution",
+          input,
         }),
       });
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
-      setSolutionText(data.result ?? data.solution ?? "Solution explanation unavailable.");
+      setSolutionText(data.result ?? "Solution explanation unavailable.");
     } catch (err) {
       await credits.refund("coding_solution");
       setSolutionText(getOfflineSolution(activeProblem));
