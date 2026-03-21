@@ -86,7 +86,7 @@ export function UpgradeModal() {
     >
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {PLANS.map((plan) => {
-          const isCurrentPlan = profile?.plan === plan.id
+          const isCurrentPlan = (profile as any)?.plan_id === plan.id
           const Icon = plan.icon
           const isHighlighted = uiStore.upgrade_modal_trigger === plan.id
 

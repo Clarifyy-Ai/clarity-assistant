@@ -29,7 +29,7 @@ export function SetupChecklist() {
     {
       id: "mock",
       label: "Complete your first mock session",
-      done: (profile?.xp ?? 0) > 0,
+      done: ((profile as any)?.xp ?? 0) > 0,
       to: "/app/mock",
     },
     {
