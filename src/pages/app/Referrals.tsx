@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/userStore";
+import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -7,8 +8,28 @@ import { Gift, Copy, Users, Zap, Check, Share2 } from "lucide-react";
 import { toast } from "sonner";
 
 export default function Referrals() {
-  const { profile } = useAuthStore();
+  const { profile, user } = useAuthStore();
   const [copied, setCopied] = useState(false);
+  const [invitedCount, setInvitedCount] = useState(0);
+  const [creditsEarned, setCreditsEarned] = useState(0);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    (async () => {
+      const { count } = await supabase
+        .from("referrals")
+        .select("*", { count: "exact", head: true })
+        .eq("referrer_id", user.id);
+      setInvitedCount(count ?? 0);
+
+      const { data } = await supabase
+        .from("referrals")
+        .select("credits_awarded")
+        .eq("referrer_id", user.id);
+      const total = (data ?? []).reduce((sum: number, r: { credits_awarded?: number }) => sum + (r.credits_awarded ?? 0), 0);
+      setCreditsEarned(total);
+    })();
+  }, [user?.id]);
 
   const code = profile?.id?.slice(0, 8)?.toUpperCase() ?? "XXXXXX";
   const link = `${window.location.origin}/signup?ref=${code}`;
@@ -75,12 +96,12 @@ export default function Referrals() {
         <div className="space-y-4">
           <Card className="text-center">
             <Users className="w-6 h-6 mx-auto text-violet-500 mb-2" />
-            <p className="text-2xl font-bold text-foreground">0</p>
+            <p className="text-2xl font-bold text-foreground">{invitedCount}</p>
             <p className="text-xs text-muted-foreground">Friends Invited</p>
           </Card>
           <Card className="text-center">
             <Zap className="w-6 h-6 mx-auto text-amber-500 mb-2" />
-            <p className="text-2xl font-bold text-foreground">0</p>
+            <p className="text-2xl font-bold text-foreground">{creditsEarned}</p>
             <p className="text-xs text-muted-foreground">Credits Earned</p>
           </Card>
         </div>

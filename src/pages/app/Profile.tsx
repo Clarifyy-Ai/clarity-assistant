@@ -85,8 +85,13 @@ export default function Profile() {
                 {profile.experience_level}
               </span>
             )}
+            {(profile as Record<string, unknown>)?.bio && (
+              <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
+                {String((profile as Record<string, unknown>).bio)}
+              </p>
+            )}
             {profile?.domain && (
-              <p className="mt-3 text-sm text-muted-foreground leading-relaxed capitalize">
+              <p className="mt-2 text-xs text-muted-foreground capitalize">
                 {profile.domain} professional
               </p>
             )}

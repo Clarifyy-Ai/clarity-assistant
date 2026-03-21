@@ -54,7 +54,8 @@ export default function AnswerDetail() {
       const { error } = await supabase
         .from("answer_bank")
         .update({ answer_text: editText, updated_at: new Date().toISOString() })
-        .eq("id", id);
+        .eq("id", id)
+        .eq("user_id", user?.id);
       if (error) throw error;
       setAnswer((prev) => prev ? { ...prev, answer_text: editText } : prev);
       setEditing(false);
@@ -67,8 +68,8 @@ export default function AnswerDetail() {
   }
 
   async function handleDelete() {
-    if (!id || !confirm("Delete this answer?")) return;
-    await supabase.from("answer_bank").delete().eq("id", id);
+    if (!id || !user?.id || !confirm("Delete this answer?")) return;
+    await supabase.from("answer_bank").delete().eq("id", id).eq("user_id", user.id);
     toast.success("Answer deleted");
     navigate("/app/answers");
   }

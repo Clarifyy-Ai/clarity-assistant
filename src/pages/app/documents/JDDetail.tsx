@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { FileText, Trash2, Building2, MapPin, DollarSign, CheckCircle, Clock } from "lucide-react";
+import { FileText, Trash2, Building2, MapPin, DollarSign, CheckCircle, Clock, Edit, Save, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
 interface JD {
@@ -29,6 +29,10 @@ export default function JDDetail() {
 
   const [jd, setJd] = useState<JD | null>(null);
   const [loading, setLoading] = useState(true);
+  const [editing, setEditing] = useState(false);
+  const [editTitle, setEditTitle] = useState("");
+  const [editCompany, setEditCompany] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
 
   useEffect(() => {
     if (!id || !user?.id) return;
@@ -41,13 +45,35 @@ export default function JDDetail() {
         .eq("user_id", user.id)
         .single();
       setJd(data as JD | null);
+      setEditTitle(data?.job_title ?? data?.title ?? "");
+      setEditCompany(data?.company_name ?? "");
       setLoading(false);
     })();
   }, [id, user?.id]);
 
+  async function handleSaveEdit() {
+    if (!id || !user?.id) return;
+    setSavingEdit(true);
+    try {
+      const { error } = await supabase
+        .from("documents")
+        .update({ job_title: editTitle, company_name: editCompany, updated_at: new Date().toISOString() })
+        .eq("id", id)
+        .eq("user_id", user.id);
+      if (error) throw error;
+      setJd((prev) => prev ? { ...prev, job_title: editTitle, company_name: editCompany } : prev);
+      setEditing(false);
+      toast.success("Job description updated");
+    } catch {
+      toast.error("Failed to update");
+    } finally {
+      setSavingEdit(false);
+    }
+  }
+
   async function handleDelete() {
-    if (!id || !confirm("Delete this job description?")) return;
-    await supabase.from("documents").delete().eq("id", id);
+    if (!id || !user?.id || !confirm("Delete this job description?")) return;
+    await supabase.from("documents").delete().eq("id", id).eq("user_id", user.id);
     toast.success("Job description deleted");
     navigate("/app/documents");
   }
@@ -75,6 +101,11 @@ export default function JDDetail() {
         ]}
         actions={
           <div className="flex gap-2">
+            {!editing && (
+              <Button variant="secondary" size="sm" onClick={() => setEditing(true)} leftIcon={<Edit className="w-4 h-4" />}>
+                Edit
+              </Button>
+            )}
             <Link to={`/app/companies/${encodeURIComponent(jd.company_name ?? "")}`}>
               <Button variant="secondary" size="sm" leftIcon={<Building2 className="w-4 h-4" />}>Company Brief</Button>
             </Link>
@@ -89,6 +120,38 @@ export default function JDDetail() {
       />
 
       <div className="space-y-4">
+        {editing && (
+          <Card>
+            <h3 className="text-sm font-semibold text-foreground mb-2">Edit Details</h3>
+            <div className="space-y-2 mb-3">
+              <input
+                type="text"
+                value={editTitle}
+                onChange={(e) => setEditTitle(e.target.value)}
+                placeholder="Job title"
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+              />
+              <input
+                type="text"
+                value={editCompany}
+                onChange={(e) => setEditCompany(e.target.value)}
+                placeholder="Company name"
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+              />
+            </div>
+            <div className="flex gap-2">
+              <Button variant="primary" size="sm" onClick={handleSaveEdit} disabled={savingEdit}
+                leftIcon={savingEdit ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}>
+                Save
+              </Button>
+              <Button variant="ghost" size="sm" onClick={() => { setEditing(false); setEditTitle(jd?.job_title ?? jd?.title ?? ""); setEditCompany(jd?.company_name ?? ""); }}
+                leftIcon={<X className="w-4 h-4" />}>
+                Cancel
+              </Button>
+            </div>
+          </Card>
+        )}
+
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           <Card className="text-center">
             <Building2 className="w-4 h-4 mx-auto text-muted-foreground mb-1" />

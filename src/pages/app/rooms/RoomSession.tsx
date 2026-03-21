@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import {
   Video, Clock, CheckCircle, Play, Square,
-  MessageSquare, Mic, MicOff, Loader2,
+  MessageSquare, Mic, MicOff, Loader2, Users,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -19,10 +19,18 @@ interface Session {
   status: string;
   difficulty: string;
   duration_minutes: number;
+  capacity: number;
   created_at: string;
-  questions?: any[];
+  questions?: unknown[];
   feedback?: string;
   score?: number;
+}
+
+interface Participant {
+  id: string;
+  user_id: string;
+  display_name: string;
+  joined_at: string;
 }
 
 export default function RoomSession() {
@@ -31,6 +39,7 @@ export default function RoomSession() {
   const { user } = useAuthStore();
 
   const [session, setSession] = useState<Session | null>(null);
+  const [participants, setParticipants] = useState<Participant[]>([]);
   const [loading, setLoading] = useState(true);
   const [elapsed, setElapsed] = useState(0);
   const [recording, setRecording] = useState(false);
@@ -45,6 +54,13 @@ export default function RoomSession() {
         .eq("host_id", user.id)
         .single();
       setSession(data as Session | null);
+
+      const { data: parts } = await supabase
+        .from("practice_room_participants")
+        .select("id, user_id, display_name, joined_at")
+        .eq("room_id", id);
+      setParticipants((parts as Participant[]) ?? []);
+
       setLoading(false);
     })();
   }, [id, user?.id]);
@@ -214,6 +230,30 @@ export default function RoomSession() {
                 <span className="text-foreground">{new Date(session.created_at).toLocaleString()}</span>
               </div>
             </div>
+          </Card>
+
+          <Card>
+            <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
+              <Users className="w-4 h-4 text-muted-foreground" />
+              Participants ({participants.length}/{session.capacity ?? 2})
+            </h3>
+            {participants.length > 0 ? (
+              <div className="space-y-2">
+                {participants.map((p) => (
+                  <div key={p.id} className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-full bg-violet-500/15 flex items-center justify-center text-[10px] font-bold text-violet-500">
+                      {(p.display_name?.[0] ?? "?").toUpperCase()}
+                    </div>
+                    <span className="text-sm text-foreground truncate">{p.display_name}</span>
+                    {p.user_id === user?.id && (
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-muted text-muted-foreground">You</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-xs text-muted-foreground">No other participants yet.</p>
+            )}
           </Card>
 
           {isCompleted && session.score != null && (

@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { CheckCircle, Cpu, Zap, ToggleLeft, ToggleRight } from "lucide-react";
+import { CheckCircle, Cpu, Zap, ToggleLeft, ToggleRight, ArrowUp, ArrowDown } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -18,12 +18,31 @@ export default function SettingsModels() {
   const [autoRoute, setAutoRoute] = useState(true);
   const [saving, setSaving] = useState(false);
 
+  const otherModels = MODELS.filter((m) => m.id !== preferred);
+  const [fallbackOrder, setFallbackOrder] = useState<string[]>(otherModels.map((m) => m.id));
+
+  const moveFallback = useCallback((idx: number, dir: -1 | 1) => {
+    setFallbackOrder((prev) => {
+      const next = [...prev];
+      const target = idx + dir;
+      if (target < 0 || target >= next.length) return prev;
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
+  }, []);
+
+  function handlePreferredChange(id: string) {
+    setPreferred(id);
+    setFallbackOrder(MODELS.filter((m) => m.id !== id).map((m) => m.id));
+  }
+
   async function handleSave() {
     setSaving(true);
     try {
       await updateProfile({
         preferred_model: preferred,
         auto_model_routing: autoRoute,
+        model_fallback_order: fallbackOrder,
       } as Record<string, unknown>);
       toast.success("Model preferences saved");
     } catch {
@@ -43,7 +62,7 @@ export default function SettingsModels() {
           {MODELS.map((m) => (
             <button
               key={m.id}
-              onClick={() => setPreferred(m.id)}
+              onClick={() => handlePreferredChange(m.id)}
               className={cn(
                 "w-full flex items-center gap-3 p-3 rounded-xl border transition-all text-left",
                 preferred === m.id
@@ -86,15 +105,35 @@ export default function SettingsModels() {
       <Card>
         <h3 className="text-sm font-semibold text-foreground mb-3">Fallback Order</h3>
         <p className="text-xs text-muted-foreground mb-3">
-          If your preferred model is unavailable, the system will try these in order:
+          If your preferred model is unavailable, the system will try these in order. Use the arrows to reorder.
         </p>
-        <div className="flex items-center gap-2">
-          {MODELS.filter((m) => m.id !== preferred).map((m, i) => (
-            <div key={m.id} className="flex items-center gap-2">
-              {i > 0 && <Zap className="w-3 h-3 text-muted-foreground" />}
-              <span className="text-xs px-2 py-1 rounded-lg bg-muted text-muted-foreground">{m.name}</span>
-            </div>
-          ))}
+        <div className="space-y-2">
+          {fallbackOrder.map((modelId, i) => {
+            const model = MODELS.find((m) => m.id === modelId);
+            if (!model) return null;
+            return (
+              <div key={model.id} className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 border border-border">
+                <span className="text-[10px] text-muted-foreground font-mono w-4">{i + 1}.</span>
+                <span className="text-sm text-foreground flex-1">{model.name}</span>
+                <div className="flex gap-0.5">
+                  <button
+                    onClick={() => moveFallback(i, -1)}
+                    disabled={i === 0}
+                    className={cn("p-1 rounded hover:bg-accent/10", i === 0 && "opacity-30 cursor-not-allowed")}
+                  >
+                    <ArrowUp className="w-3.5 h-3.5 text-muted-foreground" />
+                  </button>
+                  <button
+                    onClick={() => moveFallback(i, 1)}
+                    disabled={i === fallbackOrder.length - 1}
+                    className={cn("p-1 rounded hover:bg-accent/10", i === fallbackOrder.length - 1 && "opacity-30 cursor-not-allowed")}
+                  >
+                    <ArrowDown className="w-3.5 h-3.5 text-muted-foreground" />
+                  </button>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </Card>
 

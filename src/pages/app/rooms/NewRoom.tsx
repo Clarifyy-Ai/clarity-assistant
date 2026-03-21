@@ -11,8 +11,8 @@ import { toast } from "sonner";
 
 const SESSION_TYPES = [
   { id: "behavioral", label: "Behavioral", icon: Users, desc: "STAR-method behavioral questions" },
-  { id: "technical", label: "Technical", icon: Code, desc: "Coding & system design questions" },
-  { id: "case_study", label: "Case Study", icon: Brain, desc: "Business case interview questions" },
+  { id: "technical", label: "Technical", icon: Code, desc: "Coding & algorithm questions" },
+  { id: "system_design", label: "System Design", icon: Brain, desc: "Architecture & scalability discussions" },
   { id: "role_specific", label: "Role-Specific", icon: Briefcase, desc: "Questions tailored to your target role" },
 ];
 
