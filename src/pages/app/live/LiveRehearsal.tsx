@@ -65,6 +65,9 @@ export default function LiveRehearsal() {
   const handleSetup = useCallback((sessionConfig: LiveSessionConfig) => {
     useSessionStore.getState().resetSession();
     useOverlayStore.getState().resetSessionState();
+    useOverlayStore.getState().setActiveModel(sessionConfig.model);
+    useOverlayStore.getState().setHintStyle(sessionConfig.hint_style);
+    useOverlayStore.getState().setProctorSafe(sessionConfig.stealth_mode);
     hasStartedRef.current = false;
     setConfig(sessionConfig);
     setPhase("active");

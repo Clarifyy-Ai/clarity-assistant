@@ -95,10 +95,12 @@ export default function MockSession() {
   const totalQ   = orchestrator.totalQuestions ?? 5;
   const isLastQ  = qIndex >= totalQ - 1;
 
+  const prevTranscriptLenRef = useRef(0);
   useEffect(() => {
     if (phase !== "active" || !question) return;
     const qText = typeof question === "string" ? question : question.question_text ?? "";
     if (qText) {
+      prevTranscriptLenRef.current = 0;
       useOverlayStore.getState().setCurrentQuestion(qText);
       if (useOverlayStore.getState().auto_generate) {
         handleRequestHint();
@@ -106,7 +108,6 @@ export default function MockSession() {
     }
   }, [phase, question]);
 
-  const prevTranscriptLenRef = useRef(0);
   useEffect(() => {
     if (phase !== "active" || !stt.transcript) return;
     const full = stt.transcript.trim();

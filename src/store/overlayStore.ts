@@ -65,6 +65,7 @@ interface OverlayStore {
   hint_history: Array<{ question: string; hint: string; timestamp: number }>;
   hint_history_index: number;
   questions_detected: number;
+  viewed_question: string | null;
 
   // Coding problem capture
   is_screenshot_loading: boolean;
@@ -164,6 +165,7 @@ export const useOverlayStore = create<OverlayStore>()(
       hint_history: [],
       hint_history_index: -1,
       questions_detected: 0,
+      viewed_question: null,
 
       is_screenshot_loading: false,
       screenshot_hint: null,
@@ -256,8 +258,8 @@ export const useOverlayStore = create<OverlayStore>()(
           return {
             hint_history_index: newIndex,
             current_hint: entry.hint,
-            current_question: entry.question,
-            hint_state: "ready",
+            viewed_question: entry.question,
+            hint_state: "ready" as const,
             streaming_buffer: "",
           };
         }),
@@ -292,6 +294,7 @@ export const useOverlayStore = create<OverlayStore>()(
         hint_history: [],
         hint_history_index: -1,
         questions_detected: 0,
+        viewed_question: null,
         is_panic_visible: false,
         panic_content: null,
         screenshot_hint: null,
