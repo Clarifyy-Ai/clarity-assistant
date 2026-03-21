@@ -22,10 +22,11 @@ import { LiveHotKeyListener } from "@/components/live/LiveHotKeyListener";
 import { LiveSessionTimer } from "@/components/live/LiveSessionTimer";
 import { LivePanicButton } from "@/components/live/LivePanicButton";
 import { LiveCodingProblemCapture } from "@/components/live/LiveCodingProblemCapture";
+import { ScreenCaptureBlocker } from "@/components/overlay/ScreenCaptureBlocker";
 import {
   Mic, MicOff, Monitor, Play, Square,
   Keyboard, Eye, EyeOff, AlertTriangle,
-  ChevronDown, ChevronUp, Shield,
+  ChevronDown, ChevronUp, Shield, Ghost,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -45,6 +46,7 @@ export default function LiveRehearsal() {
   // Individual selectors — prevents re-renders from store churn during live sessions
   const sessionStatus      = useSessionStore((s) => s.status);
   const is_proctor_safe    = useOverlayStore((s) => s.is_proctor_safe);
+  const is_stealth_mode    = useOverlayStore((s) => s.is_stealth_mode);
   const current_question   = useOverlayStore((s) => s.current_question);
 
   const [hintStyle,     setHintStyle]     = useState("short_hints");
@@ -89,6 +91,7 @@ export default function LiveRehearsal() {
     <div className="space-y-5 max-w-4xl">
       {/* Invisible overlay — renders into #overlay-root portal */}
       <OverlayWindow />
+      <ScreenCaptureBlocker isActive={isActive} />
       <LiveSessionController isActive={isActive} />
       <LiveHotKeyListener enabled={isActive} onToggleMute={() => audio.setMuted(!audio.isMuted)} />
 
@@ -273,6 +276,18 @@ export default function LiveRehearsal() {
             >
               {audio.isMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
               {audio.isMuted ? "Unmute" : "Mute"}
+            </button>
+            <button
+              onClick={() => useOverlayStore.getState().setStealthMode(!is_stealth_mode)}
+              className={cn(
+                "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-all",
+                is_stealth_mode
+                  ? "bg-violet-500/10 border-violet-500/20 text-violet-400"
+                  : "bg-secondary/30 border-border text-muted-foreground"
+              )}
+            >
+              <Ghost className="w-3.5 h-3.5" />
+              {is_stealth_mode ? "Stealth On" : "Stealth Off"}
             </button>
             <button
               onClick={() => useOverlayStore.getState().setProctorSafe(!is_proctor_safe)}

@@ -81,7 +81,7 @@ export function NetworkBanner() {
   return (
     <div
       className={cn(
-        "fixed top-14 left-0 right-0 z-30", // sits under your top bar (h-14)
+        "w-full flex-shrink-0",
         "border-b border-white/[0.08] backdrop-blur"
       )}
       role="status"

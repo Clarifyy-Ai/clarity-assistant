@@ -10,6 +10,8 @@ import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppTopBar } from "@/components/layout/AppTopBar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { NetworkBanner } from "@/components/layout/NetworkBanner";
+import { SetupChecklist } from "@/components/layout/SetupChecklist";
+import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
 import { Toaster } from "@/components/ui/sonner";
 
@@ -178,19 +180,39 @@ const queryClient = new QueryClient({
 // ─────────────────────────────────────────────────────────────────────────────
 
 function AppShell() {
+  const profile = useAuthStore((s) => s.profile);
+  const showSetupChecklist = profile && !(profile as any).onboarding_completed;
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === "b") {
+        e.preventDefault();
+        useUIStore.getState().toggleSidebar();
+      }
+    };
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
+
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-background">
+    <div className="flex h-screen w-full overflow-hidden bg-gradient-to-br from-[#0a0a0f] to-[#1a1a2e]">
       <AppSidebar />
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         <AppTopBar />
         <NetworkBanner />
         <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
-          <div className="p-4 md:p-6">
+          <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 md:py-6">
+            {showSetupChecklist && (
+              <div className="mb-6">
+                <SetupChecklist />
+              </div>
+            )}
             <Outlet />
           </div>
         </main>
       </div>
       <MobileNav />
+      <UpgradeModal />
     </div>
   );
 }

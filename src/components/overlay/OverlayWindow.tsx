@@ -1,10 +1,11 @@
 import { createPortal } from "react-dom";
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useStealthMouse } from "@/hooks/useStealthMouse";
 import { OverlayHintPanel } from "./OverlayHintPanel";
 import { OverlayQuestionBar } from "./OverlayQuestionBar";
 import { OverlayNetworkBadge } from "./OverlayNetworkBadge";
+import { OverlaySettings } from "./OverlaySettings";
 import { StealthMouseGuard } from "./StealthMouseGuard";
 import { OverlayPositionManager } from "./OverlayPositionManager";
 import { cn } from "@/lib/utils";
@@ -18,6 +19,7 @@ import { cn } from "@/lib/utils";
 
 export function OverlayWindow() {
   const panelRef = useRef<HTMLDivElement>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   // Individual selectors — prevents re-renders from unrelated store churn
   // (streaming_buffer is updated on every token; without selectors every
@@ -79,13 +81,20 @@ export function OverlayWindow() {
               </span>
               <OverlayNetworkBadge color={network_color} />
             </div>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1.5">
               {is_stealth_mode && (
-                <span className="font-mono text-[9px] text-brand-400/50">STEALTH</span>
+                <span className="font-mono text-[9px] text-violet-400/70 bg-violet-500/10 px-1.5 py-0.5 rounded">STEALTH</span>
               )}
               {is_proctor_safe && (
-                <span className="font-mono text-[9px] text-success/50">SAFE</span>
+                <span className="font-mono text-[9px] text-emerald-400/70 bg-emerald-500/10 px-1.5 py-0.5 rounded">SAFE</span>
               )}
+              <button
+                onClick={(e) => { e.stopPropagation(); setSettingsOpen((p) => !p); }}
+                className="w-5 h-5 flex items-center justify-center rounded hover:bg-white/10 text-muted-foreground/50 hover:text-white transition-colors"
+                title="Overlay Settings"
+              >
+                <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" /></svg>
+              </button>
             </div>
           </div>
 
@@ -116,6 +125,15 @@ export function OverlayWindow() {
               screenshotHint={screenshot_hint}
               isScreenshotLoading={is_screenshot_loading}
             />
+          )}
+
+          {settingsOpen && (
+            <div className="border-t border-white/5">
+              <OverlaySettings
+                isOpen={true}
+                onClose={() => setSettingsOpen(false)}
+              />
+            </div>
           )}
 
           {/* Bottom status bar */}

@@ -21,7 +21,7 @@ export function AppTopBar() {
   ).toUpperCase();
 
   return (
-    <header className="sticky top-0 z-30 h-14 w-full flex-shrink-0 bg-[#0a0a0f]/95 backdrop-blur border-b border-white/[0.08] flex items-center justify-between px-4">
+    <header className="sticky top-0 z-40 h-14 w-full flex-shrink-0 bg-[#0a0a0f]/95 backdrop-blur border-b border-white/[0.08] flex items-center justify-between px-4">
 
       {/* Left: breadcrumb portal target */}
       <div
