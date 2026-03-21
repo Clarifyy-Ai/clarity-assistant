@@ -145,8 +145,8 @@ function KPICard({
           </span>
         )}
       </div>
-      <p className="text-2xl font-black text-foreground">{value}</p>
-      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-xl sm:text-2xl font-black text-foreground">{value}</p>
+      <p className="text-[10px] sm:text-xs text-muted-foreground">{label}</p>
     </Card>
   );
 }
@@ -326,7 +326,7 @@ function SpeechMetrics({ analytics }: { analytics: any }) {
     <div className="space-y-4">
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <Card className="text-center">
-          <div className="text-3xl font-black text-foreground mb-1">
+          <div className="text-2xl sm:text-3xl font-black text-foreground mb-1">
             {analytics.avgWpm ?? "—"}
           </div>
           <p className="text-xs text-muted-foreground">Avg WPM</p>
@@ -346,7 +346,7 @@ function SpeechMetrics({ analytics }: { analytics: any }) {
         </Card>
 
         <Card className="text-center">
-          <div className="text-3xl font-black text-amber-400 mb-1">
+          <div className="text-2xl sm:text-3xl font-black text-amber-400 mb-1">
             {analytics.avgFillers ?? "—"}
           </div>
           <p className="text-xs text-muted-foreground">Avg fillers per session</p>
@@ -354,7 +354,7 @@ function SpeechMetrics({ analytics }: { analytics: any }) {
         </Card>
 
         <Card className="text-center">
-          <div className="text-3xl font-black text-violet-400 mb-1">
+          <div className="text-2xl sm:text-3xl font-black text-violet-400 mb-1">
             {analytics.avgConfidence ?? "—"}%
           </div>
           <p className="text-xs text-muted-foreground">Avg confidence score</p>

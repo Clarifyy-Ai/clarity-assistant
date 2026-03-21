@@ -78,25 +78,25 @@ export default function Dashboard() {
     <div className="space-y-6">
 
       {/* ── Header ───────────────────────────────────── */}
-      <div className="flex items-start justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">
+          <h1 className="text-xl sm:text-2xl font-bold text-foreground">
             {greeting}, {firstName} 👋
           </h1>
-          <p className="text-muted-foreground text-sm mt-0.5">
+          <p className="text-muted-foreground text-xs sm:text-sm mt-0.5">
             {format(new Date(), "EEEE, MMMM d")}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-            <Flame className="w-3.5 h-3.5 text-amber-400" />
-            <span className="text-xs font-bold text-amber-400">
+        <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+            <Flame className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400" />
+            <span className="text-[10px] sm:text-xs font-bold text-amber-400">
               {gamification.streakCurrent} day streak
             </span>
           </div>
-          <div className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500/10 border border-violet-500/20 rounded-xl">
-            <Zap className="w-3.5 h-3.5 text-violet-400" />
-            <span className="text-xs font-bold text-violet-400">
+          <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-violet-500/10 border border-violet-500/20 rounded-xl">
+            <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-violet-400" />
+            <span className="text-[10px] sm:text-xs font-bold text-violet-400">
               {profile?.credits ?? 0} credits
             </span>
           </div>
@@ -136,7 +136,7 @@ export default function Dashboard() {
               key={action.to}
               to={action.to}
               className={cn(
-                "flex flex-col gap-3 p-4 rounded-2xl border transition-all group",
+                "flex flex-col gap-2 sm:gap-3 p-3 sm:p-4 rounded-2xl border transition-all group",
                 "hover:border-white/20",
                 action.highlight
                   ? "bg-violet-600/10 border-violet-500/30 hover:bg-violet-600/15"
@@ -291,8 +291,8 @@ function StatCard({
           <span className="text-[10px] text-emerald-400">↑ improving</span>
         )}
       </div>
-      <p className="text-2xl font-black text-foreground">{value}</p>
-      <p className="text-xs text-muted-foreground">{label}</p>
+      <p className="text-xl sm:text-2xl font-black text-foreground">{value}</p>
+      <p className="text-[10px] sm:text-xs text-muted-foreground">{label}</p>
     </Card>
   );
 }

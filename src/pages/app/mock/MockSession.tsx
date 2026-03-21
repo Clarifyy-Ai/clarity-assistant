@@ -304,7 +304,7 @@ export default function MockSession() {
       <LiveSessionController isActive={true} />
 
       <div className="flex items-center justify-center min-h-screen">
-        <div className="w-full max-w-lg space-y-6 p-6">
+        <div className="w-full max-w-lg space-y-4 sm:space-y-6 p-3 sm:p-6">
 
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
@@ -340,10 +340,10 @@ export default function MockSession() {
             />
           </div>
 
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
-            <div className="flex items-center justify-between mb-4">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
               <div className={cn(
-                "flex items-center gap-1.5 text-sm font-bold tabular-nums",
+                "flex items-center gap-1.5 text-xs sm:text-sm font-bold tabular-nums",
                 timeColor === "emerald" ? "text-emerald-400" :
                 timeColor === "amber"   ? "text-amber-400"   : "text-red-400"
               )}>
@@ -359,12 +359,12 @@ export default function MockSession() {
               </button>
             </div>
 
-            <p className="text-foreground text-base font-medium leading-relaxed">
+            <p className="text-foreground text-sm sm:text-base font-medium leading-relaxed">
               {questionText}
             </p>
           </div>
 
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-6">
+          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 sm:p-6">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className={cn(

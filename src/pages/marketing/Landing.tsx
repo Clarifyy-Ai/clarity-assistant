@@ -47,20 +47,20 @@ const PROOF_POINTS = [
 export default function Landing() {
   return (
     <MarketingLayout>
-      <section className="pt-36 pb-24 px-6 text-center">
+      <section className="pt-24 sm:pt-36 pb-16 sm:pb-24 px-4 sm:px-6 text-center">
         <motion.div
           className="max-w-3xl mx-auto"
           initial={{ opacity: 0, y: 28 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7 }}
         >
-          <h1 className="text-5xl sm:text-6xl font-extrabold tracking-tight leading-[1.08]">
+          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.08]">
             Ace every interview with{" "}
             <span className="bg-gradient-to-r from-primary via-violet-400 to-fuchsia-400 bg-clip-text text-transparent">
               AI by your side
             </span>
           </h1>
-          <p className="mt-5 text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed">
+          <p className="mt-4 sm:mt-5 text-base sm:text-lg text-muted-foreground max-w-xl mx-auto leading-relaxed">
             Real-time coaching during live interviews, mock sessions with deep analytics,
             and a full prep lab — powered by GPT-4o, Claude & Gemini.
           </p>
@@ -81,8 +81,8 @@ export default function Landing() {
         </motion.div>
       </section>
 
-      <section className="pb-24 px-6">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
+      <section className="pb-16 sm:pb-24 px-4 sm:px-6">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
           {FEATURES.map((f, i) => (
             <motion.div
               key={f.title}
@@ -102,9 +102,9 @@ export default function Landing() {
         </div>
       </section>
 
-      <section className="pb-24 px-6">
+      <section className="pb-16 sm:pb-24 px-4 sm:px-6">
         <div className="max-w-2xl mx-auto text-center">
-          <h2 className="text-3xl font-bold mb-6">Built for serious candidates</h2>
+          <h2 className="text-2xl sm:text-3xl font-bold mb-6">Built for serious candidates</h2>
           <div className="space-y-3">
             {PROOF_POINTS.map((point) => (
               <div key={point} className="inline-flex items-center gap-2 text-sm text-muted-foreground mr-6">

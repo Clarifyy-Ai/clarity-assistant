@@ -104,23 +104,25 @@ export default function SessionDetail() {
     <div className="max-w-4xl space-y-5">
 
       {/* ── Header ───────────────────────────────────── */}
-      <div className="flex items-center gap-3">
-        <button
-          onClick={() => navigate("/app/sessions")}
-          className="p-2 rounded-xl bg-accent/5 hover:bg-accent/10 text-muted-foreground hover:text-foreground transition-all"
-        >
-          <ChevronLeft className="w-4 h-4" />
-        </button>
-        <div className="flex-1">
-          <h1 className="text-xl font-bold text-foreground capitalize">
-            {session.session_type} Interview
-            {session.target_company && ` — ${session.target_company}`}
-          </h1>
-          <p className="text-muted-foreground text-xs mt-0.5">
-            {format(new Date(session.created_at), "EEEE, MMMM d yyyy · h:mm a")}
-          </p>
+      <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <button
+            onClick={() => navigate("/app/sessions")}
+            className="p-2 rounded-xl bg-accent/5 hover:bg-accent/10 text-muted-foreground hover:text-foreground transition-all shrink-0"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          <div className="min-w-0">
+            <h1 className="text-lg sm:text-xl font-bold text-foreground capitalize truncate">
+              {session.session_type} Interview
+              {session.target_company && ` — ${session.target_company}`}
+            </h1>
+            <p className="text-muted-foreground text-[10px] sm:text-xs mt-0.5">
+              {format(new Date(session.created_at), "EEEE, MMMM d yyyy · h:mm a")}
+            </p>
+          </div>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 sm:ml-auto shrink-0">
           <Button
             variant="secondary"
             size="sm"
@@ -146,7 +148,7 @@ export default function SessionDetail() {
         {/* Main score */}
         <Card className="sm:col-span-1 flex flex-col items-center justify-center py-6 text-center">
           <div className={cn(
-            "text-6xl font-black mb-1",
+            "text-4xl sm:text-6xl font-black mb-1",
             scoreColor === "emerald" ? "text-emerald-400" :
             scoreColor === "amber"   ? "text-amber-400"   : "text-red-400"
           )}>
@@ -179,7 +181,7 @@ export default function SessionDetail() {
               const c   = val >= 75 ? "emerald" : val >= 50 ? "amber" : "red";
               return (
                 <div key={dim.key} className="flex items-center gap-3">
-                  <span className="text-xs text-muted-foreground w-40 shrink-0">{dim.label}</span>
+                  <span className="text-[10px] sm:text-xs text-muted-foreground w-28 sm:w-40 shrink-0">{dim.label}</span>
                   <ProgressBar value={val} max={100} color={c} size="sm" className="flex-1" />
                   <span className={cn(
                     "text-xs font-bold w-8 text-right tabular-nums",
@@ -455,19 +457,22 @@ export default function SessionDetail() {
       </div>
 
       {/* ── Debrief CTA ───────────────────────────────── */}
-      <Card className="flex items-center gap-4 bg-gradient-to-r from-violet-600/10 to-blue-600/10 border-violet-500/20">
-        <div className="w-10 h-10 bg-violet-600/20 rounded-xl flex items-center justify-center shrink-0">
-          <Brain className="w-5 h-5 text-violet-400" />
-        </div>
-        <div className="flex-1">
-          <p className="text-sm font-semibold text-foreground">Deep-dive debrief</p>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            AI-generated action plan, gap analysis, and what to study next.
-          </p>
+      <Card className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 bg-gradient-to-r from-violet-600/10 to-blue-600/10 border-violet-500/20">
+        <div className="flex items-center gap-3 flex-1 min-w-0">
+          <div className="w-10 h-10 bg-violet-600/20 rounded-xl flex items-center justify-center shrink-0">
+            <Brain className="w-5 h-5 text-violet-400" />
+          </div>
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-foreground">Deep-dive debrief</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              AI-generated action plan, gap analysis, and what to study next.
+            </p>
+          </div>
         </div>
         <Button
           variant="primary"
           size="sm"
+          className="w-full sm:w-auto shrink-0"
           onClick={() => navigate(`/app/debrief/${session.id}`)}
           rightIcon={<ChevronRight className="w-3.5 h-3.5" />}
         >

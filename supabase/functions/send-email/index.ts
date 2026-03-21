@@ -56,7 +56,7 @@ function buildEmailHtml(type: string, data: any): { subject: string; html: strin
     <div class="logo">⚡ Clarify AI</div>
     ${content}
     <div class="footer">
-      © 2025 Clarify AI · <a href="https://confideq.app/unsubscribe" style="color:#4b5563;">Unsubscribe</a>
+      © 2025 Payara Labs · <a href="https://confideq.app/unsubscribe" style="color:#4b5563;">Unsubscribe</a>
     </div>
   </div>
 </body>

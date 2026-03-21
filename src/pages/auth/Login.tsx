@@ -49,7 +49,7 @@ export default function Login() {
 
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <img src="/images/clarify-logo.png" alt="Clarify AI" className="h-12 w-auto mb-3" />
+          <img src="/images/clarify-logo.png" alt="Clarify AI" className="h-14 sm:h-16 w-auto mb-3" />
           <h1 className="text-2xl font-bold text-white">Welcome back</h1>
           <p className="text-gray-500 text-sm mt-1">Sign in to Clarify AI</p>
         </div>

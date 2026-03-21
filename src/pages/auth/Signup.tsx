@@ -82,7 +82,7 @@ export default function Signup() {
 
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <img src="/images/clarify-logo.png" alt="Clarify AI" className="h-12 w-auto mb-3" />
+          <img src="/images/clarify-logo.png" alt="Clarify AI" className="h-14 sm:h-16 w-auto mb-3" />
           <h1 className="text-2xl font-bold text-white">Create account</h1>
           <p className="text-gray-500 text-sm mt-1">Start your Clarify AI journey</p>
         </div>

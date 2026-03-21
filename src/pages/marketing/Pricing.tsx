@@ -27,13 +27,13 @@ export default function Pricing() {
 
   return (
     <MarketingLayout>
-      <section className="pt-36 pb-20 px-6">
+      <section className="pt-24 sm:pt-36 pb-16 sm:pb-20 px-4 sm:px-6">
         <div className="max-w-3xl mx-auto text-center">
           <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-            <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight">
+            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight">
               Simple, transparent pricing
             </h1>
-            <p className="mt-4 text-lg text-muted-foreground max-w-lg mx-auto">
+            <p className="mt-4 text-base sm:text-lg text-muted-foreground max-w-lg mx-auto">
               Start free. Upgrade when you're ready. Cancel anytime.
             </p>
           </motion.div>
@@ -61,8 +61,8 @@ export default function Pricing() {
         </div>
       </section>
 
-      <section className="pb-20 px-6">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-5">
+      <section className="pb-16 sm:pb-20 px-4 sm:px-6">
+        <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
           {DISPLAY_PLANS.map((planId, i) => {
             const plan = PLANS[planId];
             const price = annual ? plan.yearlyPrice : plan.monthlyPrice;
@@ -137,9 +137,9 @@ export default function Pricing() {
         </div>
       </section>
 
-      <section className="pb-20 px-6">
+      <section className="pb-16 sm:pb-20 px-4 sm:px-6">
         <div className="max-w-6xl mx-auto">
-          <div className="rounded-2xl border border-border bg-card p-8 flex flex-col md:flex-row items-center justify-between gap-6">
+          <div className="rounded-2xl border border-border bg-card p-5 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-4 sm:gap-6">
             <div>
               <h3 className="text-xl font-bold">Enterprise</h3>
               <p className="text-sm text-muted-foreground mt-1">{PLANS.enterprise.tagline}</p>
@@ -161,9 +161,9 @@ export default function Pricing() {
         </div>
       </section>
 
-      <section className="pb-24 px-6">
+      <section className="pb-16 sm:pb-24 px-4 sm:px-6">
         <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-2xl font-bold mb-6">Need more credits?</h2>
+          <h2 className="text-xl sm:text-2xl font-bold mb-6">Need more credits?</h2>
           <p className="text-muted-foreground text-sm mb-8">Buy credit packs anytime, no subscription change required.</p>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             {CREDIT_PACKS.map((pack) => (

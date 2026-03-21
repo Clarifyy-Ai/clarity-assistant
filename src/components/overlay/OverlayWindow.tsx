@@ -181,8 +181,8 @@ export function OverlayWindow({
 
           <OverlaySessionStats />
 
-          <div className="flex items-center justify-between border-t border-white/5 px-4 py-1 font-mono text-[9px] text-muted-foreground/40 shrink-0">
-            <span>⌃⇧H hide · Esc clear · ⌃⇧P panic</span>
+          <div className="flex items-center justify-between border-t border-white/5 px-2 sm:px-4 py-1 font-mono text-[8px] sm:text-[9px] text-muted-foreground/40 shrink-0">
+            <span className="truncate">⌃⇧H hide · Esc clear · ⌃⇧P panic</span>
             <span className="capitalize">{hint_style.replace("_", " ")}</span>
           </div>
 

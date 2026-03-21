@@ -86,7 +86,7 @@ function ResumeManager() {
           if (f) handleFile(f);
         }}
         className={cn(
-          "border-2 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-all",
+          "border-2 border-dashed rounded-2xl p-5 sm:p-8 text-center cursor-pointer transition-all",
           dragOver
             ? "border-violet-500/60 bg-violet-500/5"
             : "border-white/10 hover:border-white/20 bg-white/3"
@@ -125,16 +125,16 @@ function ResumeManager() {
         <div className="space-y-2">
           {resumes.map((r) => (
             <Card key={r.id} padding="sm">
-              <div className="flex items-center gap-4">
+              <div className="flex items-center gap-3 sm:gap-4">
                 {/* Icon */}
-                <div className="w-9 h-9 bg-blue-500/10 rounded-xl flex items-center justify-center shrink-0">
+                <div className="w-9 h-9 bg-blue-500/10 rounded-xl flex items-center justify-center shrink-0 hidden sm:flex">
                   <FileText className="w-4 h-4 text-blue-400" />
                 </div>
 
                 {/* Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-sm font-medium text-foreground truncate">
+                    <p className="text-xs sm:text-sm font-medium text-foreground truncate">
                       {r.file_name}
                     </p>
                     {r.is_active && (
@@ -295,13 +295,13 @@ function JDManager() {
         <div className="space-y-2">
           {jds.map((jd) => (
             <Card key={jd.id} padding="sm">
-              <div className="flex items-center gap-4">
-                <div className="w-9 h-9 bg-violet-500/10 rounded-xl flex items-center justify-center shrink-0">
+              <div className="flex items-center gap-3 sm:gap-4">
+                <div className="w-9 h-9 bg-violet-500/10 rounded-xl flex items-center justify-center shrink-0 hidden sm:flex">
                   <ClipboardList className="w-4 h-4 text-violet-400" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <p className="text-sm font-medium text-foreground truncate">{jd.title}</p>
+                    <p className="text-xs sm:text-sm font-medium text-foreground truncate">{jd.title}</p>
                     {jd.is_active && (
                       <Badge variant="emerald" size="sm" dot>Active</Badge>
                     )}
@@ -338,7 +338,7 @@ function JDManager() {
       {/* Add JD modal */}
       <Modal open={addOpen} onClose={() => setAddOpen(false)} title="Add job description" size="lg">
         <div className="space-y-4">
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
               <p className="text-xs text-muted-foreground mb-1.5">Job title</p>
               <input

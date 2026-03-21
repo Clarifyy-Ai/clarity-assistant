@@ -133,9 +133,9 @@ export default function DebriefDetail() {
 
       {/* Hero grade card */}
       <Card className="bg-gradient-to-br from-violet-600/10 to-blue-600/10 border-violet-500/20">
-        <div className="flex items-start gap-5">
+        <div className="flex items-start gap-3 sm:gap-5">
           <div className={cn(
-            "w-20 h-20 rounded-2xl flex items-center justify-center text-4xl font-black border-2 shrink-0",
+            "w-14 h-14 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center text-2xl sm:text-4xl font-black border-2 shrink-0",
             gradeColor === "emerald" ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400" :
             gradeColor === "blue"    ? "border-blue-500/50 bg-blue-500/10 text-blue-400"          :
             gradeColor === "amber"   ? "border-amber-500/50 bg-amber-500/10 text-amber-400"       :
@@ -148,7 +148,7 @@ export default function DebriefDetail() {
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
               AI Debrief
             </p>
-            <h1 className="text-xl font-bold text-foreground mt-1">
+            <h1 className="text-base sm:text-xl font-bold text-foreground mt-1">
               {session?.session_type
                 ? `${session.session_type.charAt(0).toUpperCase() + session.session_type.slice(1)} Interview`
                 : "Session Debrief"}
@@ -192,7 +192,7 @@ export default function DebriefDetail() {
           <div className="space-y-4">
             {debrief.skill_gaps.map((gap: any, i: number) => (
               <div key={i}>
-                <div className="flex items-center justify-between mb-1">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-1 gap-0.5">
                   <p className="text-xs font-medium text-foreground">{gap.skill}</p>
                   <div className="flex items-center gap-2">
                     <span className="text-[10px] text-muted-foreground">
@@ -382,7 +382,7 @@ export default function DebriefDetail() {
       )}
 
       {/* CTA row */}
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <Button
           variant="secondary"
           size="md"

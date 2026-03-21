@@ -87,17 +87,17 @@ export function AppSidebar() {
     >
       <div className="flex min-h-[56px] items-center gap-3 border-b border-sidebar-border px-4 py-4">
         <div className={cn(
-          "flex h-8 w-8 shrink-0 items-center justify-center rounded-lg",
+          "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
           stealth ? "bg-blue-600" : "bg-violet-600"
         )}>
           {stealth ? (
-            <Briefcase className="h-4 w-4 text-white" />
+            <Briefcase className="h-5 w-5 text-white" />
           ) : (
-            <Mic className="h-4 w-4 text-white" />
+            <Mic className="h-5 w-5 text-white" />
           )}
         </div>
         {!collapsed && (
-          <span className="text-base font-bold tracking-tight text-sidebar-foreground">
+          <span className="text-lg font-bold tracking-tight text-sidebar-foreground">
             {stealth ? STEALTH_BRAND.name : "Clarify AI"}
           </span>
         )}

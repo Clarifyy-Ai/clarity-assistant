@@ -144,7 +144,7 @@ function SessionRow({ session: s }: { session: any }) {
   return (
     <Link
       to={`/app/sessions/${s.id}`}
-      className="flex items-center gap-4 p-4 bg-white/3 border border-white/8 rounded-2xl hover:bg-accent/5 hover:border-white/15 transition-all group"
+      className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 bg-white/3 border border-white/8 rounded-2xl hover:bg-accent/5 hover:border-white/15 transition-all group"
     >
       <div className={cn(
         "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
@@ -155,7 +155,7 @@ function SessionRow({ session: s }: { session: any }) {
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
-          <span className="text-sm font-semibold text-foreground capitalize">
+          <span className="text-xs sm:text-sm font-semibold text-foreground capitalize">
             {s.session_type} Interview
           </span>
           {s.interview_type && (
@@ -166,7 +166,7 @@ function SessionRow({ session: s }: { session: any }) {
           )}
         </div>
         <div className="flex items-center gap-3 mt-0.5">
-          <span className="text-xs text-muted-foreground">
+          <span className="text-[10px] sm:text-xs text-muted-foreground">
             {format(new Date(s.created_at), "MMM d, yyyy · h:mm a")}
           </span>
           {s.question_count && (
