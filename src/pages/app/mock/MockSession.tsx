@@ -106,16 +106,23 @@ export default function MockSession() {
     }
   }, [phase, question]);
 
+  const prevTranscriptRef = useRef("");
   useEffect(() => {
     if (phase !== "active" || !stt.transcript) return;
     const text = stt.transcript.trim();
-    if (!text) return;
+    if (!text || text === prevTranscriptRef.current) return;
+    prevTranscriptRef.current = text;
+    const now = Date.now();
     useAudioStore.getState().addUtterance({
-      id: `mock-${Date.now()}`,
+      id: `mock-${now}`,
       text,
       speaker: "user",
+      words: [],
+      start_ms: now,
+      end_ms: now,
       is_final: true,
-      timestamp: Date.now(),
+      is_interviewer_question: false,
+      confidence: 1.0,
     });
   }, [phase, stt.transcript]);
 

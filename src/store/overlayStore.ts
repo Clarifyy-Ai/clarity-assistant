@@ -174,7 +174,13 @@ export const useOverlayStore = create<OverlayStore>()(
 
       // ── Content ────────────────────────────────────────────
       setCurrentQuestion: (current_question) =>
-        set((s) => ({ current_question, hint_state: "listening" as const, current_hint: "", streaming_buffer: "", questions_detected: s.questions_detected + 1 })),
+        set((s) => ({
+          current_question,
+          hint_state: "listening" as const,
+          current_hint: "",
+          streaming_buffer: "",
+          questions_detected: current_question !== s.current_question ? s.questions_detected + 1 : s.questions_detected,
+        })),
 
       setHintState: (hint_state) => set({ hint_state }),
 
