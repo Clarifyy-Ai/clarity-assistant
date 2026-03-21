@@ -68,10 +68,8 @@ function getCategoryForFlag(id: FeatureFlagId): string {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AdminFeatureFlags() {
-  const { featureFlags, resolveFeatureFlags } = useGlobalStore((s) => ({
-    featureFlags:        s.featureFlags,
-    resolveFeatureFlags: s.resolveFeatureFlags,
-  }));
+  const featureFlags        = useGlobalStore((s) => s.featureFlags);
+  const resolveFeatureFlags = useGlobalStore((s) => s.resolveFeatureFlags);
 
   const [rows,        setRows]       = useState<FlagRow[]>([]);
   const [overrides,   setOverrides]  = useState<Partial<Record<FeatureFlagId, boolean>>>({});
