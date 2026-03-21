@@ -2,7 +2,7 @@ import { useOverlayStore } from "@/store/overlayStore";
 import { useAudioStore } from "@/store/audioStore";
 import { PANIC_RESPONSE } from "@/types/session.types";
 import {
-  Mic, MicOff, Zap, RefreshCw,
+  Mic, MicOff, Volume2, VolumeX, Zap, RefreshCw,
   Eye, EyeOff, Square, AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -10,13 +10,15 @@ import type { LucideIcon } from "lucide-react";
 
 interface OverlayToolbarProps {
   onToggleMic?: () => void;
+  onToggleSystemAudio?: () => void;
   onGenerate?: () => void;
   onEndSession?: () => void;
 }
 
-export function OverlayToolbar({ onToggleMic, onGenerate, onEndSession }: OverlayToolbarProps) {
+export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, onEndSession }: OverlayToolbarProps) {
   const isMuted        = useAudioStore((s) => s.is_muted);
   const isCapturing    = useAudioStore((s) => s.streams?.is_capturing ?? false);
+  const hasSystemAudio = useAudioStore((s) => !!s.streams?.system_stream);
   const isStealth      = useOverlayStore((s) => s.is_stealth_mode);
   const autoGenerate   = useOverlayStore((s) => s.auto_generate);
   const hintState      = useOverlayStore((s) => s.hint_state);
@@ -31,6 +33,14 @@ export function OverlayToolbar({ onToggleMic, onGenerate, onEndSession }: Overla
         active={isCapturing && !isMuted}
         color={isMuted ? "red" : "green"}
         onClick={onToggleMic}
+      />
+
+      <ToolbarButton
+        icon={hasSystemAudio ? Volume2 : VolumeX}
+        label={hasSystemAudio ? "System audio active" : "System audio off"}
+        active={hasSystemAudio}
+        color={hasSystemAudio ? "emerald" : "gray"}
+        onClick={onToggleSystemAudio}
       />
 
       <ToolbarButton

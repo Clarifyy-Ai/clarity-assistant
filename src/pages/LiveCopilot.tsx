@@ -110,6 +110,7 @@ export default function LiveCopilot() {
 
       <OverlayWindow
         onToggleMic={copilot.toggleMute}
+        onToggleSystemAudio={copilot.toggleSystemAudio}
         onGenerate={() => {
           const question = useOverlayStore.getState().current_question;
           if (question) copilot.requestLiveHint(question);

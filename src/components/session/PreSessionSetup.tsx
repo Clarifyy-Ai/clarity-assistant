@@ -55,6 +55,8 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
   const [stealthMode,       setStealthMode]       = useState(true);
   const [showAdvanced,      setShowAdvanced]      = useState(false);
 
+  const [micPermission, setMicPermission] = useState<"unknown" | "granted" | "denied" | "checking">("unknown");
+
   useEffect(() => {
     setResumeId(activeResumeId);
   }, [activeResumeId]);
@@ -63,7 +65,28 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
     setJdId(activeJdId);
   }, [activeJdId]);
 
+  const checkMicPermission = async () => {
+    setMicPermission("checking");
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      stream.getTracks().forEach((t) => t.stop());
+      setMicPermission("granted");
+    } catch {
+      setMicPermission("denied");
+    }
+  };
+
+  useEffect(() => {
+    if (navigator.permissions) {
+      navigator.permissions.query({ name: "microphone" as PermissionName }).then((result) => {
+        if (result.state === "granted") setMicPermission("granted");
+        else if (result.state === "denied") setMicPermission("denied");
+      }).catch(() => {});
+    }
+  }, []);
+
   function handleStart() {
+    if (micPermission === "denied") return;
     const config: LiveSessionConfig = {
       company:             null,
       role:                null,
@@ -266,9 +289,44 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
           )}
         </div>
 
+        {micPermission === "denied" && (
+          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-center">
+            <p className="text-sm text-red-400 font-medium mb-1">Microphone access denied</p>
+            <p className="text-xs text-red-400/60">
+              Please allow microphone access in your browser settings, then reload this page.
+            </p>
+          </div>
+        )}
+
+        {micPermission !== "granted" && micPermission !== "denied" && (
+          <button
+            onClick={checkMicPermission}
+            disabled={micPermission === "checking"}
+            className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium rounded-xl transition-all flex items-center justify-center gap-2 text-sm mb-2"
+          >
+            {micPermission === "checking" ? (
+              <>
+                <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                Checking permissions…
+              </>
+            ) : (
+              <>
+                <Volume2 className="w-4 h-4" />
+                Check microphone access
+              </>
+            )}
+          </button>
+        )}
+
         <button
           onClick={handleStart}
-          className="w-full py-3.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-2"
+          disabled={micPermission === "denied"}
+          className={cn(
+            "w-full py-3.5 font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
+            micPermission === "denied"
+              ? "bg-gray-700 text-gray-400 cursor-not-allowed"
+              : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white"
+          )}
         >
           <Zap className="w-4 h-4" />
           {sessionType === "live" ? "Start Live Co-pilot" : "Start Mock Session"}

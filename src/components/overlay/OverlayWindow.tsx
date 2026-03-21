@@ -16,14 +16,16 @@ import { LiveTranscriptStream } from "@/components/live/LiveTranscriptStream";
 import { cn } from "@/lib/utils";
 
 interface OverlayWindowProps {
-  onToggleMic?:     () => void;
-  onGenerate?:      () => void;
-  onEndSession?:    () => void;
-  onManualQuestion?: (question: string) => void;
+  onToggleMic?:        () => void;
+  onToggleSystemAudio?: () => void;
+  onGenerate?:         () => void;
+  onEndSession?:       () => void;
+  onManualQuestion?:   (question: string) => void;
 }
 
 export function OverlayWindow({
   onToggleMic,
+  onToggleSystemAudio,
   onGenerate,
   onEndSession,
   onManualQuestion,
@@ -113,6 +115,7 @@ export function OverlayWindow({
 
           <OverlayToolbar
             onToggleMic={onToggleMic}
+            onToggleSystemAudio={onToggleSystemAudio}
             onGenerate={onGenerate}
             onEndSession={onEndSession}
           />

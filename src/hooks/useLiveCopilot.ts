@@ -95,17 +95,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     return () => { dragCleanupRef.current?.(); };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Session ticker ─────────────────────────────────────────────
-  useEffect(() => {
-    if (sessionStatus !== "active") return;
-
-    const tick = setInterval(() => {
-      // getState() avoids stale closure — always calls the live action
-      useSessionStore.getState().tickElapsed();
-    }, 1000);
-
-    return () => clearInterval(tick);
-  }, [sessionStatus]);
+  // Session ticker handled by LiveSessionController to avoid double-increment
 
   // ── Handle detected question ───────────────────────────────────
   function handleQuestionDetected(question: string): void {
@@ -124,7 +114,8 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     const context = coachStore.getContext();
     if (!context) return;
 
-    const creditCheck = checkCredits(profile.preferred_model);
+    const selectedModel = useOverlayStore.getState().active_model;
+    const creditCheck = checkCredits(selectedModel);
     if (!creditCheck.canProceed) {
       useOverlayStore.getState().setError(creditCheck.reason ?? "Out of credits");
       return;
@@ -142,7 +133,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     await routeHint({
       question,
       context,
-      preferredModel: profile.preferred_model,
+      preferredModel: selectedModel,
       interviewType:  context.session_type,
       isLive:         true,
       sessionId:      sessionIdRef.current,
@@ -150,7 +141,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
       onChunk:  (chunk) => useOverlayStore.getState().appendStreamChunk(chunk),
       onDone:   async (_fullText) => {
         useOverlayStore.getState().commitStreamedHint();
-        await deductCredits(profile.preferred_model, sessionIdRef.current);
+        await deductCredits(selectedModel, sessionIdRef.current);
         useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
       },
       onError:  (error) => useOverlayStore.getState().setError(error.message),
@@ -181,6 +172,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
       try {
         const audioState = useAudioStore.getState();
         const fullTranscript = audioState.transcript?.full_transcript ?? "";
+        const utterances = audioState.transcript?.utterances ?? [];
 
         await sessionsDB.update(session.session_id, {
           status:           "ended",
@@ -190,9 +182,13 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
           model_used:       overlay.active_model,
           ended_at:         new Date().toISOString(),
           metadata: {
-            filler_count: session.filler_count,
-            avg_wpm:      session.current_wpm,
-            hint_style:   overlay.hint_style,
+            filler_count:       session.filler_count,
+            avg_wpm:            session.current_wpm,
+            hint_style:         overlay.hint_style,
+            last_question:      overlay.current_question,
+            last_generated_hint: overlay.current_hint,
+            utterance_count:    utterances.length,
+            question_count:     utterances.filter((u) => u.is_interviewer_question).length,
           },
         });
       } catch (err) {
@@ -209,11 +205,16 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     setProctorSafe(!is_proctor_safe);
   }, []);
 
+  const toggleSystemAudio = useCallback(() => {
+    audio.reconnect();
+  }, [audio.reconnect]);
+
   return {
     startLiveSession,
     endLiveSession,
-    toggleMute:     audio.toggleMute,
-    reconnectAudio: audio.reconnect,
+    toggleMute:        audio.toggleMute,
+    toggleSystemAudio,
+    reconnectAudio:    audio.reconnect,
     isCapturing:    audio.isCapturing,
     isMuted:        audio.isMuted,
     deepgramStatus: audio.deepgramStatus,
