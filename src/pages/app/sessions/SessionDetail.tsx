@@ -486,13 +486,13 @@ export default function SessionDetail() {
           <div className="flex gap-2">
             <input
               readOnly
-              value={`https://clarifyai.app/share/${session.id}`}
+              value={`https://confideq.app/share/${session.id}`}
               className="flex-1 bg-black/30 border border-white/10 text-foreground rounded-xl px-3 py-2 text-xs focus:outline-none"
             />
             <Button
               variant="secondary"
               size="sm"
-              onClick={() => navigator.clipboard.writeText(`https://clarifyai.app/share/${session.id}`)}
+              onClick={() => navigator.clipboard.writeText(`https://confideq.app/share/${session.id}`)}
             >
               Copy
             </Button>
