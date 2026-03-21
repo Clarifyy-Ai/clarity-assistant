@@ -1,5 +1,4 @@
 import type { ReactNode } from "react";
-import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────────
 // StealthMouseGuard
@@ -17,10 +16,7 @@ interface StealthMouseGuardProps {
 export function StealthMouseGuard({ isActive, children }: StealthMouseGuardProps) {
   return (
     <div
-      className={cn(
-        "no-select",
-        isActive && "pointer-events-none"
-      )}
+      className="no-select"
       data-stealth-active={isActive ? "true" : "false"}
     >
       {children}

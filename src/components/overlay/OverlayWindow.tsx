@@ -84,7 +84,6 @@ export function OverlayWindow({
             is_stealth_mode && "opacity-90"
           )}
           style={{
-            pointerEvents: is_stealth_mode ? "none" : "auto",
             width:  overlay_width,
             height: overlay_height,
           }}

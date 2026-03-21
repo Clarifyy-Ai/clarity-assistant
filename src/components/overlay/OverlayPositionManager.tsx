@@ -83,6 +83,7 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
           left: `${position.x}px`,
           top: `${position.y}px`,
           zIndex: 9999,
+          pointerEvents: "auto",
           isolation: "isolate",
           willChange: "transform",
           transform: "translateZ(0)",

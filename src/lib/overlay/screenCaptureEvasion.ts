@@ -14,11 +14,6 @@
  * Additional CSS selectors can be used to apply special filters.
  */
 export function applyStealthToElement(el: HTMLElement): void {
-  // Prevent interaction for automation tools / tests
-  el.style.pointerEvents = "none";
-
-  // Mark for CSS selectors like:
-  // [data-stealth-active="true"] { -webkit-backface-visibility: hidden; opacity: .001; }
   el.dataset.stealthActive = "true";
 }
 
@@ -26,7 +21,6 @@ export function applyStealthToElement(el: HTMLElement): void {
  * Removes stealth mode and restores normal behavior.
  */
 export function removeStealthFromElement(el: HTMLElement): void {
-  el.style.pointerEvents = "";
   delete el.dataset.stealthActive;
 }
 

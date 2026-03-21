@@ -307,7 +307,7 @@
     background: var(--overlay-bg);
     border: 1px solid var(--overlay-border);
     @apply rounded-2xl backdrop-blur-xl shadow-overlay;
-    pointer-events: none;
+    pointer-events: auto;
     user-select: none;
   }
 
