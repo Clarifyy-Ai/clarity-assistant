@@ -39,27 +39,40 @@ export function ScreenCaptureBlocker({
     };
     document.addEventListener('visibilitychange', handleVisChange);
 
-    const checkActiveDisplayCapture = () => {
-      try {
-        if (!navigator.mediaDevices?.enumerateDevices) return;
-        navigator.mediaDevices.enumerateDevices().then((devices) => {
-          const hasActiveCapture = devices.some(
-            (d) =>
-              d.kind === 'videoinput' &&
-              d.label &&
-              /screen|display|monitor|window|tab/i.test(d.label)
-          );
-          if (hasActiveCapture) notify('sharing');
-        }).catch(() => {});
-      } catch (_) {}
+    const checkDevicesForCapture = () => {
+      if (!navigator.mediaDevices?.enumerateDevices) return;
+      navigator.mediaDevices.enumerateDevices().then((devices) => {
+        for (const d of devices) {
+          if (d.kind !== 'videoinput' || !d.label) continue;
+          const label = d.label.toLowerCase();
+          if (/screen|display|monitor|window|tab/.test(label)) {
+            if (/share|cast|present/.test(label)) {
+              notify('sharing');
+            } else {
+              notify('recording');
+            }
+            break;
+          }
+        }
+      }).catch(() => {});
     };
 
-    checkActiveDisplayCapture();
-    const interval = setInterval(checkActiveDisplayCapture, 15000);
+    checkDevicesForCapture();
+    const interval = setInterval(checkDevicesForCapture, 15000);
+
+    const onDeviceChange = () => {
+      checkDevicesForCapture();
+    };
+    try {
+      navigator.mediaDevices?.addEventListener?.('devicechange', onDeviceChange);
+    } catch (_) {}
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisChange);
       clearInterval(interval);
+      try {
+        navigator.mediaDevices?.removeEventListener?.('devicechange', onDeviceChange);
+      } catch (_) {}
     };
   }, [isActive, notify]);
 

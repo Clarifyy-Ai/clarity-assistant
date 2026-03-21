@@ -71,7 +71,7 @@ export function AppSidebar() {
       className={cn(
         "hidden md:flex flex-col flex-shrink-0",
         "h-screen bg-[#0d0d14] border-r border-white/[0.08]",
-        "transition-all duration-200 relative z-40",
+        "transition-all duration-200 relative z-30",
         collapsed ? "w-16" : "w-56"
       )}
     >
