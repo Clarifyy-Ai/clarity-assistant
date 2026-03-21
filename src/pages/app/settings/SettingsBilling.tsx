@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { useCredits } from "@/hooks/useCredits";
@@ -13,9 +12,9 @@ import {
 } from "@/lib/billing/subscriptionManager";
 import {
   formatPrice,
-  calculateYearlySavings,
   CREDIT_PACKS as TOPUP_PACKS,
 } from "@/lib/billing/priceCalculator";
+import { PricingCard } from "@/components/billing/PricingCard";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -26,11 +25,9 @@ import {
   CreditCard,
   Shield,
   AlertTriangle,
-  CheckCircle,
   XCircle,
   Crown,
   ArrowUpRight,
-  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
@@ -50,6 +47,14 @@ const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   paused:     { label: "Paused",     color: "text-gray-400" },
 };
 
+const PLAN_COLORS: Record<string, "violet" | "amber" | "emerald" | "blue"> = {
+  free: "blue",
+  starter: "blue",
+  pro: "violet",
+  elite: "amber",
+  enterprise: "emerald",
+};
+
 export default function SettingsBilling() {
   const { user, profile, planId } = useAuthStore();
   const credits = useCredits();
@@ -58,7 +63,8 @@ export default function SettingsBilling() {
   const [loadingSub, setLoadingSub] = useState(true);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const currentPlan = PLANS[(planId as PlanId) ?? "free"] ?? PLANS.free;
+  const effectivePlanId = (planId as PlanId) || "free";
+  const currentPlan = PLANS[effectivePlanId] ?? PLANS.free;
 
   useEffect(() => {
     if (!user?.id) return;
@@ -68,12 +74,12 @@ export default function SettingsBilling() {
       .finally(() => setLoadingSub(false));
   }, [user?.id]);
 
-  async function handleUpgrade(targetPlanId: PlanId) {
+  async function handleUpgrade(targetPlanId: string) {
     if (!STRIPE_CONFIGURED) {
       toast.error("Stripe is not configured. Contact support to upgrade.");
       return;
     }
-    const plan = PLANS[targetPlanId];
+    const plan = PLANS[targetPlanId as PlanId];
     if (!plan?.stripePriceIdMonthly) {
       toast.error("No Stripe price configured for this plan.");
       return;
@@ -258,7 +264,7 @@ export default function SettingsBilling() {
                   {creditsRemaining} credits remaining
                 </span>
               </div>
-              {(planId === "free" || !planId) && (
+              {effectivePlanId === "free" && (
                 <Button
                   variant="primary"
                   size="sm"
@@ -270,7 +276,7 @@ export default function SettingsBilling() {
                   Upgrade
                 </Button>
               )}
-              {subscription && !subscription.cancelAtPeriodEnd && planId !== "free" && (
+              {subscription && !subscription.cancelAtPeriodEnd && effectivePlanId !== "free" && (
                 <Button
                   variant="ghost"
                   size="sm"
@@ -322,74 +328,36 @@ export default function SettingsBilling() {
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
           {PLAN_ORDER.filter((id) => id !== "enterprise").map((id) => {
             const plan = PLANS[id];
-            const isCurrent = planId === id || (!planId && id === "free");
-            const savings = calculateYearlySavings(id);
+            const isCurrent = effectivePlanId === id;
+            const color = PLAN_COLORS[id] ?? "violet";
 
             return (
-              <Card
+              <PricingCard
                 key={id}
-                className={cn(
-                  "flex flex-col",
-                  isCurrent && "border-violet-500/40 bg-violet-600/5",
-                  plan.isPopular && !isCurrent && "border-blue-500/30"
-                )}
-              >
-                {plan.isPopular && (
-                  <Badge variant="violet" size="sm" className="self-start mb-2">
-                    Most Popular
-                  </Badge>
-                )}
-                <h4 className="text-base font-bold text-white">{plan.name}</h4>
-                <p className="text-[10px] text-gray-500 mt-0.5">{plan.tagline}</p>
-                <div className="mt-2">
-                  <span className="text-xl font-black text-white">
-                    {plan.monthlyPrice === 0
-                      ? "Free"
-                      : formatPrice(plan.monthlyPrice, true)}
-                  </span>
-                  {plan.monthlyPrice > 0 && (
-                    <span className="text-xs text-gray-500">/mo</span>
-                  )}
-                </div>
-                {savings.savedPercent > 0 && (
-                  <p className="text-[10px] text-emerald-400 mt-0.5">
-                    Save {savings.savedPercent}% yearly
-                  </p>
-                )}
-                <p className="text-xs text-gray-400 mt-1">
-                  {plan.creditsPerMonth === -1
-                    ? "Unlimited credits"
-                    : `${plan.creditsPerMonth} credits/mo`}
-                </p>
-                <ul className="mt-3 space-y-1 flex-1">
-                  {plan.features.slice(0, 5).map((f) => (
-                    <li
-                      key={f.key}
-                      className={cn(
-                        "flex items-center gap-1.5 text-[11px]",
-                        f.included ? "text-gray-300" : "text-gray-600"
-                      )}
-                    >
-                      {f.included ? (
-                        <CheckCircle className="w-3 h-3 text-emerald-400 shrink-0" />
-                      ) : (
-                        <XCircle className="w-3 h-3 text-gray-600 shrink-0" />
-                      )}
-                      {f.label}
-                    </li>
-                  ))}
-                </ul>
-                <Button
-                  variant={isCurrent ? "ghost" : "primary"}
-                  size="sm"
-                  className="mt-3 w-full"
-                  disabled={isCurrent || !STRIPE_CONFIGURED}
-                  loading={actionLoading === id}
-                  onClick={() => handleUpgrade(id)}
-                >
-                  {isCurrent ? "Current Plan" : `Upgrade to ${plan.name}`}
-                </Button>
-              </Card>
+                id={id}
+                label={plan.name}
+                price={plan.monthlyPrice === 0 ? "Free" : formatPrice(plan.monthlyPrice, true)}
+                period={plan.monthlyPrice === 0 ? "" : "/mo"}
+                credits={plan.creditsPerMonth === -1 ? undefined : plan.creditsPerMonth}
+                color={color}
+                features={plan.features.slice(0, 5).map((f) => ({
+                  label: f.label,
+                  included: f.included,
+                }))}
+                isCurrent={isCurrent}
+                isHighlighted={plan.isPopular && !isCurrent}
+                badge={plan.isPopular ? "Most Popular" : undefined}
+                subtitle={plan.tagline}
+                size="sm"
+                onUpgrade={() => handleUpgrade(id)}
+                ctaLabel={
+                  isCurrent
+                    ? undefined
+                    : !STRIPE_CONFIGURED
+                    ? "Stripe not configured"
+                    : undefined
+                }
+              />
             );
           })}
         </div>
