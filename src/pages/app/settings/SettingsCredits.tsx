@@ -16,7 +16,9 @@ import { toast } from "sonner";
 // ─────────────────────────────────────────────────────────────────
 
 const STRIPE_CONFIGURED =
-  !!import.meta.env.VITE_STRIPE_PRICE_CREDITS_10;
+  !!import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY ||
+  !!import.meta.env.VITE_STRIPE_PRICE_STARTER_MONTHLY ||
+  !!import.meta.env.VITE_STRIPE_PRICE_CREDITS_100;
 
 const CREDIT_PACKS = [
   { id: "100",  amount: 100,  price: 4.99,  bonus: 0,     stripePriceId: import.meta.env.VITE_STRIPE_PRICE_CREDITS_100  },
