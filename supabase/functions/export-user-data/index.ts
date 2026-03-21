@@ -85,7 +85,7 @@ Deno.serve(async (req) => {
       headers: {
         ...corsHeaders,
         "Content-Type":        "application/json",
-        "Content-Disposition": `attachment; filename="clarifyai-export-${type}.json"`,
+        "Content-Disposition": `attachment; filename="clarify-ai-export-${type}.json"`,
       },
     });
 
