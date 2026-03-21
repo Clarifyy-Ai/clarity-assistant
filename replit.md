@@ -145,6 +145,14 @@ DEEPGRAM_API_KEY=...      # Speech-to-text for live sessions
 6. `Scorecard` route added to router (page existed but wasn't routed)
 7. `/auth/callback` route + `AuthCallback.tsx` created (OAuth redirects were hitting 404)
 8. Navigation fixed: `completeSession()` → `/app/scorecard/:id` (was `/scorecard/:id`)
+9. `#overlay-root` div added to `index.html` (overlay portal was rendering into void)
+10. `OverlayWindow.tsx` rewritten with `getElementById` portal pattern (removed broken `useRef` + stray backtick)
+11. `useSpeechRecognition.ts` fully implemented with Web Speech API (continuous, auto-restart, mute/unmute)
+12. `useFillerWordDetection`, `useWPMTracker`, `useSentimentAnalysis` — all rewritten to match MockSession.tsx API shapes
+13. `useDeepgramStream.ts` wired to real `DeepgramStreamClient`; `deepgram-token` edge function created
+14. `MockSession.tsx` credit key fixed (`"live_hint"` not `"liveHint"`), Scorecard navigation fixed
+15. React Router v7 `startTransition` warning suppressed in `main.tsx`
+16. `userStore.ts` confirmed as a re-export of `authStore` (no duplicate state)
 
 ## What User Must Do for Full Features
 

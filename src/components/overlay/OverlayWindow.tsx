@@ -1,5 +1,5 @@
-import { useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
+import { useRef } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useStealthMouse } from "@/hooks/useStealthMouse";
 import { OverlayHintPanel } from "./OverlayHintPanel";
@@ -11,20 +11,12 @@ import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────────
 // OverlayWindow
-// Invisible floating overlay panel rendered via a portal into
-// #overlay-root — separate compositor layer from screen capture.
+// Floating overlay rendered via a portal into #overlay-root —
+// a separate DOM node outside #root for compositor-layer isolation.
+// The #overlay-root div is declared in index.html.
 // ─────────────────────────────────────────────────────────────────
 
 export function OverlayWindow() {
-  // Guard for non-DOM contexts (SSR/hydration)
-  const overlayRootRef = useRef<HTMLElement | null>(null);
-
-  useEffect(() => {
-    if (typeof document !== "undefined") {
-      overlayRootRef.current = document.getElementById("overlay-root") as HTMLElement | null;
-    }
-  }, []);
-
   const panelRef = useRef<HTMLDivElement>(null);
 
   const {
@@ -46,11 +38,15 @@ export function OverlayWindow() {
     setPosition,
   } = useOverlayStore();
 
-  // Attach stealth mouse behavior to the panel
   useStealthMouse(panelRef, is_stealth_mode);
 
-  // If root is missing or overlay is hidden, render nothing
-  if (!overlayRootRef.current || !is_visible) return null;
+  // Resolve the portal target directly — it always exists in the DOM
+  const overlayRoot =
+    typeof document !== "undefined"
+      ? document.getElementById("overlay-root")
+      : null;
+
+  if (!overlayRoot || !is_visible) return null;
 
   const displayText = hint_state === "streaming" ? streaming_buffer : current_hint;
 
@@ -67,10 +63,9 @@ export function OverlayWindow() {
             "overlay-panel no-select flex max-h-[520px] w-[420px] flex-col gap-0 transition-opacity duration-150",
             is_stealth_mode && "opacity-90"
           )}
-          // Prevent accidental interactions in stealth
           style={{ pointerEvents: is_stealth_mode ? "none" : "auto" }}
           role="dialog"
-          aria-label="ConfideQ Overlay"
+          aria-label="Clarity AI Overlay"
         >
           {/* Top bar / drag handle */}
           <div
@@ -80,7 +75,7 @@ export function OverlayWindow() {
           >
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-semibold uppercase tracking-widest text-brand-300/60">
-                ConfideQ
+                Clarity AI
               </span>
               <OverlayNetworkBadge color={network_color} />
             </div>
@@ -131,7 +126,6 @@ export function OverlayWindow() {
         </div>
       </OverlayPositionManager>
     </StealthMouseGuard>,
-    overlayRootRef.current
+    overlayRoot
   );
 }
-``

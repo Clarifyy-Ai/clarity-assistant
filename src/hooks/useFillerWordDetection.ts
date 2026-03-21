@@ -1,9 +1,14 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 // ─────────────────────────────────────────────────────────────────
 // useFillerWordDetection
-// Scans incoming transcript text for filler words in real time.
-// Returns running count, rate/min, and per-word breakdown.
+// Accepts an incoming transcript string and automatically scans
+// it for filler words in real time.
+// API is designed to match MockSession.tsx expectations:
+//   const fillerHook = useFillerWordDetection(stt.interimTranscript)
+//   fillerHook.totalCount — total fillers detected
+//   fillerHook.counts     — Record<word, count>
+//   fillerHook.reset()    — clear all counts
 // ─────────────────────────────────────────────────────────────────
 
 const FILLER_WORDS = new Set([
@@ -12,38 +17,39 @@ const FILLER_WORDS = new Set([
   "right", "so", "okay", "well", "just", "honestly",
 ]);
 
-interface FillerStats {
-  total:    number;
-  perWord:  Record<string, number>;
-  ratePerMin: number;
-}
+export function useFillerWordDetection(incomingText = "") {
+  const [totalCount, setTotalCount] = useState(0);
+  const [counts,     setCounts]     = useState<Record<string, number>>({});
 
-export function useFillerWordDetection() {
-  const [stats, setStats] = useState<FillerStats>({
-    total:    0,
-    perWord:  {},
-    ratePerMin: 0,
-  });
+  const countsRef     = useRef<Record<string, number>>({});
+  const totalRef      = useRef(0);
+  const startTimeRef  = useRef<number | null>(null);
+  const prevTextRef   = useRef("");
 
-  const perWordRef  = useRef<Record<string, number>>({});
-  const totalRef    = useRef(0);
-  const startTime   = useRef<number | null>(null);
+  // ── Auto-scan when incomingText changes ──────────────────────
+  useEffect(() => {
+    if (!incomingText.trim()) return;
 
-  // ── Scan a new transcript segment ────────────────────────────
+    // Only scan the NEW suffix since last update
+    const prev = prevTextRef.current;
+    const diff = incomingText.startsWith(prev)
+      ? incomingText.slice(prev.length)
+      : incomingText;
 
-  const scan = useCallback((text: string): void => {
-    if (!text.trim()) return;
-    if (!startTime.current) startTime.current = Date.now();
+    prevTextRef.current = incomingText;
+    if (!diff.trim()) return;
 
-    const lower  = text.toLowerCase();
-    let   found  = 0;
+    if (!startTimeRef.current) startTimeRef.current = Date.now();
+
+    const lower = diff.toLowerCase();
+    let found   = 0;
 
     // Multi-word fillers first
     for (const filler of FILLER_WORDS) {
       if (!filler.includes(" ")) continue;
       const occurrences = (lower.match(new RegExp(filler, "g")) ?? []).length;
       if (occurrences > 0) {
-        perWordRef.current[filler] = (perWordRef.current[filler] ?? 0) + occurrences;
+        countsRef.current[filler] = (countsRef.current[filler] ?? 0) + occurrences;
         found += occurrences;
       }
     }
@@ -52,48 +58,85 @@ export function useFillerWordDetection() {
     const words = lower.split(/\s+/);
     for (const word of words) {
       const clean = word.replace(/[^a-z]/g, "");
-      if (FILLER_WORDS.has(clean)) {
-        perWordRef.current[clean] = (perWordRef.current[clean] ?? 0) + 1;
+      if (clean && FILLER_WORDS.has(clean)) {
+        countsRef.current[clean] = (countsRef.current[clean] ?? 0) + 1;
         found += 1;
       }
     }
 
-    totalRef.current += found;
+    if (found > 0) {
+      totalRef.current += found;
+      setTotalCount(totalRef.current);
+      setCounts({ ...countsRef.current });
+    }
+  }, [incomingText]);
 
-    const elapsedMin = (Date.now() - (startTime.current ?? Date.now())) / 60_000;
-    const rate = elapsedMin > 0 ? totalRef.current / elapsedMin : 0;
+  // ── Manual scan (for one-off text) ───────────────────────────
+  const scan = useCallback((text: string): void => {
+    if (!text.trim()) return;
+    if (!startTimeRef.current) startTimeRef.current = Date.now();
 
-    setStats({
-      total:      totalRef.current,
-      perWord:    { ...perWordRef.current },
-      ratePerMin: Math.round(rate * 10) / 10,
-    });
+    const lower = text.toLowerCase();
+    let found   = 0;
+
+    for (const filler of FILLER_WORDS) {
+      if (!filler.includes(" ")) continue;
+      const occurrences = (lower.match(new RegExp(filler, "g")) ?? []).length;
+      if (occurrences > 0) {
+        countsRef.current[filler] = (countsRef.current[filler] ?? 0) + occurrences;
+        found += occurrences;
+      }
+    }
+
+    const words = lower.split(/\s+/);
+    for (const word of words) {
+      const clean = word.replace(/[^a-z]/g, "");
+      if (clean && FILLER_WORDS.has(clean)) {
+        countsRef.current[clean] = (countsRef.current[clean] ?? 0) + 1;
+        found += 1;
+      }
+    }
+
+    if (found > 0) {
+      totalRef.current += found;
+      setTotalCount(totalRef.current);
+      setCounts({ ...countsRef.current });
+    }
   }, []);
 
   // ── Reset ─────────────────────────────────────────────────────
-
   const reset = useCallback((): void => {
-    perWordRef.current = {};
+    countsRef.current  = {};
     totalRef.current   = 0;
-    startTime.current  = null;
-    setStats({ total: 0, perWord: {}, ratePerMin: 0 });
+    startTimeRef.current = null;
+    prevTextRef.current  = "";
+    setTotalCount(0);
+    setCounts({});
   }, []);
 
-  // ── Top N fillers for scorecard ───────────────────────────────
+  // ── Rate per minute ───────────────────────────────────────────
+  const ratePerMin =
+    startTimeRef.current
+      ? Math.round((totalRef.current / ((Date.now() - startTimeRef.current) / 60_000)) * 10) / 10
+      : 0;
 
+  // ── Top N fillers ─────────────────────────────────────────────
   const getTopFillers = useCallback((n = 5): { word: string; count: number }[] => {
-    return Object.entries(perWordRef.current)
+    return Object.entries(countsRef.current)
       .sort((a, b) => b[1] - a[1])
       .slice(0, n)
       .map(([word, count]) => ({ word, count }));
   }, []);
 
   return {
-    stats,
+    totalCount,
+    counts,
     scan,
     reset,
+    ratePerMin,
     getTopFillers,
-    total:      stats.total,
-    ratePerMin: stats.ratePerMin,
+    // Legacy aliases kept for compatibility
+    total: totalCount,
+    stats: { total: totalCount, perWord: counts, ratePerMin },
   };
 }
