@@ -399,7 +399,10 @@ export default function MockSession() {
         onToggleMic={stt.toggleMute}
         onGenerate={handleRequestHint}
         onEndSession={handleEndSession}
-        onManualQuestion={(q) => orchestrator.requestHint(q)}
+        onManualQuestion={(q) => {
+          useOverlayStore.getState().setCurrentQuestion(q);
+          orchestrator.requestHint(q);
+        }}
       />
 
       <Modal

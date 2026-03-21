@@ -185,6 +185,26 @@ DEEPGRAM_API_KEY=...      # Speech-to-text for live sessions
 - `useOverlayVisibility.ts` — bare `useOverlayStore()` → individual selectors for reactive return values; all hotkey callbacks and `useCallback` wrappers use `.getState()` to read state at call-time (prevents stale closure bugs)
 - `useDeepgramStream.ts` — removed `audioStore` reactive subscription entirely; all `setDeepgramStatus` calls use `useAudioStore.getState()` inside callbacks
 
+## Stealth Overlay & Session Wiring (Session 3)
+
+### LiveRehearsal.tsx (`/app/live`) — Major Overhaul
+- Replaced ad-hoc audio/overlay hooks with `useLiveCopilot` master hook (matches `LiveCopilot.tsx` pattern)
+- **OverlayWindow now fully wired**: `onToggleMic`, `onToggleSystemAudio`, `onGenerate`, `onEndSession`, `onManualQuestion` all connected
+- Pre-session → active-session handoff uses explicit `phase` state ("setup" | "active")
+- Session start triggers full audio pipeline (mic → Deepgram STT → VAD → filler detection → WPM)
+- Session end persists: transcript, hint history, credits, filler count, WPM to Supabase
+- Audio error banner with reconnect button shown when stream fails
+- `OverlayKeyboardHandler` replaces `LiveHotKeyListener` (identical behavior, removes indirection)
+
+### MockSession.tsx (`/app/mock/session`)
+- `onManualQuestion` now sets `current_question` in overlay store before requesting hint
+- Ensures overlay question bar displays manual questions immediately
+
+### Pages & Routing
+- `LiveRehearsal.tsx` at `/app/live` — full session with in-page controls + floating overlay
+- `LiveCopilot.tsx` at root (not currently routed) — minimal session page with overlay-only UI
+- `MockSession.tsx` at `/app/mock/session` — timed mock session with overlay
+
 ## Replit Environment Setup
 
 - **Runtime**: Node.js 20 via Vite dev server on port 5000
