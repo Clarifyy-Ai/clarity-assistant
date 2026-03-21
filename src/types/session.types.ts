@@ -52,6 +52,9 @@ export interface LiveSessionConfig {
   stealth_mode: boolean;
   resume_id: string | null;
   jd_id: string | null;
+  interview_type: string;
+  instructions: string;
+  enable_system_audio: boolean;
 }
 
 // ── Question ──────────────────────────────────────────────────────

@@ -3,6 +3,7 @@ import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useNetworkMonitor } from "@/hooks/useNetworkMonitor";
 import { Wifi, WifiOff, Mic, Zap, Clock, CreditCard, Brain } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 export function OverlayAuditPanel() {
@@ -82,7 +83,7 @@ function AuditRow({
   value,
   valueClass,
 }: {
-  icon: any;
+  icon: LucideIcon;
   label: string;
   value: string;
   valueClass: string;

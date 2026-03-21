@@ -1,16 +1,15 @@
-// @ts-nocheck
 import { useState, useEffect } from "react";
 import { useDocumentStore } from "@/store/documentStore";
 import { useAuthStore } from "@/store/userStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import {
-  Radio, FileText, Briefcase, Brain, Mic, Volume2,
+  Radio, FileText, Briefcase, Brain,  Volume2,
   ChevronDown, Settings2, Zap, Shield, Keyboard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatHotkeyLabel } from "@/lib/overlay/hotkeys";
 import type { LiveSessionConfig } from "@/types/session.types";
-import type { PreferredAIModel, HintStyle } from "@/types/user.types";
+import type { PreferredAIModel, HintStyle, UserProfile } from "@/types/user.types";
 
 interface PreSessionSetupProps {
   onStart: (config: LiveSessionConfig) => void;
@@ -45,11 +44,12 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
   const [resumeId,          setResumeId]          = useState<string | null>(activeResumeId);
   const [jdId,              setJdId]              = useState<string | null>(activeJdId);
   const [instructions,      setInstructions]      = useState("");
+  const typedProfile = profile as UserProfile | null;
   const [model,             setModel]             = useState<PreferredAIModel>(
-    (profile as any)?.preferred_model ?? "gemini-flash"
+    typedProfile?.preferred_model ?? "gemini-flash"
   );
   const [hintStyle,         setHintStyle]         = useState<HintStyle>(
-    (profile as any)?.hint_style ?? "short_hints"
+    typedProfile?.hint_style ?? "short_hints"
   );
   const [enableSystemAudio, setEnableSystemAudio] = useState(false);
   const [stealthMode,       setStealthMode]       = useState(true);
@@ -65,13 +65,16 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
 
   function handleStart() {
     const config: LiveSessionConfig = {
-      company:      null,
-      role:         null,
-      hint_style:   hintStyle,
+      company:             null,
+      role:                null,
+      hint_style:          hintStyle,
       model,
-      stealth_mode: stealthMode,
-      resume_id:    resumeId,
-      jd_id:        jdId,
+      stealth_mode:        stealthMode,
+      resume_id:           resumeId,
+      jd_id:               jdId,
+      interview_type:      interviewType,
+      instructions,
+      enable_system_audio: enableSystemAudio,
     };
 
     useOverlayStore.getState().setActiveModel(model);

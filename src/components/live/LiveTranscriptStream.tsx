@@ -7,6 +7,13 @@ import { cn } from "@/lib/utils";
 // Real-time transcript display with speaker labels
 // ─────────────────────────────────────────────────────────────────
 
+function formatTimestamp(ms: number): string {
+  const totalSec = Math.floor(ms / 1000);
+  const m = Math.floor(totalSec / 60);
+  const s = totalSec % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
 export function LiveTranscriptStream() {
   const transcript = useAudioStore((s) => s.transcript);
 
@@ -45,9 +52,12 @@ export function LiveTranscriptStream() {
 
       {utterances.map((u) => (
         <div key={u.id} className="flex gap-2">
+          <span className="w-10 shrink-0 text-[9px] font-mono tabular-nums text-muted-foreground/30">
+            {formatTimestamp(u.start_ms)}
+          </span>
           <span
             className={cn(
-              "w-16 shrink-0 text-[10px] font-semibold uppercase tracking-wider",
+              "w-12 shrink-0 text-[10px] font-semibold uppercase tracking-wider",
               u.speaker === "interviewer"
                 ? "text-warning/70"
                 : "text-brand-400/70"

@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { useRef, useState, useCallback } from "react";
+import { useRef, useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveCopilot } from "@/hooks/useLiveCopilot";
 import { useAuth } from "@/hooks/useAuth";
@@ -12,15 +11,28 @@ import { LiveSessionController } from "@/components/live/LiveSessionController";
 import { cn } from "@/lib/utils";
 import type { LiveSessionConfig } from "@/types/session.types";
 
+const DEFAULT_CONFIG: LiveSessionConfig = {
+  company: null,
+  role: null,
+  hint_style: "short_hints",
+  model: "gemini-flash",
+  stealth_mode: true,
+  resume_id: null,
+  jd_id: null,
+  interview_type: "behavioral",
+  instructions: "",
+  enable_system_audio: false,
+};
+
 export default function LiveCopilot() {
   const navigate     = useNavigate();
   const { profile }  = useAuth();
   const overlayRef   = useRef<HTMLDivElement>(null);
   const [phase, setPhase] = useState<"setup" | "active">("setup");
-  const [config, setConfig] = useState<Partial<LiveSessionConfig>>({});
+  const [config, setConfig] = useState<LiveSessionConfig>(DEFAULT_CONFIG);
 
   const copilot = useLiveCopilot({
-    config:     config as LiveSessionConfig,
+    config,
     overlayRef,
   });
 
@@ -28,11 +40,16 @@ export default function LiveCopilot() {
   const isMuted      = useAudioStore((s) => s.is_muted);
   const deepgramStatus = useAudioStore((s) => s.deepgram_status);
 
-  const handleStart = useCallback(async (sessionConfig: LiveSessionConfig) => {
+  const handleStart = useCallback((sessionConfig: LiveSessionConfig) => {
     setConfig(sessionConfig);
     setPhase("active");
-    await copilot.startLiveSession();
-  }, [copilot.startLiveSession]);
+  }, []);
+
+  useEffect(() => {
+    if (phase === "active") {
+      copilot.startLiveSession();
+    }
+  }, [phase]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleEndSession = useCallback(async () => {
     await copilot.endLiveSession();

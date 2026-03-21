@@ -1,12 +1,12 @@
 import { useOverlayStore } from "@/store/overlayStore";
 import { useAudioStore } from "@/store/audioStore";
-import { useSessionStore } from "@/store/sessionStore";
 import { PANIC_RESPONSE } from "@/types/session.types";
 import {
-  Mic, MicOff, Volume2, VolumeX, Zap, RefreshCw,
+  Mic, MicOff, Zap, RefreshCw,
   Eye, EyeOff, Square, AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { LucideIcon } from "lucide-react";
 
 interface OverlayToolbarProps {
   onToggleMic?: () => void;
@@ -91,7 +91,7 @@ function ToolbarButton({
   disabled,
   small,
 }: {
-  icon: any;
+  icon: LucideIcon;
   label: string;
   active: boolean;
   color: string;

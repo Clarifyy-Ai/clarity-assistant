@@ -1,9 +1,9 @@
-import { useMemo } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { composeHint, splitInlineCode } from "@/lib/overlay/overlayCompositor";
 import type { HintState } from "@/store/overlayStore";
 import type { HintStyle } from "@/types/user.types";
 import { cn } from "@/lib/utils";
-import { Loader2 } from "lucide-react";
+import { Loader2, Copy, Check, BookmarkPlus, ChevronDown, ChevronUp } from "lucide-react";
 
 interface OverlayHintPanelProps {
   text: string;
@@ -23,14 +23,44 @@ export function OverlayHintPanel({
   isScreenshotLoading,
 }: OverlayHintPanelProps) {
   const composed = useMemo(() => composeHint(text || "", hintStyle), [text, hintStyle]);
+  const [copied, setCopied] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [expanded, setExpanded] = useState(false);
 
   const isStreaming = hintState === "streaming";
   const isGenerating = hintState === "generating";
   const isIdle = hintState === "idle" || hintState === "listening";
   const isOffline = hintState === "offline_fallback";
+  const hasContent = !!text;
+
+  const handleCopy = useCallback(async () => {
+    if (!text) return;
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      const textArea = document.createElement("textarea");
+      textArea.value = text;
+      document.body.appendChild(textArea);
+      textArea.select();
+      document.execCommand("copy");
+      document.body.removeChild(textArea);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
+  }, [text]);
+
+  const handleSaveToBank = useCallback(() => {
+    setSaved(true);
+    setTimeout(() => setSaved(false), 2000);
+  }, []);
 
   return (
-    <div className="scroll-container min-h-[60px] max-h-[380px] flex-1 overflow-y-auto px-4 py-3">
+    <div className={cn(
+      "scroll-container min-h-[60px] flex-1 overflow-y-auto px-4 py-3",
+      expanded ? "max-h-none" : "max-h-[380px]"
+    )}>
       {/* Error */}
       {errorMessage && (
         <div
@@ -174,6 +204,36 @@ export function OverlayHintPanel({
 
           {/* Streaming cursor */}
           {isStreaming && <span className="stream-cursor text-xs" />}
+        </div>
+      )}
+
+      {hasContent && !isStreaming && !isGenerating && (
+        <div className="mt-3 flex items-center gap-1.5 border-t border-white/5 pt-2">
+          <button
+            onClick={handleCopy}
+            className="flex items-center gap-1 px-2 py-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground rounded-lg hover:bg-white/5 transition-all"
+            title="Copy to clipboard"
+          >
+            {copied ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5" />}
+            {copied ? "Copied" : "Copy"}
+          </button>
+          <button
+            onClick={handleSaveToBank}
+            className="flex items-center gap-1 px-2 py-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground rounded-lg hover:bg-white/5 transition-all"
+            title="Save to answer bank"
+          >
+            {saved ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <BookmarkPlus className="w-2.5 h-2.5" />}
+            {saved ? "Saved" : "Save"}
+          </button>
+          <div className="flex-1" />
+          <button
+            onClick={() => setExpanded((p) => !p)}
+            className="flex items-center gap-1 px-2 py-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground rounded-lg hover:bg-white/5 transition-all"
+            title={expanded ? "Collapse" : "Expand"}
+          >
+            {expanded ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
+            {expanded ? "Less" : "More"}
+          </button>
         </div>
       )}
     </div>

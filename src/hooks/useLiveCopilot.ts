@@ -6,6 +6,7 @@ import { useCoachStore } from "@/store/coachStore";
 import { useAuthStore } from "@/store/userStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { useAudioSession } from "./useAudioSession";
+import { useAudioStore } from "@/store/audioStore";
 import { buildCoachingContext } from "@/lib/ai/contextEnvelopeBuilder";
 import { routeHint } from "@/lib/ai/modelRouter";
 import { checkCredits, deductCredits } from "@/lib/billing/creditsManager";
@@ -48,7 +49,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
 
   // ── Audio session ──────────────────────────────────────────────
   const audio = useAudioSession({
-    enableSystemAudio: config.stealth_mode ?? false,
+    enableSystemAudio: config.enable_system_audio ?? false,
     micDeviceId:       null,
     onQuestionDetected: handleQuestionDetected,
     onFillerDetected:   (count: number) => {
@@ -110,7 +111,10 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
   function handleQuestionDetected(question: string): void {
     if (question === lastQuestionRef.current) return;
     lastQuestionRef.current = question;
-    requestLiveHint(question);
+    useOverlayStore.getState().setCurrentQuestion(question);
+    if (useOverlayStore.getState().auto_generate) {
+      requestLiveHint(question);
+    }
   }
 
   // ── Request live hint ──────────────────────────────────────────
@@ -175,13 +179,21 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
 
     if (userId && session.session_id) {
       try {
+        const audioState = useAudioStore.getState();
+        const fullTranscript = audioState.transcript?.full_transcript ?? "";
+
         await sessionsDB.update(session.session_id, {
           status:           "ended",
           duration_seconds: session.elapsed_seconds,
           credits_used:     session.credits_consumed,
-          transcript:       session.transcript ?? null,
+          transcript:       fullTranscript || null,
           model_used:       overlay.active_model,
           ended_at:         new Date().toISOString(),
+          metadata: {
+            filler_count: session.filler_count,
+            avg_wpm:      session.current_wpm,
+            hint_style:   overlay.hint_style,
+          },
         });
       } catch (err) {
         console.error("[useLiveCopilot] Failed to persist session:", err);
