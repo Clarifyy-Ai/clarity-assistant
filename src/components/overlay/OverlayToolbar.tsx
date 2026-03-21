@@ -35,13 +35,15 @@ export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, o
         onClick={onToggleMic}
       />
 
-      <ToolbarButton
-        icon={hasSystemAudio ? Volume2 : VolumeX}
-        label={hasSystemAudio ? "System audio active" : "System audio off"}
-        active={hasSystemAudio}
-        color={hasSystemAudio ? "emerald" : "gray"}
-        onClick={onToggleSystemAudio}
-      />
+      {onToggleSystemAudio && (
+        <ToolbarButton
+          icon={hasSystemAudio ? Volume2 : VolumeX}
+          label={hasSystemAudio ? "System audio active" : "System audio off"}
+          active={hasSystemAudio}
+          color={hasSystemAudio ? "emerald" : "gray"}
+          onClick={onToggleSystemAudio}
+        />
+      )}
 
       <ToolbarButton
         icon={isStealth ? EyeOff : Eye}

@@ -14,6 +14,7 @@ import { hotkeyManager } from "@/lib/overlay/hotkeys";
 import { createDragHandler } from "@/lib/overlay/stealthMouse";
 import { generateId } from "@/lib/utils";
 import { sessionsDB } from "@/lib/supabase/database";
+import { supabase } from "@/integrations/supabase/client";
 import type { LiveSessionConfig } from "@/types/session.types";
 
 // ─────────────────────────────────────────────────────────────────
@@ -164,11 +165,11 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
         await sessionsDB.create({
           id:         sessionIdRef.current,
           user_id:    userId,
-          mode:       "live",
+          type:       "live",
           status:     "active",
           started_at: new Date().toISOString(),
-          model_used: useOverlayStore.getState().active_model,
-        } as Parameters<typeof sessionsDB.create>[0]);
+          model_used: useOverlayStore.getState().active_model as any,
+        });
       } catch (err) {
         console.error("[useLiveCopilot] Failed to create session record:", err);
       }
@@ -190,25 +191,47 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
         const audioState = useAudioStore.getState();
         const fullTranscript = audioState.transcript?.full_transcript ?? "";
         const utterances = audioState.transcript?.utterances ?? [];
+        const questionCount = utterances.filter((u: any) => u.is_interviewer_question).length;
 
         await sessionsDB.update(session.session_id, {
-          status:           "ended",
-          duration_seconds: session.elapsed_seconds,
-          credits_used:     session.credits_consumed,
-          transcript:       fullTranscript || null,
-          model_used:       overlay.active_model,
-          ended_at:         new Date().toISOString(),
-          metadata: {
-            filler_count:        session.filler_count,
-            avg_wpm:             session.current_wpm,
-            hint_style:          overlay.hint_style,
-            last_question:       overlay.current_question,
-            last_generated_hint: overlay.current_hint,
-            utterance_count:     utterances.length,
-            question_count:      utterances.filter((u) => u.is_interviewer_question).length,
-            generated_hints:     overlay.hint_history,
-          },
+          status:            "completed",
+          credits_used:      session.credits_consumed,
+          model_used:        overlay.active_model as any,
+          ended_at:          new Date().toISOString(),
+          filler_words:      session.filler_count,
+          avg_wpm:           session.current_wpm,
+          hints_used:        overlay.hint_history.length,
+          answers_generated: overlay.hint_history.length,
+          questions_asked:   questionCount,
+          notes:             fullTranscript || null,
         });
+
+        if (fullTranscript && userId) {
+          try {
+            await supabase.from("session_transcripts").insert({
+              session_id: session.session_id,
+              user_id:    userId,
+              content:    fullTranscript,
+              speaker:    "combined",
+              is_final:   true,
+            });
+          } catch {
+          }
+        }
+
+        for (const hint of overlay.hint_history) {
+          try {
+            await supabase.from("session_ai_interactions").insert({
+              session_id: session.session_id,
+              user_id:    userId,
+              type:       "hint",
+              prompt:     hint.question,
+              response:   hint.hint,
+              model:      overlay.active_model as any,
+            });
+          } catch {
+          }
+        }
       } catch (err) {
         console.error("[useLiveCopilot] Failed to persist session:", err);
       }

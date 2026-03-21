@@ -33,13 +33,14 @@ const INTERVIEW_TYPES = [
   { value: "leadership",     label: "Leadership" },
 ];
 
-export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSetupProps) {
+export function PreSessionSetup({ onStart, sessionType: initialSessionType = "live" }: PreSessionSetupProps) {
   const { profile } = useAuthStore();
   const resumes     = useDocumentStore((s) => s.resumes);
   const jds         = useDocumentStore((s) => s.jds);
   const activeResumeId = useDocumentStore((s) => s.active_resume_id);
   const activeJdId     = useDocumentStore((s) => s.active_jd_id);
 
+  const [sessionType,       setSessionType]       = useState<"live" | "mock">(initialSessionType);
   const [interviewType,     setInterviewType]     = useState("behavioral");
   const [resumeId,          setResumeId]          = useState<string | null>(activeResumeId);
   const [jdId,              setJdId]              = useState<string | null>(activeJdId);
@@ -48,6 +49,7 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
   const [model,             setModel]             = useState<PreferredAIModel>(
     typedProfile?.preferred_model ?? "gemini-flash"
   );
+  const [smartRouting,      setSmartRouting]       = useState(false);
   const [hintStyle,         setHintStyle]         = useState<HintStyle>(
     typedProfile?.hint_style ?? "short_hints"
   );
@@ -113,10 +115,10 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
         <div className="text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-sm font-medium mb-4">
             <Radio className="w-3.5 h-3.5 animate-pulse" />
-            {sessionType === "live" ? "Live Co-pilot" : "Mock Interview"}
+            Session Setup
           </div>
           <h1 className="text-3xl font-bold text-white">
-            {sessionType === "live" ? "Real-Time Interview Assistance" : "Practice Interview Session"}
+            Configure Your Session
           </h1>
           <p className="text-gray-400 mt-2 text-sm">
             Configure your session below, then start when ready.
@@ -124,6 +126,28 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
         </div>
 
         <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-5">
+
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Session Mode
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              {(["live", "mock"] as const).map((t) => (
+                <button
+                  key={t}
+                  onClick={() => setSessionType(t)}
+                  className={cn(
+                    "px-3 py-2 rounded-xl border text-sm font-medium transition-all",
+                    sessionType === t
+                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                      : "bg-white/5 border-white/10 text-gray-400 hover:border-white/20"
+                  )}
+                >
+                  {t === "live" ? "Live Co-pilot" : "Mock Interview"}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -187,41 +211,67 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
           </div>
 
           <div>
-            <label className="flex items-center gap-1.5 text-sm font-medium text-gray-300 mb-2">
-              <Brain className="w-3.5 h-3.5" /> AI Model
-            </label>
-            <div className="grid grid-cols-2 gap-2">
-              {MODEL_OPTIONS.map((m) => (
-                <button
-                  key={m.id}
-                  onClick={() => setModel(m.id)}
-                  className={cn(
-                    "text-left px-3 py-2 rounded-xl border text-sm transition-all",
-                    model === m.id
-                      ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                      : "bg-white/5 border-white/10 text-gray-400 hover:border-white/20"
-                  )}
-                >
-                  <p className="font-medium text-xs">{m.label}</p>
-                  <p className="text-[10px] mt-0.5 opacity-60">{m.desc}</p>
-                </button>
-              ))}
+            <div className="flex items-center justify-between mb-2">
+              <label className="flex items-center gap-1.5 text-sm font-medium text-gray-300">
+                <Brain className="w-3.5 h-3.5" /> AI Model
+              </label>
+              <label className="flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={smartRouting}
+                  onChange={(e) => setSmartRouting(e.target.checked)}
+                  className="rounded border-white/20 bg-white/5 text-emerald-500"
+                />
+                <span className="text-xs text-gray-400">Smart routing</span>
+              </label>
             </div>
+            {smartRouting ? (
+              <div className="bg-emerald-500/5 border border-emerald-500/15 rounded-xl p-3">
+                <p className="text-xs text-emerald-400 font-medium">Auto-select best model</p>
+                <p className="text-[10px] text-gray-400 mt-1">Routes to the optimal model based on question type and complexity.</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2">
+                {MODEL_OPTIONS.map((m) => (
+                  <button
+                    key={m.id}
+                    onClick={() => setModel(m.id)}
+                    className={cn(
+                      "text-left px-3 py-2 rounded-xl border text-sm transition-all",
+                      model === m.id
+                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                        : "bg-white/5 border-white/10 text-gray-400 hover:border-white/20"
+                    )}
+                  >
+                    <p className="font-medium text-xs">{m.label}</p>
+                    <p className="text-[10px] mt-0.5 opacity-60">{m.desc}</p>
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex items-center gap-4">
-            <label className="flex items-center gap-3 cursor-pointer flex-1">
+            <label className={cn(
+              "flex items-center gap-3 flex-1",
+              !!(navigator.mediaDevices as any)?.getDisplayMedia ? "cursor-pointer" : "cursor-not-allowed opacity-50"
+            )}>
               <input
                 type="checkbox"
                 checked={enableSystemAudio}
                 onChange={(e) => setEnableSystemAudio(e.target.checked)}
+                disabled={!(navigator.mediaDevices as any)?.getDisplayMedia}
                 className="rounded border-white/20 bg-white/5 text-emerald-500"
               />
               <div>
                 <p className="text-sm font-medium text-white flex items-center gap-1.5">
                   <Volume2 className="w-3.5 h-3.5" /> System Audio
                 </p>
-                <p className="text-[10px] text-gray-400 mt-0.5">Capture interviewer audio</p>
+                <p className="text-[10px] text-gray-400 mt-0.5">
+                  {(navigator.mediaDevices as any)?.getDisplayMedia
+                    ? "Capture interviewer audio"
+                    : "Not supported in this browser"}
+                </p>
               </div>
             </label>
 

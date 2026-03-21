@@ -50,34 +50,35 @@ export interface ProfileUpdate extends Partial<Omit<ProfileRow, "id" | "created_
 // ─── Table: sessions ──────────────────────────────────────────────────────────
 
 export interface SessionRow {
-  id:                UUID;
-  user_id:           UUID;
-  title:             string | null;
-  mode:              "live" | "mock" | "self" | "prep";
-  status:            "active" | "paused" | "ended" | "error";
-  interview_type:    string | null;
-  company:           string | null;
-  role:              string | null;
-  job_description:   string | null;
-  resume_id:         UUID | null;
-  transcript:        string | null;
-  question_count:    number;
-  duration_seconds:  number | null;
-  overall_score:     number | null;
-  debrief:           JSONB | null;
-  model_used:        string | null;
-  credits_used:      number;
-  metadata:          JSONB | null;
-  started_at:        ISODate;
-  paused_at:         ISODate | null;
-  ended_at:          ISODate | null;
-  created_at:        ISODate;
-  updated_at:        ISODate;
+  id:                 UUID;
+  user_id:            UUID;
+  title:              string | null;
+  type:               "live" | "mock" | "warmup" | "rehearsal" | "room";
+  status:             "pending" | "active" | "paused" | "completed" | "abandoned";
+  interview_id:       UUID | null;
+  company_id:         UUID | null;
+  document_id:        UUID | null;
+  jd_id:              UUID | null;
+  model_used:         string | null;
+  credits_used:       number | null;
+  filler_words:       number | null;
+  avg_wpm:            number | null;
+  hints_used:         number | null;
+  answers_generated:  number | null;
+  questions_asked:    number | null;
+  overall_score:      number | null;
+  clarity_score:      number | null;
+  confidence_score:   number | null;
+  notes:              string | null;
+  tags:               string[] | null;
+  started_at:         ISODate | null;
+  ended_at:           ISODate | null;
+  created_at:         ISODate;
+  updated_at:         ISODate;
 }
 
 export interface SessionInsert extends Partial<Omit<SessionRow, "id" | "created_at" | "updated_at">> {
-  user_id:    UUID;
-  started_at: ISODate;
+  user_id: UUID;
 }
 
 export interface SessionUpdate extends Partial<Omit<SessionRow, "id" | "user_id" | "created_at">> {
