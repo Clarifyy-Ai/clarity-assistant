@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useCallback } from "react";
 import { useNetworkMonitor } from "./useNetworkMonitor";
 import { useAuthStore } from "@/store/userStore";

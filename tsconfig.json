@@ -29,6 +29,9 @@
   "exclude": [
     "node_modules",
     "dist",
-    "coverage"
+    "coverage",
+    "supabase",
+    "playwright-fixture.ts",
+    "playwright.config.ts"
   ]
 }

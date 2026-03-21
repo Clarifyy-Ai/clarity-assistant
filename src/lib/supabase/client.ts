@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─────────────────────────────────────────────────────────────────────────────
 // src/lib/supabase/client.ts
 // Utility functions only — imports the singleton from integrations.

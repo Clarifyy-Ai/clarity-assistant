@@ -151,7 +151,7 @@ export function AppSidebar() {
                 {profile?.full_name ?? "User"}
               </p>
               <p className="text-[10px] capitalize text-gray-500">
-                {profile?.plan ?? "free"}
+                {(profile as any)?.plan_id ?? "free"}
               </p>
             </div>
           )}

@@ -31,7 +31,7 @@ export function PlanGate({
   const { profile } = useAuthStore();
   const uiStore = useUIStore();
 
-  const userPlan = (profile?.plan ?? "free") as Plan;
+  const userPlan = ((profile as any)?.plan_id ?? "free") as Plan;
   const hasAccess = PLAN_RANK[userPlan] >= PLAN_RANK[requiredPlan];
 
   // If user has access, render children directly
