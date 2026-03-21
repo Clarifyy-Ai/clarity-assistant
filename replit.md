@@ -33,7 +33,8 @@ src/
   hooks/
     useSessionOrchestrator.ts # Mock/live session state machine (FIXED)
     useGamification.ts        # XP, badges, streaks (persisted in localStorage)
-    useCredits.ts             # Credit balance + deductions (actions: coding_hint, coding_solution, system_design, rephrase, project_build)
+    useCredits.ts             # Credit balance + deductions (actions: coding_hint, coding_solution, system_design, rephrase, project_build). Mock sessions are free.
+    useAnalytics.ts           # Analytics data hook — exposes avgScore30d, scoreTrend, categoryScores, fillerBreakdown, activityByDay etc.
     useDeepgramStream.ts      # STT stub (connect real key when available)
     ...
   lib/

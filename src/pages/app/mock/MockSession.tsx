@@ -45,8 +45,9 @@ export default function MockSession() {
   const [endConfirm,   setEndConfirm]  = useState(false);
   const sessionConfigRef = useRef<LiveSessionConfig | null>(null);
 
-  const [timeLeft,     setTimeLeft]    = useState(orchestrator.currentTimeLimit ?? 180);
-  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const SESSION_DURATION = 5 * 60;
+  const [sessionTimeLeft, setSessionTimeLeft] = useState(SESSION_DURATION);
+  const sessionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   useEffect(() => {
     if (phase === "active") {
@@ -59,22 +60,21 @@ export default function MockSession() {
 
   useEffect(() => {
     if (phase !== "active") return;
-    timerRef.current = setInterval(() => {
-      setTimeLeft((t) => {
+    sessionTimerRef.current = setInterval(() => {
+      setSessionTimeLeft((t) => {
         if (t <= 1) {
-          clearInterval(timerRef.current!);
-          handleNextQuestion();
+          clearInterval(sessionTimerRef.current!);
+          handleEndSession();
           return 0;
         }
         return t - 1;
       });
     }, 1000);
-    return () => clearInterval(timerRef.current!);
-  }, [orchestrator.currentQuestionIndex, phase]);
+    return () => clearInterval(sessionTimerRef.current!);
+  }, [phase]);
 
   useEffect(() => {
     if (phase !== "active") return;
-    setTimeLeft(orchestrator.currentTimeLimit ?? 180);
     stt.resetTranscript();
     fillerHook.reset();
     wpmHook.reset();
@@ -137,8 +137,8 @@ export default function MockSession() {
   }, [phase, stt.interimTranscript]);
 
   const timeColor =
-    timeLeft > 60  ? "emerald" :
-    timeLeft > 20  ? "amber"   : "red";
+    sessionTimeLeft > 120 ? "emerald" :
+    sessionTimeLeft > 30  ? "amber"   : "red";
 
   async function handleSetup(config: LiveSessionConfig) {
     sessionConfigRef.current = config;
@@ -181,10 +181,10 @@ export default function MockSession() {
   }
 
   async function handleNextQuestion() {
-    clearInterval(timerRef.current!);
     stt.stop();
 
     if (isLastQ) {
+      clearInterval(sessionTimerRef.current!);
       useOverlayStore.getState().hideOverlay();
       await persistMockSession();
       await orchestrator.completeSession();
@@ -254,7 +254,7 @@ export default function MockSession() {
   }
 
   async function handleEndSession() {
-    clearInterval(timerRef.current!);
+    clearInterval(sessionTimerRef.current!);
     stt.stop();
     useOverlayStore.getState().hideOverlay();
     await persistMockSession();
@@ -351,7 +351,7 @@ export default function MockSession() {
                 timeColor === "amber"   ? "text-amber-400"   : "text-red-400"
               )}>
                 <Timer className="w-3.5 h-3.5" />
-                {Math.floor(timeLeft / 60)}:{String(timeLeft % 60).padStart(2, "0")}
+                {Math.floor(sessionTimeLeft / 60)}:{String(sessionTimeLeft % 60).padStart(2, "0")}
               </div>
               <button
                 onClick={() => setSkipConfirm(true)}

@@ -9,8 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { PlanGate } from "@/components/layout/PlanGate";
 import {
-  ClipboardList, Zap, AlertTriangle,
-  ChevronRight, Timer, BarChart2,
+  ClipboardList, ChevronRight, Timer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -27,8 +26,6 @@ const INTERVIEW_TYPES = [
 ];
 
 const QUESTION_COUNTS = [3, 5, 8, 10, 15];
-const TIME_PER_Q      = [2, 3, 5, 7, 10];
-
 const COMPANIES = [
   "Google", "Meta", "Amazon", "Apple", "Microsoft",
   "Stripe", "Airbnb", "Notion", "OpenAI", "Netflix",
@@ -42,11 +39,10 @@ export default function MockInterview() {
   const [type,       setType]       = useState("behavioural");
   const [company,    setCompany]    = useState("");
   const [numQ,       setNumQ]       = useState(5);
-  const [timePerQ,   setTimePerQ]   = useState(3);
   const [warmup,     setWarmup]     = useState(true);
   const [loading,    setLoading]    = useState(false);
 
-  const totalCost = numQ; // 1 credit per question
+  const totalCost = 0;
 
   async function handleStart() {
     setLoading(true);
@@ -55,7 +51,6 @@ export default function MockInterview() {
       interview_type:   type,
       target_company:   company || null,
       question_count:   numQ,
-      time_per_question: timePerQ * 60,
     });
     setLoading(false);
 
@@ -73,16 +68,13 @@ export default function MockInterview() {
         subtitle="Configure your practice session"
       />
 
-      {/* Credit check */}
-      {credits.balance < totalCost && (
-        <div className="flex items-center gap-3 p-4 bg-amber-500/10 border border-amber-500/20 rounded-2xl">
-          <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0" />
-          <p className="text-sm text-amber-300">
-            This session needs <strong>{totalCost} credits</strong> but you only have{" "}
-            <strong>{credits.balance}</strong>. Reduce questions or upgrade.
-          </p>
-        </div>
-      )}
+      {/* Mock sessions are free */}
+      <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
+        <ClipboardList className="w-4 h-4 text-emerald-400 shrink-0" />
+        <p className="text-sm text-emerald-300">
+          Mock sessions are <strong>free</strong> — practice as much as you like. Each session runs for 5 minutes.
+        </p>
+      </div>
 
       {/* Interview type */}
       <Card>
@@ -167,34 +159,13 @@ export default function MockInterview() {
             </div>
           </div>
 
-          <div>
-            <p className="text-xs text-muted-foreground mb-2">Minutes per question</p>
-            <div className="flex gap-2">
-              {TIME_PER_Q.map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setTimePerQ(t)}
-                  className={cn(
-                    "flex-1 py-2 rounded-lg border text-xs font-medium transition-all",
-                    timePerQ === t
-                      ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                      : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
-                  )}
-                >
-                  {t}m
-                </button>
-              ))}
-            </div>
-          </div>
-
           <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground bg-white/3 rounded-xl px-3 py-2">
             <span className="flex items-center gap-1.5">
               <Timer className="w-3.5 h-3.5" />
-              Est. {numQ * timePerQ} min total
+              5 min session
             </span>
-            <span className="flex items-center gap-1.5">
-              <Zap className="w-3.5 h-3.5 text-violet-400" />
-              {totalCost} credits
+            <span className="flex items-center gap-1.5 text-emerald-400">
+              Free
             </span>
           </div>
         </Card>
@@ -233,7 +204,6 @@ export default function MockInterview() {
         size="lg"
         fullWidth
         loading={loading}
-        disabled={credits.balance < totalCost}
         onClick={handleStart}
         leftIcon={<ClipboardList className="w-4 h-4" />}
         rightIcon={<ChevronRight className="w-4 h-4" />}

@@ -188,32 +188,88 @@ export function useAnalytics() {
     URL.revokeObjectURL(url);
   }, [data, filter.period]);
 
+  const avgScore30d   = data?.avg_confidence_score ?? 0;
+  const scoreDelta    = data?.avg_confidence_delta_30d ?? null;
+  const avgWpm        = data?.avg_wpm ?? 0;
+  const avgFillers    = data ? Math.round(data.avg_filler_rate * 10) / 10 : 0;
+  const fillerDelta   = data?.avg_filler_delta_30d ?? null;
+  const wpmDelta      = null;
+  const avgConfidence = data?.avg_confidence_score ?? 0;
+
+  const sessionsThisWeek = (() => {
+    if (!data?.recent_sessions) return 0;
+    const weekAgo = new Date();
+    weekAgo.setDate(weekAgo.getDate() - 7);
+    return data.recent_sessions.filter(
+      (s) => new Date(s.date) >= weekAgo
+    ).length;
+  })();
+
+  const scoreTrend = (data?.confidence_trend ?? []).map((p) => ({
+    date: p.date,
+    score: p.score,
+  }));
+
+  const dimensionAverages: Record<string, number> | undefined = data?.weak_spot_radar
+    ? Object.fromEntries(data.weak_spot_radar.map((w) => [w.label, w.avg_score]))
+    : undefined;
+
+  const categoryScores = (data?.weak_spot_radar ?? []).map((w) => ({
+    category: w.label,
+    avg_score: w.avg_score,
+    count: w.session_count,
+  }));
+
+  const fillerBreakdown: Record<string, number> = {};
+  if (data?.filler_trend) {
+    for (const fp of data.filler_trend) {
+      if (fp.top_filler) {
+        fillerBreakdown[fp.top_filler] =
+          (fillerBreakdown[fp.top_filler] ?? 0) + fp.total_fillers;
+      }
+    }
+  }
+
+  const activityByDay: Record<string, number> = {};
+  if (data?.recent_sessions) {
+    for (const s of data.recent_sessions) {
+      const day = s.date.slice(0, 10);
+      activityByDay[day] = (activityByDay[day] ?? 0) + 1;
+    }
+  }
+
   return {
-    // Data
     data,
     isLoading,
     error,
     filter,
     comparison,
 
-    // Filter actions
     setPeriod,
     setSessionFilter,
     setInterviewTypeFilter,
 
-    // Session comparison
-    compareSession: compareSession,
-    compareSessionIds: compareSession,
-    compareSessionsData: comparison,
-    compareSessionsFn: compareSessionFn,
+    compareSessions,
     clearComparison: () => setComparison(null),
 
-    // Actions
     toggleLeaderboardOptIn,
     downloadCSV,
     reload: loadAnalytics,
 
-    // Shortcuts
+    avgScore30d,
+    scoreDelta,
+    sessionsThisWeek,
+    avgWpm,
+    avgFillers,
+    fillerDelta,
+    wpmDelta,
+    avgConfidence,
+    scoreTrend,
+    dimensionAverages,
+    categoryScores,
+    fillerBreakdown,
+    activityByDay,
+
     summary: data
       ? {
           totalSessions:      data.total_sessions,
@@ -227,14 +283,6 @@ export function useAnalytics() {
         }
       : null,
   };
-
-  function compareSession(a: string, b: string) {
-    compareSession(a, b);
-  }
-
-  function compareSessionFn(a: string, b: string) {
-    compareSessions(a, b);
-  }
 }
 
 // ─────────────────────────────────────────────────────────────────

@@ -1,7 +1,8 @@
 // @ts-nocheck
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
+import { supabase } from "@/lib/supabase/client";
 import { useUIStore } from "@/store/uiStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
@@ -35,6 +36,16 @@ export default function Dashboard() {
   const scheduler    = useInterviewSchedulerStore();
   const gamification = useGamification();
   const navigate     = useNavigate();
+
+  const [sessionCount, setSessionCount] = useState(0);
+  useEffect(() => {
+    if (!profile?.id) return;
+    supabase
+      .from("sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", profile.id)
+      .then(({ count }) => setSessionCount(count ?? 0));
+  }, [profile?.id]);
 
   const todayInterview = scheduler.interviews.find((i) => {
     const d = new Date(i.scheduled_at);
@@ -86,7 +97,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-1.5 px-3 py-1.5 bg-violet-500/10 border border-violet-500/20 rounded-xl">
             <Zap className="w-3.5 h-3.5 text-violet-400" />
             <span className="text-xs font-bold text-violet-400">
-              {profile?.credits_remaining ?? 0} credits
+              {profile?.credits ?? 0} credits
             </span>
           </div>
         </div>
@@ -162,20 +173,15 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <StatCard
           label="Total sessions"
-          value={profile?.total_sessions ?? 0}
+          value={sessionCount}
           icon={<ClipboardList className="w-4 h-4 text-blue-400" />}
           color="blue"
         />
         <StatCard
-          label="Avg confidence"
-          value={`${profile?.avg_confidence_score ?? 0}%`}
-          icon={<TrendingUp className="w-4 h-4 text-emerald-400" />}
+          label="Credits"
+          value={profile?.credits ?? 0}
+          icon={<Zap className="w-4 h-4 text-emerald-400" />}
           color="emerald"
-          trend={
-            (profile?.avg_confidence_score ?? 0) >= 70
-              ? "up"
-              : "neutral"
-          }
         />
         <StatCard
           label="Best streak"
@@ -461,8 +467,8 @@ function XPLevelCard({ gamification }: { gamification: any }) {
 
 function DocumentsStatusCard() {
   const docStore   = useDocumentStore();
-  const hasResume  = !!docStore.activeResume;
-  const hasJD      = !!docStore.activeJD;
+  const hasResume  = !!docStore.active_resume_id;
+  const hasJD      = !!docStore.active_jd_id;
 
   return (
     <Card>
