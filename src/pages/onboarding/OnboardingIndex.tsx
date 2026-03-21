@@ -215,11 +215,9 @@ function CompletionScreen({ onContinue }: { onContinue: () => void }) {
 
 export default function OnboardingIndex() {
   const navigate    = useNavigate();
-  const { user, updateProfile, loadProfile } = useAuthStore((s) => ({
-    user:          s.user,
-    updateProfile: s.updateProfile,
-    loadProfile:   s.loadProfile,
-  }));
+  const user          = useAuthStore((s) => s.user);
+  const updateProfile = useAuthStore((s) => s.updateProfile);
+  const loadProfile   = useAuthStore((s) => s.loadProfile);
 
   const [currentStep,    setCurrentStep]    = useState(1);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
