@@ -41,6 +41,7 @@ export default function ResumeDetail() {
         .select("*")
         .eq("id", id)
         .eq("type", "resume")
+        .eq("user_id", user.id)
         .single();
       setDoc(data as Doc | null);
       setLoading(false);

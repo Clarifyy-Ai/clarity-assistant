@@ -29,7 +29,7 @@ export default function Profile() {
     { label: "Email", value: profile?.email, icon: Mail },
     { label: "Role", value: profile?.role ?? "Not set", icon: Briefcase },
     { label: "Experience", value: profile?.experience_level ?? "Not set", icon: User },
-    { label: "Location", value: (profile as any)?.location ?? "Not set", icon: MapPin },
+    { label: "Domain", value: profile?.domain ?? "Not set", icon: MapPin },
     { label: "Joined", value: profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : "—", icon: Calendar },
   ];
 
@@ -70,9 +70,9 @@ export default function Profile() {
                 {profile.experience_level}
               </span>
             )}
-            {(profile as any)?.bio && (
-              <p className="mt-3 text-sm text-muted-foreground leading-relaxed">
-                {(profile as any).bio}
+            {profile?.domain && (
+              <p className="mt-3 text-sm text-muted-foreground leading-relaxed capitalize">
+                {profile.domain} professional
               </p>
             )}
           </div>

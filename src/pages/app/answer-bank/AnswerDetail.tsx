@@ -37,6 +37,7 @@ export default function AnswerDetail() {
         .from("answer_bank")
         .select("*")
         .eq("id", id)
+        .eq("user_id", user.id)
         .single();
       setAnswer(data as Answer | null);
       setEditText(data?.answer_text ?? "");

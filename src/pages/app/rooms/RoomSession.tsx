@@ -26,7 +26,7 @@ interface Session {
 }
 
 export default function RoomSession() {
-  const { id } = useParams<{ id: string }>();
+  const { roomId: id } = useParams<{ roomId: string }>();
   const navigate = useNavigate();
   const { user } = useAuthStore();
 
@@ -42,6 +42,7 @@ export default function RoomSession() {
         .from("practice_rooms")
         .select("*")
         .eq("id", id)
+        .eq("host_id", user.id)
         .single();
       setSession(data as Session | null);
       setLoading(false);

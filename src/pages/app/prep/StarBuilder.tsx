@@ -36,8 +36,11 @@ export default function StarBuilder() {
       return;
     }
 
-    const ok = await credits.deduct("star_generate");
-    if (!ok) return;
+    const deductResult = await credits.deduct("star_generate");
+    if (!deductResult.success) {
+      toast.error(deductResult.error ?? "Not enough credits.");
+      return;
+    }
 
     setPolishing(true);
     try {

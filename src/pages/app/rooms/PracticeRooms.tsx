@@ -101,7 +101,7 @@ export default function PracticeRooms() {
       ) : (
         <div className="space-y-2">
           {filtered.map((room) => (
-            <Link key={room.id} to={`/app/rooms/${room.id}`}>
+            <Link key={room.id} to={`/app/rooms/${room.id}/session`}>
               <Card className="hover:border-violet-500/30 transition-all cursor-pointer">
                 <div className="flex items-center gap-3">
                   <div className="p-2 rounded-lg bg-violet-500/15 flex-shrink-0">

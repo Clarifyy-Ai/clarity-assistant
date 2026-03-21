@@ -47,7 +47,7 @@ export default function NewRoom() {
 
       if (error) throw error;
       toast.success("Session started!");
-      navigate(`/app/rooms/${data.id}`);
+      navigate(`/app/rooms/${data.id}/session`);
     } catch {
       toast.error("Failed to create session");
       setCreating(false);

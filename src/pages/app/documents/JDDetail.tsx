@@ -38,6 +38,7 @@ export default function JDDetail() {
         .select("*")
         .eq("id", id)
         .eq("type", "job_description")
+        .eq("user_id", user.id)
         .single();
       setJd(data as JD | null);
       setLoading(false);
@@ -76,6 +77,9 @@ export default function JDDetail() {
           <div className="flex gap-2">
             <Link to={`/app/companies/${encodeURIComponent(jd.company_name ?? "")}`}>
               <Button variant="secondary" size="sm" leftIcon={<Building2 className="w-4 h-4" />}>Company Brief</Button>
+            </Link>
+            <Link to="/app/prep?tool=gap_analysis">
+              <Button variant="secondary" size="sm" leftIcon={<FileText className="w-4 h-4" />}>Gap Analysis</Button>
             </Link>
             <Button variant="ghost" size="sm" onClick={handleDelete} className="text-red-400 hover:text-red-300">
               <Trash2 className="w-4 h-4" />

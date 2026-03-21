@@ -31,13 +31,14 @@ export default function SettingsBYOK() {
   const [saving, setSaving] = useState(false);
 
   function hasKey(field: string): boolean {
-    return !!(profile as any)?.[field];
+    if (!profile) return false;
+    return !!(profile as Record<string, unknown>)?.[field];
   }
 
   async function handleSave() {
     setSaving(true);
     try {
-      const updates: Record<string, any> = {};
+      const updates: Record<string, string> = {};
       if (keys.openai) updates.byok_openai = keys.openai;
       if (keys.anthropic) updates.byok_anthropic = keys.anthropic;
       if (keys.gemini) updates.byok_gemini = keys.gemini;
@@ -60,7 +61,7 @@ export default function SettingsBYOK() {
 
   async function handleRemove(id: string, profileField: string) {
     try {
-      await updateProfile({ [profileField]: null });
+      await updateProfile({ [profileField]: "" } as Record<string, string>);
       toast.success(`${id} key removed`);
     } catch {
       toast.error("Failed to remove key");
