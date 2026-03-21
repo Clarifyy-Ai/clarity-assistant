@@ -137,7 +137,7 @@ export function useAuth() {
   const updateProfile = useCallback(async (
     patch: Partial<UserProfile>
   ): Promise<{ error: Error | null }> => {
-    const state = (useAuthStore as any).getState();
+    const state = useAuthStore.getState();
     const user  = state?.user;
     if (!user) return { error: new Error("Not authenticated") };
 
@@ -158,7 +158,7 @@ export function useAuth() {
   const uploadAvatar = useCallback(async (
     file: File
   ): Promise<{ url: string | null; error: Error | null }> => {
-    const state = (useAuthStore as any).getState();
+    const state = useAuthStore.getState();
     const user  = state?.user;
     if (!user) return { url: null, error: new Error("Not authenticated") };
 
@@ -195,7 +195,7 @@ export function useAuth() {
   const canAccessFeature = useCallback((
     feature: "live_copilot" | "team_rooms" | "advanced_analytics" | "export_pdf" | "byok"
   ): boolean => {
-    const profile = (useAuthStore as any).getState()?.profile;
+    const profile = useAuthStore.getState()?.profile;
     if (!profile) return false;
 
     const plan = profile.plan;
