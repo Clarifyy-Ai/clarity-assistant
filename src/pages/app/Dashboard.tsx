@@ -315,7 +315,8 @@ function RecentSessions() {
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(5)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) console.warn("[Dashboard] Recent sessions fetch error:", error.message);
         setSessions(data ?? []);
         setLoading(false);
       });

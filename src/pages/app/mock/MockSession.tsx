@@ -6,7 +6,6 @@ import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useFillerWordDetection } from "@/hooks/useFillerWordDetection";
 import { useWPMTracker } from "@/hooks/useWPMTracker";
 import { useSentimentAnalysis } from "@/hooks/useSentimentAnalysis";
-import { useCredits } from "@/hooks/useCredits";
 import { useHotkeys } from "@/hooks/useHotkeys";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";
@@ -36,7 +35,6 @@ export default function MockSession() {
   const fillerHook    = useFillerWordDetection(stt.interimTranscript);
   const wpmHook       = useWPMTracker(stt.transcript);
   const sentimentHook = useSentimentAnalysis(stt.transcript);
-  const credits       = useCredits();
   const startTimeRef  = useRef<string>(new Date().toISOString());
 
   const [phase,        setPhase]       = useState<"setup" | "active">("setup");

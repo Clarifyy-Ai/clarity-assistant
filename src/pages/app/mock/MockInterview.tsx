@@ -2,7 +2,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSessionOrchestrator } from "@/hooks/useSessionOrchestrator";
-import { useCredits } from "@/hooks/useCredits";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -33,7 +32,6 @@ const COMPANIES = [
 
 export default function MockInterview() {
   const navigate    = useNavigate();
-  const credits     = useCredits();
   const orchestrator = useSessionOrchestrator();
 
   const [type,       setType]       = useState("behavioural");
@@ -41,8 +39,6 @@ export default function MockInterview() {
   const [numQ,       setNumQ]       = useState(5);
   const [warmup,     setWarmup]     = useState(true);
   const [loading,    setLoading]    = useState(false);
-
-  const totalCost = 0;
 
   async function handleStart() {
     setLoading(true);
