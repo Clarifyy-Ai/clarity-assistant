@@ -106,16 +106,18 @@ export default function MockSession() {
     }
   }, [phase, question]);
 
-  const prevTranscriptRef = useRef("");
+  const prevTranscriptLenRef = useRef(0);
   useEffect(() => {
     if (phase !== "active" || !stt.transcript) return;
-    const text = stt.transcript.trim();
-    if (!text || text === prevTranscriptRef.current) return;
-    prevTranscriptRef.current = text;
+    const full = stt.transcript.trim();
+    if (!full || full.length <= prevTranscriptLenRef.current) return;
+    const delta = full.slice(prevTranscriptLenRef.current).trim();
+    prevTranscriptLenRef.current = full.length;
+    if (!delta) return;
     const now = Date.now();
     useAudioStore.getState().addUtterance({
       id: `mock-${now}`,
-      text,
+      text: delta,
       speaker: "user",
       words: [],
       start_ms: now,
@@ -142,6 +144,7 @@ export default function MockSession() {
     startTimeRef.current = new Date().toISOString();
 
     const overlay = useOverlayStore.getState();
+    overlay.resetSessionState();
     overlay.setActiveModel(config.model);
     overlay.setHintStyle(config.hint_style);
     overlay.setProctorSafe(config.stealth_mode);

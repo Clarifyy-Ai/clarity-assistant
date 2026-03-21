@@ -110,6 +110,9 @@ interface OverlayStore {
   showPanic: (content: { step_1: string; step_2: string; step_3: string }) => void;
   hidePanic: () => void;
 
+  // Actions — session lifecycle
+  resetSessionState: () => void;
+
   // Actions — coding
   setScreenshotLoading: (loading: boolean) => void;
   setScreenshotHint: (hint: string | null) => void;
@@ -278,6 +281,24 @@ export const useOverlayStore = create<OverlayStore>()(
       showPanic: (panic_content) =>
         set({ is_panic_visible: true, panic_content, is_visible: true }),
       hidePanic: () => set({ is_panic_visible: false }),
+
+      // ── Session Lifecycle ──────────────────────────────────
+      resetSessionState: () => set({
+        current_question: "",
+        current_hint: "",
+        hint_state: "idle" as const,
+        streaming_buffer: "",
+        error_message: null,
+        hint_history: [],
+        hint_history_index: -1,
+        questions_detected: 0,
+        is_panic_visible: false,
+        panic_content: null,
+        screenshot_hint: null,
+        is_screenshot_loading: false,
+        network_color: "green" as const,
+        active_tab: "answer" as const,
+      }),
 
       // ── Coding ─────────────────────────────────────────────
       setScreenshotLoading: (is_screenshot_loading) => set({ is_screenshot_loading }),
