@@ -95,6 +95,12 @@ export default function MockSession() {
   const totalQ   = orchestrator.totalQuestions ?? 5;
   const isLastQ  = qIndex >= totalQ - 1;
 
+  useEffect(() => {
+    if (phase !== "active" || !question) return;
+    const qText = typeof question === "string" ? question : question.question_text ?? "";
+    if (qText) useOverlayStore.getState().setCurrentQuestion(qText);
+  }, [phase, question]);
+
   const timeColor =
     timeLeft > 60  ? "emerald" :
     timeLeft > 20  ? "amber"   : "red";
@@ -148,11 +154,6 @@ export default function MockSession() {
       await orchestrator.completeSession();
     } else {
       orchestrator.nextQuestion();
-      const nextQ = useSessionStore.getState().current_question;
-      if (nextQ) {
-        const qText = typeof nextQ === "string" ? nextQ : nextQ.question_text ?? "";
-        if (qText) useOverlayStore.getState().setCurrentQuestion(qText);
-      }
       stt.start();
     }
   }

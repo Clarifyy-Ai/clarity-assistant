@@ -30,7 +30,7 @@ import type { LiveSessionConfig } from "@/types/session.types";
 
 interface UseLiveCopilotOptions {
   config:     LiveSessionConfig;
-  overlayRef: React.RefObject<HTMLDivElement>;
+  overlayRef?: React.RefObject<HTMLDivElement> | null;
 }
 
 export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {

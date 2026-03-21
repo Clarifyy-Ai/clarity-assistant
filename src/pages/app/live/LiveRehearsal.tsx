@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useLiveCopilot } from "@/hooks/useLiveCopilot";
 import { useCredits } from "@/hooks/useCredits";
@@ -43,7 +43,6 @@ const DEFAULT_CONFIG: LiveSessionConfig = {
 export default function LiveRehearsal() {
   const navigate      = useNavigate();
   const credits       = useCredits();
-  const overlayRef    = useRef<HTMLDivElement>(null);
 
   const sessionStatus      = useSessionStore((s) => s.status);
   const is_proctor_safe    = useOverlayStore((s) => s.is_proctor_safe);
@@ -58,7 +57,7 @@ export default function LiveRehearsal() {
   const [phase, setPhase]   = useState<"setup" | "active">("setup");
   const [config, setConfig] = useState<LiveSessionConfig>(DEFAULT_CONFIG);
 
-  const copilot = useLiveCopilot({ config, overlayRef });
+  const copilot = useLiveCopilot({ config });
 
   const isActive = sessionStatus === "active";
 
