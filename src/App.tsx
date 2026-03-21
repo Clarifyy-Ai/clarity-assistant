@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useAuthStore } from "@/store/authStore";
 import { useUIStore } from "@/store/uiStore";
 import { useOverlayStore } from "@/store/overlayStore";
+import { syncStealthFromOverlay } from "@/lib/stealth/stealthActions";
 
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { AppSidebar } from "@/components/layout/AppSidebar";
@@ -408,6 +409,10 @@ export default function App() {
   const stealthMode = useUIStore((s) => s.stealth_mode);
 
   useEffect(() => {
+    syncStealthFromOverlay();
+  }, []);
+
+  useEffect(() => {
     const root = document.documentElement;
     root.classList.toggle("dark", resolvedTheme === "dark");
     root.setAttribute("data-theme", resolvedTheme);
@@ -416,7 +421,6 @@ export default function App() {
   useEffect(() => {
     const root = document.documentElement;
     root.setAttribute("data-stealth", stealthMode ? "true" : "false");
-    useOverlayStore.getState().setStealthMode(stealthMode);
   }, [stealthMode]);
 
   return (

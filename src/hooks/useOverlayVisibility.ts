@@ -1,8 +1,8 @@
 import { useCallback } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
-import { useUIStore } from "@/store/uiStore";
 import { useHotkeys } from "./useHotkeys";
 import { PANIC_RESPONSE } from "@/types/session.types";
+import { toggleAppStealthMode, setAppStealthMode } from "@/lib/stealth/stealthActions";
 
 // ─────────────────────────────────────────────────────────────────
 // useOverlayVisibility
@@ -25,12 +25,7 @@ export function useOverlayVisibility(enabled = true) {
         const s = useOverlayStore.getState();
         s.is_visible ? s.hideOverlay() : s.showOverlay();
       },
-      stealth_mode: () => {
-        const s = useOverlayStore.getState();
-        const next = !s.is_stealth_mode;
-        s.setStealthMode(next);
-        useUIStore.getState().setStealthMode(next);
-      },
+      stealth_mode: toggleAppStealthMode,
       panic:      () => useOverlayStore.getState().showPanic(PANIC_RESPONSE),
       clear_hint: () => useOverlayStore.getState().clearHint(),
     },

@@ -1,7 +1,7 @@
 import { captureAndAnalyseCodingProblem } from "@/lib/audio/screenshotCapture";
 import { useOverlayStore } from "@/store/overlayStore";
-import { useUIStore } from "@/store/uiStore";
 import { useSessionStore } from "@/store/sessionStore";
+import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 
 // ─────────────────────────────────────────────────────────────────
 // Global Hotkey Manager
@@ -43,12 +43,7 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
       description: "Switch overlay to minimal stealth view",
       keys:        ["ctrl", "shift", "s"],
       category:    "overlay",
-      action:      () => {
-        const { is_stealth_mode, setStealthMode } = useOverlayStore.getState();
-        const next = !is_stealth_mode;
-        setStealthMode(next);
-        useUIStore.getState().setStealthMode(next);
-      },
+      action:      toggleAppStealthMode,
       isEnabled:   () => useOverlayStore.getState().is_visible,
       showInHelp:  true,
     },

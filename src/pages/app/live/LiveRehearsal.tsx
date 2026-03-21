@@ -4,7 +4,7 @@ import { useLiveCopilot } from "@/hooks/useLiveCopilot";
 import { useCredits } from "@/hooks/useCredits";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
-import { useUIStore } from "@/store/uiStore";
+import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 import { useAudioStore } from "@/store/audioStore";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -155,7 +155,7 @@ export default function LiveRehearsal() {
                 <p className="text-sm font-semibold text-foreground">Session Active</p>
                 <p className="text-[10px] text-muted-foreground">
                   {deepgramStatus === "connected"
-                    ? "Listening for interview questions…"
+                    ? (is_stealth_mode ? "Listening for input…" : "Listening for interview questions…")
                     : deepgramStatus === "connecting"
                     ? "Connecting to speech recognition…"
                     : "The overlay is active. Use hotkeys to control it."}
@@ -191,11 +191,7 @@ export default function LiveRehearsal() {
               <LivePanicButton />
               <LiveCodingProblemCapture disabled={!isActive} />
               <button
-                onClick={() => {
-                  const next = !is_stealth_mode;
-                  useOverlayStore.getState().setStealthMode(next);
-                  useUIStore.getState().setStealthMode(next);
-                }}
+                onClick={toggleAppStealthMode}
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all",
                   is_stealth_mode
@@ -238,14 +234,14 @@ export default function LiveRehearsal() {
 
           <Card className="!bg-white/5 !border-white/10">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-semibold text-foreground">AI Answer</h3>
+              <h3 className="text-sm font-semibold text-foreground">{is_stealth_mode ? "AI Response" : "AI Answer"}</h3>
               {current_question && (
-                <Badge variant="violet" size="sm">Question detected</Badge>
+                <Badge variant="violet" size="sm">{is_stealth_mode ? "Input detected" : "Question detected"}</Badge>
               )}
             </div>
             {current_question && (
               <div className="mb-3 p-3 bg-primary/10 border border-primary/20 rounded-xl">
-                <p className="text-xs text-primary font-medium mb-1">Current question</p>
+                <p className="text-xs text-primary font-medium mb-1">{is_stealth_mode ? "Current input" : "Current question"}</p>
                 <p className="text-sm text-foreground">{current_question}</p>
               </div>
             )}

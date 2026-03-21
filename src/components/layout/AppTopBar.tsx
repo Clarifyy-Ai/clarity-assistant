@@ -3,7 +3,7 @@ import { Bell, Zap, AlertTriangle, Shield, ShieldOff } from "lucide-react";
 import { useAuthStore } from "@/store/userStore";
 import { useNotificationStore } from "@/store/notificationStore";
 import { useUIStore } from "@/store/uiStore";
-import { useOverlayStore } from "@/store/overlayStore";
+import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { cn } from "@/lib/utils";
 
@@ -11,7 +11,6 @@ export function AppTopBar() {
   const { profile } = useAuthStore();
   const notifStore  = useNotificationStore();
   const uiStore     = useUIStore();
-  const overlaySetStealth = useOverlayStore((s) => s.setStealthMode);
   const stealthMode = uiStore.stealth_mode;
 
   const credits = profile?.credits ?? 0;
@@ -23,12 +22,6 @@ export function AppTopBar() {
     profile?.email?.trim()?.[0] ??
     "U"
   ).toUpperCase();
-
-  function handleStealthToggle() {
-    const next = !stealthMode;
-    uiStore.setStealthMode(next);
-    overlaySetStealth(next);
-  }
 
   return (
     <header className="sticky top-0 z-40 h-14 w-full flex-shrink-0 bg-background/95 backdrop-blur border-b border-border flex items-center justify-between px-4">
@@ -63,7 +56,7 @@ export function AppTopBar() {
 
         <button
           type="button"
-          onClick={handleStealthToggle}
+          onClick={toggleAppStealthMode}
           title={stealthMode ? "Disable stealth mode" : "Enable stealth mode"}
           className={cn(
             "flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-all",

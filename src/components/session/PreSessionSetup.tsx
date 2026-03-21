@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useDocumentStore } from "@/store/documentStore";
 import { useAuthStore } from "@/store/userStore";
 import { useOverlayStore } from "@/store/overlayStore";
-import { useUIStore } from "@/store/uiStore";
+import { setAppStealthMode } from "@/lib/stealth/stealthActions";
 import {
   Radio, FileText, Briefcase, Brain,  Volume2,
   ChevronDown, Settings2, Zap, Shield, Keyboard,
@@ -109,8 +109,7 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
     const overlay = useOverlayStore.getState();
     overlay.setActiveModel(smartRouting ? "gemini-flash" : model);
     overlay.setHintStyle(hintStyle);
-    overlay.setStealthMode(stealthMode);
-    useUIStore.getState().setStealthMode(stealthMode);
+    setAppStealthMode(stealthMode);
 
     onStart(config);
   }

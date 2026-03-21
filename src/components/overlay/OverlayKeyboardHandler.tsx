@@ -1,7 +1,7 @@
 import { useHotkey } from '@/hooks/useHotkeys';
 import { useOverlayStore } from '@/store/overlayStore';
-import { useUIStore } from '@/store/uiStore';
 import { useSessionStore } from '@/store/sessionStore';
+import { toggleAppStealthMode } from '@/lib/stealth/stealthActions';
 import { PANIC_RESPONSE } from '@/types/session.types';
 import { captureAndAnalyseCodingProblem } from '@/lib/audio/screenshotCapture';
 
@@ -41,14 +41,10 @@ export function OverlayKeyboardHandler({
     enabled
   );
 
-  // Stealth mode: Ctrl+Shift+S (syncs both overlay and app-wide stealth)
+  // Stealth mode: Ctrl+Shift+S
   useHotkey(
     ['ctrl', 'shift', 's'],
-    () => {
-      const next = !is_stealth_mode;
-      setStealthMode?.(next);
-      useUIStore.getState().setStealthMode(next);
-    },
+    toggleAppStealthMode,
     enabled && is_visible
   );
 

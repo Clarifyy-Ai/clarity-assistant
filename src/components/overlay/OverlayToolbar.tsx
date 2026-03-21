@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
-import { useUIStore } from "@/store/uiStore";
 import { useAudioStore } from "@/store/audioStore";
+import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 import { PANIC_RESPONSE } from "@/types/session.types";
 import {
   Mic, MicOff, Volume2, VolumeX, Zap, RefreshCw,
@@ -93,11 +93,7 @@ export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, o
         label={isStealth ? "Exit stealth" : "Enter stealth"}
         active={isStealth}
         color={isStealth ? "violet" : "gray"}
-        onClick={() => {
-          const next = !isStealth;
-          useOverlayStore.getState().setStealthMode(next);
-          useUIStore.getState().setStealthMode(next);
-        }}
+        onClick={toggleAppStealthMode}
       />
 
       <ToolbarButton
