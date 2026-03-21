@@ -14,12 +14,18 @@ const MODELS = [
 
 export default function SettingsModels() {
   const { profile, updateProfile } = useAuthStore();
+  const profileRecord = profile as Record<string, unknown> | null;
   const [preferred, setPreferred] = useState(profile?.preferred_model ?? "gpt-4o");
-  const [autoRoute, setAutoRoute] = useState(true);
+  const [autoRoute, setAutoRoute] = useState(
+    profileRecord?.auto_model_routing != null ? Boolean(profileRecord.auto_model_routing) : true
+  );
   const [saving, setSaving] = useState(false);
 
-  const otherModels = MODELS.filter((m) => m.id !== preferred);
-  const [fallbackOrder, setFallbackOrder] = useState<string[]>(otherModels.map((m) => m.id));
+  const defaultFallback = MODELS.filter((m) => m.id !== preferred).map((m) => m.id);
+  const savedFallback = Array.isArray(profileRecord?.model_fallback_order)
+    ? (profileRecord.model_fallback_order as string[]).filter((id) => id !== preferred && MODELS.some((m) => m.id === id))
+    : null;
+  const [fallbackOrder, setFallbackOrder] = useState<string[]>(savedFallback ?? defaultFallback);
 
   const moveFallback = useCallback((idx: number, dir: -1 | 1) => {
     setFallbackOrder((prev) => {
