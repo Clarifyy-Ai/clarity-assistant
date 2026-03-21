@@ -142,14 +142,14 @@ export default function AdminRevenue() {
       // Plan distribution from profiles
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("plan_id, credits, stripe_subscription_id, subscription_status");
+        .select("plan, credits, stripe_subscription_id, subscription_status");
 
       if (profileData) {
         const planCounts: Record<string, number> = {};
         let activeSubscribers = 0;
 
         profileData.forEach((p) => {
-          const planId = (p as Record<string, unknown>).plan_id as string ?? "free";
+          const planId = (p as Record<string, unknown>).plan as string ?? "free";
           planCounts[planId] = (planCounts[planId] ?? 0) + 1;
           if ((p as Record<string, unknown>).subscription_status === "active") activeSubscribers++;
         });
@@ -188,7 +188,7 @@ export default function AdminRevenue() {
       // Recent transactions from credit_transactions
       const { data: txData } = await supabase
         .from("credit_transactions")
-        .select("id, user_id, amount, type, description, created_at")
+        .select("id, user_id, amount, action, model, created_at")
         .order("created_at", { ascending: false })
         .limit(50);
 
@@ -197,9 +197,9 @@ export default function AdminRevenue() {
           id:          tx.id as string,
           userId:      tx.user_id as string,
           userEmail:   `user-${(tx.user_id as string).slice(0, 8)}`,
-          type:        (tx.type as string).includes("purchase") ? "credits" : "subscription",
-          amount:      Math.abs(tx.amount as number) * 10,  // rough cents estimate
-          description: tx.description as string,
+          type:        (tx.action as string ?? "").includes("purchase") ? "credits" : "subscription",
+          amount:      Math.abs(tx.amount as number) * 10,
+          description: (tx.action as string) ?? "",
           createdAt:   tx.created_at as string,
           status:      "succeeded" as const,
         }));
