@@ -49,10 +49,7 @@ export function useOverlayVisibility(enabled = true) {
     hide,
     toggle,
     setPosition: useOverlayStore.getState().setPosition,
-    setStealth:  (enabled: boolean) => {
-      useOverlayStore.getState().setStealthMode(enabled);
-      useUIStore.getState().setStealthMode(enabled);
-    },
+    setStealth:  setAppStealthMode,
     showPanic:   useOverlayStore.getState().showPanic,
     hidePanic:   useOverlayStore.getState().hidePanic,
   };
