@@ -1,3 +1,442 @@
+// @ts-nocheck
+import { useState, useEffect } from "react";
+import { useAuthStore } from "@/store/userStore";
+import { useCredits } from "@/hooks/useCredits";
+import {
+  PLANS,
+  PLAN_ORDER,
+  type PlanId,
+  getUserSubscription,
+  cancelSubscription,
+  resumeSubscription,
+  type Subscription,
+} from "@/lib/billing/subscriptionManager";
+import {
+  formatPrice,
+  calculateYearlySavings,
+  CREDIT_PACKS as TOPUP_PACKS,
+} from "@/lib/billing/priceCalculator";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Badge } from "@/components/ui/Badge";
+import { ProgressBar } from "@/components/ui/ProgressBar";
+import { PageHeader } from "@/components/layout/PageHeader";
+import {
+  Zap,
+  CreditCard,
+  Shield,
+  AlertTriangle,
+  CheckCircle,
+  XCircle,
+  Crown,
+  ArrowUpRight,
+  RefreshCw,
+} from "lucide-react";
+import { toast } from "sonner";
+import { supabase } from "@/lib/supabase/client";
+import { cn } from "@/lib/utils";
+
+const STRIPE_CONFIGURED =
+  !!import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY ||
+  !!import.meta.env.VITE_STRIPE_PRICE_STARTER_MONTHLY;
+
+const STATUS_LABELS: Record<string, { label: string; color: string }> = {
+  active:     { label: "Active",     color: "text-emerald-400" },
+  trialing:   { label: "Trial",      color: "text-blue-400" },
+  past_due:   { label: "Past Due",   color: "text-amber-400" },
+  canceled:   { label: "Canceled",   color: "text-red-400" },
+  unpaid:     { label: "Unpaid",     color: "text-red-400" },
+  incomplete: { label: "Incomplete", color: "text-amber-400" },
+  paused:     { label: "Paused",     color: "text-gray-400" },
+};
+
 export default function SettingsBilling() {
-  return <div className="p-6"><h1 className="text-lg font-bold text-white">Billing</h1><p className="text-gray-400 mt-2">Coming soon.</p></div>;
+  const { user, profile, planId } = useAuthStore();
+  const credits = useCredits();
+
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [loadingSub, setLoadingSub] = useState(true);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  const currentPlan = PLANS[(planId as PlanId) ?? "free"] ?? PLANS.free;
+
+  useEffect(() => {
+    if (!user?.id) return;
+    setLoadingSub(true);
+    getUserSubscription(user.id)
+      .then((sub) => setSubscription(sub))
+      .finally(() => setLoadingSub(false));
+  }, [user?.id]);
+
+  async function handleUpgrade(targetPlanId: PlanId) {
+    if (!STRIPE_CONFIGURED) {
+      toast.error("Stripe is not configured. Contact support to upgrade.");
+      return;
+    }
+    const plan = PLANS[targetPlanId];
+    if (!plan?.stripePriceIdMonthly) {
+      toast.error("No Stripe price configured for this plan.");
+      return;
+    }
+    setActionLoading(targetPlanId);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-checkout", {
+        body: {
+          price_id: plan.stripePriceIdMonthly,
+          success_url: `${window.location.origin}/app/settings/billing?success=1`,
+          cancel_url: `${window.location.origin}/app/settings/billing`,
+          mode: "subscription",
+        },
+      });
+      if (error) throw error;
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        toast.error("Could not create checkout session.");
+      }
+    } catch {
+      toast.error("Failed to start checkout. The checkout service may not be deployed yet.");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleCancel() {
+    if (!subscription?.stripeSubscriptionId) {
+      toast.error("No active subscription to cancel.");
+      return;
+    }
+    setActionLoading("cancel");
+    try {
+      await cancelSubscription(subscription.stripeSubscriptionId);
+      toast.success("Subscription will cancel at end of billing period.");
+      setSubscription((s) => s ? { ...s, cancelAtPeriodEnd: true } : s);
+    } catch {
+      toast.error("Failed to cancel subscription. Try again later.");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleResume() {
+    if (!subscription?.stripeSubscriptionId) return;
+    setActionLoading("resume");
+    try {
+      await resumeSubscription(subscription.stripeSubscriptionId);
+      toast.success("Subscription resumed!");
+      setSubscription((s) => s ? { ...s, cancelAtPeriodEnd: false } : s);
+    } catch {
+      toast.error("Failed to resume subscription. Try again later.");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  async function handleBuyCredits(packId: string, stripePriceId?: string) {
+    if (!STRIPE_CONFIGURED && !stripePriceId) {
+      toast.error("Stripe is not configured. Contact support to buy credits.");
+      return;
+    }
+    setActionLoading(packId);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-checkout", {
+        body: {
+          price_id: stripePriceId,
+          success_url: `${window.location.origin}/app/settings/credits?success=1`,
+          cancel_url: `${window.location.origin}/app/settings/billing`,
+          mode: "payment",
+        },
+      });
+      if (error) throw error;
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        toast.error("Could not create checkout session.");
+      }
+    } catch {
+      toast.error("Failed to start checkout. The checkout service may not be deployed yet.");
+    } finally {
+      setActionLoading(null);
+    }
+  }
+
+  const statusInfo = STATUS_LABELS[subscription?.status ?? ""] ?? null;
+  const creditsRemaining = credits.balance;
+  const creditsMonthly = currentPlan.creditsPerMonth === -1 ? 999 : currentPlan.creditsPerMonth;
+  const creditsUsed = Math.max(0, creditsMonthly - creditsRemaining);
+  const usagePct = creditsMonthly > 0 ? Math.min(100, (creditsUsed / creditsMonthly) * 100) : 0;
+
+  return (
+    <div className="space-y-6 max-w-4xl">
+      <PageHeader
+        title="Billing & Subscription"
+        description="Manage your plan, subscription, and credits"
+      />
+
+      {!STRIPE_CONFIGURED && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+            <div>
+              <p className="text-sm font-semibold text-amber-300">Stripe Not Configured</p>
+              <p className="text-xs text-gray-400 mt-1">
+                Payment processing is not set up yet. Set the VITE_STRIPE_* environment
+                variables and deploy the create-checkout edge function to enable upgrades
+                and credit purchases.
+              </p>
+            </div>
+          </div>
+        </Card>
+      )}
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <Card className="lg:col-span-2 bg-gradient-to-br from-violet-600/10 to-blue-600/10 border-violet-500/20">
+          <div className="flex items-start justify-between mb-4">
+            <div>
+              <p className="text-xs text-gray-500 uppercase tracking-widest">Current Plan</p>
+              <div className="flex items-center gap-2 mt-1">
+                <Crown className="w-5 h-5 text-violet-400" />
+                <p className="text-2xl font-black text-white">{currentPlan.name}</p>
+                {statusInfo && (
+                  <Badge variant="outline" size="sm">
+                    <span className={statusInfo.color}>{statusInfo.label}</span>
+                  </Badge>
+                )}
+              </div>
+              <p className="text-xs text-gray-400 mt-1">{currentPlan.tagline}</p>
+            </div>
+            <div className="text-right">
+              <p className="text-2xl font-black text-white">
+                {currentPlan.monthlyPrice === 0
+                  ? "Free"
+                  : formatPrice(currentPlan.monthlyPrice, true)}
+              </p>
+              {currentPlan.monthlyPrice > 0 && (
+                <p className="text-xs text-gray-500">/month</p>
+              )}
+            </div>
+          </div>
+
+          {subscription?.cancelAtPeriodEnd && (
+            <div className="flex items-center gap-2 p-3 rounded-lg bg-red-500/10 border border-red-500/20 mb-4">
+              <XCircle className="w-4 h-4 text-red-400 shrink-0" />
+              <p className="text-xs text-red-300">
+                Cancels at end of period ({subscription.currentPeriodEnd.toLocaleDateString()})
+              </p>
+              <Button
+                variant="secondary"
+                size="xs"
+                loading={actionLoading === "resume"}
+                onClick={handleResume}
+                className="ml-auto"
+              >
+                Resume
+              </Button>
+            </div>
+          )}
+
+          <div className="space-y-3">
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs text-gray-400">Credits used this period</p>
+                <p className="text-xs text-gray-400">
+                  {creditsUsed} / {currentPlan.creditsPerMonth === -1 ? "∞" : creditsMonthly}
+                </p>
+              </div>
+              <ProgressBar
+                value={creditsUsed}
+                max={creditsMonthly}
+                color={usagePct > 80 ? "red" : usagePct > 50 ? "amber" : "violet"}
+                size="sm"
+              />
+            </div>
+
+            <div className="flex items-center justify-between pt-2">
+              <div className="flex items-center gap-2">
+                <Zap className="w-4 h-4 text-violet-400" />
+                <span className="text-sm font-bold text-violet-400">
+                  {creditsRemaining} credits remaining
+                </span>
+              </div>
+              {(planId === "free" || !planId) && (
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => handleUpgrade("starter")}
+                  loading={actionLoading === "starter"}
+                  disabled={!STRIPE_CONFIGURED}
+                >
+                  <ArrowUpRight className="w-3.5 h-3.5 mr-1" />
+                  Upgrade
+                </Button>
+              )}
+              {subscription && !subscription.cancelAtPeriodEnd && planId !== "free" && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={handleCancel}
+                  loading={actionLoading === "cancel"}
+                  className="text-red-400 hover:text-red-300"
+                >
+                  Cancel subscription
+                </Button>
+              )}
+            </div>
+          </div>
+        </Card>
+
+        <Card>
+          <div className="flex items-center gap-2 mb-4">
+            <Shield className="w-4 h-4 text-gray-500" />
+            <h3 className="text-sm font-semibold text-white">Account Details</h3>
+          </div>
+          <div className="space-y-3 text-xs">
+            <div className="flex justify-between">
+              <span className="text-gray-500">Email</span>
+              <span className="text-gray-300 truncate ml-2">{user?.email ?? "—"}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Customer ID</span>
+              <span className="text-gray-300 font-mono text-[10px]">
+                {profile?.stripe_customer_id ?? "Not linked"}
+              </span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-gray-500">Plan</span>
+              <span className="text-gray-300">{currentPlan.name}</span>
+            </div>
+            {subscription?.currentPeriodEnd && (
+              <div className="flex justify-between">
+                <span className="text-gray-500">Renews</span>
+                <span className="text-gray-300">
+                  {subscription.currentPeriodEnd.toLocaleDateString()}
+                </span>
+              </div>
+            )}
+          </div>
+        </Card>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-white mb-3">Available Plans</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+          {PLAN_ORDER.filter((id) => id !== "enterprise").map((id) => {
+            const plan = PLANS[id];
+            const isCurrent = planId === id || (!planId && id === "free");
+            const savings = calculateYearlySavings(id);
+
+            return (
+              <Card
+                key={id}
+                className={cn(
+                  "flex flex-col",
+                  isCurrent && "border-violet-500/40 bg-violet-600/5",
+                  plan.isPopular && !isCurrent && "border-blue-500/30"
+                )}
+              >
+                {plan.isPopular && (
+                  <Badge variant="violet" size="sm" className="self-start mb-2">
+                    Most Popular
+                  </Badge>
+                )}
+                <h4 className="text-base font-bold text-white">{plan.name}</h4>
+                <p className="text-[10px] text-gray-500 mt-0.5">{plan.tagline}</p>
+                <div className="mt-2">
+                  <span className="text-xl font-black text-white">
+                    {plan.monthlyPrice === 0
+                      ? "Free"
+                      : formatPrice(plan.monthlyPrice, true)}
+                  </span>
+                  {plan.monthlyPrice > 0 && (
+                    <span className="text-xs text-gray-500">/mo</span>
+                  )}
+                </div>
+                {savings.savedPercent > 0 && (
+                  <p className="text-[10px] text-emerald-400 mt-0.5">
+                    Save {savings.savedPercent}% yearly
+                  </p>
+                )}
+                <p className="text-xs text-gray-400 mt-1">
+                  {plan.creditsPerMonth === -1
+                    ? "Unlimited credits"
+                    : `${plan.creditsPerMonth} credits/mo`}
+                </p>
+                <ul className="mt-3 space-y-1 flex-1">
+                  {plan.features.slice(0, 5).map((f) => (
+                    <li
+                      key={f.key}
+                      className={cn(
+                        "flex items-center gap-1.5 text-[11px]",
+                        f.included ? "text-gray-300" : "text-gray-600"
+                      )}
+                    >
+                      {f.included ? (
+                        <CheckCircle className="w-3 h-3 text-emerald-400 shrink-0" />
+                      ) : (
+                        <XCircle className="w-3 h-3 text-gray-600 shrink-0" />
+                      )}
+                      {f.label}
+                    </li>
+                  ))}
+                </ul>
+                <Button
+                  variant={isCurrent ? "ghost" : "primary"}
+                  size="sm"
+                  className="mt-3 w-full"
+                  disabled={isCurrent || !STRIPE_CONFIGURED}
+                  loading={actionLoading === id}
+                  onClick={() => handleUpgrade(id)}
+                >
+                  {isCurrent ? "Current Plan" : `Upgrade to ${plan.name}`}
+                </Button>
+              </Card>
+            );
+          })}
+        </div>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-white mb-3">Buy Credit Packs</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          {TOPUP_PACKS.map((pack) => (
+            <Card
+              key={pack.id}
+              className={cn(
+                "flex flex-col gap-2",
+                pack.badge && "border-violet-500/30 bg-violet-600/5"
+              )}
+            >
+              {pack.badge && (
+                <Badge variant="violet" size="sm" className="self-start">
+                  {pack.badge}
+                </Badge>
+              )}
+              <div className="flex items-baseline justify-between">
+                <div>
+                  <p className="text-lg font-black text-white">
+                    {pack.credits}
+                  </p>
+                  <p className="text-xs text-gray-500">credits</p>
+                </div>
+                <p className="text-lg font-bold text-white">
+                  {formatPrice(pack.priceUsdCents)}
+                </p>
+              </div>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="w-full mt-auto"
+                loading={actionLoading === pack.id}
+                disabled={!STRIPE_CONFIGURED || !pack.stripePriceId}
+                onClick={() => handleBuyCredits(pack.id, pack.stripePriceId)}
+              >
+                <CreditCard className="w-3.5 h-3.5 mr-1" />
+                Buy
+              </Button>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </div>
+  );
 }

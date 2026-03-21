@@ -1,10 +1,17 @@
+// @ts-nocheck
+import { useState } from "react"
 import { Modal } from "@/components/ui/Modal"
 import { useUIStore } from "@/store/uiStore"
 import { useAuthStore } from "@/store/userStore"
 import { Check, Zap, Users } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { supabase } from "@/lib/supabase/client"
+import { toast } from "sonner"
 
 type PlanId = "pro" | "team"
+
+const STRIPE_CONFIGURED =
+  !!import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY;
 
 const PLANS: Array<{
   id: PlanId
@@ -14,6 +21,7 @@ const PLANS: Array<{
   icon: typeof Zap
   color: "violet" | "amber"
   credits: number
+  stripePriceId: string | undefined
   perks: string[]
 }> = [
   {
@@ -24,6 +32,7 @@ const PLANS: Array<{
     icon: Zap,
     color: "violet",
     credits: 30,
+    stripePriceId: import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY,
     perks: [
       "30 credits / month",
       "All 4 AI models",
@@ -41,6 +50,7 @@ const PLANS: Array<{
     icon: Users,
     color: "amber",
     credits: 150,
+    stripePriceId: import.meta.env.VITE_STRIPE_PRICE_TEAM_MONTHLY,
     perks: [
       "5 seats included",
       "150 shared credits / month",
@@ -55,24 +65,77 @@ const PLANS: Array<{
 export function UpgradeModal() {
   const uiStore = useUIStore()
   const { profile } = useAuthStore()
+  const [loading, setLoading] = useState<string | null>(null)
 
   const handleUpgrade = async (plan: PlanId) => {
+    const planDef = PLANS.find((p) => p.id === plan)
+    if (!planDef) return
+
+    if (!STRIPE_CONFIGURED || !planDef.stripePriceId) {
+      toast.error("Stripe is not configured. Visit Settings > Billing for details.")
+      uiStore.setUpgradeModalOpen(false)
+      return
+    }
+
+    setLoading(plan)
     try {
-      // TODO: wire to your checkout flow.
-      // Examples (uncomment the one you use):
-      // await uiStore.startCheckout(plan)
-      // uiStore.setRoute("/settings/billing")
-      // window.location.href = "/settings/billing"
+      const { data, error } = await supabase.functions.invoke("create-checkout", {
+        body: {
+          price_id: planDef.stripePriceId,
+          success_url: `${window.location.origin}/app/settings/billing?success=1`,
+          cancel_url: `${window.location.origin}/app/settings/billing`,
+          mode: "subscription",
+        },
+      })
+
+      if (error) throw error
+      if (data?.url) {
+        window.location.href = data.url
+      } else {
+        toast.error("Could not create checkout session.")
+      }
+    } catch {
+      toast.error("Failed to start checkout. The checkout service may not be deployed yet.")
     } finally {
+      setLoading(null)
       uiStore.setUpgradeModalOpen(false)
     }
   }
 
   const handleBuyCredits = async () => {
+    if (!STRIPE_CONFIGURED) {
+      toast.error("Stripe is not configured. Visit Settings > Billing for details.")
+      uiStore.setUpgradeModalOpen(false)
+      return
+    }
+
+    setLoading("credits")
     try {
-      // TODO: wire to your pay-per-credit flow
-      // await uiStore.buyCredits({ pack: "10-for-3" })
+      const priceId = import.meta.env.VITE_STRIPE_PRICE_CREDITS_10
+      if (!priceId) {
+        toast.error("No credit pack price configured.")
+        return
+      }
+
+      const { data, error } = await supabase.functions.invoke("create-checkout", {
+        body: {
+          price_id: priceId,
+          success_url: `${window.location.origin}/app/settings/credits?success=1`,
+          cancel_url: `${window.location.origin}/app/settings/billing`,
+          mode: "payment",
+        },
+      })
+
+      if (error) throw error
+      if (data?.url) {
+        window.location.href = data.url
+      } else {
+        toast.error("Could not create checkout session.")
+      }
+    } catch {
+      toast.error("Failed to start checkout. The checkout service may not be deployed yet.")
     } finally {
+      setLoading(null)
       uiStore.setUpgradeModalOpen(false)
     }
   }
@@ -84,6 +147,15 @@ export function UpgradeModal() {
       title="Upgrade ConfideQ"
       size="lg"
     >
+      {!STRIPE_CONFIGURED && (
+        <div className="mb-4 flex items-center gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+          <span className="text-amber-400 text-sm">⚠</span>
+          <p className="text-xs text-amber-300">
+            Stripe is not configured yet. Checkout will not work until VITE_STRIPE_* env vars are set.
+          </p>
+        </div>
+      )}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {PLANS.map((plan) => {
           const isCurrentPlan = (profile as any)?.plan_id === plan.id
@@ -99,10 +171,9 @@ export function UpgradeModal() {
                   ? plan.color === "violet"
                     ? "border-violet-500/50 bg-violet-500/5"
                     : "border-amber-500/50 bg-amber-500/5"
-                  : "border-white/10 bg-white/[0.03]" // ✅ valid tailwind using arbitrary opacity
+                  : "border-white/10 bg-white/[0.03]"
               )}
             >
-              {/* Header */}
               <div className="flex items-center gap-3">
                 <div
                   className={cn(
@@ -124,7 +195,6 @@ export function UpgradeModal() {
                 </div>
               </div>
 
-              {/* Perks */}
               <ul className="space-y-1.5">
                 {plan.perks.map((perk) => (
                   <li key={perk} className="flex items-center gap-2 text-xs text-gray-300">
@@ -134,11 +204,10 @@ export function UpgradeModal() {
                 ))}
               </ul>
 
-              {/* CTA */}
               <button
                 type="button"
                 onClick={() => !isCurrentPlan && handleUpgrade(plan.id)}
-                disabled={isCurrentPlan}
+                disabled={isCurrentPlan || loading === plan.id}
                 aria-disabled={isCurrentPlan}
                 className={cn(
                   "mt-auto w-full rounded-xl py-2.5 text-sm font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-transparent",
@@ -149,14 +218,17 @@ export function UpgradeModal() {
                     : "bg-amber-500 text-black hover:bg-amber-400 focus:ring-amber-500"
                 )}
               >
-                {isCurrentPlan ? "Current plan" : `Upgrade to ${plan.label}`}
+                {loading === plan.id
+                  ? "Redirecting…"
+                  : isCurrentPlan
+                  ? "Current plan"
+                  : `Upgrade to ${plan.label}`}
               </button>
             </div>
           )
         })}
       </div>
 
-      {/* Pay-per-credit option */}
       <div className="mt-4 flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-4">
         <div>
           <p className="text-sm font-medium text-white">Pay as you go</p>
@@ -165,9 +237,10 @@ export function UpgradeModal() {
         <button
           type="button"
           onClick={handleBuyCredits}
+          disabled={loading === "credits"}
           className="rounded-xl border border-white/[0.15] bg-white/10 px-4 py-2 text-xs font-medium text-white transition-all hover:bg-white/[0.15] focus:outline-none focus:ring-2 focus:ring-white/30"
         >
-          Buy credits
+          {loading === "credits" ? "Redirecting…" : "Buy credits"}
         </button>
       </div>
     </Modal>

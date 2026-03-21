@@ -8,16 +8,21 @@ import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Zap, TrendingDown, RefreshCw, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/lib/supabase/client";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsCredits
 // ─────────────────────────────────────────────────────────────────
 
+const STRIPE_CONFIGURED =
+  !!import.meta.env.VITE_STRIPE_PRICE_CREDITS_10;
+
 const CREDIT_PACKS = [
-  { id: "100",  amount: 100,  price: 4.99,  bonus: 0      },
-  { id: "500",  amount: 500,  price: 19.99, bonus: 50     },
-  { id: "1000", amount: 1000, price: 34.99, bonus: 150,   popular: true },
-  { id: "5000", amount: 5000, price: 99.99, bonus: 1000   },
+  { id: "100",  amount: 100,  price: 4.99,  bonus: 0,     stripePriceId: import.meta.env.VITE_STRIPE_PRICE_CREDITS_100  },
+  { id: "500",  amount: 500,  price: 19.99, bonus: 50,    stripePriceId: import.meta.env.VITE_STRIPE_PRICE_CREDITS_500  },
+  { id: "1000", amount: 1000, price: 34.99, bonus: 150,   popular: true, stripePriceId: import.meta.env.VITE_STRIPE_PRICE_CREDITS_1000 },
+  { id: "5000", amount: 5000, price: 99.99, bonus: 1000,  stripePriceId: import.meta.env.VITE_STRIPE_PRICE_CREDITS_5000 },
 ];
 
 const CREDIT_COSTS = [
@@ -42,10 +47,35 @@ export default function SettingsCredits() {
   const usedPct   = Math.min(100, (used / monthly) * 100);
 
   async function handleBuy(packId: string) {
+    const pack = CREDIT_PACKS.find((p) => p.id === packId);
+    if (!pack) return;
+
+    if (!pack.stripePriceId) {
+      toast.error("No Stripe price configured for this credit pack.");
+      return;
+    }
+
     setBuying(packId);
-    // Integrate with Stripe / payment
-    await new Promise((r) => setTimeout(r, 1000));
-    setBuying(null);
+    try {
+      const { data, error } = await supabase.functions.invoke("create-checkout", {
+        body: {
+          price_id: pack.stripePriceId,
+          success_url: `${window.location.origin}/app/settings/credits?success=1`,
+          cancel_url: `${window.location.origin}/app/settings/credits`,
+          mode: "payment",
+        },
+      });
+      if (error) throw error;
+      if (data?.url) {
+        window.location.href = data.url;
+      } else {
+        toast.error("Could not create checkout session.");
+      }
+    } catch {
+      toast.error("Failed to start checkout. The checkout service may not be deployed yet.");
+    } finally {
+      setBuying(null);
+    }
   }
 
   return (
