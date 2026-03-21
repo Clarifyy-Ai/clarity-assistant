@@ -3,7 +3,7 @@
 // encryption flag, and event-driven cross-tab sync.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const NAMESPACE  = "clarity:";
+const NAMESPACE  = "clarify:";
 const META_SUFFIX = ":__meta__";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -169,7 +169,7 @@ export const ls = {
   },
 
   /**
-   * Remove all keys under the Clarity namespace.
+   * Remove all keys under the Clarify namespace.
    */
   clear(): void {
     if (typeof window === "undefined") return;
@@ -184,7 +184,7 @@ export const ls = {
   },
 
   /**
-   * Get all Clarity-namespaced keys (without prefix).
+   * Get all Clarify-namespaced keys (without prefix).
    */
   keys(): string[] {
     if (typeof window === "undefined") return [];
@@ -217,7 +217,7 @@ export const ls = {
   },
 
   /**
-   * Estimate how many bytes are used by Clarity keys.
+   * Estimate how many bytes are used by Clarify keys.
    */
   sizeInBytes(): number {
     if (typeof window === "undefined") return 0;

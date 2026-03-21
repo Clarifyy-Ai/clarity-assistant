@@ -35,15 +35,15 @@ const keyIsMissing =
 
 if (urlIsMissing) {
   throw new Error(
-    "[Clarity] VITE_SUPABASE_URL is missing or is a placeholder. " +
-      "Set it in Lovable Project Settings → Environment Variables."
+    "[Clarify] VITE_SUPABASE_URL is missing or is a placeholder. " +
+      "Set it in Project Settings → Environment Variables."
   );
 }
 
 if (keyIsMissing) {
   throw new Error(
-    "[Clarity] VITE_SUPABASE_PUBLISHABLE_KEY is missing or is a placeholder. " +
-      "Set it in Lovable Project Settings → Environment Variables."
+    "[Clarify] VITE_SUPABASE_PUBLISHABLE_KEY is missing or is a placeholder. " +
+      "Set it in Project Settings → Environment Variables."
   );
 }
 
@@ -62,7 +62,7 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, 
   },
   global: {
     headers: {
-      "x-app-name":    "clarity-ai",
+      "x-app-name":    "clarify-ai",
       "x-app-version": "1.0.0",
     },
   },

@@ -157,7 +157,7 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
             Welcome Back
           </h1>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Sign in to your Clarity Assistant account
+            Sign in to your Clarify Assistant account
           </p>
         </div>
 

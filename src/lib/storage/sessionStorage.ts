@@ -4,7 +4,7 @@
 // Used for live session state, temp drafts, and in-progress interview data.
 // ─────────────────────────────────────────────────────────────────────────────
 
-const NAMESPACE = "clarity:session:";
+const NAMESPACE = "clarify:session:";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 

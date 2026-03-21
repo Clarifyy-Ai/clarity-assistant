@@ -35,7 +35,7 @@ serve(async (req: Request) => {
           "Content-Type":  "application/json",
         },
         body: JSON.stringify({
-          comment:         "Clarity AI temporary key",
+          comment:         "Clarify AI temporary key",
           scopes:          ["usage:write"],
           time_to_live_in_seconds: 15,
         }),

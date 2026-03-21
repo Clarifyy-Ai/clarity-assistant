@@ -202,7 +202,7 @@ export const SignupForm = ({ onSuccess }: SignupFormProps) => {
             Create Account
           </h1>
           <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
-            Join Clarity Assistant and start your interview preparation
+            Join Clarify Assistant and start your interview preparation
           </p>
         </div>
 

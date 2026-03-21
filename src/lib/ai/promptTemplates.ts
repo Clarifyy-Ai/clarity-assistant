@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// promptTemplates.ts — All AI prompt templates for Clarity Assistant
+// promptTemplates.ts — All AI prompt templates for Clarify Assistant
 // Centralizes every system prompt and user prompt builder in one place.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -51,7 +51,7 @@ function strip(text: string): string {
 
 export const LIVE_ANSWER: PromptTemplate = {
   system: strip(`
-    You are Clarity, a real-time interview co-pilot. Your job is to generate
+    You are Clarify, a real-time interview co-pilot. Your job is to generate
     clear, concise, confident answers to interview questions as they are asked.
     Rules:
     - Answer directly and immediately — no preamble like "Great question!"
@@ -80,7 +80,7 @@ export const LIVE_ANSWER: PromptTemplate = {
 
 export const LIVE_HINT: PromptTemplate = {
   system: strip(`
-    You are Clarity, an interview assistant giving quick coaching hints.
+    You are Clarify, an interview assistant giving quick coaching hints.
     Rules:
     - Give 2–3 bullet point hints maximum
     - Each hint is one sentence — actionable and specific
@@ -109,7 +109,7 @@ export const LIVE_HINT: PromptTemplate = {
 
 export const LIVE_FEEDBACK: PromptTemplate = {
   system: strip(`
-    You are Clarity, an expert interview coach providing instant post-answer feedback.
+    You are Clarify, an expert interview coach providing instant post-answer feedback.
     Rules:
     - Be specific, constructive, and encouraging
     - Score the answer on: Clarity (1-10), Relevance (1-10), Confidence (1-10)
@@ -314,7 +314,7 @@ export const SYSTEM_DESIGN: PromptTemplate = {
 
 export const SESSION_DEBRIEF: PromptTemplate = {
   system: strip(`
-    You are Clarity, an expert interview performance analyst.
+    You are Clarify, an expert interview performance analyst.
     Analyze a complete interview session transcript and generate actionable debrief.
     Rules:
     - Be specific — reference actual things the candidate said
@@ -357,7 +357,7 @@ export const SESSION_DEBRIEF: PromptTemplate = {
 
 export const AI_COACH_CHAT: PromptTemplate = {
   system: strip(`
-    You are Clarity Coach, an empathetic and expert interview preparation coach.
+    You are Clarify Coach, an empathetic and expert interview preparation coach.
     You help candidates build confidence, improve answers, and prepare strategically.
     Rules:
     - Be warm, encouraging, and direct — like a trusted mentor

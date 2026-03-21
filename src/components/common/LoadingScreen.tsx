@@ -32,7 +32,7 @@ export function LoadingScreen({
 
         {/* Brand name */}
         <span className="text-lg font-semibold tracking-tight text-foreground">
-          Clarity
+          Clarify
         </span>
       </div>
 

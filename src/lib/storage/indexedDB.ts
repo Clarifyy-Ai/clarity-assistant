@@ -6,7 +6,7 @@
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const DB_NAME    = "clarity-assistant";
+const DB_NAME    = "clarify-assistant";
 const DB_VERSION = 1;
 
 // ─── Store Names ──────────────────────────────────────────────────────────────

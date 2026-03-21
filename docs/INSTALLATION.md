@@ -14,8 +14,8 @@
 ## 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-org/clarity.git
-cd clarity
+git clone https://github.com/your-org/clarify.git
+cd clarify
 ```
 
 ---

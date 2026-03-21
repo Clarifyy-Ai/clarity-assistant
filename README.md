@@ -1,4 +1,4 @@
-clarity-assistant/
+clarify-assistant/
 │
 ├── 📁 public/
 │   ├── favicon.ico
@@ -539,7 +539,7 @@ clarity-assistant/
 
 Based on your repository structure and description, here's a comprehensive summary of your application:
 
-## **Clarity Assistant - Interview Preparation & Real-time Call Assistant**
+## **Clarify Assistant - Interview Preparation & Real-time Call Assistant**
 
 ### **Core Purpose**
 A comprehensive AI-powered platform designed to help students and job seekers **overcome interview anxiety and perform better** by providing real-time assistance during mock interviews and actual interviews, with advanced stealth features that remain invisible during screen sharing.
@@ -697,7 +697,7 @@ A comprehensive AI-powered platform designed to help students and job seekers **
 
 ## **Key Differentiators vs. Competitors**
 
-| Feature | Clarity | ParakeetAI | Others |
+| Feature | Clarify | ParakeetAI | Others |
 |---------|---------|-----------|--------|
 | **Stealth Overlay** | ✅ Advanced | ✅ Basic | ❌ None |
 | **Real-time AI Answers** | ✅ Yes | ✅ Yes | ⚠️ Limited |

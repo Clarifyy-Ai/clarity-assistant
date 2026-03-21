@@ -1,4 +1,4 @@
-# Clarity AI — Interview Preparation Platform
+# Clarify AI — Interview Preparation Platform
 
 A React 18 + Vite SPA for AI-powered interview preparation. Real-time AI coaching during live interviews, mock session simulations, deep analytics, and gamification.
 

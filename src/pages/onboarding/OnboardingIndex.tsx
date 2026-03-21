@@ -360,7 +360,7 @@ export default function OnboardingIndex() {
             <div className="h-7 w-7 rounded-lg bg-primary/90 flex items-center justify-center">
               <span className="text-xs font-bold text-primary-foreground">C</span>
             </div>
-            <span className="font-semibold text-sm tracking-tight">Clarity</span>
+            <span className="font-semibold text-sm tracking-tight">Clarify</span>
           </div>
 
           <StepProgressBar currentStep={currentStep} completedSteps={completedSteps} />

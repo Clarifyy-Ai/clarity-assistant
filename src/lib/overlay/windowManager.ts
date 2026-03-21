@@ -8,7 +8,7 @@ import { OverlayError, ErrorCode } from "@/lib/errors";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const STORAGE_KEY           = "clarity:overlay:window";
+const STORAGE_KEY           = "clarify:overlay:window";
 const SNAP_THRESHOLD_PX     = 20;
 const MIN_WIDTH             = 280;
 const MIN_HEIGHT            = 180;

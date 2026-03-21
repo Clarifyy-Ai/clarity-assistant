@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// errors.ts — Centralized error taxonomy for Clarity Assistant
+// errors.ts — Centralized error taxonomy for Clarify Assistant
 // All custom error classes, error codes, guards, and formatters live here.
 // ─────────────────────────────────────────────────────────────────────────────
 

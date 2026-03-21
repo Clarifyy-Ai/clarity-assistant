@@ -67,7 +67,7 @@ export function OverlayWindow() {
           )}
           style={{ pointerEvents: is_stealth_mode ? "none" : "auto" }}
           role="dialog"
-          aria-label="Clarity AI Overlay"
+          aria-label="Clarify AI Overlay"
         >
           {/* Top bar / drag handle */}
           <div
@@ -77,7 +77,7 @@ export function OverlayWindow() {
           >
             <div className="flex items-center gap-2">
               <span className="text-[10px] font-semibold uppercase tracking-widest text-brand-300/60">
-                Clarity AI
+                Clarify AI
               </span>
               <OverlayNetworkBadge color={network_color} />
             </div>

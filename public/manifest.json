@@ -1,6 +1,6 @@
 {
-  "name": "Clarity AI",
-  "short_name": "Clarity",
+  "name": "Clarify AI",
+  "short_name": "Clarify",
   "description": "AI-powered interview preparation assistant",
   "start_url": "/",
   "display": "standalone",

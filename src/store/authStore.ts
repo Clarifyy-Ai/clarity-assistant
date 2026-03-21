@@ -400,7 +400,7 @@ export const useAuthStore = create<AuthStore>()(
         };
       }),
       {
-        name: "clarity-auth-v1",
+        name: "clarify-auth-v1",
         // Never persist session/user/tokens — only persist stable UI flags
         partialize: (s) => ({
           isOnboarded: s.isOnboarded,
