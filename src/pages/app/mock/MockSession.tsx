@@ -148,6 +148,11 @@ export default function MockSession() {
       await orchestrator.completeSession();
     } else {
       orchestrator.nextQuestion();
+      const nextQ = useSessionStore.getState().current_question;
+      if (nextQ) {
+        const qText = typeof nextQ === "string" ? nextQ : nextQ.question_text ?? "";
+        if (qText) useOverlayStore.getState().setCurrentQuestion(qText);
+      }
       stt.start();
     }
   }

@@ -5,11 +5,9 @@ import { useCredits } from "@/hooks/useCredits";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useAudioStore } from "@/store/audioStore";
-import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Modal } from "@/components/ui/Modal";
 import { OverlayWindow } from "@/components/overlay/OverlayWindow";
 import { OverlayKeyboardHandler } from "@/components/overlay/OverlayKeyboardHandler";
 import { LiveSessionController } from "@/components/live/LiveSessionController";
@@ -20,20 +18,13 @@ import { LiveSessionTimer } from "@/components/live/LiveSessionTimer";
 import { LivePanicButton } from "@/components/live/LivePanicButton";
 import { LiveCodingProblemCapture } from "@/components/live/LiveCodingProblemCapture";
 import { ScreenCaptureBlocker } from "@/components/overlay/ScreenCaptureBlocker";
+import { PreSessionSetup } from "@/components/session/PreSessionSetup";
 import {
-  Mic, MicOff, Monitor, Play, Square,
-  Keyboard, Eye, EyeOff, AlertTriangle,
-  ChevronDown, ChevronUp, Shield, Ghost,
+  Mic, MicOff, Square, Eye, EyeOff,
+  AlertTriangle, Shield, Ghost,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LiveSessionConfig } from "@/types/session.types";
-import type { HintStyle } from "@/types/user.types";
-
-const HINT_STYLES = [
-  { value: "full_answer",  label: "Full Answer",    icon: "📝" },
-  { value: "short_hints",  label: "Short Hints",    icon: "💡" },
-  { value: "keywords_only", label: "Keywords Only",  icon: "🔑" },
-];
 
 const DEFAULT_CONFIG: LiveSessionConfig = {
   company: null,
@@ -61,32 +52,20 @@ export default function LiveRehearsal() {
   const current_question   = useOverlayStore((s) => s.current_question);
   const isCapturing        = useAudioStore((s) => s.streams?.is_capturing ?? false);
   const isMuted            = useAudioStore((s) => s.is_muted);
+  const streamError        = useAudioStore((s) => s.streams?.error ?? null);
+  const deepgramStatus     = useAudioStore((s) => s.deepgram_status);
 
-  const [hintStyle,     setHintStyle]     = useState<HintStyle>("short_hints");
-  const [targetCompany, setTargetCompany] = useState("");
-  const [configOpen,    setConfigOpen]    = useState(true);
-  const [hotkeysOpen,   setHotkeysOpen]   = useState(false);
-  const [phase, setPhase]                = useState<"setup" | "active">("setup");
-  const [config, setConfig]              = useState<LiveSessionConfig>(DEFAULT_CONFIG);
+  const [phase, setPhase]   = useState<"setup" | "active">("setup");
+  const [config, setConfig] = useState<LiveSessionConfig>(DEFAULT_CONFIG);
 
   const copilot = useLiveCopilot({ config, overlayRef });
 
   const isActive = sessionStatus === "active";
-  const streamError = useAudioStore((s) => s.streams?.error ?? null);
 
-  async function handleStart() {
-    if (!credits.canAfford("live_hint")) return;
-
-    const sessionConfig: LiveSessionConfig = {
-      ...DEFAULT_CONFIG,
-      hint_style: hintStyle,
-      company: targetCompany || null,
-    };
+  const handleSetup = useCallback((sessionConfig: LiveSessionConfig) => {
     setConfig(sessionConfig);
-    useOverlayStore.getState().setHintStyle(hintStyle);
-    setConfigOpen(false);
     setPhase("active");
-  }
+  }, []);
 
   useEffect(() => {
     if (phase === "active" && sessionStatus !== "active") {
@@ -113,8 +92,17 @@ export default function LiveRehearsal() {
     copilot.submitManualQuestion(question);
   }, [copilot.submitManualQuestion]);
 
+  if (phase === "setup") {
+    return (
+      <PreSessionSetup
+        onStart={handleSetup}
+        sessionType="live"
+      />
+    );
+  }
+
   return (
-    <div className="space-y-5 max-w-4xl">
+    <div className="min-h-screen bg-[#0a0a0f] text-white">
       <OverlayWindow
         onToggleMic={copilot.toggleMute}
         onToggleSystemAudio={copilot.toggleSystemAudio}
@@ -129,119 +117,8 @@ export default function LiveRehearsal() {
         onToggleMute={copilot.toggleMute}
       />
 
-      <PageHeader
-        title="Live Co-Pilot"
-        subtitle="Real-time AI assistance during your actual interview"
-        action={
-          <div className="flex items-center gap-2">
-            <LiveNetworkMonitor />
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setHotkeysOpen(true)}
-              leftIcon={<Keyboard className="w-3.5 h-3.5" />}
-            >
-              Hotkeys
-            </Button>
-          </div>
-        }
-      />
-
-      {credits.isEmpty && (
-        <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-2xl">
-          <AlertTriangle className="w-5 h-5 text-destructive shrink-0" />
-          <div className="flex-1">
-            <p className="text-sm font-semibold text-destructive">No credits remaining</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              AI generation is paused. All other features still work.
-            </p>
-          </div>
-          <Button variant="danger" size="sm" onClick={() => navigate("/app/settings/billing")}>
-            Upgrade
-          </Button>
-        </div>
-      )}
-
-      {!isActive && (
-        <Card>
-          <div
-            className="flex items-center justify-between cursor-pointer"
-            onClick={() => setConfigOpen((p) => !p)}
-          >
-            <h3 className="text-sm font-semibold text-foreground">Session setup</h3>
-            {configOpen
-              ? <ChevronUp className="w-4 h-4 text-muted-foreground" />
-              : <ChevronDown className="w-4 h-4 text-muted-foreground" />
-            }
-          </div>
-
-          {configOpen && (
-            <div className="mt-5 space-y-5">
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-2">Hint style</p>
-                <div className="grid grid-cols-3 gap-2">
-                  {HINT_STYLES.map((h) => (
-                    <button
-                      key={h.value}
-                      onClick={() => setHintStyle(h.value as HintStyle)}
-                      className={cn(
-                        "flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-all",
-                        hintStyle === h.value
-                          ? "bg-primary/20 border-primary/40 text-primary"
-                          : "bg-secondary/30 border-border text-muted-foreground hover:border-primary/20"
-                      )}
-                    >
-                      <span className="text-lg">{h.icon}</span>
-                      {h.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <p className="text-xs font-medium text-muted-foreground mb-2">
-                  Target company <span className="text-muted-foreground/50">(optional)</span>
-                </p>
-                <input
-                  value={targetCompany}
-                  onChange={(e) => setTargetCompany(e.target.value)}
-                  placeholder="e.g. Google, Stripe, Notion…"
-                  className="w-full bg-secondary/30 border border-border text-foreground placeholder-muted-foreground/40 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-primary"
-                />
-              </div>
-
-              <div className="flex items-center gap-3 p-3 bg-secondary/30 rounded-xl border border-border">
-                <Mic className="w-4 h-4 text-muted-foreground shrink-0" />
-                <div className="flex-1">
-                  <p className="text-xs font-medium text-foreground">Microphone</p>
-                  <p className="text-[10px] text-muted-foreground">
-                    Will be requested when you start
-                  </p>
-                </div>
-                <Monitor className="w-4 h-4 text-muted-foreground/50 shrink-0" />
-                <div>
-                  <p className="text-xs font-medium text-muted-foreground">System audio</p>
-                  <p className="text-[10px] text-muted-foreground/50">Optional</p>
-                </div>
-              </div>
-
-              <Button
-                variant="primary"
-                size="lg"
-                fullWidth
-                disabled={credits.isEmpty}
-                onClick={handleStart}
-                leftIcon={<Play className="w-4 h-4" />}
-              >
-                Start Live Session
-              </Button>
-            </div>
-          )}
-        </Card>
-      )}
-
-      {isActive && streamError && (
-        <div className="flex items-center gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-2xl">
+      {streamError && (
+        <div className="fixed top-4 left-1/2 -translate-x-1/2 z-40 flex items-center gap-3 p-4 bg-destructive/10 border border-destructive/20 rounded-2xl backdrop-blur-sm max-w-md">
           <AlertTriangle className="w-5 h-5 text-destructive shrink-0" />
           <div className="flex-1">
             <p className="text-sm font-semibold text-destructive">Audio Error</p>
@@ -257,99 +134,97 @@ export default function LiveRehearsal() {
         </div>
       )}
 
-      {isActive && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Card className="flex items-center gap-4">
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="w-full max-w-lg space-y-6 p-6">
+
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
               <div className={cn(
                 "w-3 h-3 rounded-full shrink-0",
-                isCapturing && !isMuted ? "bg-emerald-400 animate-pulse" : "bg-destructive animate-pulse"
+                isCapturing && !isMuted ? "bg-emerald-400 animate-pulse" : "bg-red-500 animate-pulse"
               )} />
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-foreground">Session active</p>
-                <LiveSessionTimer />
+              <div>
+                <p className="text-sm font-semibold text-foreground">Session Active</p>
+                <p className="text-[10px] text-muted-foreground">
+                  {deepgramStatus === "connected"
+                    ? "Listening for interview questions…"
+                    : deepgramStatus === "connecting"
+                    ? "Connecting to speech recognition…"
+                    : "The overlay is active. Use hotkeys to control it."}
+                </p>
               </div>
-              <Button variant="danger" size="sm" onClick={handleStop} leftIcon={<Square className="w-3.5 h-3.5" />}>
-                End
-              </Button>
-            </Card>
+            </div>
+            <div className="flex items-center gap-2">
+              <LiveNetworkMonitor />
+              <Badge variant="violet" size="sm">live</Badge>
+            </div>
+          </div>
 
-            <Card className="flex items-center gap-4">
-              <div className={cn(
-                "w-9 h-9 rounded-xl flex items-center justify-center",
-                is_visible ? "bg-primary/20" : "bg-secondary/30"
-              )}>
-                {is_visible
-                  ? <Eye className="w-4 h-4 text-primary" />
-                  : <EyeOff className="w-4 h-4 text-muted-foreground" />
-                }
+          <Card className="!bg-white/5 !border-white/10">
+            <div className="flex items-center justify-between mb-3">
+              <LiveSessionTimer />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={copilot.toggleMute}
+                  className={cn(
+                    "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all",
+                    isMuted
+                      ? "bg-warning/10 border-warning/20 text-warning"
+                      : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                  )}
+                >
+                  {isMuted ? <MicOff className="w-3 h-3" /> : <Mic className="w-3 h-3" />}
+                  {isMuted ? "Unmute" : "Mute"}
+                </button>
               </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium text-foreground">Overlay</p>
-                <p className="text-[10px] text-muted-foreground">Ctrl+Shift+H to toggle</p>
-              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <LivePanicButton />
+              <LiveCodingProblemCapture disabled={!isActive} />
+              <button
+                onClick={() => useOverlayStore.getState().setStealthMode(!is_stealth_mode)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all",
+                  is_stealth_mode
+                    ? "bg-violet-500/10 border-violet-500/20 text-violet-400"
+                    : "bg-white/5 border-white/10 text-muted-foreground"
+                )}
+              >
+                <Ghost className="w-3 h-3" />
+                {is_stealth_mode ? "Stealth On" : "Stealth Off"}
+              </button>
+              <button
+                onClick={() => useOverlayStore.getState().setProctorSafe(!is_proctor_safe)}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all",
+                  is_proctor_safe
+                    ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+                    : "bg-white/5 border-white/10 text-muted-foreground"
+                )}
+              >
+                <Shield className="w-3 h-3" />
+                Proctor Safe
+              </button>
               <button
                 onClick={() => {
                   const s = useOverlayStore.getState();
                   s.is_visible ? s.hideOverlay() : s.showOverlay();
                 }}
                 className={cn(
-                  "w-10 h-5 rounded-full border transition-all relative",
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all",
                   is_visible
-                    ? "bg-primary border-primary"
-                    : "bg-secondary border-border"
+                    ? "bg-primary/10 border-primary/20 text-primary"
+                    : "bg-white/5 border-white/10 text-muted-foreground"
                 )}
               >
-                <span className={cn(
-                  "absolute top-0.5 w-4 h-4 bg-primary-foreground rounded-full transition-all",
-                  is_visible ? "left-5" : "left-0.5"
-                )} />
+                {is_visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
+                Overlay
               </button>
-            </Card>
-          </div>
+            </div>
+          </Card>
 
-          <div className="flex flex-wrap gap-2">
-            <LivePanicButton />
-            <LiveCodingProblemCapture disabled={!isActive} />
-            <button
-              onClick={copilot.toggleMute}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-all",
-                isMuted
-                  ? "bg-warning/10 border-warning/20 text-warning"
-                  : "bg-secondary/30 border-border text-muted-foreground"
-              )}
-            >
-              {isMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
-              {isMuted ? "Unmute" : "Mute"}
-            </button>
-            <button
-              onClick={() => useOverlayStore.getState().setStealthMode(!is_stealth_mode)}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-all",
-                is_stealth_mode
-                  ? "bg-violet-500/10 border-violet-500/20 text-violet-400"
-                  : "bg-secondary/30 border-border text-muted-foreground"
-              )}
-            >
-              <Ghost className="w-3.5 h-3.5" />
-              {is_stealth_mode ? "Stealth On" : "Stealth Off"}
-            </button>
-            <button
-              onClick={() => useOverlayStore.getState().setProctorSafe(!is_proctor_safe)}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-medium border transition-all",
-                is_proctor_safe
-                  ? "bg-success/10 border-success/20 text-success"
-                  : "bg-secondary/30 border-border text-muted-foreground"
-              )}
-            >
-              <Shield className="w-3.5 h-3.5" />
-              Proctor Safe
-            </button>
-          </div>
-
-          <Card>
+          <Card className="!bg-white/5 !border-white/10">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-foreground">AI Answer</h3>
               {current_question && (
@@ -365,43 +240,39 @@ export default function LiveRehearsal() {
             <LiveAnswerStream />
           </Card>
 
-          <Card>
+          <Card className="!bg-white/5 !border-white/10">
             <h3 className="text-sm font-semibold text-foreground mb-3">Live Transcript</h3>
             <LiveTranscriptStream />
           </Card>
-        </div>
-      )}
 
-      <HotkeysModal open={hotkeysOpen} onClose={() => setHotkeysOpen(false)} />
-    </div>
-  );
-}
+          <button
+            onClick={handleStop}
+            className="w-full py-3 bg-red-600/20 hover:bg-red-600/30 border border-red-500/20 text-red-400 text-sm font-medium rounded-xl transition-all flex items-center justify-center gap-2"
+          >
+            <Square className="w-3.5 h-3.5" />
+            End Session
+          </button>
 
-function HotkeysModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const KEYS = [
-    { keys: "Ctrl+Shift+H", action: "Toggle overlay visibility" },
-    { keys: "Ctrl+Shift+S", action: "Toggle stealth mode" },
-    { keys: "Ctrl+Shift+P", action: "Panic — instant calming steps" },
-    { keys: "Ctrl+Shift+M", action: "Mute/unmute microphone" },
-    { keys: "Ctrl+Shift+Y", action: "Cycle hint style" },
-    { keys: "Ctrl+Shift+C", action: "Capture coding problem" },
-    { keys: "Escape",       action: "Clear hint / dismiss panic" },
-  ];
-
-  if (!open) return null;
-
-  return (
-    <Modal open={open} onClose={onClose} title="Keyboard Shortcuts">
-      <div className="space-y-2">
-        {KEYS.map((k) => (
-          <div key={k.keys} className="flex items-center justify-between py-2 border-b border-border last:border-0">
-            <span className="text-sm text-foreground">{k.action}</span>
-            <kbd className="px-2 py-1 bg-secondary border border-border rounded text-xs font-mono text-muted-foreground">
-              {k.keys}
-            </kbd>
+          <div className="space-y-1.5 text-center text-xs text-gray-500">
+            <p><kbd className="px-1.5 py-0.5 bg-white/10 rounded font-mono">Ctrl+Shift+H</kbd> Toggle overlay</p>
+            <p><kbd className="px-1.5 py-0.5 bg-white/10 rounded font-mono">Ctrl+Shift+S</kbd> Stealth mode</p>
+            <p><kbd className="px-1.5 py-0.5 bg-white/10 rounded font-mono">Ctrl+Shift+P</kbd> Panic button</p>
+            <p><kbd className="px-1.5 py-0.5 bg-white/10 rounded font-mono">Ctrl+Shift+M</kbd> Mute/unmute</p>
           </div>
-        ))}
+        </div>
       </div>
-    </Modal>
+
+      <div className="fixed bottom-0 left-0 right-0 z-30 pointer-events-none">
+        <div className="max-w-xs mx-auto h-1 bg-white/5 rounded-full overflow-hidden">
+          <div
+            className={cn(
+              "h-full rounded-full transition-all duration-75",
+              copilot.isSpeaking ? "bg-emerald-400" : "bg-white/20"
+            )}
+            style={{ width: `${Math.min(100, copilot.currentLevel * 100)}%` }}
+          />
+        </div>
+      </div>
+    </div>
   );
 }
