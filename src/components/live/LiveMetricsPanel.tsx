@@ -1,6 +1,5 @@
 // @ts-nocheck
 import { useEffect, useState } from 'react';
-import { useSessionStore } from '@/store/sessionStore';
 import { useAudioStore } from '@/store/audioStore';
 import { TrendingUp, TrendingDown, Minus, Star } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -61,8 +60,8 @@ export function LiveMetricsPanel({
   showTrend = true,
   detailed = true,
 }: LiveMetricsPanelProps) {
-  const sessionStore = useSessionStore();
-  const audioStore = useAudioStore();
+  const transcript  = useAudioStore((s) => s.transcript);
+  const elapsedTime = useAudioStore((s) => s.elapsedTime);
   
   const [metrics, setMetrics] = useState<SessionMetrics>({
     overallScore: 75,
@@ -94,7 +93,6 @@ export function LiveMetricsPanel({
 
   useEffect(() => {
     // Calculate answer quality based on transcript
-    const transcript = audioStore.transcript;
     const text = transcript?.utterances
       .map((u) => u.text)
       .join(' ')
@@ -138,7 +136,7 @@ export function LiveMetricsPanel({
     structure = Math.min(100, structure);
 
     // Speaking pace (WPM)
-    const elapsedSeconds = audioStore.elapsedTime || 1;
+    const elapsedSeconds = elapsedTime || 1;
     const wpm = Math.round((words.length / elapsedSeconds) * 60);
     const pace = wpm >= 100 && wpm <= 130 ? 95 : Math.max(50, 100 - Math.abs(wpm - 115));
 
@@ -201,7 +199,7 @@ export function LiveMetricsPanel({
         direction: 'up',
       },
     });
-  }, [audioStore.transcript, audioStore.elapsedTime]);
+  }, [transcript, elapsedTime]);
 
   const getTierColor = (tier: string) => {
     switch (tier) {

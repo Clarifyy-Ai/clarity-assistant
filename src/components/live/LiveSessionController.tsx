@@ -14,8 +14,12 @@ interface LiveSessionControllerProps {
 }
 
 export function LiveSessionController({ isActive }: LiveSessionControllerProps) {
-  const session = useSessionStore();
-  const overlay = useOverlayStore();
+  // Select only the individual fields we need — never select the whole store
+  // as an object (causes infinite re-render loop in React 18 + Zustand)
+  const status      = useSessionStore((s) => s.status);
+  const tickElapsed = useSessionStore((s) => s.tickElapsed);
+  const setNetworkColor = useOverlayStore((s) => s.setNetworkColor);
+
   const networkColor = useNetworkColor();
 
   // Keep a ref to the active interval id
@@ -31,47 +35,33 @@ export function LiveSessionController({ isActive }: LiveSessionControllerProps) 
 
   // Tick elapsed seconds when session is active
   useEffect(() => {
-    // Guard conditions
-    const shouldRun =
-      isActive &&
-      session.status === "active";
+    const shouldRun = isActive && status === "active";
 
-    // Always clear any existing timer first
     clearTimer();
 
-    if (!shouldRun) {
-      return; // Nothing to do
-    }
+    if (!shouldRun) return;
 
-    // (Optional) avoid ticking while tab is hidden to save resources
     let docHidden = false;
-    const onVisibility = () => {
-      docHidden = document.hidden;
-    };
+    const onVisibility = () => { docHidden = document.hidden; };
     document.addEventListener("visibilitychange", onVisibility);
 
-    // Start the timer
     timerRef.current = setInterval(() => {
-      // Skip ticking when hidden (optional behaviour)
-      if (!docHidden) {
-        session.tickElapsed?.();
-      }
+      if (!docHidden) tickElapsed?.();
     }, 1000);
 
-    // Cleanup
     return () => {
       document.removeEventListener("visibilitychange", onVisibility);
       clearTimer();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isActive, session.status]); // we intentionally avoid depending on the store function identity
+  }, [isActive, status]);
 
   // Sync network color to overlay
   useEffect(() => {
-    overlay.setNetworkColor?.(networkColor);
-  }, [networkColor, overlay]);
+    setNetworkColor?.(networkColor);
+  }, [networkColor, setNetworkColor]);
 
-  // Cleanup on unmount as a final safety
+  // Cleanup on unmount
   useEffect(() => clearTimer, []);
 
   return null;
