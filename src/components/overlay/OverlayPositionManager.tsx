@@ -6,7 +6,7 @@ import {
   type ReactNode,
   type Ref,
 } from "react";
-import { createDragHandler, getProctorSafePosition } from "@/lib/overlay/stealthMouse";
+import { createDragHandler, createTouchDragHandler, getProctorSafePosition } from "@/lib/overlay/stealthMouse";
 import type { OverlayPosition } from "@/store/overlayStore";
 
 interface OverlayPositionManagerProps {
@@ -42,8 +42,12 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
       const el = localRef.current;
       if (!el) return;
 
-      const cleanup = createDragHandler(el, onPositionChange);
-      return () => cleanup?.();
+      const cleanupMouse = createDragHandler(el, onPositionChange);
+      const cleanupTouch = createTouchDragHandler(el, onPositionChange);
+      return () => {
+        cleanupMouse?.();
+        cleanupTouch?.();
+      };
     }, [onPositionChange]);
 
     useLayoutEffect(() => {
@@ -82,7 +86,7 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
         style={{
           left: `${position.x}px`,
           top: `${position.y}px`,
-          zIndex: 9999,
+          zIndex: 2147483647,
           pointerEvents: "auto",
           isolation: "isolate",
           willChange: "transform",

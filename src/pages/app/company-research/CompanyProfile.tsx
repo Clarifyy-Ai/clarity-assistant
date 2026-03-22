@@ -121,7 +121,24 @@ export default function CompanyProfile() {
     );
   }
 
-  if (!brief) return null;
+  if (!brief) {
+    return (
+      <div className="max-w-3xl text-center py-20 space-y-4">
+        <Building2 className="w-10 h-10 text-muted-foreground/40 mx-auto" />
+        <p className="text-sm text-muted-foreground">No brief available for {companyName || "this company"}.</p>
+        <div className="flex items-center justify-center gap-3">
+          <Button variant="secondary" size="sm" onClick={() => navigate("/app/companies")}>
+            <ChevronLeft className="w-3 h-3 mr-1" />
+            Back
+          </Button>
+          <Button variant="primary" size="sm" onClick={() => generateBrief(true)}>
+            <RefreshCw className="w-3 h-3 mr-1" />
+            Generate Brief
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-3xl space-y-5">

@@ -199,6 +199,7 @@ export function createTouchDragHandler(
   onPositionChange: (pos: OverlayPosition) => void,
   snapConfig: SnapConfig = DEFAULT_SNAP
 ): () => void {
+  let isDragging = false;
   let startTouchX = 0;
   let startTouchY = 0;
   let startLeft = 0;
@@ -212,6 +213,7 @@ export function createTouchDragHandler(
     if (!touch) return;
     const rect = overlayEl.getBoundingClientRect();
 
+    isDragging = true;
     startTouchX = touch.clientX;
     startTouchY = touch.clientY;
     startLeft = rect.left;
@@ -219,7 +221,8 @@ export function createTouchDragHandler(
   }
 
   function onTouchMove(e: TouchEvent): void {
-    // We need to prevent default to stop the page from scrolling while dragging
+    if (!isDragging) return;
+
     e.preventDefault();
     const touch = e.touches[0];
     if (!touch) return;
@@ -240,12 +243,14 @@ export function createTouchDragHandler(
   }
 
   function onTouchEnd(): void {
+    if (!isDragging) return;
+    isDragging = false;
+
     const rect = overlayEl.getBoundingClientRect();
 
     let finalX = rect.left;
     let finalY = rect.top;
 
-    // Apply edge snapping for touch as well (parity with mouse)
     if (snapConfig.enabled) {
       const snapped = computeSnapPosition(
         finalX,
@@ -265,7 +270,7 @@ export function createTouchDragHandler(
     onPositionChange({ x: finalX, y: finalY });
   }
 
-  overlayEl.addEventListener("touchstart", onTouchStart, { passive: false });
+  overlayEl.addEventListener("touchstart", onTouchStart, { passive: true });
   overlayEl.addEventListener("touchmove", onTouchMove, { passive: false });
   overlayEl.addEventListener("touchend", onTouchEnd);
 

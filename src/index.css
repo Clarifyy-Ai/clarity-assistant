@@ -434,8 +434,7 @@
   height: 0;
   overflow: visible;
   pointer-events: none;
-  z-index: 9999;
-  /* Compositor isolation */
+  z-index: 2147483647;
   isolation: isolate;
   will-change: transform;
   transform: translateZ(0);

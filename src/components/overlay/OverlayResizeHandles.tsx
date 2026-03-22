@@ -8,9 +8,9 @@ interface OverlayResizeHandlesProps {
 type Edge = "e" | "s" | "se";
 
 const HANDLE_STYLES: Record<Edge, React.CSSProperties> = {
-  e:  { position: "absolute", top: 8, right: -4, bottom: 8, width: 8, cursor: "ew-resize" },
-  s:  { position: "absolute", left: 8, right: 8, bottom: -4, height: 8, cursor: "ns-resize" },
-  se: { position: "absolute", right: -4, bottom: -4, width: 14, height: 14, cursor: "nwse-resize" },
+  e:  { position: "absolute", top: 8, right: -8, bottom: 8, width: 16, cursor: "ew-resize" },
+  s:  { position: "absolute", left: 8, right: 8, bottom: -8, height: 16, cursor: "ns-resize" },
+  se: { position: "absolute", right: -8, bottom: -8, width: 20, height: 20, cursor: "nwse-resize" },
 };
 
 export function OverlayResizeHandles({ containerRef }: OverlayResizeHandlesProps) {
@@ -59,7 +59,7 @@ export function OverlayResizeHandles({ containerRef }: OverlayResizeHandlesProps
           key={edge}
           style={HANDLE_STYLES[edge]}
           onPointerDown={(e) => handlePointerDown(edge, e)}
-          className="z-50 group"
+          className="z-50 group touch-none"
         >
           {edge === "se" && (
             <svg
