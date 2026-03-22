@@ -19,7 +19,7 @@ import { createServiceClient } from "../_shared/supabase.ts";
 
 const FREE_CREDITS = 20;
 
-const VALID_PLAN_IDS = new Set(["free", "starter", "pro", "enterprise"]);
+const VALID_PLAN_IDS = new Set(["free", "starter", "pro", "elite", "enterprise"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -99,7 +99,7 @@ Deno.serve(async (req) => {
           await db.from("credit_transactions").insert({
             user_id: userId,
             amount:  monthlyCredits,
-            reason:  `subscription_grant:${dbPlanId}`,
+            action:  `subscription_grant:${dbPlanId}`,
           });
 
           await db.from("profiles").update({
@@ -127,7 +127,7 @@ Deno.serve(async (req) => {
             await db.from("credit_transactions").insert({
               user_id: userId,
               amount:  credits,
-              reason:  `purchase:credits_pack`,
+              action:  `purchase:credits_pack`,
             });
           }
         }

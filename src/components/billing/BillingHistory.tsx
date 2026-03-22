@@ -69,7 +69,7 @@ export function BillingHistory({
       try {
         const { data, error } = await supabase
           .from('credit_transactions')
-          .select('id, amount, reason, created_at')
+          .select('id, amount, action, created_at')
           .eq('user_id', profile.id)
           .order('created_at', { ascending: false })
           .limit(100);
@@ -78,7 +78,7 @@ export function BillingHistory({
 
         const mapped: Transaction[] = (data ?? []).map((row) => {
           const credits = row.amount as number;
-          const reason: string = row.reason ?? '';
+          const reason: string = (row.action as string) ?? '';
 
           let type: Transaction['type'] = 'usage';
           if (reason.startsWith('purchase:') || reason.startsWith('subscription_grant:')) {

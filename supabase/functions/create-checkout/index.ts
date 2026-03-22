@@ -34,6 +34,7 @@ function buildPriceAllowlist(): Map<string, PriceEntitlement> {
   };
   add("STRIPE_PRICE_STARTER_MONTHLY",    { mode: "subscription", plan_id: "starter",    monthly_credits: 100  });
   add("STRIPE_PRICE_PRO_MONTHLY",        { mode: "subscription", plan_id: "pro",         monthly_credits: 300  });
+  add("STRIPE_PRICE_ELITE_MONTHLY",      { mode: "subscription", plan_id: "elite",       monthly_credits: 1000 });
   add("STRIPE_PRICE_ENTERPRISE_MONTHLY", { mode: "subscription", plan_id: "enterprise",  monthly_credits: 9999 });
   add("STRIPE_PRICE_CREDITS_50",         { mode: "payment",      credits: 50  });
   add("STRIPE_PRICE_CREDITS_150",        { mode: "payment",      credits: 150 });

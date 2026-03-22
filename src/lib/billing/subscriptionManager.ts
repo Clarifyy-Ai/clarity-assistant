@@ -158,6 +158,8 @@ export const PLANS: Record<PlanId, Plan> = {
 
 export const PLAN_ORDER: PlanId[] = ["free", "starter", "pro", "elite", "enterprise"];
 
+const VALID_PLAN_IDS_FRONTEND = new Set<string>(PLAN_ORDER);
+
 // ─── Subscription State ───────────────────────────────────────────────────────
 
 export interface Subscription {
@@ -253,23 +255,28 @@ export async function getUserSubscription(
   let cancelAtPeriodEnd = false;
   let currentPeriodEnd = new Date();
 
+  let billingPlanId: PlanId = (data.plan_id as PlanId) ?? "free";
+
   if (data.subscription_id) {
     const [subRow] = await tryCatch(async () => {
       const { data: sub } = await supabase
         .from("subscriptions")
-        .select("cancel_at, current_period_end, stripe_subscription_id")
+        .select("cancel_at, current_period_end, stripe_subscription_id, plan_id")
         .eq("user_id", userId)
         .maybeSingle();
       return sub;
     });
     if (subRow?.cancel_at) cancelAtPeriodEnd = true;
     if (subRow?.current_period_end) currentPeriodEnd = new Date(subRow.current_period_end);
+    if (subRow?.plan_id && VALID_PLAN_IDS_FRONTEND.has(subRow.plan_id as string)) {
+      billingPlanId = subRow.plan_id as PlanId;
+    }
   }
 
   return {
     id:                   data.subscription_id ?? userId,
     userId:               userId,
-    planId:               (data.plan_id as PlanId) ?? "free",
+    planId:               billingPlanId,
     interval:             "monthly" as BillingInterval,
     status:               (data.subscription_status ?? "active") as SubscriptionStatus,
     currentPeriodStart:   new Date(),

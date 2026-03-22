@@ -113,6 +113,13 @@ export default function SettingsBilling() {
       if (error) throw error;
       if (data?.url) {
         window.location.href = data.url;
+      } else if (data?.error) {
+        const msg: string = data.error;
+        if (msg.includes("not configured") || msg.includes("STRIPE_SECRET_KEY")) {
+          toast.error("Stripe is not configured on the server. Contact support to upgrade.");
+        } else {
+          toast.error(msg);
+        }
       } else {
         toast.error("Could not create checkout session.");
       }
@@ -334,11 +341,11 @@ export default function SettingsBilling() {
                 </span>
               </div>
             )}
-            {subscription && currentPlan.monthlyPrice > 0 && !subscription.cancelAtPeriodEnd && (
+            {subscription && !subscription.cancelAtPeriodEnd && (PLANS[subscription.planId]?.monthlyPrice ?? 0) > 0 && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Next invoice</span>
                 <span className="text-foreground font-medium">
-                  {formatPrice(currentPlan.monthlyPrice, false)}
+                  {formatPrice(PLANS[subscription.planId]!.monthlyPrice, false)}
                 </span>
               </div>
             )}
