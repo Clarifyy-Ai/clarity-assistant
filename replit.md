@@ -7,15 +7,20 @@ A React 18 + Vite SPA for AI-powered interview preparation. Real-time AI coachin
 - **Frontend**: React 18, TypeScript, Vite 5
 - **UI**: Tailwind CSS, Radix UI, shadcn/ui, Framer Motion
 - **State**: Zustand, TanStack React Query
-- **Backend**: Supabase (auth, PostgreSQL, storage, edge functions)
-- **AI**: OpenAI GPT-4o, Anthropic Claude, Google Gemini (routed via Edge Functions)
+- **Backend**: Supabase (auth, PostgreSQL, storage, edge functions) — external service
+- **AI**: OpenAI GPT-4o, Anthropic Claude, Google Gemini (routed via Supabase Edge Functions)
 - **Audio**: Deepgram (speech-to-text, currently stubbed — needs API key)
 - **Analytics**: PostHog (optional)
 - **Payments**: Stripe (optional)
 
-## Port
+## Replit Environment
 
-Runs on **port 5000** via Vite dev server.
+- Runs on **port 5000** via Vite dev server (`npm run dev`)
+- Supabase connection configured via Replit environment variables:
+  - `VITE_SUPABASE_URL` — project URL
+  - `VITE_SUPABASE_ANON_KEY` / `VITE_SUPABASE_PUBLISHABLE_KEY` — public anon key
+  - `VITE_SUPABASE_PROJECT_ID` — project ref ID
+- Architecture: Pure SPA — all backend logic runs on Supabase Edge Functions (no server-side Node.js layer)
 
 ## Project Structure
 
