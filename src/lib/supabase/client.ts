@@ -11,8 +11,8 @@ import {
   SUPABASE_ANON_KEY,
 } from "@/integrations/supabase/client";
 
-// Re-export the singleton so existing imports from this path still work
-export { supabase };
+// Re-export the singleton and URL so existing imports from this path still work
+export { supabase, SUPABASE_URL, SUPABASE_ANON_KEY };
 
 // ── Storage bucket names ──────────────────────────────────────────────────────
 export const STORAGE_BUCKETS = {

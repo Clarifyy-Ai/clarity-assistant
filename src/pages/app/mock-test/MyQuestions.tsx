@@ -47,7 +47,7 @@ interface Question {
   is_verified: boolean;
 }
 
-type SortKey = "question_text" | "subject" | "topic" | "difficulty" | "created_at";
+type SortKey = "question_text" | "subject" | "topic" | "difficulty" | "exam_type" | "created_at";
 type SortDir = "asc" | "desc";
 
 const DIFFICULTY_COLOR: Record<string, string> = {
@@ -488,6 +488,9 @@ export default function MyQuestions() {
             <span className="w-16">
               <ColHeader label="Difficulty" col="difficulty" />
             </span>
+            <span className="w-24 hidden xl:block">
+              <ColHeader label="Exam" col="exam_type" />
+            </span>
             <span className="w-24 hidden lg:block text-right">
               <ColHeader label="Added" col="created_at" />
             </span>
@@ -535,6 +538,10 @@ export default function MyQuestions() {
               >
                 {q.difficulty}
               </Badge>
+
+              <div className="w-24 hidden xl:block text-xs text-muted-foreground truncate">
+                {q.exam_type ?? <span className="italic">—</span>}
+              </div>
 
               <div className="w-24 hidden lg:block text-xs text-muted-foreground text-right">
                 {new Date(q.created_at).toLocaleDateString()}

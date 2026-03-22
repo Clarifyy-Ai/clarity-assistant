@@ -3,15 +3,14 @@ import { requireAuth, getAdminClient, errorResponse, successResponse } from "../
 
 // ─────────────────────────────────────────────────────────────────────────────
 // parse-question-pdf — Extract questions from a PDF using Claude's native
-// PDF document support. Accepts a base64-encoded PDF in the request body.
+// PDF document support.
 //
-// Request body (JSON):
-//   { pdf_base64: string }         — base64-encoded PDF bytes
+// Accepts either:
+//   a) multipart/form-data with a "pdf" file field  (primary)
+//   b) JSON body { pdf_base64: string }             (fallback / programmatic)
 //
 // Response: { questions: ParsedQuestion[], count: number, summary: string }
-//
 // Credits: 5 per PDF import
-// Required env vars: ANTHROPIC_API_KEY
 // ─────────────────────────────────────────────────────────────────────────────
 
 const CREDIT_COST = 5;
@@ -68,6 +67,56 @@ Rules:
 If a question is unclear, incomplete, or cannot be parsed, skip it entirely.
 Return ONLY a valid JSON array of question objects. No prose, no markdown code fences, no explanation outside the JSON.`;
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+/** Convert ArrayBuffer to base64 string without exceeding call stack. */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 8192;
+  let binary = "";
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
+}
+
+/** Extract base64 PDF from either multipart form or JSON body. */
+async function extractPdfBase64(req: Request): Promise<string | null> {
+  const contentType = req.headers.get("content-type") ?? "";
+
+  // ── Multipart form upload (primary) ──────────────────────────────────────
+  if (contentType.includes("multipart/form-data")) {
+    try {
+      const form = await req.formData();
+      const file = form.get("pdf");
+      if (file instanceof File) {
+        const buffer = await file.arrayBuffer();
+        return arrayBufferToBase64(buffer);
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  // ── JSON body { pdf_base64 } (fallback / programmatic) ──────────────────
+  if (contentType.includes("application/json") || contentType === "") {
+    try {
+      const body = await req.json();
+      if (typeof body?.pdf_base64 === "string") return body.pdf_base64;
+      return null;
+    } catch {
+      return null;
+    }
+  }
+
+  return null;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Handler
+// ─────────────────────────────────────────────────────────────────────────────
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -82,16 +131,13 @@ Deno.serve(async (req) => {
       return errorResponse("AI service not configured on server.", "AI_NOT_CONFIGURED", 503);
     }
 
-    const body = await req.json().catch(() => null);
-    if (!body?.pdf_base64 || typeof body.pdf_base64 !== "string") {
-      return errorResponse("Missing or invalid pdf_base64 field.", "INVALID_BODY", 400);
-    }
-
-    const pdfBase64: string = body.pdf_base64;
-
-    // Validate it looks like base64
-    if (pdfBase64.length < 100) {
-      return errorResponse("PDF too small or empty.", "INVALID_PDF", 400);
+    const pdfBase64 = await extractPdfBase64(req);
+    if (!pdfBase64 || pdfBase64.length < 100) {
+      return errorResponse(
+        "No valid PDF received. POST a multipart/form-data request with a 'pdf' file field, or JSON with pdf_base64.",
+        "INVALID_PDF",
+        400
+      );
     }
 
     // Credit check
@@ -119,7 +165,7 @@ Deno.serve(async (req) => {
       }).catch(() => null);
     }
 
-    // Call Claude with the PDF as a document
+    // Call Claude with the PDF as a native document type
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
       headers: {

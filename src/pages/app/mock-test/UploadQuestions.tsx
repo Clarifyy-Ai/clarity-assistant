@@ -8,7 +8,7 @@ import {
 import { toast } from "sonner";
 import { InlineMath, BlockMath } from "react-katex";
 import "katex/dist/katex.min.css";
-import { supabase } from "@/lib/supabase/client";
+import { supabase, SUPABASE_URL } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -457,49 +457,57 @@ function ReviewModal({
         </DialogHeader>
 
         <div className="space-y-3">
-          {visible.map((q) => (
+          {visible.map((q, idx) => (
             <Card key={q._id} className="border">
-              <CardContent className="p-4 space-y-2">
-                <div className="flex items-start justify-between gap-2">
-                  <p className="text-sm text-foreground flex-1">
-                    {q.question_text.length > 150 ? q.question_text.slice(0, 150) + "…" : q.question_text}
+              <CardContent className="p-4 space-y-3">
+                {/* Header row: question # + remove button */}
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                    Question {idx + 1}
                   </p>
                   <button
                     type="button"
                     onClick={() => remove(q._id)}
                     className="shrink-0 text-muted-foreground hover:text-destructive"
+                    title="Remove"
                   >
                     <X className="h-4 w-4" />
                   </button>
                 </div>
 
-                <div className="flex flex-wrap gap-2 text-xs">
-                  <Badge variant="outline" className={DIFFICULTY_COLOR[q.difficulty]}>{q.difficulty}</Badge>
-                  <Badge variant="outline">{q.question_type}</Badge>
-                  <Badge variant="outline">{q.subject}</Badge>
-                  <Badge variant="outline" className="text-muted-foreground">{q.topic}</Badge>
-                  {q.exam_type && <Badge variant="outline">{q.exam_type}</Badge>}
-                  {q.source_year && <Badge variant="outline">{q.source_year}</Badge>}
+                {/* Question text */}
+                <div className="space-y-1">
+                  <p className="text-xs text-muted-foreground font-medium">Question Text</p>
+                  <Textarea
+                    className="text-xs min-h-[60px] font-mono"
+                    value={q.question_text}
+                    onChange={(e) => updateField(q._id, "question_text", e.target.value)}
+                    placeholder="Question text (LaTeX supported)"
+                  />
                 </div>
 
-                <div className="flex gap-2">
-                  <div className="flex-1 space-y-1">
-                    <p className="text-xs text-muted-foreground font-medium">Correct Answer</p>
-                    <Input
-                      className="h-7 text-xs"
-                      value={q.correct_answer}
-                      onChange={(e) => updateField(q._id, "correct_answer", e.target.value)}
-                    />
+                {/* Row: type, difficulty, subject, topic */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground font-medium">Type</p>
+                    <Select
+                      value={q.question_type}
+                      onValueChange={(v) => updateField(q._id, "question_type", v)}
+                    >
+                      <SelectTrigger className="h-7 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="MCQ">MCQ</SelectItem>
+                        <SelectItem value="TRUE_FALSE">True/False</SelectItem>
+                        <SelectItem value="SHORT_ANSWER">Short Answer</SelectItem>
+                        <SelectItem value="NUMERICAL">Numerical</SelectItem>
+                        <SelectItem value="CODING">Coding</SelectItem>
+                      </SelectContent>
+                    </Select>
                   </div>
-                  <div className="w-24 space-y-1">
-                    <p className="text-xs text-muted-foreground font-medium">Subject</p>
-                    <Input
-                      className="h-7 text-xs"
-                      value={q.subject}
-                      onChange={(e) => updateField(q._id, "subject", e.target.value)}
-                    />
-                  </div>
-                  <div className="w-24 space-y-1">
+
+                  <div className="space-y-1">
                     <p className="text-xs text-muted-foreground font-medium">Difficulty</p>
                     <Select
                       value={q.difficulty}
@@ -512,6 +520,79 @@ function ReviewModal({
                         <SelectItem value="EASY">Easy</SelectItem>
                         <SelectItem value="MEDIUM">Medium</SelectItem>
                         <SelectItem value="HARD">Hard</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground font-medium">Subject</p>
+                    <Input
+                      className="h-7 text-xs"
+                      value={q.subject}
+                      onChange={(e) => updateField(q._id, "subject", e.target.value)}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground font-medium">Topic</p>
+                    <Input
+                      className="h-7 text-xs"
+                      value={q.topic}
+                      onChange={(e) => updateField(q._id, "topic", e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* MCQ options (shown when type is MCQ) */}
+                {q.question_type === "MCQ" && Array.isArray(q.options) && (
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground font-medium">Options</p>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                      {q.options.map((opt, oi) => (
+                        <div key={opt.label} className="flex items-center gap-1.5">
+                          <span className="text-xs font-semibold w-4 shrink-0 text-muted-foreground">{opt.label}.</span>
+                          <Input
+                            className="h-7 text-xs"
+                            value={opt.text}
+                            onChange={(e) => {
+                              const opts = [...(q.options ?? [])];
+                              opts[oi] = { ...opts[oi], text: e.target.value };
+                              updateField(q._id, "options", opts);
+                            }}
+                            placeholder={`Option ${opt.label}`}
+                          />
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Row: correct answer, exam_type */}
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground font-medium">Correct Answer</p>
+                    <Input
+                      className="h-7 text-xs"
+                      value={q.correct_answer}
+                      onChange={(e) => updateField(q._id, "correct_answer", e.target.value)}
+                      placeholder={q.question_type === "MCQ" ? "A / B / C / D" : "Answer text"}
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <p className="text-xs text-muted-foreground font-medium">Exam Type</p>
+                    <Select
+                      value={q.exam_type ?? ""}
+                      onValueChange={(v) => updateField(q._id, "exam_type", v || null)}
+                    >
+                      <SelectTrigger className="h-7 text-xs">
+                        <SelectValue placeholder="(none)" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">None</SelectItem>
+                        {EXAM_TYPES.map((et) => (
+                          <SelectItem key={et} value={et}>{et}</SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -582,22 +663,32 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
     setSummary(null);
 
     try {
-      // Convert PDF to base64
-      const arrayBuffer = await file.arrayBuffer();
-      const uint8 = new Uint8Array(arrayBuffer);
-      let binary = "";
-      for (let i = 0; i < uint8.length; i++) binary += String.fromCharCode(uint8[i]);
-      const pdf_base64 = btoa(binary);
+      // Send as multipart/form-data (primary contract)
+      const formData = new FormData();
+      formData.append("pdf", file);
 
-      // Call the edge function
-      const { data, error } = await supabase.functions.invoke("parse-question-pdf", {
-        body: { pdf_base64 },
-      });
+      // Call the edge function via multipart upload
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
 
-      if (error) throw new Error(error.message);
-      if (!data?.success) throw new Error(data?.error ?? "Parse failed");
+      const response = await fetch(
+        `${SUPABASE_URL}/functions/v1/parse-question-pdf`,
+        {
+          method:  "POST",
+          headers: { Authorization: `Bearer ${token}` },
+          body:    formData,
+        }
+      );
 
-      const { questions, summary: parseSummary } = data.data;
+      if (!response.ok) {
+        const errJson = await response.json().catch(() => ({}));
+        throw new Error((errJson as Record<string, unknown>)?.error as string ?? "Parse failed");
+      }
+
+      const responseJson = await response.json();
+      if (!responseJson?.success) throw new Error(responseJson?.error ?? "Parse failed");
+
+      const { questions, summary: parseSummary } = responseJson.data;
 
       const reviewItems: ReviewItem[] = (questions as ParsedQuestion[]).map((q, i) => ({
         ...q,
