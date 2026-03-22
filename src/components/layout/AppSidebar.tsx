@@ -1,4 +1,4 @@
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store/uiStore";
@@ -10,7 +10,7 @@ import {
   LogOut, Star, Users, Bell,
   Briefcase, ListTodo, PenTool, FolderOpen,
   FileSpreadsheet, BarChart3, Calendar, Building,
-  Inbox, Wrench, GraduationCap, Upload,
+  Inbox, Wrench, GraduationCap, Upload, LayoutGrid,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import {
@@ -42,8 +42,9 @@ const NAV_SECTIONS: Array<{ label: string; items: NavItem[] }> = [
         stealthIcon: GraduationCap,
         label: "Mock Tests",
         subItems: [
-          { to: "/app/mock-test/my-questions", icon: BookOpen,  label: "Question Bank" },
-          { to: "/app/mock-test/upload",       icon: Upload,    label: "Import Questions" },
+          { to: "/app/mock-test",              icon: LayoutGrid, label: "Hub" },
+          { to: "/app/mock-test/my-questions", icon: BookOpen,   label: "Question Bank" },
+          { to: "/app/mock-test/upload",       icon: Upload,     label: "Import Questions" },
         ],
       },
     ],
@@ -70,9 +71,25 @@ const NAV_SECTIONS: Array<{ label: string; items: NavItem[] }> = [
 export function AppSidebar() {
   const uiStore = useUIStore();
   const { profile, clearAuth } = useAuthStore();
+  const user = useAuthStore((s) => s.user);
   const location = useLocation();
   const collapsed = uiStore.sidebar_collapsed;
   const stealth = uiStore.stealth_mode;
+
+  const [questionCount, setQuestionCount] = useState<number | null>(null);
+
+  // Fetch the user's question bank count for the badge
+  useEffect(() => {
+    if (!user?.id) return;
+    supabase
+      .from("questions")
+      .select("id", { count: "exact", head: true })
+      .eq("uploaded_by", user.id)
+      .then(({ count }) => {
+        setQuestionCount(count ?? 0);
+      })
+      .catch(() => null);
+  }, [user?.id, location.pathname]); // refresh when navigating (e.g. after upload)
 
   async function handleLogout() {
     try {
@@ -88,6 +105,8 @@ export function AppSidebar() {
     profile?.full_name?.trim()?.charAt(0)?.toUpperCase() ??
     profile?.email?.trim()?.charAt(0)?.toUpperCase() ??
     "U";
+
+  const isMockTestSection = location.pathname.startsWith("/app/mock-test");
 
   return (
     <aside
@@ -125,37 +144,72 @@ export function AppSidebar() {
               </p>
             )}
             {section.items.map((item) => {
-              const isSubActive = location.pathname.startsWith(item.to + "/");
-              const isExact    = location.pathname === item.to;
-              const isActive   = isSubActive || isExact;
-              const showSubs   = !collapsed && (isActive || isSubActive) && item.subItems;
+              const showSubs = !collapsed && isMockTestSection && !!item.subItems;
 
               return (
                 <div key={item.to}>
-                  <SidebarLink
+                  {/* Main nav item */}
+                  <NavLink
                     to={item.to}
-                    icon={stealth ? item.stealthIcon : item.icon}
-                    label={stealth ? (STEALTH_NAV_LABELS[item.label] ?? item.label) : item.label}
-                    collapsed={collapsed}
-                    exact={item.exact}
-                    stealth={stealth}
-                  />
+                    end={!item.subItems}
+                    title={collapsed ? item.label : undefined}
+                    className={({ isActive }) =>
+                      cn(
+                        "mx-1 flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all",
+                        (isActive || (item.subItems && isMockTestSection))
+                          ? stealth
+                            ? "border border-blue-500/20 bg-blue-600/15 text-blue-600 dark:text-blue-300"
+                            : "border border-violet-500/20 bg-violet-600/15 text-violet-600 dark:text-violet-300"
+                          : "text-muted-foreground hover:bg-accent/10 hover:text-foreground",
+                        collapsed && "justify-center"
+                      )
+                    }
+                  >
+                    {React.createElement(stealth ? item.stealthIcon : item.icon, {
+                      className: "h-4 w-4 shrink-0",
+                    })}
+                    {!collapsed && (
+                      <>
+                        <span className="truncate flex-1">
+                          {stealth ? (STEALTH_NAV_LABELS[item.label] ?? item.label) : item.label}
+                        </span>
+                        {/* Question count badge for Mock Tests */}
+                        {item.subItems && questionCount !== null && questionCount > 0 && (
+                          <span className={cn(
+                            "ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none",
+                            stealth
+                              ? "bg-blue-500/20 text-blue-600"
+                              : "bg-violet-500/20 text-violet-600"
+                          )}>
+                            {questionCount > 99 ? "99+" : questionCount}
+                          </span>
+                        )}
+                      </>
+                    )}
+                  </NavLink>
 
+                  {/* Sub-items — shown when on any /app/mock-test/* route and sidebar is open */}
                   {showSubs && (
                     <div className="ml-7 mt-0.5 space-y-0.5 border-l border-border pl-2">
                       {item.subItems!.map((sub) => {
                         const SubIcon = sub.icon;
-                        const subActive = location.pathname === sub.to || location.pathname.startsWith(sub.to + "/");
+                        const subActive =
+                          (sub.to === "/app/mock-test" && location.pathname === "/app/mock-test") ||
+                          (sub.to !== "/app/mock-test" && (
+                            location.pathname === sub.to ||
+                            location.pathname.startsWith(sub.to + "/")
+                          ));
                         return (
                           <NavLink
                             key={sub.to}
                             to={sub.to}
+                            end={sub.to === "/app/mock-test"}
                             className={cn(
                               "flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
                               subActive
                                 ? stealth
-                                  ? "text-blue-600 dark:text-blue-300"
-                                  : "text-violet-600 dark:text-violet-300"
+                                  ? "text-blue-600 dark:text-blue-300 font-semibold"
+                                  : "text-violet-600 dark:text-violet-300 font-semibold"
                                 : "text-muted-foreground hover:text-foreground"
                             )}
                           >
@@ -277,3 +331,4 @@ function SidebarLink({
     </NavLink>
   );
 }
+

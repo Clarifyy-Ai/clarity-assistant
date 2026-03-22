@@ -233,7 +233,10 @@ CREATE TABLE IF NOT EXISTS public.user_topic_performance (
   user_id          UUID        NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
   topic            TEXT        NOT NULL,
   subject          TEXT        NOT NULL,
-  exam_type        TEXT,
+  -- exam_type is NOT NULL with sentinel 'GENERAL' so ON CONFLICT upserts work
+  -- reliably. PostgreSQL NULL values never conflict in unique indexes, which
+  -- would silently create duplicate rows instead of upserting.
+  exam_type        TEXT        NOT NULL DEFAULT 'GENERAL',
   total_attempted  INTEGER     NOT NULL DEFAULT 0,
   total_correct    INTEGER     NOT NULL DEFAULT 0,
   accuracy         DECIMAL(5,2) DEFAULT 0,
@@ -286,7 +289,10 @@ BEGIN
     (user_id, topic, subject, exam_type, total_attempted, total_correct,
      accuracy, avg_time_seconds, last_practiced, updated_at)
   VALUES
-    (v_caller_id, p_topic, p_subject, p_exam_type, p_attempted_delta, p_correct_delta,
+    (v_caller_id, p_topic, p_subject,
+     -- Normalise NULL to 'GENERAL' to match the NOT NULL DEFAULT 'GENERAL' column
+     COALESCE(p_exam_type, 'GENERAL'),
+     p_attempted_delta, p_correct_delta,
      CASE WHEN p_attempted_delta > 0
           THEN ROUND((p_correct_delta::DECIMAL / p_attempted_delta) * 100, 2)
           ELSE 0 END,
