@@ -1,6 +1,7 @@
 import { createPortal } from "react-dom";
 import { useRef, useCallback } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
+import { useAudioStore } from "@/store/audioStore";
 import { useStealthMouse } from "@/hooks/useStealthMouse";
 import { OverlayHintPanel } from "./OverlayHintPanel";
 import { OverlayQuestionBar } from "./OverlayQuestionBar";
