@@ -3,8 +3,9 @@ import { createServiceClient } from "../_shared/supabase.ts";
 
 // ─────────────────────────────────────────────────────────────────
 // submit-test
-// Atomically scores all responses, calculates breakdowns,
-// calls update_topic_performance RPC, and marks the test COMPLETED.
+// Verifies JWT, scores all responses, calculates breakdowns,
+// calls update_topic_performance RPC, marks test COMPLETED.
+// Best-effort atomic: all writes happen before COMPLETED status.
 // ─────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -12,38 +13,47 @@ Deno.serve(async (req) => {
   if (cors) return cors;
 
   try {
+    // ── Verify JWT ────────────────────────────────────────────────
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const token = authHeader.replace("Bearer ", "");
+    const db = createServiceClient();
 
-    const { test_id, user_id } = await req.json();
-    if (!test_id || !user_id) {
-      return new Response(JSON.stringify({ error: "Missing test_id or user_id" }), {
+    const { data: { user }, error: authErr } = await db.auth.getUser(token);
+    if (authErr || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const userId = user.id;
+
+    const { test_id } = await req.json();
+    if (!test_id) {
+      return new Response(JSON.stringify({ error: "Missing test_id" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const db = createServiceClient();
-
-    // Fetch the test
+    // ── Fetch the test — ownership enforced by user_id = verified JWT ──
     const { data: test, error: testErr } = await db
       .from("mock_tests")
       .select("id, config, question_ids, status")
       .eq("id", test_id)
-      .eq("user_id", user_id)
+      .eq("user_id", userId)      // ownership check
       .single();
 
     if (testErr || !test) {
-      return new Response(JSON.stringify({ error: "Test not found" }), {
+      return new Response(JSON.stringify({ error: "Test not found or access denied" }), {
         status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
+    // ── If already completed, return existing analysis ─────────────
     if (test.status === "COMPLETED") {
-      // Already submitted — return existing analysis
       const { data: existing } = await db
         .from("test_analyses")
         .select("*")
@@ -55,42 +65,40 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Fetch all test responses
-    const { data: responses } = await db
-      .from("test_responses")
-      .select("question_id, user_answer, is_correct, is_attempted, time_spent_seconds")
-      .eq("test_id", test_id)
-      .eq("user_id", user_id);
-
-    // Fetch question details for scoring
+    // ── Fetch responses and questions ─────────────────────────────
     const questionIds = test.question_ids as string[];
-    const { data: questions } = await db
-      .from("questions")
-      .select("id, correct_answer, marks_positive, marks_negative, subject, topic, difficulty, exam_type")
-      .in("id", questionIds);
+
+    const [responsesRes, questionsRes] = await Promise.all([
+      db.from("test_responses")
+        .select("question_id, user_answer, is_correct, is_attempted, time_spent_seconds, is_marked_review")
+        .eq("test_id", test_id)
+        .eq("user_id", userId),   // ownership enforced
+      db.from("questions")
+        .select("id, correct_answer, marks_positive, marks_negative, subject, topic, difficulty, exam_type")
+        .in("id", questionIds),
+    ]);
 
     const questionMap: Record<string, any> = {};
-    for (const q of (questions ?? [])) {
-      questionMap[q.id] = q;
-    }
+    for (const q of (questionsRes.data ?? [])) questionMap[q.id] = q;
 
     const responseMap: Record<string, any> = {};
-    for (const r of (responses ?? [])) {
-      responseMap[r.question_id] = r;
-    }
+    for (const r of (responsesRes.data ?? [])) responseMap[r.question_id] = r;
 
-    // Score each question
+    // ── Score each question ───────────────────────────────────────
     let totalScore = 0;
     let maxScore = 0;
     let totalAttempted = 0;
     let totalCorrect = 0;
 
-    const subjectBreakdown: Record<string, { correct: number; wrong: number; attempted: number; total: number; marks: number }> = {};
-    const topicBreakdown: Record<string, { correct: number; wrong: number; attempted: number; total: number; time_total: number; count_with_time: number }> = {};
+    const subjectBreakdown: Record<string, {
+      correct: number; wrong: number; attempted: number; total: number; marks: number;
+    }> = {};
+    const topicBreakdown: Record<string, {
+      correct: number; wrong: number; attempted: number; total: number;
+      time_total: number; count_with_time: number; subject: string;
+    }> = {};
     const timePerQuestion: number[] = [];
     const wrongQuestionIds: string[] = [];
-
-    const responsesToUpdate: any[] = [];
 
     for (const qid of questionIds) {
       const q = questionMap[qid];
@@ -101,19 +109,20 @@ Deno.serve(async (req) => {
       maxScore += marksPos;
 
       const resp = responseMap[qid];
-      const isAttempted = resp?.is_attempted ?? false;
+      const isAttempted = resp?.is_attempted ?? (resp?.user_answer ? true : false);
       const userAnswer = resp?.user_answer ?? null;
       const timeSpent = resp?.time_spent_seconds ?? 0;
 
-      // Subject bucket
       if (!subjectBreakdown[q.subject]) {
         subjectBreakdown[q.subject] = { correct: 0, wrong: 0, attempted: 0, total: 0, marks: 0 };
       }
       subjectBreakdown[q.subject].total++;
 
-      // Topic bucket
       if (!topicBreakdown[q.topic]) {
-        topicBreakdown[q.topic] = { correct: 0, wrong: 0, attempted: 0, total: 0, time_total: 0, count_with_time: 0 };
+        topicBreakdown[q.topic] = {
+          correct: 0, wrong: 0, attempted: 0, total: 0,
+          time_total: 0, count_with_time: 0, subject: q.subject,
+        };
       }
       topicBreakdown[q.topic].total++;
 
@@ -146,19 +155,19 @@ Deno.serve(async (req) => {
         topicBreakdown[q.topic].count_with_time++;
       }
 
-      // Update response with is_correct
-      responsesToUpdate.push({
+      // Upsert is_correct for this response
+      await db.from("test_responses").upsert({
         test_id,
         question_id: qid,
-        user_id,
+        user_id: userId,
         is_correct: isCorrect,
         is_attempted: isAttempted,
         user_answer: userAnswer,
         time_spent_seconds: timeSpent,
-      });
+      }, { onConflict: "test_id,question_id" });
     }
 
-    // Build final breakdowns
+    // ── Build breakdown objects ────────────────────────────────────
     const subjectBD: Record<string, any> = {};
     for (const [subj, data] of Object.entries(subjectBreakdown)) {
       subjectBD[subj] = {
@@ -183,7 +192,6 @@ Deno.serve(async (req) => {
       ? Math.round(timePerQuestion.reduce((a, b) => a + b, 0) / timePerQuestion.length)
       : 0;
 
-    // Time traps: questions that took > 3x avg time
     const timeTrapThreshold = avgTime * 3;
     const timeTraps = questionIds
       .filter((qid) => (responseMap[qid]?.time_spent_seconds ?? 0) > timeTrapThreshold && timeTrapThreshold > 0)
@@ -192,7 +200,6 @@ Deno.serve(async (req) => {
     const accuracy = totalAttempted > 0 ? Math.round((totalCorrect / totalAttempted) * 100) : 0;
     const attemptPct = questionIds.length > 0 ? Math.round((totalAttempted / questionIds.length) * 100) : 0;
 
-    // Weak/strong topic classification
     const weakTopics = Object.entries(topicBD)
       .filter(([, v]) => (v as any).attempted > 0 && (v as any).accuracy < 50)
       .map(([k]) => k);
@@ -200,14 +207,23 @@ Deno.serve(async (req) => {
       .filter(([, v]) => (v as any).attempted > 0 && (v as any).accuracy >= 80)
       .map(([k]) => k);
 
-    // Predicted percentile (rough heuristic)
-    const pctScore = maxScore > 0 ? (totalScore / maxScore) * 100 : 0;
+    // Rough percentile heuristic
+    const pctScore = maxScore > 0 ? (Math.max(0, totalScore) / maxScore) * 100 : 0;
     const predictedPercentile = Math.min(99, Math.max(1, Math.round(pctScore)));
 
-    // Upsert test_analyses
+    // Estimate rank tier
+    const rankTier =
+      predictedPercentile >= 99 ? "Top 1%" :
+      predictedPercentile >= 95 ? "Top 5%" :
+      predictedPercentile >= 90 ? "Top 10%" :
+      predictedPercentile >= 75 ? "Top 25%" :
+      predictedPercentile >= 50 ? "Top 50%" :
+      "Bottom 50%";
+
+    // ── Write analysis (before COMPLETED status update) ───────────
     const { error: analysisErr } = await db.from("test_analyses").upsert({
       test_id,
-      user_id,
+      user_id: userId,
       total_score: Math.max(0, totalScore),
       max_score: maxScore,
       accuracy,
@@ -222,15 +238,12 @@ Deno.serve(async (req) => {
 
     if (analysisErr) {
       console.error("[submit-test] analysis upsert error:", analysisErr);
+      return new Response(JSON.stringify({ error: "Failed to save analysis" }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    // Mark test as COMPLETED
-    await db
-      .from("mock_tests")
-      .update({ status: "COMPLETED", submitted_at: new Date().toISOString() })
-      .eq("id", test_id);
-
-    // Add wrong questions to revision list
+    // ── Add wrong questions to revision list ──────────────────────
     if (wrongQuestionIds.length > 0) {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
@@ -238,7 +251,7 @@ Deno.serve(async (req) => {
 
       await db.from("revision_list").upsert(
         wrongQuestionIds.map((qid) => ({
-          user_id,
+          user_id: userId,
           question_id: qid,
           added_from_test_id: test_id,
           next_review_date: tomorrowStr,
@@ -249,26 +262,18 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Call update_topic_performance RPC for each topic
-    const config = test.config as any;
-    const examType = config?.exam_type ?? "GENERAL";
-
-    // Build a user auth client to call RPC as the user
+    // ── Call update_topic_performance RPC using user JWT ──────────
     const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.45.4");
     const url = Deno.env.get("SUPABASE_URL") ?? "";
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
-    const userToken = authHeader.replace("Bearer ", "");
 
     const userClient = createClient(url, anonKey, {
-      global: { headers: { Authorization: `Bearer ${userToken}` } },
+      global: { headers: { Authorization: `Bearer ${token}` } },
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    // Get subject for each topic
-    const topicToSubject: Record<string, string> = {};
-    for (const q of (questions ?? [])) {
-      topicToSubject[q.topic] = q.subject;
-    }
+    const config = test.config as any;
+    const examType = config?.exam_type ?? "GENERAL";
 
     for (const [topic, data] of Object.entries(topicBreakdown)) {
       if (data.attempted === 0) continue;
@@ -277,13 +282,20 @@ Deno.serve(async (req) => {
         : null;
       await userClient.rpc("update_topic_performance", {
         p_topic: topic,
-        p_subject: topicToSubject[topic] ?? "General",
+        p_subject: data.subject,
         p_exam_type: examType,
         p_attempted_delta: data.attempted,
         p_correct_delta: data.correct,
         p_avg_time_seconds: avgTopicTime,
       });
     }
+
+    // ── Mark test COMPLETED (last write — everything else succeeded) ──
+    await db
+      .from("mock_tests")
+      .update({ status: "COMPLETED", submitted_at: new Date().toISOString() })
+      .eq("id", test_id)
+      .eq("user_id", userId);
 
     return new Response(
       JSON.stringify({
@@ -296,6 +308,7 @@ Deno.serve(async (req) => {
         total_attempted: totalAttempted,
         weak_topics: weakTopics,
         predicted_percentile: predictedPercentile,
+        rank_tier: rankTier,
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );

@@ -1,10 +1,12 @@
 // @ts-nocheck
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
-  ChevronLeft, ChevronRight, Flag, X, Clock, CheckCircle,
-  AlertCircle, Send, BookmarkPlus,
+  ChevronLeft, ChevronRight, Flag, X, Clock, AlertCircle,
+  Send, BookmarkPlus,
 } from "lucide-react";
+import { InlineMath, BlockMath } from "react-katex";
+import "katex/dist/katex.min.css";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
@@ -27,6 +29,7 @@ interface Question {
   marks_positive: number;
   marks_negative: number;
   image_url?: string;
+  latex_present?: boolean;
 }
 
 type QuestionState = "unattempted" | "attempted" | "marked" | "attempted-marked" | "bookmarked";
@@ -34,7 +37,6 @@ type QuestionState = "unattempted" | "attempted" | "marked" | "attempted-marked"
 interface ResponseState {
   answer: string;
   state: QuestionState;
-  timeStart?: number;
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -48,12 +50,70 @@ function formatTime(seconds: number) {
 }
 
 const STATE_COLORS: Record<QuestionState, string> = {
-  unattempted:      "bg-muted text-muted-foreground border-border",
-  attempted:        "bg-green-500/20 text-green-400 border-green-500/30",
-  marked:           "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  "attempted-marked": "bg-purple-500/20 text-purple-400 border-purple-500/30",
-  bookmarked:       "bg-blue-500/20 text-blue-400 border-blue-500/30",
+  unattempted:          "bg-muted text-muted-foreground border-border",
+  attempted:            "bg-green-500/20 text-green-400 border-green-500/30",
+  marked:               "bg-amber-500/20 text-amber-400 border-amber-500/30",
+  "attempted-marked":   "bg-purple-500/20 text-purple-400 border-purple-500/30",
+  bookmarked:           "bg-blue-500/20 text-blue-400 border-blue-500/30",
 };
+
+/**
+ * Render text that may contain LaTeX.
+ * Inline: $...$  Block: $$...$$
+ */
+function MathText({ text }: { text: string }) {
+  if (!text) return null;
+
+  // Split on $$ (block) or $ (inline)
+  const parts: React.ReactNode[] = [];
+  const blockRe = /\$\$([\s\S]+?)\$\$/g;
+  const inlineRe = /\$([^\$]+?)\$/g;
+
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+
+  const merged = text;
+  const blockMatches: Array<{ start: number; end: number; latex: string; isBlock: boolean }> = [];
+
+  // Find block math first
+  blockRe.lastIndex = 0;
+  while ((match = blockRe.exec(merged)) !== null) {
+    blockMatches.push({ start: match.index, end: match.index + match[0].length, latex: match[1], isBlock: true });
+  }
+
+  // Find inline math, excluding already-captured block ranges
+  inlineRe.lastIndex = 0;
+  while ((match = inlineRe.exec(merged)) !== null) {
+    const inBlock = blockMatches.some((b) => match!.index >= b.start && match!.index < b.end);
+    if (!inBlock) {
+      blockMatches.push({ start: match.index, end: match.index + match[0].length, latex: match[1], isBlock: false });
+    }
+  }
+
+  blockMatches.sort((a, b) => a.start - b.start);
+
+  let cursor = 0;
+  for (const segment of blockMatches) {
+    if (segment.start > cursor) {
+      parts.push(merged.slice(cursor, segment.start));
+    }
+    try {
+      parts.push(
+        segment.isBlock
+          ? <BlockMath key={segment.start} math={segment.latex} />
+          : <InlineMath key={segment.start} math={segment.latex} />
+      );
+    } catch {
+      parts.push(segment.latex);
+    }
+    cursor = segment.end;
+  }
+  if (cursor < merged.length) {
+    parts.push(merged.slice(cursor));
+  }
+
+  return <>{parts}</>;
+}
 
 // ─────────────────────────────────────────────────────────────────
 // Component
@@ -76,34 +136,17 @@ export default function TestSession() {
   const autoSaveRef = useRef<ReturnType<typeof setInterval>>();
   const timerRef    = useRef<ReturnType<typeof setInterval>>();
   const questionStartRef = useRef<number>(Date.now());
+  const timeSpentMap = useRef<Record<string, number>>({});
+  const timerStartedRef = useRef(false);
 
-  // Load test and questions
   useEffect(() => {
     if (!testId || !user?.id) return;
     loadTest();
   }, [testId, user?.id]);
 
-  // Timer
-  useEffect(() => {
-    if (!test || timeLeft <= 0) return;
-    timerRef.current = setInterval(() => {
-      setTimeLeft((t) => {
-        if (t <= 1) {
-          clearInterval(timerRef.current!);
-          handleSubmit(true);
-          return 0;
-        }
-        return t - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timerRef.current!);
-  }, [test]);
-
   // Auto-save every 30 seconds
   useEffect(() => {
-    autoSaveRef.current = setInterval(() => {
-      saveResponses();
-    }, 30_000);
+    autoSaveRef.current = setInterval(() => { saveResponses(); }, 30_000);
     return () => clearInterval(autoSaveRef.current!);
   }, [responses]);
 
@@ -129,29 +172,28 @@ export default function TestSession() {
       }
 
       setTest(testData);
-      setTimeLeft((testData.time_limit_minutes ?? 60) * 60);
+      const secs = (testData.time_limit_minutes ?? 60) * 60;
+      setTimeLeft(secs);
 
-      // Fetch questions
       const qIds = testData.question_ids as string[];
       const { data: qData } = await supabase
         .from("questions")
-        .select("id, question_text, question_type, options, correct_answer, subject, topic, difficulty, marks_positive, marks_negative, image_url")
+        .select("id, question_text, question_type, options, correct_answer, subject, topic, difficulty, marks_positive, marks_negative, image_url, latex_present")
         .in("id", qIds);
 
-      // Preserve order from question_ids
       const qMap: Record<string, Question> = {};
       for (const q of (qData ?? [])) qMap[q.id] = q;
       const orderedQuestions = qIds.map((id) => qMap[id]).filter(Boolean);
       setQuestions(orderedQuestions);
 
-      // Load existing responses
       const { data: respData } = await supabase
         .from("test_responses")
-        .select("question_id, user_answer, is_marked_review, is_attempted")
+        .select("question_id, user_answer, is_marked_review, is_attempted, time_spent_seconds")
         .eq("test_id", testId)
         .eq("user_id", user!.id);
 
       const respMap: Record<string, ResponseState> = {};
+      const timeMap: Record<string, number> = {};
       for (const r of (respData ?? [])) {
         respMap[r.question_id] = {
           answer: r.user_answer ?? "",
@@ -159,10 +201,11 @@ export default function TestSession() {
             ? (r.is_attempted ? "attempted-marked" : "marked")
             : (r.is_attempted ? "attempted" : "unattempted"),
         };
+        if (r.time_spent_seconds) timeMap[r.question_id] = r.time_spent_seconds;
       }
       setResponses(respMap);
+      timeSpentMap.current = timeMap;
 
-      // Mark test as IN_PROGRESS if DRAFT
       if (testData.status === "DRAFT") {
         await supabase
           .from("mock_tests")
@@ -177,6 +220,36 @@ export default function TestSession() {
     }
   }
 
+  // Start timer only after loading
+  useEffect(() => {
+    if (!test || timerStartedRef.current || timeLeft <= 0) return;
+    timerStartedRef.current = true;
+    timerRef.current = setInterval(() => {
+      setTimeLeft((t) => {
+        if (t <= 1) {
+          clearInterval(timerRef.current!);
+          handleSubmit(true);
+          return 0;
+        }
+        return t - 1;
+      });
+    }, 1000);
+    return () => clearInterval(timerRef.current!);
+  }, [test, timeLeft]);
+
+  // Track time on question
+  useEffect(() => {
+    const prev = currentIndex;
+    questionStartRef.current = Date.now();
+    return () => {
+      const elapsed = Math.round((Date.now() - questionStartRef.current) / 1000);
+      if (elapsed > 0 && questions[prev]) {
+        const qid = questions[prev].id;
+        timeSpentMap.current[qid] = (timeSpentMap.current[qid] ?? 0) + elapsed;
+      }
+    };
+  }, [currentIndex]);
+
   async function saveResponses() {
     if (!testId || !user?.id || Object.keys(responses).length === 0) return;
     try {
@@ -187,6 +260,7 @@ export default function TestSession() {
         user_answer:       r.answer || null,
         is_attempted:      !!r.answer,
         is_marked_review:  r.state === "marked" || r.state === "attempted-marked",
+        time_spent_seconds: timeSpentMap.current[qId] ?? 0,
       }));
       await supabase.from("test_responses").upsert(upserts, { onConflict: "test_id,question_id" });
     } catch (err) {
@@ -194,8 +268,8 @@ export default function TestSession() {
     }
   }
 
-  function getCurrentQuestion() {
-    return questions[currentIndex];
+  function getCurrentQuestion(): Question | null {
+    return questions[currentIndex] ?? null;
   }
 
   function updateResponse(answer: string) {
@@ -218,7 +292,7 @@ export default function TestSession() {
     const q = getCurrentQuestion();
     if (!q) return;
     setResponses((prev) => {
-      const current = prev[q.id] ?? { answer: "", state: "unattempted" };
+      const current = prev[q.id] ?? { answer: "", state: "unattempted" as QuestionState };
       const hasAnswer = !!current.answer;
       let newState: QuestionState;
       if (current.state === "marked" || current.state === "attempted-marked") {
@@ -234,7 +308,7 @@ export default function TestSession() {
     const q = getCurrentQuestion();
     if (!q) return;
     setResponses((prev) => {
-      const current = prev[q.id] ?? { answer: "", state: "unattempted" };
+      const current = prev[q.id] ?? { answer: "", state: "unattempted" as QuestionState };
       return {
         ...prev,
         [q.id]: {
@@ -250,60 +324,45 @@ export default function TestSession() {
     if (!q) return;
     setResponses((prev) => ({
       ...prev,
-      [q.id]: { ...prev[q.id] ?? { answer: "", state: "unattempted" }, state: "bookmarked" },
+      [q.id]: { ...prev[q.id] ?? { answer: "", state: "unattempted" as QuestionState }, state: "bookmarked" },
     }));
-    toast.success("Added to revision list");
+    toast.success("Bookmarked for revision");
   }
 
   async function handleSubmit(autoSubmit = false) {
     if (submitting) return;
     setSubmitting(true);
     try {
-      // Final save of responses
-      await saveResponses();
-
-      // Also save time_spent for current question
-      const now = Date.now();
-      const elapsed = Math.round((now - questionStartRef.current) / 1000);
+      // Final save with current time tracking
+      const elapsed = Math.round((Date.now() - questionStartRef.current) / 1000);
       const q = getCurrentQuestion();
       if (q && elapsed > 0) {
-        await supabase.from("test_responses").upsert({
-          test_id: testId,
-          question_id: q.id,
-          user_id: user!.id,
-          time_spent_seconds: elapsed,
-          user_answer: responses[q.id]?.answer || null,
-          is_attempted: !!responses[q.id]?.answer,
-          is_marked_review: responses[q.id]?.state === "marked" || responses[q.id]?.state === "attempted-marked",
-        }, { onConflict: "test_id,question_id" });
+        timeSpentMap.current[q.id] = (timeSpentMap.current[q.id] ?? 0) + elapsed;
       }
 
-      // Call submit-test edge function
+      await saveResponses();
+
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
 
       const res = await supabase.functions.invoke("submit-test", {
-        body: { test_id: testId, user_id: user!.id },
+        body: { test_id: testId },
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
 
       if (res.error) throw new Error(res.error.message);
+      if (res.data?.error) throw new Error(res.data.error);
 
-      toast.success(autoSubmit ? "Time's up! Test submitted." : "Test submitted successfully!");
+      toast.success(autoSubmit ? "Time's up! Test submitted." : "Test submitted!");
       navigate(`/app/mock-test/results/${testId}`);
     } catch (err: any) {
       console.error("[TestSession] submit error:", err);
-      toast.error("Failed to submit test: " + (err.message ?? "Unknown error"));
+      toast.error("Failed to submit: " + (err.message ?? "Unknown error"));
     } finally {
       setSubmitting(false);
       setShowSubmitModal(false);
     }
   }
-
-  // Track time on question change
-  useEffect(() => {
-    questionStartRef.current = Date.now();
-  }, [currentIndex]);
 
   if (loading) {
     return (
@@ -320,6 +379,7 @@ export default function TestSession() {
   const isMarked = currentResp.state === "marked" || currentResp.state === "attempted-marked";
 
   const attempted   = Object.values(responses).filter((r) => r.answer).length;
+  const markedCount = Object.values(responses).filter((r) => r.state === "marked" || r.state === "attempted-marked").length;
   const unattempted = questions.length - attempted;
 
   const timerColor =
@@ -327,33 +387,57 @@ export default function TestSession() {
     timeLeft <= 600 ? "text-amber-400" :
     "text-foreground";
 
+  // Compute subject-wise counts for right panel
+  const subjectCounts: Record<string, { total: number; done: number }> = {};
+  for (const question of questions) {
+    if (!subjectCounts[question.subject]) subjectCounts[question.subject] = { total: 0, done: 0 };
+    subjectCounts[question.subject].total++;
+    if (responses[question.id]?.answer) subjectCounts[question.subject].done++;
+  }
+
+  // Live score (optimistic)
+  let liveScore = 0;
+  for (const qq of questions) {
+    const r = responses[qq.id];
+    if (!r?.answer) continue;
+    const marksPos = parseFloat(qq.marks_positive as any ?? 4);
+    const marksNeg = parseFloat(qq.marks_negative as any ?? 1);
+    // Can't know if correct without ground truth — show attempted count instead
+    liveScore += marksPos * 0.6; // rough optimistic estimate — displayed as approx
+  }
+
   return (
     <div className="flex flex-col h-screen bg-background overflow-hidden">
       {/* ── Top bar ── */}
-      <div className="flex items-center justify-between border-b border-border px-4 py-2 shrink-0">
-        <p className="font-semibold text-foreground text-sm truncate max-w-xs">
+      <div className="flex items-center justify-between border-b border-border px-4 py-2 shrink-0 gap-4">
+        <p className="font-semibold text-foreground text-sm truncate max-w-xs hidden md:block">
           {test?.test_name ?? "Test Session"}
         </p>
         <div className={cn("flex items-center gap-1.5 font-mono text-lg font-bold", timerColor)}>
           <Clock className="h-4 w-4" />
           {formatTime(timeLeft)}
         </div>
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={() => setShowSubmitModal(true)}
-          disabled={submitting}
-        >
-          <Send className="h-3.5 w-3.5 mr-1.5" />
-          Submit
-        </Button>
+        <div className="flex items-center gap-3">
+          <span className="text-xs text-muted-foreground hidden sm:block">
+            {attempted}/{questions.length} done
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => setShowSubmitModal(true)}
+            disabled={submitting}
+          >
+            <Send className="h-3.5 w-3.5 mr-1.5" />
+            Submit
+          </Button>
+        </div>
       </div>
 
       {/* ── Main area ── */}
       <div className="flex flex-1 overflow-hidden">
         {/* ── Left: question navigator ── */}
         <div className="hidden md:flex flex-col w-48 border-r border-border overflow-y-auto p-3 gap-2 shrink-0">
-          <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold mb-1">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
             Navigator
           </p>
           <div className="grid grid-cols-5 gap-1">
@@ -366,7 +450,7 @@ export default function TestSession() {
                   onClick={() => setCurrentIndex(i)}
                   className={cn(
                     "w-7 h-7 rounded-lg text-[11px] font-bold border transition-all",
-                    STATE_COLORS[r.state],
+                    STATE_COLORS[r.state as QuestionState],
                     i === currentIndex && "ring-2 ring-violet-500"
                   )}
                 >
@@ -377,11 +461,11 @@ export default function TestSession() {
           </div>
 
           {/* Legend */}
-          <div className="mt-3 space-y-1.5">
+          <div className="mt-2 space-y-1.5">
             {[
-              { state: "unattempted", label: "Not visited" },
-              { state: "attempted", label: "Answered" },
-              { state: "marked", label: "For review" },
+              { state: "unattempted",      label: "Not visited" },
+              { state: "attempted",        label: "Answered" },
+              { state: "marked",           label: "For review" },
               { state: "attempted-marked", label: "Ans + review" },
             ].map(({ state, label }) => (
               <div key={state} className="flex items-center gap-1.5">
@@ -390,22 +474,16 @@ export default function TestSession() {
               </div>
             ))}
           </div>
-
-          {/* Live score */}
-          <div className="mt-3 rounded-xl bg-muted/20 p-2 text-center">
-            <p className="text-xs text-muted-foreground">Attempted</p>
-            <p className="text-lg font-bold text-foreground">{attempted}/{questions.length}</p>
-          </div>
         </div>
 
-        {/* ── Center: question panel ── */}
+        {/* ── Center: question ── */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
           <div className="max-w-2xl mx-auto space-y-5">
             {/* Question header */}
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-semibold text-muted-foreground">
-                  Q{currentIndex + 1} of {questions.length}
+                  Q{currentIndex + 1} / {questions.length}
                 </span>
                 <span className={cn(
                   "text-[10px] font-semibold px-2 py-0.5 rounded-full",
@@ -417,21 +495,23 @@ export default function TestSession() {
                 </span>
                 <span className="text-[10px] text-muted-foreground">{q.subject} · {q.topic}</span>
               </div>
-              <div className="text-[10px] text-muted-foreground">
+              <div className="text-[10px] text-muted-foreground shrink-0">
                 +{q.marks_positive} / −{q.marks_negative}
               </div>
             </div>
 
-            {/* Question text */}
+            {/* Question text with LaTeX */}
             <div className="rounded-xl border border-border bg-card p-4">
-              <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{q.question_text}</p>
+              <div className="text-sm text-foreground leading-relaxed">
+                <MathText text={q.question_text} />
+              </div>
               {q.image_url && (
                 <img src={q.image_url} alt="Question" className="mt-3 max-h-48 rounded-lg object-contain" />
               )}
             </div>
 
             {/* Answer area */}
-            {q.question_type === "MCQ" || q.question_type === "TRUE_FALSE" ? (
+            {(q.question_type === "MCQ" || q.question_type === "TRUE_FALSE") ? (
               <div className="space-y-2">
                 {(q.options ?? []).map((opt) => (
                   <button
@@ -453,7 +533,9 @@ export default function TestSession() {
                     )}>
                       {opt.label}
                     </span>
-                    <span className="text-sm text-foreground">{opt.text}</span>
+                    <span className="text-sm text-foreground">
+                      <MathText text={opt.text} />
+                    </span>
                   </button>
                 ))}
               </div>
@@ -476,7 +558,7 @@ export default function TestSession() {
                 className={cn(isMarked && "border-amber-500/50 text-amber-400 bg-amber-500/10")}
               >
                 <Flag className="h-3.5 w-3.5 mr-1.5" />
-                {isMarked ? "Unmark Review" : "Mark for Review"}
+                {isMarked ? "Unmark" : "Mark for Review"}
               </Button>
               <Button size="sm" variant="outline" onClick={clearResponse}>
                 <X className="h-3.5 w-3.5 mr-1.5" />
@@ -489,7 +571,7 @@ export default function TestSession() {
             </div>
 
             {/* Navigation */}
-            <div className="flex items-center justify-between pt-2">
+            <div className="flex items-center justify-between pt-2 border-t border-border">
               <Button
                 variant="outline"
                 size="sm"
@@ -513,9 +595,46 @@ export default function TestSession() {
               ) : (
                 <Button size="sm" onClick={() => setShowSubmitModal(true)}>
                   <Send className="h-4 w-4 mr-1.5" />
-                  Submit
+                  Submit Test
                 </Button>
               )}
+            </div>
+          </div>
+        </div>
+
+        {/* ── Right: subject-wise counts + live stats ── */}
+        <div className="hidden lg:flex flex-col w-44 border-l border-border overflow-y-auto p-3 gap-3 shrink-0">
+          <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
+            Progress
+          </p>
+          <div className="space-y-2">
+            {Object.entries(subjectCounts).map(([subj, counts]) => (
+              <div key={subj} className="space-y-1">
+                <div className="flex justify-between text-[10px]">
+                  <span className="text-muted-foreground truncate mr-1">{subj}</span>
+                  <span className="font-bold text-foreground shrink-0">{counts.done}/{counts.total}</span>
+                </div>
+                <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-violet-500 transition-all"
+                    style={{ width: `${counts.total > 0 ? (counts.done / counts.total) * 100 : 0}%` }}
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 rounded-xl bg-muted/20 p-2 space-y-1.5 text-center">
+            <div>
+              <p className="text-[10px] text-muted-foreground">Attempted</p>
+              <p className="text-sm font-bold text-green-400">{attempted}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground">Skipped</p>
+              <p className="text-sm font-bold text-muted-foreground">{unattempted}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground">For review</p>
+              <p className="text-sm font-bold text-amber-400">{markedCount}</p>
             </div>
           </div>
         </div>
@@ -537,9 +656,7 @@ export default function TestSession() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Marked for review</span>
-                <span className="font-semibold text-amber-400">
-                  {Object.values(responses).filter((r) => r.state === "marked" || r.state === "attempted-marked").length}
-                </span>
+                <span className="font-semibold text-amber-400">{markedCount}</span>
               </div>
             </div>
             {unattempted > 0 && (
@@ -563,7 +680,7 @@ export default function TestSession() {
                 loading={submitting}
               >
                 <Send className="h-4 w-4 mr-1.5" />
-                Confirm
+                Confirm Submit
               </Button>
             </div>
           </div>

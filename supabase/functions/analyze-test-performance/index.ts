@@ -4,8 +4,8 @@ import { geminiGenerate } from "../_shared/gemini.ts";
 
 // ─────────────────────────────────────────────────────────────────
 // analyze-test-performance
-// Generates AI analysis report using Gemini for a completed test.
-// Costs 3 credits. Saves result to test_analyses.ai_analysis_text.
+// Verifies JWT, then generates AI analysis for a completed test.
+// Costs 3 credits. Saves to test_analyses.ai_analysis_text.
 // ─────────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `You are an expert exam coach specializing in competitive exams
@@ -17,37 +17,47 @@ Deno.serve(async (req) => {
   if (cors) return cors;
 
   try {
+    // ── Verify JWT ────────────────────────────────────────────────
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+    const token = authHeader.replace("Bearer ", "");
+    const db = createServiceClient();
 
-    const { test_id, user_id } = await req.json();
-    if (!test_id || !user_id) {
-      return new Response(JSON.stringify({ error: "Missing test_id or user_id" }), {
+    const { data: { user }, error: authErr } = await db.auth.getUser(token);
+    if (authErr || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const userId = user.id;
+
+    const { test_id } = await req.json();
+    if (!test_id) {
+      return new Response(JSON.stringify({ error: "Missing test_id" }), {
         status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const db = createServiceClient();
-
-    // Fetch existing analysis
+    // ── Fetch analysis — ownership enforced ───────────────────────
     const { data: analysis, error: aErr } = await db
       .from("test_analyses")
       .select("*")
       .eq("test_id", test_id)
-      .eq("user_id", user_id)
+      .eq("user_id", userId)     // ownership check
       .single();
 
     if (aErr || !analysis) {
-      return new Response(JSON.stringify({ error: "Test analysis not found. Submit the test first." }), {
-        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Test analysis not found. Submit the test first." }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    // If already has AI analysis, return it
+    // If already has AI analysis, return cached
     if (analysis.ai_analysis_text) {
       return new Response(
         JSON.stringify({ success: true, analysis: analysis.ai_analysis_text, cached: true }),
@@ -55,19 +65,21 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Deduct 3 credits
-    const credited = await deductCredits(db, user_id, 3, "AI test analysis");
+    // ── Deduct 3 credits ──────────────────────────────────────────
+    const credited = await deductCredits(db, userId, 3, "AI test analysis");
     if (!credited) {
-      return new Response(JSON.stringify({ error: "Insufficient credits. AI analysis costs 3 credits." }), {
-        status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Insufficient credits. AI analysis costs 3 credits." }),
+        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    // Fetch test config
+    // ── Fetch test config ─────────────────────────────────────────
     const { data: test } = await db
       .from("mock_tests")
       .select("test_name, config, submitted_at")
       .eq("id", test_id)
+      .eq("user_id", userId)
       .single();
 
     const prompt = `Analyze this student's mock test performance and write a comprehensive 600-word coaching report.
@@ -75,7 +87,7 @@ Deno.serve(async (req) => {
 TEST: ${test?.test_name ?? "Mock Test"}
 Score: ${analysis.total_score} / ${analysis.max_score} (${analysis.accuracy}% accuracy)
 Attempt Rate: ${analysis.attempt_percentage}%
-Predicted Percentile: ${analysis.predicted_percentile}%
+Predicted Percentile: ~${analysis.predicted_percentile}th
 
 SUBJECT BREAKDOWN:
 ${JSON.stringify(analysis.subject_breakdown, null, 2)}
@@ -85,7 +97,7 @@ STRONG TOPICS (accuracy > 80%): ${(analysis.strong_topics ?? []).join(", ") || "
 
 TIME ANALYSIS:
 Average time per question: ${analysis.time_analysis?.avg_seconds ?? 0} seconds
-Number of time traps: ${(analysis.time_analysis?.time_traps ?? []).length}
+Time traps (unusually slow questions): ${(analysis.time_analysis?.time_traps ?? []).length}
 
 Write a structured report with EXACTLY these 5 sections using these exact headers:
 
@@ -108,11 +120,12 @@ Be specific, encouraging, and actionable. Use the actual topic and subject names
 
     const analysisText = await geminiGenerate(prompt, SYSTEM_PROMPT, 0.7, 2048);
 
-    // Save to test_analyses
+    // ── Save to test_analyses ─────────────────────────────────────
     await db
       .from("test_analyses")
       .update({ ai_analysis_text: analysisText })
-      .eq("test_id", test_id);
+      .eq("test_id", test_id)
+      .eq("user_id", userId);
 
     return new Response(
       JSON.stringify({ success: true, analysis: analysisText, cached: false }),

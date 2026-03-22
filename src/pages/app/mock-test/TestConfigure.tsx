@@ -1,10 +1,7 @@
 // @ts-nocheck
 import { useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import {
-  Settings, Zap, ChevronRight, BookOpen, Calendar,
-  Sliders, Clock, Target, Shuffle,
-} from "lucide-react";
+import { Zap, ChevronRight } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
@@ -13,13 +10,38 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { toast } from "sonner";
 
 const EXAM_SUBJECTS: Record<string, string[]> = {
-  JEE_MAIN:   ["Physics", "Chemistry", "Mathematics"],
-  JEE_ADV:    ["Physics", "Chemistry", "Mathematics"],
-  NEET:       ["Biology", "Physics", "Chemistry"],
-  UPSC:       ["General Studies", "Current Affairs", "Essay"],
-  SSC_CGL:    ["Reasoning", "Quantitative Aptitude", "English", "General Knowledge"],
-  IBPS_PO:    ["Reasoning", "Quantitative Aptitude", "English", "Computer Awareness", "Banking"],
-  CUSTOM:     [],
+  JEE_MAIN: ["Physics", "Chemistry", "Mathematics"],
+  JEE_ADV:  ["Physics", "Chemistry", "Mathematics"],
+  NEET:     ["Biology", "Physics", "Chemistry"],
+  UPSC:     ["General Studies", "Current Affairs", "Essay"],
+  SSC_CGL:  ["Reasoning", "Quantitative Aptitude", "English", "General Knowledge"],
+  IBPS_PO:  ["Reasoning", "Quantitative Aptitude", "English", "Computer Awareness", "Banking"],
+  CUSTOM:   [],
+};
+
+const EXAM_TOPICS: Record<string, string[]> = {
+  JEE_MAIN: [
+    "Mechanics", "Thermodynamics", "Electrostatics", "Magnetism", "Optics", "Modern Physics",
+    "Organic Chemistry", "Inorganic Chemistry", "Physical Chemistry",
+    "Algebra", "Calculus", "Trigonometry", "Coordinate Geometry", "Vectors",
+  ],
+  NEET: [
+    "Cell Biology", "Genetics", "Human Physiology", "Plant Physiology", "Ecology",
+    "Mechanics", "Thermodynamics", "Optics",
+    "Organic Chemistry", "Inorganic Chemistry", "Physical Chemistry",
+  ],
+  UPSC: [
+    "History", "Geography", "Polity", "Economy", "Science & Technology",
+    "Environment", "International Relations", "Ethics",
+  ],
+  SSC_CGL: [
+    "Number System", "Percentage", "Ratio", "Time & Work", "Geometry",
+    "Verbal Reasoning", "Non-verbal Reasoning", "English Grammar", "Current Affairs",
+  ],
+  IBPS_PO: [
+    "Number Series", "Data Interpretation", "Seating Arrangement", "Syllogism",
+    "Banking Awareness", "Reading Comprehension",
+  ],
 };
 
 const SOURCE_OPTIONS = [
@@ -27,20 +49,6 @@ const SOURCE_OPTIONS = [
   { id: "AI_GENERATED",  label: "AI-Generated" },
   { id: "USER_UPLOAD",   label: "My Uploads" },
 ];
-
-interface TestConfig {
-  exam_type: string;
-  test_name: string;
-  subjects: string[];
-  source_types: string[];
-  year_range: { min: number | null; max: number | null } | null;
-  difficulty_distribution: { EASY: number; MEDIUM: number; HARD: number };
-  question_count: number;
-  duration_minutes: number;
-  marks_positive: number;
-  marks_negative: number;
-  randomize_order: boolean;
-}
 
 function Label({ children }: { children: React.ReactNode }) {
   return (
@@ -57,13 +65,18 @@ export default function TestConfigure() {
 
   const examFromURL = searchParams.get("exam") ?? "JEE_MAIN";
   const isQuick = searchParams.get("quick") === "true";
+  const yearMinFromURL = searchParams.get("year_min") ? Number(searchParams.get("year_min")) : null;
+  const yearMaxFromURL = searchParams.get("year_max") ? Number(searchParams.get("year_max")) : null;
 
-  const [config, setConfig] = useState<TestConfig>({
+  const [config, setConfig] = useState({
     exam_type:              isQuick ? "CUSTOM" : examFromURL,
-    test_name:              isQuick ? "Quick Drill" : `${examFromURL.replace("_", " ")} Practice Test`,
+    test_name:              isQuick ? "Quick Drill" : `${examFromURL.replace(/_/g, " ")} Practice Test`,
     subjects:               isQuick ? [] : (EXAM_SUBJECTS[examFromURL] ?? []),
-    source_types:           ["OFFICIAL_PYP", "AI_GENERATED"],
-    year_range:             null,
+    topics:                 [] as string[],
+    source_types:           ["OFFICIAL_PYP", "AI_GENERATED"] as string[],
+    year_range:             yearMinFromURL || yearMaxFromURL
+      ? { min: yearMinFromURL, max: yearMaxFromURL }
+      : null as { min: number | null; max: number | null } | null,
     difficulty_distribution: isQuick
       ? { EASY: 30, MEDIUM: 50, HARD: 20 }
       : { EASY: 30, MEDIUM: 40, HARD: 30 },
@@ -77,6 +90,7 @@ export default function TestConfigure() {
   const [loading, setLoading] = useState(false);
 
   const subjects = EXAM_SUBJECTS[config.exam_type] ?? [];
+  const availableTopics = EXAM_TOPICS[config.exam_type] ?? [];
 
   function toggleSubject(s: string) {
     setConfig((c) => ({
@@ -84,6 +98,15 @@ export default function TestConfigure() {
       subjects: c.subjects.includes(s)
         ? c.subjects.filter((x) => x !== s)
         : [...c.subjects, s],
+    }));
+  }
+
+  function toggleTopic(t: string) {
+    setConfig((c) => ({
+      ...c,
+      topics: c.topics.includes(t)
+        ? c.topics.filter((x) => x !== t)
+        : [...c.topics, t],
     }));
   }
 
@@ -105,35 +128,38 @@ export default function TestConfigure() {
 
   async function handleStart() {
     if (!user?.id) return;
+    if (!config.test_name.trim()) {
+      toast.error("Please enter a test name");
+      return;
+    }
     setLoading(true);
     try {
-      // Call select-test-questions edge function
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
 
       const res = await supabase.functions.invoke("select-test-questions", {
-        body: { config, user_id: user.id },
+        body: { config },
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
 
       if (res.error) throw new Error(res.error.message);
+      if (res.data?.error) throw new Error(res.data.error);
 
       const { question_ids } = res.data as { question_ids: string[] };
 
       if (!question_ids || question_ids.length === 0) {
-        toast.error("No questions found matching your criteria. Try different settings.");
+        toast.error("No questions found matching your criteria. Try different settings or add more questions to your bank.");
         return;
       }
 
-      // Create mock_test row
       const { data: newTest, error: insertErr } = await supabase
         .from("mock_tests")
         .insert({
-          user_id:           user.id,
-          test_name:         config.test_name,
+          user_id:            user.id,
+          test_name:          config.test_name,
           config,
           question_ids,
-          status:            "DRAFT",
+          status:             "DRAFT",
           time_limit_minutes: config.duration_minutes,
         })
         .select("id")
@@ -166,7 +192,7 @@ export default function TestConfigure() {
 
       {/* ── Test name ── */}
       <Card>
-        <CardContent className="py-4 space-y-4">
+        <CardContent className="py-4 space-y-3">
           <Label>Test Name</Label>
           <input
             type="text"
@@ -192,6 +218,7 @@ export default function TestConfigure() {
                     ...c,
                     exam_type: et,
                     subjects: EXAM_SUBJECTS[et] ?? [],
+                    topics: [],
                     test_name: et === "CUSTOM" ? c.test_name : `${et.replace(/_/g, " ")} Practice Test`,
                   }));
                 }}
@@ -212,7 +239,7 @@ export default function TestConfigure() {
       {subjects.length > 0 && (
         <Card>
           <CardContent className="py-4 space-y-3">
-            <Label>Subjects</Label>
+            <Label>Subjects (select to filter)</Label>
             <div className="flex flex-wrap gap-2">
               {subjects.map((s) => (
                 <button
@@ -229,6 +256,40 @@ export default function TestConfigure() {
                 </button>
               ))}
             </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* ── Topics ── */}
+      {availableTopics.length > 0 && (
+        <Card>
+          <CardContent className="py-4 space-y-3">
+            <Label>Topics (optional — leave empty for all topics)</Label>
+            <div className="flex flex-wrap gap-2">
+              {availableTopics.map((t) => (
+                <button
+                  key={t}
+                  type="button"
+                  onClick={() => toggleTopic(t)}
+                  className={`rounded-full px-3 py-1 text-xs font-medium border transition-all ${
+                    config.topics.includes(t)
+                      ? "border-blue-500/50 bg-blue-500/15 text-blue-300"
+                      : "border-border text-muted-foreground hover:border-blue-500/30"
+                  }`}
+                >
+                  {t}
+                </button>
+              ))}
+            </div>
+            {config.topics.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setConfig((c) => ({ ...c, topics: [] }))}
+                className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+              >
+                Clear topic filter
+              </button>
+            )}
           </CardContent>
         </Card>
       )}
@@ -252,6 +313,45 @@ export default function TestConfigure() {
                 {src.label}
               </button>
             ))}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* ── Year range ── */}
+      <Card>
+        <CardContent className="py-4 space-y-3">
+          <Label>Year Range (for Previous Year Papers)</Label>
+          <div className="grid grid-cols-2 gap-4">
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">From year</p>
+              <input
+                type="number"
+                min="2000"
+                max={new Date().getFullYear()}
+                placeholder="e.g. 2018"
+                value={config.year_range?.min ?? ""}
+                onChange={(e) => setConfig((c) => ({
+                  ...c,
+                  year_range: { min: e.target.value ? Number(e.target.value) : null, max: c.year_range?.max ?? null },
+                }))}
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+              />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground mb-1">To year</p>
+              <input
+                type="number"
+                min="2000"
+                max={new Date().getFullYear()}
+                placeholder={String(new Date().getFullYear())}
+                value={config.year_range?.max ?? ""}
+                onChange={(e) => setConfig((c) => ({
+                  ...c,
+                  year_range: { min: c.year_range?.min ?? null, max: e.target.value ? Number(e.target.value) : null },
+                }))}
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+              />
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -323,12 +423,18 @@ export default function TestConfigure() {
               </span>
             </div>
           ))}
+          <p className="text-[10px] text-muted-foreground">
+            Sum: {Object.values(config.difficulty_distribution).reduce((a, b) => a + b, 0)}%
+            {Object.values(config.difficulty_distribution).reduce((a, b) => a + b, 0) !== 100 && (
+              <span className="text-amber-400 ml-1">(should total 100%)</span>
+            )}
+          </p>
         </CardContent>
       </Card>
 
       {/* ── Marking scheme ── */}
       <Card>
-        <CardContent className="py-4 space-y-4">
+        <CardContent className="py-4 space-y-3">
           <Label>Marking Scheme</Label>
           <div className="grid grid-cols-2 gap-4">
             <div>
@@ -374,20 +480,20 @@ export default function TestConfigure() {
         </CardContent>
       </Card>
 
+      {/* ── Info row ── */}
+      <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-4 py-3">
+        <p className="text-xs text-muted-foreground">
+          <span className="text-violet-300 font-semibold">2 credits</span> will be deducted when you start the test.
+          Free plan: up to 2 tests per month.
+        </p>
+      </div>
+
       {/* ── Start button ── */}
       <div className="flex gap-3">
-        <Button
-          variant="outline"
-          onClick={() => navigate("/app/mock-test")}
-          className="flex-1"
-        >
+        <Button variant="outline" onClick={() => navigate("/app/mock-test")} className="flex-1">
           Cancel
         </Button>
-        <Button
-          onClick={handleStart}
-          loading={loading}
-          className="flex-1"
-        >
+        <Button onClick={handleStart} loading={loading} className="flex-1">
           <Zap className="h-4 w-4 mr-2" />
           Start Test
         </Button>

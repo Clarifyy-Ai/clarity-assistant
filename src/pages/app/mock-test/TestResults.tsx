@@ -4,7 +4,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   Trophy, Target, Clock, ChevronRight, CheckCircle,
   XCircle, Minus, Brain, TrendingUp, ChevronDown,
-  ChevronUp, ArrowLeft, Loader2,
+  ChevronUp, ArrowLeft, Loader2, Zap, AlertTriangle,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
@@ -14,11 +14,16 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
+type QuestionFilter = "all" | "wrong" | "marked";
+
 // ─────────────────────────────────────────────────────────────────
-// Types
+// Helpers
 // ─────────────────────────────────────────────────────────────────
 
-type QuestionFilter = "all" | "wrong" | "marked";
+// Flag a question as "likely guessed" if answered very quickly (< 10s)
+function isLikelyGuessed(timeSpent: number, avgTime: number): boolean {
+  return timeSpent > 0 && timeSpent < Math.max(10, avgTime * 0.3);
+}
 
 // ─────────────────────────────────────────────────────────────────
 // Component
@@ -89,7 +94,7 @@ export default function TestResults() {
       const token = session?.session?.access_token;
 
       const res = await supabase.functions.invoke("analyze-test-performance", {
-        body: { test_id: testId, user_id: user!.id },
+        body: { test_id: testId },
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
 
@@ -127,6 +132,17 @@ export default function TestResults() {
 
   const topicBD = analysis.topic_breakdown ?? {};
   const subjectBD = analysis.subject_breakdown ?? {};
+  const avgTime = analysis.time_analysis?.avg_seconds ?? 0;
+  const timeTraps: string[] = (analysis.time_analysis?.time_traps ?? []).map((t: any) => t.question_id);
+
+  // Rank tier from analysis or compute
+  const rankTier =
+    (analysis.predicted_percentile ?? 0) >= 99 ? "Top 1%" :
+    (analysis.predicted_percentile ?? 0) >= 95 ? "Top 5%" :
+    (analysis.predicted_percentile ?? 0) >= 90 ? "Top 10%" :
+    (analysis.predicted_percentile ?? 0) >= 75 ? "Top 25%" :
+    (analysis.predicted_percentile ?? 0) >= 50 ? "Top 50%" :
+    "Bottom 50%";
 
   const filteredQuestions = questions.filter((q) => {
     const r = responses[q.id];
@@ -154,7 +170,7 @@ export default function TestResults() {
         {[
           {
             label: "Score",
-            value: `${Math.max(0, analysis.total_score)}/${analysis.max_score}`,
+            value: `${Math.max(0, analysis.total_score ?? 0)}/${analysis.max_score ?? 0}`,
             icon: <Trophy className="h-5 w-5 text-amber-400" />,
             color: "text-amber-400",
           },
@@ -185,6 +201,43 @@ export default function TestResults() {
             </CardContent>
           </Card>
         ))}
+      </div>
+
+      {/* ── Rank tier + time summary ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+        <Card className="border-violet-500/20 bg-violet-500/5">
+          <CardContent className="py-3 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-violet-500/20 flex items-center justify-center shrink-0">
+              <Trophy className="h-5 w-5 text-violet-400" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Estimated Rank Tier</p>
+              <p className="font-bold text-foreground">{rankTier}</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-3 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-blue-500/20 flex items-center justify-center shrink-0">
+              <Clock className="h-5 w-5 text-blue-400" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Avg per Question</p>
+              <p className="font-bold text-foreground">{avgTime}s</p>
+            </div>
+          </CardContent>
+        </Card>
+        <Card>
+          <CardContent className="py-3 flex items-center gap-3">
+            <div className="h-9 w-9 rounded-lg bg-amber-500/20 flex items-center justify-center shrink-0">
+              <AlertTriangle className="h-5 w-5 text-amber-400" />
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Time Traps</p>
+              <p className="font-bold text-foreground">{timeTraps.length}</p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
 
       {/* ── Subject breakdown ── */}
@@ -221,9 +274,9 @@ export default function TestResults() {
                         </span>
                       </td>
                       <td className={cn("py-2 text-right font-semibold",
-                        data.marks >= 0 ? "text-green-400" : "text-red-400"
+                        (data.marks ?? 0) >= 0 ? "text-green-400" : "text-red-400"
                       )}>
-                        {data.marks >= 0 ? "+" : ""}{data.marks?.toFixed(0) ?? 0}
+                        {(data.marks ?? 0) >= 0 ? "+" : ""}{(data.marks ?? 0).toFixed(0)}
                       </td>
                     </tr>
                   ))}
@@ -238,7 +291,7 @@ export default function TestResults() {
       {Object.keys(topicBD).length > 0 && (
         <Card>
           <CardContent className="py-4">
-            <h3 className="text-sm font-semibold text-foreground mb-3">Topic Accuracy Heatmap</h3>
+            <h3 className="text-sm font-semibold text-foreground mb-1">Topic Accuracy Heatmap</h3>
             <p className="text-xs text-muted-foreground mb-3">Click a topic to filter questions below.</p>
             <div className="flex flex-wrap gap-2">
               {Object.entries(topicBD).map(([topic, data]: [string, any]) => {
@@ -256,48 +309,20 @@ export default function TestResults() {
                       data.attempted > 0 ? "bg-red-500/20 text-red-400 border-red-500/30" :
                       "bg-muted/30 text-muted-foreground border-border"
                     )}
-                    title={`${topic}: ${data.correct}/${data.attempted} correct (${acc}%)`}
+                    title={`${topic}: ${data.correct}/${data.attempted} (${acc}%)`}
                   >
                     {topic}
-                    {data.attempted > 0 && (
-                      <span className="ml-1 opacity-70">{acc}%</span>
-                    )}
+                    {data.attempted > 0 && <span className="ml-1 opacity-70">{acc}%</span>}
                   </button>
                 );
               })}
             </div>
             {topicFilter && (
-              <button
-                type="button"
-                onClick={() => setTopicFilter(null)}
-                className="mt-2 text-xs text-violet-400 hover:underline"
-              >
+              <button type="button" onClick={() => setTopicFilter(null)}
+                className="mt-2 text-xs text-violet-400 hover:underline">
                 Clear filter
               </button>
             )}
-          </CardContent>
-        </Card>
-      )}
-
-      {/* ── Time analysis ── */}
-      {analysis.time_analysis && (
-        <Card>
-          <CardContent className="py-4">
-            <h3 className="text-sm font-semibold text-foreground mb-3">Time Analysis</h3>
-            <div className="flex items-center gap-6 text-sm">
-              <div>
-                <p className="text-muted-foreground text-xs">Avg per question</p>
-                <p className="font-bold text-foreground">
-                  {analysis.time_analysis.avg_seconds ?? 0}s
-                </p>
-              </div>
-              <div>
-                <p className="text-muted-foreground text-xs">Time traps</p>
-                <p className="font-bold text-amber-400">
-                  {(analysis.time_analysis.time_traps ?? []).length}
-                </p>
-              </div>
-            </div>
           </CardContent>
         </Card>
       )}
@@ -331,16 +356,18 @@ export default function TestResults() {
                 onClick={generateAIAnalysis}
                 loading={aiLoading}
               >
-                <Brain className="h-3.5 w-3.5 mr-1.5" />
+                <Zap className="h-3.5 w-3.5 mr-1.5" />
                 Generate (3 credits)
               </Button>
             )}
           </div>
 
           {showAI && analysis.ai_analysis_text && (
-            <div className="mt-4 prose prose-sm prose-invert max-w-none">
-              <div className="space-y-4 text-sm text-foreground leading-relaxed">
-                {analysis.ai_analysis_text.split(/^##\s/m).filter(Boolean).map((section: string, i: number) => {
+            <div className="mt-4 space-y-3">
+              {analysis.ai_analysis_text
+                .split(/^##\s/m)
+                .filter(Boolean)
+                .map((section: string, i: number) => {
                   const lines = section.split("\n");
                   const heading = lines[0];
                   const content = lines.slice(1).join("\n").trim();
@@ -350,8 +377,8 @@ export default function TestResults() {
                       <p className="text-sm text-foreground/80 whitespace-pre-wrap">{content}</p>
                     </div>
                   );
-                })}
-              </div>
+                })
+              }
             </div>
           )}
 
@@ -389,20 +416,20 @@ export default function TestResults() {
           </div>
           <div className="space-y-4">
             {filteredQuestions.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-4">No questions match the filter.</p>
+              <p className="text-sm text-muted-foreground text-center py-6">No questions match the filter.</p>
             ) : (
-              filteredQuestions.map((q, i) => {
+              filteredQuestions.map((q) => {
                 const r = responses[q.id];
-                const isCorrect = r?.is_correct;
-                const isAttempted = r?.is_attempted;
+                const isTimeTrap = timeTraps.includes(q.id);
+                const guessed = isLikelyGuessed(r?.time_spent_seconds ?? 0, avgTime);
                 return (
                   <QuestionReviewCard
                     key={q.id}
                     number={questions.indexOf(q) + 1}
                     question={q}
                     response={r}
-                    isCorrect={isCorrect}
-                    isAttempted={isAttempted}
+                    isTimeTrap={isTimeTrap}
+                    isGuessed={guessed && (r?.is_attempted)}
                   />
                 );
               })
@@ -417,7 +444,7 @@ export default function TestResults() {
           Back to Hub
         </Button>
         <Button onClick={() => navigate("/app/mock-test/revision")} className="flex-1">
-          Review Weak Topics
+          Revision List
           <ChevronRight className="h-4 w-4 ml-1.5" />
         </Button>
       </div>
@@ -426,15 +453,17 @@ export default function TestResults() {
 }
 
 function QuestionReviewCard({
-  number, question, response, isCorrect, isAttempted,
+  number, question, response, isTimeTrap, isGuessed,
 }: {
   number: number;
   question: any;
   response: any;
-  isCorrect: boolean;
-  isAttempted: boolean;
+  isTimeTrap: boolean;
+  isGuessed: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const isCorrect  = response?.is_correct;
+  const isAttempted = response?.is_attempted;
 
   return (
     <div className={cn(
@@ -448,7 +477,7 @@ function QuestionReviewCard({
           {number}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
+          <div className="flex items-center gap-2 mb-1 flex-wrap">
             {isCorrect ? (
               <CheckCircle className="h-4 w-4 text-green-400 shrink-0" />
             ) : isAttempted ? (
@@ -457,11 +486,23 @@ function QuestionReviewCard({
               <Minus className="h-4 w-4 text-muted-foreground shrink-0" />
             )}
             <span className="text-xs text-muted-foreground">{question.subject} · {question.topic}</span>
+            {isTimeTrap && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-red-500/10 text-red-400 border border-red-500/20">
+                Time trap
+              </span>
+            )}
+            {isGuessed && (
+              <span className="text-[10px] px-1.5 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/20">
+                Likely guessed
+              </span>
+            )}
           </div>
           <p className="text-sm text-foreground">{question.question_text}</p>
         </div>
-        <button type="button" onClick={() => setExpanded((v) => !v)}>
-          {expanded ? <ChevronUp className="h-4 w-4 text-muted-foreground" /> : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
+        <button type="button" onClick={() => setExpanded((v) => !v)} className="shrink-0">
+          {expanded
+            ? <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            : <ChevronDown className="h-4 w-4 text-muted-foreground" />}
         </button>
       </div>
 
@@ -473,6 +514,11 @@ function QuestionReviewCard({
               <span className={cn("font-semibold", isCorrect ? "text-green-400" : "text-red-400")}>
                 {response?.user_answer ?? "—"}
               </span>
+              {response?.time_spent_seconds && (
+                <span className="text-muted-foreground ml-2 text-xs">
+                  ({response.time_spent_seconds}s)
+                </span>
+              )}
             </p>
           )}
           <p className="text-muted-foreground">

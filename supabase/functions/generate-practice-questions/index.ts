@@ -4,9 +4,8 @@ import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
 
 // ─────────────────────────────────────────────────────────────────
 // generate-practice-questions
-// Checks question count by topic; if below 20, generates 10 new
-// AI questions and saves them with source = 'AI_GENERATED'.
-// Called lazily when a test config would pull from a thin topic.
+// Verifies JWT, checks question count by topic; if below 20,
+// generates 10 MCQ questions via Gemini and saves them.
 // ─────────────────────────────────────────────────────────────────
 
 const SYSTEM_PROMPT = `You are an expert question setter for Indian competitive exams (JEE, NEET, UPSC, SSC).
@@ -17,8 +16,18 @@ Deno.serve(async (req) => {
   if (cors) return cors;
 
   try {
+    // ── Verify JWT ────────────────────────────────────────────────
     const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    if (!authHeader?.startsWith("Bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const token = authHeader.replace("Bearer ", "");
+    const db = createServiceClient();
+
+    const { data: { user }, error: authErr } = await db.auth.getUser(token);
+    if (authErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -31,9 +40,7 @@ Deno.serve(async (req) => {
       });
     }
 
-    const db = createServiceClient();
-
-    // Count existing questions for this topic
+    // ── Count existing questions for this topic ───────────────────
     const { count } = await db
       .from("questions")
       .select("id", { count: "exact", head: true })
