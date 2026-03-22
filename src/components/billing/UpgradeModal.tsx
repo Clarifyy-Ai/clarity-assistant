@@ -53,6 +53,13 @@ export function UpgradeModal() {
       if (error) throw error
       if (data?.url) {
         window.location.href = data.url
+      } else if (data?.error) {
+        const msg: string = data.error
+        toast.error(
+          msg.includes("not configured") || msg.includes("STRIPE_SECRET_KEY")
+            ? "Stripe is not configured on the server. Contact support to upgrade."
+            : msg
+        )
       } else {
         toast.error("Could not create checkout session.")
       }
@@ -92,6 +99,13 @@ export function UpgradeModal() {
       if (error) throw error
       if (data?.url) {
         window.location.href = data.url
+      } else if (data?.error) {
+        const msg: string = data.error
+        toast.error(
+          msg.includes("not configured") || msg.includes("STRIPE_SECRET_KEY")
+            ? "Stripe is not configured on the server. Contact support to buy credits."
+            : msg
+        )
       } else {
         toast.error("Could not create checkout session.")
       }

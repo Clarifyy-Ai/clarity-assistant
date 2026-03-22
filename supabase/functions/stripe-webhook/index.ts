@@ -83,14 +83,18 @@ Deno.serve(async (req) => {
             subscription_status: sub.status,
           }).eq("id", userId);
 
+          const stripePriceItem = sub.items.data[0]?.price;
+          const monthlyAmountCents = stripePriceItem?.unit_amount ?? null;
+
           await db.from("subscriptions").upsert({
             user_id:                userId,
             stripe_subscription_id: sub.id,
-            stripe_price_id:        sub.items.data[0]?.price?.id ?? null,
-            stripe_product_id:      sub.items.data[0]?.price?.product as string ?? null,
+            stripe_price_id:        stripePriceItem?.id ?? null,
+            stripe_product_id:      stripePriceItem?.product as string ?? null,
             plan_id:                dbPlanId,
             status:                 sub.status,
             monthly_credits:        monthlyCredits,
+            monthly_amount_cents:   monthlyAmountCents,
             current_period_start:   new Date((sub.current_period_start as number) * 1000).toISOString(),
             current_period_end:     new Date((sub.current_period_end as number) * 1000).toISOString(),
             updated_at:             new Date().toISOString(),

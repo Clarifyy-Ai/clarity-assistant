@@ -176,6 +176,7 @@ export interface Subscription {
   trialEndsAt?: Date;
   createdAt: Date;
   updatedAt: Date;
+  monthlyAmountCents?: number;
 }
 
 export type SubscriptionStatus =
@@ -256,12 +257,13 @@ export async function getUserSubscription(
   let currentPeriodEnd = new Date();
 
   let billingPlanId: PlanId = (data.plan_id as PlanId) ?? "free";
+  let monthlyAmountCents: number | undefined;
 
   if (data.subscription_id) {
     const [subRow] = await tryCatch(async () => {
       const { data: sub } = await supabase
         .from("subscriptions")
-        .select("cancel_at, current_period_end, stripe_subscription_id, plan_id")
+        .select("cancel_at, current_period_end, stripe_subscription_id, plan_id, monthly_amount_cents")
         .eq("user_id", userId)
         .maybeSingle();
       return sub;
@@ -270,6 +272,9 @@ export async function getUserSubscription(
     if (subRow?.current_period_end) currentPeriodEnd = new Date(subRow.current_period_end);
     if (subRow?.plan_id && VALID_PLAN_IDS_FRONTEND.has(subRow.plan_id as string)) {
       billingPlanId = subRow.plan_id as PlanId;
+    }
+    if (typeof subRow?.monthly_amount_cents === "number") {
+      monthlyAmountCents = subRow.monthly_amount_cents;
     }
   }
 
@@ -287,6 +292,7 @@ export async function getUserSubscription(
     trialEndsAt:          undefined,
     createdAt:            new Date(),
     updatedAt:            new Date(),
+    monthlyAmountCents,
   };
 }
 

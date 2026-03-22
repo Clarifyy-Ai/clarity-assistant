@@ -341,11 +341,11 @@ export default function SettingsBilling() {
                 </span>
               </div>
             )}
-            {subscription && !subscription.cancelAtPeriodEnd && (PLANS[subscription.planId]?.monthlyPrice ?? 0) > 0 && (
+            {subscription && !subscription.cancelAtPeriodEnd && (subscription.monthlyAmountCents ?? PLANS[subscription.planId]?.monthlyPrice ?? 0) > 0 && (
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Next invoice</span>
                 <span className="text-foreground font-medium">
-                  {formatPrice(PLANS[subscription.planId]!.monthlyPrice, false)}
+                  {formatPrice(subscription.monthlyAmountCents ?? PLANS[subscription.planId]!.monthlyPrice, false)}
                 </span>
               </div>
             )}

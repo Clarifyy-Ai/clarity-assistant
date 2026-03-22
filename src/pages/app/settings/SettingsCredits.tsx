@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
@@ -7,26 +6,16 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
-import { Zap, TrendingDown, RefreshCw, Info } from "lucide-react";
+import { Zap, TrendingDown, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";
 import { toast } from "sonner";
-
-// ─────────────────────────────────────────────────────────────────
-// SettingsCredits
-// ─────────────────────────────────────────────────────────────────
+import { CREDIT_PACKS, formatPrice } from "@/lib/billing/priceCalculator";
 
 const STRIPE_CONFIGURED =
   !!import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY ||
   !!import.meta.env.VITE_STRIPE_PRICE_STARTER_MONTHLY ||
-  !!import.meta.env.VITE_STRIPE_PRICE_CREDITS_100;
-
-const CREDIT_PACKS = [
-  { id: "100",  amount: 100,  price: 4.99,  bonus: 0,     stripePriceId: import.meta.env.VITE_STRIPE_PRICE_CREDITS_100  },
-  { id: "500",  amount: 500,  price: 19.99, bonus: 50,    stripePriceId: import.meta.env.VITE_STRIPE_PRICE_CREDITS_500  },
-  { id: "1000", amount: 1000, price: 34.99, bonus: 150,   popular: true, stripePriceId: import.meta.env.VITE_STRIPE_PRICE_CREDITS_1000 },
-  { id: "5000", amount: 5000, price: 99.99, bonus: 1000,  stripePriceId: import.meta.env.VITE_STRIPE_PRICE_CREDITS_5000 },
-];
+  !!import.meta.env.VITE_STRIPE_PRICE_CREDITS_50;
 
 const CREDIT_COSTS = [
   { action: "AI Hint",            cost: 2,   icon: "💡" },
@@ -57,10 +46,10 @@ export default function SettingsCredits() {
     }
   }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const remaining = profile?.credits_remaining ?? 0;
-  const monthly   = profile?.credits_monthly   ?? 50;
-  const used      = monthly - remaining;
-  const usedPct   = Math.min(100, (used / monthly) * 100);
+  const remaining = credits.balance ?? 0;
+  const monthly   = profile?.credits ?? 0;
+  const used      = Math.max(0, monthly - remaining);
+  const usedPct   = monthly > 0 ? Math.min(100, (used / monthly) * 100) : 0;
 
   async function handleBuy(packId: string) {
     const pack = CREDIT_PACKS.find((p) => p.id === packId);
@@ -83,6 +72,13 @@ export default function SettingsCredits() {
       if (error) throw error;
       if (data?.url) {
         window.location.href = data.url;
+      } else if (data?.error) {
+        const msg: string = data.error;
+        if (msg.includes("not configured") || msg.includes("STRIPE_SECRET_KEY")) {
+          toast.error("Stripe is not configured on the server. Contact support to buy credits.");
+        } else {
+          toast.error(msg);
+        }
       } else {
         toast.error("Could not create checkout session.");
       }
@@ -97,7 +93,6 @@ export default function SettingsCredits() {
     <div className="space-y-5">
       <h2 className="text-lg font-bold text-foreground">Credits</h2>
 
-      {/* Balance card */}
       <Card className="bg-gradient-to-r from-violet-600/10 to-blue-600/10 border-violet-500/20">
         <div className="flex items-start justify-between">
           <div>
@@ -132,7 +127,6 @@ export default function SettingsCredits() {
         )}
       </Card>
 
-      {/* Credit packs */}
       <div>
         <h3 className="text-sm font-semibold text-foreground mb-3">Buy credit packs</h3>
         <div className="grid grid-cols-2 gap-3">
@@ -141,31 +135,29 @@ export default function SettingsCredits() {
               key={pack.id}
               className={cn(
                 "flex flex-col gap-3 relative",
-                pack.popular && "border-violet-500/40 bg-violet-600/5"
+                pack.badge === "Most Popular" && "border-violet-500/40 bg-violet-600/5"
               )}
             >
-              {pack.popular && (
+              {pack.badge && (
                 <div className="absolute -top-2 right-3">
-                  <Badge variant="violet" size="sm">Best value</Badge>
+                  <Badge variant="violet" size="sm">{pack.badge}</Badge>
                 </div>
               )}
               <div>
                 <p className="text-xl font-black text-foreground">
-                  {pack.amount.toLocaleString()}
+                  {pack.credits.toLocaleString()}
                 </p>
                 <p className="text-xs text-muted-foreground">credits</p>
-                {pack.bonus > 0 && (
-                  <p className="text-[10px] text-emerald-400 mt-0.5">
-                    +{pack.bonus} bonus credits
-                  </p>
-                )}
               </div>
               <div className="flex items-center justify-between">
-                <p className="text-lg font-bold text-foreground">${pack.price}</p>
+                <p className="text-lg font-bold text-foreground">
+                  {formatPrice(pack.priceUsdCents)}
+                </p>
                 <Button
                   variant="secondary"
                   size="xs"
                   loading={buying === pack.id}
+                  disabled={!STRIPE_CONFIGURED || !pack.stripePriceId}
                   onClick={() => handleBuy(pack.id)}
                 >
                   Buy
@@ -176,7 +168,6 @@ export default function SettingsCredits() {
         </div>
       </div>
 
-      {/* Credit costs reference */}
       <Card>
         <div className="flex items-center gap-2 mb-4">
           <Info className="w-4 h-4 text-muted-foreground" />
