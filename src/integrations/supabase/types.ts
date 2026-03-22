@@ -1575,6 +1575,356 @@ export type Database = {
           },
         ]
       }
+      questions: {
+        Row: {
+          id: string
+          question_text: string
+          question_type: "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER" | "NUMERICAL" | "CODING"
+          options: Json | null
+          correct_answer: string
+          explanation: string | null
+          subject: string
+          topic: string
+          difficulty: "EASY" | "MEDIUM" | "HARD"
+          marks_positive: number
+          marks_negative: number
+          source_year: number | null
+          exam_type: string | null
+          latex_present: boolean
+          is_public: boolean
+          is_verified: boolean
+          source: string | null
+          uploaded_by: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          question_text: string
+          question_type?: "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER" | "NUMERICAL" | "CODING"
+          options?: Json | null
+          correct_answer: string
+          explanation?: string | null
+          subject: string
+          topic: string
+          difficulty?: "EASY" | "MEDIUM" | "HARD"
+          marks_positive?: number
+          marks_negative?: number
+          source_year?: number | null
+          exam_type?: string | null
+          latex_present?: boolean
+          is_public?: boolean
+          is_verified?: boolean
+          source?: string | null
+          uploaded_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          question_text?: string
+          question_type?: "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER" | "NUMERICAL" | "CODING"
+          options?: Json | null
+          correct_answer?: string
+          explanation?: string | null
+          subject?: string
+          topic?: string
+          difficulty?: "EASY" | "MEDIUM" | "HARD"
+          marks_positive?: number
+          marks_negative?: number
+          source_year?: number | null
+          exam_type?: string | null
+          latex_present?: boolean
+          is_public?: boolean
+          is_verified?: boolean
+          source?: string | null
+          uploaded_by?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "questions_uploaded_by_fkey"
+            columns: ["uploaded_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      exam_papers: {
+        Row: {
+          id: string
+          title: string
+          exam_type: string
+          year: number | null
+          subject: string | null
+          description: string | null
+          created_by: string | null
+          is_public: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          title: string
+          exam_type: string
+          year?: number | null
+          subject?: string | null
+          description?: string | null
+          created_by?: string | null
+          is_public?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          title?: string
+          exam_type?: string
+          year?: number | null
+          subject?: string | null
+          description?: string | null
+          created_by?: string | null
+          is_public?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      mock_tests: {
+        Row: {
+          id: string
+          user_id: string
+          title: string
+          exam_type: string
+          status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "ABANDONED"
+          time_limit_minutes: number | null
+          started_at: string | null
+          completed_at: string | null
+          total_questions: number
+          attempted: number
+          correct: number
+          score_pct: number | null
+          config: Json | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          title: string
+          exam_type?: string
+          status?: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "ABANDONED"
+          time_limit_minutes?: number | null
+          started_at?: string | null
+          completed_at?: string | null
+          total_questions?: number
+          attempted?: number
+          correct?: number
+          score_pct?: number | null
+          config?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          title?: string
+          exam_type?: string
+          status?: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "ABANDONED"
+          time_limit_minutes?: number | null
+          started_at?: string | null
+          completed_at?: string | null
+          total_questions?: number
+          attempted?: number
+          correct?: number
+          score_pct?: number | null
+          config?: Json | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "mock_tests_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      test_responses: {
+        Row: {
+          id: string
+          test_id: string
+          question_id: string
+          user_answer: string | null
+          is_correct: boolean | null
+          time_taken_seconds: number | null
+          marked_for_review: boolean
+          sequence_no: number | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          test_id: string
+          question_id: string
+          user_answer?: string | null
+          is_correct?: boolean | null
+          time_taken_seconds?: number | null
+          marked_for_review?: boolean
+          sequence_no?: number | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          test_id?: string
+          question_id?: string
+          user_answer?: string | null
+          is_correct?: boolean | null
+          time_taken_seconds?: number | null
+          marked_for_review?: boolean
+          sequence_no?: number | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "test_responses_test_id_fkey"
+            columns: ["test_id"]
+            isOneToOne: false
+            referencedRelation: "mock_tests"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "test_responses_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      test_analyses: {
+        Row: {
+          id: string
+          test_id: string
+          user_id: string
+          summary: string | null
+          weak_topics: Json | null
+          strong_topics: Json | null
+          recommendations: Json | null
+          time_analysis: Json | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          test_id: string
+          user_id: string
+          summary?: string | null
+          weak_topics?: Json | null
+          strong_topics?: Json | null
+          recommendations?: Json | null
+          time_analysis?: Json | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          test_id?: string
+          user_id?: string
+          summary?: string | null
+          weak_topics?: Json | null
+          strong_topics?: Json | null
+          recommendations?: Json | null
+          time_analysis?: Json | null
+          created_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "test_analyses_test_id_fkey"
+            columns: ["test_id"]
+            isOneToOne: false
+            referencedRelation: "mock_tests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      revision_list: {
+        Row: {
+          id: string
+          user_id: string
+          question_id: string
+          added_at: string
+          is_mastered: boolean
+          next_review_at: string | null
+          review_count: number
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          question_id: string
+          added_at?: string
+          is_mastered?: boolean
+          next_review_at?: string | null
+          review_count?: number
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          question_id?: string
+          added_at?: string
+          is_mastered?: boolean
+          next_review_at?: string | null
+          review_count?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "revision_list_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_topic_performance: {
+        Row: {
+          id: string
+          user_id: string
+          exam_type: string
+          subject: string
+          topic: string
+          attempted: number
+          correct: number
+          accuracy_pct: number
+          last_attempted_at: string | null
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          exam_type?: string
+          subject: string
+          topic: string
+          attempted?: number
+          correct?: number
+          accuracy_pct?: number
+          last_attempted_at?: string | null
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          exam_type?: string
+          subject?: string
+          topic?: string
+          attempted?: number
+          correct?: number
+          accuracy_pct?: number
+          last_attempted_at?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

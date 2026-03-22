@@ -153,8 +153,13 @@ export function AppSidebar() {
                     to={item.to}
                     end={false}
                     title={collapsed ? item.label : undefined}
-                    className={({ isActive }) =>
-                      cn(
+                    className={({ isActive: navIsActive }) => {
+                      // Prevent /app/mock from matching /app/mock-test/* (raw prefix overlap)
+                      const isActive = navIsActive && (
+                        location.pathname === item.to ||
+                        location.pathname.startsWith(item.to + "/")
+                      );
+                      return cn(
                         "mx-1 flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all",
                         (isActive || (item.subItems && isMockTestSection))
                           ? stealth
@@ -162,8 +167,8 @@ export function AppSidebar() {
                             : "border border-violet-500/20 bg-violet-600/15 text-violet-600 dark:text-violet-300"
                           : "text-muted-foreground hover:bg-accent/10 hover:text-foreground",
                         collapsed && "justify-center"
-                      )
-                    }
+                      );
+                    }}
                   >
                     {React.createElement(stealth ? item.stealthIcon : item.icon, {
                       className: "h-4 w-4 shrink-0",
