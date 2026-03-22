@@ -1,4 +1,5 @@
 import { useParams, Link } from "react-router-dom";
+import { useEffect } from "react";
 import { ArrowLeft, Calendar, User } from "lucide-react";
 import { motion } from "framer-motion";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
@@ -10,6 +11,7 @@ interface BlogPostData {
   category: string;
   author: string;
   readTime: string;
+  excerpt: string;
   content: string;
 }
 
@@ -21,6 +23,7 @@ const POSTS: BlogPostData[] = [
     category: "Interview Tips",
     author: "Clarify AI Team",
     readTime: "6 min read",
+    excerpt: "Learn how to structure your behavioral interview answers using the Situation, Task, Action, Result framework to make a lasting impression.",
     content: `The STAR method is one of the most effective frameworks for answering behavioral interview questions. It stands for Situation, Task, Action, and Result.
 
 ## Why STAR Works
@@ -65,6 +68,7 @@ Try it free at clarifyai.com/signup.`,
     category: "Industry",
     author: "Clarify AI Team",
     readTime: "8 min read",
+    excerpt: "From real-time coaching to intelligent mock sessions, discover how AI tools are reshaping how candidates prepare for technical and behavioral interviews.",
     content: `The interview preparation landscape has transformed dramatically. AI-powered tools are now an essential part of every serious candidate's toolkit.
 
 ## The Evolution of Interview Prep
@@ -107,6 +111,7 @@ The best approach combines AI tools with deliberate practice. Use AI for feedbac
     category: "Technical",
     author: "Clarify AI Team",
     readTime: "10 min read",
+    excerpt: "A breakdown of the evaluation criteria used by FAANG companies for system design rounds, with tips on how to structure your approach.",
     content: `System design interviews are often the most intimidating round for software engineers. Here's what FAANG-level companies actually evaluate.
 
 ## The Four Pillars of Evaluation
@@ -152,6 +157,7 @@ Our system design mock sessions generate realistic design problems tailored to y
     category: "Wellness",
     author: "Clarify AI Team",
     readTime: "5 min read",
+    excerpt: "Interview nerves are universal. Here are evidence-based techniques to stay calm, focused, and articulate under pressure.",
     content: `Interview anxiety affects nearly everyone. Research shows that up to 92% of candidates experience some form of interview nervousness. Here are five evidence-based strategies to manage it.
 
 ## 1. Preparation Reduces Uncertainty
@@ -206,6 +212,7 @@ Some nervousness is actually beneficial — it sharpens focus and keeps you aler
     category: "Interview Tips",
     author: "Clarify AI Team",
     readTime: "7 min read",
+    excerpt: "The most commonly asked behavioral questions for PM roles at top tech companies, with tips on how to answer each one effectively.",
     content: `Product management interviews have their own flavor of behavioral questions. Here are the 20 most commonly asked questions across top tech companies, organized by theme.
 
 ## Leadership & Influence
@@ -260,6 +267,7 @@ Use Clarify AI's mock sessions to practice these questions with AI feedback on s
     category: "Research",
     author: "Clarify AI Team",
     readTime: "5 min read",
+    excerpt: "Research shows that candidates who do regular mock interviews are 3x more likely to receive offers. Here's why practice sessions matter more than study sessions.",
     content: `Most candidates spend 80% of their prep time reading and only 20% practicing. Research suggests the optimal ratio should be reversed.
 
 ## The Science of Practice
@@ -310,9 +318,125 @@ function formatDate(dateStr: string) {
   });
 }
 
+function renderMarkdown(text: string) {
+  const lines = text.split("\n");
+  const elements: React.ReactNode[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i];
+
+    if (line.startsWith("### ")) {
+      elements.push(
+        <h3 key={i} className="text-base font-bold text-foreground mt-6 mb-2">
+          {renderInline(line.slice(4))}
+        </h3>
+      );
+    } else if (line.startsWith("## ")) {
+      elements.push(
+        <h2 key={i} className="text-lg font-bold text-foreground mt-8 mb-3">
+          {renderInline(line.slice(3))}
+        </h2>
+      );
+    } else if (line.startsWith("# ")) {
+      elements.push(
+        <h1 key={i} className="text-xl font-bold text-foreground mt-8 mb-3">
+          {renderInline(line.slice(2))}
+        </h1>
+      );
+    } else if (line.match(/^\d+\.\s/)) {
+      const items: string[] = [];
+      while (i < lines.length && lines[i].match(/^\d+\.\s/)) {
+        items.push(lines[i].replace(/^\d+\.\s/, ""));
+        i++;
+      }
+      elements.push(
+        <ol key={`ol-${i}`} className="list-decimal list-inside space-y-1 my-3 text-muted-foreground text-sm">
+          {items.map((item, j) => (
+            <li key={j}>{renderInline(item)}</li>
+          ))}
+        </ol>
+      );
+      continue;
+    } else if (line.startsWith("- ")) {
+      const items: string[] = [];
+      while (i < lines.length && lines[i].startsWith("- ")) {
+        items.push(lines[i].slice(2));
+        i++;
+      }
+      elements.push(
+        <ul key={`ul-${i}`} className="list-disc list-inside space-y-1 my-3 text-muted-foreground text-sm">
+          {items.map((item, j) => (
+            <li key={j}>{renderInline(item)}</li>
+          ))}
+        </ul>
+      );
+      continue;
+    } else if (line.trim() === "") {
+      elements.push(<div key={i} className="h-2" />);
+    } else {
+      elements.push(
+        <p key={i} className="text-sm text-muted-foreground leading-relaxed">
+          {renderInline(line)}
+        </p>
+      );
+    }
+    i++;
+  }
+
+  return elements;
+}
+
+function renderInline(text: string): React.ReactNode {
+  const parts = text.split(/(\*\*[^*]+\*\*)/g);
+  return parts.map((part, i) => {
+    if (part.startsWith("**") && part.endsWith("**")) {
+      return <strong key={i} className="font-semibold text-foreground">{part.slice(2, -2)}</strong>;
+    }
+    return part;
+  });
+}
+
+function useBlogPostMeta(post: BlogPostData | undefined) {
+  useEffect(() => {
+    if (!post) return;
+
+    const title = `${post.title} | Clarify AI Blog`;
+    const description = post.excerpt;
+    const url = `${window.location.origin}/blog/${post.slug}`;
+
+    document.title = title;
+
+    function setMeta(name: string, content: string, attr = "name") {
+      let el = document.querySelector(`meta[${attr}="${name}"]`);
+      if (!el) {
+        el = document.createElement("meta");
+        el.setAttribute(attr, name);
+        document.head.appendChild(el);
+      }
+      el.setAttribute("content", content);
+    }
+
+    setMeta("description", description);
+    setMeta("og:title", title, "property");
+    setMeta("og:description", description, "property");
+    setMeta("og:url", url, "property");
+    setMeta("og:type", "article", "property");
+    setMeta("twitter:card", "summary_large_image");
+    setMeta("twitter:title", title);
+    setMeta("twitter:description", description);
+
+    return () => {
+      document.title = "Clarify AI — Interview Prep Powered by AI";
+    };
+  }, [post]);
+}
+
 export default function BlogPost() {
   const { slug } = useParams<{ slug: string }>();
   const post = POSTS.find((p) => p.slug === slug);
+
+  useBlogPostMeta(post);
 
   if (!post) {
     return (
@@ -345,8 +469,8 @@ export default function BlogPost() {
               <span>{post.readTime}</span>
             </div>
 
-            <div className="prose dark:prose-invert prose-sm max-w-none text-muted-foreground leading-relaxed whitespace-pre-wrap">
-              {post.content}
+            <div className="max-w-none">
+              {renderMarkdown(post.content)}
             </div>
           </motion.div>
 

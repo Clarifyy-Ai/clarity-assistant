@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -8,6 +8,8 @@ import { Eye, EyeOff, AlertCircle, CheckCircle } from "lucide-react";
 
 export default function Signup() {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const refCode = searchParams.get("ref") ?? null;
 
   const [name,      setName]      = useState("");
   const [email,     setEmail]     = useState("");
@@ -28,12 +30,20 @@ export default function Signup() {
 
     setLoading(true);
 
+    if (refCode) {
+      localStorage.setItem("clarify_ref", refCode);
+    }
+
+    const redirectUrl = refCode
+      ? `${window.location.origin}/onboarding/step-1?ref=${refCode}`
+      : `${window.location.origin}/onboarding/step-1`;
+
     const { error: authError } = await supabase.auth.signUp({
       email:    email.trim(),
       password,
       options: {
-        data:        { full_name: name.trim() },
-        emailRedirectTo: `${window.location.origin}/onboarding/step-1`,
+        data:            { full_name: name.trim() },
+        emailRedirectTo: redirectUrl,
       },
     });
 
@@ -41,15 +51,24 @@ export default function Signup() {
 
     if (authError) {
       setError(authError.message);
-    } else {
-      setDone(true);
+      return;
     }
+
+    setDone(true);
   }
 
   async function handleGoogle() {
+    if (refCode) {
+      localStorage.setItem("clarify_ref", refCode);
+    }
+
+    const redirectUrl = refCode
+      ? `${window.location.origin}/onboarding/step-1?ref=${refCode}`
+      : `${window.location.origin}/onboarding/step-1`;
+
     await supabase.auth.signInWithOAuth({
       provider: "google",
-      options:  { redirectTo: `${window.location.origin}/onboarding/step-1` },
+      options:  { redirectTo: redirectUrl },
     });
   }
 
@@ -80,12 +99,17 @@ export default function Signup() {
     <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center px-4">
       <div className="w-full max-w-sm">
 
-        {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <img src="/images/clarify-logo.png" alt="Clarify AI" className="h-14 sm:h-16 w-auto mb-3" />
           <h1 className="text-2xl font-bold text-white">Create account</h1>
           <p className="text-gray-500 text-sm mt-1">Start your Clarify AI journey</p>
         </div>
+
+        {refCode && (
+          <div className="mb-4 px-3 py-2.5 bg-violet-500/10 border border-violet-500/20 rounded-xl text-xs text-violet-300 text-center">
+            Referral code <span className="font-mono font-bold">{refCode}</span> applied — you'll both earn bonus credits!
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <Input

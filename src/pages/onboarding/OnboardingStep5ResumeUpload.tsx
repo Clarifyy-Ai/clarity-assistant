@@ -3,6 +3,7 @@ import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
+import { recordReferral } from "@/lib/referrals";
 import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
 import { Button } from "@/components/ui/Button";
 import {
@@ -17,7 +18,7 @@ import { cn } from "@/lib/utils";
 
 export default function OnboardingStep5ResumeUpload() {
   const navigate  = useNavigate();
-  const { user, setProfile } = useAuthStore();
+  const { user, profile, setProfile } = useAuthStore();
 
   const [file,      setFile]      = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -109,6 +110,8 @@ export default function OnboardingStep5ResumeUpload() {
 
   async function completeOnboarding() {
     if (!user) return;
+
+    await recordReferral(user.id, profile?.referred_by);
 
     const { data } = await supabase
       .from("profiles")

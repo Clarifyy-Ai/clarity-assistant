@@ -6,11 +6,12 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useCallback, useEffect } from "react";
-import { useNavigate }                       from "react-router-dom";
+import { useNavigate, useSearchParams }      from "react-router-dom";
 import { motion, AnimatePresence }           from "framer-motion";
 
-import { supabase }          from "@/integrations/supabase/client";
-import { useAuthStore }      from "@/store";
+import { supabase }                             from "@/integrations/supabase/client";
+import { useAuthStore }                         from "@/store";
+import { recordReferral, getStoredRefCode, normalizeRefCode } from "@/lib/referrals";
 import { ROUTES }            from "@/lib/constants";
 import { cn }                from "@/lib/utils";
 
@@ -215,9 +216,12 @@ function CompletionScreen({ onContinue }: { onContinue: () => void }) {
 
 export default function OnboardingIndex() {
   const navigate    = useNavigate();
+  const [searchParams] = useSearchParams();
   const user          = useAuthStore((s) => s.user);
   const updateProfile = useAuthStore((s) => s.updateProfile);
   const loadProfile   = useAuthStore((s) => s.loadProfile);
+
+  const refCode = normalizeRefCode(searchParams.get("ref")) ?? getStoredRefCode();
 
   const [currentStep,    setCurrentStep]    = useState(1);
   const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
@@ -279,9 +283,14 @@ export default function OnboardingIndex() {
     setIsSaving(true);
 
     try {
+      if (user?.id && refCode) {
+        await recordReferral(user.id, refCode);
+      }
+
       await updateProfile({
         onboarding_completed: true,
         preferred_model:      finalData.preferredModel,
+        ...(refCode ? { referred_by: refCode } : {}),
       } as Record<string, unknown>);
 
       // Persist extended onboarding data to a metadata column

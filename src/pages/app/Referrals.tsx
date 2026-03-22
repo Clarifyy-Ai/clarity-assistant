@@ -31,7 +31,7 @@ export default function Referrals() {
     })();
   }, [user?.id]);
 
-  const code = profile?.id?.slice(0, 8)?.toUpperCase() ?? "XXXXXX";
+  const code = profile?.referral_code ?? profile?.id?.slice(0, 8)?.toUpperCase() ?? "XXXXXX";
   const link = `${window.location.origin}/signup?ref=${code}`;
 
   function copyLink() {

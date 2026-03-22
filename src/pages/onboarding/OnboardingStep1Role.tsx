@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
@@ -8,9 +8,11 @@ import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Mic } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { normalizeRefCode } from "@/lib/referrals";
 
 // ─────────────────────────────────────────────────────────────────
 // Step 1 — Name, role, domain
+// Also captures ?ref=CODE and stores it in profile.referred_by
 // ─────────────────────────────────────────────────────────────────
 
 const ROLES = [
@@ -32,6 +34,8 @@ const DOMAINS = [
 export default function OnboardingStep1Role() {
   const navigate    = useNavigate();
   const { user, setProfile } = useAuthStore();
+  const [searchParams] = useSearchParams();
+  const refCode = normalizeRefCode(searchParams.get("ref"));
 
   const [name,      setName]      = useState("");
   const [role,      setRole]      = useState("");
@@ -53,6 +57,7 @@ export default function OnboardingStep1Role() {
         role,
         domain,
         onboarding_step:  2,
+        ...(refCode ? { referred_by: refCode } : {}),
       })
       .eq("id", user.id)
       .select()
@@ -88,6 +93,12 @@ export default function OnboardingStep1Role() {
         <p className="text-gray-400 text-sm mb-8">
           We use this to personalise every AI answer to your exact role and industry.
         </p>
+
+        {refCode && (
+          <div className="mb-6 px-3 py-2.5 bg-violet-500/10 border border-violet-500/20 rounded-xl text-xs text-violet-300 text-center">
+            Referral code <span className="font-mono font-bold">{refCode}</span> applied — you'll both earn bonus credits!
+          </div>
+        )}
 
         <div className="space-y-6">
           {/* Name */}

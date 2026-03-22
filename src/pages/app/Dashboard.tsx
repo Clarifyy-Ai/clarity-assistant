@@ -7,6 +7,7 @@ import { useUIStore } from "@/store/uiStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
 import { useGamification } from "@/hooks/useGamification";
+import { useInterviewScheduler } from "@/hooks/useInterviewScheduler";
 import { SetupChecklist } from "@/components/layout/SetupChecklist";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -36,6 +37,8 @@ export default function Dashboard() {
   const scheduler    = useInterviewSchedulerStore();
   const gamification = useGamification();
   const navigate     = useNavigate();
+
+  useInterviewScheduler();
 
   const [sessionCount, setSessionCount] = useState(0);
   useEffect(() => {

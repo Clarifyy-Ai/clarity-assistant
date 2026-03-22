@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
-import { createBrowserRouter, RouterProvider, Navigate, Outlet } from "react-router-dom";
+import { createBrowserRouter, RouterProvider, Navigate, Outlet, useLocation } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { useAuthStore } from "@/store/authStore";
@@ -154,6 +154,11 @@ function Page({ component: Component }: { component: React.ComponentType }) {
 // React Query client
 // ─────────────────────────────────────────────────────────────────────────────
 
+function OnboardingRedirect() {
+  const location = useLocation();
+  return <Navigate to={`/onboarding${location.search}`} replace />;
+}
+
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
@@ -262,11 +267,11 @@ const router = createBrowserRouter([
     element: <ProtectedRoute />,
     children: [
       { path: "/onboarding",        element: <Page component={OnboardingIndex} /> },
-      { path: "/onboarding/step-1", element: <Navigate to="/onboarding" replace /> },
-      { path: "/onboarding/step-2", element: <Navigate to="/onboarding" replace /> },
-      { path: "/onboarding/step-3", element: <Navigate to="/onboarding" replace /> },
-      { path: "/onboarding/step-4", element: <Navigate to="/onboarding" replace /> },
-      { path: "/onboarding/step-5", element: <Navigate to="/onboarding" replace /> },
+      { path: "/onboarding/step-1", element: <OnboardingRedirect /> },
+      { path: "/onboarding/step-2", element: <OnboardingRedirect /> },
+      { path: "/onboarding/step-3", element: <OnboardingRedirect /> },
+      { path: "/onboarding/step-4", element: <OnboardingRedirect /> },
+      { path: "/onboarding/step-5", element: <OnboardingRedirect /> },
     ],
   },
 

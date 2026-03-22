@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useCalendarSync } from "@/hooks/useCalendarSync";
+import { supabase } from "@/lib/supabase/client";
 import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
@@ -94,6 +95,14 @@ export default function SettingsIntegrations() {
     importedCount,
     error,
   } = useCalendarSync();
+
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => {
+      if (data?.session?.provider_token) {
+        setCalendarConnected(true);
+      }
+    });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     const calendarParam = searchParams.get("calendar");
