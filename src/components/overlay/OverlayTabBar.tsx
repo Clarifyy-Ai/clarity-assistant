@@ -11,7 +11,7 @@ export function OverlayTabBar() {
   const activeTab = useOverlayStore((s) => s.active_tab);
 
   return (
-    <div className="flex border-b border-white/5 px-2">
+    <div className="flex border-b border-white/5 px-2 shrink-0">
       {TABS.map((tab) => (
         <button
           key={tab.id}

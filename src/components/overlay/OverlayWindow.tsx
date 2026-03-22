@@ -59,7 +59,7 @@ export function OverlayWindow({
   const is_peek_active        = useOverlayStore((s) => s.is_peek_active);
   const is_minimal_mode       = useOverlayStore((s) => s.is_minimal_mode);
   const deepgramStatus        = useAudioStore((s) => s.deepgram_status);
-  const stream_error          = useAudioStore((s) => s.stream_error);
+  const stream_error          = useAudioStore((s) => s.streams?.error ?? null);
   const isRecording           = deepgramStatus === "connected";
 
   const handlePositionChange = useCallback(

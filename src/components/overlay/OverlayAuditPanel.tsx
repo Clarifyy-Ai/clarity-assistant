@@ -11,7 +11,7 @@ export function OverlayAuditPanel() {
   const isCapturing      = useAudioStore((s) => s.streams?.is_capturing ?? false);
   const isMuted          = useAudioStore((s) => s.is_muted);
   const hasSystemAudio   = useAudioStore((s) => !!s.streams?.system_stream);
-  const streamError      = useAudioStore((s) => s.stream_error);
+  const streamError      = useAudioStore((s) => s.streams?.error ?? null);
   const elapsed          = useSessionStore((s) => s.elapsed_seconds);
   const credits          = useSessionStore((s) => s.credits_consumed);
   const activeModel      = useOverlayStore((s) => s.active_model);
