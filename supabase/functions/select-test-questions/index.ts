@@ -216,7 +216,16 @@ Deno.serve(async (req) => {
     if (year_range?.max) {
       query = query.lte("source_year", year_range.max);
     }
-    query = query.eq("is_public", true).limit(2000);
+    // If user selected USER_UPLOAD as a source, include their private uploads.
+    // Otherwise, only include public questions.
+    const includesUserUpload = source_types.includes("USER_UPLOAD");
+    if (includesUserUpload) {
+      // (is_public=true) OR (source='USER_UPLOAD' AND uploaded_by=userId)
+      query = query.or(`is_public.eq.true,and(source.eq.USER_UPLOAD,uploaded_by.eq.${userId})`);
+    } else {
+      query = query.eq("is_public", true);
+    }
+    query = query.limit(2000);
 
     const { data: allQuestions, error: qErr } = await query;
 

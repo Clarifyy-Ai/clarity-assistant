@@ -68,19 +68,26 @@ interface MockTestConfig {
 // ─────────────────────────────────────────────────────────────────
 // submit-test
 //
-// Concurrency-safe submission flow:
-//   1. Verify JWT server-side (not from request body)
-//   2. Fetch test with SELECT FOR UPDATE via DB lock (via acquire_submit_lock RPC)
-//      — returns early if already COMPLETED (idempotent)
-//   3. Score all responses, upsert individual response rows
-//   4. Build breakdown objects
-//   5. Update topic performance stats (inside try/catch — non-blocking)
-//   6. ATOMIC COMMIT via submit_test_atomic RPC:
-//        upserts test_analyses + marks test COMPLETED in ONE transaction
+// Truly idempotent and concurrency-safe:
 //
-// The DB lock in step 2 ensures only one concurrent submit can proceed
-// past the status check — the second concurrent call will see COMPLETED
-// and return the cached analysis immediately.
+//   1. Verify JWT (server-side only)
+//   2. Score responses + build analysis objects (cheap, read-only scoring)
+//   3. Call claim_and_complete_test RPC — single atomic DB transaction:
+//        a) SELECT ownership check
+//        b) UPDATE status='COMPLETED' WHERE status!='COMPLETED'  ← the GATE
+//        c) INSERT/UPDATE test_analyses
+//        → Returns already_completed if the UPDATE affected 0 rows
+//        → Returns claimed=true if this call owns completion
+//   4. If already_completed → return cached analysis (idempotent)
+//   5. If claimed → run once-only side effects:
+//        - Batch upsert scored responses
+//        - Revision list inserts (wrong answers)
+//        - Topic performance increments (update_topic_performance RPC)
+//
+// The WHERE status!='COMPLETED' UPDATE in step 3 is serialized by Postgres
+// under READ COMMITTED isolation — only one concurrent transaction can
+// transition from any non-COMPLETED status to COMPLETED, guaranteeing
+// that scoring side effects run exactly once.
 // ─────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -113,38 +120,29 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── Acquire submit lock (SELECT ... FOR UPDATE via RPC) ────────
-    // This DB-level lock ensures at most one concurrent submission proceeds
-    // per test. If the test is already COMPLETED, return early with cached data.
-    const { data: lockResult, error: lockErr } = await db.rpc("acquire_submit_lock", {
-      p_test_id: test_id,
-      p_user_id: userId,
-    });
+    // ── Fetch test data for scoring (read-only, no lock needed yet) ──
+    const { data: testRaw, error: testErr } = await db
+      .from("mock_tests")
+      .select("id, config, question_ids, status")
+      .eq("id", test_id)
+      .eq("user_id", userId)
+      .single();
 
-    if (lockErr) {
-      console.error("[submit-test] lock error:", lockErr);
-      return new Response(
-        JSON.stringify({ error: "Failed to acquire submit lock", detail: lockErr.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    if (testErr || !testRaw) {
+      return new Response(JSON.stringify({ error: "Test not found or access denied" }), {
+        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
     }
 
-    type LockResult = {
-      error?: string;
-      already_completed?: boolean;
-      question_ids?: string[];
-      config?: MockTestConfig;
+    const test = testRaw as unknown as {
+      id: string;
+      config: MockTestConfig;
+      question_ids: string[];
+      status: string;
     };
-    const lock = lockResult as LockResult;
 
-    if (lock?.error) {
-      return new Response(
-        JSON.stringify({ error: lock.error }),
-        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (lock?.already_completed) {
+    // If already completed, return cached analysis (fast path for retries/double-submits)
+    if (test.status === "COMPLETED") {
       const { data: existing } = await db
         .from("test_analyses")
         .select("*")
@@ -156,9 +154,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    const questionIds = lock.question_ids ?? [];
+    const questionIds = test.question_ids;
 
-    // ── Fetch responses and questions ─────────────────────────────
+    // ── Fetch responses and questions for scoring ─────────────────
     const [responsesRes, questionsRes] = await Promise.all([
       db.from("test_responses")
         .select("question_id, user_answer, is_correct, is_attempted, time_spent_seconds, is_marked_review")
@@ -191,7 +189,6 @@ Deno.serve(async (req) => {
     const topicBreakdown: Record<string, TopicStat> = {};
     const timePerQuestion: number[] = [];
     const wrongQuestionIds: string[] = [];
-
     const responseUpserts: Array<Record<string, unknown>> = [];
 
     for (const qid of questionIds) {
@@ -260,11 +257,6 @@ Deno.serve(async (req) => {
       });
     }
 
-    // Batch-upsert all scored responses
-    if (responseUpserts.length > 0) {
-      await db.from("test_responses").upsert(responseUpserts, { onConflict: "test_id,question_id" });
-    }
-
     // ── Build breakdown objects ────────────────────────────────────
     const subjectBD: Record<string, SubjectBreakdownEntry> = {};
     for (const [subj, data] of Object.entries(subjectBreakdown)) {
@@ -319,7 +311,67 @@ Deno.serve(async (req) => {
       predictedPercentile >= 50 ? "Top 50%" :
       "Bottom 50%";
 
-    // ── Add wrong questions to revision list (non-blocking) ────────
+    // ── ATOMIC GATE: claim completion + write analysis in one transaction ──
+    // claim_and_complete_test does:
+    //   UPDATE mock_tests SET status='COMPLETED' WHERE status != 'COMPLETED' ... RETURNING ...
+    //   INSERT/UPDATE test_analyses
+    // If 0 rows returned from UPDATE → already_completed by a concurrent call.
+    const { data: claimResult, error: claimErr } = await db.rpc("claim_and_complete_test", {
+      p_test_id:              test_id,
+      p_user_id:              userId,
+      p_total_score:          Math.max(0, totalScore),
+      p_max_score:            maxScore,
+      p_accuracy:             accuracy,
+      p_attempt_percentage:   attemptPct,
+      p_subject_breakdown:    subjectBD,
+      p_topic_breakdown:      topicBD,
+      p_weak_topics:          weakTopics,
+      p_strong_topics:        strongTopics,
+      p_time_analysis:        { avg_seconds: avgTime, time_traps: timeTraps },
+      p_predicted_percentile: predictedPercentile,
+    });
+
+    if (claimErr) {
+      console.error("[submit-test] claim_and_complete_test error:", claimErr);
+      return new Response(
+        JSON.stringify({ error: "Failed to complete test submission", detail: claimErr.message }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    type ClaimResult = { error?: string; already_completed?: boolean; claimed?: boolean };
+    const claim = claimResult as ClaimResult;
+
+    if (claim?.error) {
+      return new Response(
+        JSON.stringify({ error: claim.error }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (claim?.already_completed) {
+      // Another concurrent call won the race — return success; analysis was committed by it
+      const { data: existing } = await db
+        .from("test_analyses")
+        .select("*")
+        .eq("test_id", test_id)
+        .single();
+      return new Response(
+        JSON.stringify({ success: true, already_completed: true, analysis: existing }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    // ── Only if WE claimed completion: run once-only side effects ────
+    // By this point, the DB guarantees no other concurrent call can
+    // also claim (the UPDATE WHERE status!='COMPLETED' is already committed).
+
+    // Batch-upsert all scored responses
+    if (responseUpserts.length > 0) {
+      await db.from("test_responses").upsert(responseUpserts, { onConflict: "test_id,question_id" });
+    }
+
+    // Revision list: add wrong questions (select-then-insert, non-blocking)
     if (wrongQuestionIds.length > 0) {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
@@ -348,15 +400,11 @@ Deno.serve(async (req) => {
             is_mastered: false,
           }))
         );
-        if (revErr) {
-          console.error("[submit-test] revision_list insert error:", revErr.message);
-        }
+        if (revErr) console.error("[submit-test] revision_list error:", revErr.message);
       }
     }
 
-    // ── Update topic performance (best-effort, non-blocking) ───────
-    // These are idempotent increments — the DB lock above ensures this
-    // code path runs exactly once per test_id.
+    // Topic performance increments (best-effort, non-blocking)
     try {
       const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.45.4");
       const url = Deno.env.get("SUPABASE_URL") ?? "";
@@ -367,7 +415,7 @@ Deno.serve(async (req) => {
         auth: { autoRefreshToken: false, persistSession: false },
       });
 
-      const examType = lock.config?.exam_type ?? "GENERAL";
+      const examType = test.config?.exam_type ?? "GENERAL";
 
       for (const [topic, data] of Object.entries(topicBreakdown)) {
         if (data.attempted === 0) continue;
@@ -384,39 +432,7 @@ Deno.serve(async (req) => {
         });
       }
     } catch (topicErr) {
-      console.warn("[submit-test] topic performance update error (non-blocking):", topicErr);
-    }
-
-    // ── ATOMIC COMMIT: analysis + COMPLETED status in one transaction ──
-    const { data: atomicResult, error: atomicErr } = await db.rpc("submit_test_atomic", {
-      p_test_id:              test_id,
-      p_user_id:              userId,
-      p_total_score:          Math.max(0, totalScore),
-      p_max_score:            maxScore,
-      p_accuracy:             accuracy,
-      p_attempt_percentage:   attemptPct,
-      p_subject_breakdown:    subjectBD,
-      p_topic_breakdown:      topicBD,
-      p_weak_topics:          weakTopics,
-      p_strong_topics:        strongTopics,
-      p_time_analysis:        { avg_seconds: avgTime, time_traps: timeTraps },
-      p_predicted_percentile: predictedPercentile,
-    });
-
-    if (atomicErr) {
-      console.error("[submit-test] atomic RPC error:", atomicErr);
-      return new Response(
-        JSON.stringify({ error: "Failed to complete test submission", detail: atomicErr.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const atomicData = atomicResult as { error?: string; success?: boolean; already_completed?: boolean };
-    if (atomicData?.error) {
-      return new Response(
-        JSON.stringify({ error: atomicData.error }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      console.warn("[submit-test] topic performance error (non-blocking):", topicErr);
     }
 
     return new Response(
