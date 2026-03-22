@@ -1,11 +1,11 @@
 import { handleCors, corsHeaders } from "../_shared/cors.ts";
-import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
+import { createServiceClient } from "../_shared/supabase.ts";
 
 // ─────────────────────────────────────────────────────────────────
 // create-test
-// Atomically: verifies JWT → checks quota → deducts 2 credits →
-// inserts mock_tests row. If any step fails, already-deducted
-// credits are refunded so users are never charged without a test.
+// Calls the create_test_atomic DB function which runs the entire
+// quota-check + credit-deduction + test-insert in ONE transaction.
+// This prevents any race condition or partial-billing scenario.
 // ─────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -30,7 +30,12 @@ Deno.serve(async (req) => {
     }
     const userId = user.id;
 
-    const { test_name, config, question_ids } = await req.json();
+    const body = await req.json() as {
+      test_name?: string;
+      config?: { duration_minutes?: number; [key: string]: unknown };
+      question_ids?: string[];
+    };
+    const { test_name, config, question_ids } = body;
 
     if (!question_ids || question_ids.length === 0) {
       return new Response(JSON.stringify({ error: "No questions provided" }), {
@@ -38,90 +43,46 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── Check free-plan monthly quota ─────────────────────────────
-    const { data: profile } = await db
-      .from("profiles")
-      .select("plan_id, credits")
-      .eq("id", userId)
-      .single();
+    const timeLimitMinutes = config?.duration_minutes ?? 60;
 
-    const planId = profile?.plan_id ?? "free";
+    // ── Single atomic RPC call: quota check + deduct + insert ─────
+    const { data: rpcResult, error: rpcErr } = await db.rpc("create_test_atomic", {
+      p_user_id:      userId,
+      p_test_name:    test_name ?? "Practice Test",
+      p_config:       config ?? {},
+      p_question_ids: question_ids,
+      p_time_limit:   timeLimitMinutes,
+      p_credit_cost:  2,
+    });
 
-    if (planId === "free") {
-      const startOfMonth = new Date();
-      startOfMonth.setDate(1);
-      startOfMonth.setHours(0, 0, 0, 0);
-
-      const { count: monthlyCount } = await db
-        .from("mock_tests")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .gte("created_at", startOfMonth.toISOString());
-
-      if ((monthlyCount ?? 0) >= 2) {
-        return new Response(
-          JSON.stringify({
-            error: "Free plan limit reached. You can take 2 tests per month.",
-            code: "FREE_PLAN_LIMIT",
-          }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
-    }
-
-    // ── Deduct 2 credits ──────────────────────────────────────────
-    const credited = await deductCredits(db, userId, 2, "Mock test creation");
-    if (!credited) {
+    if (rpcErr) {
+      console.error("[create-test] RPC error:", rpcErr);
       return new Response(
-        JSON.stringify({ error: "Insufficient credits. Mock tests cost 2 credits.", code: "INSUFFICIENT_CREDITS" }),
-        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Failed to create test", detail: rpcErr.message }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // ── Create test row ──────────────────────────────────────────
-    const { data: newTest, error: insertErr } = await db
-      .from("mock_tests")
-      .insert({
-        user_id:            userId,
-        test_name:          test_name ?? "Practice Test",
-        config,
-        question_ids,
-        status:             "DRAFT",
-        time_limit_minutes: config?.duration_minutes ?? 60,
-      })
-      .select("id")
-      .single();
+    const result = rpcResult as { error?: string; code?: string; test_id?: string };
 
-    if (insertErr || !newTest) {
-      // Refund credits on insert failure
-      const { data: latestProfile } = await db
-        .from("profiles")
-        .select("credits")
-        .eq("id", userId)
-        .single();
-
-      await db
-        .from("profiles")
-        .update({ credits: (latestProfile?.credits ?? 0) + 2 })
-        .eq("id", userId);
-
-      // Delete the credit transaction log entry to keep records clean
-      await db
-        .from("credit_transactions")
-        .delete()
-        .eq("user_id", userId)
-        .eq("reason", "Mock test creation")
-        .order("created_at", { ascending: false })
-        .limit(1);
-
+    if (result.error) {
+      const statusCode = result.code === "FREE_PLAN_LIMIT" || result.code === "INSUFFICIENT_CREDITS"
+        ? 402 : 500;
       return new Response(
-        JSON.stringify({ error: "Failed to create test. Credits refunded.", detail: insertErr?.message }),
+        JSON.stringify({ error: result.error, code: result.code }),
+        { status: statusCode, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (!result.test_id) {
+      return new Response(
+        JSON.stringify({ error: "Test creation failed: no ID returned" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
     return new Response(
-      JSON.stringify({ test_id: newTest.id }),
+      JSON.stringify({ test_id: result.test_id }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {

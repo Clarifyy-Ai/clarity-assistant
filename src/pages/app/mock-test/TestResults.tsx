@@ -147,17 +147,36 @@ export default function TestResults(): React.ReactElement {
       if (analysisRes.data) setAnalysis(analysisRes.data as unknown as TestAnalysis);
 
       const qIds = (testRes.data as unknown as MockTest).question_ids;
-      const [qRes, rRes] = await Promise.all([
-        supabase.from("questions").select("id, question_text, question_type, correct_answer, explanation, subject, topic, difficulty").in("id", qIds),
-        supabase.from("test_responses").select("question_id, user_answer, is_correct, is_attempted, is_marked_review, time_spent_seconds").eq("test_id", testId!).eq("user_id", user!.id),
-      ]);
+
+      // Fetch questions via Supabase client (no depth issue for this table)
+      const qRes = await supabase
+        .from("questions")
+        .select("id, question_text, question_type, correct_answer, explanation, subject, topic, difficulty")
+        .in("id", qIds);
 
       const qMap: Record<string, Question> = {};
-      for (const q of (qRes.data ?? [])) qMap[(q as unknown as Question).id] = q as unknown as Question;
+      for (const q of (qRes.data ?? [])) {
+        const row = q as unknown as Question;
+        qMap[row.id] = row;
+      }
       setQuestions(qIds.map((id) => qMap[id]).filter(Boolean) as Question[]);
 
+      // Fetch responses via REST API directly to avoid Supabase type-depth (TS2589)
+      // for columns not in generated schema types.
+      const { data: respSession } = await supabase.auth.getSession();
+      const rFetch = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/test_responses?select=question_id,user_answer,is_correct,is_attempted,is_marked_review,time_spent_seconds&test_id=eq.${testId}&user_id=eq.${user!.id}`,
+        {
+          headers: {
+            apikey:        import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+            Authorization: `Bearer ${respSession?.session?.access_token ?? ""}`,
+          },
+        }
+      );
+      const rData: TestResponse[] = rFetch.ok ? (await rFetch.json() as TestResponse[]) : [];
+
       const rMap: Record<string, TestResponse> = {};
-      for (const r of (rRes.data ?? [])) rMap[(r as unknown as TestResponse).question_id] = r as unknown as TestResponse;
+      for (const r of rData) rMap[r.question_id] = r;
       setResponses(rMap);
     } catch (err) {
       console.error("[TestResults] load error:", err);

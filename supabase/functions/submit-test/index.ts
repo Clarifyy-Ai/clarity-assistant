@@ -2,10 +2,73 @@ import { handleCors, corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 // ─────────────────────────────────────────────────────────────────
+// Typed interfaces for internal use
+// ─────────────────────────────────────────────────────────────────
+
+interface QuestionRow {
+  id: string;
+  correct_answer: string;
+  marks_positive: number;
+  marks_negative: number;
+  subject: string;
+  topic: string;
+  difficulty: string;
+  exam_type: string | null;
+}
+
+interface ResponseRow {
+  question_id: string;
+  user_answer: string | null;
+  is_correct: boolean | null;
+  is_attempted: boolean;
+  time_spent_seconds: number | null;
+  is_marked_review: boolean | null;
+}
+
+interface SubjectStat {
+  correct: number;
+  wrong: number;
+  attempted: number;
+  total: number;
+  marks: number;
+}
+
+interface TopicStat {
+  correct: number;
+  wrong: number;
+  attempted: number;
+  total: number;
+  time_total: number;
+  count_with_time: number;
+  subject: string;
+}
+
+interface SubjectBreakdownEntry {
+  correct: number;
+  wrong: number;
+  attempted: number;
+  total: number;
+  marks: number;
+  accuracy: number;
+}
+
+interface TopicBreakdownEntry {
+  correct: number;
+  wrong: number;
+  attempted: number;
+  total: number;
+  accuracy: number;
+  avg_time: number;
+}
+
+interface MockTestConfig {
+  exam_type?: string;
+}
+
+// ─────────────────────────────────────────────────────────────────
 // submit-test
 // Verifies JWT, scores all responses, calculates breakdowns,
 // calls update_topic_performance RPC, marks test COMPLETED.
-// Best-effort atomic: all writes happen before COMPLETED status.
 // ─────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -39,18 +102,25 @@ Deno.serve(async (req) => {
     }
 
     // ── Fetch the test — ownership enforced by user_id = verified JWT ──
-    const { data: test, error: testErr } = await db
+    const { data: testRaw, error: testErr } = await db
       .from("mock_tests")
       .select("id, config, question_ids, status")
       .eq("id", test_id)
-      .eq("user_id", userId)      // ownership check
+      .eq("user_id", userId)
       .single();
 
-    if (testErr || !test) {
+    if (testErr || !testRaw) {
       return new Response(JSON.stringify({ error: "Test not found or access denied" }), {
         status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
+
+    const test = testRaw as unknown as {
+      id: string;
+      config: MockTestConfig;
+      question_ids: string[];
+      status: string;
+    };
 
     // ── If already completed, return existing analysis ─────────────
     if (test.status === "COMPLETED") {
@@ -66,23 +136,29 @@ Deno.serve(async (req) => {
     }
 
     // ── Fetch responses and questions ─────────────────────────────
-    const questionIds = test.question_ids as string[];
+    const questionIds = test.question_ids;
 
     const [responsesRes, questionsRes] = await Promise.all([
       db.from("test_responses")
         .select("question_id, user_answer, is_correct, is_attempted, time_spent_seconds, is_marked_review")
         .eq("test_id", test_id)
-        .eq("user_id", userId),   // ownership enforced
+        .eq("user_id", userId),
       db.from("questions")
         .select("id, correct_answer, marks_positive, marks_negative, subject, topic, difficulty, exam_type")
         .in("id", questionIds),
     ]);
 
-    const questionMap: Record<string, any> = {};
-    for (const q of (questionsRes.data ?? [])) questionMap[q.id] = q;
+    const questionMap: Record<string, QuestionRow> = {};
+    for (const q of (questionsRes.data ?? [])) {
+      const row = q as unknown as QuestionRow;
+      questionMap[row.id] = row;
+    }
 
-    const responseMap: Record<string, any> = {};
-    for (const r of (responsesRes.data ?? [])) responseMap[r.question_id] = r;
+    const responseMap: Record<string, ResponseRow> = {};
+    for (const r of (responsesRes.data ?? [])) {
+      const row = r as unknown as ResponseRow;
+      responseMap[row.question_id] = row;
+    }
 
     // ── Score each question ───────────────────────────────────────
     let totalScore = 0;
@@ -90,13 +166,8 @@ Deno.serve(async (req) => {
     let totalAttempted = 0;
     let totalCorrect = 0;
 
-    const subjectBreakdown: Record<string, {
-      correct: number; wrong: number; attempted: number; total: number; marks: number;
-    }> = {};
-    const topicBreakdown: Record<string, {
-      correct: number; wrong: number; attempted: number; total: number;
-      time_total: number; count_with_time: number; subject: string;
-    }> = {};
+    const subjectBreakdown: Record<string, SubjectStat> = {};
+    const topicBreakdown: Record<string, TopicStat> = {};
     const timePerQuestion: number[] = [];
     const wrongQuestionIds: string[] = [];
 
@@ -104,12 +175,12 @@ Deno.serve(async (req) => {
       const q = questionMap[qid];
       if (!q) continue;
 
-      const marksPos = parseFloat(q.marks_positive ?? 4);
-      const marksNeg = parseFloat(q.marks_negative ?? 1);
+      const marksPos = parseFloat(String(q.marks_positive ?? 4));
+      const marksNeg = parseFloat(String(q.marks_negative ?? 1));
       maxScore += marksPos;
 
       const resp = responseMap[qid];
-      const isAttempted = resp?.is_attempted ?? (resp?.user_answer ? true : false);
+      const isAttempted = resp?.is_attempted ?? Boolean(resp?.user_answer);
       const userAnswer = resp?.user_answer ?? null;
       const timeSpent = resp?.time_spent_seconds ?? 0;
 
@@ -168,7 +239,7 @@ Deno.serve(async (req) => {
     }
 
     // ── Build breakdown objects ────────────────────────────────────
-    const subjectBD: Record<string, any> = {};
+    const subjectBD: Record<string, SubjectBreakdownEntry> = {};
     for (const [subj, data] of Object.entries(subjectBreakdown)) {
       subjectBD[subj] = {
         ...data,
@@ -176,7 +247,7 @@ Deno.serve(async (req) => {
       };
     }
 
-    const topicBD: Record<string, any> = {};
+    const topicBD: Record<string, TopicBreakdownEntry> = {};
     for (const [topic, data] of Object.entries(topicBreakdown)) {
       topicBD[topic] = {
         correct: data.correct,
@@ -195,16 +266,19 @@ Deno.serve(async (req) => {
     const timeTrapThreshold = avgTime * 3;
     const timeTraps = questionIds
       .filter((qid) => (responseMap[qid]?.time_spent_seconds ?? 0) > timeTrapThreshold && timeTrapThreshold > 0)
-      .map((qid) => ({ question_id: qid, time_seconds: responseMap[qid].time_spent_seconds }));
+      .map((qid) => ({
+        question_id: qid,
+        time_seconds: responseMap[qid]?.time_spent_seconds ?? 0,
+      }));
 
     const accuracy = totalAttempted > 0 ? Math.round((totalCorrect / totalAttempted) * 100) : 0;
     const attemptPct = questionIds.length > 0 ? Math.round((totalAttempted / questionIds.length) * 100) : 0;
 
     const weakTopics = Object.entries(topicBD)
-      .filter(([, v]) => (v as any).attempted > 0 && (v as any).accuracy < 50)
+      .filter(([, v]) => v.attempted > 0 && v.accuracy < 50)
       .map(([k]) => k);
     const strongTopics = Object.entries(topicBD)
-      .filter(([, v]) => (v as any).attempted > 0 && (v as any).accuracy >= 80)
+      .filter(([, v]) => v.attempted > 0 && v.accuracy >= 80)
       .map(([k]) => k);
 
     // Rough percentile heuristic
@@ -244,14 +318,11 @@ Deno.serve(async (req) => {
     }
 
     // ── Add wrong questions to revision list ──────────────────────
-    // Insert one-by-one so individual constraint violations (duplicate question)
-    // don't abort the whole batch. Errors are logged but non-blocking.
     if (wrongQuestionIds.length > 0) {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       const tomorrowStr = tomorrow.toISOString().split("T")[0];
 
-      // Fetch which question_ids are already in revision list (not mastered)
       const { data: existing } = await db
         .from("revision_list")
         .select("question_id")
@@ -259,7 +330,9 @@ Deno.serve(async (req) => {
         .in("question_id", wrongQuestionIds)
         .eq("is_mastered", false);
 
-      const existingIds = new Set((existing ?? []).map((r: { question_id: string }) => r.question_id));
+      const existingIds = new Set(
+        (existing ?? []).map((r: { question_id: string }) => r.question_id)
+      );
       const newRevisionIds = wrongQuestionIds.filter((qid) => !existingIds.has(qid));
 
       if (newRevisionIds.length > 0) {
@@ -290,8 +363,7 @@ Deno.serve(async (req) => {
       auth: { autoRefreshToken: false, persistSession: false },
     });
 
-    const config = test.config as any;
-    const examType = config?.exam_type ?? "GENERAL";
+    const examType = test.config?.exam_type ?? "GENERAL";
 
     for (const [topic, data] of Object.entries(topicBreakdown)) {
       if (data.attempted === 0) continue;

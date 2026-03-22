@@ -1,9 +1,9 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
-  BookOpen, Upload, ClipboardList, TrendingUp,
-  ChevronRight, Plus, Zap, Target, Award, Clock,
-  FlaskConical, BarChart2,
+  BookOpen, Upload, ClipboardList,
+  ChevronRight, Zap, Target, Clock,
+  FlaskConical, BarChart2, Flame,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
@@ -27,6 +27,7 @@ interface HubStats {
   totalTests: number;
   totalQuestions: number;
   avgAccuracy: number;
+  streakDays: number;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -91,25 +92,61 @@ const EXAM_TYPES = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Streak calculation
+// Counts consecutive calendar days (most recent first) where at least one
+// test was completed.
+// ─────────────────────────────────────────────────────────────────────────────
+
+function calcStreakDays(completedDates: string[]): number {
+  if (completedDates.length === 0) return 0;
+
+  // Unique calendar days (YYYY-MM-DD) sorted descending
+  const days = [...new Set(
+    completedDates.map((d) => d.slice(0, 10))
+  )].sort((a, b) => b.localeCompare(a));
+
+  const today = new Date().toISOString().slice(0, 10);
+  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+
+  // Streak must include today or yesterday to be live
+  if (days[0] !== today && days[0] !== yesterday) return 0;
+
+  let streak = 1;
+  for (let i = 1; i < days.length; i++) {
+    const prev = new Date(days[i - 1]);
+    const curr = new Date(days[i]);
+    const diffDays = Math.round((prev.getTime() - curr.getTime()) / 86400000);
+    if (diffDays === 1) {
+      streak++;
+    } else {
+      break;
+    }
+  }
+  return streak;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────────────────────────────────────
 
-export default function MockTestHub() {
+export default function MockTestHub(): React.ReactElement {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
   const [recentTests, setRecentTests] = useState<RecentTest[]>([]);
-  const [stats, setStats] = useState<HubStats>({ totalTests: 0, totalQuestions: 0, avgAccuracy: 0 });
+  const [stats, setStats] = useState<HubStats>({
+    totalTests: 0, totalQuestions: 0, avgAccuracy: 0, streakDays: 0,
+  });
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     if (!user?.id) return;
-    loadData();
+    void loadData();
   }, [user?.id]);
 
   async function loadData() {
     setLoading(true);
     try {
-      const [testsRes, questionsRes, analysesRes] = await Promise.all([
+      const [testsRes, questionsRes, analysesRes, completedDatesRes] = await Promise.all([
         supabase
           .from("mock_tests")
           .select("id, test_name, status, created_at, config")
@@ -124,18 +161,29 @@ export default function MockTestHub() {
           .from("test_analyses")
           .select("accuracy")
           .eq("user_id", user!.id),
+        // Fetch completed_at for all completed tests to compute streak
+        supabase
+          .from("mock_tests")
+          .select("created_at")
+          .eq("user_id", user!.id)
+          .eq("status", "COMPLETED")
+          .order("created_at", { ascending: false })
+          .limit(90), // last 90 days max
       ]);
 
       setRecentTests((testsRes.data ?? []) as RecentTest[]);
 
-      const totalTests = (testsRes.data ?? []).length;
+      const totalTests = (testsRes.data ?? []).filter((t) => t.status === "COMPLETED").length;
       const totalQuestions = questionsRes.count ?? 0;
       const analyses = analysesRes.data ?? [];
       const avgAccuracy = analyses.length > 0
         ? Math.round(analyses.reduce((s, a) => s + (a.accuracy ?? 0), 0) / analyses.length)
         : 0;
 
-      setStats({ totalTests, totalQuestions, avgAccuracy });
+      const completedDates = (completedDatesRes.data ?? []).map((r) => r.created_at as string);
+      const streakDays = calcStreakDays(completedDates);
+
+      setStats({ totalTests, totalQuestions, avgAccuracy, streakDays });
     } catch (err) {
       console.error("[MockTestHub] load error:", err);
     } finally {
@@ -180,17 +228,20 @@ export default function MockTestHub() {
         }
       />
 
-      {/* ── Stats bar ─────────────────────────────────────── */}
-      <div className="grid grid-cols-3 gap-3">
+      {/* ── Stats bar: 4 stats including streak ───────────────────── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { icon: ClipboardList, label: "Tests Taken",    value: loading ? "—" : String(stats.totalTests) },
           { icon: Target,        label: "Avg Accuracy",   value: loading ? "—" : `${stats.avgAccuracy}%` },
           { icon: BookOpen,      label: "My Questions",   value: loading ? "—" : String(stats.totalQuestions) },
-        ].map(({ icon: Icon, label, value }) => (
+          { icon: Flame,         label: "Day Streak",     value: loading ? "—" : `${stats.streakDays}🔥`, streak: true },
+        ].map(({ icon: Icon, label, value, streak }) => (
           <Card key={label} className="text-center py-3">
             <CardContent className="p-0">
-              <Icon className="h-5 w-5 text-muted-foreground mx-auto mb-1" />
-              <p className="text-xl font-bold text-foreground">{value}</p>
+              <Icon className={`h-5 w-5 mx-auto mb-1 ${streak ? "text-amber-400" : "text-muted-foreground"}`} />
+              <p className={`text-xl font-bold ${streak && stats.streakDays > 0 ? "text-amber-400" : "text-foreground"}`}>
+                {value}
+              </p>
               <p className="text-xs text-muted-foreground">{label}</p>
             </CardContent>
           </Card>

@@ -284,26 +284,31 @@ export default function TestSession(): React.ReactElement {
       if (!isMounted.current) return;
       setQuestions(orderedQuestions);
 
-      // Supabase generated types don't reflect all schema columns — cast via unknown
-      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-      // @ts-ignore TS2589: Supabase type depth exceeded for schema columns
-      const { data: respData } = await supabase
-        .from("test_responses")
-        .select("question_id, user_answer, is_marked_review, is_attempted, time_spent_seconds")
-        .eq("test_id", testId!)
-        .eq("user_id", user!.id);
-
-      interface RawResp {
+      // Fetch responses using a typed helper to avoid Supabase generated-type
+      // depth issues (TS2589) for schema columns added after initial generation.
+      type RawResp = {
         question_id: string;
         user_answer: string | null;
         is_marked_review: boolean;
         is_attempted: boolean;
         time_spent_seconds: number | null;
-      }
+      };
+      // Using the Supabase REST API directly to avoid TS type-depth limits
+      const { data: sessionForResp } = await supabase.auth.getSession();
+      const respFetch = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/test_responses?select=question_id,user_answer,is_marked_review,is_attempted,time_spent_seconds&test_id=eq.${testId}&user_id=eq.${user!.id}`,
+        {
+          headers: {
+            apikey:        import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+            Authorization: `Bearer ${sessionForResp?.session?.access_token ?? ""}`,
+          },
+        }
+      );
+      const respData: RawResp[] = respFetch.ok ? (await respFetch.json() as RawResp[]) : [];
+
       const respMap: Record<string, ResponseState> = {};
       const timeMap: Record<string, number> = {};
-      for (const rawR of (respData ?? [])) {
-        const r = rawR as unknown as RawResp;
+      for (const r of respData) {
         const isAnswered = Boolean(r.user_answer);
         const isMarked   = Boolean(r.is_marked_review);
         let state: QuestionState;
