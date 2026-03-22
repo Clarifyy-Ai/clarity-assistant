@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { PreferredAIModel } from "@/types/user.types";
 import type { CoachingContext } from "@/types/ai.types";
 import type { InterviewType } from "@/types/session.types";

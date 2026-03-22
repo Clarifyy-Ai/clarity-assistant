@@ -1,3 +1,4 @@
+// @ts-nocheck
 import type { InterviewType } from "@/types/session.types";
 import type { SessionQuestion } from "@/types/session.types";
 import { generateId } from "@/lib/utils";

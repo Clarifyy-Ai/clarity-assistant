@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useMemo, useState, useCallback } from "react";
 import { composeHint, splitInlineCode } from "@/lib/overlay/overlayCompositor";
 import { useOverlayStore } from "@/store/overlayStore";

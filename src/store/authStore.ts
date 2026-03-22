@@ -318,7 +318,7 @@ export const useAuthStore = create<AuthStore>()(
               s.isProfileLoaded = true;
               s.isAdmin         = (row.is_admin             as boolean) ?? false;
               s.isOnboarded     = (row.onboarding_completed as boolean) ?? false;
-              s.planId          = (row.plan                 as string)  ?? "free";
+              s.planId          = (row.plan_id              as string)  ?? "free";
               s.credits         = (row.credits              as number)  ?? 0;
             });
           },
