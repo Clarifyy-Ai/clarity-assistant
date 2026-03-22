@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
 
     const body = await req.json() as {
       test_name?: string;
-      config?: { duration_minutes?: number; [key: string]: unknown };
+      config?: { duration_minutes?: number; randomize_order?: boolean; [key: string]: unknown };
       question_ids?: string[];
     };
     const { test_name, config, question_ids } = body;
@@ -45,12 +45,19 @@ Deno.serve(async (req) => {
 
     const timeLimitMinutes = config?.duration_minutes ?? 60;
 
+    // Honor randomize_order: true (default) = shuffle before storing;
+    // false = preserve the selection order returned by select-test-questions.
+    const randomizeOrder = config?.randomize_order !== false;
+    const orderedIds: string[] = randomizeOrder
+      ? [...question_ids].sort(() => Math.random() - 0.5)
+      : [...question_ids];
+
     // ── Single atomic RPC call: quota check + deduct + insert ─────
     const { data: rpcResult, error: rpcErr } = await db.rpc("create_test_atomic", {
       p_user_id:      userId,
       p_test_name:    test_name ?? "Practice Test",
       p_config:       config ?? {},
-      p_question_ids: question_ids,
+      p_question_ids: orderedIds,
       p_time_limit:   timeLimitMinutes,
       p_credit_cost:  2,
     });

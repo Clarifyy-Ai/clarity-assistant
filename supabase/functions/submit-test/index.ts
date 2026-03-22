@@ -2,7 +2,7 @@ import { handleCors, corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 // ─────────────────────────────────────────────────────────────────
-// Typed interfaces for internal use
+// Typed interfaces
 // ─────────────────────────────────────────────────────────────────
 
 interface QuestionRow {
@@ -67,8 +67,20 @@ interface MockTestConfig {
 
 // ─────────────────────────────────────────────────────────────────
 // submit-test
-// Verifies JWT, scores all responses, calculates breakdowns,
-// calls update_topic_performance RPC, marks test COMPLETED.
+//
+// Concurrency-safe submission flow:
+//   1. Verify JWT server-side (not from request body)
+//   2. Fetch test with SELECT FOR UPDATE via DB lock (via acquire_submit_lock RPC)
+//      — returns early if already COMPLETED (idempotent)
+//   3. Score all responses, upsert individual response rows
+//   4. Build breakdown objects
+//   5. Update topic performance stats (inside try/catch — non-blocking)
+//   6. ATOMIC COMMIT via submit_test_atomic RPC:
+//        upserts test_analyses + marks test COMPLETED in ONE transaction
+//
+// The DB lock in step 2 ensures only one concurrent submit can proceed
+// past the status check — the second concurrent call will see COMPLETED
+// and return the cached analysis immediately.
 // ─────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -101,29 +113,38 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── Fetch the test — ownership enforced by user_id = verified JWT ──
-    const { data: testRaw, error: testErr } = await db
-      .from("mock_tests")
-      .select("id, config, question_ids, status")
-      .eq("id", test_id)
-      .eq("user_id", userId)
-      .single();
+    // ── Acquire submit lock (SELECT ... FOR UPDATE via RPC) ────────
+    // This DB-level lock ensures at most one concurrent submission proceeds
+    // per test. If the test is already COMPLETED, return early with cached data.
+    const { data: lockResult, error: lockErr } = await db.rpc("acquire_submit_lock", {
+      p_test_id: test_id,
+      p_user_id: userId,
+    });
 
-    if (testErr || !testRaw) {
-      return new Response(JSON.stringify({ error: "Test not found or access denied" }), {
-        status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    if (lockErr) {
+      console.error("[submit-test] lock error:", lockErr);
+      return new Response(
+        JSON.stringify({ error: "Failed to acquire submit lock", detail: lockErr.message }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
-    const test = testRaw as unknown as {
-      id: string;
-      config: MockTestConfig;
-      question_ids: string[];
-      status: string;
+    type LockResult = {
+      error?: string;
+      already_completed?: boolean;
+      question_ids?: string[];
+      config?: MockTestConfig;
     };
+    const lock = lockResult as LockResult;
 
-    // ── If already completed, return existing analysis ─────────────
-    if (test.status === "COMPLETED") {
+    if (lock?.error) {
+      return new Response(
+        JSON.stringify({ error: lock.error }),
+        { status: 403, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+
+    if (lock?.already_completed) {
       const { data: existing } = await db
         .from("test_analyses")
         .select("*")
@@ -135,9 +156,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── Fetch responses and questions ─────────────────────────────
-    const questionIds = test.question_ids;
+    const questionIds = lock.question_ids ?? [];
 
+    // ── Fetch responses and questions ─────────────────────────────
     const [responsesRes, questionsRes] = await Promise.all([
       db.from("test_responses")
         .select("question_id, user_answer, is_correct, is_attempted, time_spent_seconds, is_marked_review")
@@ -170,6 +191,8 @@ Deno.serve(async (req) => {
     const topicBreakdown: Record<string, TopicStat> = {};
     const timePerQuestion: number[] = [];
     const wrongQuestionIds: string[] = [];
+
+    const responseUpserts: Array<Record<string, unknown>> = [];
 
     for (const qid of questionIds) {
       const q = questionMap[qid];
@@ -226,8 +249,7 @@ Deno.serve(async (req) => {
         topicBreakdown[q.topic].count_with_time++;
       }
 
-      // Upsert is_correct for this response
-      await db.from("test_responses").upsert({
+      responseUpserts.push({
         test_id,
         question_id: qid,
         user_id: userId,
@@ -235,7 +257,12 @@ Deno.serve(async (req) => {
         is_attempted: isAttempted,
         user_answer: userAnswer,
         time_spent_seconds: timeSpent,
-      }, { onConflict: "test_id,question_id" });
+      });
+    }
+
+    // Batch-upsert all scored responses
+    if (responseUpserts.length > 0) {
+      await db.from("test_responses").upsert(responseUpserts, { onConflict: "test_id,question_id" });
     }
 
     // ── Build breakdown objects ────────────────────────────────────
@@ -281,11 +308,9 @@ Deno.serve(async (req) => {
       .filter(([, v]) => v.attempted > 0 && v.accuracy >= 80)
       .map(([k]) => k);
 
-    // Rough percentile heuristic
     const pctScore = maxScore > 0 ? (Math.max(0, totalScore) / maxScore) * 100 : 0;
     const predictedPercentile = Math.min(99, Math.max(1, Math.round(pctScore)));
 
-    // Estimate rank tier
     const rankTier =
       predictedPercentile >= 99 ? "Top 1%" :
       predictedPercentile >= 95 ? "Top 5%" :
@@ -294,7 +319,7 @@ Deno.serve(async (req) => {
       predictedPercentile >= 50 ? "Top 50%" :
       "Bottom 50%";
 
-    // ── Add wrong questions to revision list (best-effort, non-blocking) ──
+    // ── Add wrong questions to revision list (non-blocking) ────────
     if (wrongQuestionIds.length > 0) {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
@@ -325,41 +350,44 @@ Deno.serve(async (req) => {
         );
         if (revErr) {
           console.error("[submit-test] revision_list insert error:", revErr.message);
-          // Non-blocking — test submission proceeds regardless
         }
       }
     }
 
-    // ── Call update_topic_performance RPC using user JWT (best-effort) ───
-    const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.45.4");
-    const url = Deno.env.get("SUPABASE_URL") ?? "";
-    const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
+    // ── Update topic performance (best-effort, non-blocking) ───────
+    // These are idempotent increments — the DB lock above ensures this
+    // code path runs exactly once per test_id.
+    try {
+      const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.45.4");
+      const url = Deno.env.get("SUPABASE_URL") ?? "";
+      const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
 
-    const userClient = createClient(url, anonKey, {
-      global: { headers: { Authorization: `Bearer ${token}` } },
-      auth: { autoRefreshToken: false, persistSession: false },
-    });
-
-    const examType = test.config?.exam_type ?? "GENERAL";
-
-    for (const [topic, data] of Object.entries(topicBreakdown)) {
-      if (data.attempted === 0) continue;
-      const avgTopicTime = data.count_with_time > 0
-        ? Math.round(data.time_total / data.count_with_time)
-        : null;
-      await userClient.rpc("update_topic_performance", {
-        p_topic: topic,
-        p_subject: data.subject,
-        p_exam_type: examType,
-        p_attempted_delta: data.attempted,
-        p_correct_delta: data.correct,
-        p_avg_time_seconds: avgTopicTime,
+      const userClient = createClient(url, anonKey, {
+        global: { headers: { Authorization: `Bearer ${token}` } },
+        auth: { autoRefreshToken: false, persistSession: false },
       });
+
+      const examType = lock.config?.exam_type ?? "GENERAL";
+
+      for (const [topic, data] of Object.entries(topicBreakdown)) {
+        if (data.attempted === 0) continue;
+        const avgTopicTime = data.count_with_time > 0
+          ? Math.round(data.time_total / data.count_with_time)
+          : null;
+        await userClient.rpc("update_topic_performance", {
+          p_topic: topic,
+          p_subject: data.subject,
+          p_exam_type: examType,
+          p_attempted_delta: data.attempted,
+          p_correct_delta: data.correct,
+          p_avg_time_seconds: avgTopicTime,
+        });
+      }
+    } catch (topicErr) {
+      console.warn("[submit-test] topic performance update error (non-blocking):", topicErr);
     }
 
-    // ── ATOMIC: save analysis + mark COMPLETED in single transaction ──
-    // submit_test_atomic acquires a row lock on mock_tests, upserts test_analyses,
-    // then updates status = 'COMPLETED' — all within one DB transaction.
+    // ── ATOMIC COMMIT: analysis + COMPLETED status in one transaction ──
     const { data: atomicResult, error: atomicErr } = await db.rpc("submit_test_atomic", {
       p_test_id:              test_id,
       p_user_id:              userId,
@@ -377,17 +405,18 @@ Deno.serve(async (req) => {
 
     if (atomicErr) {
       console.error("[submit-test] atomic RPC error:", atomicErr);
-      return new Response(JSON.stringify({ error: "Failed to complete test submission", detail: atomicErr.message }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: "Failed to complete test submission", detail: atomicErr.message }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     const atomicData = atomicResult as { error?: string; success?: boolean; already_completed?: boolean };
     if (atomicData?.error) {
-      console.error("[submit-test] atomic RPC returned error:", atomicData.error);
-      return new Response(JSON.stringify({ error: atomicData.error }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ error: atomicData.error }),
+        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
     }
 
     return new Response(
