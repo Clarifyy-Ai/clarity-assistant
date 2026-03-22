@@ -46,6 +46,7 @@ export function OverlaySettings({
   const hint_style      = useOverlayStore((s) => s.hint_style);
 
   const stealth_opacity = useOverlayStore((s) => s.stealth_opacity);
+  const is_minimal_mode = useOverlayStore((s) => s.is_minimal_mode);
 
   const [settings, setSettings] = useState({
     stealthMode: is_stealth_mode,
@@ -159,7 +160,7 @@ export function OverlaySettings({
             </label>
             <input
               type="checkbox"
-              checked={useOverlayStore.getState().is_minimal_mode}
+              checked={is_minimal_mode}
               onChange={(e) =>
                 useOverlayStore.getState().setMinimalMode(e.target.checked)
               }

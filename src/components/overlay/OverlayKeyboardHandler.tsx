@@ -78,7 +78,21 @@ export function OverlayKeyboardHandler({
       }
     }
 
+    let peekArmTimer: ReturnType<typeof setTimeout> | null = null;
+
+    function clearPeekArm() {
+      if (peekArmTimer) {
+        clearTimeout(peekArmTimer);
+        peekArmTimer = null;
+      }
+    }
+
     function onKeyDown(e: KeyboardEvent) {
+      if (e.key !== 'Control' && e.key !== 'Shift') {
+        clearPeekArm();
+        return;
+      }
+
       if (!e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey) return;
 
       const os = useOverlayStore.getState();
@@ -88,15 +102,22 @@ export function OverlayKeyboardHandler({
         return;
       }
 
-      if (!os.is_visible && !os.is_peek_active) {
-        clearPeekTimer();
-        os.setPeekActive(true);
-        os.showOverlay();
+      if (!os.is_visible && !os.is_peek_active && !peekArmTimer) {
+        peekArmTimer = setTimeout(() => {
+          peekArmTimer = null;
+          const current = useOverlayStore.getState();
+          if (!current.is_visible && !current.is_peek_active) {
+            current.setPeekActive(true);
+            current.showOverlay();
+          }
+        }, 400);
       }
     }
 
     function onKeyUp(e: KeyboardEvent) {
       if (e.key !== 'Control' && e.key !== 'Shift') return;
+
+      clearPeekArm();
 
       const os = useOverlayStore.getState();
       if (!os.is_peek_active) return;
@@ -120,6 +141,7 @@ export function OverlayKeyboardHandler({
       window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('keyup', onKeyUp, true);
       clearPeekTimer();
+      clearPeekArm();
     };
   }, [enabled]);
 
