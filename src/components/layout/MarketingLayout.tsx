@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
-import { Menu, X } from "lucide-react";
+import { Menu, X, Twitter, Github } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const NAV_LINKS = [
@@ -10,11 +10,40 @@ const NAV_LINKS = [
   { to: "/help", label: "Help" },
 ];
 
-const FOOTER_LINKS = [
-  { to: "/pricing", label: "Pricing" },
-  { to: "/help", label: "Help" },
-  { to: "/shortcuts", label: "Shortcuts" },
-  { to: "/blog", label: "Blog" },
+const FOOTER_COLUMNS = [
+  {
+    heading: "Product",
+    links: [
+      { href: "/#features", label: "Features" },
+      { to: "/pricing", label: "Pricing" },
+      { to: "/shortcuts", label: "Shortcuts" },
+      { to: "/signup", label: "Get started free" },
+    ],
+  },
+  {
+    heading: "Resources",
+    links: [
+      { to: "/blog", label: "Blog" },
+      { to: "/help", label: "Help Center" },
+      { to: "/help", label: "Getting started" },
+      { to: "/shortcuts", label: "Keyboard shortcuts" },
+    ],
+  },
+  {
+    heading: "Company",
+    links: [
+      { href: "mailto:sales@clarifyai.com", label: "Contact Sales" },
+      { to: "/signup", label: "Sign up free" },
+      { to: "/login", label: "Log in" },
+    ],
+  },
+  {
+    heading: "Social",
+    links: [
+      { href: "https://twitter.com/clarifyai", label: "Twitter / X", external: true },
+      { href: "https://github.com/clarifyai", label: "GitHub", external: true },
+    ],
+  },
 ];
 
 interface MarketingLayoutProps {
@@ -110,19 +139,75 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
 
       {children}
 
-      <footer className="border-t border-border py-10 px-4 sm:px-6">
-        <div className="max-w-6xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-muted-foreground">
-          <span>&copy; {new Date().getFullYear()} Payara Labs. All rights reserved.</span>
-          <div className="flex gap-4 sm:gap-6 flex-wrap justify-center">
-            {FOOTER_LINKS.map((link) => (
-              <Link
-                key={link.to}
-                to={link.to}
-                className="hover:text-foreground transition-colors"
-              >
-                {link.label}
+      <footer className="border-t border-border bg-background">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 pb-8">
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-10">
+            <div className="col-span-2 md:col-span-1">
+              <Link to="/" className="inline-block mb-3">
+                <img src="/images/clarify-logo.png" alt="Clarify AI" className="h-9 w-auto" />
               </Link>
+              <p className="text-xs text-muted-foreground leading-relaxed max-w-[180px]">
+                AI-powered interview preparation and real-time coaching.
+              </p>
+              <div className="flex gap-3 mt-4">
+                <a
+                  href="https://twitter.com/clarifyai"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="Twitter / X"
+                  className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all"
+                >
+                  <Twitter className="w-4 h-4" />
+                </a>
+                <a
+                  href="https://github.com/clarifyai"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  aria-label="GitHub"
+                  className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all"
+                >
+                  <Github className="w-4 h-4" />
+                </a>
+              </div>
+            </div>
+            {FOOTER_COLUMNS.map((col) => (
+              <div key={col.heading}>
+                <p className="text-xs font-semibold text-foreground uppercase tracking-widest mb-3">
+                  {col.heading}
+                </p>
+                <ul className="space-y-2.5">
+                  {col.links.map((link) => (
+                    <li key={link.label}>
+                      {"href" in link ? (
+                        <a
+                          href={link.href}
+                          target={"external" in link && link.external ? "_blank" : undefined}
+                          rel={"external" in link && link.external ? "noopener noreferrer" : undefined}
+                          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {link.label}
+                        </a>
+                      ) : (
+                        <Link
+                          to={link.to}
+                          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                        >
+                          {link.label}
+                        </Link>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
             ))}
+          </div>
+          <div className="border-t border-border pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
+            <span>&copy; {new Date().getFullYear()} Payara Labs. All rights reserved.</span>
+            <div className="flex gap-4 flex-wrap justify-center">
+              <Link to="/help" className="hover:text-foreground transition-colors">Help</Link>
+              <Link to="/pricing" className="hover:text-foreground transition-colors">Pricing</Link>
+              <Link to="/blog" className="hover:text-foreground transition-colors">Blog</Link>
+            </div>
           </div>
         </div>
       </footer>
