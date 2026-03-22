@@ -298,6 +298,39 @@ export function OverlayHintPanel({
 
 function IdleStateContent() {
   const resumeCtx = useOverlayStore((s) => s.resume_context);
+  const resumePoints = useOverlayStore((s) => s.resume_talking_points);
+  const networkColor = useOverlayStore((s) => s.network_color);
+  const isOffline = networkColor === "red";
+
+  if (isOffline && resumePoints) {
+    return (
+      <div className="space-y-2">
+        <div className="flex items-center gap-1.5 text-[10px] text-amber-400/80">
+          <FileText className="w-3 h-3 shrink-0" />
+          <span>Offline — showing your resume talking points</span>
+        </div>
+        <p className="text-xs text-overlay-text leading-relaxed whitespace-pre-wrap">
+          {resumePoints.intro}
+        </p>
+        {resumePoints.experience_points.length > 0 && (
+          <div className="space-y-0.5">
+            {resumePoints.experience_points.slice(0, 2).map((pt, i) => (
+              <div key={i} className="flex gap-1.5 text-xs text-overlay-text">
+                <span className="shrink-0 text-brand-400">•</span>
+                <span>{pt}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        <button
+          onClick={() => useOverlayStore.getState().setActiveTab("resume")}
+          className="text-[10px] text-brand-300 hover:text-brand-200 transition-colors"
+        >
+          View full resume notes →
+        </button>
+      </div>
+    );
+  }
 
   if (resumeCtx) {
     return (

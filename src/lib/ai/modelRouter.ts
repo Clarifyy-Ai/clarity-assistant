@@ -8,6 +8,7 @@ import { streamGeminiHint } from "./geminiClient";
 import { streamOpenAIHint } from "./openaiClient";
 import { streamClaudeHint } from "./anthropicClient";
 import { getOfflineTemplate } from "./offlineTemplates";
+import { formatTalkingPointsAsHint } from "./resumeFallback";
 import { useOverlayStore } from "@/store/overlayStore";
 
 // ─────────────────────────────────────────────────────────────────
@@ -39,13 +40,23 @@ export interface RouteHintOptions {
 // Main router entry point
 // ─────────────────────────────────────────────────────────────────
 
+function getResumeFallbackOrTemplate(
+  interviewType: InterviewType,
+  hintStyle: import("@/types/user.types").HintStyle
+): string {
+  const overlayStore = useOverlayStore.getState();
+  const tp = overlayStore.resume_talking_points;
+  if (tp) return formatTalkingPointsAsHint(tp);
+  return getOfflineTemplate(interviewType, hintStyle);
+}
+
 export async function routeHint(opts: RouteHintOptions): Promise<void> {
   const networkStore = useNetworkStore.getState();
   const overlayStore = useOverlayStore.getState();
 
   // ── Offline fallback — serve immediately, queue real request ──
   if (networkStore.mode === "offline") {
-    const fallback = getOfflineTemplate(opts.interviewType, opts.context.hint_style);
+    const fallback = getResumeFallbackOrTemplate(opts.interviewType, opts.context.hint_style);
     overlayStore.setOfflineFallback(fallback);
     networkStore.setQueuedHintRequest(true);
     return;
@@ -74,13 +85,12 @@ export async function routeHint(opts: RouteHintOptions): Promise<void> {
         await callModel(fallbackModel, opts);
       } catch (fallbackErr) {
         console.error(`[ModelRouter] Fallback model ${fallbackModel} also failed.`);
-        // Last resort: offline template
-        const fallback = getOfflineTemplate(opts.interviewType, opts.context.hint_style);
+        const fallback = getResumeFallbackOrTemplate(opts.interviewType, opts.context.hint_style);
         overlayStore.setOfflineFallback(fallback);
         opts.onError(fallbackErr instanceof Error ? fallbackErr : new Error(String(fallbackErr)));
       }
     } else {
-      const fallback = getOfflineTemplate(opts.interviewType, opts.context.hint_style);
+      const fallback = getResumeFallbackOrTemplate(opts.interviewType, opts.context.hint_style);
       overlayStore.setOfflineFallback(fallback);
       opts.onError(primaryErr instanceof Error ? primaryErr : new Error(String(primaryErr)));
     }
