@@ -14,6 +14,8 @@ import { StealthMouseGuard } from "./StealthMouseGuard";
 import { OverlayPositionManager } from "./OverlayPositionManager";
 import { LiveTranscriptStream } from "@/components/live/LiveTranscriptStream";
 import { OverlaySessionStats } from "./OverlaySessionStats";
+import { OverlayActivityTimer } from "./OverlayActivityTimer";
+import { OverlayHotkeyHelp } from "./OverlayHotkeyHelp";
 import { cn } from "@/lib/utils";
 
 interface OverlayWindowProps {
@@ -52,6 +54,9 @@ export function OverlayWindow({
   const screenshot_hint       = useOverlayStore((s) => s.screenshot_hint);
   const is_screenshot_loading = useOverlayStore((s) => s.is_screenshot_loading);
   const active_tab            = useOverlayStore((s) => s.active_tab);
+  const stealth_opacity       = useOverlayStore((s) => s.stealth_opacity);
+  const is_peek_active        = useOverlayStore((s) => s.is_peek_active);
+  const is_minimal_mode       = useOverlayStore((s) => s.is_minimal_mode);
 
   const handlePositionChange = useCallback(
     (pos: import("@/store/overlayStore").OverlayPosition) => useOverlayStore.getState().setPosition(pos),
@@ -65,9 +70,11 @@ export function OverlayWindow({
       ? document.getElementById("overlay-root")
       : null;
 
-  if (!overlayRoot || !is_visible) return null;
+  if (!overlayRoot || (!is_visible && !is_peek_active)) return null;
 
   const displayText = hint_state === "streaming" ? streaming_buffer : current_hint;
+
+  const effectiveOpacity = is_stealth_mode ? stealth_opacity / 100 : 1;
 
   return createPortal(
     <StealthMouseGuard isActive={is_stealth_mode}>
@@ -81,11 +88,11 @@ export function OverlayWindow({
           ref={resizeContainerRef}
           className={cn(
             "overlay-panel no-select flex flex-col gap-0 transition-opacity duration-150 relative",
-            is_stealth_mode && "opacity-90"
           )}
           style={{
             width:  overlay_width,
-            height: overlay_height,
+            height: is_minimal_mode ? "auto" : overlay_height,
+            opacity: effectiveOpacity,
           }}
           role="dialog"
           aria-label="Clarify AI Overlay"
@@ -100,6 +107,9 @@ export function OverlayWindow({
                 Clarify AI
               </span>
               <OverlayNetworkBadge color={network_color} />
+              {is_peek_active && (
+                <span className="font-mono text-[9px] text-sky-400/70 bg-sky-500/10 px-1.5 py-0.5 rounded animate-pulse">PEEK</span>
+              )}
             </div>
             <div className="flex items-center gap-1.5">
               {is_stealth_mode && (
@@ -107,6 +117,15 @@ export function OverlayWindow({
               )}
               {is_proctor_safe && (
                 <span className="font-mono text-[9px] text-emerald-400/70 bg-emerald-500/10 px-1.5 py-0.5 rounded">SAFE</span>
+              )}
+              {is_minimal_mode && (
+                <button
+                  onClick={(e) => { e.stopPropagation(); useOverlayStore.getState().setMinimalMode(false); }}
+                  className="font-mono text-[9px] text-amber-400/70 bg-amber-500/10 px-1.5 py-0.5 rounded hover:bg-amber-500/20 transition-colors"
+                  title="Exit minimal mode"
+                >
+                  MIN ✕
+                </button>
               )}
               <button
                 onClick={(e) => { e.stopPropagation(); useOverlayStore.getState().hideOverlay(); }}
@@ -118,12 +137,14 @@ export function OverlayWindow({
             </div>
           </div>
 
-          <OverlayToolbar
-            onToggleMic={onToggleMic}
-            onToggleSystemAudio={onToggleSystemAudio}
-            onGenerate={onGenerate}
-            onEndSession={onEndSession}
-          />
+          {!is_minimal_mode && (
+            <OverlayToolbar
+              onToggleMic={onToggleMic}
+              onToggleSystemAudio={onToggleSystemAudio}
+              onGenerate={onGenerate}
+              onEndSession={onEndSession}
+            />
+          )}
 
           {is_panic_visible && panic_content && (
             <div className="animate-fade-in border-b border-warning/20 bg-warning/10 px-4 py-3 shrink-0">
@@ -144,13 +165,16 @@ export function OverlayWindow({
 
           {!is_panic_visible && (
             <>
-              {current_question && (
+              {current_question && !is_minimal_mode && (
                 <OverlayQuestionBar question={current_question} />
               )}
 
-              <OverlayTabBar />
+              {!is_minimal_mode && <OverlayTabBar />}
 
-              <div className="flex-1 overflow-y-auto min-h-0">
+              <div className={cn(
+                "overflow-y-auto min-h-0",
+                is_minimal_mode ? "max-h-[300px]" : "flex-1"
+              )}>
                 {active_tab === "answer" && (
                   <OverlayHintPanel
                     text={displayText}
@@ -162,33 +186,42 @@ export function OverlayWindow({
                   />
                 )}
 
-                {active_tab === "transcript" && (
+                {active_tab === "transcript" && !is_minimal_mode && (
                   <div className="p-3">
                     <LiveTranscriptStream />
                   </div>
                 )}
 
-                {active_tab === "audit" && (
+                {active_tab === "audit" && !is_minimal_mode && (
                   <OverlayAuditPanel />
                 )}
               </div>
 
-              {onManualQuestion && (
+              {onManualQuestion && !is_minimal_mode && (
                 <OverlayChatInput onSubmit={onManualQuestion} />
               )}
             </>
           )}
 
-          <OverlaySessionStats />
+          {!is_minimal_mode && <OverlaySessionStats />}
 
           <div className="flex items-center justify-between border-t border-white/5 px-2 sm:px-4 py-1 font-mono text-[8px] sm:text-[9px] text-muted-foreground/40 shrink-0">
-            <span className="truncate">⌃⇧H hide · Esc clear · ⌃⇧P panic</span>
-            <span className="capitalize">{hint_style.replace("_", " ")}</span>
+            <span className="truncate">
+              {is_minimal_mode
+                ? "⌃⇧H hide · ⌃⇧/ help"
+                : "⌃⇧H hide · Esc clear · ⌃⇧P panic · ⌃⇧/ help"}
+            </span>
+            <div className="flex items-center gap-2">
+              <OverlayActivityTimer />
+              <span className="capitalize">{hint_style.replace("_", " ")}</span>
+            </div>
           </div>
 
           <div className={cn(is_stealth_mode && "opacity-20")} style={is_stealth_mode ? { pointerEvents: "auto" } : undefined}>
             <OverlayResizeHandles containerRef={resizeContainerRef} />
           </div>
+
+          <OverlayHotkeyHelp />
         </div>
       </OverlayPositionManager>
     </StealthMouseGuard>,

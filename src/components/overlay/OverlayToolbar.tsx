@@ -6,6 +6,7 @@ import { PANIC_RESPONSE } from "@/types/session.types";
 import {
   Mic, MicOff, Volume2, VolumeX, Zap, RefreshCw,
   Eye, EyeOff, Square, AlertCircle, Type, ChevronDown, Keyboard,
+  Minimize2, Maximize2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatHotkeyLabel } from "@/lib/overlay/hotkeys";
@@ -51,6 +52,7 @@ export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, o
   const hintState      = useOverlayStore((s) => s.hint_state);
   const hintStyle      = useOverlayStore((s) => s.hint_style);
   const activeModel    = useOverlayStore((s) => s.active_model);
+  const isMinimal      = useOverlayStore((s) => s.is_minimal_mode);
 
   const [showModelMenu, setShowModelMenu] = useState(false);
   const [showHotkeyRef, setShowHotkeyRef] = useState(false);
@@ -154,6 +156,15 @@ export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, o
           </div>
         )}
       </div>
+
+      <ToolbarButton
+        icon={isMinimal ? Maximize2 : Minimize2}
+        label={isMinimal ? "Exit minimal" : "Minimal mode"}
+        active={isMinimal}
+        color={isMinimal ? "amber" : "gray"}
+        onClick={() => useOverlayStore.getState().setMinimalMode(!isMinimal)}
+        small
+      />
 
       <ToolbarButton
         icon={AlertCircle}

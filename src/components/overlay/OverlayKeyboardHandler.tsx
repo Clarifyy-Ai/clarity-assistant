@@ -1,17 +1,10 @@
+import { useEffect, useRef } from 'react';
 import { useHotkey } from '@/hooks/useHotkeys';
 import { useOverlayStore } from '@/store/overlayStore';
 import { useSessionStore } from '@/store/sessionStore';
 import { toggleAppStealthMode } from '@/lib/stealth/stealthActions';
 import { PANIC_RESPONSE } from '@/types/session.types';
 import { captureAndAnalyseCodingProblem } from '@/lib/audio/screenshotCapture';
-
-// ─────────────────────────────────────────────────────────────────
-// OverlayKeyboardHandler
-// Handles keyboard shortcuts for the overlay. Renders nothing.
-// Uses individual selectors — never the full store object — so
-// this component only re-renders when the specific field it needs
-// actually changes.
-// ─────────────────────────────────────────────────────────────────
 
 interface OverlayKeyboardHandlerProps {
   enabled: boolean;
@@ -22,11 +15,8 @@ export function OverlayKeyboardHandler({
   enabled,
   onToggleMute,
 }: OverlayKeyboardHandlerProps) {
-  // Individual selectors — stable, minimal re-renders
   const toggleOverlay    = useOverlayStore((s) => s.toggleOverlay);
   const is_visible       = useOverlayStore((s) => s.is_visible);
-  const is_stealth_mode  = useOverlayStore((s) => s.is_stealth_mode);
-  const setStealthMode   = useOverlayStore((s) => s.setStealthMode);
   const is_panic_visible = useOverlayStore((s) => s.is_panic_visible);
   const showPanic        = useOverlayStore((s) => s.showPanic);
   const hidePanic        = useOverlayStore((s) => s.hidePanic);
@@ -34,32 +24,19 @@ export function OverlayKeyboardHandler({
   const cycleHintStyle   = useOverlayStore((s) => s.cycleHintStyle);
   const sessionStatus    = useSessionStore((s) => s.status);
 
-  // Toggle overlay: Ctrl+Shift+H
-  useHotkey(
-    ['ctrl', 'shift', 'h'],
-    () => { toggleOverlay?.(); },
-    enabled
-  );
+  useHotkey(['ctrl', 'shift', 'h'], () => { toggleOverlay?.(); }, enabled);
 
-  // Stealth mode: Ctrl+Shift+S
-  useHotkey(
-    ['ctrl', 'shift', 's'],
-    toggleAppStealthMode,
-    enabled && is_visible
-  );
+  useHotkey(['ctrl', 'shift', 's'], toggleAppStealthMode, enabled && is_visible);
 
-  // Panic: Ctrl+Shift+P
-  useHotkey(
-    ['ctrl', 'shift', 'p'],
-    () => { showPanic?.(PANIC_RESPONSE); },
-    enabled
-  );
+  useHotkey(['ctrl', 'shift', 'p'], () => { showPanic?.(PANIC_RESPONSE); }, enabled);
 
-  // Clear hint or hide panic: Escape
   useHotkey(
     ['escape'],
     () => {
-      if (is_panic_visible) {
+      const os = useOverlayStore.getState();
+      if (os.is_hotkey_help_visible) {
+        os.setHotkeyHelpVisible(false);
+      } else if (is_panic_visible) {
         hidePanic?.();
       } else {
         clearHint?.();
@@ -68,30 +45,77 @@ export function OverlayKeyboardHandler({
     enabled && is_visible
   );
 
-  // Cycle hint style: Ctrl+Shift+Y
-  useHotkey(
-    ['ctrl', 'shift', 'y'],
-    () => { cycleHintStyle?.(); },
-    enabled && is_visible
-  );
+  useHotkey(['ctrl', 'shift', 'y'], () => { cycleHintStyle?.(); }, enabled && is_visible);
 
-  // Coding screenshot: Ctrl+Shift+C
   useHotkey(
     ['ctrl', 'shift', 'c'],
-    () => {
-      if (sessionStatus === 'active') {
-        captureAndAnalyseCodingProblem();
-      }
-    },
+    () => { if (sessionStatus === 'active') captureAndAnalyseCodingProblem(); },
     enabled && is_visible
   );
 
-  // Mute: Ctrl+Shift+M
+  useHotkey(['ctrl', 'shift', 'm'], () => { onToggleMute?.(); }, enabled);
+
   useHotkey(
-    ['ctrl', 'shift', 'm'],
-    () => { onToggleMute?.(); },
-    enabled
+    ['ctrl', 'shift', '/'],
+    () => { useOverlayStore.getState().toggleHotkeyHelp(); },
+    enabled && is_visible
   );
+
+  const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (!enabled) return;
+
+    function clearPeekTimer() {
+      if (peekTimerRef.current) {
+        clearTimeout(peekTimerRef.current);
+        peekTimerRef.current = null;
+      }
+    }
+
+    function onKeyDown(e: KeyboardEvent) {
+      if (!e.ctrlKey || !e.shiftKey || e.altKey || e.metaKey) return;
+
+      const os = useOverlayStore.getState();
+
+      if (os.is_peek_active) {
+        clearPeekTimer();
+        return;
+      }
+
+      if (!os.is_visible && !os.is_peek_active) {
+        clearPeekTimer();
+        os.setPeekActive(true);
+        os.showOverlay();
+      }
+    }
+
+    function onKeyUp(e: KeyboardEvent) {
+      if (e.key !== 'Control' && e.key !== 'Shift') return;
+
+      const os = useOverlayStore.getState();
+      if (!os.is_peek_active) return;
+
+      clearPeekTimer();
+      peekTimerRef.current = setTimeout(() => {
+        const current = useOverlayStore.getState();
+        if (current.is_peek_active) {
+          current.setPeekActive(false);
+          current.hideOverlay();
+        }
+        peekTimerRef.current = null;
+      }, 2000);
+    }
+
+    window.addEventListener('keydown', onKeyDown, true);
+    window.addEventListener('keyup', onKeyUp, true);
+
+    return () => {
+      window.removeEventListener('keydown', onKeyDown, true);
+      window.removeEventListener('keyup', onKeyUp, true);
+      clearPeekTimer();
+    };
+  }, [enabled]);
 
   return null;
 }

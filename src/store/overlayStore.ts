@@ -28,6 +28,11 @@ export type HintState =
 // Overlay Store
 // ─────────────────────────────────────────────────────────────────
 
+export interface ActivityLogEntry {
+  event: string;
+  timestamp: number;
+}
+
 interface OverlayStore {
   // Visibility
   is_visible: boolean;
@@ -70,6 +75,22 @@ interface OverlayStore {
   // Coding problem capture
   is_screenshot_loading: boolean;
   screenshot_hint: string | null;
+
+  // Activity timer
+  session_start_time: number | null;
+  activity_log: ActivityLogEntry[];
+
+  // Stealth opacity (persisted, 20–100)
+  stealth_opacity: number;
+
+  // Peek mode
+  is_peek_active: boolean;
+
+  // Minimal mode (persisted)
+  is_minimal_mode: boolean;
+
+  // Hotkey help overlay
+  is_hotkey_help_visible: boolean;
 
   // Actions — visibility
   showOverlay: () => void;
@@ -117,6 +138,23 @@ interface OverlayStore {
   // Actions — coding
   setScreenshotLoading: (loading: boolean) => void;
   setScreenshotHint: (hint: string | null) => void;
+
+  // Actions — activity timer
+  startActivityTimer: () => void;
+  logActivity: (event: string) => void;
+
+  // Actions — stealth opacity
+  setStealthOpacity: (opacity: number) => void;
+
+  // Actions — peek mode
+  setPeekActive: (active: boolean) => void;
+
+  // Actions — minimal mode
+  setMinimalMode: (enabled: boolean) => void;
+
+  // Actions — hotkey help
+  setHotkeyHelpVisible: (visible: boolean) => void;
+  toggleHotkeyHelp: () => void;
 }
 
 const DEFAULT_POSITION: OverlayPosition = { x: 24, y: 80 };
@@ -170,10 +208,26 @@ export const useOverlayStore = create<OverlayStore>()(
       is_screenshot_loading: false,
       screenshot_hint: null,
 
+      session_start_time: null,
+      activity_log: [],
+      stealth_opacity: 90,
+      is_peek_active: false,
+      is_minimal_mode: false,
+      is_hotkey_help_visible: false,
+
       // ── Visibility ─────────────────────────────────────────
-      showOverlay: () => set({ is_visible: true }),
-      hideOverlay: () => set({ is_visible: false, is_panic_visible: false }),
-      toggleOverlay: () => set((s) => ({ is_visible: !s.is_visible })),
+      showOverlay: () => set((s) => ({
+        is_visible: true,
+        session_start_time: s.session_start_time ?? Date.now(),
+      })),
+      hideOverlay: () => set({ is_visible: false, is_panic_visible: false, is_peek_active: false }),
+      toggleOverlay: () => set((s) => {
+        const willShow = !s.is_visible;
+        return {
+          is_visible: willShow,
+          ...(willShow ? { session_start_time: s.session_start_time ?? Date.now() } : { is_panic_visible: false, is_peek_active: false }),
+        };
+      }),
       setStealthMode: (enabled) => set({ is_stealth_mode: enabled }),
       setProctorSafe: (enabled) => set({ is_proctor_safe: enabled }),
 
@@ -301,12 +355,40 @@ export const useOverlayStore = create<OverlayStore>()(
         is_screenshot_loading: false,
         network_color: "green" as const,
         active_tab: "answer" as const,
+        session_start_time: null,
+        activity_log: [],
+        is_peek_active: false,
+        is_hotkey_help_visible: false,
       }),
 
       // ── Coding ─────────────────────────────────────────────
       setScreenshotLoading: (is_screenshot_loading) => set({ is_screenshot_loading }),
       setScreenshotHint: (screenshot_hint) =>
         set({ screenshot_hint, is_screenshot_loading: false }),
+
+      // ── Activity Timer ──────────────────────────────────────
+      startActivityTimer: () => set({
+        session_start_time: Date.now(),
+        activity_log: [{ event: "session_started", timestamp: Date.now() }],
+      }),
+      logActivity: (event) => set((s) => ({
+        activity_log: [...s.activity_log, { event, timestamp: Date.now() }],
+      })),
+
+      // ── Stealth Opacity ─────────────────────────────────────
+      setStealthOpacity: (opacity) => set({
+        stealth_opacity: Math.max(20, Math.min(100, opacity)),
+      }),
+
+      // ── Peek Mode ───────────────────────────────────────────
+      setPeekActive: (is_peek_active) => set({ is_peek_active }),
+
+      // ── Minimal Mode ────────────────────────────────────────
+      setMinimalMode: (is_minimal_mode) => set({ is_minimal_mode }),
+
+      // ── Hotkey Help ─────────────────────────────────────────
+      setHotkeyHelpVisible: (is_hotkey_help_visible) => set({ is_hotkey_help_visible }),
+      toggleHotkeyHelp: () => set((s) => ({ is_hotkey_help_visible: !s.is_hotkey_help_visible })),
     })),
     {
       name: "confideq-overlay",
@@ -319,6 +401,8 @@ export const useOverlayStore = create<OverlayStore>()(
         is_stealth_mode: state.is_stealth_mode,
         is_proctor_safe: state.is_proctor_safe,
         auto_generate: state.auto_generate,
+        stealth_opacity: state.stealth_opacity,
+        is_minimal_mode: state.is_minimal_mode,
       }),
     }
   )

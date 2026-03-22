@@ -45,10 +45,12 @@ export function OverlaySettings({
   const is_proctor_safe = useOverlayStore((s) => s.is_proctor_safe);
   const hint_style      = useOverlayStore((s) => s.hint_style);
 
+  const stealth_opacity = useOverlayStore((s) => s.stealth_opacity);
+
   const [settings, setSettings] = useState({
     stealthMode: is_stealth_mode,
     proctorSafe: is_proctor_safe,
-    opacity: 90,
+    opacity: stealth_opacity,
     hintStyle: hint_style,
     autoHide: true,
     hotkeysEnabled: true,
@@ -77,7 +79,7 @@ export function OverlaySettings({
         os.setHintStyle?.(value);
         break;
       case 'opacity':
-        // Would need overlay store method
+        os.setStealthOpacity(value);
         break;
     }
   };
@@ -314,6 +316,7 @@ export function OverlaySettings({
               screenCaptureDetection: true,
               windowVisibilityTracking: true,
             });
+            useOverlayStore.getState().setStealthOpacity(90);
           }}
           className="w-full px-4 py-2 bg-white/[0.05] hover:bg-white/[0.1] text-gray-300 text-sm font-medium rounded transition-colors"
         >
