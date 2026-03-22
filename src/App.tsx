@@ -48,6 +48,11 @@ const MockInterview = lazy(() => import("@/pages/app/mock/MockInterview"));
 const MockSession   = lazy(() => import("@/pages/app/mock/MockSession"));
 const MockWarmup    = lazy(() => import("@/pages/app/mock/MockWarmup"));
 
+// Mock Test Engine
+const MockTestHub    = lazy(() => import("@/pages/app/mock-test/MockTestHub"));
+const MyQuestions    = lazy(() => import("@/pages/app/mock-test/MyQuestions"));
+const UploadQuestions= lazy(() => import("@/pages/app/mock-test/UploadQuestions"));
+
 // Prep
 const PrepLab       = lazy(() => import("@/pages/app/prep/PrepLab"));
 const StarBuilder   = lazy(() => import("@/pages/app/prep/StarBuilder"));
@@ -306,6 +311,10 @@ const router = createBrowserRouter([
           { path: "mock",         element: <Page component={MockInterview} /> },
           { path: "mock/warmup",  element: <Page component={MockWarmup} /> },
           { path: "mock/session", element: <Page component={MockSession} /> },
+
+          { path: "mock-test",                element: <Page component={MockTestHub} /> },
+          { path: "mock-test/my-questions",   element: <Page component={MyQuestions} /> },
+          { path: "mock-test/upload",         element: <Page component={UploadQuestions} /> },
 
           { path: "prep",                element: <Page component={PrepLab} /> },
           { path: "prep/star-builder",   element: <Page component={StarBuilder} /> },

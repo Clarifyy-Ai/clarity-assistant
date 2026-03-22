@@ -9,7 +9,7 @@ import {
   LogOut, Star, Users, Bell,
   Briefcase, ListTodo, PenTool, FolderOpen,
   FileSpreadsheet, BarChart3, Calendar, Building,
-  Inbox, Wrench,
+  Inbox, Wrench, GraduationCap,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import {
@@ -34,6 +34,7 @@ const NAV_SECTIONS: Array<{ label: string; items: NavItem[] }> = [
       { to: "/app/live", icon: Mic, stealthIcon: ListTodo, label: "Live Co-Pilot" },
       { to: "/app/mock", icon: ClipboardList, stealthIcon: PenTool, label: "Mock Interview" },
       { to: "/app/prep", icon: FlaskConical, stealthIcon: FolderOpen, label: "Prep Lab" },
+      { to: "/app/mock-test", icon: GraduationCap, stealthIcon: GraduationCap, label: "Mock Tests" },
     ],
   },
   {

@@ -94,7 +94,28 @@ supabase/
     cancel-subscription/      # Cancel Stripe sub at period end
     resume-subscription/      # Resume cancelled Stripe sub
     sync-calendar/            # Import interview events from Google Calendar (requires provider_token)
+    parse-question-pdf/       # Extract questions from PDF using Claude 3.5 Sonnet (5 credits/import)
 ```
+
+## Mock Test Engine (Task #10)
+
+New module at `/app/mock-test/` (separate from `/app/mock/` AI interview mock).
+
+**Database tables** (migration `20260323000000_mock_test_engine.sql`):
+- `questions` — question bank (MCQ, T/F, numerical, coding, short answer; RLS by uploaded_by)
+- `exam_papers` — official paper metadata (JEE, NEET, UPSC, SSC, etc.)
+- `mock_tests` — test sessions (DRAFT → IN_PROGRESS → COMPLETED/ABANDONED)
+- `test_responses` — per-question answers (auto-saved)
+- `test_analyses` — AI-generated post-test reports with subject/topic breakdown
+- `revision_list` — spaced repetition queue
+- `user_topic_performance` — cumulative accuracy by topic (updated via `update_topic_performance` RPC)
+
+**Frontend pages**:
+- `MockTestHub` — exam type quick-start (JEE/NEET/UPSC/SSC/IBPS/Custom), stats, recent tests, tools row
+- `MyQuestions` — question bank manager with search/filter, multi-select, bulk delete
+- `UploadQuestions` — PDF import tab (calls parse-question-pdf edge function) + manual creator form
+
+**Packages**: `react-katex`, `katex` installed for LaTeX math rendering.
 
 ## Environment Variables
 
