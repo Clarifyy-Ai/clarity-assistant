@@ -143,21 +143,21 @@ export default function TestResults(): React.ReactElement {
         return;
       }
 
-      setTest(testRes.data as MockTest);
-      if (analysisRes.data) setAnalysis(analysisRes.data as TestAnalysis);
+      setTest(testRes.data as unknown as MockTest);
+      if (analysisRes.data) setAnalysis(analysisRes.data as unknown as TestAnalysis);
 
-      const qIds = (testRes.data as MockTest).question_ids;
+      const qIds = (testRes.data as unknown as MockTest).question_ids;
       const [qRes, rRes] = await Promise.all([
         supabase.from("questions").select("id, question_text, question_type, correct_answer, explanation, subject, topic, difficulty").in("id", qIds),
         supabase.from("test_responses").select("question_id, user_answer, is_correct, is_attempted, is_marked_review, time_spent_seconds").eq("test_id", testId!).eq("user_id", user!.id),
       ]);
 
       const qMap: Record<string, Question> = {};
-      for (const q of (qRes.data ?? [])) qMap[q.id] = q as Question;
+      for (const q of (qRes.data ?? [])) qMap[(q as unknown as Question).id] = q as unknown as Question;
       setQuestions(qIds.map((id) => qMap[id]).filter(Boolean) as Question[]);
 
       const rMap: Record<string, TestResponse> = {};
-      for (const r of (rRes.data ?? [])) rMap[r.question_id] = r as TestResponse;
+      for (const r of (rRes.data ?? [])) rMap[(r as unknown as TestResponse).question_id] = r as unknown as TestResponse;
       setResponses(rMap);
     } catch (err) {
       console.error("[TestResults] load error:", err);

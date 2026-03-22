@@ -1,12 +1,90 @@
 import { handleCors, corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
+import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
 
 // ─────────────────────────────────────────────────────────────────
 // select-test-questions
 // Verifies JWT, checks free-plan quota and credit balance WITHOUT
 // deducting — deduction happens in create-test after questions are
 // selected and the test row is committed. Returns question IDs.
+//
+// Adaptive selection strategy (per topic bucket):
+//   1st priority: never-attempted questions (topic not in user_topic_performance)
+//   2nd priority (weak): accuracy < 50%, 40% of target
+//   3rd priority (medium): 50–80%, 30% of target
+//   4th priority (strong): > 80%, 30% of target
+//
+// If a topic bucket has fewer than 20 questions, lazy-generates via
+// generate-practice-questions before the final selection.
+// Avoids repeating questions from the last 3 tests.
 // ─────────────────────────────────────────────────────────────────
+
+const SYSTEM_PROMPT = `You are an expert question setter for Indian competitive exams (JEE, NEET, UPSC, SSC).
+Generate high-quality, accurate MCQ questions. Always respond with valid JSON only.`;
+
+async function generateThinTopicQuestions(
+  db: ReturnType<typeof createServiceClient>,
+  topic: string,
+  subject: string,
+  examType: string | null,
+  difficulty: string,
+): Promise<void> {
+  try {
+    const prompt = `Generate exactly 10 multiple-choice questions for:
+Topic: ${topic}
+Subject: ${subject}
+${examType ? `Exam: ${examType}` : ""}
+Difficulty: ${difficulty}
+
+Return ONLY valid JSON:
+{
+  "questions": [
+    {
+      "question_text": "<question text>",
+      "options": [
+        {"label": "A", "text": "<option text>"},
+        {"label": "B", "text": "<option text>"},
+        {"label": "C", "text": "<option text>"},
+        {"label": "D", "text": "<option text>"}
+      ],
+      "correct_answer": "<A|B|C|D>",
+      "explanation": "<brief explanation>",
+      "difficulty": "<EASY|MEDIUM|HARD>",
+      "marks_positive": 4,
+      "marks_negative": 1
+    }
+  ]
+}`;
+
+    const raw = await geminiGenerate(prompt, SYSTEM_PROMPT, 0.7, 3000);
+    const data = parseJSON(raw, { questions: [] });
+
+    const questions = (data.questions as Array<Record<string, unknown>>).map((q) => ({
+      question_text:  q.question_text,
+      question_type:  "MCQ",
+      options:        q.options,
+      correct_answer: q.correct_answer,
+      explanation:    q.explanation,
+      subject,
+      topic,
+      difficulty:     q.difficulty ?? difficulty,
+      exam_type:      examType,
+      source:         "AI_GENERATED",
+      marks_positive: q.marks_positive ?? 4,
+      marks_negative: q.marks_negative ?? 1,
+      is_verified:    false,
+      is_public:      true,
+      latex_present:  false,
+    }));
+
+    if (questions.length > 0) {
+      await db.from("questions").insert(questions);
+    }
+  } catch (err) {
+    // Non-blocking: log and continue with existing questions
+    console.warn(`[select-test-questions] thin-topic generation failed for "${topic}":`, err);
+  }
+}
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
@@ -90,14 +168,16 @@ Deno.serve(async (req) => {
     } = config;
 
     // ── Fetch user topic performance ──────────────────────────────
-    const { data: topicPerf } = await db
+    const { data: topicPerfData } = await db
       .from("user_topic_performance")
       .select("topic, accuracy, total_attempted")
       .eq("user_id", userId);
 
     const topicAccuracyMap: Record<string, number> = {};
-    for (const tp of (topicPerf ?? [])) {
+    const attemptedTopics = new Set<string>();
+    for (const tp of (topicPerfData ?? [])) {
       topicAccuracyMap[tp.topic] = tp.accuracy ?? 0;
+      if ((tp.total_attempted ?? 0) > 0) attemptedTopics.add(tp.topic);
     }
 
     // ── Fetch recently used question IDs (last 3 tests) ───────────
@@ -111,7 +191,7 @@ Deno.serve(async (req) => {
     const recentQuestionIds = new Set<string>();
     for (const t of (recentTests ?? [])) {
       for (const qid of (t.question_ids ?? [])) {
-        recentQuestionIds.add(qid);
+        recentQuestionIds.add(qid as string);
       }
     }
 
@@ -146,87 +226,158 @@ Deno.serve(async (req) => {
       });
     }
 
-    const questions = allQuestions ?? [];
+    let questions = allQuestions ?? [];
 
-    // ── Separate questions by difficulty ──────────────────────────
-    const easyQ:   string[] = [];
-    const mediumQ: string[] = [];
-    const hardQ:   string[] = [];
+    // ── Lazy generation for thin topics (<20 questions) ───────────
+    // Group questions by topic, then generate for any thin topic
+    const topicQuestionCounts: Record<string, number> = {};
+    for (const q of questions) {
+      topicQuestionCounts[q.topic] = (topicQuestionCounts[q.topic] ?? 0) + 1;
+    }
+
+    // Determine topics in scope (from filter or distinct from results)
+    const topicsInScope = topics.length > 0
+      ? topics
+      : [...new Set(questions.map((q) => q.topic))];
+
+    // Get dominant subject for each thin topic for generation
+    const topicSubjectMap: Record<string, string> = {};
+    for (const q of questions) {
+      if (!topicSubjectMap[q.topic]) topicSubjectMap[q.topic] = q.subject;
+    }
+
+    const thinTopics = topicsInScope.filter((t: string) => (topicQuestionCounts[t] ?? 0) < 20);
+
+    if (thinTopics.length > 0 && Deno.env.get("GEMINI_API_KEY")) {
+      // Generate concurrently (capped to 5 at a time to avoid rate limits)
+      const chunks = [];
+      for (let i = 0; i < thinTopics.length; i += 5) chunks.push(thinTopics.slice(i, i + 5));
+      for (const chunk of chunks) {
+        await Promise.all(
+          chunk.map((t: string) =>
+            generateThinTopicQuestions(
+              db,
+              t,
+              topicSubjectMap[t] ?? subjects[0] ?? "",
+              exam_type ?? null,
+              "MEDIUM"
+            )
+          )
+        );
+      }
+
+      // Re-query to include newly generated questions
+      const { data: refreshed } = await query;
+      questions = refreshed ?? questions;
+    }
+
+    // ── Classify by difficulty and priority ───────────────────────
+    // Priority 1: never-attempted topics (not in user_topic_performance at all)
+    // Priority 2–4: weak / medium / strong by accuracy
+
+    const neverAttempted: string[] = [];
+    const easyWeak:   string[] = [];
+    const easyMed:    string[] = [];
+    const easyStrong: string[] = [];
+    const medWeak:    string[] = [];
+    const medMed:     string[] = [];
+    const medStrong:  string[] = [];
+    const hardWeak:   string[] = [];
+    const hardMed:    string[] = [];
+    const hardStrong: string[] = [];
 
     for (const q of questions) {
       if (recentQuestionIds.has(q.id)) continue;
-      if (q.difficulty === "EASY") easyQ.push(q.id);
-      else if (q.difficulty === "HARD") hardQ.push(q.id);
-      else mediumQ.push(q.id);
+
+      const isNeverAttempted = !attemptedTopics.has(q.topic);
+
+      if (isNeverAttempted) {
+        neverAttempted.push(q.id);
+        continue;
+      }
+
+      const acc = topicAccuracyMap[q.topic] ?? 50;
+      const isWeak   = acc < 50;
+      const isMed    = acc >= 50 && acc <= 80;
+      const isStrong = acc > 80;
+
+      if (q.difficulty === "EASY") {
+        if (isWeak) easyWeak.push(q.id);
+        else if (isMed) easyMed.push(q.id);
+        else easyStrong.push(q.id);
+      } else if (q.difficulty === "HARD") {
+        if (isWeak) hardWeak.push(q.id);
+        else if (isMed) hardMed.push(q.id);
+        else hardStrong.push(q.id);
+      } else {
+        if (isWeak) medWeak.push(q.id);
+        else if (isMed) medMed.push(q.id);
+        else medStrong.push(q.id);
+      }
     }
 
-    const qLookup: Record<string, { topic: string }> = {};
-    for (const q of questions) qLookup[q.id] = { topic: q.topic };
+    const shuffle = (arr: string[]): string[] => [...arr].sort(() => Math.random() - 0.5);
 
-    const shuffle = (arr: string[]): string[] => arr.sort(() => Math.random() - 0.5);
+    // Calculate targets from difficulty_distribution
+    const easyPct   = difficulty_distribution.EASY ?? 30;
+    const hardPct   = difficulty_distribution.HARD ?? 30;
+    const medPct    = 100 - easyPct - hardPct;
+    const easyTarget = Math.round(question_count * easyPct / 100);
+    const hardTarget = Math.round(question_count * hardPct / 100);
+    const medTarget  = question_count - easyTarget - hardTarget;
 
-    const classifyAdaptive = (ids: string[]) => {
-      const weak: string[] = [], medium: string[] = [], strong: string[] = [];
-      for (const id of ids) {
-        const topic = qLookup[id]?.topic;
-        const accuracy = topic !== undefined ? topicAccuracyMap[topic] : undefined;
-        if (accuracy === undefined) strong.push(id);
-        else if (accuracy < 50) weak.push(id);
-        else if (accuracy <= 80) medium.push(id);
-        else strong.push(id);
-      }
-      return { weak: shuffle(weak), medium: shuffle(medium), strong: shuffle(strong) };
-    };
+    // Reserve ~20% of each difficulty slot for never-attempted questions
+    const neverAttemptedShuffled = shuffle(neverAttempted);
 
-    const pickAdaptive = (bucket: string[], target: number): string[] => {
+    const pickWithNeverAttempted = (
+      weak: string[], med: string[], strong: string[], target: number
+    ): string[] => {
       if (target <= 0) return [];
-      const { weak, medium, strong } = classifyAdaptive(bucket);
-      const wantWeak   = Math.round(target * 0.4);
-      const wantMedium = Math.round(target * 0.3);
-      const wantStrong = target - wantWeak - wantMedium;
-      const selected: string[] = [];
-      let leftover = 0;
+      const naSlots = Math.min(Math.round(target * 0.2), neverAttemptedShuffled.length);
+      const naSelected = neverAttemptedShuffled.splice(0, naSlots);
+      const remaining  = target - naSelected.length;
+      const wantWeak   = Math.round(remaining * 0.4);
+      const wantMed    = Math.round(remaining * 0.3);
+      const wantStrong = remaining - wantWeak - wantMed;
 
+      const selected = [...naSelected];
       const take = (arr: string[], n: number): number => {
-        const taken = arr.slice(0, n);
+        const taken = shuffle(arr).slice(0, n);
         selected.push(...taken);
         return n - taken.length;
       };
 
-      leftover  = take(weak, wantWeak);
-      leftover += take(medium, wantMedium + leftover);
+      let leftover  = take(weak, wantWeak);
+      leftover += take(med, wantMed + leftover);
       take(strong, wantStrong + leftover);
 
-      // Fill any remaining from all pools
       if (selected.length < target) {
         const usedSet = new Set(selected);
-        const rest = shuffle(bucket.filter((id) => !usedSet.has(id)));
+        const rest = shuffle([...weak, ...med, ...strong].filter((id) => !usedSet.has(id)));
         selected.push(...rest.slice(0, target - selected.length));
       }
       return selected.slice(0, target);
     };
 
-    const easyPct   = difficulty_distribution.EASY ?? 30;
-    const hardPct   = difficulty_distribution.HARD ?? 30;
-    const mediumPct = 100 - easyPct - hardPct;
-
-    const easyTarget   = Math.round(question_count * easyPct / 100);
-    const hardTarget   = Math.round(question_count * hardPct / 100);
-    const mediumTarget = question_count - easyTarget - hardTarget;
-
-    const easySelected   = pickAdaptive(easyQ, easyTarget);
-    const mediumSelected = pickAdaptive(mediumQ, mediumTarget);
-    const hardSelected   = pickAdaptive(hardQ, hardTarget);
+    const easySelected   = pickWithNeverAttempted(easyWeak, easyMed, easyStrong, easyTarget);
+    const mediumSelected = pickWithNeverAttempted(medWeak, medMed, medStrong, medTarget);
+    const hardSelected   = pickWithNeverAttempted(hardWeak, hardMed, hardStrong, hardTarget);
 
     let finalIds = [...easySelected, ...mediumSelected, ...hardSelected];
 
-    // Fill shortfall from any remaining questions
+    // Fill shortfall from remaining never-attempted or any remaining
     if (finalIds.length < question_count) {
       const usedSet = new Set(finalIds);
-      const extras = shuffle(
-        questions.map((q) => q.id).filter((id) => !usedSet.has(id) && !recentQuestionIds.has(id))
-      );
-      finalIds.push(...extras.slice(0, question_count - finalIds.length));
+      const restNA = neverAttemptedShuffled.filter((id) => !usedSet.has(id));
+      finalIds.push(...restNA.slice(0, question_count - finalIds.length));
+
+      if (finalIds.length < question_count) {
+        const usedSet2 = new Set(finalIds);
+        const rest = shuffle(
+          questions.map((q) => q.id).filter((id) => !usedSet2.has(id) && !recentQuestionIds.has(id))
+        );
+        finalIds.push(...rest.slice(0, question_count - finalIds.length));
+      }
     }
 
     shuffle(finalIds);

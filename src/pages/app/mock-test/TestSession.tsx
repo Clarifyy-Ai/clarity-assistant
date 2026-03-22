@@ -36,7 +36,13 @@ interface Question {
   latex_present?: boolean;
 }
 
-type QuestionState = "unattempted" | "attempted" | "marked" | "attempted-marked" | "bookmarked";
+// 5-state navigator model:
+//   unattempted       = grey   — never opened
+//   visited           = red    — opened but no answer given
+//   answered          = green  — has answer
+//   marked            = yellow — marked for review, no answer
+//   answered-marked   = purple — answered AND marked for review
+type QuestionState = "unattempted" | "visited" | "answered" | "marked" | "answered-marked";
 
 interface ResponseState {
   answer: string;
@@ -66,20 +72,20 @@ function formatTime(seconds: number): string {
 function computeRemainingSeconds(test: MockTest): number {
   const limitSecs = (test.time_limit_minutes ?? 60) * 60;
   if (!test.started_at) return limitSecs;
-  const elapsedMs = Date.now() - new Date(test.started_at).getTime();
+  const elapsedMs  = Date.now() - new Date(test.started_at).getTime();
   const elapsedSecs = Math.floor(elapsedMs / 1000);
   return Math.max(0, limitSecs - elapsedSecs);
 }
 
+// 5-state color map matches spec:  grey / red / green / yellow / purple
 const STATE_COLORS: Record<QuestionState, string> = {
-  unattempted:          "bg-muted text-muted-foreground border-border",
-  attempted:            "bg-green-500/20 text-green-400 border-green-500/30",
-  marked:               "bg-amber-500/20 text-amber-400 border-amber-500/30",
-  "attempted-marked":   "bg-purple-500/20 text-purple-400 border-purple-500/30",
-  bookmarked:           "bg-blue-500/20 text-blue-400 border-blue-500/30",
+  unattempted:      "bg-muted text-muted-foreground border-border",
+  visited:          "bg-red-500/20 text-red-400 border-red-500/30",
+  answered:         "bg-green-500/20 text-green-400 border-green-500/30",
+  marked:           "bg-amber-500/20 text-amber-400 border-amber-500/30",
+  "answered-marked":"bg-purple-500/20 text-purple-400 border-purple-500/30",
 };
 
-// Regex segments for LaTeX rendering
 interface MathSegment {
   start: number;
   end: number;
@@ -91,7 +97,7 @@ function MathText({ text }: { text: string }): React.ReactElement {
   const parts: React.ReactNode[] = [];
   const segments: MathSegment[] = [];
 
-  const blockRe = /\$\$([\s\S]+?)\$\$/g;
+  const blockRe  = /\$\$([\s\S]+?)\$\$/g;
   const inlineRe = /\$([^$]+?)\$/g;
 
   let match: RegExpExecArray | null;
@@ -131,28 +137,51 @@ function MathText({ text }: { text: string }): React.ReactElement {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Main component
+// Live score estimation (optimistic, based on correct answers rate)
+// Returns { score, max } using actual question marks
+// ─────────────────────────────────────────────────────────────────
+function estimateLiveScore(
+  questions: Question[],
+  responses: Record<string, ResponseState>
+): { score: number; max: number } {
+  let score = 0;
+  let max   = 0;
+  for (const q of questions) {
+    const marksPos = Number(q.marks_positive ?? 4);
+    const marksNeg = Number(q.marks_negative ?? 1);
+    max += marksPos;
+    const r = responses[q.id];
+    if (r?.answer) {
+      // We don't know correct answer here; show attempted marks at 60% optimistic
+      score += marksPos * 0.6 - marksNeg * 0.4;
+    }
+  }
+  return { score: Math.round(Math.max(0, score)), max: Math.round(max) };
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Component
 // ─────────────────────────────────────────────────────────────────
 
 export default function TestSession(): React.ReactElement {
   const { testId } = useParams<{ testId: string }>();
-  const navigate = useNavigate();
-  const user = useAuthStore((s) => s.user);
+  const navigate   = useNavigate();
+  const user       = useAuthStore((s) => s.user);
 
-  const [test, setTest] = useState<MockTest | null>(null);
-  const [questions, setQuestions] = useState<Question[]>([]);
+  const [test, setTest]               = useState<MockTest | null>(null);
+  const [questions, setQuestions]     = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [responses, setResponses] = useState<Record<string, ResponseState>>({});
-  const [timeLeft, setTimeLeft] = useState(0);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
+  const [responses, setResponses]     = useState<Record<string, ResponseState>>({});
+  const [timeLeft, setTimeLeft]       = useState(0);
+  const [loading, setLoading]         = useState(true);
+  const [submitting, setSubmitting]   = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
 
-  const timerRef    = useRef<ReturnType<typeof setInterval> | null>(null);
-  const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const timerRef         = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoSaveRef      = useRef<ReturnType<typeof setInterval> | null>(null);
   const questionStartRef = useRef<number>(Date.now());
-  const timeSpentMap = useRef<Record<string, number>>({});
-  const isMounted = useRef(true);
+  const timeSpentMap     = useRef<Record<string, number>>({});
+  const isMounted        = useRef(true);
 
   useEffect(() => {
     isMounted.current = true;
@@ -170,6 +199,40 @@ export default function TestSession(): React.ReactElement {
       if (autoSaveRef.current) clearInterval(autoSaveRef.current);
     };
   }, [responses]);
+
+  // When moving away from a question — mark as "visited" if opened but unanswered
+  useEffect(() => {
+    questionStartRef.current = Date.now();
+    const prevIndex = currentIndex;
+    return () => {
+      const elapsed = Math.round((Date.now() - questionStartRef.current) / 1000);
+      if (elapsed > 0 && questions[prevIndex]) {
+        const qid = questions[prevIndex].id;
+        timeSpentMap.current[qid] = (timeSpentMap.current[qid] ?? 0) + elapsed;
+        // Mark as visited if unattempted
+        setResponses((prev) => {
+          const current = prev[qid];
+          if (!current || current.state === "unattempted") {
+            return { ...prev, [qid]: { answer: "", state: "visited" } };
+          }
+          return prev;
+        });
+      }
+    };
+  }, [currentIndex, questions]);
+
+  // Mark the initial question as visited when first rendered
+  useEffect(() => {
+    if (questions.length > 0) {
+      const qid = questions[0].id;
+      setResponses((prev) => {
+        if (!prev[qid] || prev[qid].state === "unattempted") {
+          return { ...prev, [qid]: { answer: prev[qid]?.answer ?? "", state: "visited" } };
+        }
+        return prev;
+      });
+    }
+  }, [questions]);
 
   async function loadTest() {
     setLoading(true);
@@ -192,9 +255,8 @@ export default function TestSession(): React.ReactElement {
         return;
       }
 
-      const loadedTest = testData as MockTest;
+      const loadedTest = testData as unknown as MockTest;
 
-      // If IN_PROGRESS, derive remaining time from started_at
       let remaining: number;
       if (loadedTest.status === "IN_PROGRESS" && loadedTest.started_at) {
         remaining = computeRemainingSeconds(loadedTest);
@@ -213,26 +275,45 @@ export default function TestSession(): React.ReactElement {
         .in("id", qIds);
 
       const qMap: Record<string, Question> = {};
-      for (const q of (qData ?? [])) qMap[q.id] = q as Question;
+      for (const rawQ of (qData ?? [])) {
+        const q = rawQ as unknown as Question;
+        qMap[q.id] = q;
+      }
       const orderedQuestions = qIds.map((id) => qMap[id]).filter(Boolean) as Question[];
 
       if (!isMounted.current) return;
       setQuestions(orderedQuestions);
 
+      // Supabase generated types don't reflect all schema columns — cast via unknown
+      // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+      // @ts-ignore TS2589: Supabase type depth exceeded for schema columns
       const { data: respData } = await supabase
         .from("test_responses")
         .select("question_id, user_answer, is_marked_review, is_attempted, time_spent_seconds")
         .eq("test_id", testId!)
         .eq("user_id", user!.id);
 
+      interface RawResp {
+        question_id: string;
+        user_answer: string | null;
+        is_marked_review: boolean;
+        is_attempted: boolean;
+        time_spent_seconds: number | null;
+      }
       const respMap: Record<string, ResponseState> = {};
       const timeMap: Record<string, number> = {};
-      for (const r of (respData ?? [])) {
-        const state: QuestionState = r.is_marked_review
-          ? (r.is_attempted ? "attempted-marked" : "marked")
-          : (r.is_attempted ? "attempted" : "unattempted");
+      for (const rawR of (respData ?? [])) {
+        const r = rawR as unknown as RawResp;
+        const isAnswered = Boolean(r.user_answer);
+        const isMarked   = Boolean(r.is_marked_review);
+        let state: QuestionState;
+        if (isAnswered && isMarked) state = "answered-marked";
+        else if (isAnswered) state = "answered";
+        else if (isMarked) state = "marked";
+        else if (r.is_attempted) state = "visited";
+        else state = "unattempted";
         respMap[r.question_id] = { answer: r.user_answer ?? "", state };
-        if (r.time_spent_seconds) timeMap[r.question_id] = r.time_spent_seconds as number;
+        if (r.time_spent_seconds) timeMap[r.question_id] = r.time_spent_seconds;
       }
       if (!isMounted.current) return;
       setResponses(respMap);
@@ -245,7 +326,6 @@ export default function TestSession(): React.ReactElement {
           .from("mock_tests")
           .update({ status: "IN_PROGRESS", started_at: startedAt })
           .eq("id", testId!);
-        // Update local copy so timer uses correct started_at
         setTest((prev) => prev ? { ...prev, status: "IN_PROGRESS", started_at: startedAt } : prev);
       }
 
@@ -276,19 +356,6 @@ export default function TestSession(): React.ReactElement {
     };
   }, []);
 
-  // Track time spent on current question
-  useEffect(() => {
-    questionStartRef.current = Date.now();
-    const prevIndex = currentIndex;
-    return () => {
-      const elapsed = Math.round((Date.now() - questionStartRef.current) / 1000);
-      if (elapsed > 0 && questions[prevIndex]) {
-        const qid = questions[prevIndex].id;
-        timeSpentMap.current[qid] = (timeSpentMap.current[qid] ?? 0) + elapsed;
-      }
-    };
-  }, [currentIndex, questions]);
-
   async function saveResponses() {
     if (!testId || !user?.id || Object.keys(responses).length === 0) return;
     try {
@@ -297,8 +364,8 @@ export default function TestSession(): React.ReactElement {
         question_id:        qId,
         user_id:            user!.id,
         user_answer:        r.answer || null,
-        is_attempted:       Boolean(r.answer),
-        is_marked_review:   r.state === "marked" || r.state === "attempted-marked",
+        is_attempted:       r.state !== "unattempted",
+        is_marked_review:   r.state === "marked" || r.state === "answered-marked",
         time_spent_seconds: timeSpentMap.current[qId] ?? 0,
       }));
       await supabase
@@ -318,13 +385,27 @@ export default function TestSession(): React.ReactElement {
     if (!q) return;
     setResponses((prev) => {
       const current = prev[q.id];
-      const wasMarked = current?.state === "marked" || current?.state === "attempted-marked";
+      const wasMarked = current?.state === "marked" || current?.state === "answered-marked";
       const newState: QuestionState = wasMarked && answer
-        ? "attempted-marked"
+        ? "answered-marked"
         : answer
-          ? "attempted"
-          : "unattempted";
+          ? "answered"
+          : "visited";
       return { ...prev, [q.id]: { answer, state: newState } };
+    });
+  }
+
+  // Mark the question as visited when navigating to it
+  function navigateTo(index: number) {
+    setCurrentIndex(index);
+    const q = questions[index];
+    if (!q) return;
+    setResponses((prev) => {
+      const current = prev[q.id];
+      if (!current || current.state === "unattempted") {
+        return { ...prev, [q.id]: { answer: "", state: "visited" } };
+      }
+      return prev;
     });
   }
 
@@ -333,11 +414,11 @@ export default function TestSession(): React.ReactElement {
     if (!q) return;
     setResponses((prev) => {
       const current = prev[q.id] ?? { answer: "", state: "unattempted" as QuestionState };
-      const hasAnswer = Boolean(current.answer);
-      const isCurrentlyMarked = current.state === "marked" || current.state === "attempted-marked";
-      const newState: QuestionState = isCurrentlyMarked
-        ? (hasAnswer ? "attempted" : "unattempted")
-        : (hasAnswer ? "attempted-marked" : "marked");
+      const hasAnswer  = Boolean(current.answer);
+      const isMarked   = current.state === "marked" || current.state === "answered-marked";
+      const newState: QuestionState = isMarked
+        ? (hasAnswer ? "answered" : "visited")
+        : (hasAnswer ? "answered-marked" : "marked");
       return { ...prev, [q.id]: { ...current, state: newState } };
     });
   }
@@ -347,26 +428,15 @@ export default function TestSession(): React.ReactElement {
     if (!q) return;
     setResponses((prev) => {
       const current = prev[q.id] ?? { answer: "", state: "unattempted" as QuestionState };
-      const isMarked = current.state === "marked" || current.state === "attempted-marked";
-      return { ...prev, [q.id]: { answer: "", state: isMarked ? "marked" : "unattempted" } };
+      const isMarked = current.state === "marked" || current.state === "answered-marked";
+      return { ...prev, [q.id]: { answer: "", state: isMarked ? "marked" : "visited" } };
     });
-  }
-
-  function addToRevision() {
-    const q = getCurrentQuestion();
-    if (!q) return;
-    setResponses((prev) => ({
-      ...prev,
-      [q.id]: { ...(prev[q.id] ?? { answer: "", state: "unattempted" as QuestionState }), state: "bookmarked" },
-    }));
-    toast.success("Bookmarked for revision");
   }
 
   async function handleSubmit(autoSubmit = false) {
     if (submitting) return;
     setSubmitting(true);
     try {
-      // Record final time on current question
       const elapsed = Math.round((Date.now() - questionStartRef.current) / 1000);
       const q = getCurrentQuestion();
       if (q && elapsed > 0) {
@@ -408,29 +478,37 @@ export default function TestSession(): React.ReactElement {
   }
 
   const q = getCurrentQuestion();
-  if (!q) return <div className="flex h-screen items-center justify-center bg-background"><p className="text-muted-foreground">No questions found.</p></div>;
+  if (!q) {
+    return (
+      <div className="flex h-screen items-center justify-center bg-background">
+        <p className="text-muted-foreground">No questions found.</p>
+      </div>
+    );
+  }
 
-  const currentResp = responses[q.id] ?? { answer: "", state: "unattempted" as QuestionState };
-  const isMarked = currentResp.state === "marked" || currentResp.state === "attempted-marked";
+  const currentResp = responses[q.id] ?? { answer: "", state: "visited" as QuestionState };
+  const isMarked    = currentResp.state === "marked" || currentResp.state === "answered-marked";
 
-  const attempted   = Object.values(responses).filter((r) => r.answer).length;
+  const answered    = Object.values(responses).filter((r) => r.answer).length;
   const markedCount = Object.values(responses).filter(
-    (r) => r.state === "marked" || r.state === "attempted-marked"
+    (r) => r.state === "marked" || r.state === "answered-marked"
   ).length;
-  const unattempted = questions.length - attempted;
+  const visitedCount = Object.values(responses).filter((r) => r.state === "visited").length;
+  const unanswered   = questions.length - answered;
 
   const timerColor =
     timeLeft <= 300 ? "text-red-400" :
     timeLeft <= 600 ? "text-amber-400" :
     "text-foreground";
 
-  // Subject-wise counts
   const subjectCounts: Record<string, { total: number; done: number }> = {};
   for (const question of questions) {
     if (!subjectCounts[question.subject]) subjectCounts[question.subject] = { total: 0, done: 0 };
     subjectCounts[question.subject].total++;
     if (responses[question.id]?.answer) subjectCounts[question.subject].done++;
   }
+
+  const { score: liveScore, max: liveMax } = estimateLiveScore(questions, responses);
 
   return (
     <div className="flex flex-col h-screen bg-background overflow-hidden">
@@ -445,7 +523,7 @@ export default function TestSession(): React.ReactElement {
         </div>
         <div className="flex items-center gap-3">
           <span className="text-xs text-muted-foreground hidden sm:block">
-            {attempted}/{questions.length} done
+            {answered}/{questions.length} answered
           </span>
           <Button size="sm" variant="outline" onClick={() => setShowSubmitModal(true)} disabled={submitting}>
             <Send className="h-3.5 w-3.5 mr-1.5" />
@@ -468,7 +546,7 @@ export default function TestSession(): React.ReactElement {
                 <button
                   key={qq.id}
                   type="button"
-                  onClick={() => setCurrentIndex(i)}
+                  onClick={() => navigateTo(i)}
                   className={cn(
                     "w-7 h-7 rounded-lg text-[11px] font-bold border transition-all",
                     STATE_COLORS[r.state as QuestionState],
@@ -480,15 +558,19 @@ export default function TestSession(): React.ReactElement {
               );
             })}
           </div>
+
+          {/* Legend */}
           <div className="mt-2 space-y-1.5">
-            {(["unattempted", "attempted", "marked", "attempted-marked"] as QuestionState[]).map((state) => (
+            {([
+              { state: "unattempted"     as QuestionState, label: "Not visited" },
+              { state: "visited"         as QuestionState, label: "Visited, no ans" },
+              { state: "answered"        as QuestionState, label: "Answered" },
+              { state: "marked"          as QuestionState, label: "For review" },
+              { state: "answered-marked" as QuestionState, label: "Ans + review" },
+            ]).map(({ state, label }) => (
               <div key={state} className="flex items-center gap-1.5">
-                <div className={cn("w-4 h-4 rounded border", STATE_COLORS[state])} />
-                <span className="text-[10px] text-muted-foreground">
-                  {state === "unattempted" ? "Not visited" :
-                   state === "attempted" ? "Answered" :
-                   state === "marked" ? "For review" : "Ans + review"}
-                </span>
+                <div className={cn("w-4 h-4 rounded border shrink-0", STATE_COLORS[state])} />
+                <span className="text-[10px] text-muted-foreground">{label}</span>
               </div>
             ))}
           </div>
@@ -578,7 +660,28 @@ export default function TestSession(): React.ReactElement {
                 <X className="h-3.5 w-3.5 mr-1.5" />
                 Clear
               </Button>
-              <Button size="sm" variant="outline" onClick={addToRevision}>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  const curr = getCurrentQuestion();
+                  if (!curr) return;
+                  toast.success("Bookmarked for post-test revision");
+                  // Add directly to DB for persistence
+                  void supabase.from("revision_list").insert({
+                    user_id: user!.id,
+                    question_id: curr.id,
+                    added_from_test_id: testId,
+                    next_review_date: new Date(Date.now() + 86400000).toISOString().split("T")[0],
+                    interval_days: 1,
+                    is_mastered: false,
+                  }).then(({ error }) => {
+                    if (error && !error.message.includes("duplicate")) {
+                      console.warn("[TestSession] bookmark error:", error.message);
+                    }
+                  });
+                }}
+              >
                 <BookmarkPlus className="h-3.5 w-3.5 mr-1.5" />
                 Bookmark
               </Button>
@@ -588,7 +691,7 @@ export default function TestSession(): React.ReactElement {
               <Button
                 variant="outline"
                 size="sm"
-                onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
+                onClick={() => navigateTo(Math.max(0, currentIndex - 1))}
                 disabled={currentIndex === 0}
               >
                 <ChevronLeft className="h-4 w-4 mr-1" />
@@ -596,7 +699,7 @@ export default function TestSession(): React.ReactElement {
               </Button>
               <span className="text-xs text-muted-foreground">{currentIndex + 1} / {questions.length}</span>
               {currentIndex < questions.length - 1 ? (
-                <Button size="sm" onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}>
+                <Button size="sm" onClick={() => navigateTo(Math.min(questions.length - 1, currentIndex + 1))}>
                   Next
                   <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
@@ -610,11 +713,20 @@ export default function TestSession(): React.ReactElement {
           </div>
         </div>
 
-        {/* Right: subject-wise counts and live stats */}
-        <div className="hidden lg:flex flex-col w-44 border-l border-border overflow-y-auto p-3 gap-3 shrink-0">
+        {/* Right: subject counts + live stats */}
+        <div className="hidden lg:flex flex-col w-48 border-l border-border overflow-y-auto p-3 gap-3 shrink-0">
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
             Progress
           </p>
+
+          {/* Live score display */}
+          <div className="rounded-xl border border-violet-500/30 bg-violet-500/5 px-3 py-2 text-center">
+            <p className="text-[10px] text-muted-foreground">Est. Score</p>
+            <p className="text-base font-black text-violet-300">{liveScore} <span className="text-xs font-normal text-muted-foreground">/ {liveMax}</span></p>
+            <p className="text-[9px] text-muted-foreground mt-0.5">optimistic estimate</p>
+          </div>
+
+          {/* Subject bars */}
           <div className="space-y-2">
             {Object.entries(subjectCounts).map(([subj, counts]) => (
               <div key={subj} className="space-y-1">
@@ -631,14 +743,20 @@ export default function TestSession(): React.ReactElement {
               </div>
             ))}
           </div>
-          <div className="mt-2 rounded-xl bg-muted/20 p-2 space-y-1.5 text-center">
+
+          {/* Counts summary */}
+          <div className="rounded-xl bg-muted/20 p-2 space-y-1.5 text-center">
             <div>
-              <p className="text-[10px] text-muted-foreground">Attempted</p>
-              <p className="text-sm font-bold text-green-400">{attempted}</p>
+              <p className="text-[10px] text-muted-foreground">Answered</p>
+              <p className="text-sm font-bold text-green-400">{answered}</p>
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground">Skipped</p>
-              <p className="text-sm font-bold text-muted-foreground">{unattempted}</p>
+              <p className="text-[10px] text-muted-foreground">Visited only</p>
+              <p className="text-sm font-bold text-red-400">{visitedCount}</p>
+            </div>
+            <div>
+              <p className="text-[10px] text-muted-foreground">Unanswered</p>
+              <p className="text-sm font-bold text-muted-foreground">{unanswered}</p>
             </div>
             <div>
               <p className="text-[10px] text-muted-foreground">For review</p>
@@ -655,31 +773,30 @@ export default function TestSession(): React.ReactElement {
             <h2 className="text-lg font-bold text-foreground">Submit Test?</h2>
             <div className="space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Attempted</span>
-                <span className="font-semibold text-green-400">{attempted}</span>
+                <span className="text-muted-foreground">Answered</span>
+                <span className="font-semibold text-green-400">{answered}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-muted-foreground">Unattempted</span>
-                <span className="font-semibold text-red-400">{unattempted}</span>
+                <span className="text-muted-foreground">Visited, no answer</span>
+                <span className="font-semibold text-red-400">{visitedCount}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Not visited</span>
+                <span className="font-semibold text-muted-foreground">{unanswered - visitedCount}</span>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Marked for review</span>
                 <span className="font-semibold text-amber-400">{markedCount}</span>
               </div>
             </div>
-            {unattempted > 0 && (
+            {unanswered > 0 && (
               <p className="text-xs text-amber-400 flex items-center gap-1.5">
                 <AlertCircle className="h-3.5 w-3.5" />
-                {unattempted} question{unattempted > 1 ? "s" : ""} unattempted
+                {unanswered} question{unanswered > 1 ? "s" : ""} without an answer
               </p>
             )}
             <div className="flex gap-3 pt-2">
-              <Button
-                variant="outline"
-                className="flex-1"
-                onClick={() => setShowSubmitModal(false)}
-                disabled={submitting}
-              >
+              <Button variant="outline" className="flex-1" onClick={() => setShowSubmitModal(false)} disabled={submitting}>
                 Go Back
               </Button>
               <Button className="flex-1" onClick={() => { void handleSubmit(false); }} loading={submitting}>

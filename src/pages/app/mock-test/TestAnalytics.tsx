@@ -23,13 +23,21 @@ interface MockTestSummary {
   created_at: string;
 }
 
+interface SubjectBreakdownEntry {
+  correct: number;
+  wrong: number;
+  attempted: number;
+  total: number;
+  accuracy: number;
+}
+
 interface TestAnalysisSummary {
   test_id: string;
   total_score: number;
   max_score: number;
   accuracy: number;
   attempt_percentage: number;
-  subject_breakdown: Record<string, unknown>;
+  subject_breakdown: Record<string, SubjectBreakdownEntry>;
   topic_breakdown: Record<string, unknown>;
   created_at: string;
 }
@@ -46,19 +54,21 @@ interface TopicPerformance {
 interface TrendDataPoint {
   name: string;
   accuracy: number;
-  attempted: number;
   score_pct: number;
+  [subject: string]: number | string; // per-subject accuracy
 }
 
 // ─────────────────────────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────────────────────────
 
+const SUBJECT_COLORS = ["#8b5cf6", "#22c55e", "#3b82f6", "#f59e0b", "#ef4444", "#06b6d4"];
+
 export default function TestAnalytics(): React.ReactElement {
   const user = useAuthStore((s) => s.user);
-  const [loading, setLoading] = useState(true);
-  const [tests, setTests] = useState<MockTestSummary[]>([]);
-  const [analyses, setAnalyses] = useState<TestAnalysisSummary[]>([]);
+  const [loading, setLoading]     = useState(true);
+  const [tests, setTests]         = useState<MockTestSummary[]>([]);
+  const [analyses, setAnalyses]   = useState<TestAnalysisSummary[]>([]);
   const [topicPerf, setTopicPerf] = useState<TopicPerformance[]>([]);
 
   useEffect(() => {
@@ -91,9 +101,9 @@ export default function TestAnalytics(): React.ReactElement {
           .limit(100),
       ]);
 
-      setTests((testsRes.data ?? []) as MockTestSummary[]);
-      setAnalyses((analysesRes.data ?? []) as TestAnalysisSummary[]);
-      setTopicPerf((topicRes.data ?? []) as TopicPerformance[]);
+      setTests((testsRes.data ?? []) as unknown as MockTestSummary[]);
+      setAnalyses((analysesRes.data ?? []) as unknown as TestAnalysisSummary[]);
+      setTopicPerf((topicRes.data ?? []) as unknown as TopicPerformance[]);
     } catch (err) {
       console.error("[TestAnalytics] load error:", err);
     } finally {
@@ -101,34 +111,49 @@ export default function TestAnalytics(): React.ReactElement {
     }
   }
 
+  // ── Per-subject trend data (last 10 tests, oldest first) ─────────
+  // Collect all subjects that appear across tests
+  const allSubjects = [...new Set(
+    analyses.flatMap((a) => Object.keys(a.subject_breakdown ?? {}))
+  )];
+
   const trendData: TrendDataPoint[] = [...analyses]
     .reverse()
     .slice(-10)
     .map((a, i) => {
       const test = tests.find((t) => t.id === a.test_id);
-      return {
-        name: test?.test_name?.slice(0, 12) ?? `Test ${i + 1}`,
-        accuracy: a.accuracy ?? 0,
-        attempted: a.attempt_percentage ?? 0,
+      const point: TrendDataPoint = {
+        name:      test?.test_name?.slice(0, 10) ?? `Test ${i + 1}`,
+        accuracy:  a.accuracy ?? 0,
         score_pct: a.max_score > 0 ? Math.round((a.total_score / a.max_score) * 100) : 0,
       };
+      // Add per-subject accuracy
+      for (const subj of allSubjects) {
+        const bd = a.subject_breakdown?.[subj];
+        point[subj] = bd?.accuracy ?? 0;
+      }
+      return point;
     });
 
-  const weakTopics = topicPerf.filter((t) => t.total_attempted > 0 && t.accuracy < 60).slice(0, 8);
+  const weakTopics   = topicPerf.filter((t) => t.total_attempted > 0 && t.accuracy < 60).slice(0, 8);
   const strongTopics = topicPerf.filter((t) => t.total_attempted > 0 && t.accuracy >= 80).slice(0, 5);
 
-  const avgAccuracy = analyses.length > 0
+  // Overall personal average accuracy
+  const personalAvgAccuracy = analyses.length > 0
     ? Math.round(analyses.reduce((s, a) => s + (a.accuracy ?? 0), 0) / analyses.length)
     : 0;
 
+  // Improvement vs personal average (not just last vs previous)
   const latestAccuracy = analyses[0]?.accuracy ?? 0;
-  const prevAccuracy   = analyses[1]?.accuracy ?? latestAccuracy;
-  const improvement    = Math.round(latestAccuracy - prevAccuracy);
+  const improvementVsAvg = analyses.length > 1
+    ? Math.round(latestAccuracy - personalAvgAccuracy)
+    : 0;
 
   const milestones: string[] = [];
-  if (improvement > 10) milestones.push(`Accuracy improved by ${improvement}% in the last test!`);
+  if (improvementVsAvg > 5) milestones.push(`Latest test is ${improvementVsAvg}% above your personal average!`);
+  if (improvementVsAvg < -5) milestones.push(`Latest test is ${Math.abs(improvementVsAvg)}% below your average — review weak topics.`);
   if (strongTopics.length > 3) milestones.push(`You've mastered ${strongTopics.length} topics with 80%+ accuracy.`);
-  if (analyses.length >= 5) milestones.push(`You've completed ${analyses.length} tests — keep going!`);
+  if (analyses.length >= 5)    milestones.push(`You've completed ${analyses.length} tests — great consistency!`);
 
   if (loading) {
     return (
@@ -142,16 +167,16 @@ export default function TestAnalytics(): React.ReactElement {
     <div className="space-y-6">
       <PageHeader
         title="Performance Analytics"
-        description="Cross-test trends, topic heatmap, and improvement insights."
+        description="Cross-test trends (per-subject), topic heatmap, and improvement insights."
       />
 
       {/* Summary stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Tests Taken",  value: analyses.length,                                        icon: <Trophy className="h-5 w-5 text-amber-400" /> },
-          { label: "Avg Accuracy", value: `${avgAccuracy}%`,                                      icon: <Target className="h-5 w-5 text-green-400" /> },
-          { label: "Weak Topics",  value: weakTopics.length,                                      icon: <AlertTriangle className="h-5 w-5 text-red-400" /> },
-          { label: "Improvement",  value: improvement >= 0 ? `+${improvement}%` : `${improvement}%`, icon: <TrendingUp className="h-5 w-5 text-violet-400" /> },
+          { label: "Tests Taken",   value: analyses.length,                                                              icon: <Trophy className="h-5 w-5 text-amber-400" /> },
+          { label: "Personal Avg",  value: `${personalAvgAccuracy}%`,                                                    icon: <Target className="h-5 w-5 text-green-400" /> },
+          { label: "Weak Topics",   value: weakTopics.length,                                                             icon: <AlertTriangle className="h-5 w-5 text-red-400" /> },
+          { label: "vs Avg",        value: improvementVsAvg >= 0 ? `+${improvementVsAvg}%` : `${improvementVsAvg}%`,    icon: <TrendingUp className="h-5 w-5 text-violet-400" /> },
         ].map(({ label, value, icon }) => (
           <Card key={label} className="text-center py-4">
             <CardContent className="p-0 space-y-1">
@@ -178,12 +203,15 @@ export default function TestAnalytics(): React.ReactElement {
         </div>
       )}
 
-      {/* Score trend chart */}
+      {/* Score trend chart — per-subject accuracy */}
       {trendData.length > 0 ? (
         <Card>
           <CardContent className="py-4">
-            <h3 className="text-sm font-semibold text-foreground mb-4">Score Trend (Last 10 Tests)</h3>
-            <ResponsiveContainer width="100%" height={240}>
+            <h3 className="text-sm font-semibold text-foreground mb-1">
+              Score Trend — Last {trendData.length} Tests
+            </h3>
+            <p className="text-xs text-muted-foreground mb-4">Per-subject accuracy over time.</p>
+            <ResponsiveContainer width="100%" height={260}>
               <LineChart data={trendData} margin={{ top: 5, right: 20, left: 0, bottom: 5 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" />
                 <XAxis
@@ -204,24 +232,30 @@ export default function TestAnalytics(): React.ReactElement {
                     fontSize: 12,
                   }}
                 />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
+                <Legend wrapperStyle={{ fontSize: 11 }} />
+                {/* Overall accuracy */}
                 <Line
                   type="monotone"
                   dataKey="accuracy"
-                  name="Accuracy %"
+                  name="Overall"
                   stroke="#8b5cf6"
-                  strokeWidth={2}
-                  dot={{ r: 4, fill: "#8b5cf6" }}
+                  strokeWidth={2.5}
+                  dot={{ r: 4 }}
                   activeDot={{ r: 6 }}
                 />
-                <Line
-                  type="monotone"
-                  dataKey="score_pct"
-                  name="Score %"
-                  stroke="#22c55e"
-                  strokeWidth={2}
-                  dot={{ r: 4, fill: "#22c55e" }}
-                />
+                {/* Per-subject lines */}
+                {allSubjects.slice(0, 5).map((subj, i) => (
+                  <Line
+                    key={subj}
+                    type="monotone"
+                    dataKey={subj}
+                    name={subj}
+                    stroke={SUBJECT_COLORS[(i + 1) % SUBJECT_COLORS.length]}
+                    strokeWidth={1.5}
+                    strokeDasharray="4 2"
+                    dot={false}
+                  />
+                ))}
               </LineChart>
             </ResponsiveContainer>
           </CardContent>
@@ -231,9 +265,7 @@ export default function TestAnalytics(): React.ReactElement {
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <TrendingUp className="h-10 w-10 text-muted-foreground mb-3" />
             <p className="font-medium text-foreground">No test data yet</p>
-            <p className="text-sm text-muted-foreground mt-1">
-              Complete a mock test to see your trends here.
-            </p>
+            <p className="text-sm text-muted-foreground mt-1">Complete a mock test to see your trends here.</p>
           </CardContent>
         </Card>
       )}

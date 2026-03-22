@@ -60,7 +60,7 @@ export default function ExamPapers(): React.ReactElement {
         .select("id, exam_type, exam_name, year, session, shift, total_questions, total_marks, duration_minutes, difficulty_level")
         .eq("exam_type", (examType ?? "").toUpperCase())
         .order("year", { ascending: false });
-      setPapers((data ?? []) as ExamPaper[]);
+      setPapers((data ?? []) as unknown as ExamPaper[]);
     } catch (err) {
       console.error("[ExamPapers] load error:", err);
     } finally {
