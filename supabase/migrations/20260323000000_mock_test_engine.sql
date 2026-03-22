@@ -261,7 +261,6 @@ CREATE POLICY "utp_all" ON public.user_topic_performance
 -- Called by the submit-test edge function.
 
 CREATE OR REPLACE FUNCTION public.update_topic_performance(
-  p_user_id          UUID,
   p_topic            TEXT,
   p_subject          TEXT,
   p_exam_type        TEXT,
@@ -274,15 +273,20 @@ LANGUAGE plpgsql
 SECURITY DEFINER
 AS $$
 DECLARE
-  v_total_attempted INTEGER;
-  v_total_correct   INTEGER;
-  v_accuracy        DECIMAL(5,2);
+  v_caller_id UUID;
 BEGIN
+  -- Always use the authenticated caller's ID — ignores any caller-supplied user_id
+  v_caller_id := auth.uid();
+
+  IF v_caller_id IS NULL THEN
+    RAISE EXCEPTION 'Not authenticated';
+  END IF;
+
   INSERT INTO public.user_topic_performance
     (user_id, topic, subject, exam_type, total_attempted, total_correct,
      accuracy, avg_time_seconds, last_practiced, updated_at)
   VALUES
-    (p_user_id, p_topic, p_subject, p_exam_type, p_attempted_delta, p_correct_delta,
+    (v_caller_id, p_topic, p_subject, p_exam_type, p_attempted_delta, p_correct_delta,
      CASE WHEN p_attempted_delta > 0
           THEN ROUND((p_correct_delta::DECIMAL / p_attempted_delta) * 100, 2)
           ELSE 0 END,
@@ -306,7 +310,7 @@ BEGIN
 END;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.update_topic_performance TO service_role;
+-- Only grant to authenticated — the function itself enforces the caller's own user_id via auth.uid()
 GRANT EXECUTE ON FUNCTION public.update_topic_performance TO authenticated;
 
 

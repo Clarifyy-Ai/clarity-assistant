@@ -1,4 +1,5 @@
-import { NavLink } from "react-router-dom";
+import { useState } from "react";
+import { NavLink, useLocation } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store/uiStore";
 import { useAuthStore } from "@/store/userStore";
@@ -9,7 +10,7 @@ import {
   LogOut, Star, Users, Bell,
   Briefcase, ListTodo, PenTool, FolderOpen,
   FileSpreadsheet, BarChart3, Calendar, Building,
-  Inbox, Wrench, GraduationCap,
+  Inbox, Wrench, GraduationCap, Upload,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import {
@@ -24,6 +25,7 @@ type NavItem = {
   stealthIcon: React.ElementType;
   label: string;
   exact?: boolean;
+  subItems?: Array<{ to: string; icon: React.ElementType; label: string }>;
 };
 
 const NAV_SECTIONS: Array<{ label: string; items: NavItem[] }> = [
@@ -34,7 +36,16 @@ const NAV_SECTIONS: Array<{ label: string; items: NavItem[] }> = [
       { to: "/app/live", icon: Mic, stealthIcon: ListTodo, label: "Live Co-Pilot" },
       { to: "/app/mock", icon: ClipboardList, stealthIcon: PenTool, label: "Mock Interview" },
       { to: "/app/prep", icon: FlaskConical, stealthIcon: FolderOpen, label: "Prep Lab" },
-      { to: "/app/mock-test", icon: GraduationCap, stealthIcon: GraduationCap, label: "Mock Tests" },
+      {
+        to: "/app/mock-test",
+        icon: GraduationCap,
+        stealthIcon: GraduationCap,
+        label: "Mock Tests",
+        subItems: [
+          { to: "/app/mock-test/my-questions", icon: BookOpen,  label: "Question Bank" },
+          { to: "/app/mock-test/upload",       icon: Upload,    label: "Import Questions" },
+        ],
+      },
     ],
   },
   {
@@ -59,6 +70,7 @@ const NAV_SECTIONS: Array<{ label: string; items: NavItem[] }> = [
 export function AppSidebar() {
   const uiStore = useUIStore();
   const { profile, clearAuth } = useAuthStore();
+  const location = useLocation();
   const collapsed = uiStore.sidebar_collapsed;
   const stealth = uiStore.stealth_mode;
 
@@ -112,17 +124,51 @@ export function AppSidebar() {
                 {stealth ? (STEALTH_SECTION_LABELS[section.label] ?? section.label) : section.label}
               </p>
             )}
-            {section.items.map((item) => (
-              <SidebarLink
-                key={item.to}
-                to={item.to}
-                icon={stealth ? item.stealthIcon : item.icon}
-                label={stealth ? (STEALTH_NAV_LABELS[item.label] ?? item.label) : item.label}
-                collapsed={collapsed}
-                exact={item.exact}
-                stealth={stealth}
-              />
-            ))}
+            {section.items.map((item) => {
+              const isSubActive = location.pathname.startsWith(item.to + "/");
+              const isExact    = location.pathname === item.to;
+              const isActive   = isSubActive || isExact;
+              const showSubs   = !collapsed && (isActive || isSubActive) && item.subItems;
+
+              return (
+                <div key={item.to}>
+                  <SidebarLink
+                    to={item.to}
+                    icon={stealth ? item.stealthIcon : item.icon}
+                    label={stealth ? (STEALTH_NAV_LABELS[item.label] ?? item.label) : item.label}
+                    collapsed={collapsed}
+                    exact={item.exact}
+                    stealth={stealth}
+                  />
+
+                  {showSubs && (
+                    <div className="ml-7 mt-0.5 space-y-0.5 border-l border-border pl-2">
+                      {item.subItems!.map((sub) => {
+                        const SubIcon = sub.icon;
+                        const subActive = location.pathname === sub.to || location.pathname.startsWith(sub.to + "/");
+                        return (
+                          <NavLink
+                            key={sub.to}
+                            to={sub.to}
+                            className={cn(
+                              "flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
+                              subActive
+                                ? stealth
+                                  ? "text-blue-600 dark:text-blue-300"
+                                  : "text-violet-600 dark:text-violet-300"
+                                : "text-muted-foreground hover:text-foreground"
+                            )}
+                          >
+                            <SubIcon className="h-3.5 w-3.5 shrink-0" />
+                            <span className="truncate">{sub.label}</span>
+                          </NavLink>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         ))}
       </nav>

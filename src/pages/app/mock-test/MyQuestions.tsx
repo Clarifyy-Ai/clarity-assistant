@@ -1,17 +1,19 @@
 import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
 import {
-  Plus, Search, Trash2, Edit2, ChevronDown,
+  Plus, Search, Trash2, ChevronDown, ChevronUp,
   BookOpen, Upload, Filter, CheckSquare, Square,
-  FlaskConical, ExternalLink,
+  FlaskConical, ChevronsUpDown, Edit2, Check, X, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
+import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/layout/PageHeader";
 import {
   DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
@@ -20,6 +22,12 @@ import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent,
   AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -34,9 +42,13 @@ interface Question {
   difficulty: "EASY" | "MEDIUM" | "HARD";
   exam_type: string | null;
   correct_answer: string;
+  explanation: string;
   created_at: string;
   is_verified: boolean;
 }
+
+type SortKey = "question_text" | "subject" | "topic" | "difficulty" | "created_at";
+type SortDir = "asc" | "desc";
 
 const DIFFICULTY_COLOR: Record<string, string> = {
   EASY:   "bg-green-500/10 text-green-600 border-green-500/20",
@@ -47,20 +59,153 @@ const DIFFICULTY_COLOR: Record<string, string> = {
 const ALL = "__ALL__";
 
 // ─────────────────────────────────────────────────────────────────────────────
+// Inline Edit Modal
+// ─────────────────────────────────────────────────────────────────────────────
+
+function EditModal({
+  question,
+  onClose,
+  onSaved,
+}: {
+  question: Question;
+  onClose: () => void;
+  onSaved: (updated: Question) => void;
+}) {
+  const [form, setForm] = useState({ ...question });
+  const [saving, setSaving] = useState(false);
+
+  function set<K extends keyof Question>(key: K, val: Question[K]) {
+    setForm((prev) => ({ ...prev, [key]: val }));
+  }
+
+  async function handleSave() {
+    if (!form.question_text.trim()) { toast.error("Question text is required."); return; }
+    if (!form.topic.trim()) { toast.error("Topic is required."); return; }
+    setSaving(true);
+    try {
+      const { error } = await supabase.from("questions").update({
+        question_text: form.question_text.trim(),
+        subject:       form.subject,
+        topic:         form.topic.trim(),
+        difficulty:    form.difficulty,
+        correct_answer: form.correct_answer,
+        explanation:   form.explanation,
+        exam_type:     form.exam_type,
+      }).eq("id", question.id);
+      if (error) throw error;
+      toast.success("Question updated.");
+      onSaved({ ...question, ...form });
+    } catch (err) {
+      console.error("[EditModal] save error:", err);
+      toast.error("Failed to save changes.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open onOpenChange={onClose}>
+      <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>Edit Question</DialogTitle>
+        </DialogHeader>
+
+        <div className="space-y-4 py-2">
+          <div className="space-y-1.5">
+            <Label>Question Text</Label>
+            <Textarea
+              className="min-h-[100px] font-mono text-sm"
+              value={form.question_text}
+              onChange={(e) => set("question_text", e.target.value)}
+            />
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <Label>Subject</Label>
+              <Input value={form.subject} onChange={(e) => set("subject", e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Topic</Label>
+              <Input value={form.topic} onChange={(e) => set("topic", e.target.value)} />
+            </div>
+            <div className="space-y-1.5">
+              <Label>Difficulty</Label>
+              <Select value={form.difficulty} onValueChange={(v) => set("difficulty", v as Question["difficulty"])}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="EASY">Easy</SelectItem>
+                  <SelectItem value="MEDIUM">Medium</SelectItem>
+                  <SelectItem value="HARD">Hard</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <Label>Exam Type</Label>
+              <Input
+                placeholder="e.g. JEE_MAIN"
+                value={form.exam_type ?? ""}
+                onChange={(e) => set("exam_type", e.target.value || null)}
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Correct Answer</Label>
+            <Input value={form.correct_answer} onChange={(e) => set("correct_answer", e.target.value)} />
+          </div>
+
+          <div className="space-y-1.5">
+            <Label>Explanation</Label>
+            <Textarea
+              className="min-h-[80px] text-sm"
+              value={form.explanation ?? ""}
+              onChange={(e) => set("explanation", e.target.value)}
+            />
+          </div>
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={onClose}>Cancel</Button>
+          <Button onClick={handleSave} disabled={saving}>
+            {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Check className="h-4 w-4 mr-2" />}
+            Save Changes
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Sort Icon
+// ─────────────────────────────────────────────────────────────────────────────
+
+function SortIcon({ col, sortKey, sortDir }: { col: SortKey; sortKey: SortKey; sortDir: SortDir }) {
+  if (col !== sortKey) return <ChevronsUpDown className="h-3 w-3 opacity-40" />;
+  return sortDir === "asc"
+    ? <ChevronUp className="h-3 w-3" />
+    : <ChevronDown className="h-3 w-3" />;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function MyQuestions() {
   const user = useAuthStore((s) => s.user);
 
-  const [questions, setQuestions] = useState<Question[]>([]);
-  const [loading, setLoading]     = useState(true);
-  const [search, setSearch]       = useState("");
-  const [filterSubject, setFilterSubject]     = useState(ALL);
+  const [questions, setQuestions]   = useState<Question[]>([]);
+  const [loading, setLoading]       = useState(true);
+  const [search, setSearch]         = useState("");
+  const [filterSubject, setFilterSubject]       = useState(ALL);
   const [filterDifficulty, setFilterDifficulty] = useState(ALL);
-  const [filterExamType, setFilterExamType]   = useState(ALL);
-  const [selected, setSelected]   = useState<Set<string>>(new Set());
+  const [filterExamType, setFilterExamType]     = useState(ALL);
+  const [selected, setSelected]     = useState<Set<string>>(new Set());
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [editTarget, setEditTarget]     = useState<Question | null>(null);
+  const [sortKey, setSortKey]   = useState<SortKey>("created_at");
+  const [sortDir, setSortDir]   = useState<SortDir>("desc");
 
   const loadQuestions = useCallback(async () => {
     if (!user?.id) return;
@@ -68,7 +213,7 @@ export default function MyQuestions() {
     try {
       const { data, error } = await supabase
         .from("questions")
-        .select("id, question_text, question_type, subject, topic, difficulty, exam_type, correct_answer, created_at, is_verified")
+        .select("id, question_text, question_type, subject, topic, difficulty, exam_type, correct_answer, explanation, created_at, is_verified")
         .eq("uploaded_by", user.id)
         .order("created_at", { ascending: false });
 
@@ -84,21 +229,39 @@ export default function MyQuestions() {
 
   useEffect(() => { loadQuestions(); }, [loadQuestions]);
 
-  // ── Derived filter options ────────────────────────────────────────────────
+  // ── Derived options ───────────────────────────────────────────────────────
 
-  const subjects   = [...new Set(questions.map((q) => q.subject))].sort();
-  const examTypes  = [...new Set(questions.map((q) => q.exam_type).filter(Boolean))].sort() as string[];
+  const subjects  = [...new Set(questions.map((q) => q.subject))].sort();
+  const examTypes = [...new Set(questions.map((q) => q.exam_type).filter(Boolean))].sort() as string[];
 
-  const filtered = questions.filter((q) => {
-    if (filterSubject !== ALL && q.subject !== filterSubject) return false;
-    if (filterDifficulty !== ALL && q.difficulty !== filterDifficulty) return false;
-    if (filterExamType !== ALL && q.exam_type !== filterExamType) return false;
-    if (search.trim()) {
-      const s = search.toLowerCase();
-      if (!q.question_text.toLowerCase().includes(s) && !q.topic.toLowerCase().includes(s)) return false;
+  // ── Filter + sort ─────────────────────────────────────────────────────────
+
+  const filtered = questions
+    .filter((q) => {
+      if (filterSubject !== ALL && q.subject !== filterSubject) return false;
+      if (filterDifficulty !== ALL && q.difficulty !== filterDifficulty) return false;
+      if (filterExamType !== ALL && q.exam_type !== filterExamType) return false;
+      if (search.trim()) {
+        const s = search.toLowerCase();
+        if (!q.question_text.toLowerCase().includes(s) && !q.topic.toLowerCase().includes(s)) return false;
+      }
+      return true;
+    })
+    .sort((a, b) => {
+      const av = (a[sortKey] ?? "") as string;
+      const bv = (b[sortKey] ?? "") as string;
+      const cmp = av.localeCompare(bv);
+      return sortDir === "asc" ? cmp : -cmp;
+    });
+
+  function handleSort(key: SortKey) {
+    if (sortKey === key) {
+      setSortDir((prev) => (prev === "asc" ? "desc" : "asc"));
+    } else {
+      setSortKey(key);
+      setSortDir("asc");
     }
-    return true;
-  });
+  }
 
   // ── Selection ─────────────────────────────────────────────────────────────
 
@@ -149,7 +312,26 @@ export default function MyQuestions() {
     }
   }
 
+  function handleEdited(updated: Question) {
+    setQuestions((prev) => prev.map((q) => q.id === updated.id ? updated : q));
+    setEditTarget(null);
+  }
+
   const allFilteredSelected = filtered.length > 0 && filtered.every((q) => selected.has(q.id));
+
+  // ── Column header renderer ─────────────────────────────────────────────────
+
+  function ColHeader({ label, col }: { label: string; col: SortKey }) {
+    return (
+      <button
+        type="button"
+        onClick={() => handleSort(col)}
+        className="flex items-center gap-1 hover:text-foreground"
+      >
+        {label} <SortIcon col={col} sortKey={sortKey} sortDir={sortDir} />
+      </button>
+    );
+  }
 
   return (
     <div className="space-y-5">
@@ -221,7 +403,7 @@ export default function MyQuestions() {
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="outline" size="sm">
-                {filterExamType === ALL ? "Exam Type" : filterExamType}
+                {filterExamType === ALL ? "Exam" : filterExamType}
                 <ChevronDown className="h-3 w-3 ml-1" />
               </Button>
             </DropdownMenuTrigger>
@@ -235,27 +417,18 @@ export default function MyQuestions() {
         )}
 
         {selected.size > 0 && (
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={handleBulkDelete}
-          >
-            <Trash2 className="h-4 w-4 mr-1" />
-            Delete {selected.size}
-          </Button>
-        )}
-
-        {selected.size > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            asChild
-          >
-            <Link to={`/app/mock-test/configure?question_ids=${[...selected].join(",")}`}>
-              <FlaskConical className="h-4 w-4 mr-1" />
-              Create Test
-            </Link>
-          </Button>
+          <>
+            <Button variant="destructive" size="sm" onClick={handleBulkDelete}>
+              <Trash2 className="h-4 w-4 mr-1" />
+              Delete {selected.size}
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link to={`/app/mock-test/configure?question_ids=${[...selected].join(",")}`}>
+                <FlaskConical className="h-4 w-4 mr-1" />
+                Create Test
+              </Link>
+            </Button>
+          </>
         )}
       </div>
 
@@ -303,11 +476,22 @@ export default function MyQuestions() {
                 <Square className="h-4 w-4" />
               )}
             </button>
-            <span className="flex-1">Question</span>
-            <span className="w-28 hidden sm:block">Subject · Topic</span>
-            <span className="w-16 hidden md:block">Type</span>
-            <span className="w-16">Difficulty</span>
-            <span className="w-20 text-right">Actions</span>
+            <span className="flex-1">
+              <ColHeader label="Question" col="question_text" />
+            </span>
+            <span className="w-28 hidden sm:block">
+              <ColHeader label="Subject" col="subject" />
+            </span>
+            <span className="w-28 hidden md:block">
+              <ColHeader label="Topic" col="topic" />
+            </span>
+            <span className="w-16">
+              <ColHeader label="Difficulty" col="difficulty" />
+            </span>
+            <span className="w-24 hidden lg:block text-right">
+              <ColHeader label="Added" col="created_at" />
+            </span>
+            <span className="w-16 text-right">Actions</span>
           </div>
 
           {/* Rows */}
@@ -332,20 +516,18 @@ export default function MyQuestions() {
               </button>
 
               <p className="flex-1 text-sm text-foreground truncate">
-                {q.question_text.length > 80
-                  ? q.question_text.slice(0, 80) + "…"
+                {q.question_text.length > 75
+                  ? q.question_text.slice(0, 75) + "…"
                   : q.question_text}
               </p>
 
               <div className="w-28 hidden sm:block text-xs text-muted-foreground truncate">
-                <span className="font-medium text-foreground">{q.subject}</span>
-                <br />
-                <span>{q.topic}</span>
+                {q.subject}
               </div>
 
-              <span className="w-16 hidden md:block text-xs text-muted-foreground">
-                {q.question_type}
-              </span>
+              <div className="w-28 hidden md:block text-xs text-muted-foreground truncate">
+                {q.topic}
+              </div>
 
               <Badge
                 variant="outline"
@@ -354,21 +536,25 @@ export default function MyQuestions() {
                 {q.difficulty}
               </Badge>
 
-              <div className="w-20 flex items-center justify-end gap-1">
+              <div className="w-24 hidden lg:block text-xs text-muted-foreground text-right">
+                {new Date(q.created_at).toLocaleDateString()}
+              </div>
+
+              <div className="w-16 flex items-center justify-end gap-1">
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7"
-                  asChild
+                  title="Edit"
+                  onClick={() => setEditTarget(q)}
                 >
-                  <Link to={`/app/mock-test/upload?tab=manual&edit=${q.id}`}>
-                    <Edit2 className="h-3.5 w-3.5" />
-                  </Link>
+                  <Edit2 className="h-3.5 w-3.5" />
                 </Button>
                 <Button
                   variant="ghost"
                   size="icon"
                   className="h-7 w-7 text-destructive hover:text-destructive"
+                  title="Delete"
                   onClick={() => setDeleteTarget(q.id)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
@@ -379,7 +565,7 @@ export default function MyQuestions() {
         </div>
       )}
 
-      {/* ── Delete confirmation dialog ─────────────────────── */}
+      {/* ── Delete confirmation ────────────────────────────── */}
       <AlertDialog open={!!deleteTarget} onOpenChange={() => setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -399,6 +585,15 @@ export default function MyQuestions() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* ── Inline Edit Modal ──────────────────────────────── */}
+      {editTarget && (
+        <EditModal
+          question={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={handleEdited}
+        />
+      )}
     </div>
   );
 }

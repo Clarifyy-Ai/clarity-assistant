@@ -1,11 +1,13 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
-  Upload, FileText, X, Check, AlertCircle, Edit2,
-  Trash2, ChevronDown, Plus, Eye, EyeOff, Loader2,
+  Upload, X, Check, AlertCircle,
+  Plus, Eye, EyeOff, Loader2,
   BookOpen, Save,
 } from "lucide-react";
 import { toast } from "sonner";
+import { InlineMath, BlockMath } from "react-katex";
+import "katex/dist/katex.min.css";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/button";
@@ -67,21 +69,79 @@ const SUBJECTS = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LaTeX Preview helper
+// LaTeX Preview helper — renders inline ($...$) and block ($$...$$) math
 // ─────────────────────────────────────────────────────────────────────────────
 
 function LaTeXPreview({ text }: { text: string }) {
-  if (!text?.trim()) return <p className="text-muted-foreground text-sm italic">Preview will appear here…</p>;
+  if (!text?.trim()) {
+    return <p className="text-muted-foreground text-sm italic">Preview will appear here…</p>;
+  }
 
-  // Simple inline/block LaTeX rendering with KaTeX if available
-  // We keep it simple: just show the text with basic HTML escaping
-  // (react-katex wraps are added if available)
-  const lines = text.split("\n");
+  const blockRegex = /\$\$([\s\S]+?)\$\$/g;
+  const inlineRegex = /\$((?:[^$\\]|\\.)+?)\$/g;
+
+  let match: RegExpExecArray | null;
+
+  const segments: Array<{ start: number; end: number; type: "block" | "inline"; math: string }> = [];
+
+  // Find block math
+  blockRegex.lastIndex = 0;
+  while ((match = blockRegex.exec(text)) !== null) {
+    segments.push({ start: match.index, end: match.index + match[0].length, type: "block", math: match[1] });
+  }
+
+  // Find inline math, only in regions not covered by block math
+  inlineRegex.lastIndex = 0;
+  while ((match = inlineRegex.exec(text)) !== null) {
+    const start = match.index;
+    const end = start + match[0].length;
+    const overlaps = segments.some((s) => start < s.end && end > s.start);
+    if (!overlaps) {
+      segments.push({ start, end, type: "inline", math: match[1] });
+    }
+  }
+
+  // Sort by start position
+  segments.sort((a, b) => a.start - b.start);
+
+  let cursor = 0;
+  const tokens: Array<{ type: "text" | "inline" | "block"; content: string }> = [];
+  for (const seg of segments) {
+    if (seg.start > cursor) {
+      tokens.push({ type: "text", content: text.slice(cursor, seg.start) });
+    }
+    tokens.push({ type: seg.type, content: seg.math });
+    cursor = seg.end;
+  }
+  if (cursor < text.length) {
+    tokens.push({ type: "text", content: text.slice(cursor) });
+  }
+
   return (
-    <div className="text-sm text-foreground space-y-1 font-[serif]">
-      {lines.map((line, i) => (
-        <p key={i}>{line || "\u00a0"}</p>
-      ))}
+    <div className="text-sm text-foreground leading-relaxed">
+      {tokens.map((token, i) => {
+        if (token.type === "block") {
+          return (
+            <div key={i} className="my-2 text-center overflow-x-auto">
+              <BlockMath math={token.content} errorColor="#e74c3c" />
+            </div>
+          );
+        }
+        if (token.type === "inline") {
+          return <InlineMath key={i} math={token.content} errorColor="#e74c3c" />;
+        }
+        // plain text — preserve newlines
+        return (
+          <span key={i}>
+            {token.content.split("\n").map((line, j, arr) => (
+              <span key={j}>
+                {line}
+                {j < arr.length - 1 && <br />}
+              </span>
+            ))}
+          </span>
+        );
+      })}
     </div>
   );
 }
