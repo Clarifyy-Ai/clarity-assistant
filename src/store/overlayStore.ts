@@ -219,12 +219,19 @@ export const useOverlayStore = create<OverlayStore>()(
       showOverlay: () => set((s) => ({
         is_visible: true,
         session_start_time: s.session_start_time ?? Date.now(),
+        activity_log: [...s.activity_log, { event: "overlay_shown", timestamp: Date.now() }],
       })),
-      hideOverlay: () => set({ is_visible: false, is_panic_visible: false, is_peek_active: false }),
+      hideOverlay: () => set((s) => ({
+        is_visible: false,
+        is_panic_visible: false,
+        is_peek_active: false,
+        activity_log: [...s.activity_log, { event: "overlay_hidden", timestamp: Date.now() }],
+      })),
       toggleOverlay: () => set((s) => {
         const willShow = !s.is_visible;
         return {
           is_visible: willShow,
+          activity_log: [...s.activity_log, { event: willShow ? "overlay_shown" : "overlay_hidden", timestamp: Date.now() }],
           ...(willShow ? { session_start_time: s.session_start_time ?? Date.now() } : { is_panic_visible: false, is_peek_active: false }),
         };
       }),
@@ -239,6 +246,9 @@ export const useOverlayStore = create<OverlayStore>()(
           current_hint: "",
           streaming_buffer: "",
           questions_detected: current_question !== s.current_question ? s.questions_detected + 1 : s.questions_detected,
+          activity_log: current_question !== s.current_question
+            ? [...s.activity_log, { event: "question_detected", timestamp: Date.now() }]
+            : s.activity_log,
         })),
 
       setHintState: (hint_state) => set({ hint_state }),
@@ -265,6 +275,7 @@ export const useOverlayStore = create<OverlayStore>()(
             hint_state: "ready",
             hint_history: newHistory,
             hint_history_index: newHistory.length - 1,
+            activity_log: [...state.activity_log, { event: "hint_generated", timestamp: Date.now() }],
           };
         }),
 

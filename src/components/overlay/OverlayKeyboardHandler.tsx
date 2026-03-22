@@ -55,16 +55,21 @@ export function OverlayKeyboardHandler({
 
   useHotkey(['ctrl', 'shift', 'm'], () => { onToggleMute?.(); }, enabled);
 
-  useHotkey(
-    ['ctrl', 'shift', '/'],
-    () => { useOverlayStore.getState().toggleHotkeyHelp(); },
-    enabled && is_visible
-  );
-
   const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!enabled) return;
+
+    function onHotkeyHelp(e: KeyboardEvent) {
+      if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && (e.key === '/' || e.key === '?')) {
+        e.preventDefault();
+        const os = useOverlayStore.getState();
+        if (os.is_visible) {
+          os.toggleHotkeyHelp();
+        }
+      }
+    }
+    window.addEventListener('keydown', onHotkeyHelp, true);
 
     function clearPeekTimer() {
       if (peekTimerRef.current) {
@@ -111,6 +116,7 @@ export function OverlayKeyboardHandler({
     window.addEventListener('keyup', onKeyUp, true);
 
     return () => {
+      window.removeEventListener('keydown', onHotkeyHelp, true);
       window.removeEventListener('keydown', onKeyDown, true);
       window.removeEventListener('keyup', onKeyUp, true);
       clearPeekTimer();

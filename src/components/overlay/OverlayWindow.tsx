@@ -186,13 +186,13 @@ export function OverlayWindow({
                   />
                 )}
 
-                {active_tab === "transcript" && !is_minimal_mode && (
+                {active_tab === "transcript" && (
                   <div className="p-3">
                     <LiveTranscriptStream />
                   </div>
                 )}
 
-                {active_tab === "audit" && !is_minimal_mode && (
+                {active_tab === "audit" && (
                   <OverlayAuditPanel />
                 )}
               </div>
@@ -205,17 +205,17 @@ export function OverlayWindow({
 
           {!is_minimal_mode && <OverlaySessionStats />}
 
-          <div className="flex items-center justify-between border-t border-white/5 px-2 sm:px-4 py-1 font-mono text-[8px] sm:text-[9px] text-muted-foreground/40 shrink-0">
-            <span className="truncate">
-              {is_minimal_mode
-                ? "⌃⇧H hide · ⌃⇧/ help"
-                : "⌃⇧H hide · Esc clear · ⌃⇧P panic · ⌃⇧/ help"}
-            </span>
-            <div className="flex items-center gap-2">
-              <OverlayActivityTimer />
-              <span className="capitalize">{hint_style.replace("_", " ")}</span>
+          {!is_minimal_mode && (
+            <div className="flex items-center justify-between border-t border-white/5 px-2 sm:px-4 py-1 font-mono text-[8px] sm:text-[9px] text-muted-foreground/40 shrink-0">
+              <span className="truncate">
+                ⌃⇧H hide · Esc clear · ⌃⇧P panic · ⌃⇧/ help
+              </span>
+              <div className="flex items-center gap-2">
+                <OverlayActivityTimer />
+                <span className="capitalize">{hint_style.replace("_", " ")}</span>
+              </div>
             </div>
-          </div>
+          )}
 
           <div className={cn(is_stealth_mode && "opacity-20")} style={is_stealth_mode ? { pointerEvents: "auto" } : undefined}>
             <OverlayResizeHandles containerRef={resizeContainerRef} />

@@ -151,6 +151,26 @@ export function OverlaySettings({
           </p>
         </div>
 
+        {/* Minimal Mode */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between">
+            <label className="text-sm font-medium text-gray-300">
+              Minimal Mode
+            </label>
+            <input
+              type="checkbox"
+              checked={useOverlayStore.getState().is_minimal_mode}
+              onChange={(e) =>
+                useOverlayStore.getState().setMinimalMode(e.target.checked)
+              }
+              className="w-4 h-4 rounded"
+            />
+          </div>
+          <p className="text-xs text-gray-500">
+            Hides toolbar, tabs, chat, and stats for a compact view
+          </p>
+        </div>
+
         {/* Proctor Safe */}
         <div className="space-y-2 p-3 bg-white/[0.02] rounded border border-white/[0.05]">
           <div className="flex items-center justify-between">
