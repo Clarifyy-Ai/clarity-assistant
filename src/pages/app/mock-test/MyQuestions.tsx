@@ -11,7 +11,6 @@ import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/label";
-import { Badge } from "@/components/ui/Badge";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -340,18 +339,18 @@ export default function MyQuestions() {
         description={`${questions.length} question${questions.length !== 1 ? "s" : ""} in your personal bank.`}
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" asChild>
-              <Link to="/app/mock-test/upload">
-                <Upload className="h-4 w-4 mr-2" />
-                Import PDF
-              </Link>
-            </Button>
-            <Button size="sm" asChild>
-              <Link to="/app/mock-test/upload?tab=manual">
-                <Plus className="h-4 w-4 mr-2" />
-                New Question
-              </Link>
-            </Button>
+            <Link
+              to="/app/mock-test/upload"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 px-3 py-1.5 text-xs font-medium text-gray-300 transition-all hover:bg-white/5 hover:border-white/25"
+            >
+              <Upload className="h-4 w-4" /> Import PDF
+            </Link>
+            <Link
+              to="/app/mock-test/upload?tab=manual"
+              className="inline-flex items-center gap-1.5 rounded-xl bg-violet-600/15 border border-violet-500/20 px-3 py-1.5 text-xs font-medium text-violet-600 hover:bg-violet-600/25 transition-colors"
+            >
+              <Plus className="h-4 w-4" /> New Question
+            </Link>
           </div>
         }
       />
@@ -422,12 +421,12 @@ export default function MyQuestions() {
               <Trash2 className="h-4 w-4 mr-1" />
               Delete {selected.size}
             </Button>
-            <Button variant="outline" size="sm" asChild>
-              <Link to={`/app/mock-test/configure?question_ids=${[...selected].join(",")}`}>
-                <FlaskConical className="h-4 w-4 mr-1" />
-                Create Test
-              </Link>
-            </Button>
+            <Link
+              to={`/app/mock-test/configure?question_ids=${[...selected].join(",")}`}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 px-3 py-1.5 text-xs font-medium text-gray-300 transition-all hover:bg-white/5 hover:border-white/25"
+            >
+              <FlaskConical className="h-4 w-4" /> Create Test
+            </Link>
           </>
         )}
       </div>
@@ -452,11 +451,12 @@ export default function MyQuestions() {
                 : "Try adjusting the search or filters."}
             </p>
             {questions.length === 0 && (
-              <Button size="sm" className="mt-4" asChild>
-                <Link to="/app/mock-test/upload">
-                  <Upload className="h-4 w-4 mr-2" /> Import Questions
-                </Link>
-              </Button>
+              <Link
+                to="/app/mock-test/upload"
+                className="mt-4 inline-flex items-center gap-1.5 rounded-xl bg-violet-600/15 border border-violet-500/20 px-3 py-1.5 text-xs font-medium text-violet-600 hover:bg-violet-600/25 transition-colors"
+              >
+                <Upload className="h-4 w-4" /> Import Questions
+              </Link>
             )}
           </CardContent>
         </Card>
@@ -532,12 +532,9 @@ export default function MyQuestions() {
                 {q.topic}
               </div>
 
-              <Badge
-                variant="outline"
-                className={`w-16 text-center text-xs ${DIFFICULTY_COLOR[q.difficulty] ?? ""}`}
-              >
+              <span className={`inline-flex w-16 justify-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${DIFFICULTY_COLOR[q.difficulty] ?? "bg-slate-500/10 text-slate-500 border-slate-500/20"}`}>
                 {q.difficulty}
-              </Badge>
+              </span>
 
               <div className="w-24 hidden xl:block text-xs text-muted-foreground truncate">
                 {q.exam_type ?? <span className="italic">—</span>}
@@ -548,24 +545,22 @@ export default function MyQuestions() {
               </div>
 
               <div className="w-16 flex items-center justify-end gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
+                <button
+                  type="button"
+                  className="h-7 w-7 flex items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
                   title="Edit"
                   onClick={() => setEditTarget(q)}
                 >
                   <Edit2 className="h-3.5 w-3.5" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 text-destructive hover:text-destructive"
+                </button>
+                <button
+                  type="button"
+                  className="h-7 w-7 flex items-center justify-center rounded-md text-destructive/70 hover:bg-destructive/10 hover:text-destructive transition-colors"
                   title="Delete"
                   onClick={() => setDeleteTarget(q.id)}
                 >
                   <Trash2 className="h-3.5 w-3.5" />
-                </Button>
+                </button>
               </div>
             </div>
           ))}

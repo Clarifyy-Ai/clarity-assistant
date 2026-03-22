@@ -14,7 +14,6 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/Badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -253,7 +252,7 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
               onChange={(e) => setField("question_text", e.target.value)}
             />
           )}
-          <p className="text-xs text-muted-foreground">LaTeX: use $x^2$ for inline, $$\frac{a}{b}$$ for block</p>
+          <p className="text-xs text-muted-foreground">{"LaTeX: use $x^2$ for inline, $$\\frac{a}{b}$$ for block"}</p>
         </div>
 
         {/* Question type */}

@@ -81,14 +81,13 @@ export function AppSidebar() {
   // Fetch the user's question bank count for the badge
   useEffect(() => {
     if (!user?.id) return;
-    supabase
-      .from("questions")
-      .select("id", { count: "exact", head: true })
-      .eq("uploaded_by", user.id)
-      .then(({ count }) => {
-        setQuestionCount(count ?? 0);
-      })
-      .catch(() => null);
+    (async () => {
+      const { count } = await supabase
+        .from("questions")
+        .select("id", { count: "exact", head: true })
+        .eq("uploaded_by", user.id);
+      setQuestionCount(count ?? 0);
+    })();
   }, [user?.id, location.pathname]); // refresh when navigating (e.g. after upload)
 
   async function handleLogout() {

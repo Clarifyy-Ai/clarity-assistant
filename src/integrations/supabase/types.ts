@@ -1695,7 +1695,7 @@ export type Database = {
         Row: {
           id: string
           user_id: string
-          title: string
+          test_name: string
           exam_type: string
           status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "ABANDONED"
           time_limit_minutes: number | null
@@ -1712,7 +1712,7 @@ export type Database = {
         Insert: {
           id?: string
           user_id: string
-          title: string
+          test_name: string
           exam_type?: string
           status?: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "ABANDONED"
           time_limit_minutes?: number | null
@@ -1729,7 +1729,7 @@ export type Database = {
         Update: {
           id?: string
           user_id?: string
-          title?: string
+          test_name?: string
           exam_type?: string
           status?: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "ABANDONED"
           time_limit_minutes?: number | null
@@ -1810,6 +1810,9 @@ export type Database = {
           test_id: string
           user_id: string
           summary: string | null
+          accuracy: number | null
+          subject_breakdown: Json | null
+          topic_breakdown: Json | null
           weak_topics: Json | null
           strong_topics: Json | null
           recommendations: Json | null
@@ -1821,6 +1824,9 @@ export type Database = {
           test_id: string
           user_id: string
           summary?: string | null
+          accuracy?: number | null
+          subject_breakdown?: Json | null
+          topic_breakdown?: Json | null
           weak_topics?: Json | null
           strong_topics?: Json | null
           recommendations?: Json | null
@@ -1832,6 +1838,9 @@ export type Database = {
           test_id?: string
           user_id?: string
           summary?: string | null
+          accuracy?: number | null
+          subject_breakdown?: Json | null
+          topic_breakdown?: Json | null
           weak_topics?: Json | null
           strong_topics?: Json | null
           recommendations?: Json | null

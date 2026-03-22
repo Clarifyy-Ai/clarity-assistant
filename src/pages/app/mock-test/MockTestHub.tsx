@@ -8,8 +8,7 @@ import {
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
+import { Card, CardContent } from "@/components/ui/Card";
 import { PageHeader } from "@/components/layout/PageHeader";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -166,12 +165,13 @@ export default function MockTestHub() {
         description="Practice with previous year papers and AI-generated questions for JEE, NEET, UPSC, SSC, and more."
         actions={
           <div className="flex gap-2">
-            <Button variant="outline" size="sm" asChild>
-              <Link to="/app/mock-test/my-questions">
-                <BookOpen className="h-4 w-4 mr-2" />
-                My Questions
-              </Link>
-            </Button>
+            <Link
+              to="/app/mock-test/my-questions"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 px-3 py-1.5 text-xs font-medium text-gray-300 transition-all hover:bg-white/5 hover:border-white/25"
+            >
+              <BookOpen className="h-4 w-4" />
+              My Questions
+            </Link>
             <Button size="sm" onClick={handleQuickDrill}>
               <Zap className="h-4 w-4 mr-2" />
               Quick Drill
@@ -247,11 +247,12 @@ export default function MockTestHub() {
           <h2 className="text-sm font-semibold uppercase tracking-widest text-muted-foreground">
             Recent Tests
           </h2>
-          <Button variant="ghost" size="sm" asChild>
-            <Link to="/app/mock-test/analytics">
-              <BarChart2 className="h-4 w-4 mr-1" /> Analytics
-            </Link>
-          </Button>
+          <Link
+            to="/app/mock-test/analytics"
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <BarChart2 className="h-4 w-4" /> Analytics
+          </Link>
         </div>
 
         {loading ? (
@@ -283,18 +284,20 @@ export default function MockTestHub() {
                     </div>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <Badge className={statusColor[test.status] ?? "bg-slate-500/10 text-slate-500"} variant="outline">
+                    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium ${statusColor[test.status] ?? "bg-slate-500/10 text-slate-500 border-slate-500/20"}`}>
                       {test.status}
-                    </Badge>
+                    </span>
                     {test.status === "COMPLETED" && (
-                      <Button variant="ghost" size="sm" asChild>
-                        <Link to={`/app/mock-test/results/${test.id}`}>Results</Link>
-                      </Button>
+                      <Link
+                        to={`/app/mock-test/results/${test.id}`}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      >Results</Link>
                     )}
                     {test.status === "IN_PROGRESS" && (
-                      <Button size="sm" asChild>
-                        <Link to={`/app/mock-test/session/${test.id}`}>Resume</Link>
-                      </Button>
+                      <Link
+                        to={`/app/mock-test/session/${test.id}`}
+                        className="inline-flex items-center rounded-xl bg-violet-600/15 border border-violet-500/20 px-2.5 py-1 text-xs font-medium text-violet-600 hover:bg-violet-600/25 transition-colors"
+                      >Resume</Link>
                     )}
                   </div>
                 </CardContent>
