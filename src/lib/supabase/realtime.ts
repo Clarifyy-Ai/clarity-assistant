@@ -4,7 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import type { RealtimeChannel } from "@supabase/supabase-js"; // ✅ FIXED import source
-import { supabase }             from "@/integrations/supabase/client";
+import { supabase }             from "@/lib/supabase/client";
 import { DatabaseError, ErrorCode } from "@/lib/errors";
 
 // ─── Types ────────────────────────────────────────────────────────────────────

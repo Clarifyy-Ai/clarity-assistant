@@ -9,7 +9,7 @@ import { useState, useCallback, useEffect } from "react";
 import { useNavigate, useSearchParams }      from "react-router-dom";
 import { motion, AnimatePresence }           from "framer-motion";
 
-import { supabase }                             from "@/integrations/supabase/client";
+import { supabase }                             from "@/lib/supabase/client";
 import { useAuthStore }                         from "@/store";
 import { recordReferral, getStoredRefCode, normalizeRefCode } from "@/lib/referrals";
 import { ROUTES }            from "@/lib/constants";

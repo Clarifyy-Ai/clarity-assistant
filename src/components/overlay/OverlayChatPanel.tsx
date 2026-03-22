@@ -30,7 +30,7 @@ export function OverlayChatPanel({ onSubmit }: OverlayChatPanelProps) {
               </svg>
             </div>
             <p className="text-[11px] font-medium text-muted-foreground/60">Ask anything</p>
-            <p className="text-[10px] text-muted-foreground/40 mt-1 max-w-[200px]">
+            <p className="text-xs text-muted-foreground/40 mt-1 max-w-[200px]">
               Type a question below to get AI-powered guidance during your interview.
             </p>
           </div>
@@ -75,7 +75,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
       >
         <p className="whitespace-pre-wrap break-words">{message.text}</p>
         <p className={cn(
-          "text-[8px] mt-1",
+          "text-[11px] mt-1",
           isUser ? "text-brand-300/40 text-right" : "text-muted-foreground/30"
         )}>
           {timeStr}

@@ -3,7 +3,7 @@
 // Handles resumes, JDs, avatars, session recordings, and screenshots.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/supabase/client";
 import { StorageError, ErrorCode, tryCatch } from "@/lib/errors";
 
 // ─── Bucket Names ────────────────────────────────────────────────────────────

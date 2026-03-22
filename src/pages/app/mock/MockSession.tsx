@@ -15,7 +15,7 @@ import { OverlayWindow } from "@/components/overlay/OverlayWindow";
 import { LiveSessionController } from "@/components/live/LiveSessionController";
 import { PreSessionSetup } from "@/components/session/PreSessionSetup";
 import { sessionsDB } from "@/lib/supabase/database";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/supabase/client";
 import { toDbModel } from "@/lib/ai/modelMapping";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";

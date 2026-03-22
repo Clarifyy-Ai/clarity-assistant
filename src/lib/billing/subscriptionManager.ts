@@ -5,7 +5,7 @@
 // and Stripe subscription state synced via Supabase.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/supabase/client";
 import { BillingError, ErrorCode, tryCatch } from "@/lib/errors";
 
 // ─── Plan Definitions ─────────────────────────────────────────────────────────

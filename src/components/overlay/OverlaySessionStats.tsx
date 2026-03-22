@@ -25,7 +25,7 @@ export function OverlaySessionStats() {
 
 function StatItem({ icon: Icon, value, label }: { icon: React.ElementType; value: string; label?: string }) {
   return (
-    <div className="flex items-center gap-1 text-[9px] text-muted-foreground/50 font-mono">
+    <div className="flex items-center gap-1 text-[11px] text-muted-foreground/50 font-mono">
       <Icon className="w-2.5 h-2.5" />
       <span className="text-muted-foreground/70">{value}</span>
       {label && <span>{label}</span>}

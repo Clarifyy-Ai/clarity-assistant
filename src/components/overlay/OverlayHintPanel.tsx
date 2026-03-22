@@ -124,7 +124,7 @@ export function OverlayHintPanel({
       {/* Screenshot hint */}
       {screenshotHint && !isScreenshotLoading && (
         <div className="mb-3 rounded-lg border border-brand-500/20 bg-brand-500/10 p-2.5">
-          <p className="mb-1 text-[10px] font-semibold text-brand-300">📸 Coding Analysis</p>
+          <p className="mb-1 text-xs font-semibold text-brand-300">📸 Coding Analysis</p>
           <p className="whitespace-pre-wrap text-xs text-overlay-text">{screenshotHint}</p>
         </div>
       )}
@@ -148,14 +148,14 @@ export function OverlayHintPanel({
 
       {/* Offline badge */}
       {isOffline && (
-        <div className="mb-2 font-mono text-[9px] text-warning/60">
+        <div className="mb-2 font-mono text-[11px] text-warning/60">
           ⚡ OFFLINE TEMPLATE — real answer queued
         </div>
       )}
 
       {/* Hint content */}
       {isViewingHistory && viewedQuestion && (
-        <div className="mb-1.5 rounded bg-white/5 px-2 py-1 text-[9px] text-muted-foreground/60 italic truncate">
+        <div className="mb-1.5 rounded bg-white/5 px-2 py-1 text-[11px] text-muted-foreground/60 italic truncate">
           Q: {viewedQuestion}
         </div>
       )}
@@ -260,7 +260,7 @@ export function OverlayHintPanel({
           <div className="flex items-center gap-1.5 mt-1.5">
           <button
             onClick={handleCopy}
-            className="flex items-center gap-1 px-2 py-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground rounded-lg hover:bg-white/5 transition-all"
+            className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground/60 hover:text-muted-foreground rounded-lg hover:bg-white/5 transition-all"
             title="Copy to clipboard"
           >
             {copied ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <Copy className="w-2.5 h-2.5" />}
@@ -268,7 +268,7 @@ export function OverlayHintPanel({
           </button>
           <button
             onClick={handleSaveToBank}
-            className="flex items-center gap-1 px-2 py-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground rounded-lg hover:bg-white/5 transition-all"
+            className="flex items-center gap-1 px-2 py-1 text-xs text-muted-foreground/60 hover:text-muted-foreground rounded-lg hover:bg-white/5 transition-all"
             title="Save to answer bank"
           >
             {saved ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <BookmarkPlus className="w-2.5 h-2.5" />}
@@ -276,7 +276,7 @@ export function OverlayHintPanel({
           </button>
           <button
             onClick={() => useOverlayStore.getState().togglePinHint(text, currentQ)}
-            className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-lg hover:bg-white/5 transition-all ${isPinned ? "text-brand-300" : "text-muted-foreground/60 hover:text-muted-foreground"}`}
+            className={`flex items-center gap-1 px-2 py-1 text-xs rounded-lg hover:bg-white/5 transition-all ${isPinned ? "text-brand-300" : "text-muted-foreground/60 hover:text-muted-foreground"}`}
             title={isPinned ? "Unpin hint" : "Pin hint for quick access"}
           >
             <Pin className={`w-2.5 h-2.5 ${isPinned ? "fill-brand-300" : ""}`} />
@@ -293,7 +293,7 @@ export function OverlayHintPanel({
               >
                 <ChevronLeft className="w-3 h-3" />
               </button>
-              <span className="text-[9px] font-mono text-muted-foreground/50 min-w-[24px] text-center">
+              <span className="text-[11px] font-mono text-muted-foreground/50 min-w-[24px] text-center">
                 {historyIndex + 1}/{historyLen}
               </span>
               <button
@@ -328,7 +328,7 @@ function IdleStateContent() {
     const reason = isOffline ? "Offline" : "No credits available";
     return (
       <div className="space-y-2">
-        <div className="flex items-center gap-1.5 text-[10px] text-amber-400/80">
+        <div className="flex items-center gap-1.5 text-xs text-amber-400/80">
           <FileText className="w-3 h-3 shrink-0" />
           <span>{reason} — showing your resume talking points</span>
         </div>
@@ -347,7 +347,7 @@ function IdleStateContent() {
         )}
         <button
           onClick={() => useOverlayStore.getState().setActiveTab("resume")}
-          className="text-[10px] text-brand-300 hover:text-brand-200 transition-colors"
+          className="text-xs text-brand-300 hover:text-brand-200 transition-colors"
         >
           View full resume notes →
         </button>
@@ -361,7 +361,7 @@ function IdleStateContent() {
         <p className="text-xs italic text-muted-foreground/40">Listening for questions…</p>
         <button
           onClick={() => useOverlayStore.getState().setActiveTab("resume")}
-          className="flex items-center gap-1.5 rounded-lg bg-brand-500/10 px-2.5 py-1.5 text-[10px] text-brand-300/80 hover:bg-brand-500/15 transition-colors w-full text-left"
+          className="flex items-center gap-1.5 rounded-lg bg-brand-500/10 px-2.5 py-1.5 text-xs text-brand-300/80 hover:bg-brand-500/15 transition-colors w-full text-left"
         >
           <FileText className="w-3 h-3 shrink-0" />
           <span>

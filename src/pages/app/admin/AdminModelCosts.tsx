@@ -6,7 +6,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useEffect } from "react";
-import { supabase }            from "@/integrations/supabase/client";
+import { supabase }            from "@/lib/supabase/client";
 import { formatNumber, formatCents, formatPercent } from "@/lib/utils/formatters";
 
 import {

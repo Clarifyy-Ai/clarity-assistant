@@ -120,12 +120,12 @@ export function OverlayWindow({
             title="Drag to move"
           >
             <div className="flex items-center gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-widest text-brand-300/60">
+              <span className="text-[11px] font-semibold uppercase tracking-widest text-brand-300/60">
                 Clarify AI
               </span>
               <OverlayNetworkBadge color={network_color} />
               {isRecording && (
-                <span className="flex items-center gap-1 text-[9px] text-red-400/80">
+                <span className="flex items-center gap-1 text-[11px] text-red-400/80">
                   <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
                   REC
                 </span>
@@ -133,20 +133,20 @@ export function OverlayWindow({
               {isSessionActive && !is_minimal_mode && <OverlayAudioBadge />}
               {isSessionActive && !is_minimal_mode && <OverlayAnswerTimer />}
               {is_peek_active && (
-                <span className="font-mono text-[9px] text-sky-400/70 bg-sky-500/10 px-1.5 py-0.5 rounded animate-pulse">PEEK</span>
+                <span className="font-mono text-[11px] text-sky-400/70 bg-sky-500/10 px-1.5 py-0.5 rounded animate-pulse">PEEK</span>
               )}
             </div>
             <div className="flex items-center gap-1.5">
               {is_stealth_mode && (
-                <span className="font-mono text-[9px] text-violet-400/70 bg-violet-500/10 px-1.5 py-0.5 rounded">STEALTH</span>
+                <span className="font-mono text-[11px] text-violet-400/70 bg-violet-500/10 px-1.5 py-0.5 rounded">STEALTH</span>
               )}
               {is_proctor_safe && (
-                <span className="font-mono text-[9px] text-emerald-400/70 bg-emerald-500/10 px-1.5 py-0.5 rounded">SAFE</span>
+                <span className="font-mono text-[11px] text-emerald-400/70 bg-emerald-500/10 px-1.5 py-0.5 rounded">SAFE</span>
               )}
               {is_minimal_mode && (
                 <button
                   onClick={(e) => { e.stopPropagation(); useOverlayStore.getState().setMinimalMode(false); }}
-                  className="font-mono text-[9px] text-amber-400/70 bg-amber-500/10 px-1.5 py-0.5 rounded hover:bg-amber-500/20 transition-colors"
+                  className="font-mono text-[11px] text-amber-400/70 bg-amber-500/10 px-1.5 py-0.5 rounded hover:bg-amber-500/20 transition-colors"
                   title="Exit minimal mode"
                 >
                   MIN ✕
@@ -181,7 +181,7 @@ export function OverlayWindow({
               </ol>
               <button
                 onClick={() => useOverlayStore.getState().hidePanic()}
-                className="mt-2 text-[10px] text-brand-300 hover:text-brand-200"
+                className="mt-2 text-xs text-brand-300 hover:text-brand-200"
               >
                 I'm ready — continue
               </button>
@@ -192,13 +192,13 @@ export function OverlayWindow({
             <>
               {stream_error && !is_minimal_mode && (
                 <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 border-b border-red-500/20 shrink-0">
-                  <span className="text-[10px] text-red-400 truncate flex-1">
+                  <span className="text-xs text-red-400 truncate flex-1">
                     {stream_error.message}
                     {stream_error.suggestion && ` — ${stream_error.suggestion}`}
                   </span>
                   <button
                     onClick={() => useAudioStore.getState().setStreamError(null)}
-                    className="text-red-400/60 hover:text-red-400 text-[10px] shrink-0"
+                    className="text-red-400/60 hover:text-red-400 text-xs shrink-0"
                   >
                     dismiss
                   </button>
@@ -261,7 +261,7 @@ export function OverlayWindow({
           {!is_minimal_mode && isSessionActive && <OverlaySessionStats />}
 
           {!is_minimal_mode && isSessionActive && (
-            <div className="flex items-center justify-between border-t border-white/5 px-2 sm:px-4 py-1 font-mono text-[8px] sm:text-[9px] text-muted-foreground/40 shrink-0">
+            <div className="flex items-center justify-between border-t border-white/5 px-2 sm:px-4 py-1 font-mono text-[11px] sm:text-[11px] text-muted-foreground/40 shrink-0">
               <span className="truncate">
                 ⌃⇧H hide · Esc clear · ⌃⇧P panic · ⌃⇧/ help
               </span>

@@ -53,7 +53,7 @@ export function OverlayQuickStart({ onStart }: OverlayQuickStartProps) {
 
   return (
     <div className="px-3 py-3 space-y-2.5">
-      <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/50">
+      <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground/50">
         Quick Start
       </p>
 
@@ -89,7 +89,7 @@ export function OverlayQuickStart({ onStart }: OverlayQuickStartProps) {
               key={hs.value}
               onClick={() => setHintStyle(hs.value)}
               className={cn(
-                "px-2 py-1.5 text-[10px] font-medium transition-colors",
+                "px-2 py-1.5 text-xs font-medium transition-colors",
                 hintStyle === hs.value
                   ? "bg-brand-500/20 text-brand-300"
                   : "text-muted-foreground/40 hover:text-muted-foreground/60"

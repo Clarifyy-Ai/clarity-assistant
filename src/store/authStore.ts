@@ -19,7 +19,7 @@ import { create }            from "zustand";
 import { devtools, persist } from "zustand/middleware";
 import { immer }             from "zustand/middleware/immer";
 import posthog               from "posthog-js";
-import { supabase }          from "@/integrations/supabase/client";
+import { supabase }          from "@/lib/supabase/client";
 
 import type {
   SupabaseSession,

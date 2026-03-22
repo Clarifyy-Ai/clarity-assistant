@@ -40,7 +40,7 @@ export function OverlayActivityTimer() {
       : "bg-red-500/10";
 
   return (
-    <div className={cn("flex items-center gap-1 px-1.5 py-0.5 rounded font-mono text-[9px] tabular-nums", color, bgColor)}>
+    <div className={cn("flex items-center gap-1 px-1.5 py-0.5 rounded font-mono text-[11px] tabular-nums", color, bgColor)}>
       <Timer className="w-2.5 h-2.5" />
       <span>{timeStr}</span>
     </div>

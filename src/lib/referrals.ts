@@ -1,4 +1,4 @@
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/supabase/client";
 
 const REF_CODE_PATTERN = /^[A-Z0-9]{6,16}$/;
 

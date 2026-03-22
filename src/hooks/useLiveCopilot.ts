@@ -15,7 +15,7 @@ import { hotkeyManager } from "@/lib/overlay/hotkeys";
 import { createDragHandler } from "@/lib/overlay/stealthMouse";
 import { generateId } from "@/lib/utils";
 import { sessionsDB } from "@/lib/supabase/database";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/supabase/client";
 import { toDbModel } from "@/lib/ai/modelMapping";
 import type { LiveSessionConfig } from "@/types/session.types";
 

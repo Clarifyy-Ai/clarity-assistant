@@ -27,7 +27,7 @@ export default function MockSession() {
   const { profile, canAccessFeature } = useAuth();
   const orchestrator             = useSessionOrchestrator();
   const hint_state               = useOverlayStore((s) => s.hint_state);
-  const current_hint_text        = useOverlayStore((s) => s.current_hint_text);
+  const current_hint_text        = useOverlayStore((s) => s.current_hint);
   const [phase, setPhase]        = useState<SessionPhase>("setup");
   const [config, setConfig]      = useState<Partial<SessionConfig>>({
     interview_type:   "behavioral",

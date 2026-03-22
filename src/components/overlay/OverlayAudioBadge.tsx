@@ -9,7 +9,7 @@ export function OverlayAudioBadge() {
   if (hasSystem) {
     return (
       <span
-        className="font-mono text-[9px] text-emerald-400/70 bg-emerald-500/10 px-1.5 py-0.5 rounded"
+        className="font-mono text-[11px] text-emerald-400/70 bg-emerald-500/10 px-1.5 py-0.5 rounded"
         title="Dual audio capture active (mic + system)"
       >
         DUAL
@@ -19,7 +19,7 @@ export function OverlayAudioBadge() {
 
   return (
     <span
-      className="font-mono text-[9px] text-amber-400/70 bg-amber-500/10 px-1.5 py-0.5 rounded"
+      className="font-mono text-[11px] text-amber-400/70 bg-amber-500/10 px-1.5 py-0.5 rounded"
       title="Mic-only capture — interviewer audio not captured"
     >
       MIC

@@ -22,7 +22,7 @@ export function OverlayAnswerTimer() {
   return (
     <span
       className={cn(
-        "font-mono text-[9px] px-1.5 py-0.5 rounded transition-all duration-300",
+        "font-mono text-[11px] px-1.5 py-0.5 rounded transition-all duration-300",
         colorClass,
       )}
       title={`Per-answer timer — target ${TARGET_SECONDS}s`}

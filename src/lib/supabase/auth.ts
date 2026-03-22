@@ -4,7 +4,7 @@
 // directly from components or hooks.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/lib/supabase/client";
 import { AuthError, ErrorCode, tryCatch } from "@/lib/errors";
 import type { User, Session, AuthChangeEvent } from "@supabase/supabase-js";
 
