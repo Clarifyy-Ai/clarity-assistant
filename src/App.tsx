@@ -49,9 +49,15 @@ const MockSession   = lazy(() => import("@/pages/app/mock/MockSession"));
 const MockWarmup    = lazy(() => import("@/pages/app/mock/MockWarmup"));
 
 // Mock Test Engine
-const MockTestHub    = lazy(() => import("@/pages/app/mock-test/MockTestHub"));
-const MyQuestions    = lazy(() => import("@/pages/app/mock-test/MyQuestions"));
-const UploadQuestions= lazy(() => import("@/pages/app/mock-test/UploadQuestions"));
+const MockTestHub       = lazy(() => import("@/pages/app/mock-test/MockTestHub"));
+const MyQuestions       = lazy(() => import("@/pages/app/mock-test/MyQuestions"));
+const UploadQuestions   = lazy(() => import("@/pages/app/mock-test/UploadQuestions"));
+const TestConfigure     = lazy(() => import("@/pages/app/mock-test/TestConfigure"));
+const TestSession       = lazy(() => import("@/pages/app/mock-test/TestSession"));
+const TestResults       = lazy(() => import("@/pages/app/mock-test/TestResults"));
+const TestRevision      = lazy(() => import("@/pages/app/mock-test/TestRevision"));
+const TestAnalytics     = lazy(() => import("@/pages/app/mock-test/TestAnalytics"));
+const ExamPapers        = lazy(() => import("@/pages/app/mock-test/ExamPapers"));
 
 // Prep
 const PrepLab       = lazy(() => import("@/pages/app/prep/PrepLab"));
@@ -284,8 +290,9 @@ const router = createBrowserRouter([
   {
     element: <ProtectedRoute />,
     children: [
-      { path: "/app/live/overlay",            element: <Page component={LiveOverlay} /> },
-      { path: "/app/rooms/:roomId/session",   element: <Page component={RoomSession} /> },
+      { path: "/app/live/overlay",                    element: <Page component={LiveOverlay} /> },
+      { path: "/app/rooms/:roomId/session",           element: <Page component={RoomSession} /> },
+      { path: "/app/mock-test/session/:testId",       element: <Page component={TestSession} /> },
     ],
   },
 
@@ -312,9 +319,14 @@ const router = createBrowserRouter([
           { path: "mock/warmup",  element: <Page component={MockWarmup} /> },
           { path: "mock/session", element: <Page component={MockSession} /> },
 
-          { path: "mock-test",                element: <Page component={MockTestHub} /> },
-          { path: "mock-test/my-questions",   element: <Page component={MyQuestions} /> },
-          { path: "mock-test/upload",         element: <Page component={UploadQuestions} /> },
+          { path: "mock-test",                          element: <Page component={MockTestHub} /> },
+          { path: "mock-test/configure",              element: <Page component={TestConfigure} /> },
+          { path: "mock-test/results/:testId",        element: <Page component={TestResults} /> },
+          { path: "mock-test/my-questions",           element: <Page component={MyQuestions} /> },
+          { path: "mock-test/upload",                 element: <Page component={UploadQuestions} /> },
+          { path: "mock-test/revision",               element: <Page component={TestRevision} /> },
+          { path: "mock-test/analytics",              element: <Page component={TestAnalytics} /> },
+          { path: "mock-test/papers/:examType",       element: <Page component={ExamPapers} /> },
 
           { path: "prep",                element: <Page component={PrepLab} /> },
           { path: "prep/star-builder",   element: <Page component={StarBuilder} /> },

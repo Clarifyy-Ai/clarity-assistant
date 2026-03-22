@@ -117,6 +117,27 @@ New module at `/app/mock-test/` (separate from `/app/mock/` AI interview mock).
 
 **Packages**: `react-katex`, `katex` installed for LaTeX math rendering.
 
+## Mock Test Engine — Session, Results & AI Analysis (Task #11)
+
+Extends the Mock Test Engine from Task #10 with the complete test-taking experience.
+
+**New Edge Functions**:
+- `select-test-questions` — adaptive question selection (40% weak, 30% medium, 30% strong topics); avoids last-3-test questions; falls back when buckets thin
+- `submit-test` — atomic scoring, subject/topic breakdowns, calls `update_topic_performance` RPC, adds wrong questions to `revision_list`, marks test COMPLETED
+- `analyze-test-performance` — Gemini-powered ~600-word analysis (Strengths, Weak Areas, Time Management, 7-Day Plan, Exam Strategy); costs 3 credits
+- `generate-practice-questions` — generates 10 MCQ questions per thin topic (< 20 questions) via Gemini; saves with source=AI_GENERATED
+
+**New Frontend Pages**:
+- `TestConfigure` (`/mock-test/configure`) — full configurator: exam type, subjects, source, duration, difficulty sliders, marking scheme, randomize toggle
+- `TestSession` (`/mock-test/session/:testId`) — full-screen distraction-free UI: left navigator grid (5 states), center question+MCQ/numerical/text, right timer (yellow 10min/red 5min); auto-save 30s; submit modal with counts
+- `TestResults` (`/mock-test/results/:testId`) — scorecard, subject table, topic heatmap (click to filter), time analysis, AI analysis card (collapsible with section rendering), full question review (filter: all/wrong/marked)
+- `TestRevision` (`/mock-test/revision`) — spaced repetition flashcards: I knew it (advances interval), Still struggling (resets to tomorrow), Mark as Mastered; empty state celebrations
+- `TestAnalytics` (`/mock-test/analytics`) — recharts LineChart score trend (last 10 tests), topic heatmap (all-time), weak/strong spotlights, milestone alerts
+- `ExamPapers` (`/mock-test/papers/:examType`) — browse exam papers from `exam_papers` table by year; pre-fills configurator
+
+**Router changes**: TestSession added as full-screen no-shell route; all others added to app shell context
+**Sidebar**: Added Revision List and Analytics sub-items to Mock Tests nav group
+
 ## Environment Variables
 
 Set in `.env`:

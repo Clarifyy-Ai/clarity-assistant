@@ -11,6 +11,7 @@ import {
   Briefcase, ListTodo, PenTool, FolderOpen,
   FileSpreadsheet, BarChart3, Calendar, Building,
   Inbox, Wrench, GraduationCap, Upload, LayoutGrid,
+  RotateCcw, TrendingUp,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import {
@@ -42,9 +43,11 @@ const NAV_SECTIONS: Array<{ label: string; items: NavItem[] }> = [
         stealthIcon: GraduationCap,
         label: "Mock Tests",
         subItems: [
-          { to: "/app/mock-test",              icon: LayoutGrid, label: "Hub" },
-          { to: "/app/mock-test/my-questions", icon: BookOpen,   label: "Question Bank" },
-          { to: "/app/mock-test/upload",       icon: Upload,     label: "Import Questions" },
+          { to: "/app/mock-test",              icon: LayoutGrid,  label: "Hub" },
+          { to: "/app/mock-test/my-questions", icon: BookOpen,    label: "Question Bank" },
+          { to: "/app/mock-test/upload",       icon: Upload,      label: "Import Questions" },
+          { to: "/app/mock-test/revision",     icon: RotateCcw,   label: "Revision List" },
+          { to: "/app/mock-test/analytics",    icon: TrendingUp,  label: "Analytics" },
         ],
       },
     ],
