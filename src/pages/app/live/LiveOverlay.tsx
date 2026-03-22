@@ -30,6 +30,7 @@ export default function LiveOverlay() {
   const [phase, setPhase] = useState<"setup" | "active">("setup");
   const [config, setConfig] = useState<LiveSessionConfig>(DEFAULT_CONFIG);
   const hasStartedRef = useRef(false);
+  const didEndRef = useRef(false);
 
   const copilot = useLiveCopilot({ config });
   const isActive = sessionStatus === "active";
@@ -43,6 +44,7 @@ export default function LiveOverlay() {
     useOverlayStore.getState().setHintStyle(sessionConfig.hint_style);
     useOverlayStore.getState().setProctorSafe(sessionConfig.stealth_mode);
     hasStartedRef.current = false;
+    didEndRef.current = false;
     setConfig(sessionConfig);
     setPhase("active");
   }, []);
@@ -57,7 +59,7 @@ export default function LiveOverlay() {
 
   useEffect(() => {
     return () => {
-      if (hasStartedRef.current) {
+      if (hasStartedRef.current && !didEndRef.current) {
         endSessionRef.current();
       }
       useOverlayStore.getState().hideOverlay();
@@ -66,6 +68,7 @@ export default function LiveOverlay() {
   }, []);
 
   const handleStop = useCallback(async () => {
+    didEndRef.current = true;
     await copilot.endLiveSession();
     const sessionId = useSessionStore.getState().session_id;
     if (sessionId) {
