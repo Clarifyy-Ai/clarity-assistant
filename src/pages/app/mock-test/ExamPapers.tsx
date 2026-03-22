@@ -1,9 +1,7 @@
-// @ts-nocheck
 import { useEffect, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import {
-  BookOpen, Calendar, ChevronRight, ArrowLeft, Filter,
-  FileText, Layers,
+  ChevronRight, ArrowLeft, Filter, FileText, Layers, Calendar,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { Button } from "@/components/ui/Button";
@@ -12,8 +10,21 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────────
-// ExamPapers — browse available exam papers by type and year
+// Types
 // ─────────────────────────────────────────────────────────────────
+
+interface ExamPaper {
+  id: string;
+  exam_type: string;
+  exam_name: string;
+  year: number;
+  session?: string;
+  shift?: string;
+  total_questions?: number;
+  total_marks?: number;
+  duration_minutes?: number;
+  difficulty_level?: "EASY" | "MEDIUM" | "HARD";
+}
 
 const EXAM_LABELS: Record<string, string> = {
   JEE_MAIN:  "JEE Main",
@@ -25,16 +36,20 @@ const EXAM_LABELS: Record<string, string> = {
   CUSTOM:    "Custom",
 };
 
-export default function ExamPapers() {
+// ─────────────────────────────────────────────────────────────────
+// Component
+// ─────────────────────────────────────────────────────────────────
+
+export default function ExamPapers(): React.ReactElement {
   const { examType } = useParams<{ examType: string }>();
   const navigate = useNavigate();
-  const [papers, setPapers] = useState<any[]>([]);
+  const [papers, setPapers] = useState<ExamPaper[]>([]);
   const [loading, setLoading] = useState(true);
   const [yearFilter, setYearFilter] = useState<number | null>(null);
 
   useEffect(() => {
     if (!examType) return;
-    loadPapers();
+    void loadPapers();
   }, [examType]);
 
   async function loadPapers() {
@@ -42,10 +57,10 @@ export default function ExamPapers() {
     try {
       const { data } = await supabase
         .from("exam_papers")
-        .select("*")
-        .eq("exam_type", examType!.toUpperCase())
+        .select("id, exam_type, exam_name, year, session, shift, total_questions, total_marks, duration_minutes, difficulty_level")
+        .eq("exam_type", (examType ?? "").toUpperCase())
         .order("year", { ascending: false });
-      setPapers(data ?? []);
+      setPapers((data ?? []) as ExamPaper[]);
     } catch (err) {
       console.error("[ExamPapers] load error:", err);
     } finally {
@@ -55,11 +70,12 @@ export default function ExamPapers() {
 
   const years = [...new Set(papers.map((p) => p.year))].sort((a, b) => b - a);
   const filtered = yearFilter ? papers.filter((p) => p.year === yearFilter) : papers;
+  const examLabel = EXAM_LABELS[(examType ?? "").toUpperCase()] ?? examType ?? "Exam";
 
-  const examLabel = EXAM_LABELS[examType?.toUpperCase() ?? ""] ?? examType ?? "Exam";
-
-  function handleSelectPaper(paper: any) {
-    navigate(`/app/mock-test/configure?exam=${paper.exam_type}&year_min=${paper.year}&year_max=${paper.year}`);
+  function handleSelectPaper(paper: ExamPaper) {
+    navigate(
+      `/app/mock-test/configure?exam=${paper.exam_type}&year_min=${paper.year}&year_max=${paper.year}`
+    );
   }
 
   return (
@@ -127,7 +143,7 @@ export default function ExamPapers() {
             </p>
             <Button
               size="sm"
-              onClick={() => navigate(`/app/mock-test/configure?exam=${examType?.toUpperCase()}`)}
+              onClick={() => navigate(`/app/mock-test/configure?exam=${(examType ?? "").toUpperCase()}`)}
             >
               Create AI-Generated Test
               <ChevronRight className="h-4 w-4 ml-1.5" />
@@ -172,8 +188,8 @@ export default function ExamPapers() {
                           paper.difficulty_level === "HARD"
                             ? "bg-red-500/10 text-red-400"
                             : paper.difficulty_level === "EASY"
-                            ? "bg-green-500/10 text-green-400"
-                            : "bg-amber-500/10 text-amber-400"
+                              ? "bg-green-500/10 text-green-400"
+                              : "bg-amber-500/10 text-amber-400"
                         )}>
                           {paper.difficulty_level}
                         </span>
@@ -196,7 +212,7 @@ export default function ExamPapers() {
         </div>
       )}
 
-      {/* Quick link to configure */}
+      {/* Configure link */}
       <div className="rounded-xl border border-dashed border-border p-4 text-center">
         <p className="text-sm text-muted-foreground mb-2">
           Want a custom mix? Use the full configurator.
@@ -204,7 +220,7 @@ export default function ExamPapers() {
         <Button
           size="sm"
           variant="outline"
-          onClick={() => navigate(`/app/mock-test/configure?exam=${examType?.toUpperCase()}`)}
+          onClick={() => navigate(`/app/mock-test/configure?exam=${(examType ?? "").toUpperCase()}`)}
         >
           Configure Custom Test
           <ChevronRight className="h-4 w-4 ml-1.5" />

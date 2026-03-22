@@ -1,8 +1,6 @@
-// @ts-nocheck
 import { useEffect, useState } from "react";
 import {
-  BookOpen, CheckCircle, XCircle, Award, ChevronDown,
-  ChevronUp, RotateCcw,
+  CheckCircle, XCircle, Award, ChevronDown, RotateCcw,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";

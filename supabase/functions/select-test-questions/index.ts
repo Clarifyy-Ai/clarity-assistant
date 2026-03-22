@@ -1,14 +1,11 @@
 import { handleCors, corsHeaders } from "../_shared/cors.ts";
-import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
+import { createServiceClient } from "../_shared/supabase.ts";
 
 // ─────────────────────────────────────────────────────────────────
 // select-test-questions
-// Verifies JWT, deducts 2 credits (test creation cost), then runs
-// adaptive question selection:
-//   40% from weak topics (accuracy < 50%)
-//   30% from medium topics (50–80% accuracy)
-//   30% from strong/never-attempted topics
-// Avoids repeating questions from the last 3 tests.
+// Verifies JWT, checks free-plan quota and credit balance WITHOUT
+// deducting — deduction happens in create-test after questions are
+// selected and the test row is committed. Returns question IDs.
 // ─────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -16,7 +13,7 @@ Deno.serve(async (req) => {
   if (cors) return cors;
 
   try {
-    // ── Verify JWT and extract authenticated user id ──────────────
+    // ── Verify JWT ────────────────────────────────────────────────
     const authHeader = req.headers.get("Authorization");
     if (!authHeader?.startsWith("Bearer ")) {
       return new Response(JSON.stringify({ error: "Missing or invalid Authorization header" }), {
@@ -27,7 +24,6 @@ Deno.serve(async (req) => {
 
     const db = createServiceClient();
 
-    // Verify the token server-side — only trust the user id from the verified JWT
     const { data: { user }, error: authErr } = await db.auth.getUser(token);
     if (authErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -51,9 +47,9 @@ Deno.serve(async (req) => {
       .single();
 
     const planId = profile?.plan_id ?? "free";
+    const credits = profile?.credits ?? 0;
 
     if (planId === "free") {
-      // Count tests taken this calendar month
       const startOfMonth = new Date();
       startOfMonth.setDate(1);
       startOfMonth.setHours(0, 0, 0, 0);
@@ -75,9 +71,8 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── Deduct 2 credits ──────────────────────────────────────────
-    const credited = await deductCredits(db, userId, 2, "Mock test creation");
-    if (!credited) {
+    // ── Check credit balance (do not deduct yet) ──────────────────
+    if (credits < 2) {
       return new Response(
         JSON.stringify({ error: "Insufficient credits. Mock tests cost 2 credits.", code: "INSUFFICIENT_CREDITS" }),
         { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -146,8 +141,6 @@ Deno.serve(async (req) => {
     const { data: allQuestions, error: qErr } = await query;
 
     if (qErr) {
-      // Refund credits on query error
-      await db.from("profiles").update({ credits: (profile?.credits ?? 0) }).eq("id", userId);
       return new Response(JSON.stringify({ error: "Failed to fetch questions" }), {
         status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
@@ -155,84 +148,87 @@ Deno.serve(async (req) => {
 
     const questions = allQuestions ?? [];
 
-    // ── Separate questions by difficulty for difficulty-distribution ──
+    // ── Separate questions by difficulty ──────────────────────────
     const easyQ:   string[] = [];
     const mediumQ: string[] = [];
     const hardQ:   string[] = [];
 
     for (const q of questions) {
       if (recentQuestionIds.has(q.id)) continue;
-      const bucket = q.difficulty === "EASY" ? easyQ : q.difficulty === "HARD" ? hardQ : mediumQ;
-      bucket.push(q.id);
+      if (q.difficulty === "EASY") easyQ.push(q.id);
+      else if (q.difficulty === "HARD") hardQ.push(q.id);
+      else mediumQ.push(q.id);
     }
 
-    // ── Classify by topic performance for adaptive weighting ──────
-    const classify = (ids: string[], qLookup: Record<string, any>) => {
+    const qLookup: Record<string, { topic: string }> = {};
+    for (const q of questions) qLookup[q.id] = { topic: q.topic };
+
+    const shuffle = (arr: string[]): string[] => arr.sort(() => Math.random() - 0.5);
+
+    const classifyAdaptive = (ids: string[]) => {
       const weak: string[] = [], medium: string[] = [], strong: string[] = [];
       for (const id of ids) {
         const topic = qLookup[id]?.topic;
-        const accuracy = topic ? topicAccuracyMap[topic] : undefined;
+        const accuracy = topic !== undefined ? topicAccuracyMap[topic] : undefined;
         if (accuracy === undefined) strong.push(id);
         else if (accuracy < 50) weak.push(id);
         else if (accuracy <= 80) medium.push(id);
         else strong.push(id);
       }
-      return { weak, medium, strong };
+      return { weak: shuffle(weak), medium: shuffle(medium), strong: shuffle(strong) };
     };
 
-    const qLookup: Record<string, any> = {};
-    for (const q of questions) qLookup[q.id] = q;
-
-    const shuffle = (arr: string[]) => arr.sort(() => Math.random() - 0.5);
-
-    // For each difficulty bucket, apply adaptive weighting
-    const pickFromBucket = (bucket: string[], target: number): string[] => {
+    const pickAdaptive = (bucket: string[], target: number): string[] => {
       if (target <= 0) return [];
-      const { weak, medium, strong } = classify(bucket, qLookup);
-      shuffle(weak); shuffle(medium); shuffle(strong);
+      const { weak, medium, strong } = classifyAdaptive(bucket);
       const wantWeak   = Math.round(target * 0.4);
       const wantMedium = Math.round(target * 0.3);
       const wantStrong = target - wantWeak - wantMedium;
       const selected: string[] = [];
-      const pick = (arr: string[], n: number) => {
+      let leftover = 0;
+
+      const take = (arr: string[], n: number): number => {
         const taken = arr.slice(0, n);
         selected.push(...taken);
         return n - taken.length;
       };
-      const leftW = pick(weak, wantWeak);
-      const leftM = pick(medium, wantMedium + leftW);
-      pick(strong, wantStrong + leftM);
-      // Fill with anything remaining
+
+      leftover  = take(weak, wantWeak);
+      leftover += take(medium, wantMedium + leftover);
+      take(strong, wantStrong + leftover);
+
+      // Fill any remaining from all pools
       if (selected.length < target) {
-        const rest = bucket.filter((id) => !selected.includes(id));
-        shuffle(rest);
+        const usedSet = new Set(selected);
+        const rest = shuffle(bucket.filter((id) => !usedSet.has(id)));
         selected.push(...rest.slice(0, target - selected.length));
       }
       return selected.slice(0, target);
     };
 
-    // Calculate targets from difficulty_distribution
-    const easyTarget   = Math.round(question_count * (difficulty_distribution.EASY ?? 30) / 100);
-    const hardTarget   = Math.round(question_count * (difficulty_distribution.HARD ?? 30) / 100);
+    const easyPct   = difficulty_distribution.EASY ?? 30;
+    const hardPct   = difficulty_distribution.HARD ?? 30;
+    const mediumPct = 100 - easyPct - hardPct;
+
+    const easyTarget   = Math.round(question_count * easyPct / 100);
+    const hardTarget   = Math.round(question_count * hardPct / 100);
     const mediumTarget = question_count - easyTarget - hardTarget;
 
-    const easySelected   = pickFromBucket(easyQ, easyTarget);
-    const mediumSelected = pickFromBucket(mediumQ, mediumTarget);
-    const hardSelected   = pickFromBucket(hardQ, hardTarget);
+    const easySelected   = pickAdaptive(easyQ, easyTarget);
+    const mediumSelected = pickAdaptive(mediumQ, mediumTarget);
+    const hardSelected   = pickAdaptive(hardQ, hardTarget);
 
     let finalIds = [...easySelected, ...mediumSelected, ...hardSelected];
 
-    // Fill any shortfall from any remaining questions
+    // Fill shortfall from any remaining questions
     if (finalIds.length < question_count) {
       const usedSet = new Set(finalIds);
-      const extras = questions
-        .map((q) => q.id)
-        .filter((id) => !usedSet.has(id) && !recentQuestionIds.has(id));
-      shuffle(extras);
+      const extras = shuffle(
+        questions.map((q) => q.id).filter((id) => !usedSet.has(id) && !recentQuestionIds.has(id))
+      );
       finalIds.push(...extras.slice(0, question_count - finalIds.length));
     }
 
-    // Final shuffle and trim
     shuffle(finalIds);
     finalIds = finalIds.slice(0, question_count);
 

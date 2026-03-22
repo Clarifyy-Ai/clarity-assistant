@@ -244,22 +244,40 @@ Deno.serve(async (req) => {
     }
 
     // ── Add wrong questions to revision list ──────────────────────
+    // Insert one-by-one so individual constraint violations (duplicate question)
+    // don't abort the whole batch. Errors are logged but non-blocking.
     if (wrongQuestionIds.length > 0) {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
       const tomorrowStr = tomorrow.toISOString().split("T")[0];
 
-      await db.from("revision_list").upsert(
-        wrongQuestionIds.map((qid) => ({
-          user_id: userId,
-          question_id: qid,
-          added_from_test_id: test_id,
-          next_review_date: tomorrowStr,
-          interval_days: 1,
-          is_mastered: false,
-        })),
-        { onConflict: "user_id,question_id", ignoreDuplicates: true }
-      );
+      // Fetch which question_ids are already in revision list (not mastered)
+      const { data: existing } = await db
+        .from("revision_list")
+        .select("question_id")
+        .eq("user_id", userId)
+        .in("question_id", wrongQuestionIds)
+        .eq("is_mastered", false);
+
+      const existingIds = new Set((existing ?? []).map((r: { question_id: string }) => r.question_id));
+      const newRevisionIds = wrongQuestionIds.filter((qid) => !existingIds.has(qid));
+
+      if (newRevisionIds.length > 0) {
+        const { error: revErr } = await db.from("revision_list").insert(
+          newRevisionIds.map((qid) => ({
+            user_id: userId,
+            question_id: qid,
+            added_from_test_id: test_id,
+            next_review_date: tomorrowStr,
+            interval_days: 1,
+            is_mastered: false,
+          }))
+        );
+        if (revErr) {
+          console.error("[submit-test] revision_list insert error:", revErr.message);
+          // Non-blocking — test submission proceeds regardless
+        }
+      }
     }
 
     // ── Call update_topic_performance RPC using user JWT ──────────

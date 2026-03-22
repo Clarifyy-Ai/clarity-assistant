@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -17,15 +16,20 @@ import { toast } from "sonner";
 // Types
 // ─────────────────────────────────────────────────────────────────
 
+interface QuestionOption {
+  label: string;
+  text: string;
+}
+
 interface Question {
   id: string;
   question_text: string;
   question_type: string;
-  options: Array<{ label: string; text: string }> | null;
+  options: QuestionOption[] | null;
   correct_answer: string;
   subject: string;
   topic: string;
-  difficulty: string;
+  difficulty: "EASY" | "MEDIUM" | "HARD";
   marks_positive: number;
   marks_negative: number;
   image_url?: string;
@@ -39,14 +43,32 @@ interface ResponseState {
   state: QuestionState;
 }
 
+interface MockTest {
+  id: string;
+  test_name: string;
+  config: Record<string, unknown>;
+  question_ids: string[];
+  status: string;
+  time_limit_minutes: number;
+  started_at?: string;
+}
+
 // ─────────────────────────────────────────────────────────────────
 // Helpers
 // ─────────────────────────────────────────────────────────────────
 
-function formatTime(seconds: number) {
-  const m = Math.floor(seconds / 60);
-  const s = seconds % 60;
+function formatTime(seconds: number): string {
+  const m = Math.floor(Math.max(0, seconds) / 60);
+  const s = Math.max(0, seconds) % 60;
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function computeRemainingSeconds(test: MockTest): number {
+  const limitSecs = (test.time_limit_minutes ?? 60) * 60;
+  if (!test.started_at) return limitSecs;
+  const elapsedMs = Date.now() - new Date(test.started_at).getTime();
+  const elapsedSecs = Math.floor(elapsedMs / 1000);
+  return Math.max(0, limitSecs - elapsedSecs);
 }
 
 const STATE_COLORS: Record<QuestionState, string> = {
@@ -57,74 +79,67 @@ const STATE_COLORS: Record<QuestionState, string> = {
   bookmarked:           "bg-blue-500/20 text-blue-400 border-blue-500/30",
 };
 
-/**
- * Render text that may contain LaTeX.
- * Inline: $...$  Block: $$...$$
- */
-function MathText({ text }: { text: string }) {
-  if (!text) return null;
+// Regex segments for LaTeX rendering
+interface MathSegment {
+  start: number;
+  end: number;
+  latex: string;
+  isBlock: boolean;
+}
 
-  // Split on $$ (block) or $ (inline)
+function MathText({ text }: { text: string }): React.ReactElement {
   const parts: React.ReactNode[] = [];
-  const blockRe = /\$\$([\s\S]+?)\$\$/g;
-  const inlineRe = /\$([^\$]+?)\$/g;
+  const segments: MathSegment[] = [];
 
-  let lastIndex = 0;
+  const blockRe = /\$\$([\s\S]+?)\$\$/g;
+  const inlineRe = /\$([^$]+?)\$/g;
+
   let match: RegExpExecArray | null;
 
-  const merged = text;
-  const blockMatches: Array<{ start: number; end: number; latex: string; isBlock: boolean }> = [];
-
-  // Find block math first
   blockRe.lastIndex = 0;
-  while ((match = blockRe.exec(merged)) !== null) {
-    blockMatches.push({ start: match.index, end: match.index + match[0].length, latex: match[1], isBlock: true });
+  while ((match = blockRe.exec(text)) !== null) {
+    segments.push({ start: match.index, end: match.index + match[0].length, latex: match[1], isBlock: true });
   }
 
-  // Find inline math, excluding already-captured block ranges
   inlineRe.lastIndex = 0;
-  while ((match = inlineRe.exec(merged)) !== null) {
-    const inBlock = blockMatches.some((b) => match!.index >= b.start && match!.index < b.end);
+  while ((match = inlineRe.exec(text)) !== null) {
+    const inBlock = segments.some((b) => match!.index >= b.start && match!.index < b.end);
     if (!inBlock) {
-      blockMatches.push({ start: match.index, end: match.index + match[0].length, latex: match[1], isBlock: false });
+      segments.push({ start: match.index, end: match.index + match[0].length, latex: match[1], isBlock: false });
     }
   }
 
-  blockMatches.sort((a, b) => a.start - b.start);
+  segments.sort((a, b) => a.start - b.start);
 
   let cursor = 0;
-  for (const segment of blockMatches) {
-    if (segment.start > cursor) {
-      parts.push(merged.slice(cursor, segment.start));
-    }
+  for (const seg of segments) {
+    if (seg.start > cursor) parts.push(text.slice(cursor, seg.start));
     try {
       parts.push(
-        segment.isBlock
-          ? <BlockMath key={segment.start} math={segment.latex} />
-          : <InlineMath key={segment.start} math={segment.latex} />
+        seg.isBlock
+          ? <BlockMath key={seg.start} math={seg.latex} />
+          : <InlineMath key={seg.start} math={seg.latex} />
       );
     } catch {
-      parts.push(segment.latex);
+      parts.push(seg.latex);
     }
-    cursor = segment.end;
+    cursor = seg.end;
   }
-  if (cursor < merged.length) {
-    parts.push(merged.slice(cursor));
-  }
+  if (cursor < text.length) parts.push(text.slice(cursor));
 
   return <>{parts}</>;
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Component
+// Main component
 // ─────────────────────────────────────────────────────────────────
 
-export default function TestSession() {
+export default function TestSession(): React.ReactElement {
   const { testId } = useParams<{ testId: string }>();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
 
-  const [test, setTest] = useState<any>(null);
+  const [test, setTest] = useState<MockTest | null>(null);
   const [questions, setQuestions] = useState<Question[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [responses, setResponses] = useState<Record<string, ResponseState>>({});
@@ -133,21 +148,27 @@ export default function TestSession() {
   const [submitting, setSubmitting] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
 
-  const autoSaveRef = useRef<ReturnType<typeof setInterval>>();
-  const timerRef    = useRef<ReturnType<typeof setInterval>>();
+  const timerRef    = useRef<ReturnType<typeof setInterval> | null>(null);
+  const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const questionStartRef = useRef<number>(Date.now());
   const timeSpentMap = useRef<Record<string, number>>({});
-  const timerStartedRef = useRef(false);
+  const isMounted = useRef(true);
+
+  useEffect(() => {
+    isMounted.current = true;
+    return () => { isMounted.current = false; };
+  }, []);
 
   useEffect(() => {
     if (!testId || !user?.id) return;
-    loadTest();
+    void loadTest();
   }, [testId, user?.id]);
 
-  // Auto-save every 30 seconds
   useEffect(() => {
-    autoSaveRef.current = setInterval(() => { saveResponses(); }, 30_000);
-    return () => clearInterval(autoSaveRef.current!);
+    autoSaveRef.current = setInterval(() => { void saveResponses(); }, 30_000);
+    return () => {
+      if (autoSaveRef.current) clearInterval(autoSaveRef.current);
+    };
   }, [responses]);
 
   async function loadTest() {
@@ -156,7 +177,7 @@ export default function TestSession() {
       const { data: testData, error: testErr } = await supabase
         .from("mock_tests")
         .select("*")
-        .eq("id", testId)
+        .eq("id", testId!)
         .eq("user_id", user!.id)
         .single();
 
@@ -171,98 +192,118 @@ export default function TestSession() {
         return;
       }
 
-      setTest(testData);
-      const secs = (testData.time_limit_minutes ?? 60) * 60;
-      setTimeLeft(secs);
+      const loadedTest = testData as MockTest;
 
-      const qIds = testData.question_ids as string[];
+      // If IN_PROGRESS, derive remaining time from started_at
+      let remaining: number;
+      if (loadedTest.status === "IN_PROGRESS" && loadedTest.started_at) {
+        remaining = computeRemainingSeconds(loadedTest);
+      } else {
+        remaining = (loadedTest.time_limit_minutes ?? 60) * 60;
+      }
+
+      if (!isMounted.current) return;
+      setTest(loadedTest);
+      setTimeLeft(remaining);
+
+      const qIds = loadedTest.question_ids;
       const { data: qData } = await supabase
         .from("questions")
         .select("id, question_text, question_type, options, correct_answer, subject, topic, difficulty, marks_positive, marks_negative, image_url, latex_present")
         .in("id", qIds);
 
       const qMap: Record<string, Question> = {};
-      for (const q of (qData ?? [])) qMap[q.id] = q;
-      const orderedQuestions = qIds.map((id) => qMap[id]).filter(Boolean);
+      for (const q of (qData ?? [])) qMap[q.id] = q as Question;
+      const orderedQuestions = qIds.map((id) => qMap[id]).filter(Boolean) as Question[];
+
+      if (!isMounted.current) return;
       setQuestions(orderedQuestions);
 
       const { data: respData } = await supabase
         .from("test_responses")
         .select("question_id, user_answer, is_marked_review, is_attempted, time_spent_seconds")
-        .eq("test_id", testId)
+        .eq("test_id", testId!)
         .eq("user_id", user!.id);
 
       const respMap: Record<string, ResponseState> = {};
       const timeMap: Record<string, number> = {};
       for (const r of (respData ?? [])) {
-        respMap[r.question_id] = {
-          answer: r.user_answer ?? "",
-          state: r.is_marked_review
-            ? (r.is_attempted ? "attempted-marked" : "marked")
-            : (r.is_attempted ? "attempted" : "unattempted"),
-        };
-        if (r.time_spent_seconds) timeMap[r.question_id] = r.time_spent_seconds;
+        const state: QuestionState = r.is_marked_review
+          ? (r.is_attempted ? "attempted-marked" : "marked")
+          : (r.is_attempted ? "attempted" : "unattempted");
+        respMap[r.question_id] = { answer: r.user_answer ?? "", state };
+        if (r.time_spent_seconds) timeMap[r.question_id] = r.time_spent_seconds as number;
       }
+      if (!isMounted.current) return;
       setResponses(respMap);
       timeSpentMap.current = timeMap;
 
-      if (testData.status === "DRAFT") {
+      // Mark as IN_PROGRESS if first time starting
+      if (loadedTest.status === "DRAFT") {
+        const startedAt = new Date().toISOString();
         await supabase
           .from("mock_tests")
-          .update({ status: "IN_PROGRESS", started_at: new Date().toISOString() })
-          .eq("id", testId);
+          .update({ status: "IN_PROGRESS", started_at: startedAt })
+          .eq("id", testId!);
+        // Update local copy so timer uses correct started_at
+        setTest((prev) => prev ? { ...prev, status: "IN_PROGRESS", started_at: startedAt } : prev);
       }
+
+      // Start countdown
+      if (timerRef.current) clearInterval(timerRef.current);
+      timerRef.current = setInterval(() => {
+        if (!isMounted.current) return;
+        setTimeLeft((t) => {
+          if (t <= 1) {
+            clearInterval(timerRef.current!);
+            void handleSubmit(true);
+            return 0;
+          }
+          return t - 1;
+        });
+      }, 1000);
     } catch (err) {
       console.error("[TestSession] load error:", err);
       toast.error("Failed to load test");
     } finally {
-      setLoading(false);
+      if (isMounted.current) setLoading(false);
     }
   }
 
-  // Start timer only after loading
   useEffect(() => {
-    if (!test || timerStartedRef.current || timeLeft <= 0) return;
-    timerStartedRef.current = true;
-    timerRef.current = setInterval(() => {
-      setTimeLeft((t) => {
-        if (t <= 1) {
-          clearInterval(timerRef.current!);
-          handleSubmit(true);
-          return 0;
-        }
-        return t - 1;
-      });
-    }, 1000);
-    return () => clearInterval(timerRef.current!);
-  }, [test, timeLeft]);
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
 
-  // Track time on question
+  // Track time spent on current question
   useEffect(() => {
-    const prev = currentIndex;
     questionStartRef.current = Date.now();
+    const prevIndex = currentIndex;
     return () => {
       const elapsed = Math.round((Date.now() - questionStartRef.current) / 1000);
-      if (elapsed > 0 && questions[prev]) {
-        const qid = questions[prev].id;
+      if (elapsed > 0 && questions[prevIndex]) {
+        const qid = questions[prevIndex].id;
         timeSpentMap.current[qid] = (timeSpentMap.current[qid] ?? 0) + elapsed;
       }
     };
-  }, [currentIndex]);
+  }, [currentIndex, questions]);
 
   async function saveResponses() {
     if (!testId || !user?.id || Object.keys(responses).length === 0) return;
     try {
       const upserts = Object.entries(responses).map(([qId, r]) => ({
-        test_id:           testId,
-        question_id:       qId,
-        user_id:           user!.id,
-        user_answer:       r.answer || null,
-        is_attempted:      !!r.answer,
-        is_marked_review:  r.state === "marked" || r.state === "attempted-marked",
+        test_id:            testId,
+        question_id:        qId,
+        user_id:            user!.id,
+        user_answer:        r.answer || null,
+        is_attempted:       Boolean(r.answer),
+        is_marked_review:   r.state === "marked" || r.state === "attempted-marked",
         time_spent_seconds: timeSpentMap.current[qId] ?? 0,
       }));
-      await supabase.from("test_responses").upsert(upserts, { onConflict: "test_id,question_id" });
+      await supabase
+        .from("test_responses")
+        .upsert(upserts, { onConflict: "test_id,question_id" });
     } catch (err) {
       console.warn("[TestSession] auto-save error:", err);
     }
@@ -278,13 +319,12 @@ export default function TestSession() {
     setResponses((prev) => {
       const current = prev[q.id];
       const wasMarked = current?.state === "marked" || current?.state === "attempted-marked";
-      return {
-        ...prev,
-        [q.id]: {
-          answer,
-          state: wasMarked && answer ? "attempted-marked" : answer ? "attempted" : "unattempted",
-        },
-      };
+      const newState: QuestionState = wasMarked && answer
+        ? "attempted-marked"
+        : answer
+          ? "attempted"
+          : "unattempted";
+      return { ...prev, [q.id]: { answer, state: newState } };
     });
   }
 
@@ -293,13 +333,11 @@ export default function TestSession() {
     if (!q) return;
     setResponses((prev) => {
       const current = prev[q.id] ?? { answer: "", state: "unattempted" as QuestionState };
-      const hasAnswer = !!current.answer;
-      let newState: QuestionState;
-      if (current.state === "marked" || current.state === "attempted-marked") {
-        newState = hasAnswer ? "attempted" : "unattempted";
-      } else {
-        newState = hasAnswer ? "attempted-marked" : "marked";
-      }
+      const hasAnswer = Boolean(current.answer);
+      const isCurrentlyMarked = current.state === "marked" || current.state === "attempted-marked";
+      const newState: QuestionState = isCurrentlyMarked
+        ? (hasAnswer ? "attempted" : "unattempted")
+        : (hasAnswer ? "attempted-marked" : "marked");
       return { ...prev, [q.id]: { ...current, state: newState } };
     });
   }
@@ -309,13 +347,8 @@ export default function TestSession() {
     if (!q) return;
     setResponses((prev) => {
       const current = prev[q.id] ?? { answer: "", state: "unattempted" as QuestionState };
-      return {
-        ...prev,
-        [q.id]: {
-          answer: "",
-          state: current.state === "marked" || current.state === "attempted-marked" ? "marked" : "unattempted",
-        },
-      };
+      const isMarked = current.state === "marked" || current.state === "attempted-marked";
+      return { ...prev, [q.id]: { answer: "", state: isMarked ? "marked" : "unattempted" } };
     });
   }
 
@@ -324,7 +357,7 @@ export default function TestSession() {
     if (!q) return;
     setResponses((prev) => ({
       ...prev,
-      [q.id]: { ...prev[q.id] ?? { answer: "", state: "unattempted" as QuestionState }, state: "bookmarked" },
+      [q.id]: { ...(prev[q.id] ?? { answer: "", state: "unattempted" as QuestionState }), state: "bookmarked" },
     }));
     toast.success("Bookmarked for revision");
   }
@@ -333,31 +366,33 @@ export default function TestSession() {
     if (submitting) return;
     setSubmitting(true);
     try {
-      // Final save with current time tracking
+      // Record final time on current question
       const elapsed = Math.round((Date.now() - questionStartRef.current) / 1000);
       const q = getCurrentQuestion();
       if (q && elapsed > 0) {
         timeSpentMap.current[q.id] = (timeSpentMap.current[q.id] ?? 0) + elapsed;
       }
-
       await saveResponses();
 
-      const { data: session } = await supabase.auth.getSession();
-      const token = session?.session?.access_token;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) throw new Error("Not authenticated");
 
       const res = await supabase.functions.invoke("submit-test", {
         body: { test_id: testId },
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (res.error) throw new Error(res.error.message);
-      if (res.data?.error) throw new Error(res.data.error);
+      const data = res.data as { error?: string };
+      if (data?.error) throw new Error(data.error);
 
       toast.success(autoSubmit ? "Time's up! Test submitted." : "Test submitted!");
       navigate(`/app/mock-test/results/${testId}`);
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Unknown error";
       console.error("[TestSession] submit error:", err);
-      toast.error("Failed to submit: " + (err.message ?? "Unknown error"));
+      toast.error("Failed to submit: " + message);
     } finally {
       setSubmitting(false);
       setShowSubmitModal(false);
@@ -373,13 +408,15 @@ export default function TestSession() {
   }
 
   const q = getCurrentQuestion();
-  if (!q) return null;
+  if (!q) return <div className="flex h-screen items-center justify-center bg-background"><p className="text-muted-foreground">No questions found.</p></div>;
 
   const currentResp = responses[q.id] ?? { answer: "", state: "unattempted" as QuestionState };
   const isMarked = currentResp.state === "marked" || currentResp.state === "attempted-marked";
 
   const attempted   = Object.values(responses).filter((r) => r.answer).length;
-  const markedCount = Object.values(responses).filter((r) => r.state === "marked" || r.state === "attempted-marked").length;
+  const markedCount = Object.values(responses).filter(
+    (r) => r.state === "marked" || r.state === "attempted-marked"
+  ).length;
   const unattempted = questions.length - attempted;
 
   const timerColor =
@@ -387,7 +424,7 @@ export default function TestSession() {
     timeLeft <= 600 ? "text-amber-400" :
     "text-foreground";
 
-  // Compute subject-wise counts for right panel
+  // Subject-wise counts
   const subjectCounts: Record<string, { total: number; done: number }> = {};
   for (const question of questions) {
     if (!subjectCounts[question.subject]) subjectCounts[question.subject] = { total: 0, done: 0 };
@@ -395,20 +432,9 @@ export default function TestSession() {
     if (responses[question.id]?.answer) subjectCounts[question.subject].done++;
   }
 
-  // Live score (optimistic)
-  let liveScore = 0;
-  for (const qq of questions) {
-    const r = responses[qq.id];
-    if (!r?.answer) continue;
-    const marksPos = parseFloat(qq.marks_positive as any ?? 4);
-    const marksNeg = parseFloat(qq.marks_negative as any ?? 1);
-    // Can't know if correct without ground truth — show attempted count instead
-    liveScore += marksPos * 0.6; // rough optimistic estimate — displayed as approx
-  }
-
   return (
     <div className="flex flex-col h-screen bg-background overflow-hidden">
-      {/* ── Top bar ── */}
+      {/* Top bar */}
       <div className="flex items-center justify-between border-b border-border px-4 py-2 shrink-0 gap-4">
         <p className="font-semibold text-foreground text-sm truncate max-w-xs hidden md:block">
           {test?.test_name ?? "Test Session"}
@@ -421,28 +447,23 @@ export default function TestSession() {
           <span className="text-xs text-muted-foreground hidden sm:block">
             {attempted}/{questions.length} done
           </span>
-          <Button
-            size="sm"
-            variant="outline"
-            onClick={() => setShowSubmitModal(true)}
-            disabled={submitting}
-          >
+          <Button size="sm" variant="outline" onClick={() => setShowSubmitModal(true)} disabled={submitting}>
             <Send className="h-3.5 w-3.5 mr-1.5" />
             Submit
           </Button>
         </div>
       </div>
 
-      {/* ── Main area ── */}
+      {/* Main area */}
       <div className="flex flex-1 overflow-hidden">
-        {/* ── Left: question navigator ── */}
+        {/* Left: question navigator */}
         <div className="hidden md:flex flex-col w-48 border-r border-border overflow-y-auto p-3 gap-2 shrink-0">
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
             Navigator
           </p>
           <div className="grid grid-cols-5 gap-1">
             {questions.map((qq, i) => {
-              const r = responses[qq.id] ?? { state: "unattempted" };
+              const r = responses[qq.id] ?? { state: "unattempted" as QuestionState };
               return (
                 <button
                   key={qq.id}
@@ -459,27 +480,23 @@ export default function TestSession() {
               );
             })}
           </div>
-
-          {/* Legend */}
           <div className="mt-2 space-y-1.5">
-            {[
-              { state: "unattempted",      label: "Not visited" },
-              { state: "attempted",        label: "Answered" },
-              { state: "marked",           label: "For review" },
-              { state: "attempted-marked", label: "Ans + review" },
-            ].map(({ state, label }) => (
+            {(["unattempted", "attempted", "marked", "attempted-marked"] as QuestionState[]).map((state) => (
               <div key={state} className="flex items-center gap-1.5">
-                <div className={cn("w-4 h-4 rounded border", STATE_COLORS[state as QuestionState])} />
-                <span className="text-[10px] text-muted-foreground">{label}</span>
+                <div className={cn("w-4 h-4 rounded border", STATE_COLORS[state])} />
+                <span className="text-[10px] text-muted-foreground">
+                  {state === "unattempted" ? "Not visited" :
+                   state === "attempted" ? "Answered" :
+                   state === "marked" ? "For review" : "Ans + review"}
+                </span>
               </div>
             ))}
           </div>
         </div>
 
-        {/* ── Center: question ── */}
+        {/* Center: question */}
         <div className="flex-1 overflow-y-auto p-4 md:p-6">
           <div className="max-w-2xl mx-auto space-y-5">
-            {/* Question header */}
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs font-semibold text-muted-foreground">
@@ -500,7 +517,6 @@ export default function TestSession() {
               </div>
             </div>
 
-            {/* Question text with LaTeX */}
             <div className="rounded-xl border border-border bg-card p-4">
               <div className="text-sm text-foreground leading-relaxed">
                 <MathText text={q.question_text} />
@@ -510,7 +526,6 @@ export default function TestSession() {
               )}
             </div>
 
-            {/* Answer area */}
             {(q.question_type === "MCQ" || q.question_type === "TRUE_FALSE") ? (
               <div className="space-y-2">
                 {(q.options ?? []).map((opt) => (
@@ -549,7 +564,6 @@ export default function TestSession() {
               />
             )}
 
-            {/* Controls */}
             <div className="flex flex-wrap gap-2">
               <Button
                 size="sm"
@@ -570,7 +584,6 @@ export default function TestSession() {
               </Button>
             </div>
 
-            {/* Navigation */}
             <div className="flex items-center justify-between pt-2 border-t border-border">
               <Button
                 variant="outline"
@@ -581,14 +594,9 @@ export default function TestSession() {
                 <ChevronLeft className="h-4 w-4 mr-1" />
                 Previous
               </Button>
-              <span className="text-xs text-muted-foreground">
-                {currentIndex + 1} / {questions.length}
-              </span>
+              <span className="text-xs text-muted-foreground">{currentIndex + 1} / {questions.length}</span>
               {currentIndex < questions.length - 1 ? (
-                <Button
-                  size="sm"
-                  onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}
-                >
+                <Button size="sm" onClick={() => setCurrentIndex((i) => Math.min(questions.length - 1, i + 1))}>
                   Next
                   <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
@@ -602,7 +610,7 @@ export default function TestSession() {
           </div>
         </div>
 
-        {/* ── Right: subject-wise counts + live stats ── */}
+        {/* Right: subject-wise counts and live stats */}
         <div className="hidden lg:flex flex-col w-44 border-l border-border overflow-y-auto p-3 gap-3 shrink-0">
           <p className="text-[10px] uppercase tracking-widest text-muted-foreground font-semibold">
             Progress
@@ -640,7 +648,7 @@ export default function TestSession() {
         </div>
       </div>
 
-      {/* ── Submit confirmation modal ── */}
+      {/* Submit modal */}
       {showSubmitModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4">
           <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 space-y-4">
@@ -674,11 +682,7 @@ export default function TestSession() {
               >
                 Go Back
               </Button>
-              <Button
-                className="flex-1"
-                onClick={() => handleSubmit(false)}
-                loading={submitting}
-              >
+              <Button className="flex-1" onClick={() => { void handleSubmit(false); }} loading={submitting}>
                 <Send className="h-4 w-4 mr-1.5" />
                 Confirm Submit
               </Button>

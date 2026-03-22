@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState } from "react";
 import {
   TrendingUp, Target, AlertTriangle, Trophy, Flame,
@@ -14,19 +13,57 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────────
-// TestAnalytics — cross-test performance dashboard
+// Types
 // ─────────────────────────────────────────────────────────────────
 
-export default function TestAnalytics() {
+interface MockTestSummary {
+  id: string;
+  test_name: string;
+  config: Record<string, unknown>;
+  created_at: string;
+}
+
+interface TestAnalysisSummary {
+  test_id: string;
+  total_score: number;
+  max_score: number;
+  accuracy: number;
+  attempt_percentage: number;
+  subject_breakdown: Record<string, unknown>;
+  topic_breakdown: Record<string, unknown>;
+  created_at: string;
+}
+
+interface TopicPerformance {
+  topic: string;
+  subject: string;
+  accuracy: number;
+  total_attempted: number;
+  total_correct: number;
+  last_practiced: string;
+}
+
+interface TrendDataPoint {
+  name: string;
+  accuracy: number;
+  attempted: number;
+  score_pct: number;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Component
+// ─────────────────────────────────────────────────────────────────
+
+export default function TestAnalytics(): React.ReactElement {
   const user = useAuthStore((s) => s.user);
   const [loading, setLoading] = useState(true);
-  const [tests, setTests] = useState<any[]>([]);
-  const [analyses, setAnalyses] = useState<any[]>([]);
-  const [topicPerf, setTopicPerf] = useState<any[]>([]);
+  const [tests, setTests] = useState<MockTestSummary[]>([]);
+  const [analyses, setAnalyses] = useState<TestAnalysisSummary[]>([]);
+  const [topicPerf, setTopicPerf] = useState<TopicPerformance[]>([]);
 
   useEffect(() => {
     if (!user?.id) return;
-    loadData();
+    void loadData();
   }, [user?.id]);
 
   async function loadData() {
@@ -54,9 +91,9 @@ export default function TestAnalytics() {
           .limit(100),
       ]);
 
-      setTests(testsRes.data ?? []);
-      setAnalyses(analysesRes.data ?? []);
-      setTopicPerf(topicRes.data ?? []);
+      setTests((testsRes.data ?? []) as MockTestSummary[]);
+      setAnalyses((analysesRes.data ?? []) as TestAnalysisSummary[]);
+      setTopicPerf((topicRes.data ?? []) as TopicPerformance[]);
     } catch (err) {
       console.error("[TestAnalytics] load error:", err);
     } finally {
@@ -64,8 +101,7 @@ export default function TestAnalytics() {
     }
   }
 
-  // Build trend chart data (last 10 tests, oldest first)
-  const trendData = [...analyses]
+  const trendData: TrendDataPoint[] = [...analyses]
     .reverse()
     .slice(-10)
     .map((a, i) => {
@@ -78,17 +114,9 @@ export default function TestAnalytics() {
       };
     });
 
-  // Weak topics: lowest accuracy, attempted > 0
-  const weakTopics = topicPerf
-    .filter((t) => t.total_attempted > 0 && t.accuracy < 60)
-    .slice(0, 8);
+  const weakTopics = topicPerf.filter((t) => t.total_attempted > 0 && t.accuracy < 60).slice(0, 8);
+  const strongTopics = topicPerf.filter((t) => t.total_attempted > 0 && t.accuracy >= 80).slice(0, 5);
 
-  // Strong topics: accuracy > 80
-  const strongTopics = topicPerf
-    .filter((t) => t.total_attempted > 0 && t.accuracy >= 80)
-    .slice(0, 5);
-
-  // Overall stats
   const avgAccuracy = analyses.length > 0
     ? Math.round(analyses.reduce((s, a) => s + (a.accuracy ?? 0), 0) / analyses.length)
     : 0;
@@ -97,7 +125,6 @@ export default function TestAnalytics() {
   const prevAccuracy   = analyses[1]?.accuracy ?? latestAccuracy;
   const improvement    = Math.round(latestAccuracy - prevAccuracy);
 
-  // Milestone alerts
   const milestones: string[] = [];
   if (improvement > 10) milestones.push(`Accuracy improved by ${improvement}% in the last test!`);
   if (strongTopics.length > 3) milestones.push(`You've mastered ${strongTopics.length} topics with 80%+ accuracy.`);
@@ -118,13 +145,13 @@ export default function TestAnalytics() {
         description="Cross-test trends, topic heatmap, and improvement insights."
       />
 
-      {/* ── Summary stats ── */}
+      {/* Summary stats */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
-          { label: "Tests Taken", value: analyses.length, icon: <Trophy className="h-5 w-5 text-amber-400" /> },
-          { label: "Avg Accuracy", value: `${avgAccuracy}%`, icon: <Target className="h-5 w-5 text-green-400" /> },
-          { label: "Weak Topics", value: weakTopics.length, icon: <AlertTriangle className="h-5 w-5 text-red-400" /> },
-          { label: "Improvement", value: improvement >= 0 ? `+${improvement}%` : `${improvement}%`, icon: <TrendingUp className="h-5 w-5 text-violet-400" /> },
+          { label: "Tests Taken",  value: analyses.length,                                        icon: <Trophy className="h-5 w-5 text-amber-400" /> },
+          { label: "Avg Accuracy", value: `${avgAccuracy}%`,                                      icon: <Target className="h-5 w-5 text-green-400" /> },
+          { label: "Weak Topics",  value: weakTopics.length,                                      icon: <AlertTriangle className="h-5 w-5 text-red-400" /> },
+          { label: "Improvement",  value: improvement >= 0 ? `+${improvement}%` : `${improvement}%`, icon: <TrendingUp className="h-5 w-5 text-violet-400" /> },
         ].map(({ label, value, icon }) => (
           <Card key={label} className="text-center py-4">
             <CardContent className="p-0 space-y-1">
@@ -136,11 +163,14 @@ export default function TestAnalytics() {
         ))}
       </div>
 
-      {/* ── Milestone alerts ── */}
+      {/* Milestone alerts */}
       {milestones.length > 0 && (
         <div className="space-y-2">
           {milestones.map((m, i) => (
-            <div key={i} className="flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+            <div
+              key={i}
+              className="flex items-center gap-3 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3"
+            >
               <Flame className="h-5 w-5 text-amber-400 shrink-0" />
               <p className="text-sm text-foreground">{m}</p>
             </div>
@@ -148,7 +178,7 @@ export default function TestAnalytics() {
         </div>
       )}
 
-      {/* ── Score trend chart ── */}
+      {/* Score trend chart */}
       {trendData.length > 0 ? (
         <Card>
           <CardContent className="py-4">
@@ -201,26 +231,32 @@ export default function TestAnalytics() {
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <TrendingUp className="h-10 w-10 text-muted-foreground mb-3" />
             <p className="font-medium text-foreground">No test data yet</p>
-            <p className="text-sm text-muted-foreground mt-1">Complete a mock test to see your trends here.</p>
+            <p className="text-sm text-muted-foreground mt-1">
+              Complete a mock test to see your trends here.
+            </p>
           </CardContent>
         </Card>
       )}
 
-      {/* ── Topic heatmap (all-time) ── */}
+      {/* Topic heatmap (all-time) */}
       {topicPerf.length > 0 && (
         <Card>
           <CardContent className="py-4">
-            <h3 className="text-sm font-semibold text-foreground mb-3">Topic Accuracy Heatmap (All-Time)</h3>
+            <h3 className="text-sm font-semibold text-foreground mb-3">
+              Topic Accuracy Heatmap (All-Time)
+            </h3>
             <div className="flex flex-wrap gap-2">
               {topicPerf.filter((t) => t.total_attempted > 0).map((t) => (
                 <div
                   key={t.topic}
-                  title={`${t.topic}: ${t.total_correct}/${t.total_attempted} (${t.accuracy}%)`}
+                  title={`${t.topic}: ${t.total_correct}/${t.total_attempted} (${Math.round(t.accuracy)}%)`}
                   className={cn(
                     "rounded-lg px-3 py-1.5 text-xs font-semibold border",
-                    t.accuracy >= 80 ? "bg-green-500/20 text-green-400 border-green-500/30" :
-                    t.accuracy >= 50 ? "bg-amber-500/20 text-amber-400 border-amber-500/30" :
-                    "bg-red-500/20 text-red-400 border-red-500/30"
+                    t.accuracy >= 80
+                      ? "bg-green-500/20 text-green-400 border-green-500/30"
+                      : t.accuracy >= 50
+                        ? "bg-amber-500/20 text-amber-400 border-amber-500/30"
+                        : "bg-red-500/20 text-red-400 border-red-500/30"
                   )}
                 >
                   {t.topic} <span className="opacity-70">{Math.round(t.accuracy)}%</span>
@@ -231,7 +267,7 @@ export default function TestAnalytics() {
         </Card>
       )}
 
-      {/* ── Weak topics spotlight ── */}
+      {/* Weak topics spotlight */}
       {weakTopics.length > 0 && (
         <Card>
           <CardContent className="py-4">
@@ -257,7 +293,7 @@ export default function TestAnalytics() {
         </Card>
       )}
 
-      {/* ── Strong topics ── */}
+      {/* Mastered topics */}
       {strongTopics.length > 0 && (
         <Card>
           <CardContent className="py-4">

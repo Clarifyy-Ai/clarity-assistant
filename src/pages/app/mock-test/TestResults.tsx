@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
@@ -14,30 +13,111 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
+// ─────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────
+
 type QuestionFilter = "all" | "wrong" | "marked";
 
+interface SubjectBreakdown {
+  correct: number;
+  wrong: number;
+  attempted: number;
+  total: number;
+  accuracy: number;
+  marks: number;
+}
+
+interface TopicBreakdown {
+  correct: number;
+  wrong: number;
+  attempted: number;
+  total: number;
+  accuracy: number;
+  avg_time: number;
+}
+
+interface TimeTrap {
+  question_id: string;
+  time_seconds: number;
+}
+
+interface TimeAnalysis {
+  avg_seconds: number;
+  time_traps: TimeTrap[];
+}
+
+interface TestAnalysis {
+  total_score: number;
+  max_score: number;
+  accuracy: number;
+  attempt_percentage: number;
+  subject_breakdown: Record<string, SubjectBreakdown>;
+  topic_breakdown: Record<string, TopicBreakdown>;
+  weak_topics: string[];
+  strong_topics: string[];
+  time_analysis: TimeAnalysis;
+  predicted_percentile: number;
+  ai_analysis_text?: string;
+}
+
+interface MockTest {
+  id: string;
+  test_name: string;
+  question_ids: string[];
+  status: string;
+}
+
+interface Question {
+  id: string;
+  question_text: string;
+  question_type: string;
+  correct_answer: string;
+  explanation?: string;
+  subject: string;
+  topic: string;
+  difficulty: string;
+}
+
+interface TestResponse {
+  question_id: string;
+  user_answer: string | null;
+  is_correct: boolean;
+  is_attempted: boolean;
+  is_marked_review: boolean;
+  time_spent_seconds: number;
+}
+
 // ─────────────────────────────────────────────────────────────────
-// Helpers
+// Helper
 // ─────────────────────────────────────────────────────────────────
 
-// Flag a question as "likely guessed" if answered very quickly (< 10s)
 function isLikelyGuessed(timeSpent: number, avgTime: number): boolean {
-  return timeSpent > 0 && timeSpent < Math.max(10, avgTime * 0.3);
+  return timeSpent > 0 && avgTime > 0 && timeSpent < Math.max(10, avgTime * 0.3);
+}
+
+function getRankTier(percentile: number): string {
+  if (percentile >= 99) return "Top 1%";
+  if (percentile >= 95) return "Top 5%";
+  if (percentile >= 90) return "Top 10%";
+  if (percentile >= 75) return "Top 25%";
+  if (percentile >= 50) return "Top 50%";
+  return "Bottom 50%";
 }
 
 // ─────────────────────────────────────────────────────────────────
 // Component
 // ─────────────────────────────────────────────────────────────────
 
-export default function TestResults() {
+export default function TestResults(): React.ReactElement {
   const { testId } = useParams<{ testId: string }>();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
 
-  const [test, setTest] = useState<any>(null);
-  const [analysis, setAnalysis] = useState<any>(null);
-  const [questions, setQuestions] = useState<any[]>([]);
-  const [responses, setResponses] = useState<Record<string, any>>({});
+  const [test, setTest] = useState<MockTest | null>(null);
+  const [analysis, setAnalysis] = useState<TestAnalysis | null>(null);
+  const [questions, setQuestions] = useState<Question[]>([]);
+  const [responses, setResponses] = useState<Record<string, TestResponse>>({});
   const [loading, setLoading] = useState(true);
   const [aiLoading, setAiLoading] = useState(false);
   const [showAI, setShowAI] = useState(false);
@@ -46,15 +126,15 @@ export default function TestResults() {
 
   useEffect(() => {
     if (!testId || !user?.id) return;
-    loadResults();
+    void loadResults();
   }, [testId, user?.id]);
 
   async function loadResults() {
     setLoading(true);
     try {
       const [testRes, analysisRes] = await Promise.all([
-        supabase.from("mock_tests").select("*").eq("id", testId).eq("user_id", user!.id).single(),
-        supabase.from("test_analyses").select("*").eq("test_id", testId).eq("user_id", user!.id).single(),
+        supabase.from("mock_tests").select("*").eq("id", testId!).eq("user_id", user!.id).single(),
+        supabase.from("test_analyses").select("*").eq("test_id", testId!).eq("user_id", user!.id).single(),
       ]);
 
       if (testRes.error) {
@@ -63,21 +143,21 @@ export default function TestResults() {
         return;
       }
 
-      setTest(testRes.data);
-      setAnalysis(analysisRes.data);
+      setTest(testRes.data as MockTest);
+      if (analysisRes.data) setAnalysis(analysisRes.data as TestAnalysis);
 
-      const qIds = testRes.data.question_ids as string[];
+      const qIds = (testRes.data as MockTest).question_ids;
       const [qRes, rRes] = await Promise.all([
-        supabase.from("questions").select("*").in("id", qIds),
-        supabase.from("test_responses").select("*").eq("test_id", testId).eq("user_id", user!.id),
+        supabase.from("questions").select("id, question_text, question_type, correct_answer, explanation, subject, topic, difficulty").in("id", qIds),
+        supabase.from("test_responses").select("question_id, user_answer, is_correct, is_attempted, is_marked_review, time_spent_seconds").eq("test_id", testId!).eq("user_id", user!.id),
       ]);
 
-      const qMap: Record<string, any> = {};
-      for (const q of (qRes.data ?? [])) qMap[q.id] = q;
-      setQuestions(qIds.map((id) => qMap[id]).filter(Boolean));
+      const qMap: Record<string, Question> = {};
+      for (const q of (qRes.data ?? [])) qMap[q.id] = q as Question;
+      setQuestions(qIds.map((id) => qMap[id]).filter(Boolean) as Question[]);
 
-      const rMap: Record<string, any> = {};
-      for (const r of (rRes.data ?? [])) rMap[r.question_id] = r;
+      const rMap: Record<string, TestResponse> = {};
+      for (const r of (rRes.data ?? [])) rMap[r.question_id] = r as TestResponse;
       setResponses(rMap);
     } catch (err) {
       console.error("[TestResults] load error:", err);
@@ -87,25 +167,27 @@ export default function TestResults() {
   }
 
   async function generateAIAnalysis() {
-    if (!testId || !user?.id) return;
     setAiLoading(true);
     try {
-      const { data: session } = await supabase.auth.getSession();
-      const token = session?.session?.access_token;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
+      if (!token) throw new Error("Not authenticated");
 
       const res = await supabase.functions.invoke("analyze-test-performance", {
         body: { test_id: testId },
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+        headers: { Authorization: `Bearer ${token}` },
       });
 
       if (res.error) throw new Error(res.error.message);
-      if (res.data?.error) throw new Error(res.data.error);
+      const data = res.data as { error?: string; analysis?: string };
+      if (data?.error) throw new Error(data.error);
 
-      setAnalysis((prev: any) => ({ ...prev, ai_analysis_text: res.data.analysis }));
+      setAnalysis((prev) => prev ? { ...prev, ai_analysis_text: data.analysis } : prev);
       setShowAI(true);
       toast.success("AI analysis ready!");
-    } catch (err: any) {
-      toast.error(err.message ?? "Failed to generate analysis");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to generate analysis";
+      toast.error(message);
     } finally {
       setAiLoading(false);
     }
@@ -130,19 +212,13 @@ export default function TestResults() {
     );
   }
 
-  const topicBD = analysis.topic_breakdown ?? {};
   const subjectBD = analysis.subject_breakdown ?? {};
+  const topicBD = analysis.topic_breakdown ?? {};
   const avgTime = analysis.time_analysis?.avg_seconds ?? 0;
-  const timeTraps: string[] = (analysis.time_analysis?.time_traps ?? []).map((t: any) => t.question_id);
-
-  // Rank tier from analysis or compute
-  const rankTier =
-    (analysis.predicted_percentile ?? 0) >= 99 ? "Top 1%" :
-    (analysis.predicted_percentile ?? 0) >= 95 ? "Top 5%" :
-    (analysis.predicted_percentile ?? 0) >= 90 ? "Top 10%" :
-    (analysis.predicted_percentile ?? 0) >= 75 ? "Top 25%" :
-    (analysis.predicted_percentile ?? 0) >= 50 ? "Top 50%" :
-    "Bottom 50%";
+  const timeTrapsSet = new Set(
+    (analysis.time_analysis?.time_traps ?? []).map((t) => t.question_id)
+  );
+  const rankTier = getRankTier(analysis.predicted_percentile ?? 0);
 
   const filteredQuestions = questions.filter((q) => {
     const r = responses[q.id];
@@ -165,7 +241,7 @@ export default function TestResults() {
         }
       />
 
-      {/* ── Scorecard ── */}
+      {/* Scorecard */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           {
@@ -203,7 +279,7 @@ export default function TestResults() {
         ))}
       </div>
 
-      {/* ── Rank tier + time summary ── */}
+      {/* Rank tier + time summary */}
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
         <Card className="border-violet-500/20 bg-violet-500/5">
           <CardContent className="py-3 flex items-center gap-3">
@@ -234,13 +310,13 @@ export default function TestResults() {
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Time Traps</p>
-              <p className="font-bold text-foreground">{timeTraps.length}</p>
+              <p className="font-bold text-foreground">{timeTrapsSet.size}</p>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* ── Subject breakdown ── */}
+      {/* Subject breakdown */}
       {Object.keys(subjectBD).length > 0 && (
         <Card>
           <CardContent className="py-4">
@@ -258,7 +334,7 @@ export default function TestResults() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
-                  {Object.entries(subjectBD).map(([subj, data]: [string, any]) => (
+                  {Object.entries(subjectBD).map(([subj, data]) => (
                     <tr key={subj}>
                       <td className="py-2 font-medium text-foreground">{subj}</td>
                       <td className="py-2 text-right text-green-400">{data.correct}</td>
@@ -273,7 +349,8 @@ export default function TestResults() {
                           {data.accuracy}%
                         </span>
                       </td>
-                      <td className={cn("py-2 text-right font-semibold",
+                      <td className={cn(
+                        "py-2 text-right font-semibold",
                         (data.marks ?? 0) >= 0 ? "text-green-400" : "text-red-400"
                       )}>
                         {(data.marks ?? 0) >= 0 ? "+" : ""}{(data.marks ?? 0).toFixed(0)}
@@ -287,14 +364,14 @@ export default function TestResults() {
         </Card>
       )}
 
-      {/* ── Topic heatmap ── */}
+      {/* Topic heatmap */}
       {Object.keys(topicBD).length > 0 && (
         <Card>
           <CardContent className="py-4">
             <h3 className="text-sm font-semibold text-foreground mb-1">Topic Accuracy Heatmap</h3>
             <p className="text-xs text-muted-foreground mb-3">Click a topic to filter questions below.</p>
             <div className="flex flex-wrap gap-2">
-              {Object.entries(topicBD).map(([topic, data]: [string, any]) => {
+              {Object.entries(topicBD).map(([topic, data]) => {
                 const acc = data.accuracy ?? 0;
                 return (
                   <button
@@ -318,8 +395,11 @@ export default function TestResults() {
               })}
             </div>
             {topicFilter && (
-              <button type="button" onClick={() => setTopicFilter(null)}
-                className="mt-2 text-xs text-violet-400 hover:underline">
+              <button
+                type="button"
+                onClick={() => setTopicFilter(null)}
+                className="mt-2 text-xs text-violet-400 hover:underline"
+              >
                 Clear filter
               </button>
             )}
@@ -327,7 +407,7 @@ export default function TestResults() {
         </Card>
       )}
 
-      {/* ── AI Analysis card ── */}
+      {/* AI Analysis */}
       <Card className="border-violet-500/30">
         <CardContent className="py-4">
           <div className="flex items-center justify-between">
@@ -350,12 +430,7 @@ export default function TestResults() {
                 {showAI ? "Collapse" : "Expand"}
               </button>
             ) : (
-              <Button
-                size="sm"
-                variant="outline"
-                onClick={generateAIAnalysis}
-                loading={aiLoading}
-              >
+              <Button size="sm" variant="outline" onClick={() => { void generateAIAnalysis(); }} loading={aiLoading}>
                 <Zap className="h-3.5 w-3.5 mr-1.5" />
                 Generate (3 credits)
               </Button>
@@ -367,7 +442,7 @@ export default function TestResults() {
               {analysis.ai_analysis_text
                 .split(/^##\s/m)
                 .filter(Boolean)
-                .map((section: string, i: number) => {
+                .map((section, i) => {
                   const lines = section.split("\n");
                   const heading = lines[0];
                   const content = lines.slice(1).join("\n").trim();
@@ -377,8 +452,7 @@ export default function TestResults() {
                       <p className="text-sm text-foreground/80 whitespace-pre-wrap">{content}</p>
                     </div>
                   );
-                })
-              }
+                })}
             </div>
           )}
 
@@ -391,7 +465,7 @@ export default function TestResults() {
         </CardContent>
       </Card>
 
-      {/* ── Question review ── */}
+      {/* Question review */}
       <Card>
         <CardContent className="py-4">
           <div className="flex items-center justify-between mb-3">
@@ -416,20 +490,20 @@ export default function TestResults() {
           </div>
           <div className="space-y-4">
             {filteredQuestions.length === 0 ? (
-              <p className="text-sm text-muted-foreground text-center py-6">No questions match the filter.</p>
+              <p className="text-sm text-muted-foreground text-center py-6">
+                No questions match the filter.
+              </p>
             ) : (
               filteredQuestions.map((q) => {
                 const r = responses[q.id];
-                const isTimeTrap = timeTraps.includes(q.id);
-                const guessed = isLikelyGuessed(r?.time_spent_seconds ?? 0, avgTime);
                 return (
                   <QuestionReviewCard
                     key={q.id}
                     number={questions.indexOf(q) + 1}
                     question={q}
                     response={r}
-                    isTimeTrap={isTimeTrap}
-                    isGuessed={guessed && (r?.is_attempted)}
+                    isTimeTrap={timeTrapsSet.has(q.id)}
+                    isGuessed={isLikelyGuessed(r?.time_spent_seconds ?? 0, avgTime) && Boolean(r?.is_attempted)}
                   />
                 );
               })
@@ -438,7 +512,7 @@ export default function TestResults() {
         </CardContent>
       </Card>
 
-      {/* ── Actions ── */}
+      {/* Actions */}
       <div className="flex gap-3">
         <Button variant="outline" onClick={() => navigate("/app/mock-test")} className="flex-1">
           Back to Hub
@@ -452,18 +526,22 @@ export default function TestResults() {
   );
 }
 
-function QuestionReviewCard({
-  number, question, response, isTimeTrap, isGuessed,
-}: {
+// ─────────────────────────────────────────────────────────────────
+// Question review card sub-component
+// ─────────────────────────────────────────────────────────────────
+
+interface QuestionReviewCardProps {
   number: number;
-  question: any;
-  response: any;
+  question: Question;
+  response: TestResponse | undefined;
   isTimeTrap: boolean;
   isGuessed: boolean;
-}) {
+}
+
+function QuestionReviewCard({ number, question, response, isTimeTrap, isGuessed }: QuestionReviewCardProps): React.ReactElement {
   const [expanded, setExpanded] = useState(false);
-  const isCorrect  = response?.is_correct;
-  const isAttempted = response?.is_attempted;
+  const isCorrect = response?.is_correct ?? false;
+  const isAttempted = response?.is_attempted ?? false;
 
   return (
     <div className={cn(
@@ -514,9 +592,9 @@ function QuestionReviewCard({
               <span className={cn("font-semibold", isCorrect ? "text-green-400" : "text-red-400")}>
                 {response?.user_answer ?? "—"}
               </span>
-              {response?.time_spent_seconds && (
+              {(response?.time_spent_seconds ?? 0) > 0 && (
                 <span className="text-muted-foreground ml-2 text-xs">
-                  ({response.time_spent_seconds}s)
+                  ({response?.time_spent_seconds}s)
                 </span>
               )}
             </p>
