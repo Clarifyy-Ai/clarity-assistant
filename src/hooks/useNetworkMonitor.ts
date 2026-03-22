@@ -73,7 +73,7 @@ export function useNetworkMonitor() {
 // ─────────────────────────────────────────────────────────────────
 
 export function useNetworkColor(): "green" | "yellow" | "red" {
-  const { mode } = useNetworkStore();
+  const mode = useNetworkStore((s) => s.mode);
   if (mode === "strong")   return "green";
   if (mode === "degraded") return "yellow";
   return "red";

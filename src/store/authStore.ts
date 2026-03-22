@@ -338,7 +338,7 @@ export const useAuthStore = create<AuthStore>()(
 
             _set((s) => {
               s.profile = data as unknown as ProfileRow;
-              if ("plan"    in updates) s.planId  = updates.plan    as string;
+              if ("plan_id" in updates) s.planId  = (updates as any).plan_id as string;
               if ("credits" in updates) s.credits = updates.credits as number;
             });
           },
