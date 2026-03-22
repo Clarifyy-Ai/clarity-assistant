@@ -55,6 +55,30 @@ export function OverlayKeyboardHandler({
 
   useHotkey(['ctrl', 'shift', 'm'], () => { onToggleMute?.(); }, enabled);
 
+  // ── Quick Dock Positions ──────────────────────────────────────
+  useHotkey(['ctrl', '1'], () => {
+    useOverlayStore.getState().setPosition({ x: 24, y: 80 });
+  }, enabled && is_visible);
+
+  useHotkey(['ctrl', '2'], () => {
+    useOverlayStore.getState().setPosition({ x: window.innerWidth - 444, y: 80 });
+  }, enabled && is_visible);
+
+  useHotkey(['ctrl', '3'], () => {
+    useOverlayStore.getState().setPosition({ x: 24, y: window.innerHeight - 560 });
+  }, enabled && is_visible);
+
+  useHotkey(['ctrl', '4'], () => {
+    useOverlayStore.getState().setPosition({ x: window.innerWidth - 444, y: window.innerHeight - 560 });
+  }, enabled && is_visible);
+
+  // ── Safe Word / Emergency Exit ────────────────────────────────
+  useHotkey(['ctrl', 'shift', 'escape'], () => {
+    const os = useOverlayStore.getState();
+    os.hideOverlay();
+    os.resetSessionState();
+  }, enabled);
+
   const peekTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
