@@ -52,10 +52,12 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
       };
     }, [onPositionChange]);
 
+    const proctorSafeInitialized = useRef(false);
+
     useLayoutEffect(() => {
-      const el = localRef.current;
-      if (!el || !isProctorSafe) {
+      if (!isProctorSafe) {
         lastSafePos.current = null;
+        proctorSafeInitialized.current = false;
         return;
       }
 
@@ -67,7 +69,10 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
         onPositionChange(safePos);
       };
 
-      applySafe();
+      if (!proctorSafeInitialized.current) {
+        proctorSafeInitialized.current = true;
+        applySafe();
+      }
 
       const onWinResize = () => applySafe();
       window.addEventListener("resize", onWinResize);

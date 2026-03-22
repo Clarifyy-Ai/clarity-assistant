@@ -33,6 +33,8 @@ export default function LiveOverlay() {
 
   const copilot = useLiveCopilot({ config });
   const isActive = sessionStatus === "active";
+  const endSessionRef = useRef(copilot.endLiveSession);
+  endSessionRef.current = copilot.endLiveSession;
 
   const handleSetup = useCallback((sessionConfig: LiveSessionConfig) => {
     useSessionStore.getState().resetSession();
@@ -55,6 +57,9 @@ export default function LiveOverlay() {
 
   useEffect(() => {
     return () => {
+      if (hasStartedRef.current) {
+        endSessionRef.current();
+      }
       useOverlayStore.getState().hideOverlay();
       useOverlayStore.getState().resetSessionState();
     };
