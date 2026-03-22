@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { Loader2, Copy, Check, BookmarkPlus, ChevronLeft, ChevronRight, FileText } from "lucide-react";
+import { checkCredits } from "@/lib/billing/creditsManager";
 
 interface OverlayHintPanelProps {
   text: string;
@@ -300,14 +301,18 @@ function IdleStateContent() {
   const resumeCtx = useOverlayStore((s) => s.resume_context);
   const resumePoints = useOverlayStore((s) => s.resume_talking_points);
   const networkColor = useOverlayStore((s) => s.network_color);
+  const activeModel = useOverlayStore((s) => s.active_model);
   const isOffline = networkColor === "red";
+  const creditCheck = checkCredits(activeModel);
+  const isAIUnavailable = isOffline || !creditCheck.canProceed;
 
-  if (isOffline && resumePoints) {
+  if (isAIUnavailable && resumePoints) {
+    const reason = isOffline ? "Offline" : "No credits available";
     return (
       <div className="space-y-2">
         <div className="flex items-center gap-1.5 text-[10px] text-amber-400/80">
           <FileText className="w-3 h-3 shrink-0" />
-          <span>Offline — showing your resume talking points</span>
+          <span>{reason} — showing your resume talking points</span>
         </div>
         <p className="text-xs text-overlay-text leading-relaxed whitespace-pre-wrap">
           {resumePoints.intro}

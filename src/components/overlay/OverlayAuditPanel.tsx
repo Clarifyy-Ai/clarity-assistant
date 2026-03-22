@@ -101,6 +101,13 @@ export function OverlayAuditPanel() {
         value={resumeCtx ? `${resumeCtx.skills_count} skills · ${resumeCtx.experience_count} roles` : "Not loaded"}
         valueClass={resumeCtx ? "text-green-400" : "text-gray-500"}
       />
+      {resumeCtx?.top_skills && resumeCtx.top_skills.length > 0 && (
+        <div className="mt-1 pl-[18px]">
+          <p className="text-[9px] text-muted-foreground/40 truncate">
+            {resumeCtx.top_skills.slice(0, 5).join(", ")}
+          </p>
+        </div>
+      )}
     </div>
   );
 }
