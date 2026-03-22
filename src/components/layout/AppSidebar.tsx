@@ -151,7 +151,7 @@ export function AppSidebar() {
                   {/* Main nav item */}
                   <NavLink
                     to={item.to}
-                    end={!item.subItems}
+                    end={false}
                     title={collapsed ? item.label : undefined}
                     className={({ isActive }) =>
                       cn(

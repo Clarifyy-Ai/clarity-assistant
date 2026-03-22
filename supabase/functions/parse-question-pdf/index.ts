@@ -151,20 +151,6 @@ Deno.serve(async (req) => {
 
     const admin = getAdminClient();
 
-    // Deduct credits upfront
-    if (credits !== -1) {
-      const newBalance = credits - CREDIT_COST;
-      await admin.from("profiles")
-        .update({ credits: newBalance })
-        .eq("id", userId);
-
-      await admin.from("credit_transactions").insert({
-        user_id: userId,
-        amount:  -CREDIT_COST,
-        action:  "pdf_import",
-      }).catch(() => null);
-    }
-
     // Call Claude with the PDF as a native document type
     const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
       method: "POST",
@@ -226,22 +212,58 @@ Deno.serve(async (req) => {
     // Validate and sanitize each question
     const sanitized = questions
       .filter((q) => q.question_text && q.correct_answer && q.subject && q.topic)
-      .map((q): ParsedQuestion => ({
-        question_text:  String(q.question_text).trim(),
-        question_type:  ["MCQ","TRUE_FALSE","SHORT_ANSWER","NUMERICAL","CODING"].includes(q.question_type)
-                        ? q.question_type : "MCQ",
-        options:        Array.isArray(q.options) ? q.options : null,
-        correct_answer: String(q.correct_answer).trim(),
-        explanation:    String(q.explanation ?? "").trim(),
-        subject:        String(q.subject).trim(),
-        topic:          String(q.topic).trim(),
-        difficulty:     ["EASY","MEDIUM","HARD"].includes(q.difficulty) ? q.difficulty : "MEDIUM",
-        marks_positive: typeof q.marks_positive === "number" ? q.marks_positive : 4,
-        marks_negative: typeof q.marks_negative === "number" ? q.marks_negative : 1,
-        source_year:    typeof q.source_year === "number" ? q.source_year : null,
-        exam_type:      q.exam_type ? String(q.exam_type) : null,
-        latex_present:  Boolean(q.latex_present),
-      }));
+      .map((q): ParsedQuestion => {
+        const qType = ["MCQ","TRUE_FALSE","SHORT_ANSWER","NUMERICAL","CODING"].includes(q.question_type)
+          ? q.question_type : "MCQ";
+
+        // Normalize MCQ options — must be exactly 4 entries with string label + text
+        let options: ParsedQuestion["options"] = null;
+        if (qType === "MCQ") {
+          const rawOpts = Array.isArray(q.options) ? q.options : [];
+          const normalized = rawOpts
+            .filter((o) => o && typeof o.label === "string" && typeof o.text === "string")
+            .map((o) => ({ label: String(o.label).trim(), text: String(o.text).trim() }));
+          // Fall back to A/B/C/D placeholders if shape is wrong
+          options = normalized.length >= 2
+            ? normalized.slice(0, 4)
+            : [
+                { label: "A", text: "" },
+                { label: "B", text: "" },
+                { label: "C", text: "" },
+                { label: "D", text: "" },
+              ];
+        }
+
+        return {
+          question_text:  String(q.question_text).trim(),
+          question_type:  qType,
+          options,
+          correct_answer: String(q.correct_answer).trim(),
+          explanation:    String(q.explanation ?? "").trim(),
+          subject:        String(q.subject).trim(),
+          topic:          String(q.topic).trim(),
+          difficulty:     ["EASY","MEDIUM","HARD"].includes(q.difficulty) ? q.difficulty : "MEDIUM",
+          marks_positive: typeof q.marks_positive === "number" ? q.marks_positive : 4,
+          marks_negative: typeof q.marks_negative === "number" ? q.marks_negative : 1,
+          source_year:    typeof q.source_year === "number" ? q.source_year : null,
+          exam_type:      q.exam_type ? String(q.exam_type) : null,
+          latex_present:  Boolean(q.latex_present),
+        };
+      });
+
+    // Deduct credits only after successful parse (user-friendly — no charge on AI failure)
+    if (credits !== -1) {
+      const newBalance = credits - CREDIT_COST;
+      await admin.from("profiles")
+        .update({ credits: newBalance })
+        .eq("id", userId);
+
+      await admin.from("credit_transactions").insert({
+        user_id: userId,
+        amount:  -CREDIT_COST,
+        action:  "pdf_import",
+      }).catch(() => null);
+    }
 
     // Build subject summary
     const subjectCounts: Record<string, number> = {};
