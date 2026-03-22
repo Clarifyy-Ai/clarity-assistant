@@ -63,7 +63,8 @@ export function useCalendarSync() {
 
   const disconnect = useCallback(async (): Promise<void> => {
     if (!user) return;
-    await supabase.auth.signOut({ scope: "local" });
+    setLastSynced(null);
+    setError(null);
   }, [user]);
 
   return {

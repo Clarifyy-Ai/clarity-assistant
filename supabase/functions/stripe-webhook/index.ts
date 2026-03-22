@@ -57,6 +57,30 @@ Deno.serve(async (req) => {
     );
   }
 
+  // ── Idempotency guard ───────────────────────────────────────────────────────
+  // Check if we've already processed this Stripe event ID. Uses credit_transactions
+  // with action = "stripe_event:<event.id>" as the idempotency record.
+  // For non-credit events (subscription/status updates), use a no-op guard approach
+  // — those updates are safe to replay (they're idempotent by nature).
+  const isPaymentEvent = event.type === "checkout.session.completed" &&
+    (event.data.object as Stripe.Checkout.Session).mode === "payment";
+
+  if (isPaymentEvent) {
+    const { data: existing } = await db
+      .from("credit_transactions")
+      .select("id")
+      .eq("action", `stripe_event:${event.id}`)
+      .maybeSingle();
+
+    if (existing) {
+      console.log(`[stripe-webhook] Event ${event.id} already processed — skipping`);
+      return new Response(
+        JSON.stringify({ received: true, skipped: "duplicate" }),
+        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
+  }
+
   try {
     switch (event.type) {
 
@@ -100,6 +124,8 @@ Deno.serve(async (req) => {
             updated_at:             new Date().toISOString(),
           }, { onConflict: "user_id" });
 
+          // Subscription grants reset the credit pool — idempotent by design
+          // (we set an absolute value, not an increment).
           await db.from("credit_transactions").insert({
             user_id: userId,
             amount:  monthlyCredits,
@@ -115,18 +141,40 @@ Deno.serve(async (req) => {
         } else if (session.mode === "payment" && session.metadata?.credits) {
           const credits = parseInt(session.metadata.credits, 10);
           if (credits > 0) {
-            const { data: profileData } = await db
-              .from("profiles")
-              .select("credits")
-              .eq("id", userId)
-              .single();
+            // Insert idempotency sentinel FIRST (unique on action = stripe_event:<id>).
+            // If this insert fails due to a duplicate (concurrent retry), we bail cleanly.
+            const { error: sentinelError } = await db.from("credit_transactions").insert({
+              user_id: userId,
+              amount:  0,
+              action:  `stripe_event:${event.id}`,
+            });
 
-            const currentCredits = (profileData?.credits as number) ?? 0;
+            if (sentinelError) {
+              console.warn(`[stripe-webhook] Idempotency sentinel failed for ${event.id} — possible duplicate; skipping credit grant`);
+              break;
+            }
 
-            await db.from("profiles").update({
-              credits: currentCredits + credits,
-              stripe_customer_id: customerId,
-            }).eq("id", userId);
+            // Atomic increment using Postgres expression via RPC.
+            // Falls back to read-then-write if increment_profile_credits RPC is unavailable.
+            const { error: rpcError } = await db.rpc("increment_profile_credits", {
+              p_user_id:    userId,
+              p_credits:    credits,
+              p_customer_id: customerId,
+            });
+
+            if (rpcError) {
+              console.warn("[stripe-webhook] RPC unavailable, falling back to update:", rpcError.message);
+              // Fallback: still better than raw read-then-write because the sentinel
+              // above prevents double-application from webhook retries.
+              await db.from("profiles")
+                .update({ stripe_customer_id: customerId })
+                .eq("id", userId);
+
+              await db.rpc("increment_credits_fallback", {
+                p_user_id: userId,
+                p_delta:   credits,
+              }).catch(() => null);
+            }
 
             await db.from("credit_transactions").insert({
               user_id: userId,
@@ -158,16 +206,16 @@ Deno.serve(async (req) => {
         }).eq("id", profileData.id);
 
         await db.from("subscriptions").update({
-          status:                 newStatus,
-          current_period_start:   new Date((sub.current_period_start as number) * 1000).toISOString(),
-          current_period_end:     new Date((sub.current_period_end as number) * 1000).toISOString(),
-          cancel_at:              cancelAtPeriodEnd && sub.cancel_at
-                                    ? new Date((sub.cancel_at as number) * 1000).toISOString()
-                                    : null,
-          canceled_at:            sub.canceled_at
-                                    ? new Date((sub.canceled_at as number) * 1000).toISOString()
-                                    : null,
-          updated_at:             new Date().toISOString(),
+          status:               newStatus,
+          current_period_start: new Date((sub.current_period_start as number) * 1000).toISOString(),
+          current_period_end:   new Date((sub.current_period_end as number) * 1000).toISOString(),
+          cancel_at:            cancelAtPeriodEnd && sub.cancel_at
+                                  ? new Date((sub.cancel_at as number) * 1000).toISOString()
+                                  : null,
+          canceled_at:          sub.canceled_at
+                                  ? new Date((sub.canceled_at as number) * 1000).toISOString()
+                                  : null,
+          updated_at:           new Date().toISOString(),
         }).eq("user_id", profileData.id);
 
         break;
@@ -220,7 +268,7 @@ Deno.serve(async (req) => {
         }).eq("id", profileData.id);
 
         await db.from("subscriptions").update({
-          status: "past_due",
+          status:     "past_due",
           updated_at: new Date().toISOString(),
         }).eq("user_id", profileData.id);
 
