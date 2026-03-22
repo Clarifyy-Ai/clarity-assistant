@@ -20,6 +20,9 @@ import { LiveTranscriptStream } from "@/components/live/LiveTranscriptStream";
 import { OverlaySessionStats } from "./OverlaySessionStats";
 import { OverlayActivityTimer } from "./OverlayActivityTimer";
 import { OverlayHotkeyHelp } from "./OverlayHotkeyHelp";
+import { OverlayAnswerTimer } from "./OverlayAnswerTimer";
+import { OverlayAudioBadge } from "./OverlayAudioBadge";
+import { OverlayQuestionPreview } from "./OverlayQuestionPreview";
 import { cn } from "@/lib/utils";
 import type { LiveSessionConfig } from "@/types/session.types";
 
@@ -127,6 +130,8 @@ export function OverlayWindow({
                   REC
                 </span>
               )}
+              {isSessionActive && !is_minimal_mode && <OverlayAudioBadge />}
+              {isSessionActive && !is_minimal_mode && <OverlayAnswerTimer />}
               {is_peek_active && (
                 <span className="font-mono text-[9px] text-sky-400/70 bg-sky-500/10 px-1.5 py-0.5 rounded animate-pulse">PEEK</span>
               )}
@@ -209,6 +214,8 @@ export function OverlayWindow({
                   {current_question && !is_minimal_mode && (
                     <OverlayQuestionBar question={current_question} />
                   )}
+
+                  {!is_minimal_mode && <OverlayQuestionPreview />}
 
                   {!is_minimal_mode && <OverlayTabBar />}
 

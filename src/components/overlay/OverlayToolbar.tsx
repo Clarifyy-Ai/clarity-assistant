@@ -6,7 +6,7 @@ import { PANIC_RESPONSE } from "@/types/session.types";
 import {
   Mic, MicOff, Volume2, VolumeX, Zap, RefreshCw,
   Eye, EyeOff, Square, AlertCircle, Type, ChevronDown, Keyboard,
-  Minimize2, Maximize2,
+  Minimize2, Maximize2, Star, FileText, Pin,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatHotkeyLabel } from "@/lib/overlay/hotkeys";
@@ -56,17 +56,26 @@ export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, o
   const activeModel    = useOverlayStore((s) => s.active_model);
   const isMinimal      = useOverlayStore((s) => s.is_minimal_mode);
 
-  const [showModelMenu, setShowModelMenu] = useState(false);
-  const [showHotkeyRef, setShowHotkeyRef] = useState(false);
-  const modelMenuRef = useRef<HTMLDivElement>(null);
-  const hotkeyRefRef = useRef<HTMLDivElement>(null);
+  const pinnedHints      = useOverlayStore((s) => s.pinned_hints);
+  const resumePoints     = useOverlayStore((s) => s.resume_talking_points);
+
+  const [showModelMenu,       setShowModelMenu]       = useState(false);
+  const [showHotkeyRef,       setShowHotkeyRef]       = useState(false);
+  const [showPinnedMenu,      setShowPinnedMenu]      = useState(false);
+  const [showResumeQuickPeek, setShowResumeQuickPeek] = useState(false);
+  const modelMenuRef       = useRef<HTMLDivElement>(null);
+  const hotkeyRefRef       = useRef<HTMLDivElement>(null);
+  const pinnedMenuRef      = useRef<HTMLDivElement>(null);
+  const resumeQuickPeekRef = useRef<HTMLDivElement>(null);
 
   const isGenerating = hintState === "generating" || hintState === "streaming";
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (modelMenuRef.current && !modelMenuRef.current.contains(e.target as Node)) setShowModelMenu(false);
-      if (hotkeyRefRef.current && !hotkeyRefRef.current.contains(e.target as Node)) setShowHotkeyRef(false);
+      if (modelMenuRef.current       && !modelMenuRef.current.contains(e.target as Node))       setShowModelMenu(false);
+      if (hotkeyRefRef.current       && !hotkeyRefRef.current.contains(e.target as Node))       setShowHotkeyRef(false);
+      if (pinnedMenuRef.current      && !pinnedMenuRef.current.contains(e.target as Node))      setShowPinnedMenu(false);
+      if (resumeQuickPeekRef.current && !resumeQuickPeekRef.current.contains(e.target as Node)) setShowResumeQuickPeek(false);
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
@@ -99,6 +108,53 @@ export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, o
         color={isStealth ? "violet" : "gray"}
         onClick={toggleAppStealthMode}
       />
+
+      <div className="relative" ref={resumeQuickPeekRef}>
+        <button
+          onClick={() => setShowResumeQuickPeek((p) => !p)}
+          title="Resume quick-peek"
+          className={cn(
+            "p-1.5 rounded-lg transition-all shrink-0",
+            resumePoints
+              ? "text-brand-300/60 hover:text-brand-300 hover:bg-white/5"
+              : "text-gray-600 cursor-default opacity-50",
+          )}
+          disabled={!resumePoints}
+        >
+          <FileText className="w-3.5 h-3.5" />
+        </button>
+        {showResumeQuickPeek && resumePoints && (
+          <div className="absolute top-full left-0 mt-1 w-60 bg-[#1a1a2e] border border-white/10 rounded-xl shadow-xl z-50 p-3 space-y-2">
+            <p className="text-[10px] font-semibold text-brand-300/60 uppercase tracking-wider">Resume Snapshot</p>
+            <p className="text-[10px] text-overlay-text leading-snug line-clamp-3">
+              {resumePoints.intro}
+            </p>
+            {resumePoints.skills_summary && (
+              <div className="flex flex-wrap gap-1">
+                {resumePoints.skills_summary.split(", ").slice(0, 4).map((skill, i) => (
+                  <span
+                    key={i}
+                    className="rounded-md border border-brand-500/20 bg-brand-500/10 px-1.5 py-0.5 text-[9px] text-brand-300"
+                  >
+                    {skill}
+                  </span>
+                ))}
+              </div>
+            )}
+            {resumePoints.experience_points.slice(0, 2).map((pt, i) => (
+              <div key={i} className="flex gap-1.5 text-[10px] text-overlay-text/70">
+                <span className="shrink-0 text-brand-400">•</span>
+                <span>{pt}</span>
+              </div>
+            ))}
+          </div>
+        )}
+        {showResumeQuickPeek && !resumePoints && (
+          <div className="absolute top-full left-0 mt-1 w-44 bg-[#1a1a2e] border border-white/10 rounded-xl shadow-xl z-50 p-3">
+            <p className="text-[10px] text-muted-foreground/50 italic">No resume loaded</p>
+          </div>
+        )}
+      </div>
 
       <ToolbarButton
         icon={Zap}
@@ -180,6 +236,74 @@ export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, o
           useOverlayStore.getState().showPanic(PANIC_RESPONSE);
         }}
       />
+
+      <div className="relative" ref={pinnedMenuRef}>
+        <button
+          onClick={() => setShowPinnedMenu((p) => !p)}
+          title={pinnedHints.length > 0 ? `${pinnedHints.length} pinned hint${pinnedHints.length > 1 ? "s" : ""}` : "No pinned hints yet"}
+          className={cn(
+            "p-1 rounded-lg transition-all relative",
+            pinnedHints.length > 0
+              ? "text-brand-300/60 hover:text-brand-300 hover:bg-white/5"
+              : "text-gray-700 opacity-40"
+          )}
+        >
+          <Star className={cn("w-3 h-3", pinnedHints.length > 0 && "fill-brand-300/40")} />
+          {pinnedHints.length > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-brand-500 text-[7px] font-bold text-white flex items-center justify-center leading-none">
+              {pinnedHints.length > 9 ? "9+" : pinnedHints.length}
+            </span>
+          )}
+        </button>
+        {showPinnedMenu && (
+          <div className="absolute top-full right-0 mt-1 w-64 bg-[#1a1a2e] border border-white/10 rounded-xl shadow-xl z-50 overflow-hidden">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-white/5">
+              <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider">Pinned Hints</p>
+              {pinnedHints.length > 0 && (
+                <button
+                  onClick={() => useOverlayStore.getState().clearPinnedHints()}
+                  className="text-[9px] text-muted-foreground/40 hover:text-red-400 transition-colors"
+                >
+                  clear all
+                </button>
+              )}
+            </div>
+            {pinnedHints.length === 0 ? (
+              <div className="px-3 py-3 text-[10px] text-muted-foreground/40 italic text-center">
+                Pin hints using the Pin button in the answer panel
+              </div>
+            ) : (
+              <div className="max-h-56 overflow-y-auto py-1">
+                {pinnedHints.slice(-6).reverse().map((pin) => (
+                  <div key={pin.id} className="group relative px-3 py-2 hover:bg-white/5 transition-colors">
+                    <p className="text-[9px] text-muted-foreground/40 truncate mb-0.5">{pin.question || "No question"}</p>
+                    <p className="text-[10px] text-overlay-text/80 line-clamp-2">{pin.hint}</p>
+                    <div className="flex items-center gap-1.5 mt-1.5">
+                      <button
+                        onClick={() => {
+                          useOverlayStore.getState().setHintState("ready");
+                          useOverlayStore.setState({ current_hint: pin.hint, current_question: pin.question });
+                          useOverlayStore.getState().setActiveTab("answer");
+                          setShowPinnedMenu(false);
+                        }}
+                        className="text-[9px] text-brand-300/60 hover:text-brand-300 transition-colors"
+                      >
+                        Jump to →
+                      </button>
+                      <button
+                        onClick={() => useOverlayStore.getState().togglePinHint(pin.hint, pin.question)}
+                        className="text-[9px] text-muted-foreground/30 hover:text-red-400 transition-colors"
+                      >
+                        <Pin className="w-2 h-2" />
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
 
       <div className="relative" ref={hotkeyRefRef}>
         <button

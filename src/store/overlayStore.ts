@@ -107,6 +107,9 @@ interface OverlayStore {
   resume_context: ResumeContext | null;
   resume_talking_points: ResumeTalkingPoints | null;
 
+  // Pinned hints (not persisted)
+  pinned_hints: Array<{ id: string; question: string; hint: string; timestamp: number }>;
+
   // Actions — visibility
   showOverlay: () => void;
   hideOverlay: () => void;
@@ -148,6 +151,10 @@ interface OverlayStore {
   // Actions — resume context
   setResumeContext: (ctx: ResumeContext | null) => void;
   setResumeTalkingPoints: (points: ResumeTalkingPoints | null) => void;
+
+  // Actions — pinned hints
+  togglePinHint: (hint: string, question: string) => void;
+  clearPinnedHints: () => void;
 
   // Actions — network
   setNetworkColor: (color: "green" | "yellow" | "red") => void;
@@ -244,6 +251,8 @@ export const useOverlayStore = create<OverlayStore>()(
 
       resume_context: null,
       resume_talking_points: null,
+
+      pinned_hints: [],
 
       // ── Visibility ─────────────────────────────────────────
       showOverlay: () => set((s) => ({
@@ -383,6 +392,22 @@ export const useOverlayStore = create<OverlayStore>()(
       setResumeContext: (resume_context) => set({ resume_context }),
       setResumeTalkingPoints: (resume_talking_points) => set({ resume_talking_points }),
 
+      // ── Pinned Hints ────────────────────────────────────────
+      togglePinHint: (hint, question) => set((s) => {
+        const alreadyPinned = s.pinned_hints.some((p) => p.hint === hint);
+        if (alreadyPinned) {
+          return { pinned_hints: s.pinned_hints.filter((p) => p.hint !== hint) };
+        }
+        const newPin = {
+          id: `pin-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          question,
+          hint,
+          timestamp: Date.now(),
+        };
+        return { pinned_hints: [...s.pinned_hints, newPin] };
+      }),
+      clearPinnedHints: () => set({ pinned_hints: [] }),
+
       // ── Network ────────────────────────────────────────────
       setNetworkColor: (network_color) => set({ network_color }),
 
@@ -416,6 +441,7 @@ export const useOverlayStore = create<OverlayStore>()(
         is_chat_generating: false,
         resume_context: null,
         resume_talking_points: null,
+        pinned_hints: [],
       }),
 
       // ── Coding ─────────────────────────────────────────────

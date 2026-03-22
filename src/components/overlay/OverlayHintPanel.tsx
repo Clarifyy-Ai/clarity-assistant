@@ -7,7 +7,8 @@ import type { HintStyle } from "@/types/user.types";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
-import { Loader2, Copy, Check, BookmarkPlus, ChevronLeft, ChevronRight, FileText } from "lucide-react";
+import { Loader2, Copy, Check, BookmarkPlus, ChevronLeft, ChevronRight, FileText, Pin } from "lucide-react";
+import { OverlayAnswerStrength } from "./OverlayAnswerStrength";
 import { checkCredits } from "@/lib/billing/creditsManager";
 
 interface OverlayHintPanelProps {
@@ -31,9 +32,12 @@ export function OverlayHintPanel({
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
 
-  const historyLen   = useOverlayStore((s) => s.hint_history.length);
-  const historyIndex = useOverlayStore((s) => s.hint_history_index);
+  const historyLen     = useOverlayStore((s) => s.hint_history.length);
+  const historyIndex   = useOverlayStore((s) => s.hint_history_index);
   const viewedQuestion = useOverlayStore((s) => s.viewed_question);
+  const pinnedHints    = useOverlayStore((s) => s.pinned_hints);
+  const currentQ       = useOverlayStore((s) => s.current_question);
+  const isPinned       = text ? pinnedHints.some((p) => p.hint === text) : false;
   const isViewingHistory = historyLen > 1 && historyIndex < historyLen - 1;
 
   const isStreaming = hintState === "streaming";
@@ -248,7 +252,12 @@ export function OverlayHintPanel({
       )}
 
       {hasContent && !isStreaming && !isGenerating && (
-        <div className="mt-3 flex items-center gap-1.5 border-t border-white/5 pt-2">
+        <div className="mt-3 border-t border-white/5 pt-2">
+          <div className="flex items-center gap-1.5">
+            <OverlayAnswerStrength />
+            <div className="flex-1" />
+          </div>
+          <div className="flex items-center gap-1.5 mt-1.5">
           <button
             onClick={handleCopy}
             className="flex items-center gap-1 px-2 py-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground rounded-lg hover:bg-white/5 transition-all"
@@ -264,6 +273,14 @@ export function OverlayHintPanel({
           >
             {saved ? <Check className="w-2.5 h-2.5 text-emerald-400" /> : <BookmarkPlus className="w-2.5 h-2.5" />}
             {saved ? "Saved" : "Save"}
+          </button>
+          <button
+            onClick={() => useOverlayStore.getState().togglePinHint(text, currentQ)}
+            className={`flex items-center gap-1 px-2 py-1 text-[10px] rounded-lg hover:bg-white/5 transition-all ${isPinned ? "text-brand-300" : "text-muted-foreground/60 hover:text-muted-foreground"}`}
+            title={isPinned ? "Unpin hint" : "Pin hint for quick access"}
+          >
+            <Pin className={`w-2.5 h-2.5 ${isPinned ? "fill-brand-300" : ""}`} />
+            {isPinned ? "Pinned" : "Pin"}
           </button>
 
           {historyLen > 1 && (
@@ -291,6 +308,7 @@ export function OverlayHintPanel({
           )}
 
           <div className="flex-1" />
+          </div>
         </div>
       )}
     </div>
