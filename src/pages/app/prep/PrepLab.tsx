@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";
+import { refreshCredits } from "@/lib/billing/creditsManager";
 
 // ─────────────────────────────────────────────────────────────────
 // PrepLab — STAR builder, question bank, AI tools
@@ -92,53 +93,73 @@ function STARBuilder() {
   // ── AI polish one section ─────────────────────────────────────
 
   async function polishSection(key: keyof typeof star) {
-    if (!credits.canAfford("prep")) return;
+    if (!credits.canAfford("star_analyse")) return;
     setAiLoading(key);
 
-    const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-    const res = await fetch(`${EDGE_BASE}/polish-star-section`, {
-      method:  "POST",
-      headers: {
-        "Content-Type":  "application/json",
-        "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({
-        question,
-        section:  key,
-        content:  star[key],
-        context: {
-          resume_text: docStore.activeResume?.parsed_text,
-        },
-      }),
-    });
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) return;
 
-    const data = await res.json();
-    if (data.polished) setStar((p) => ({ ...p, [key]: data.polished }));
+      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      const res = await fetch(`${EDGE_BASE}/polish-star-section`, {
+        method:  "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          section:      key,
+          currentText:  star[key],
+          questionText: question || undefined,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`Polish failed: ${res.status}`);
+
+      const envelope = await res.json();
+      if (envelope.success && envelope.data?.polished) {
+        setStar((p) => ({ ...p, [key]: envelope.data.polished }));
+        await refreshCredits();
+      }
+    } catch {
+    }
     setAiLoading(null);
   }
 
   // ── Generate full answer ──────────────────────────────────────
 
   async function generateFull() {
-    if (!isComplete || !credits.canAfford("prep")) return;
+    if (!isComplete || !credits.canAfford("star_generate")) return;
     setLoading(true);
 
-    const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-    const res = await fetch(`${EDGE_BASE}/generate-star-answer`, {
-      method:  "POST",
-      headers: {
-        "Content-Type":  "application/json",
-        "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({
-        question,
-        star,
-        resume_text: docStore.activeResume?.parsed_text,
-      }),
-    });
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) return;
 
-    const data = await res.json();
-    setGenerated(data.answer ?? "");
+      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      const res = await fetch(`${EDGE_BASE}/generate-star-answer`, {
+        method:  "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          questionText: question,
+          resumeText:   docStore.activeResume?.parsed_text || undefined,
+        }),
+      });
+
+      if (!res.ok) throw new Error(`Generate failed: ${res.status}`);
+
+      const envelope = await res.json();
+      if (envelope.success && envelope.data) {
+        setGenerated(envelope.data.fullAnswer ?? "");
+        await refreshCredits();
+      }
+    } catch {
+    }
     setLoading(false);
   }
 
@@ -196,7 +217,7 @@ function STARBuilder() {
                 {star[key].trim().length > 10 && (
                   <button
                     onClick={() => polishSection(key)}
-                    disabled={aiLoading === key || !credits.canAfford("prep")}
+                    disabled={aiLoading === key || !credits.canAfford("star_analyse")}
                     className="flex items-center gap-1 text-[10px] text-violet-400 hover:text-violet-300 transition-colors disabled:opacity-40"
                   >
                     {aiLoading === key ? (
@@ -240,7 +261,7 @@ function STARBuilder() {
         <Button
           variant="primary"
           size="md"
-          disabled={!isComplete || loading || !credits.canAfford("prep")}
+          disabled={!isComplete || loading || !credits.canAfford("star_generate")}
           loading={loading}
           onClick={generateFull}
           leftIcon={<Zap className="w-4 h-4" />}

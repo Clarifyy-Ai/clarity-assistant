@@ -148,9 +148,7 @@ export function showLowCreditWarning(creditsRemaining: number): void {
   if (creditsRemaining === 0) {
     openUpgradeFlow("out_of_credits");
   } else if (creditsRemaining < LOW_CREDIT_THRESHOLD) {
-    if (creditsRemaining < 2) {
-      openUpgradeFlow("low_credits");
-    }
+    openUpgradeFlow("low_credits");
   }
 }
 

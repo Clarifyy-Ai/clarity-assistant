@@ -227,6 +227,23 @@ DEEPGRAM_API_KEY=...      # Speech-to-text for live sessions
 ### New Components
 - `OverlaySessionStats.tsx` — compact session metrics bar (time, questions, hints, credits)
 
+### Credits System Fixes (Task #2)
+- `creditsManager.ts:showLowCreditWarning` — threshold now consistently uses `LOW_CREDIT_THRESHOLD` (was previously gated at `< 2` inside a `< 5` block)
+- `useLiveCopilot.ts:requestLiveHint` — `consumeCredit()` only called on successful `deductCredits()` result (prevents double-counting on failure)
+- `OverlaySessionStats.tsx` — reads actual remaining credits from auth store (was incorrectly subtracting session credits from profile total, double-counting since deductCredits already updates the profile)
+- `PrepLab.tsx` — fixed edge function request/response contracts:
+  - Uses `currentText`/`questionText` (not `content`/`question`) for `polish-star-section`
+  - Uses `questionText`/`resumeText` (not `question`/`resume_text`) for `generate-star-answer`
+  - Parses response envelope (`data.data.polished`, `data.data.fullAnswer`) correctly
+  - Uses user's JWT token (not anon key) for auth
+  - Removed client-side credit deduction (server already deducts via `deductCredits` in edge functions)
+  - Uses `refreshCredits()` to sync balance after server-side deduction
+  - Changed invalid `"prep"` credit action to `"star_analyse"` / `"star_generate"` (valid `CREDIT_COSTS` keys)
+
+### Audio UX Improvements (Task #2)
+- `useAudioSession.ts:toggleSystemAudio` — shows confirmation dialog before browser screen share picker explaining the workflow (select tab, check "Share audio", click Share) and that no video is recorded
+- Surfaces proper error messages for unsupported browsers and capture failures
+
 ## Replit Environment Setup
 
 - **Runtime**: Node.js 20 via Vite dev server on port 5000

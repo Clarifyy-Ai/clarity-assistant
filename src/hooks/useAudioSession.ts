@@ -276,14 +276,40 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       stopStream(currentSysStream);
       store.setSystemStream(null);
     } else {
-      if (!isSystemAudioSupported()) return;
+      if (!isSystemAudioSupported()) {
+        store.setStreamError({
+          code:        "SYSTEM_AUDIO_NOT_SUPPORTED",
+          message:     "System audio capture is only supported in Chrome and Edge.",
+          recoverable: false,
+          suggestion:  "Please use Chrome or Edge to capture interviewer audio.",
+        });
+        return;
+      }
+
+      const proceed = window.confirm(
+        "Capture Interviewer Audio\n\n" +
+        "A screen share dialog will appear next.\n\n" +
+        "1. Select the tab/window with the interview call\n" +
+        "2. Check the \"Share audio\" checkbox at the bottom\n" +
+        "3. Click Share\n\n" +
+        "No video is recorded — only the audio is used for transcription."
+      );
+      if (!proceed) return;
+
       try {
         const sysStream = await captureSystemAudio();
         store.setSystemStream(sysStream);
         cleanupSysRef.current = watchStreamEnded(sysStream, () => {
           store.setSystemStream(null);
         });
-      } catch {
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "System audio capture failed";
+        store.setStreamError({
+          code:        "SYSTEM_AUDIO_FAILED",
+          message,
+          recoverable: true,
+          suggestion:  "Make sure you selected 'Share audio' in the dialog. Try again.",
+        });
         store.setSystemAudioAvailable(false);
         return;
       }

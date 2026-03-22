@@ -143,8 +143,10 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
       onChunk:  (chunk) => useOverlayStore.getState().appendStreamChunk(chunk),
       onDone:   async (_fullText) => {
         useOverlayStore.getState().commitStreamedHint();
-        await deductCredits(selectedModel, sessionIdRef.current);
-        useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
+        const result = await deductCredits(selectedModel, sessionIdRef.current);
+        if (result.success) {
+          useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
+        }
       },
       onError:  (error) => useOverlayStore.getState().setError(error.message),
       signal:   controller.signal,

@@ -5,9 +5,7 @@ import { Clock, MessageSquare, Zap, CreditCard } from "lucide-react";
 
 export function OverlaySessionStats() {
   const elapsed = useSessionStore((s) => s.elapsed_seconds);
-  const creditsConsumed = useSessionStore((s) => s.credits_consumed);
-  const totalCredits = useAuthStore((s) => s.profile?.credits ?? 0);
-  const creditsRemaining = Math.max(0, totalCredits - creditsConsumed);
+  const creditsRemaining = useAuthStore((s) => s.profile?.credits ?? 0);
   const hintCount = useOverlayStore((s) => s.hint_history.length);
   const questionCount = useOverlayStore((s) => s.questions_detected);
 
