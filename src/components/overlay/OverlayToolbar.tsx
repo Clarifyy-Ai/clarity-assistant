@@ -33,6 +33,8 @@ const HOTKEY_REFERENCE = [
   { keys: ["ctrl", "shift", "c"], label: "Screenshot + analyse" },
   { keys: ["ctrl", "shift", "p"], label: "Panic button" },
   { keys: ["ctrl", "shift", "m"], label: "Mute / unmute" },
+  { keys: ["ctrl", "1-4"],       label: "Snap to corner" },
+  { keys: ["ctrl", "shift", "esc"], label: "Emergency exit" },
   { keys: ["escape"],             label: "Clear hint" },
 ];
 
