@@ -74,7 +74,7 @@ export function OverlayWindow({
 
   const displayText = hint_state === "streaming" ? streaming_buffer : current_hint;
 
-  const effectiveOpacity = is_stealth_mode ? stealth_opacity / 100 : 1;
+  const effectiveOpacity = stealth_opacity / 100;
 
   return createPortal(
     <StealthMouseGuard isActive={is_stealth_mode}>

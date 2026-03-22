@@ -395,7 +395,10 @@ export const useOverlayStore = create<OverlayStore>()(
       setPeekActive: (is_peek_active) => set({ is_peek_active }),
 
       // ── Minimal Mode ────────────────────────────────────────
-      setMinimalMode: (is_minimal_mode) => set({ is_minimal_mode }),
+      setMinimalMode: (is_minimal_mode) => set((s) => ({
+        is_minimal_mode,
+        active_tab: is_minimal_mode && s.active_tab === "audit" ? "answer" as const : s.active_tab,
+      })),
 
       // ── Hotkey Help ─────────────────────────────────────────
       setHotkeyHelpVisible: (is_hotkey_help_visible) => set({ is_hotkey_help_visible }),
