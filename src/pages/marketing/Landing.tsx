@@ -111,49 +111,49 @@ const COMPARISON = [
   {
     feature: "Real-time stealth overlay",
     clarify: true,
-    parakeet: false,
+    competitor: false,
     generic: false,
   },
   {
     feature: "Sub-1s AI answer latency",
     clarify: true,
-    parakeet: "Partial",
+    competitor: "Partial",
     generic: false,
   },
   {
     feature: "Mock interview with scorecards",
     clarify: true,
-    parakeet: true,
+    competitor: true,
     generic: false,
   },
   {
     feature: "Resume vs JD gap analysis",
     clarify: true,
-    parakeet: false,
+    competitor: false,
     generic: false,
   },
   {
     feature: "BYOK (bring your own API key)",
     clarify: true,
-    parakeet: false,
+    competitor: false,
     generic: false,
   },
   {
     feature: "Works offline (resume fallback)",
     clarify: true,
-    parakeet: false,
+    competitor: false,
     generic: false,
   },
   {
     feature: "Multi-model routing (GPT-4o + Claude + Gemini)",
     clarify: true,
-    parakeet: false,
+    competitor: false,
     generic: false,
   },
   {
     feature: "Filler word & WPM tracking",
     clarify: true,
-    parakeet: true,
+    competitor: true,
     generic: false,
   },
 ];
@@ -513,7 +513,7 @@ export default function Landing() {
                       Clarify AI
                     </span>
                   </th>
-                  <th className="px-4 py-4 font-semibold text-center text-muted-foreground">ParakeetAI</th>
+                  <th className="px-4 py-4 font-semibold text-center text-muted-foreground">Other AI Tools</th>
                   <th className="px-4 py-4 font-semibold text-center text-muted-foreground">Generic tools</th>
                 </tr>
               </thead>
@@ -531,7 +531,7 @@ export default function Landing() {
                       <CellValue value={row.clarify} />
                     </td>
                     <td className="px-4 py-3.5 text-center">
-                      <CellValue value={row.parakeet} />
+                      <CellValue value={row.competitor} />
                     </td>
                     <td className="px-4 py-3.5 text-center">
                       <CellValue value={row.generic} />
