@@ -201,7 +201,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     abortRef.current = controller;
 
     const requestId = generateId();
-    useOverlayStore.getState().setHintState("generating");
+    useOverlayStore.getState().setChatGenerating(true);
 
     let chatBuffer = "";
 
@@ -215,13 +215,14 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
       questionId: requestId,
       onChunk: (chunk) => { chatBuffer += chunk; },
       onDone: async () => {
-        useOverlayStore.getState().setHintState("ready");
         if (chatBuffer) {
           useOverlayStore.getState().addChatMessage({
             role: "assistant",
             text: chatBuffer,
             timestamp: Date.now(),
           });
+        } else {
+          useOverlayStore.getState().setChatGenerating(false);
         }
         const result = await deductCredits(selectedModel, sessionIdRef.current);
         if (result.success) {
@@ -229,7 +230,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
         }
       },
       onError: (error) => {
-        useOverlayStore.getState().setHintState("error");
+        useOverlayStore.getState().setChatGenerating(false);
         useOverlayStore.getState().addChatMessage({
           role: "assistant",
           text: `Error: ${error.message}`,

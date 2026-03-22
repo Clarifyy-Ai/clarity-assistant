@@ -101,6 +101,7 @@ interface OverlayStore {
 
   // Chat history (not persisted)
   chat_history: ChatMessage[];
+  is_chat_generating: boolean;
 
   // Resume context (not persisted)
   resume_context: ResumeContext | null;
@@ -142,6 +143,7 @@ interface OverlayStore {
   // Actions — chat history
   addChatMessage: (msg: ChatMessage) => void;
   clearChatHistory: () => void;
+  setChatGenerating: (generating: boolean) => void;
 
   // Actions — resume context
   setResumeContext: (ctx: ResumeContext | null) => void;
@@ -238,6 +240,7 @@ export const useOverlayStore = create<OverlayStore>()(
       is_hotkey_help_visible: false,
 
       chat_history: [],
+      is_chat_generating: false,
 
       resume_context: null,
       resume_talking_points: null,
@@ -371,8 +374,10 @@ export const useOverlayStore = create<OverlayStore>()(
       // ── Chat History ────────────────────────────────────────
       addChatMessage: (msg) => set((s) => ({
         chat_history: [...s.chat_history, msg],
+        is_chat_generating: false,
       })),
-      clearChatHistory: () => set({ chat_history: [] }),
+      clearChatHistory: () => set({ chat_history: [], is_chat_generating: false }),
+      setChatGenerating: (is_chat_generating) => set({ is_chat_generating }),
 
       // ── Resume Context ──────────────────────────────────────
       setResumeContext: (resume_context) => set({ resume_context }),
@@ -408,6 +413,7 @@ export const useOverlayStore = create<OverlayStore>()(
         is_peek_active: false,
         is_hotkey_help_visible: false,
         chat_history: [],
+        is_chat_generating: false,
         resume_context: null,
         resume_talking_points: null,
       }),

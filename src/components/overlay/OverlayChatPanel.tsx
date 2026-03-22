@@ -10,10 +10,8 @@ interface OverlayChatPanelProps {
 
 export function OverlayChatPanel({ onSubmit }: OverlayChatPanelProps) {
   const chatHistory = useOverlayStore((s) => s.chat_history);
-  const hintState = useOverlayStore((s) => s.hint_state);
+  const isGenerating = useOverlayStore((s) => s.is_chat_generating);
   const scrollRef = useRef<HTMLDivElement>(null);
-
-  const isGenerating = hintState === "generating" || hintState === "streaming";
 
   useEffect(() => {
     if (scrollRef.current) {
