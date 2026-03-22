@@ -10,13 +10,13 @@ import { InlineMath, BlockMath } from "react-katex";
 import "katex/dist/katex.min.css";
 import { supabase, SUPABASE_URL } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Badge } from "@/components/ui/Badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { PageHeader } from "@/components/layout/PageHeader";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
@@ -582,14 +582,14 @@ function ReviewModal({
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground font-medium">Exam Type</p>
                     <Select
-                      value={q.exam_type ?? ""}
-                      onValueChange={(v) => updateField(q._id, "exam_type", v || null)}
+                      value={q.exam_type ?? "none"}
+                      onValueChange={(v) => updateField(q._id, "exam_type", v === "none" ? null : v)}
                     >
                       <SelectTrigger className="h-7 text-xs">
                         <SelectValue placeholder="(none)" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">None</SelectItem>
+                        <SelectItem value="none">None</SelectItem>
                         {EXAM_TYPES.map((et) => (
                           <SelectItem key={et} value={et}>{et}</SelectItem>
                         ))}
