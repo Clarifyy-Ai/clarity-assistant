@@ -169,17 +169,7 @@ export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, o
       />
 
       {/* Stealth Opacity Slider */}
-      <div className="flex items-center gap-1 px-1">
-        <input
-          type="range"
-          min={20}
-          max={100}
-          value={useOverlayStore.getState().stealth_opacity}
-          onChange={(e) => useOverlayStore.getState().setStealthOpacity(Number(e.target.value))}
-          className="w-12 h-1 accent-brand-400 cursor-pointer opacity-60 hover:opacity-100 transition-opacity"
-          title={`Opacity: ${useOverlayStore.getState().stealth_opacity}%`}
-        />
-      </div>
+      <OpacitySlider />
 
       <ToolbarButton
         icon={AlertCircle}
