@@ -159,8 +159,15 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
       sessionId:      sessionIdRef.current,
       questionId:     requestId,
       onChunk:  (chunk) => useOverlayStore.getState().appendStreamChunk(chunk),
-      onDone:   async (_fullText) => {
+      onDone:   async (fullText) => {
         useOverlayStore.getState().commitStreamedHint();
+        if (fullText) {
+          useOverlayStore.getState().addChatMessage({
+            role: "assistant",
+            text: fullText,
+            timestamp: Date.now(),
+          });
+        }
         const result = await deductCredits(selectedModel, sessionIdRef.current);
         if (result.success) {
           useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
@@ -173,6 +180,11 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
 
   const submitManualQuestion = useCallback((question: string) => {
     lastQuestionRef.current = question;
+    useOverlayStore.getState().addChatMessage({
+      role: "user",
+      text: question,
+      timestamp: Date.now(),
+    });
     requestLiveHint(question);
   }, [requestLiveHint]);
 

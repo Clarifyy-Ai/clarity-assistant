@@ -3,6 +3,7 @@ import { cn } from "@/lib/utils";
 
 const TABS = [
   { id: "answer"     as const, label: "Answer" },
+  { id: "chat"       as const, label: "Chat" },
   { id: "resume"     as const, label: "Resume" },
   { id: "transcript" as const, label: "Transcript" },
   { id: "audit"      as const, label: "Status" },

@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useLiveCopilot } from "@/hooks/useLiveCopilot";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
@@ -8,6 +8,7 @@ import { OverlayKeyboardHandler } from "@/components/overlay/OverlayKeyboardHand
 import { LiveSessionController } from "@/components/live/LiveSessionController";
 import { ScreenCaptureBlocker } from "@/components/overlay/ScreenCaptureBlocker";
 import { PreSessionSetup } from "@/components/session/PreSessionSetup";
+import { ClipboardCheck } from "lucide-react";
 import type { LiveSessionConfig } from "@/types/session.types";
 
 const DEFAULT_CONFIG: LiveSessionConfig = {
@@ -29,6 +30,7 @@ export default function LiveOverlay() {
   const sessionStatus = useSessionStore((s) => s.status);
   const [phase, setPhase] = useState<"setup" | "active">("setup");
   const [config, setConfig] = useState<LiveSessionConfig>(DEFAULT_CONFIG);
+  const [lastSessionId, setLastSessionId] = useState<string | null>(null);
   const hasStartedRef = useRef(false);
   const didEndRef = useRef(false);
 
@@ -45,6 +47,7 @@ export default function LiveOverlay() {
     useOverlayStore.getState().setProctorSafe(sessionConfig.stealth_mode);
     hasStartedRef.current = false;
     didEndRef.current = false;
+    setLastSessionId(null);
     setConfig(sessionConfig);
     setPhase("active");
   }, []);
@@ -69,14 +72,11 @@ export default function LiveOverlay() {
 
   const handleStop = useCallback(async () => {
     didEndRef.current = true;
-    await copilot.endLiveSession();
     const sessionId = useSessionStore.getState().session_id;
-    if (sessionId) {
-      navigate(`/app/scorecard/${sessionId}`);
-    } else {
-      navigate("/app/sessions");
-    }
-  }, [copilot.endLiveSession, navigate]);
+    await copilot.endLiveSession();
+    setLastSessionId(sessionId);
+    useOverlayStore.getState().showOverlay();
+  }, [copilot.endLiveSession]);
 
   const handleGenerate = useCallback(() => {
     const question = useOverlayStore.getState().current_question;
@@ -110,16 +110,37 @@ export default function LiveOverlay() {
         onGenerate={handleGenerate}
         onEndSession={handleStop}
         onManualQuestion={handleManualQuestion}
+        onStartSession={handleSetup}
       />
       <div className="flex items-center justify-center h-[60vh]">
         <div className="text-center space-y-3">
-          <p className="text-lg font-semibold text-foreground">Overlay Mode Active</p>
-          <p className="text-sm text-muted-foreground max-w-sm">
-            The overlay is floating on your screen. Use <kbd className="hotkey-badge">Ctrl+Shift+H</kbd> to toggle visibility.
-          </p>
-          <p className="text-xs text-muted-foreground/60">
-            Press <kbd className="hotkey-badge">Ctrl+Shift+P</kbd> for panic mode
-          </p>
+          {isActive ? (
+            <>
+              <p className="text-lg font-semibold text-foreground">Overlay Mode Active</p>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                The overlay is floating on your screen. Use <kbd className="hotkey-badge">Ctrl+Shift+H</kbd> to toggle visibility.
+              </p>
+              <p className="text-xs text-muted-foreground/60">
+                Press <kbd className="hotkey-badge">Ctrl+Shift+P</kbd> for panic mode
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-lg font-semibold text-foreground">Session Ended</p>
+              <p className="text-sm text-muted-foreground max-w-sm">
+                Start a new session from the overlay, or review your results.
+              </p>
+              {lastSessionId && (
+                <Link
+                  to={`/app/scorecard/${lastSessionId}`}
+                  className="inline-flex items-center gap-2 mt-2 px-4 py-2 bg-brand-500/20 hover:bg-brand-500/30 text-brand-300 text-sm font-medium rounded-xl transition-all"
+                >
+                  <ClipboardCheck className="w-4 h-4" />
+                  View Scorecard
+                </Link>
+              )}
+            </>
+          )}
         </div>
       </div>
     </>

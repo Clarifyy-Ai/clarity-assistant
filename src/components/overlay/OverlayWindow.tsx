@@ -1,6 +1,7 @@
 import { createPortal } from "react-dom";
 import { useRef, useCallback } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
+import { useSessionStore } from "@/store/sessionStore";
 import { useAudioStore } from "@/store/audioStore";
 import { useStealthMouse } from "@/hooks/useStealthMouse";
 import { OverlayHintPanel } from "./OverlayHintPanel";
@@ -8,9 +9,10 @@ import { OverlayQuestionBar } from "./OverlayQuestionBar";
 import { OverlayNetworkBadge } from "./OverlayNetworkBadge";
 import { OverlayToolbar } from "./OverlayToolbar";
 import { OverlayTabBar } from "./OverlayTabBar";
-import { OverlayChatInput } from "./OverlayChatInput";
+import { OverlayChatPanel } from "./OverlayChatPanel";
 import { OverlayAuditPanel } from "./OverlayAuditPanel";
 import { OverlayResumePanel } from "./OverlayResumePanel";
+import { OverlayQuickStart } from "./OverlayQuickStart";
 import { OverlayResizeHandles } from "./OverlayResizeHandles";
 import { StealthMouseGuard } from "./StealthMouseGuard";
 import { OverlayPositionManager } from "./OverlayPositionManager";
@@ -19,6 +21,7 @@ import { OverlaySessionStats } from "./OverlaySessionStats";
 import { OverlayActivityTimer } from "./OverlayActivityTimer";
 import { OverlayHotkeyHelp } from "./OverlayHotkeyHelp";
 import { cn } from "@/lib/utils";
+import type { LiveSessionConfig } from "@/types/session.types";
 
 interface OverlayWindowProps {
   onToggleMic?:        () => void;
@@ -26,6 +29,7 @@ interface OverlayWindowProps {
   onGenerate?:         () => void;
   onEndSession?:       () => void;
   onManualQuestion?:   (question: string) => void;
+  onStartSession?:     (config: LiveSessionConfig) => void;
 }
 
 export function OverlayWindow({
@@ -34,6 +38,7 @@ export function OverlayWindow({
   onGenerate,
   onEndSession,
   onManualQuestion,
+  onStartSession,
 }: OverlayWindowProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const resizeContainerRef = useRef<HTMLDivElement>(null);
@@ -59,6 +64,8 @@ export function OverlayWindow({
   const stealth_opacity       = useOverlayStore((s) => s.stealth_opacity);
   const is_peek_active        = useOverlayStore((s) => s.is_peek_active);
   const is_minimal_mode       = useOverlayStore((s) => s.is_minimal_mode);
+  const sessionStatus         = useSessionStore((s) => s.status);
+  const isSessionActive       = sessionStatus === "active";
   const deepgramStatus        = useAudioStore((s) => s.deepgram_status);
   const stream_error          = useAudioStore((s) => s.streams?.error ?? null);
   const isRecording           = deepgramStatus === "connected";
@@ -150,7 +157,7 @@ export function OverlayWindow({
             </div>
           </div>
 
-          {!is_minimal_mode && (
+          {!is_minimal_mode && isSessionActive && (
             <OverlayToolbar
               onToggleMic={onToggleMic}
               onToggleSystemAudio={onToggleSystemAudio}
@@ -193,51 +200,60 @@ export function OverlayWindow({
                 </div>
               )}
 
-              {current_question && !is_minimal_mode && (
-                <OverlayQuestionBar question={current_question} />
+              {!isSessionActive && onStartSession && !is_minimal_mode && (
+                <OverlayQuickStart onStart={onStartSession} />
               )}
 
-              {!is_minimal_mode && <OverlayTabBar />}
+              {isSessionActive && (
+                <>
+                  {current_question && !is_minimal_mode && (
+                    <OverlayQuestionBar question={current_question} />
+                  )}
 
-              <div className={cn(
-                "min-h-0 overflow-y-auto",
-                is_minimal_mode ? "max-h-[200px]" : "flex-1"
-              )}>
-                {active_tab === "answer" && (
-                  <OverlayHintPanel
-                    text={displayText}
-                    hintStyle={hint_style}
-                    hintState={hint_state}
-                    errorMessage={error_message}
-                    screenshotHint={screenshot_hint}
-                    isScreenshotLoading={is_screenshot_loading}
-                  />
-                )}
+                  {!is_minimal_mode && <OverlayTabBar />}
 
-                {active_tab === "transcript" && (
-                  <div className="p-3">
-                    <LiveTranscriptStream />
+                  <div className={cn(
+                    "min-h-0",
+                    active_tab === "chat" ? "flex-1 flex flex-col" : "overflow-y-auto",
+                    is_minimal_mode ? "max-h-[200px]" : "flex-1"
+                  )}>
+                    {active_tab === "answer" && (
+                      <OverlayHintPanel
+                        text={displayText}
+                        hintStyle={hint_style}
+                        hintState={hint_state}
+                        errorMessage={error_message}
+                        screenshotHint={screenshot_hint}
+                        isScreenshotLoading={is_screenshot_loading}
+                      />
+                    )}
+
+                    {active_tab === "chat" && onManualQuestion && (
+                      <OverlayChatPanel onSubmit={onManualQuestion} />
+                    )}
+
+                    {active_tab === "transcript" && (
+                      <div className="p-3">
+                        <LiveTranscriptStream />
+                      </div>
+                    )}
+
+                    {active_tab === "resume" && (
+                      <OverlayResumePanel />
+                    )}
+
+                    {active_tab === "audit" && (
+                      <OverlayAuditPanel />
+                    )}
                   </div>
-                )}
-
-                {active_tab === "resume" && (
-                  <OverlayResumePanel />
-                )}
-
-                {active_tab === "audit" && (
-                  <OverlayAuditPanel />
-                )}
-              </div>
-
-              {onManualQuestion && !is_minimal_mode && (
-                <OverlayChatInput onSubmit={onManualQuestion} />
+                </>
               )}
             </>
           )}
 
-          {!is_minimal_mode && <OverlaySessionStats />}
+          {!is_minimal_mode && isSessionActive && <OverlaySessionStats />}
 
-          {!is_minimal_mode && (
+          {!is_minimal_mode && isSessionActive && (
             <div className="flex items-center justify-between border-t border-white/5 px-2 sm:px-4 py-1 font-mono text-[8px] sm:text-[9px] text-muted-foreground/40 shrink-0">
               <span className="truncate">
                 ⌃⇧H hide · Esc clear · ⌃⇧P panic · ⌃⇧/ help

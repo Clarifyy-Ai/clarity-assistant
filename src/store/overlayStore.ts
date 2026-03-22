@@ -34,6 +34,12 @@ export interface ActivityLogEntry {
   timestamp: number;
 }
 
+export interface ChatMessage {
+  role: "user" | "assistant";
+  text: string;
+  timestamp: number;
+}
+
 interface OverlayStore {
   // Visibility
   is_visible: boolean;
@@ -58,7 +64,7 @@ interface OverlayStore {
 
   // Session controls
   auto_generate: boolean;
-  active_tab: "answer" | "transcript" | "audit" | "resume";
+  active_tab: "answer" | "chat" | "transcript" | "audit" | "resume";
 
   // Network indicator shown in overlay
   network_color: "green" | "yellow" | "red";
@@ -92,6 +98,9 @@ interface OverlayStore {
 
   // Hotkey help overlay
   is_hotkey_help_visible: boolean;
+
+  // Chat history (not persisted)
+  chat_history: ChatMessage[];
 
   // Resume context (not persisted)
   resume_context: ResumeContext | null;
@@ -128,7 +137,11 @@ interface OverlayStore {
 
   // Actions — session controls
   setAutoGenerate: (enabled: boolean) => void;
-  setActiveTab: (tab: "answer" | "transcript" | "audit" | "resume") => void;
+  setActiveTab: (tab: "answer" | "chat" | "transcript" | "audit" | "resume") => void;
+
+  // Actions — chat history
+  addChatMessage: (msg: ChatMessage) => void;
+  clearChatHistory: () => void;
 
   // Actions — resume context
   setResumeContext: (ctx: ResumeContext | null) => void;
@@ -223,6 +236,8 @@ export const useOverlayStore = create<OverlayStore>()(
       is_peek_active: false,
       is_minimal_mode: false,
       is_hotkey_help_visible: false,
+
+      chat_history: [],
 
       resume_context: null,
       resume_talking_points: null,
@@ -353,6 +368,12 @@ export const useOverlayStore = create<OverlayStore>()(
       setAutoGenerate: (auto_generate) => set({ auto_generate }),
       setActiveTab: (active_tab) => set({ active_tab }),
 
+      // ── Chat History ────────────────────────────────────────
+      addChatMessage: (msg) => set((s) => ({
+        chat_history: [...s.chat_history, msg],
+      })),
+      clearChatHistory: () => set({ chat_history: [] }),
+
       // ── Resume Context ──────────────────────────────────────
       setResumeContext: (resume_context) => set({ resume_context }),
       setResumeTalkingPoints: (resume_talking_points) => set({ resume_talking_points }),
@@ -386,6 +407,7 @@ export const useOverlayStore = create<OverlayStore>()(
         activity_log: [],
         is_peek_active: false,
         is_hotkey_help_visible: false,
+        chat_history: [],
         resume_context: null,
         resume_talking_points: null,
       }),
@@ -415,7 +437,7 @@ export const useOverlayStore = create<OverlayStore>()(
       // ── Minimal Mode ────────────────────────────────────────
       setMinimalMode: (is_minimal_mode) => set((s) => ({
         is_minimal_mode,
-        active_tab: is_minimal_mode && s.active_tab !== "answer" && s.active_tab !== "resume" ? "answer" as const : s.active_tab,
+        active_tab: is_minimal_mode && s.active_tab !== "answer" && s.active_tab !== "resume" && s.active_tab !== "chat" ? "answer" as const : s.active_tab,
       })),
 
       // ── Hotkey Help ─────────────────────────────────────────
