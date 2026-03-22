@@ -58,6 +58,8 @@ export function OverlayWindow({
   const stealth_opacity       = useOverlayStore((s) => s.stealth_opacity);
   const is_peek_active        = useOverlayStore((s) => s.is_peek_active);
   const is_minimal_mode       = useOverlayStore((s) => s.is_minimal_mode);
+  const deepgramStatus        = useAudioStore((s) => s.deepgram_status);
+  const isRecording           = deepgramStatus === "connected" || deepgramStatus === "streaming";
 
   const handlePositionChange = useCallback(
     (pos: import("@/store/overlayStore").OverlayPosition) => useOverlayStore.getState().setPosition(pos),
