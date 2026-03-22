@@ -49,6 +49,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
   const lastQuestionRef = useRef<string | null>(null);
   const dragCleanupRef  = useRef<(() => void) | null>(null);
   const sessionIdRef    = useRef<string>(generateId());
+  const isManualRef     = useRef(false);
 
   // ── Audio session ──────────────────────────────────────────────
   const audio = useAudioSession({
@@ -161,13 +162,14 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
       onChunk:  (chunk) => useOverlayStore.getState().appendStreamChunk(chunk),
       onDone:   async (fullText) => {
         useOverlayStore.getState().commitStreamedHint();
-        if (fullText) {
+        if (fullText && isManualRef.current) {
           useOverlayStore.getState().addChatMessage({
             role: "assistant",
             text: fullText,
             timestamp: Date.now(),
           });
         }
+        isManualRef.current = false;
         const result = await deductCredits(selectedModel, sessionIdRef.current);
         if (result.success) {
           useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
@@ -180,6 +182,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
 
   const submitManualQuestion = useCallback((question: string) => {
     lastQuestionRef.current = question;
+    isManualRef.current = true;
     useOverlayStore.getState().addChatMessage({
       role: "user",
       text: question,

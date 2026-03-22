@@ -28,7 +28,7 @@ const DEFAULT_CONFIG: LiveSessionConfig = {
 export default function LiveOverlay() {
   const navigate = useNavigate();
   const sessionStatus = useSessionStore((s) => s.status);
-  const [phase, setPhase] = useState<"setup" | "active">("setup");
+  const [phase, setPhase] = useState<"setup" | "active" | "restarting">("setup");
   const [config, setConfig] = useState<LiveSessionConfig>(DEFAULT_CONFIG);
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
   const hasStartedRef = useRef(false);
@@ -49,7 +49,8 @@ export default function LiveOverlay() {
     didEndRef.current = false;
     setLastSessionId(null);
     setConfig(sessionConfig);
-    setPhase("active");
+    setPhase("restarting");
+    requestAnimationFrame(() => setPhase("active"));
   }, []);
 
   useEffect(() => {

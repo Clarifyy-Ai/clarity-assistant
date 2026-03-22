@@ -437,7 +437,7 @@ export const useOverlayStore = create<OverlayStore>()(
       // ── Minimal Mode ────────────────────────────────────────
       setMinimalMode: (is_minimal_mode) => set((s) => ({
         is_minimal_mode,
-        active_tab: is_minimal_mode && s.active_tab !== "answer" && s.active_tab !== "resume" && s.active_tab !== "chat" ? "answer" as const : s.active_tab,
+        active_tab: is_minimal_mode && s.active_tab !== "answer" && s.active_tab !== "resume" ? "answer" as const : s.active_tab,
       })),
 
       // ── Hotkey Help ─────────────────────────────────────────
