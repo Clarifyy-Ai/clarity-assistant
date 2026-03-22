@@ -73,7 +73,7 @@ export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, o
   }, []);
 
   return (
-    <div className="flex items-center gap-1 px-3 py-1.5 border-b border-white/5 flex-wrap">
+    <div className="flex items-center gap-1 px-3 py-1.5 border-b border-white/5 overflow-x-auto flex-nowrap scrollbar-hide shrink-0">
       <ToolbarButton
         icon={isMuted ? MicOff : Mic}
         label={isMuted ? "Unmute mic" : "Mute mic"}
@@ -121,7 +121,7 @@ export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, o
       <button
         onClick={() => useOverlayStore.getState().cycleHintStyle()}
         title={`Hint style: ${hintStyle.replace("_", " ")}`}
-        className="flex items-center gap-0.5 px-1.5 py-1 rounded-lg text-[9px] font-semibold uppercase tracking-wide transition-all text-brand-300/70 hover:text-brand-300 hover:bg-white/5"
+        className="flex items-center gap-0.5 px-1.5 py-1 rounded-lg text-[9px] font-semibold uppercase tracking-wide transition-all text-brand-300/70 hover:text-brand-300 hover:bg-white/5 shrink-0"
       >
         <Type className="w-2.5 h-2.5" />
         {HINT_STYLE_LABELS[hintStyle] || "Full"}
@@ -210,7 +210,7 @@ export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, o
 
       <button
         onClick={onEndSession}
-        className="flex items-center gap-1 px-2 py-1 bg-red-600/20 hover:bg-red-600/30 border border-red-500/20 text-red-400 text-[10px] font-medium rounded-lg transition-all"
+        className="flex items-center gap-1 px-2 py-1 bg-red-600/20 hover:bg-red-600/30 border border-red-500/20 text-red-400 text-[10px] font-medium rounded-lg transition-all shrink-0"
       >
         <Square className="w-2.5 h-2.5" />
         End
@@ -251,7 +251,7 @@ function ToolbarButton({
       disabled={disabled}
       title={label}
       className={cn(
-        "p-1.5 rounded-lg transition-all",
+        "p-1.5 rounded-lg transition-all shrink-0",
         active
           ? cn(colorClasses[color], "bg-white/5")
           : "text-gray-500 hover:text-gray-300 hover:bg-white/5",

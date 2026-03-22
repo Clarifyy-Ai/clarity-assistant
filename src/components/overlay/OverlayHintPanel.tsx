@@ -7,7 +7,7 @@ import type { HintStyle } from "@/types/user.types";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
-import { Loader2, Copy, Check, BookmarkPlus, ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, Copy, Check, BookmarkPlus, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface OverlayHintPanelProps {
   text: string;
@@ -29,7 +29,6 @@ export function OverlayHintPanel({
   const composed = useMemo(() => composeHint(text || "", hintStyle), [text, hintStyle]);
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [expanded, setExpanded] = useState(false);
 
   const historyLen   = useOverlayStore((s) => s.hint_history.length);
   const historyIndex = useOverlayStore((s) => s.hint_history_index);
@@ -94,10 +93,7 @@ export function OverlayHintPanel({
   }, [text]);
 
   return (
-    <div className={cn(
-      "scroll-container min-h-[60px] flex-1 overflow-y-auto px-4 py-3",
-      expanded ? "max-h-none" : "max-h-[380px]"
-    )}>
+    <div className="scroll-container min-h-[60px] overflow-y-auto px-4 py-3">
       {/* Error */}
       {errorMessage && (
         <div
@@ -294,14 +290,6 @@ export function OverlayHintPanel({
           )}
 
           <div className="flex-1" />
-          <button
-            onClick={() => setExpanded((p) => !p)}
-            className="flex items-center gap-1 px-2 py-1 text-[10px] text-muted-foreground/60 hover:text-muted-foreground rounded-lg hover:bg-white/5 transition-all"
-            title={expanded ? "Collapse" : "Expand"}
-          >
-            {expanded ? <ChevronUp className="w-2.5 h-2.5" /> : <ChevronDown className="w-2.5 h-2.5" />}
-            {expanded ? "Less" : "More"}
-          </button>
         </div>
       )}
     </div>

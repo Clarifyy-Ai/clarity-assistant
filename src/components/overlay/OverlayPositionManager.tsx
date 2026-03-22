@@ -13,6 +13,8 @@ interface OverlayPositionManagerProps {
   position: OverlayPosition;
   onPositionChange: (pos: OverlayPosition) => void;
   isProctorSafe: boolean;
+  overlayWidth: number;
+  overlayHeight: number;
   children: ReactNode;
 }
 
@@ -31,7 +33,7 @@ function setRefs<T>(...refs: (Ref<T> | undefined)[]) {
 
 export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPositionManagerProps>(
   function OverlayPositionManager(
-    { position, onPositionChange, isProctorSafe, children },
+    { position, onPositionChange, isProctorSafe, overlayWidth, overlayHeight, children },
     ref
   ) {
     const localRef = useRef<HTMLDivElement>(null);
@@ -58,7 +60,7 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
       }
 
       const applySafe = () => {
-        const safePos = getProctorSafePosition(el.offsetWidth, el.offsetHeight);
+        const safePos = getProctorSafePosition(overlayWidth, overlayHeight);
         const prev = lastSafePos.current;
         if (prev && prev.x === safePos.x && prev.y === safePos.y) return;
         lastSafePos.current = safePos;
@@ -67,17 +69,13 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
 
       applySafe();
 
-      const ro = new ResizeObserver(() => applySafe());
-      ro.observe(el);
-
       const onWinResize = () => applySafe();
       window.addEventListener("resize", onWinResize);
 
       return () => {
-        ro.disconnect();
         window.removeEventListener("resize", onWinResize);
       };
-    }, [isProctorSafe, onPositionChange]);
+    }, [isProctorSafe, onPositionChange, overlayWidth, overlayHeight]);
 
     return (
       <div

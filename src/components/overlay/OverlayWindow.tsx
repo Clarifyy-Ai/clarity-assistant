@@ -86,6 +86,8 @@ export function OverlayWindow({
         position={position}
         onPositionChange={handlePositionChange}
         isProctorSafe={is_proctor_safe}
+        overlayWidth={overlay_width}
+        overlayHeight={overlay_height}
       >
         <div
           ref={resizeContainerRef}
@@ -181,8 +183,8 @@ export function OverlayWindow({
               {!is_minimal_mode && <OverlayTabBar />}
 
               <div className={cn(
-                "overflow-y-auto min-h-0",
-                is_minimal_mode ? "max-h-[300px]" : "flex-1"
+                "min-h-0 overflow-y-auto",
+                is_minimal_mode ? "max-h-[200px]" : "flex-1"
               )}>
                 {active_tab === "answer" && (
                   <OverlayHintPanel
@@ -226,7 +228,7 @@ export function OverlayWindow({
             </div>
           )}
 
-          <div className={cn(is_stealth_mode && "opacity-20")} style={is_stealth_mode ? { pointerEvents: "auto" } : undefined}>
+          <div className={cn(is_stealth_mode && "opacity-50 hover:opacity-80 transition-opacity")} style={{ pointerEvents: "auto" }}>
             <OverlayResizeHandles containerRef={resizeContainerRef} />
           </div>
 

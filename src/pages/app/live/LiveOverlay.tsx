@@ -56,6 +56,7 @@ export default function LiveOverlay() {
   useEffect(() => {
     return () => {
       useOverlayStore.getState().hideOverlay();
+      useOverlayStore.getState().resetSessionState();
     };
   }, []);
 
