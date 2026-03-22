@@ -297,12 +297,10 @@ export async function getUserPlanId(userId: string): Promise<PlanId> {
 /**
  * Cancel a subscription at period end (via Supabase edge function → Stripe).
  */
-export async function cancelSubscription(
-  subscriptionId: string
-): Promise<void> {
+export async function cancelSubscription(): Promise<void> {
   const [, err] = await tryCatch(async () => {
     const { error } = await supabase.functions.invoke("cancel-subscription", {
-      body: { subscriptionId },
+      body: {},
     });
     if (error) throw error;
   });
@@ -310,8 +308,7 @@ export async function cancelSubscription(
   if (err) {
     throw new BillingError(
       "Failed to cancel subscription.",
-      ErrorCode.BILLING_STRIPE_ERROR,
-      { subscriptionId }
+      ErrorCode.BILLING_STRIPE_ERROR
     );
   }
 }
@@ -319,12 +316,10 @@ export async function cancelSubscription(
 /**
  * Resume a subscription that was set to cancel at period end.
  */
-export async function resumeSubscription(
-  subscriptionId: string
-): Promise<void> {
+export async function resumeSubscription(): Promise<void> {
   const [, err] = await tryCatch(async () => {
     const { error } = await supabase.functions.invoke("resume-subscription", {
-      body: { subscriptionId },
+      body: {},
     });
     if (error) throw error;
   });
@@ -332,8 +327,7 @@ export async function resumeSubscription(
   if (err) {
     throw new BillingError(
       "Failed to resume subscription.",
-      ErrorCode.BILLING_STRIPE_ERROR,
-      { subscriptionId }
+      ErrorCode.BILLING_STRIPE_ERROR
     );
   }
 }

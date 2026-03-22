@@ -78,8 +78,6 @@ export default function SettingsCredits() {
           price_id:    pack.stripePriceId,
           success_url: `${window.location.origin}/app/settings/credits?success=1`,
           cancel_url:  `${window.location.origin}/app/settings/credits?canceled=1`,
-          mode:        "payment",
-          credits:     pack.amount + (pack.bonus ?? 0),
         },
       });
       if (error) throw error;

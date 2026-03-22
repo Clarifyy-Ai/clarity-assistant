@@ -45,13 +45,20 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { subscriptionId } = await req.json();
-    if (!subscriptionId) {
+    const { data: dbSub, error: subError } = await db
+      .from("subscriptions")
+      .select("stripe_subscription_id")
+      .eq("user_id", user.id)
+      .maybeSingle();
+
+    if (subError || !dbSub?.stripe_subscription_id) {
       return new Response(
-        JSON.stringify({ error: "Missing subscriptionId" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "No active subscription found" }),
+        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+
+    const subscriptionId = dbSub.stripe_subscription_id as string;
 
     await stripe.subscriptions.update(subscriptionId, {
       cancel_at_period_end: false,

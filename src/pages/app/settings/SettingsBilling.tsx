@@ -108,8 +108,6 @@ export default function SettingsBilling() {
           price_id:    plan.stripePriceIdMonthly,
           success_url: `${window.location.origin}/app/settings/billing?success=1`,
           cancel_url:  `${window.location.origin}/app/settings/billing?canceled=1`,
-          mode:        "subscription",
-          plan_id:     targetPlanId,
         },
       });
       if (error) throw error;
@@ -126,13 +124,13 @@ export default function SettingsBilling() {
   }
 
   async function handleCancel() {
-    if (!subscription?.stripeSubscriptionId) {
+    if (!subscription) {
       toast.error("No active subscription to cancel.");
       return;
     }
     setActionLoading("cancel");
     try {
-      await cancelSubscription(subscription.stripeSubscriptionId);
+      await cancelSubscription();
       toast.success("Subscription will cancel at end of billing period.");
       setSubscription((s) => s ? { ...s, cancelAtPeriodEnd: true } : s);
     } catch {
@@ -143,10 +141,10 @@ export default function SettingsBilling() {
   }
 
   async function handleResume() {
-    if (!subscription?.stripeSubscriptionId) return;
+    if (!subscription) return;
     setActionLoading("resume");
     try {
-      await resumeSubscription(subscription.stripeSubscriptionId);
+      await resumeSubscription();
       toast.success("Subscription resumed!");
       setSubscription((s) => s ? { ...s, cancelAtPeriodEnd: false } : s);
     } catch {
@@ -168,8 +166,6 @@ export default function SettingsBilling() {
           price_id:    stripePriceId,
           success_url: `${window.location.origin}/app/settings/credits?success=1`,
           cancel_url:  `${window.location.origin}/app/settings/billing?canceled=1`,
-          mode:        "payment",
-          credits:     creditCount,
         },
       });
       if (error) throw error;
@@ -335,6 +331,14 @@ export default function SettingsBilling() {
                 <span className="text-muted-foreground">Renews</span>
                 <span className="text-foreground">
                   {subscription.currentPeriodEnd.toLocaleDateString()}
+                </span>
+              </div>
+            )}
+            {subscription && currentPlan.monthlyPrice > 0 && !subscription.cancelAtPeriodEnd && (
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Next invoice</span>
+                <span className="text-foreground font-medium">
+                  {formatPrice(currentPlan.monthlyPrice, false)}
                 </span>
               </div>
             )}

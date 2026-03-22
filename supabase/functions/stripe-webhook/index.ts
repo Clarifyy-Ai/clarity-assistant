@@ -17,20 +17,9 @@ import { createServiceClient } from "../_shared/supabase.ts";
 //   STRIPE_WEBHOOK_SECRET
 // ─────────────────────────────────────────────────────────────────────────────
 
-const PLAN_CREDIT_MAP: Record<string, number> = {
-  free:       20,
-  starter:    100,
-  pro:        300,
-  elite:      1000,
-  enterprise: 9999,
-};
+const FREE_CREDITS = 20;
 
-function normalizePlanId(planId: string): string {
-  const map: Record<string, string> = {
-    elite: "enterprise",
-  };
-  return map[planId] ?? planId;
-}
+const VALID_PLAN_IDS = new Set(["free", "starter", "pro", "enterprise"]);
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -74,8 +63,6 @@ Deno.serve(async (req) => {
       case "checkout.session.completed": {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.user_id;
-        const planId = session.metadata?.plan_id;
-        const creditsStr = session.metadata?.credits;
         const customerId = session.customer as string;
 
         if (!userId) {
@@ -85,8 +72,9 @@ Deno.serve(async (req) => {
 
         if (session.mode === "subscription" && session.subscription) {
           const sub = await stripe.subscriptions.retrieve(session.subscription as string);
-          const dbPlanId = planId ? normalizePlanId(planId) : "pro";
-          const monthlyCredits = PLAN_CREDIT_MAP[planId ?? "pro"] ?? 100;
+          const rawPlanId = session.metadata?.plan_id ?? "pro";
+          const dbPlanId = VALID_PLAN_IDS.has(rawPlanId) ? rawPlanId : "pro";
+          const monthlyCredits = parseInt(session.metadata?.monthly_credits ?? "100", 10) || 100;
 
           await db.from("profiles").update({
             plan_id:             dbPlanId,
@@ -111,7 +99,7 @@ Deno.serve(async (req) => {
           await db.from("credit_transactions").insert({
             user_id: userId,
             amount:  monthlyCredits,
-            reason:  `subscription_grant:${planId ?? "pro"}`,
+            reason:  `subscription_grant:${dbPlanId}`,
           });
 
           await db.from("profiles").update({
@@ -120,8 +108,8 @@ Deno.serve(async (req) => {
             credits_used_this_month: 0,
           }).eq("id", userId);
 
-        } else if (session.mode === "payment" && creditsStr) {
-          const credits = parseInt(creditsStr, 10);
+        } else if (session.mode === "payment" && session.metadata?.credits) {
+          const credits = parseInt(session.metadata.credits, 10);
           if (credits > 0) {
             const { data: profileData } = await db
               .from("profiles")
@@ -197,7 +185,7 @@ Deno.serve(async (req) => {
           plan_id:             "free",
           subscription_id:     null,
           subscription_status: "canceled",
-          credits:             PLAN_CREDIT_MAP.free,
+          credits:             FREE_CREDITS,
           credits_used_this_month: 0,
           credits_reset_at:    new Date().toISOString(),
         }).eq("id", profileData.id);

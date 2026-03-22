@@ -47,8 +47,6 @@ export function UpgradeModal() {
           price_id:    plan.stripePriceIdMonthly,
           success_url: `${window.location.origin}/app/settings/billing?success=1`,
           cancel_url:  `${window.location.origin}/app/settings/billing?canceled=1`,
-          mode:        "subscription",
-          plan_id:     targetPlanId,
         },
       })
 
@@ -88,8 +86,6 @@ export function UpgradeModal() {
           price_id:    priceId,
           success_url: `${window.location.origin}/app/settings/credits?success=1`,
           cancel_url:  `${window.location.origin}/app/settings/billing?canceled=1`,
-          mode:        "payment",
-          credits:     defaultPack?.credits,
         },
       })
 

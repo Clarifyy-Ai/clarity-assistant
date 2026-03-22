@@ -6,20 +6,40 @@ import { createServiceClient } from "../_shared/supabase.ts";
 // create-checkout — Create a Stripe Checkout session
 //
 // Required env vars (set in Supabase Dashboard → Edge Functions → Secrets):
-//   STRIPE_SECRET_KEY       — Stripe secret key (sk_live_... or sk_test_...)
-//   STRIPE_WEBHOOK_SECRET   — Stripe webhook signing secret
-//   SUPABASE_URL            — Auto-provided by Supabase
-//   SUPABASE_SERVICE_ROLE_KEY — Auto-provided by Supabase
+//   STRIPE_SECRET_KEY              — Stripe secret key
+//   STRIPE_PRICE_STARTER_MONTHLY   — Price ID for Starter plan
+//   STRIPE_PRICE_PRO_MONTHLY       — Price ID for Pro plan
+//   STRIPE_PRICE_ENTERPRISE_MONTHLY — Price ID for Enterprise plan
+//   STRIPE_PRICE_CREDITS_50        — Price ID for 50-credit pack
+//   STRIPE_PRICE_CREDITS_150       — Price ID for 150-credit pack
+//   STRIPE_PRICE_CREDITS_500       — Price ID for 500-credit pack
+//   SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY — Auto-provided
 //
-// Body: {
-//   price_id:    string,          Stripe Price ID
-//   success_url: string,          Redirect URL after success
-//   cancel_url:  string,          Redirect URL after cancel/close
-//   mode:        "subscription" | "payment",
-//   plan_id?:    string,          Plan being purchased (for subscription mode)
-//   credits?:    number,          Credits being purchased (for payment mode)
-// }
+// Body: { price_id, success_url, cancel_url }
+// plan_id and credits are derived server-side from price_id allowlist.
 // ─────────────────────────────────────────────────────────────────────────────
+
+type PriceEntitlement = {
+  mode: "subscription" | "payment";
+  plan_id?: string;
+  credits?: number;
+  monthly_credits?: number;
+};
+
+function buildPriceAllowlist(): Map<string, PriceEntitlement> {
+  const m = new Map<string, PriceEntitlement>();
+  const add = (envKey: string, entitlement: PriceEntitlement) => {
+    const priceId = Deno.env.get(envKey);
+    if (priceId) m.set(priceId, entitlement);
+  };
+  add("STRIPE_PRICE_STARTER_MONTHLY",    { mode: "subscription", plan_id: "starter",    monthly_credits: 100  });
+  add("STRIPE_PRICE_PRO_MONTHLY",        { mode: "subscription", plan_id: "pro",         monthly_credits: 300  });
+  add("STRIPE_PRICE_ENTERPRISE_MONTHLY", { mode: "subscription", plan_id: "enterprise",  monthly_credits: 9999 });
+  add("STRIPE_PRICE_CREDITS_50",         { mode: "payment",      credits: 50  });
+  add("STRIPE_PRICE_CREDITS_150",        { mode: "payment",      credits: 150 });
+  add("STRIPE_PRICE_CREDITS_500",        { mode: "payment",      credits: 500 });
+  return m;
+}
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
@@ -41,25 +61,20 @@ Deno.serve(async (req) => {
   const db = createServiceClient();
 
   try {
-    const {
-      price_id,
-      success_url,
-      cancel_url,
-      mode,
-      plan_id,
-      credits,
-    } = await req.json();
+    const { price_id, success_url, cancel_url } = await req.json();
 
-    if (!price_id || !success_url || !cancel_url || !mode) {
+    if (!price_id || !success_url || !cancel_url) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields: price_id, success_url, cancel_url, mode" }),
+        JSON.stringify({ error: "Missing required fields: price_id, success_url, cancel_url" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    if (mode !== "subscription" && mode !== "payment") {
+    const allowlist = buildPriceAllowlist();
+    const entitlement = allowlist.get(price_id);
+    if (!entitlement) {
       return new Response(
-        JSON.stringify({ error: "mode must be 'subscription' or 'payment'" }),
+        JSON.stringify({ error: "Invalid or unrecognised price_id" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
@@ -96,31 +111,25 @@ Deno.serve(async (req) => {
         metadata: { supabase_user_id: user.id },
       });
       customerId = customer.id;
-
-      await db
-        .from("profiles")
-        .update({ stripe_customer_id: customerId })
-        .eq("id", user.id);
+      await db.from("profiles").update({ stripe_customer_id: customerId }).eq("id", user.id);
     }
 
-    const metadata: Record<string, string> = {
-      user_id: user.id,
-      mode,
-    };
-    if (plan_id) metadata.plan_id = plan_id;
-    if (credits) metadata.credits = String(credits);
+    const metadata: Record<string, string> = { user_id: user.id };
+    if (entitlement.plan_id)        metadata.plan_id         = entitlement.plan_id;
+    if (entitlement.credits)        metadata.credits         = String(entitlement.credits);
+    if (entitlement.monthly_credits) metadata.monthly_credits = String(entitlement.monthly_credits);
 
     const sessionParams: Stripe.Checkout.SessionCreateParams = {
       customer: customerId,
       line_items: [{ price: price_id, quantity: 1 }],
-      mode: mode as "subscription" | "payment",
+      mode: entitlement.mode,
       success_url,
       cancel_url,
       metadata,
       allow_promotion_codes: true,
     };
 
-    if (mode === "subscription") {
+    if (entitlement.mode === "subscription") {
       sessionParams.subscription_data = { metadata };
     }
 
