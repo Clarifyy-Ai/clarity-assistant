@@ -81,7 +81,6 @@ export function OnboardingWizard({
   const navigate = useNavigate();
   const location = useLocation();
   const { user, profile } = useAuthStore();
-  const toast = useToast();
 
   // Determine current step from URL
   const currentStepNumber = parseInt(
@@ -144,12 +143,7 @@ export function OnboardingWizard({
     if (!canSkip) return;
 
     onSkip?.();
-    toast({
-      type: 'success',
-      title: 'Skipped',
-      description: `Skipped ${currentStep.title}`,
-    });
-
+    toast.info(`Skipped ${currentStep.title}`);
     handleNext();
   };
 
@@ -157,25 +151,13 @@ export function OnboardingWizard({
     setIsLoading(true);
 
     try {
-      // Mark onboarding as complete in database
-      // This would be handled by the final step page
       onComplete?.();
-
-      toast({
-        type: 'success',
-        title: 'Welcome!',
-        description: 'Onboarding complete. Redirecting to dashboard...',
-      });
-
+      toast.success('Welcome! Redirecting to your dashboard...');
       setTimeout(() => {
         navigate('/dashboard');
       }, 1500);
-    } catch (error) {
-      toast({
-        type: 'error',
-        title: 'Error',
-        description: 'Failed to complete onboarding',
-      });
+    } catch {
+      toast.error('Failed to complete onboarding. Please try again.');
     } finally {
       setIsLoading(false);
     }

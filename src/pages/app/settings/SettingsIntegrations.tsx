@@ -1,15 +1,17 @@
 // @ts-nocheck
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Toggle } from "@/components/ui/Toggle";
 import {
   Globe, Calendar, Linkedin, Github,
-  Slack, Chrome, CheckCircle, ExternalLink,
-  Zap,
+  Slack, Chrome, ExternalLink,
+  Zap, RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useCalendarSync } from "@/hooks/useCalendarSync";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsIntegrations
@@ -17,66 +19,98 @@ import { cn } from "@/lib/utils";
 
 const INTEGRATIONS = [
   {
-    id:       "google_calendar",
-    icon:     Calendar,
-    label:    "Google Calendar",
-    desc:     "Sync scheduled interviews directly to your Google Calendar.",
-    status:   "available",
-    color:    "text-blue-400",
-    bg:       "bg-blue-500/10",
+    id:     "google_calendar",
+    icon:   Calendar,
+    label:  "Google Calendar",
+    desc:   "Sync scheduled interviews directly from your Google Calendar.",
+    status: "available",
+    color:  "text-blue-400",
+    bg:     "bg-blue-500/10",
+    live:   true,
   },
   {
-    id:       "linkedin",
-    icon:     Linkedin,
-    label:    "LinkedIn",
-    desc:     "Import your profile and experience for personalised coaching.",
-    status:   "available",
-    color:    "text-blue-500",
-    bg:       "bg-blue-600/10",
+    id:     "linkedin",
+    icon:   Linkedin,
+    label:  "LinkedIn",
+    desc:   "Import your profile and experience for personalised coaching.",
+    status: "coming_soon",
+    color:  "text-blue-500",
+    bg:     "bg-blue-600/10",
+    live:   false,
   },
   {
-    id:       "github",
-    icon:     Github,
-    label:    "GitHub",
-    desc:     "Link your repos for technical interview context.",
-    status:   "available",
-    color:    "text-foreground",
-    bg:       "bg-white/8",
+    id:     "github",
+    icon:   Github,
+    label:  "GitHub",
+    desc:   "Link your repos for technical interview context.",
+    status: "coming_soon",
+    color:  "text-foreground",
+    bg:     "bg-white/8",
+    live:   false,
   },
   {
-    id:       "slack",
-    icon:     Slack,
-    label:    "Slack",
-    desc:     "Get interview reminders and debrief summaries in Slack.",
-    status:   "coming_soon",
-    color:    "text-emerald-400",
-    bg:       "bg-emerald-500/10",
+    id:     "slack",
+    icon:   Slack,
+    label:  "Slack",
+    desc:   "Get interview reminders and debrief summaries in Slack.",
+    status: "coming_soon",
+    color:  "text-emerald-400",
+    bg:     "bg-emerald-500/10",
+    live:   false,
   },
   {
-    id:       "chrome_ext",
-    icon:     Chrome,
-    label:    "Chrome Extension",
-    desc:     "One-click practice from any job listing page.",
-    status:   "coming_soon",
-    color:    "text-amber-400",
-    bg:       "bg-amber-500/10",
+    id:     "chrome_ext",
+    icon:   Chrome,
+    label:  "Chrome Extension",
+    desc:   "One-click practice from any job listing page.",
+    status: "coming_soon",
+    color:  "text-amber-400",
+    bg:     "bg-amber-500/10",
+    live:   false,
   },
   {
-    id:       "zapier",
-    icon:     Zap,
-    label:    "Zapier",
-    desc:     "Connect Clarify AI to 5,000+ apps via Zapier workflows.",
-    status:   "coming_soon",
-    color:    "text-orange-400",
-    bg:       "bg-orange-500/10",
+    id:     "zapier",
+    icon:   Zap,
+    label:  "Zapier",
+    desc:   "Connect Clarify AI to 5,000+ apps via Zapier workflows.",
+    status: "coming_soon",
+    color:  "text-orange-400",
+    bg:     "bg-orange-500/10",
+    live:   false,
   },
 ];
 
 export default function SettingsIntegrations() {
-  const [connected, setConnected] = useState<Record<string, boolean>>({});
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { connectGoogle, syncNow, disconnect, isSyncing, lastSynced, error } = useCalendarSync();
+  const [calendarConnected, setCalendarConnected] = useState(false);
 
-  function toggleConnect(id: string) {
-    setConnected((p) => ({ ...p, [id]: !p[id] }));
+  useEffect(() => {
+    const calendarParam = searchParams.get("calendar");
+    if (calendarParam === "connected") {
+      setCalendarConnected(true);
+      toast.success("Google Calendar connected!");
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function handleCalendarConnect() {
+    await connectGoogle();
+  }
+
+  async function handleCalendarDisconnect() {
+    await disconnect();
+    setCalendarConnected(false);
+    toast.info("Google Calendar disconnected.");
+  }
+
+  async function handleCalendarSync() {
+    const result = await syncNow();
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.success(`Synced! ${result.imported} new interview${result.imported !== 1 ? "s" : ""} imported.`);
+    }
   }
 
   return (
@@ -85,8 +119,77 @@ export default function SettingsIntegrations() {
 
       <div className="space-y-3">
         {INTEGRATIONS.map((int) => {
-          const isConnected    = connected[int.id] ?? false;
-          const isComingSoon   = int.status === "coming_soon";
+          const isComingSoon = int.status === "coming_soon";
+
+          if (int.id === "google_calendar") {
+            return (
+              <Card key={int.id}>
+                <div className="flex items-center gap-4">
+                  <div className={cn(
+                    "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+                    int.bg
+                  )}>
+                    <int.icon className={cn("w-5 h-5", int.color)} />
+                  </div>
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold text-foreground">{int.label}</p>
+                      {calendarConnected && (
+                        <Badge variant="emerald" size="sm" dot>Connected</Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                      {int.desc}
+                    </p>
+                    {lastSynced && (
+                      <p className="text-[10px] text-muted-foreground mt-0.5">
+                        Last synced: {lastSynced.toLocaleTimeString()}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    {calendarConnected && (
+                      <Button
+                        variant="secondary"
+                        size="sm"
+                        loading={isSyncing}
+                        onClick={handleCalendarSync}
+                        leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+                      >
+                        Sync
+                      </Button>
+                    )}
+                    <Button
+                      variant={calendarConnected ? "danger" : "secondary"}
+                      size="sm"
+                      onClick={calendarConnected ? handleCalendarDisconnect : handleCalendarConnect}
+                      leftIcon={
+                        calendarConnected
+                          ? undefined
+                          : <ExternalLink className="w-3.5 h-3.5" />
+                      }
+                    >
+                      {calendarConnected ? "Disconnect" : "Connect"}
+                    </Button>
+                  </div>
+                </div>
+
+                {calendarConnected && (
+                  <div className="mt-3 pt-3 border-t border-white/8">
+                    <p className="text-[10px] text-muted-foreground mb-1.5">
+                      Permissions granted:
+                    </p>
+                    <div className="flex flex-wrap gap-1.5">
+                      <Badge variant="blue" size="sm">Read calendar events</Badge>
+                      <Badge variant="blue" size="sm">Import interviews</Badge>
+                    </div>
+                  </div>
+                )}
+              </Card>
+            );
+          }
 
           return (
             <Card
@@ -94,7 +197,6 @@ export default function SettingsIntegrations() {
               className={cn(isComingSoon && "opacity-70")}
             >
               <div className="flex items-center gap-4">
-                {/* Icon */}
                 <div className={cn(
                   "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
                   int.bg
@@ -102,72 +204,23 @@ export default function SettingsIntegrations() {
                   <int.icon className={cn("w-5 h-5", int.color)} />
                 </div>
 
-                {/* Info */}
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="text-sm font-semibold text-foreground">{int.label}</p>
                     {isComingSoon && (
                       <Badge variant="default" size="sm">Coming soon</Badge>
                     )}
-                    {isConnected && (
-                      <Badge variant="emerald" size="sm" dot>Connected</Badge>
-                    )}
                   </div>
                   <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
                     {int.desc}
                   </p>
                 </div>
-
-                {/* Action */}
-                {!isComingSoon && (
-                  <Button
-                    variant={isConnected ? "danger" : "secondary"}
-                    size="sm"
-                    onClick={() => toggleConnect(int.id)}
-                    leftIcon={
-                      isConnected
-                        ? undefined
-                        : <ExternalLink className="w-3.5 h-3.5" />
-                    }
-                  >
-                    {isConnected ? "Disconnect" : "Connect"}
-                  </Button>
-                )}
               </div>
-
-              {/* Permissions shown when connected */}
-              {isConnected && (
-                <div className="mt-3 pt-3 border-t border-white/8">
-                  <p className="text-[10px] text-muted-foreground mb-1.5">
-                    Permissions granted:
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {int.id === "google_calendar" && (
-                      <>
-                        <Badge variant="blue" size="sm">Read events</Badge>
-                        <Badge variant="blue" size="sm">Create events</Badge>
-                      </>
-                    )}
-                    {int.id === "linkedin" && (
-                      <>
-                        <Badge variant="blue" size="sm">Read profile</Badge>
-                        <Badge variant="blue" size="sm">Read experience</Badge>
-                      </>
-                    )}
-                    {int.id === "github" && (
-                      <>
-                        <Badge variant="default" size="sm">Public repos</Badge>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
             </Card>
           );
         })}
       </div>
 
-      {/* API key section */}
       <Card>
         <div className="flex items-center gap-2 mb-4">
           <Zap className="w-4 h-4 text-violet-400" />

@@ -1,5 +1,6 @@
 // @ts-nocheck
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { useCredits } from "@/hooks/useCredits";
 import { Card } from "@/components/ui/Card";
@@ -42,6 +43,19 @@ export default function SettingsCredits() {
   const { profile }  = useAuthStore();
   const credits      = useCredits();
   const [buying, setBuying] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    const success  = searchParams.get("success");
+    const canceled = searchParams.get("canceled");
+    if (success === "1") {
+      toast.success("Credits added! They'll appear on your account shortly.");
+      setSearchParams({}, { replace: true });
+    } else if (canceled === "1") {
+      toast.info("Checkout was cancelled. No payment was taken.");
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const remaining = profile?.credits_remaining ?? 0;
   const monthly   = profile?.credits_monthly   ?? 50;
@@ -61,10 +75,11 @@ export default function SettingsCredits() {
     try {
       const { data, error } = await supabase.functions.invoke("create-checkout", {
         body: {
-          price_id: pack.stripePriceId,
+          price_id:    pack.stripePriceId,
           success_url: `${window.location.origin}/app/settings/credits?success=1`,
-          cancel_url: `${window.location.origin}/app/settings/credits`,
-          mode: "payment",
+          cancel_url:  `${window.location.origin}/app/settings/credits?canceled=1`,
+          mode:        "payment",
+          credits:     pack.amount + (pack.bonus ?? 0),
         },
       });
       if (error) throw error;

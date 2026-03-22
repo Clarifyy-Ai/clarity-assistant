@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/Button';
 import { Spinner } from '@/components/ui/Spinner';
-import { useNotifications } from '@/hooks/useNotifications';
+import { toast } from 'sonner';
 import { useAuth } from '@/hooks/useAuth';
 import { Github, Mail } from 'lucide-react';
 
@@ -20,7 +20,6 @@ interface OAuthButtonProps {
 
 export const OAuthButton = ({ provider, onSuccess }: OAuthButtonProps) => {
   const navigate = useNavigate();
-  const { toast } = useNotifications();
   const { signInWithOAuth } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -31,18 +30,9 @@ export const OAuthButton = ({ provider, onSuccess }: OAuthButtonProps) => {
       const { error } = await signInWithOAuth(provider.name);
 
       if (error) {
-        toast({
-          type: 'error',
-          title: 'OAuth Login Failed',
-          description:
-            error.message || `Failed to login with ${provider.label}`,
-        });
+        toast.error(error.message || `Failed to login with ${provider.label}`);
       } else {
-        toast({
-          type: 'success',
-          title: 'Login Successful',
-          description: `Successfully logged in with ${provider.label}`,
-        });
+        toast.success(`Successfully logged in with ${provider.label}`);
 
         if (onSuccess) {
           onSuccess();
@@ -56,11 +46,7 @@ export const OAuthButton = ({ provider, onSuccess }: OAuthButtonProps) => {
           ? error.message
           : `Failed to login with ${provider.label}`;
 
-      toast({
-        type: 'error',
-        title: 'Error',
-        description: errorMessage,
-      });
+      toast.error(errorMessage);
     } finally {
       setIsLoading(false);
     }

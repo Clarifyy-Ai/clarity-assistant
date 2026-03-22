@@ -239,7 +239,7 @@ export async function getUserSubscription(
   const [data, err] = await tryCatch(async () => {
     const { data, error } = await supabase
       .from("profiles")
-      .select("plan, stripe_subscription_id, stripe_customer_id, subscription_status, subscription_period_end")
+      .select("plan_id, subscription_id, stripe_customer_id, subscription_status")
       .eq("id", userId)
       .single();
 
@@ -251,28 +251,31 @@ export async function getUserSubscription(
   if (!data.subscription_status || data.subscription_status === "canceled") return null;
 
   let cancelAtPeriodEnd = false;
-  if (data.stripe_subscription_id) {
-    const subRow = await tryCatch(async () => {
+  let currentPeriodEnd = new Date();
+
+  if (data.subscription_id) {
+    const [subRow] = await tryCatch(async () => {
       const { data: sub } = await supabase
         .from("subscriptions")
-        .select("cancel_at_period_end")
-        .eq("stripe_subscription_id", data.stripe_subscription_id)
+        .select("cancel_at, current_period_end, stripe_subscription_id")
+        .eq("user_id", userId)
         .maybeSingle();
       return sub;
     });
-    if (subRow[0]?.cancel_at_period_end) cancelAtPeriodEnd = true;
+    if (subRow?.cancel_at) cancelAtPeriodEnd = true;
+    if (subRow?.current_period_end) currentPeriodEnd = new Date(subRow.current_period_end);
   }
 
   return {
-    id:                   data.stripe_subscription_id ?? userId,
+    id:                   data.subscription_id ?? userId,
     userId:               userId,
-    planId:               (data.plan as PlanId) ?? "free",
+    planId:               (data.plan_id as PlanId) ?? "free",
     interval:             "monthly" as BillingInterval,
     status:               (data.subscription_status ?? "active") as SubscriptionStatus,
     currentPeriodStart:   new Date(),
-    currentPeriodEnd:     data.subscription_period_end ? new Date(data.subscription_period_end) : new Date(),
+    currentPeriodEnd,
     cancelAtPeriodEnd,
-    stripeSubscriptionId: data.stripe_subscription_id ?? undefined,
+    stripeSubscriptionId: data.subscription_id ?? undefined,
     stripeCustomerId:     data.stripe_customer_id ?? undefined,
     trialEndsAt:          undefined,
     createdAt:            new Date(),

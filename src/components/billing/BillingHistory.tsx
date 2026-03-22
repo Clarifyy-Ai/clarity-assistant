@@ -5,6 +5,7 @@ import { Calendar, Download, CreditCard, ArrowDownLeft, Filter } from 'lucide-re
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { supabase } from '@/lib/supabase/client';
 
 /**
  * BillingHistory Component
@@ -54,7 +55,6 @@ export function BillingHistory({
   className,
 }: BillingHistoryProps) {
   const { profile } = useAuthStore();
-  const toast = useToast();
 
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,61 +62,65 @@ export function BillingHistory({
   const [filterType, setFilterType] = useState<'all' | 'purchase' | 'usage' | 'refund' | 'bonus'>('all');
   const [sortBy, setSortBy] = useState<'date-desc' | 'date-asc' | 'amount-desc'>('date-desc');
 
-  // Load transactions
   useEffect(() => {
     const loadTransactions = async () => {
+      if (!profile?.id) return;
       setLoading(true);
       try {
-        // TODO: Fetch from API
-        // const response = await fetch(`/api/billing/transactions?userId=${profile?.id}`);
-        // const data = await response.json();
-        // setTransactions(data);
+        const { data, error } = await supabase
+          .from('credit_transactions')
+          .select('id, amount, reason, created_at')
+          .eq('user_id', profile.id)
+          .order('created_at', { ascending: false })
+          .limit(100);
 
-        // Mock data for now
-        setTransactions([
-          {
-            id: '1',
-            date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-            type: 'purchase',
-            description: 'Pro Plan Subscription',
-            amount: 12,
-            credits: 30,
-            status: 'completed',
-          },
-          {
-            id: '2',
-            date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
-            type: 'usage',
-            description: '5 interviews completed',
-            amount: 0,
-            credits: -5,
-            status: 'completed',
-          },
-          {
-            id: '3',
-            date: new Date(Date.now() - 10 * 24 * 60 * 60 * 1000),
-            type: 'bonus',
-            description: 'Welcome bonus',
-            amount: 0,
-            credits: 10,
-            status: 'completed',
-          },
-        ]);
-      } catch (error) {
-        toast({
-          type: 'error',
-          title: 'Error',
-          description: 'Failed to load billing history',
+        if (error) throw error;
+
+        const mapped: Transaction[] = (data ?? []).map((row) => {
+          const credits = row.amount as number;
+          const reason: string = row.reason ?? '';
+
+          let type: Transaction['type'] = 'usage';
+          if (reason.startsWith('purchase:') || reason.startsWith('subscription_grant:')) {
+            type = credits > 0 ? 'purchase' : 'usage';
+          } else if (reason.startsWith('refund:')) {
+            type = 'refund';
+          } else if (reason.startsWith('bonus:') || reason.startsWith('welcome') || reason.startsWith('referral:')) {
+            type = 'bonus';
+          } else if (credits < 0) {
+            type = 'usage';
+          }
+
+          const description = reason
+            .replace('subscription_grant:', 'Subscription: ')
+            .replace('purchase:', 'Credit purchase: ')
+            .replace('refund:', 'Refund: ')
+            .replace('bonus:', 'Bonus: ')
+            .replace('usage:', 'Used: ')
+            .replace(/_/g, ' ')
+            .replace(/^./, (c) => c.toUpperCase());
+
+          return {
+            id:          row.id,
+            date:        new Date(row.created_at),
+            type,
+            description: description || (credits < 0 ? 'Credits used' : 'Credits added'),
+            amount:      0,
+            credits,
+            status:      'completed',
+          };
         });
+
+        setTransactions(mapped);
+      } catch {
+        toast.error('Failed to load billing history');
       } finally {
         setLoading(false);
       }
     };
 
-    if (profile?.id) {
-      loadTransactions();
-    }
-  }, [profile?.id, toast]);
+    loadTransactions();
+  }, [profile?.id]);
 
   // Filter and sort
   const filteredTransactions = transactions
@@ -164,32 +168,19 @@ export function BillingHistory({
     a.click();
     URL.revokeObjectURL(url);
 
-    toast({
-      type: 'success',
-      title: 'Exported',
-      description: 'Billing history exported to CSV',
-    });
+    toast.success('Billing history exported to CSV');
   };
 
-  // Download invoice
   const handleDownloadInvoice = async (transaction: Transaction) => {
     if (!transaction.invoice_url) {
-      toast({
-        type: 'error',
-        title: 'No invoice',
-        description: 'This transaction does not have an invoice',
-      });
+      toast.error('This transaction does not have an invoice');
       return;
     }
 
     try {
       window.open(transaction.invoice_url, '_blank');
-    } catch (error) {
-      toast({
-        type: 'error',
-        title: 'Error',
-        description: 'Failed to download invoice',
-      });
+    } catch {
+      toast.error('Failed to download invoice');
     }
   };
 

@@ -5,7 +5,7 @@ import { useAuthStore } from "@/store/userStore";
 
 // ─────────────────────────────────────────────────────────────────
 // useCalendarSync
-// Connects Google Calendar / Outlook and pulls interview events.
+// Connects Google Calendar and imports upcoming interview events.
 // ─────────────────────────────────────────────────────────────────
 
 export function useCalendarSync() {
@@ -18,8 +18,8 @@ export function useCalendarSync() {
     const { error } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
-        scopes:     "https://www.googleapis.com/auth/calendar.readonly",
-        redirectTo: `${window.location.origin}/settings/integrations`,
+        scopes:      "https://www.googleapis.com/auth/calendar.readonly",
+        redirectTo:  `${window.location.origin}/app/settings/integrations?calendar=connected`,
         queryParams: { access_type: "offline", prompt: "consent" },
       },
     });
@@ -27,27 +27,31 @@ export function useCalendarSync() {
   }, []);
 
   const syncNow = useCallback(async (): Promise<{
-    imported: number; error: string | null;
+    imported: number;
+    error: string | null;
   }> => {
     if (!user) return { imported: 0, error: "Not authenticated" };
     setIsSyncing(true);
     setError(null);
 
     try {
-      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-      const res = await fetch(`${EDGE_BASE}/sync-calendar`, {
-        method: "POST",
-        headers: {
-          "Content-Type":  "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ user_id: user.id }),
+      const { data: sessionData } = await supabase.auth.getSession();
+      const providerToken = sessionData?.session?.provider_token;
+
+      if (!providerToken) {
+        const msg = "Google Calendar not connected. Please connect it first.";
+        setError(msg);
+        return { imported: 0, error: msg };
+      }
+
+      const { data, error: fnError } = await supabase.functions.invoke("sync-calendar", {
+        body: { provider_token: providerToken },
       });
 
-      if (!res.ok) throw new Error(`Sync failed: ${res.status}`);
-      const data = await res.json();
+      if (fnError) throw fnError;
+
       setLastSynced(new Date());
-      return { imported: data.imported ?? 0, error: null };
+      return { imported: data?.imported ?? 0, error: null };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Sync failed";
       setError(msg);
@@ -59,10 +63,7 @@ export function useCalendarSync() {
 
   const disconnect = useCallback(async (): Promise<void> => {
     if (!user) return;
-    await supabase
-      .from("calendar_integrations")
-      .delete()
-      .eq("user_id", user.id);
+    await supabase.auth.signOut({ scope: "local" });
   }, [user]);
 
   return {

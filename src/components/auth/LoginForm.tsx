@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
-import { useNotifications } from '@/hooks/useNotifications';
+import { toast } from 'sonner';
 import { Mail, Lock, Eye, EyeOff } from 'lucide-react';
 
 interface LoginFormProps {
@@ -23,7 +23,6 @@ interface FormErrors {
 export const LoginForm = ({ onSuccess }: LoginFormProps) => {
   const navigate = useNavigate();
   const { login, isLoading } = useAuth();
-  const { toast } = useNotifications();
 
   const [formData, setFormData] = useState({
     email: '',
@@ -105,17 +104,9 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
           });
         }
 
-        toast({
-          type: 'error',
-          title: 'Login Failed',
-          description: error.message || 'Unable to login',
-        });
+        toast.error(error.message || 'Unable to login');
       } else {
-        toast({
-          type: 'success',
-          title: 'Welcome back!',
-          description: 'You have been successfully logged in.',
-        });
+        toast.success('Welcome back! You have been successfully logged in.');
 
         // Store remember me preference
         if (rememberMe) {
@@ -136,11 +127,7 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
         general: errorMessage,
       });
 
-      toast({
-        type: 'error',
-        title: 'Error',
-        description: errorMessage,
-      });
+      toast.error(errorMessage);
     }
   };
 

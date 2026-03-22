@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/Card';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
 import { Modal } from '@/components/ui/Modal';
-import { useNotifications } from '@/hooks/useNotifications';
+import { toast } from 'sonner';
 import { Mail, Check, X, Clock } from 'lucide-react';
 
 interface VerifyEmailModalProps {
@@ -25,7 +25,6 @@ export const VerifyEmailModal = ({
   const navigate = useNavigate();
   const location = useLocation();
   const { verifyEmail, resendVerificationEmail, isLoading } = useAuth();
-  const { toast } = useNotifications();
 
   // Get email from props or location state
   const email = initialEmail || (location.state?.email as string) || '';
@@ -72,18 +71,10 @@ export const VerifyEmailModal = ({
           setErrors({ general: error.message });
         }
 
-        toast({
-          type: 'error',
-          title: 'Verification Failed',
-          description: error.message || 'Invalid verification code',
-        });
+        toast.error(error.message || 'Invalid verification code');
       } else {
         setIsVerified(true);
-        toast({
-          type: 'success',
-          title: 'Email Verified!',
-          description: 'Your email has been verified successfully.',
-        });
+        toast.success('Your email has been verified successfully!');
 
         // Redirect to login after 2 seconds
         setTimeout(() => {
@@ -97,15 +88,10 @@ export const VerifyEmailModal = ({
           : 'An unexpected error occurred';
 
       setErrors({ general: errorMessage });
-      toast({
-        type: 'error',
-        title: 'Error',
-        description: errorMessage,
-      });
+      toast.error(errorMessage);
     }
   };
 
-  // Handle resend verification email
   const handleResendEmail = async () => {
     setErrors({});
 
@@ -118,17 +104,9 @@ export const VerifyEmailModal = ({
 
       if (error) {
         setErrors({ general: error.message });
-        toast({
-          type: 'error',
-          title: 'Resend Failed',
-          description: error.message || 'Failed to resend verification email',
-        });
+        toast.error(error.message || 'Failed to resend verification email');
       } else {
-        toast({
-          type: 'success',
-          title: 'Email Sent!',
-          description: `Verification email sent to ${email}`,
-        });
+        toast.success(`Verification email sent to ${email}`);
 
         setCanResend(false);
         setResendTimer(60); // 60 second cooldown

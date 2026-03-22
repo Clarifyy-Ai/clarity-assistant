@@ -7,7 +7,7 @@ import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { Alert } from '@/components/ui/Alert';
 import { Spinner } from '@/components/ui/Spinner';
-import { useNotifications } from '@/hooks/useNotifications';
+import { toast } from 'sonner';
 import { Mail, Lock, User, Eye, EyeOff, Check, X } from 'lucide-react';
 
 interface SignupFormProps {
@@ -31,7 +31,6 @@ interface PasswordStrength {
 export const SignupForm = ({ onSuccess }: SignupFormProps) => {
   const navigate = useNavigate();
   const { signup, isLoading } = useAuth();
-  const { toast } = useNotifications();
 
   const [formData, setFormData] = useState({
     fullName: '',
@@ -155,18 +154,9 @@ export const SignupForm = ({ onSuccess }: SignupFormProps) => {
           });
         }
 
-        toast({
-          type: 'error',
-          title: 'Signup Failed',
-          description: error.message || 'Unable to create account',
-        });
+        toast.error(error.message || 'Unable to create account');
       } else if (user) {
-        toast({
-          type: 'success',
-          title: 'Account Created!',
-          description:
-            'Please check your email to verify your account before logging in.',
-        });
+        toast.success('Account created! Check your email to verify before logging in.');
 
         // Redirect to verification screen
         navigate('/auth/verify-email', {
@@ -184,11 +174,7 @@ export const SignupForm = ({ onSuccess }: SignupFormProps) => {
         general: errorMessage,
       });
 
-      toast({
-        type: 'error',
-        title: 'Error',
-        description: errorMessage,
-      });
+      toast.error(errorMessage);
     }
   };
 

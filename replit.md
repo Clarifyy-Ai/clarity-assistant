@@ -89,6 +89,11 @@ supabase/
     send-email/               # Email notifications
     delete-account/           # GDPR delete
     export-user-data/         # GDPR export
+    create-checkout/          # Stripe Checkout session creator (plan_id + credits metadata)
+    stripe-webhook/           # Handles checkout.session.completed, subscription.updated/deleted, invoice.payment_failed
+    cancel-subscription/      # Cancel Stripe sub at period end
+    resume-subscription/      # Resume cancelled Stripe sub
+    sync-calendar/            # Import interview events from Google Calendar (requires provider_token)
 ```
 
 ## Environment Variables
@@ -103,23 +108,39 @@ VITE_SUPABASE_PROJECT_ID=...
 
 Optional (needed for full feature set):
 ```
-VITE_POSTHOG_KEY=phc_...               # Analytics (optional)
-VITE_STRIPE_PUBLISHABLE_KEY=pk_...     # Billing (optional)
-VITE_SENTRY_DSN=https://...            # Error tracking (optional)
-SENTRY_ORG=...                         # Sentry source maps — production only
+VITE_POSTHOG_KEY=phc_...                    # Analytics (optional)
+VITE_STRIPE_PUBLISHABLE_KEY=pk_...          # Billing (optional)
+VITE_STRIPE_PRICE_STARTER_MONTHLY=price_... # Stripe price IDs for plans
+VITE_STRIPE_PRICE_PRO_MONTHLY=price_...
+VITE_STRIPE_PRICE_ELITE_MONTHLY=price_...
+VITE_STRIPE_PRICE_CREDITS_50=price_...      # Credit pack Stripe price IDs
+VITE_STRIPE_PRICE_CREDITS_150=price_...
+VITE_STRIPE_PRICE_CREDITS_500=price_...
+VITE_SENTRY_DSN=https://...                 # Error tracking (optional)
+SENTRY_ORG=...                              # Sentry source maps — production only
 SENTRY_PROJECT=...
 SENTRY_AUTH_TOKEN=...
 ```
 
-Note: AI provider keys (`GEMINI_API_KEY`, `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`) are stored as Supabase Edge Function secrets — NOT in Replit env vars.
+Note: AI provider keys and Stripe secret keys are Supabase Edge Function secrets — NOT in Replit env vars.
 
 Edge Function secrets (set in Supabase Dashboard → Project Settings → Edge Functions):
 ```
-GEMINI_API_KEY=...        # Google Gemini (AI answers, question generation)
-OPENAI_API_KEY=...        # OpenAI GPT-4o (AI answers)
-ANTHROPIC_API_KEY=...     # Anthropic Claude (AI answers)
-DEEPGRAM_API_KEY=...      # Speech-to-text for live sessions
+GEMINI_API_KEY=...           # Google Gemini
+OPENAI_API_KEY=...           # OpenAI GPT-4o
+ANTHROPIC_API_KEY=...        # Anthropic Claude
+DEEPGRAM_API_KEY=...         # Speech-to-text for live sessions
+STRIPE_SECRET_KEY=sk_...     # Stripe secret key (live or test)
+STRIPE_WEBHOOK_SECRET=whsec_ # Stripe webhook signing secret (from Stripe Dashboard → Webhooks)
 ```
+
+### Stripe Webhook Registration
+
+Register the `stripe-webhook` edge function URL in Stripe Dashboard → Developers → Webhooks:
+```
+https://<project-ref>.functions.supabase.co/stripe-webhook
+```
+Events to enable: `checkout.session.completed`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.payment_failed`
 
 ## Auth Architecture
 

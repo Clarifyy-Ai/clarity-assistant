@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { useCredits } from "@/hooks/useCredits";
 import {
@@ -58,6 +59,7 @@ const PLAN_COLORS: Record<string, "violet" | "amber" | "emerald" | "blue"> = {
 export default function SettingsBilling() {
   const { user, profile, planId } = useAuthStore();
   const credits = useCredits();
+  const [searchParams, setSearchParams] = useSearchParams();
 
   const [subscription, setSubscription] = useState<Subscription | null>(null);
   const [loadingSub, setLoadingSub] = useState(true);
@@ -74,6 +76,21 @@ export default function SettingsBilling() {
       .finally(() => setLoadingSub(false));
   }, [user?.id]);
 
+  useEffect(() => {
+    const success = searchParams.get("success");
+    const canceled = searchParams.get("canceled");
+    if (success === "1") {
+      toast.success("Payment successful! Your plan has been activated.");
+      setSearchParams({}, { replace: true });
+      if (user?.id) {
+        getUserSubscription(user.id).then((sub) => setSubscription(sub));
+      }
+    } else if (canceled === "1") {
+      toast.info("Checkout was cancelled. No payment was taken.");
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams]); // eslint-disable-line react-hooks/exhaustive-deps
+
   async function handleUpgrade(targetPlanId: string) {
     if (!STRIPE_CONFIGURED) {
       toast.error("Stripe is not configured. Contact support to upgrade.");
@@ -88,10 +105,11 @@ export default function SettingsBilling() {
     try {
       const { data, error } = await supabase.functions.invoke("create-checkout", {
         body: {
-          price_id: plan.stripePriceIdMonthly,
+          price_id:    plan.stripePriceIdMonthly,
           success_url: `${window.location.origin}/app/settings/billing?success=1`,
-          cancel_url: `${window.location.origin}/app/settings/billing`,
-          mode: "subscription",
+          cancel_url:  `${window.location.origin}/app/settings/billing?canceled=1`,
+          mode:        "subscription",
+          plan_id:     targetPlanId,
         },
       });
       if (error) throw error;
@@ -138,7 +156,7 @@ export default function SettingsBilling() {
     }
   }
 
-  async function handleBuyCredits(packId: string, stripePriceId?: string) {
+  async function handleBuyCredits(packId: string, stripePriceId?: string, creditCount?: number) {
     if (!STRIPE_CONFIGURED && !stripePriceId) {
       toast.error("Stripe is not configured. Contact support to buy credits.");
       return;
@@ -147,10 +165,11 @@ export default function SettingsBilling() {
     try {
       const { data, error } = await supabase.functions.invoke("create-checkout", {
         body: {
-          price_id: stripePriceId,
+          price_id:    stripePriceId,
           success_url: `${window.location.origin}/app/settings/credits?success=1`,
-          cancel_url: `${window.location.origin}/app/settings/billing`,
-          mode: "payment",
+          cancel_url:  `${window.location.origin}/app/settings/billing?canceled=1`,
+          mode:        "payment",
+          credits:     creditCount,
         },
       });
       if (error) throw error;
@@ -396,7 +415,7 @@ export default function SettingsBilling() {
                 className="w-full mt-auto"
                 loading={actionLoading === pack.id}
                 disabled={!STRIPE_CONFIGURED || !pack.stripePriceId}
-                onClick={() => handleBuyCredits(pack.id, pack.stripePriceId)}
+                onClick={() => handleBuyCredits(pack.id, pack.stripePriceId, pack.credits)}
               >
                 <CreditCard className="w-3.5 h-3.5 mr-1" />
                 Buy
