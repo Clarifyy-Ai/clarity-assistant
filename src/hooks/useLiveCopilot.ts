@@ -49,7 +49,6 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
   const lastQuestionRef = useRef<string | null>(null);
   const dragCleanupRef  = useRef<(() => void) | null>(null);
   const sessionIdRef    = useRef<string>(generateId());
-  const isManualRef     = useRef(false);
 
   // ── Audio session ──────────────────────────────────────────────
   const audio = useAudioSession({
@@ -160,16 +159,8 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
       sessionId:      sessionIdRef.current,
       questionId:     requestId,
       onChunk:  (chunk) => useOverlayStore.getState().appendStreamChunk(chunk),
-      onDone:   async (fullText) => {
+      onDone:   async (_fullText) => {
         useOverlayStore.getState().commitStreamedHint();
-        if (fullText && isManualRef.current) {
-          useOverlayStore.getState().addChatMessage({
-            role: "assistant",
-            text: fullText,
-            timestamp: Date.now(),
-          });
-        }
-        isManualRef.current = false;
         const result = await deductCredits(selectedModel, sessionIdRef.current);
         if (result.success) {
           useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
@@ -180,18 +171,77 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     });
   }, [profile, coachStore]);
 
-  const submitManualQuestion = useCallback((question: string) => {
-    lastQuestionRef.current = question;
-    isManualRef.current = true;
+  const submitManualQuestion = useCallback(async (question: string) => {
+    if (!profile) return;
+
+    const context = coachStore.getContext();
+    if (!context) return;
+
     useOverlayStore.getState().addChatMessage({
       role: "user",
       text: question,
       timestamp: Date.now(),
     });
-    requestLiveHint(question);
-  }, [requestLiveHint]);
+
+    const selectedModel = useOverlayStore.getState().active_model;
+    const creditCheck = checkCredits(selectedModel);
+    if (!creditCheck.canProceed) {
+      const overlay = useOverlayStore.getState();
+      const tp = overlay.resume_talking_points;
+      useOverlayStore.getState().addChatMessage({
+        role: "assistant",
+        text: tp ? formatTalkingPointsAsHint(tp) : (creditCheck.reason ?? "Out of credits"),
+        timestamp: Date.now(),
+      });
+      return;
+    }
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    const requestId = generateId();
+    useOverlayStore.getState().setHintState("generating");
+
+    let chatBuffer = "";
+
+    await routeHint({
+      question,
+      context,
+      preferredModel: selectedModel,
+      interviewType: context.session_type,
+      isLive: true,
+      sessionId: sessionIdRef.current,
+      questionId: requestId,
+      onChunk: (chunk) => { chatBuffer += chunk; },
+      onDone: async () => {
+        useOverlayStore.getState().setHintState("ready");
+        if (chatBuffer) {
+          useOverlayStore.getState().addChatMessage({
+            role: "assistant",
+            text: chatBuffer,
+            timestamp: Date.now(),
+          });
+        }
+        const result = await deductCredits(selectedModel, sessionIdRef.current);
+        if (result.success) {
+          useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
+        }
+      },
+      onError: (error) => {
+        useOverlayStore.getState().setHintState("error");
+        useOverlayStore.getState().addChatMessage({
+          role: "assistant",
+          text: `Error: ${error.message}`,
+          timestamp: Date.now(),
+        });
+      },
+      signal: controller.signal,
+    });
+  }, [profile, coachStore]);
 
   const startLiveSession = useCallback(async () => {
+    sessionIdRef.current = generateId();
     initSessionFromConfig();
     useOverlayStore.getState().showOverlay();
 
