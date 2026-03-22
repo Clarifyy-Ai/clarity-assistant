@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState, useEffect } from "react";
+import { useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -82,13 +82,22 @@ const INTEGRATIONS = [
 
 export default function SettingsIntegrations() {
   const [searchParams, setSearchParams] = useSearchParams();
-  const { connectGoogle, syncNow, disconnect, isSyncing, lastSynced, error } = useCalendarSync();
-  const [calendarConnected, setCalendarConnected] = useState(false);
+  const {
+    connectGoogle,
+    syncNow,
+    disconnect,
+    isSyncing,
+    isDisconnecting,
+    isCheckingConnection,
+    isConnected,
+    lastSynced,
+    importedCount,
+    error,
+  } = useCalendarSync();
 
   useEffect(() => {
     const calendarParam = searchParams.get("calendar");
     if (calendarParam === "connected") {
-      setCalendarConnected(true);
       toast.success("Google Calendar connected!");
       setSearchParams({}, { replace: true });
     }
@@ -99,9 +108,12 @@ export default function SettingsIntegrations() {
   }
 
   async function handleCalendarDisconnect() {
-    await disconnect();
-    setCalendarConnected(false);
-    toast.info("Google Calendar disconnected.");
+    const result = await disconnect();
+    if (result.error) {
+      toast.error(result.error);
+    } else {
+      toast.info("Google Calendar disconnected.");
+    }
   }
 
   async function handleCalendarSync() {
@@ -135,22 +147,28 @@ export default function SettingsIntegrations() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
                       <p className="text-sm font-semibold text-foreground">{int.label}</p>
-                      {calendarConnected && (
+                      {isConnected && (
                         <Badge variant="emerald" size="sm" dot>Connected</Badge>
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-                      {int.desc}
+                      {isConnected
+                        ? "Your calendar is linked. Use Sync to import upcoming interview events."
+                        : int.desc}
                     </p>
                     {lastSynced && (
                       <p className="text-[10px] text-muted-foreground mt-0.5">
                         Last synced: {lastSynced.toLocaleTimeString()}
+                        {importedCount !== null && ` · ${importedCount} event${importedCount !== 1 ? "s" : ""} imported`}
                       </p>
+                    )}
+                    {error && !isSyncing && (
+                      <p className="text-[10px] text-red-400 mt-0.5">{error}</p>
                     )}
                   </div>
 
                   <div className="flex items-center gap-2 shrink-0">
-                    {calendarConnected && (
+                    {isConnected && (
                       <Button
                         variant="secondary"
                         size="sm"
@@ -158,25 +176,30 @@ export default function SettingsIntegrations() {
                         onClick={handleCalendarSync}
                         leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
                       >
-                        Sync
+                        Sync now
                       </Button>
                     )}
                     <Button
-                      variant={calendarConnected ? "danger" : "secondary"}
+                      variant={isConnected ? "danger" : "secondary"}
                       size="sm"
-                      onClick={calendarConnected ? handleCalendarDisconnect : handleCalendarConnect}
+                      loading={isDisconnecting || isCheckingConnection}
+                      onClick={isConnected ? handleCalendarDisconnect : handleCalendarConnect}
                       leftIcon={
-                        calendarConnected
+                        isConnected
                           ? undefined
                           : <ExternalLink className="w-3.5 h-3.5" />
                       }
                     >
-                      {calendarConnected ? "Disconnect" : "Connect"}
+                      {isCheckingConnection
+                        ? "…"
+                        : isConnected
+                        ? "Disconnect"
+                        : "Connect"}
                     </Button>
                   </div>
                 </div>
 
-                {calendarConnected && (
+                {isConnected && (
                   <div className="mt-3 pt-3 border-t border-white/8">
                     <p className="text-[10px] text-muted-foreground mb-1.5">
                       Permissions granted:
@@ -185,6 +208,14 @@ export default function SettingsIntegrations() {
                       <Badge variant="blue" size="sm">Read calendar events</Badge>
                       <Badge variant="blue" size="sm">Import interviews</Badge>
                     </div>
+                  </div>
+                )}
+
+                {!isConnected && (
+                  <div className="mt-3 pt-3 border-t border-white/8">
+                    <p className="text-[10px] text-muted-foreground leading-relaxed">
+                      Connects via Google OAuth. Only upcoming events with interview-related keywords are imported. Read-only access — Clarify AI never modifies your calendar.
+                    </p>
                   </div>
                 )}
               </Card>
