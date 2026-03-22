@@ -7,7 +7,7 @@ import type { HintStyle } from "@/types/user.types";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
-import { Loader2, Copy, Check, BookmarkPlus, ChevronLeft, ChevronRight } from "lucide-react";
+import { Loader2, Copy, Check, BookmarkPlus, ChevronLeft, ChevronRight, FileText } from "lucide-react";
 
 interface OverlayHintPanelProps {
   text: string;
@@ -138,7 +138,7 @@ export function OverlayHintPanel({
 
       {/* Idle state */}
       {isIdle && !errorMessage && !screenshotHint && (
-        <p className="text-xs italic text-muted-foreground/40">Listening for questions…</p>
+        <IdleStateContent />
       )}
 
       {/* Offline badge */}
@@ -294,4 +294,28 @@ export function OverlayHintPanel({
       )}
     </div>
   );
+}
+
+function IdleStateContent() {
+  const resumeCtx = useOverlayStore((s) => s.resume_context);
+
+  if (resumeCtx) {
+    return (
+      <div className="space-y-1.5">
+        <p className="text-xs italic text-muted-foreground/40">Listening for questions…</p>
+        <button
+          onClick={() => useOverlayStore.getState().setActiveTab("resume")}
+          className="flex items-center gap-1.5 rounded-lg bg-brand-500/10 px-2.5 py-1.5 text-[10px] text-brand-300/80 hover:bg-brand-500/15 transition-colors w-full text-left"
+        >
+          <FileText className="w-3 h-3 shrink-0" />
+          <span>
+            Resume loaded — {resumeCtx.skills_count} skills, {resumeCtx.experience_count} roles
+            {resumeCtx.total_years ? `, ${resumeCtx.total_years}+ yrs` : ""}
+          </span>
+        </button>
+      </div>
+    );
+  }
+
+  return <p className="text-xs italic text-muted-foreground/40">Listening for questions…</p>;
 }

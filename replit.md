@@ -42,6 +42,7 @@ src/
       localQuestionBank.ts    # 90+ fallback questions (7 interview types) — no API needed
       modelRouter.ts          # Routes to Gemini/OpenAI/Claude via Edge Functions
       offlineTemplates.ts     # Instant hint templates when offline
+      resumeFallback.ts       # Resume-based talking points generator for offline/credit-exhausted fallback
       geminiClient.ts         # Calls generate-hints Edge Function
       openaiClient.ts         # Calls ai-coach-chat Edge Function
       anthropicClient.ts      # Calls ai-coach-chat Edge Function

@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { persist, subscribeWithSelector } from "zustand/middleware";
 import type { HintStyle, PreferredAIModel } from "@/types/user.types";
+import type { ResumeTalkingPoints, ResumeContext } from "@/lib/ai/resumeFallback";
 
 // ─────────────────────────────────────────────────────────────────
 // Overlay Position
@@ -57,7 +58,7 @@ interface OverlayStore {
 
   // Session controls
   auto_generate: boolean;
-  active_tab: "answer" | "transcript" | "audit";
+  active_tab: "answer" | "transcript" | "audit" | "resume";
 
   // Network indicator shown in overlay
   network_color: "green" | "yellow" | "red";
@@ -92,6 +93,10 @@ interface OverlayStore {
   // Hotkey help overlay
   is_hotkey_help_visible: boolean;
 
+  // Resume context (not persisted)
+  resume_context: ResumeContext | null;
+  resume_talking_points: ResumeTalkingPoints | null;
+
   // Actions — visibility
   showOverlay: () => void;
   hideOverlay: () => void;
@@ -123,7 +128,11 @@ interface OverlayStore {
 
   // Actions — session controls
   setAutoGenerate: (enabled: boolean) => void;
-  setActiveTab: (tab: "answer" | "transcript" | "audit") => void;
+  setActiveTab: (tab: "answer" | "transcript" | "audit" | "resume") => void;
+
+  // Actions — resume context
+  setResumeContext: (ctx: ResumeContext | null) => void;
+  setResumeTalkingPoints: (points: ResumeTalkingPoints | null) => void;
 
   // Actions — network
   setNetworkColor: (color: "green" | "yellow" | "red") => void;
@@ -214,6 +223,9 @@ export const useOverlayStore = create<OverlayStore>()(
       is_peek_active: false,
       is_minimal_mode: false,
       is_hotkey_help_visible: false,
+
+      resume_context: null,
+      resume_talking_points: null,
 
       // ── Visibility ─────────────────────────────────────────
       showOverlay: () => set((s) => ({
@@ -341,6 +353,10 @@ export const useOverlayStore = create<OverlayStore>()(
       setAutoGenerate: (auto_generate) => set({ auto_generate }),
       setActiveTab: (active_tab) => set({ active_tab }),
 
+      // ── Resume Context ──────────────────────────────────────
+      setResumeContext: (resume_context) => set({ resume_context }),
+      setResumeTalkingPoints: (resume_talking_points) => set({ resume_talking_points }),
+
       // ── Network ────────────────────────────────────────────
       setNetworkColor: (network_color) => set({ network_color }),
 
@@ -370,6 +386,8 @@ export const useOverlayStore = create<OverlayStore>()(
         activity_log: [],
         is_peek_active: false,
         is_hotkey_help_visible: false,
+        resume_context: null,
+        resume_talking_points: null,
       }),
 
       // ── Coding ─────────────────────────────────────────────
@@ -397,7 +415,7 @@ export const useOverlayStore = create<OverlayStore>()(
       // ── Minimal Mode ────────────────────────────────────────
       setMinimalMode: (is_minimal_mode) => set((s) => ({
         is_minimal_mode,
-        active_tab: is_minimal_mode && s.active_tab !== "answer" ? "answer" as const : s.active_tab,
+        active_tab: is_minimal_mode && s.active_tab !== "answer" && s.active_tab !== "resume" ? "answer" as const : s.active_tab,
       })),
 
       // ── Hotkey Help ─────────────────────────────────────────

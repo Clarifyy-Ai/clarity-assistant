@@ -10,6 +10,7 @@ import { OverlayToolbar } from "./OverlayToolbar";
 import { OverlayTabBar } from "./OverlayTabBar";
 import { OverlayChatInput } from "./OverlayChatInput";
 import { OverlayAuditPanel } from "./OverlayAuditPanel";
+import { OverlayResumePanel } from "./OverlayResumePanel";
 import { OverlayResizeHandles } from "./OverlayResizeHandles";
 import { StealthMouseGuard } from "./StealthMouseGuard";
 import { OverlayPositionManager } from "./OverlayPositionManager";
@@ -217,6 +218,10 @@ export function OverlayWindow({
                   <div className="p-3">
                     <LiveTranscriptStream />
                   </div>
+                )}
+
+                {active_tab === "resume" && (
+                  <OverlayResumePanel />
                 )}
 
                 {active_tab === "audit" && (

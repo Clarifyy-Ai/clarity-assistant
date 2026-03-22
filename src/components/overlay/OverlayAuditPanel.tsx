@@ -2,7 +2,7 @@ import { useAudioStore } from "@/store/audioStore";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useNetworkMonitor } from "@/hooks/useNetworkMonitor";
-import { Wifi, WifiOff, Mic, Volume2, Zap, Clock, CreditCard, Brain, AlertTriangle } from "lucide-react";
+import { Wifi, WifiOff, Mic, Volume2, Zap, Clock, CreditCard, Brain, AlertTriangle, FileText } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -15,6 +15,7 @@ export function OverlayAuditPanel() {
   const elapsed          = useSessionStore((s) => s.elapsed_seconds);
   const credits          = useSessionStore((s) => s.credits_consumed);
   const activeModel      = useOverlayStore((s) => s.active_model);
+  const resumeCtx        = useOverlayStore((s) => s.resume_context);
   const network          = useNetworkMonitor();
 
   const minutes  = Math.floor(elapsed / 60);
@@ -93,6 +94,12 @@ export function OverlayAuditPanel() {
         label="Credits Used"
         value={String(credits)}
         valueClass="text-white"
+      />
+      <AuditRow
+        icon={FileText}
+        label="Resume"
+        value={resumeCtx ? `${resumeCtx.skills_count} skills · ${resumeCtx.experience_count} roles` : "Not loaded"}
+        valueClass={resumeCtx ? "text-green-400" : "text-gray-500"}
       />
     </div>
   );

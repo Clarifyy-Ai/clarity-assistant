@@ -10,6 +10,7 @@ import { useAudioStore } from "@/store/audioStore";
 import { buildCoachingContext } from "@/lib/ai/contextEnvelopeBuilder";
 import { routeHint } from "@/lib/ai/modelRouter";
 import { checkCredits, deductCredits } from "@/lib/billing/creditsManager";
+import { buildResumeContext, generateResumeTalkingPoints, formatTalkingPointsAsHint } from "@/lib/ai/resumeFallback";
 import { hotkeyManager } from "@/lib/overlay/hotkeys";
 import { createDragHandler } from "@/lib/overlay/stealthMouse";
 import { generateId } from "@/lib/utils";
@@ -73,6 +74,17 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     const context = buildCoachingContext(profile, cfg, active_context);
     coachStore.initContext(context);
 
+    const parsed = active_context.resume_version?.parsed_data ?? null;
+    const resumeCtx = buildResumeContext(parsed);
+    const talkingPoints = generateResumeTalkingPoints(parsed, {
+      company: cfg.company,
+      role: cfg.role,
+      interview_type: cfg.interview_type,
+    });
+    const overlay = useOverlayStore.getState();
+    overlay.setResumeContext(resumeCtx);
+    overlay.setResumeTalkingPoints(talkingPoints);
+
     const sessionStore = useSessionStore.getState();
     sessionStore.setSessionId(sessionIdRef.current);
     sessionStore.setMode("live");
@@ -119,7 +131,13 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     const selectedModel = useOverlayStore.getState().active_model;
     const creditCheck = checkCredits(selectedModel);
     if (!creditCheck.canProceed) {
-      useOverlayStore.getState().setError(creditCheck.reason ?? "Out of credits");
+      const overlay = useOverlayStore.getState();
+      const tp = overlay.resume_talking_points;
+      if (tp) {
+        overlay.setOfflineFallback(formatTalkingPointsAsHint(tp));
+      } else {
+        overlay.setError(creditCheck.reason ?? "Out of credits");
+      }
       return;
     }
 
