@@ -59,6 +59,7 @@ export function OverlayWindow({
   const is_peek_active        = useOverlayStore((s) => s.is_peek_active);
   const is_minimal_mode       = useOverlayStore((s) => s.is_minimal_mode);
   const deepgramStatus        = useAudioStore((s) => s.deepgram_status);
+  const stream_error          = useAudioStore((s) => s.stream_error);
   const isRecording           = deepgramStatus === "connected";
 
   const handlePositionChange = useCallback(
@@ -92,7 +93,7 @@ export function OverlayWindow({
         <div
           ref={resizeContainerRef}
           className={cn(
-            "overlay-panel no-select flex flex-col gap-0 transition-opacity duration-150 relative",
+            "overlay-panel no-select flex flex-col gap-0 transition-opacity duration-150 relative overflow-hidden",
           )}
           style={{
             width:  overlay_width,
@@ -176,6 +177,21 @@ export function OverlayWindow({
 
           {!is_panic_visible && (
             <>
+              {stream_error && !is_minimal_mode && (
+                <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 border-b border-red-500/20 shrink-0">
+                  <span className="text-[10px] text-red-400 truncate flex-1">
+                    {stream_error.message}
+                    {stream_error.suggestion && ` — ${stream_error.suggestion}`}
+                  </span>
+                  <button
+                    onClick={() => useAudioStore.getState().setStreamError(null)}
+                    className="text-red-400/60 hover:text-red-400 text-[10px] shrink-0"
+                  >
+                    dismiss
+                  </button>
+                </div>
+              )}
+
               {current_question && !is_minimal_mode && (
                 <OverlayQuestionBar question={current_question} />
               )}

@@ -99,7 +99,7 @@ function STARBuilder() {
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
-      if (!token) return;
+      if (!token) throw new Error("Not authenticated");
 
       const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
       const res = await fetch(`${EDGE_BASE}/polish-star-section`, {
@@ -123,8 +123,9 @@ function STARBuilder() {
         await refreshCredits();
       }
     } catch {
+    } finally {
+      setAiLoading(null);
     }
-    setAiLoading(null);
   }
 
   // ── Generate full answer ──────────────────────────────────────
@@ -136,7 +137,7 @@ function STARBuilder() {
     try {
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData.session?.access_token;
-      if (!token) return;
+      if (!token) throw new Error("Not authenticated");
 
       const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
       const res = await fetch(`${EDGE_BASE}/generate-star-answer`, {
@@ -159,8 +160,9 @@ function STARBuilder() {
         await refreshCredits();
       }
     } catch {
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   // ── Save to Answer Bank ───────────────────────────────────────
