@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Zap } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
@@ -118,6 +118,15 @@ export default function TestConfigure() {
   });
 
   const [loading, setLoading] = useState(false);
+  const autoLaunchedRef = useRef(false);
+
+  // Quick Drill fast-path: auto-launch without showing configurator UI
+  useEffect(() => {
+    if (!isQuick || !user?.id || autoLaunchedRef.current) return;
+    autoLaunchedRef.current = true;
+    void handleStart();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
 
   const subjects = EXAM_SUBJECTS[config.exam_type] ?? [];
   const availableTopics = EXAM_TOPICS[config.exam_type] ?? [];
@@ -212,6 +221,17 @@ export default function TestConfigure() {
   }
 
   const difficultyTotal = Object.values(config.difficulty_distribution).reduce((a, b) => a + b, 0);
+
+  // Quick Drill auto-launches — show loading screen instead of configurator UI
+  if (isQuick && loading) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[50vh] gap-4">
+        <div className="h-12 w-12 animate-spin rounded-full border-3 border-violet-500 border-t-transparent" />
+        <p className="text-lg font-semibold text-foreground">Selecting your 10 quick questions…</p>
+        <p className="text-sm text-muted-foreground">Choosing adaptive questions based on your performance.</p>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6 max-w-2xl">

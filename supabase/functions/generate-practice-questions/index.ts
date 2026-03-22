@@ -88,10 +88,20 @@ Return ONLY valid JSON with this exact shape:
   ]
 }`;
 
-    const raw = await geminiGenerate(prompt, SYSTEM_PROMPT, 0.7, 3000);
-    const data = parseJSON(raw, { questions: [] });
+    type GeneratedQuestion = {
+      question_text: string;
+      options: Array<{ label: string; text: string }>;
+      correct_answer: string;
+      explanation: string;
+      difficulty?: string;
+      marks_positive?: number;
+      marks_negative?: number;
+    };
 
-    const questions = (data.questions as any[]).map((q) => ({
+    const raw = await geminiGenerate(prompt, SYSTEM_PROMPT, 0.7, 3000);
+    const data = parseJSON(raw, { questions: [] }) as { questions: GeneratedQuestion[] };
+
+    const questions = data.questions.map((q) => ({
       question_text: q.question_text,
       question_type: "MCQ",
       options: q.options,

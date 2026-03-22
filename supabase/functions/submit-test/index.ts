@@ -294,30 +294,7 @@ Deno.serve(async (req) => {
       predictedPercentile >= 50 ? "Top 50%" :
       "Bottom 50%";
 
-    // ── Write analysis (before COMPLETED status update) ───────────
-    const { error: analysisErr } = await db.from("test_analyses").upsert({
-      test_id,
-      user_id: userId,
-      total_score: Math.max(0, totalScore),
-      max_score: maxScore,
-      accuracy,
-      attempt_percentage: attemptPct,
-      subject_breakdown: subjectBD,
-      topic_breakdown: topicBD,
-      weak_topics: weakTopics,
-      strong_topics: strongTopics,
-      time_analysis: { avg_seconds: avgTime, time_traps: timeTraps },
-      predicted_percentile: predictedPercentile,
-    }, { onConflict: "test_id" });
-
-    if (analysisErr) {
-      console.error("[submit-test] analysis upsert error:", analysisErr);
-      return new Response(JSON.stringify({ error: "Failed to save analysis" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    // ── Add wrong questions to revision list ──────────────────────
+    // ── Add wrong questions to revision list (best-effort, non-blocking) ──
     if (wrongQuestionIds.length > 0) {
       const tomorrow = new Date();
       tomorrow.setDate(tomorrow.getDate() + 1);
@@ -353,7 +330,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ── Call update_topic_performance RPC using user JWT ──────────
+    // ── Call update_topic_performance RPC using user JWT (best-effort) ───
     const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.45.4");
     const url = Deno.env.get("SUPABASE_URL") ?? "";
     const anonKey = Deno.env.get("SUPABASE_ANON_KEY") ?? "";
@@ -380,12 +357,38 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ── Mark test COMPLETED (last write — everything else succeeded) ──
-    await db
-      .from("mock_tests")
-      .update({ status: "COMPLETED", submitted_at: new Date().toISOString() })
-      .eq("id", test_id)
-      .eq("user_id", userId);
+    // ── ATOMIC: save analysis + mark COMPLETED in single transaction ──
+    // submit_test_atomic acquires a row lock on mock_tests, upserts test_analyses,
+    // then updates status = 'COMPLETED' — all within one DB transaction.
+    const { data: atomicResult, error: atomicErr } = await db.rpc("submit_test_atomic", {
+      p_test_id:              test_id,
+      p_user_id:              userId,
+      p_total_score:          Math.max(0, totalScore),
+      p_max_score:            maxScore,
+      p_accuracy:             accuracy,
+      p_attempt_percentage:   attemptPct,
+      p_subject_breakdown:    subjectBD,
+      p_topic_breakdown:      topicBD,
+      p_weak_topics:          weakTopics,
+      p_strong_topics:        strongTopics,
+      p_time_analysis:        { avg_seconds: avgTime, time_traps: timeTraps },
+      p_predicted_percentile: predictedPercentile,
+    });
+
+    if (atomicErr) {
+      console.error("[submit-test] atomic RPC error:", atomicErr);
+      return new Response(JSON.stringify({ error: "Failed to complete test submission", detail: atomicErr.message }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const atomicData = atomicResult as { error?: string; success?: boolean; already_completed?: boolean };
+    if (atomicData?.error) {
+      console.error("[submit-test] atomic RPC returned error:", atomicData.error);
+      return new Response(JSON.stringify({ error: atomicData.error }), {
+        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
 
     return new Response(
       JSON.stringify({

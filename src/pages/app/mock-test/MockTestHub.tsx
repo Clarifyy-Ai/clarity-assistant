@@ -146,41 +146,54 @@ export default function MockTestHub(): React.ReactElement {
   async function loadData() {
     setLoading(true);
     try {
-      const [testsRes, questionsRes, analysesRes, completedDatesRes] = await Promise.all([
+      const [recentRes, questionsRes, analysesRes, completedCountRes, streakRes] = await Promise.all([
+        // Recent tests for the list (last 5 any status)
         supabase
           .from("mock_tests")
           .select("id, test_name, status, created_at, config")
           .eq("user_id", user!.id)
           .order("created_at", { ascending: false })
           .limit(5),
+        // My questions count
         supabase
           .from("questions")
           .select("id", { count: "exact", head: true })
           .eq("uploaded_by", user!.id),
+        // All test analyses for avg accuracy
         supabase
           .from("test_analyses")
           .select("accuracy")
           .eq("user_id", user!.id),
-        // Fetch completed_at for all completed tests to compute streak
+        // Total completed test count (not limited to 5)
         supabase
           .from("mock_tests")
-          .select("created_at")
+          .select("id", { count: "exact", head: true })
+          .eq("user_id", user!.id)
+          .eq("status", "COMPLETED"),
+        // Submitted_at dates for streak calculation (last 90 days)
+        supabase
+          .from("mock_tests")
+          .select("submitted_at")
           .eq("user_id", user!.id)
           .eq("status", "COMPLETED")
-          .order("created_at", { ascending: false })
-          .limit(90), // last 90 days max
+          .not("submitted_at", "is", null)
+          .order("submitted_at", { ascending: false })
+          .limit(90),
       ]);
 
-      setRecentTests((testsRes.data ?? []) as RecentTest[]);
+      setRecentTests((recentRes.data ?? []) as RecentTest[]);
 
-      const totalTests = (testsRes.data ?? []).filter((t) => t.status === "COMPLETED").length;
+      const totalTests = completedCountRes.count ?? 0;
       const totalQuestions = questionsRes.count ?? 0;
       const analyses = analysesRes.data ?? [];
       const avgAccuracy = analyses.length > 0
         ? Math.round(analyses.reduce((s, a) => s + (a.accuracy ?? 0), 0) / analyses.length)
         : 0;
 
-      const completedDates = (completedDatesRes.data ?? []).map((r) => r.created_at as string);
+      // Use submitted_at for streak (actual completion date)
+      const completedDates = (streakRes.data ?? [])
+        .map((r) => (r as unknown as { submitted_at: string }).submitted_at)
+        .filter(Boolean);
       const streakDays = calcStreakDays(completedDates);
 
       setStats({ totalTests, totalQuestions, avgAccuracy, streakDays });
