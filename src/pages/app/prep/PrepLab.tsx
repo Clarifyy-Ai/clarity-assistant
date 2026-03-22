@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { useCredits } from "@/hooks/useCredits";
