@@ -10,9 +10,13 @@ const trim = (s: string) => s.length > TRUNCATE ? s.slice(0, TRUNCATE - 1) + "â€
 export function OverlayQuestionPreview() {
   const [open, setOpen] = useState(false);
 
-  const hintHistory          = useOverlayStore((s) => s.hint_history);
-  const questions            = useSessionStore((s) => s.questions);
-  const currentIndex         = useSessionStore((s) => s.current_question_index);
+  const hintHistory  = useOverlayStore((s) => s.hint_history);
+  const activeTab    = useOverlayStore((s) => s.active_tab);
+  const sessionMode  = useSessionStore((s) => s.mode);
+  const questions    = useSessionStore((s) => s.questions);
+  const currentIndex = useSessionStore((s) => s.current_question_index);
+
+  if (activeTab !== "answer" && activeTab !== "chat") return null;
 
   const recentQs = hintHistory
     .slice(-3)
@@ -20,10 +24,12 @@ export function OverlayQuestionPreview() {
     .map((h) => h.question)
     .filter(Boolean);
 
-  const upcomingQs = questions
-    .slice(currentIndex + 1, currentIndex + 3)
-    .map((q) => q.question_text ?? "")
-    .filter(Boolean);
+  const upcomingQs = sessionMode === "mock"
+    ? questions
+        .slice(currentIndex + 1, currentIndex + 3)
+        .map((q) => q.question_text ?? "")
+        .filter(Boolean)
+    : [];
 
   const hasContent = recentQs.length > 0 || upcomingQs.length > 0;
 

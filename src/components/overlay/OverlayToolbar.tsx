@@ -112,46 +112,48 @@ export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, o
       <div className="relative" ref={resumeQuickPeekRef}>
         <button
           onClick={() => setShowResumeQuickPeek((p) => !p)}
-          title="Resume quick-peek"
+          title={resumePoints ? "Resume quick-peek" : "No resume loaded for this session"}
           className={cn(
             "p-1.5 rounded-lg transition-all shrink-0",
             resumePoints
               ? "text-brand-300/60 hover:text-brand-300 hover:bg-white/5"
-              : "text-gray-600 cursor-default opacity-50",
+              : "text-gray-600 opacity-50 hover:opacity-70 hover:bg-white/5",
           )}
-          disabled={!resumePoints}
         >
           <FileText className="w-3.5 h-3.5" />
         </button>
-        {showResumeQuickPeek && resumePoints && (
+        {showResumeQuickPeek && (
           <div className="absolute top-full left-0 mt-1 w-60 bg-[#1a1a2e] border border-white/10 rounded-xl shadow-xl z-50 p-3 space-y-2">
             <p className="text-[10px] font-semibold text-brand-300/60 uppercase tracking-wider">Resume Snapshot</p>
-            <p className="text-[10px] text-overlay-text leading-snug line-clamp-3">
-              {resumePoints.intro}
-            </p>
-            {resumePoints.skills_summary && (
-              <div className="flex flex-wrap gap-1">
-                {resumePoints.skills_summary.split(", ").slice(0, 4).map((skill, i) => (
-                  <span
-                    key={i}
-                    className="rounded-md border border-brand-500/20 bg-brand-500/10 px-1.5 py-0.5 text-[9px] text-brand-300"
-                  >
-                    {skill}
-                  </span>
+            {!resumePoints ? (
+              <p className="text-[10px] text-muted-foreground/50 italic">No resume loaded for this session.</p>
+            ) : (
+              <>
+                <p className="text-[10px] text-overlay-text leading-snug">
+                  {resumePoints.intro.length > 120
+                    ? resumePoints.intro.slice(0, 119) + "…"
+                    : resumePoints.intro}
+                </p>
+                {resumePoints.skills_summary && (
+                  <div className="flex flex-wrap gap-1">
+                    {resumePoints.skills_summary.split(", ").slice(0, 3).map((skill, i) => (
+                      <span
+                        key={i}
+                        className="rounded-md border border-brand-500/20 bg-brand-500/10 px-1.5 py-0.5 text-[9px] text-brand-300"
+                      >
+                        {skill}
+                      </span>
+                    ))}
+                  </div>
+                )}
+                {resumePoints.experience_points.slice(0, 2).map((pt, i) => (
+                  <div key={i} className="flex gap-1.5 text-[10px] text-overlay-text/70">
+                    <span className="shrink-0 text-brand-400">•</span>
+                    <span>{pt}</span>
+                  </div>
                 ))}
-              </div>
+              </>
             )}
-            {resumePoints.experience_points.slice(0, 2).map((pt, i) => (
-              <div key={i} className="flex gap-1.5 text-[10px] text-overlay-text/70">
-                <span className="shrink-0 text-brand-400">•</span>
-                <span>{pt}</span>
-              </div>
-            ))}
-          </div>
-        )}
-        {showResumeQuickPeek && !resumePoints && (
-          <div className="absolute top-full left-0 mt-1 w-44 bg-[#1a1a2e] border border-white/10 rounded-xl shadow-xl z-50 p-3">
-            <p className="text-[10px] text-muted-foreground/50 italic">No resume loaded</p>
           </div>
         )}
       </div>
