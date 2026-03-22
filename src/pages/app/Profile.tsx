@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { Link } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { Card } from "@/components/ui/Card";

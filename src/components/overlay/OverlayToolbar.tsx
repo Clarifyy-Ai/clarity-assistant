@@ -33,6 +33,8 @@ const HOTKEY_REFERENCE = [
   { keys: ["ctrl", "shift", "c"], label: "Screenshot + analyse" },
   { keys: ["ctrl", "shift", "p"], label: "Panic button" },
   { keys: ["ctrl", "shift", "m"], label: "Mute / unmute" },
+  { keys: ["ctrl", "1-4"],       label: "Snap to corner" },
+  { keys: ["ctrl", "shift", "esc"], label: "Emergency exit" },
   { keys: ["escape"],             label: "Clear hint" },
 ];
 
@@ -166,6 +168,9 @@ export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, o
         small
       />
 
+      {/* Stealth Opacity Slider */}
+      <OpacitySlider />
+
       <ToolbarButton
         icon={AlertCircle}
         label="Panic"
@@ -256,5 +261,22 @@ function ToolbarButton({
     >
       <Icon className={cn(small ? "w-2.5 h-2.5" : "w-3.5 h-3.5")} />
     </button>
+  );
+}
+
+function OpacitySlider() {
+  const opacity = useOverlayStore((s) => s.stealth_opacity);
+  return (
+    <div className="flex items-center gap-1 px-1">
+      <input
+        type="range"
+        min={20}
+        max={100}
+        value={opacity}
+        onChange={(e) => useOverlayStore.getState().setStealthOpacity(Number(e.target.value))}
+        className="w-12 h-1 accent-brand-400 cursor-pointer opacity-60 hover:opacity-100 transition-opacity"
+        title={`Opacity: ${opacity}%`}
+      />
+    </div>
   );
 }

@@ -1,6 +1,7 @@
 import { createPortal } from "react-dom";
 import { useRef, useCallback } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
+import { useAudioStore } from "@/store/audioStore";
 import { useStealthMouse } from "@/hooks/useStealthMouse";
 import { OverlayHintPanel } from "./OverlayHintPanel";
 import { OverlayQuestionBar } from "./OverlayQuestionBar";
@@ -57,6 +58,8 @@ export function OverlayWindow({
   const stealth_opacity       = useOverlayStore((s) => s.stealth_opacity);
   const is_peek_active        = useOverlayStore((s) => s.is_peek_active);
   const is_minimal_mode       = useOverlayStore((s) => s.is_minimal_mode);
+  const deepgramStatus        = useAudioStore((s) => s.deepgram_status);
+  const isRecording           = deepgramStatus === "connected";
 
   const handlePositionChange = useCallback(
     (pos: import("@/store/overlayStore").OverlayPosition) => useOverlayStore.getState().setPosition(pos),
@@ -107,6 +110,12 @@ export function OverlayWindow({
                 Clarify AI
               </span>
               <OverlayNetworkBadge color={network_color} />
+              {isRecording && (
+                <span className="flex items-center gap-1 text-[9px] text-red-400/80">
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+                  REC
+                </span>
+              )}
               {is_peek_active && (
                 <span className="font-mono text-[9px] text-sky-400/70 bg-sky-500/10 px-1.5 py-0.5 rounded animate-pulse">PEEK</span>
               )}

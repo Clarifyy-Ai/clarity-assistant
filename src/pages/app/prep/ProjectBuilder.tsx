@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { useState } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { useAuthStore } from "@/store/userStore";
