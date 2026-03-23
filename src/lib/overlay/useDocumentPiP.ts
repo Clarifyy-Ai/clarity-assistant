@@ -1,135 +1,137 @@
-import { useEffect, useState } from "react";
+// src/lib/overlay/useDocumentPiP.ts
+import { useEffect, useRef, useState } from "react";
 
-// ─── DPiP Browser API type augmentation ───────────────────────────────────────
-// The Document Picture-in-Picture API is a Chrome-only experimental feature.
-// TypeScript doesn't include it in lib.dom.d.ts yet, so we declare it here.
+// Extend window type for DPiP API (Chrome 116+)
 declare global {
   interface Window {
     documentPictureInPicture?: {
-      requestWindow(options?: { width?: number; height?: number }): Promise<Window & typeof globalThis>;
-      readonly window: (Window & typeof globalThis) | null;
+      requestWindow(options?: {
+        width?: number;
+        height?: number;
+        disallowReturnToOpener?: boolean;
+      }): Promise<Window & { document: Document }>;
+      window: (Window & { document: Document }) | null;
     };
   }
 }
 
-function isDPiPSupported(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    "documentPictureInPicture" in window &&
-    typeof window.documentPictureInPicture?.requestWindow === "function"
-  );
-}
-
 /**
- * useDocumentPiP — Opens a Document Picture-in-Picture companion window when
- * `enabled` is true and the browser supports the API (Chrome 116+).
+ * Opens a Document Picture-in-Picture window when `enabled` is true.
+ * - Copies all stylesheets from the opener into the PiP document.
+ * - Creates <div id="overlay-root"> in the PiP body for React portal rendering.
+ * - Returns the PiP document (or null when PiP is unavailable/closed).
+ * - Cleans up automatically when the effect tears down or the PiP window closes.
  *
- * The PiP window floats above all other windows (always-on-top), even when
- * the main browser window is minimised. It is automatically closed when the
- * opener tab is closed — that is a hard platform constraint and is not worked
- * around here.
- *
- * Returns the PiP `Document` so that callers can use `createPortal` to render
- * React content inside it. Returns `null` when:
- *   - DPiP is not supported by the browser, OR
- *   - the window hasn't opened yet (async), OR
- *   - `enabled` is false.
- *
- * CSS stylesheets and the dark/light theme class are copied from the opener
- * document into the PiP document so that all design-system tokens and Tailwind
- * utilities are available inside the PiP window.
+ * NOTE: DPiP is tied to the opener tab by spec — closing the tab closes the
+ * PiP window. Do NOT attempt to outlive the opener tab.
  */
 export function useDocumentPiP(enabled: boolean): Document | null {
   const [pipDoc, setPipDoc] = useState<Document | null>(null);
+  const pipWinRef = useRef<(Window & { document: Document }) | null>(null);
 
   useEffect(() => {
-    if (!enabled || !isDPiPSupported()) {
+    // Guard: API must be available (Chrome 116+, HTTPS, no iframe)
+    if (!enabled || !window.documentPictureInPicture) {
+      setPipDoc(null);
       return;
     }
 
     let cancelled = false;
-    let pipWin: (Window & typeof globalThis) | null = null;
 
     async function openPiP() {
       try {
-        pipWin = await window.documentPictureInPicture!.requestWindow({
-          width: 460,
-          height: 580,
+        const pipWin = await window.documentPictureInPicture!.requestWindow({
+          width: 440,
+          height: 560,
+          disallowReturnToOpener: false,
         });
-      } catch (err) {
-        // Common reasons: user dismissed the prompt, browser policy denied it,
-        // or the API isn't available in this context.
-        console.warn("[useDocumentPiP] requestWindow failed:", err);
-        return;
-      }
 
-      if (cancelled) {
-        pipWin.close();
-        return;
-      }
-
-      const doc = pipWin.document;
-
-      // ── 1. Copy all stylesheets from the opener document ─────────────────────
-      // Clone every <link rel="stylesheet"> and <style> element so that
-      // Tailwind classes, CSS custom properties, and overlay-specific rules
-      // are available inside the PiP window.
-      document.querySelectorAll("link[rel='stylesheet'], style").forEach((el) => {
-        try {
-          doc.head.appendChild(el.cloneNode(true));
-        } catch {
-          // Ignore nodes that can't be cloned (e.g. CSSStyleSheet with CORS)
+        if (cancelled) {
+          pipWin.close();
+          return;
         }
-      });
 
-      // ── 2. Mirror theme class (dark / light) from the opener <html> ──────────
-      const openerHtml = document.documentElement;
-      const pipHtml = doc.documentElement;
-      if (openerHtml.classList.contains("dark")) {
-        pipHtml.classList.add("dark");
-      }
+        pipWinRef.current = pipWin;
 
-      // Also copy any inline CSS variables set on the opener <html> element
-      // (e.g. runtime-computed brand tokens).
-      const openerInlineStyle = openerHtml.getAttribute("style");
-      if (openerInlineStyle) {
-        pipHtml.setAttribute("style", openerInlineStyle);
-      }
+        // ── Copy all stylesheets from opener ──────────────────────────
+        const openerSheets = Array.from(document.styleSheets);
+        for (const sheet of openerSheets) {
+          try {
+            // Constructed / inline sheets
+            if (sheet.cssRules) {
+              const style = pipWin.document.createElement("style");
+              style.textContent = Array.from(sheet.cssRules)
+                .map((r) => r.cssText)
+                .join("\n");
+              pipWin.document.head.appendChild(style);
+            }
+          } catch {
+            // Cross-origin sheet — copy via <link> href instead
+            if (sheet.href) {
+              const link = pipWin.document.createElement("link");
+              link.rel = "stylesheet";
+              link.href = sheet.href;
+              pipWin.document.head.appendChild(link);
+            }
+          }
+        }
 
-      // ── 3. Reset PiP body so it's transparent and has no chrome ──────────────
-      const resetStyle = doc.createElement("style");
-      resetStyle.textContent =
-        "html,body{margin:0;padding:0;background:transparent;overflow:hidden;}";
-      doc.head.appendChild(resetStyle);
+        // Also copy any <style> tags injected by Vite HMR / Tailwind
+        document.querySelectorAll("style").forEach((s) => {
+          const clone = pipWin.document.createElement("style");
+          clone.textContent = s.textContent;
+          pipWin.document.head.appendChild(clone);
+        });
 
-      // ── 4. Create the portal root that OverlayWindow will render into ─────────
-      const overlayRoot = doc.createElement("div");
-      overlayRoot.id = "overlay-root";
-      doc.body.appendChild(overlayRoot);
+        // ── Inherit CSS custom properties from :root ──────────────────
+        const rootStyle = getComputedStyle(document.documentElement);
+        const vars = Array.from(rootStyle).filter((k) => k.startsWith("--"));
+        if (vars.length > 0) {
+          const varStyle = pipWin.document.createElement("style");
+          varStyle.textContent =
+            `:root { ${vars.map((v) => `${v}: ${rootStyle.getPropertyValue(v)};`).join(" ")} }`;
+          pipWin.document.head.appendChild(varStyle);
+        }
 
-      setPipDoc(doc);
+        // ── Dark background to match app theme ────────────────────────
+        const baseStyle = pipWin.document.createElement("style");
+        baseStyle.textContent = `
+          *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+          html, body { background: transparent; overflow: hidden; height: 100%; width: 100%; }
+          #overlay-root { width: 100%; height: 100%; }
+        `;
+        pipWin.document.head.appendChild(baseStyle);
 
-      // ── 5. Handle the PiP window being closed externally ─────────────────────
-      // `pagehide` fires both when the user manually closes the PiP window and
-      // when the opener tab closes (which also closes the PiP by spec).
-      pipWin.addEventListener("pagehide", () => {
-        if (!cancelled) {
+        // ── Create the portal root ────────────────────────────────────
+        const overlayRoot = pipWin.document.createElement("div");
+        overlayRoot.id = "overlay-root";
+        pipWin.document.body.appendChild(overlayRoot);
+
+        // ── Expose pipDoc to React ────────────────────────────────────
+        setPipDoc(pipWin.document);
+
+        // ── Cleanup when PiP window is closed by user ─────────────────
+        pipWin.addEventListener("pagehide", () => {
           setPipDoc(null);
-        }
-      });
+          pipWinRef.current = null;
+        });
+
+      } catch (err) {
+        // User dismissed the prompt or API threw — fail silently
+        console.warn("[useDocumentPiP] Could not open PiP window:", err);
+        setPipDoc(null);
+      }
     }
 
     openPiP();
 
     return () => {
       cancelled = true;
-      try {
-        if (pipWin && !pipWin.closed) {
-          pipWin.close();
-        }
-      } catch {
-        // Ignore — window may already be gone
+      // Close PiP window on effect teardown (overlay hidden / component unmount)
+      if (pipWinRef.current && !pipWinRef.current.closed) {
+        try { pipWinRef.current.close(); } catch { /* ignore */ }
       }
+      pipWinRef.current = null;
       setPipDoc(null);
     };
   }, [enabled]);
