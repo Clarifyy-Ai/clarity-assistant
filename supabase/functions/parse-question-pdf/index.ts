@@ -1,19 +1,8 @@
 import { corsHeaders } from "../_shared/cors.ts";
 import { requireAuth, getAdminClient, errorResponse, successResponse, deductCredits } from "../_shared/utils.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// parse-question-pdf — Extract questions from a PDF using Claude's native
-// PDF document support.
-//
-// Accepts either:
-//   a) multipart/form-data with a "pdf" file field  (primary)
-//   b) JSON body { pdf_base64: string }             (fallback / programmatic)
-//
-// Response: { questions: ParsedQuestion[], count: number, summary: string }
-// Credits: 5 per PDF import
-// ─────────────────────────────────────────────────────────────────────────────
-
 const CREDIT_COST = 5;
+const MAX_BASE64_CHARS = 15 * 1024 * 1024; // ~11 MB decoded
 
 interface ParsedQuestion {
   question_text: string;
@@ -69,7 +58,6 @@ Return ONLY a valid JSON array of question objects. No prose, no markdown code f
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-/** Convert ArrayBuffer to base64 string without exceeding call stack. */
 function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   const chunkSize = 8192;
@@ -80,11 +68,9 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
-/** Extract base64 PDF from either multipart form or JSON body. */
 async function extractPdfBase64(req: Request): Promise<string | null> {
   const contentType = req.headers.get("content-type") ?? "";
 
-  // ── Multipart form upload (primary) ──────────────────────────────────────
   if (contentType.includes("multipart/form-data")) {
     try {
       const form = await req.formData();
@@ -94,27 +80,37 @@ async function extractPdfBase64(req: Request): Promise<string | null> {
         return arrayBufferToBase64(buffer);
       }
       return null;
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   }
 
-  // ── JSON body { pdf_base64 } (fallback / programmatic) ──────────────────
   if (contentType.includes("application/json") || contentType === "") {
     try {
       const body = await req.json();
       if (typeof body?.pdf_base64 === "string") return body.pdf_base64;
       return null;
-    } catch {
-      return null;
-    }
+    } catch { return null; }
   }
 
   return null;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Handler
+// ★ FIX: standalone refund function — uses atomic RPC, no race condition
+async function refundCredits(userId: string, amount: number, reason: string): Promise<void> {
+  try {
+    const admin = getAdminClient();
+    // Use atomic RPC instead of read-modify-write
+    const { error } = await admin.rpc("increment_credits", {
+      user_id: userId,
+      amount,
+    });
+    if (error) {
+      console.error(`[parse-question-pdf] Credit refund RPC failed (${reason}):`, error.message);
+    }
+  } catch (err) {
+    console.error(`[parse-question-pdf] Credit refund threw (${reason}):`, err);
+  }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
@@ -140,7 +136,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Credit check and pre-deduction (deduct before AI call to prevent free usage on DB failure)
+    // ★ NEW: file size guard — before credit deduction
+    if (pdfBase64.length > MAX_BASE64_CHARS) {
+      return errorResponse("PDF too large. Maximum size is ~10 MB.", "FILE_TOO_LARGE", 413);
+    }
+
     if (credits < CREDIT_COST && credits !== -1) {
       return errorResponse(
         `Insufficient credits. PDF parsing costs ${CREDIT_COST} credits.`,
@@ -153,32 +153,17 @@ Deno.serve(async (req) => {
     if (credits !== -1) {
       const deduction = await deductCredits(userId, "resume_analysis", CREDIT_COST);
       if (!deduction.success) {
-        console.error("[parse-question-pdf] Pre-deduction failed:", deduction.error);
         return errorResponse("Failed to deduct credits. Please try again.", "CREDIT_ERROR", 500);
       }
       creditDeducted = true;
     }
 
-    const admin = getAdminClient();
+    // ★ FIX: initialize to null so TypeScript doesn't complain about uninitialized use
+    let anthropicRes: Response | null = null;
 
-    // Helper: refund credits if they were deducted
-    async function refundCredits(reason: string): Promise<void> {
-      try {
-        const { data: profile } = await admin.from("profiles").select("credits").eq("id", userId).single();
-        if (profile) {
-          await admin.from("profiles").update({ credits: (profile as Record<string, unknown>).credits as number + CREDIT_COST }).eq("id", userId);
-          const { error: txErr } = await admin.from("credit_transactions").insert({ user_id: userId, amount: CREDIT_COST, action: "pdf_import_refund" });
-          if (txErr) console.error("[parse-question-pdf] Credit refund tx insert failed:", txErr.message);
-        }
-      } catch (refundErr) {
-        console.error(`[parse-question-pdf] Credit refund failed (${reason}):`, refundErr);
-      }
-    }
-
-    // Call Claude with the PDF as a native document type
     const anthropicController = new AbortController();
     const anthropicTimeout = setTimeout(() => anthropicController.abort(), 50_000);
-    let anthropicRes: Response;
+
     try {
       anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
         method: "POST",
@@ -215,25 +200,23 @@ Deno.serve(async (req) => {
       });
     } catch (fetchErr) {
       clearTimeout(anthropicTimeout);
-      console.error("[parse-question-pdf] AI fetch threw (timeout or network):", fetchErr);
-      if (creditDeducted) await refundCredits("fetch_throw");
+      if (creditDeducted) await refundCredits(userId, CREDIT_COST, "fetch_throw");
       return errorResponse("AI request failed (network or timeout).", "AI_TIMEOUT", 504);
     } finally {
       clearTimeout(anthropicTimeout);
     }
 
-    if (!anthropicRes.ok) {
-      const errBody = await anthropicRes.json().catch(() => ({}));
-      const msg = (errBody as Record<string, unknown>)?.error?.["message"] ?? anthropicRes.statusText;
-      console.error("[parse-question-pdf] Anthropic error:", msg);
-      if (creditDeducted) await refundCredits("ai_error");
+    // ★ FIX: null check included
+    if (!anthropicRes || !anthropicRes.ok) {
+      const errBody = await anthropicRes?.json().catch(() => ({})) ?? {};
+      const msg = (errBody as Record<string, unknown>)?.error?.["message"] ?? "Unknown AI error";
+      if (creditDeducted) await refundCredits(userId, CREDIT_COST, "ai_error");
       return errorResponse(`AI parsing failed: ${msg}`, "AI_ERROR", 502);
     }
 
     const anthropicJson = await anthropicRes.json() as Record<string, unknown>;
     const rawText = ((anthropicJson.content as Record<string, unknown>[])?.[0]?.text as string) ?? "";
 
-    // Parse the JSON response — strip any accidental markdown fences
     let questions: ParsedQuestion[] = [];
     try {
       const cleaned = rawText
@@ -243,26 +226,28 @@ Deno.serve(async (req) => {
       const parsed = JSON.parse(cleaned);
       questions = Array.isArray(parsed) ? parsed : (parsed.questions ?? []);
     } catch (parseErr) {
-      console.error("[parse-question-pdf] JSON parse error:", parseErr, "Raw:", rawText.slice(0, 500));
-      if (creditDeducted) await refundCredits("parse_error");
+      if (creditDeducted) await refundCredits(userId, CREDIT_COST, "parse_error");
       return errorResponse("Failed to parse AI response as JSON.", "PARSE_ERROR", 502);
     }
 
-    // Validate and sanitize each question
+    // ★ FIX: check trimmed length, not just truthiness
     const sanitized = questions
-      .filter((q) => q.question_text && q.correct_answer && q.subject && q.topic)
+      .filter((q) =>
+        q.question_text?.trim().length > 0 &&
+        q.correct_answer?.trim().length > 0 &&
+        q.subject?.trim().length > 0 &&
+        q.topic?.trim().length > 0
+      )
       .map((q): ParsedQuestion => {
         const qType = ["MCQ","TRUE_FALSE","SHORT_ANSWER","NUMERICAL","CODING"].includes(q.question_type)
           ? q.question_type : "MCQ";
 
-        // Normalize MCQ options — must be exactly 4 entries with string label + text
         let options: ParsedQuestion["options"] = null;
         if (qType === "MCQ") {
           const rawOpts = Array.isArray(q.options) ? q.options : [];
           const normalized = rawOpts
             .filter((o) => o && typeof o.label === "string" && typeof o.text === "string")
             .map((o) => ({ label: String(o.label).trim(), text: String(o.text).trim() }));
-          // Fall back to A/B/C/D placeholders if shape is wrong
           options = normalized.length >= 2
             ? normalized.slice(0, 4)
             : [
@@ -290,7 +275,6 @@ Deno.serve(async (req) => {
         };
       });
 
-    // Build subject summary
     const subjectCounts: Record<string, number> = {};
     for (const q of sanitized) {
       subjectCounts[q.subject] = (subjectCounts[q.subject] ?? 0) + 1;
@@ -301,6 +285,7 @@ Deno.serve(async (req) => {
     const summary = `${sanitized.length} questions imported${summaryParts ? ` — ${summaryParts}` : ""}`;
 
     return successResponse({ questions: sanitized, count: sanitized.length, summary });
+
   } catch (err) {
     if (err instanceof Response) return err;
     const message = err instanceof Error ? err.message : "Unknown error";
