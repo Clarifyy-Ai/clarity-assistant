@@ -99,7 +99,7 @@ export function OverlayWindow({
   // ★ NEW: open DPiP window when overlay is visible
   const pipDoc = useDocumentPiP(is_visible);
   const targetDoc = pipDoc ?? (typeof document !== "undefined" ? document : null);
-  const overlayRoot = targetDoc?.getElementById("overlay-root");
+  const overlayRoot = targetDoc?.getElementById("overlay-root") ?? targetDoc?.body ?? null;
 
   // Inform store so other modules (e.g., WindowVisibilityManager) can adapt
   useEffect(() => {
