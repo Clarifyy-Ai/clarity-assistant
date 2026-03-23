@@ -72,7 +72,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const activeResumeId = useDocumentStore((s) => s.active_resume_id);
   const activeJdId     = useDocumentStore((s) => s.active_jd_id);
 
-  const typedProfile = profile as UserProfile | null;
+  const typedProfile = profile as unknown as UserProfile | null;
 
   const [step, setStep] = useState(1);
 
