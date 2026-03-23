@@ -423,7 +423,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 >
                   <option value="">None selected</option>
                   {resumes.map((r) => (
-                    <option key={r.id} value={r.id}>{r.title || r.file_name}</option>
+                    <option key={r.id} value={r.id}>{r.title || (r as any).file_name}</option>
                   ))}
                 </select>
               </div>
