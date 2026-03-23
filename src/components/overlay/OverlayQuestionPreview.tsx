@@ -64,7 +64,7 @@ export function OverlayQuestionPreview() {
               </div>
               <ul className="space-y-0.5">
                 {upcomingQs.map((q, i) => (
-                  <li key={i} className="flex items-start gap-1.5 text-[10px] text-overlay-text/70">
+                  <li key={i} className="flex items-start gap-1.5 text-[11px] text-overlay-text/70">
                     <span className="shrink-0 text-brand-400/50 font-mono mt-0.5">{i + 1}.</span>
                     <span>{trim(q)}</span>
                   </li>
@@ -84,7 +84,7 @@ export function OverlayQuestionPreview() {
               <ul className="space-y-0.5">
                 {recentQs.map((q, i) => (
                   <li key={i} className={cn(
-                    "text-[10px]",
+                    "text-[11px]",
                     i === 0 ? "text-overlay-text/60" : "text-muted-foreground/30"
                   )}>
                     {trim(q)}

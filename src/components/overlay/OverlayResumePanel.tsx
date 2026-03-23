@@ -28,7 +28,7 @@ export function OverlayResumePanel() {
       <div>
         <button
           onClick={() => setShowDocs((p) => !p)}
-          className="w-full flex items-center justify-between p-2.5 bg-white/5 hover:bg-white/8 border border-white/10 rounded-lg text-[10px] text-muted-foreground/60 transition-colors"
+          className="w-full flex items-center justify-between p-2.5 bg-white/5 hover:bg-white/8 border border-white/10 rounded-lg text-[11px] text-muted-foreground/60 transition-colors"
         >
           <span className="font-semibold uppercase tracking-wider">Context Documents</span>
           <ChevronDown className={cn("w-3 h-3 transition-transform", showDocs && "rotate-180")} />
@@ -44,7 +44,7 @@ export function OverlayResumePanel() {
               <select
                 value={activeResumeId ?? ""}
                 onChange={(e) => setActiveResumeId(e.target.value || null)}
-                className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-2 py-1.5 text-[10px] focus:outline-none focus:border-brand-400/30"
+                className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-2 py-1.5 text-[11px] focus:outline-none focus:border-brand-400/30"
               >
                 <option value="">None</option>
                 {resumes.map((r) => (
@@ -61,7 +61,7 @@ export function OverlayResumePanel() {
               <select
                 value={activeJdId ?? ""}
                 onChange={(e) => setActiveJDId(e.target.value || null)}
-                className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-2 py-1.5 text-[10px] focus:outline-none focus:border-brand-400/30"
+                className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-2 py-1.5 text-[11px] focus:outline-none focus:border-brand-400/30"
               >
                 <option value="">None</option>
                 {jds.map((j) => (
@@ -94,7 +94,7 @@ export function OverlayResumePanel() {
       {/* Simple Language toggle */}
       <div className="flex items-center justify-between px-2.5 py-2 bg-white/3 border border-white/5 rounded-lg">
         <div>
-          <p className="text-[10px] font-medium text-muted-foreground/70">Simple Language</p>
+          <p className="text-[11px] font-medium text-muted-foreground/70">Simple Language</p>
           <p className="text-[11px] text-muted-foreground/40 mt-0.5">Plain, jargon-free answers</p>
         </div>
         <button
@@ -116,7 +116,7 @@ export function OverlayResumePanel() {
           <p className="text-xs text-muted-foreground/40 italic">
             No context documents loaded.
           </p>
-          <p className="mt-1 text-[10px] text-muted-foreground/30">
+          <p className="mt-1 text-[11px] text-muted-foreground/30">
             Select a resume or job description above.
           </p>
         </div>
@@ -124,17 +124,17 @@ export function OverlayResumePanel() {
         <>
           {ctx && (
             <div className="flex items-center gap-3 rounded-lg bg-brand-500/10 px-3 py-2">
-              <span className="text-[10px] text-brand-300/80">
+              <span className="text-[11px] text-brand-300/80">
                 {ctx.skills_count} skills
               </span>
-              <span className="text-[10px] text-muted-foreground/30">·</span>
-              <span className="text-[10px] text-brand-300/80">
+              <span className="text-[11px] text-muted-foreground/30">·</span>
+              <span className="text-[11px] text-brand-300/80">
                 {ctx.experience_count} roles
               </span>
               {ctx.total_years && (
                 <>
-                  <span className="text-[10px] text-muted-foreground/30">·</span>
-                  <span className="text-[10px] text-brand-300/80">
+                  <span className="text-[11px] text-muted-foreground/30">·</span>
+                  <span className="text-[11px] text-brand-300/80">
                     {ctx.total_years}+ yrs
                   </span>
                 </>
@@ -154,7 +154,7 @@ export function OverlayResumePanel() {
                     {points.skills_summary.split(", ").map((skill, i) => (
                       <span
                         key={i}
-                        className="rounded-md border border-brand-500/20 bg-brand-500/10 px-1.5 py-0.5 text-[10px] text-brand-300"
+                        className="rounded-md border border-brand-500/20 bg-brand-500/10 px-1.5 py-0.5 text-[11px] text-brand-300"
                       >
                         {skill}
                       </span>
@@ -228,7 +228,7 @@ function Section({
     <div>
       <div className="mb-1 flex items-center gap-1.5">
         <Icon className="h-3 w-3 text-brand-400/70" />
-        <span className="text-[10px] font-semibold uppercase tracking-wider text-brand-300/70">
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-300/70">
           {title}
         </span>
       </div>

@@ -44,7 +44,7 @@ export function OverlayHotkeyHelp() {
   return (
     <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm rounded-2xl">
       <div className="bg-[#12121a] border border-white/10 rounded-xl shadow-2xl p-4 w-[280px] animate-fade-in">
-        <p className="text-[10px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-3">
+        <p className="text-[11px] font-semibold text-muted-foreground/60 uppercase tracking-wider mb-3">
           Keyboard Shortcuts
         </p>
         <div className="space-y-2">

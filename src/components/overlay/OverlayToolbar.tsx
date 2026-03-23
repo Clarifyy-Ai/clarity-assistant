@@ -198,14 +198,15 @@ export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, o
         )} />
       </button>
 
-      {/* Simple language indicator */}
+      {/* Simple language indicator — click to toggle off */}
       {simpleLanguage && (
-        <span
-          title="Simple language mode — plain, jargon-free answers"
-          className="flex items-center gap-0.5 px-1.5 py-0.5 h-8 rounded-lg text-[11px] font-semibold text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 shrink-0 cursor-default"
+        <button
+          onClick={() => useOverlayStore.getState().setSimpleLanguage(false)}
+          title="Simple language ON — click to disable"
+          className="flex items-center gap-1 px-1.5 py-0.5 h-8 rounded-lg text-[11px] font-semibold text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 hover:border-emerald-500/40 transition-all shrink-0"
         >
-          <span>Abc</span>
-        </span>
+          <span>Simple</span>
+        </button>
       )}
 
       <button
