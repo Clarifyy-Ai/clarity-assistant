@@ -1,6 +1,8 @@
 // @ts-nocheck
-import { useState, useRef } from "react";
+// src/pages/app/documents/Documents.tsx
+import { useState, useRef, useCallback } from "react";
 import { toast } from "sonner";
+import { supabase } from "@/lib/supabase/client";
 import { useDocumentStore } from "@/store/documentStore";
 import { useAuthStore } from "@/store/userStore";
 import { useDocumentManager } from "@/hooks/useDocumentManager";
@@ -11,16 +13,12 @@ import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
 import {
-  FileText, Upload, Trash2, CheckCircle,
-  Download, RefreshCw, Eye, AlertTriangle,
-  Plus, Zap, Star, ClipboardList,
+  FileText, Upload, Trash2, RefreshCw, Eye,
+  Plus, Star, ClipboardList,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-
-// ─────────────────────────────────────────────────────────────────
-// Documents — resume + JD management
-// ─────────────────────────────────────────────────────────────────
+import type { ResumeVersion } from "@/types/document.types";
 
 export default function Documents() {
   return (
@@ -34,12 +32,8 @@ export default function Documents() {
           <TabsTrigger value="resumes">📄 Resumes</TabsTrigger>
           <TabsTrigger value="jds">📋 Job Descriptions</TabsTrigger>
         </TabsList>
-        <TabsContent value="resumes">
-          <ResumeManager />
-        </TabsContent>
-        <TabsContent value="jds">
-          <JDManager />
-        </TabsContent>
+        <TabsContent value="resumes"><ResumeManager /></TabsContent>
+        <TabsContent value="jds"><JDManager /></TabsContent>
       </Tabs>
     </div>
   );
@@ -50,18 +44,20 @@ export default function Documents() {
 // ─────────────────────────────────────────────────────────────────
 
 function ResumeManager() {
-  const docStore  = useDocumentStore();
-  const docMgr    = useDocumentManager();
-  const { user }  = useAuthStore();
+  const docStore = useDocumentStore();
+  const docMgr   = useDocumentManager();
 
-  const [dragOver,    setDragOver]    = useState(false);
-  const [uploading,   setUploading]   = useState(false);
-  const [previewId,   setPreviewId]   = useState<string | null>(null);
-  const [deleteId,    setDeleteId]    = useState<string | null>(null);
+  const [dragOver,  setDragOver]  = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [deleteId,  setDeleteId]  = useState<string | null>(null);
+  const [retrying,  setRetrying]  = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const resumes      = docStore.resumes;
-  const activeResume = docStore.activeResume;
+  const resumes = docStore.resumes;
+
+  // ★ FIX: derive from active_resume_id, not docStore.activeResume
+  const activeResumeId = docStore.active_resume_id;
 
   async function handleFile(file: File) {
     if (file.size > 5 * 1024 * 1024) {
@@ -74,16 +70,50 @@ function ResumeManager() {
     }
     setUploading(true);
     try {
-      await docMgr.uploadResume(file);
+      const { resumeId, error } = await docMgr.uploadResume(file);
+      if (error) toast.error(error);
+      else toast.success("Resume uploaded and parsing started.");
     } catch (err) {
-      console.error("handleFile failed:", err);
       toast.error("Failed to upload document. Please try again.");
     } finally {
       setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
     }
   }
 
-  const preview = resumes.find((r) => r.id === previewId);
+  // ★ FIX: retryParse — re-invoke the edge function for the active version
+  async function handleRetryParse(resumeId: string) {
+    const resume = resumes.find((r) => r.id === resumeId);
+    if (!resume) return;
+    const versions: ResumeVersion[] = (resume as any).resume_versions ?? [];
+    const ver = versions.find((v) => v.id === resume.active_version_id) ?? versions[0];
+    if (!ver) return;
+
+    setRetrying(resumeId);
+    try {
+      await supabase.functions.invoke("parse-resume", {
+        body: {
+          resume_id:  resumeId,
+          version_id: ver.id,
+          file_url:   ver.file_url,
+          mime_type:  "application/pdf",
+        },
+      });
+      await docMgr.reload();
+      toast.success("Re-parsing started.");
+    } catch {
+      toast.error("Retry failed. Please try again.");
+    } finally {
+      setRetrying(null);
+    }
+  }
+
+  const previewResume = resumes.find((r) => r.id === previewId);
+  const previewVer: ResumeVersion | undefined = previewResume
+    ? ((previewResume as any).resume_versions ?? []).find(
+        (v: ResumeVersion) => v.id === previewResume.active_version_id
+      ) ?? (previewResume as any).resume_versions?.[0]
+    : undefined;
 
   return (
     <div className="space-y-4">
@@ -109,12 +139,21 @@ function ResumeManager() {
           <div className="flex flex-col items-center gap-2">
             <RefreshCw className="w-8 h-8 text-violet-400 animate-spin" />
             <p className="text-sm text-muted-foreground">Uploading and parsing…</p>
+            {docStore.upload_progress > 0 && (
+              <div className="w-40 h-1.5 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-violet-500 transition-all"
+                  style={{ width: `${docStore.upload_progress}%` }}
+                />
+              </div>
+            )}
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2">
             <Upload className="w-8 h-8 text-muted-foreground" />
             <p className="text-sm font-medium text-foreground">
-              Drop resume here or <span className="text-violet-400 underline">browse</span>
+              Drop resume here or{" "}
+              <span className="text-violet-400 underline">browse</span>
             </p>
             <p className="text-xs text-muted-foreground">PDF or DOCX · Max 5 MB</p>
           </div>
@@ -136,90 +175,145 @@ function ResumeManager() {
         </Card>
       ) : (
         <div className="space-y-2">
-          {resumes.map((r) => (
-            <Card key={r.id} padding="sm">
-              <div className="flex items-center gap-3 sm:gap-4">
-                {/* Icon */}
-                <div className="w-9 h-9 bg-blue-500/10 rounded-xl flex items-center justify-center shrink-0 hidden sm:flex">
-                  <FileText className="w-4 h-4 text-blue-400" />
-                </div>
+          {resumes.map((r) => {
+            // ★ FIX: all display fields come from the active ResumeVersion
+            const versions: ResumeVersion[] = (r as any).resume_versions ?? [];
+            const activeVer: ResumeVersion | undefined =
+              versions.find((v) => v.id === r.active_version_id) ?? versions[0];
+            const isActive    = r.id === activeResumeId;
+            // ★ FIX: correct parse_status values — "parsing"|"processing"|"ready"|"error"
+            const isParsing   = activeVer?.parse_status === "parsing"
+                             || activeVer?.parse_status === "processing";
+            const isError     = activeVer?.parse_status === "error";
+            const isReady     = activeVer?.parse_status === "ready";
 
-                {/* Info */}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <p className="text-xs sm:text-sm font-medium text-foreground truncate">
-                      {r.file_name}
-                    </p>
-                    {r.is_active && (
-                      <Badge variant="emerald" size="sm" dot>Active</Badge>
-                    )}
-                    {r.parse_status === "pending" && (
-                      <Badge variant="amber" size="sm">Parsing…</Badge>
-                    )}
-                    {r.parse_status === "failed" && (
-                      <Badge variant="red" size="sm">Parse failed</Badge>
-                    )}
+            return (
+              <Card key={r.id} padding="sm">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="w-9 h-9 bg-blue-500/10 rounded-xl items-center justify-center shrink-0 hidden sm:flex">
+                    <FileText className="w-4 h-4 text-blue-400" />
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {format(new Date(r.created_at), "MMM d, yyyy")} ·{" "}
-                    {(r.file_size / 1024).toFixed(0)} KB
-                  </p>
-                </div>
 
-                {/* Actions */}
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {!r.is_active && (
-                    <Button
-                      variant="secondary"
-                      size="xs"
-                      onClick={() => docMgr.setActiveResume(r.id)}
-                      leftIcon={<Star className="w-3 h-3" />}
-                    >
-                      Set active
-                    </Button>
-                  )}
-                  <button
-                    onClick={() => setPreviewId(r.id)}
-                    className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/5 transition-all"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                  </button>
-                  {r.parse_status === "failed" && (
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      {/* ★ FIX: use r.title (ResumeDocument) or activeVer.file_name */}
+                      <p className="text-xs sm:text-sm font-medium text-foreground truncate">
+                        {r.title || activeVer?.file_name || "Untitled"}
+                      </p>
+                      {isActive && (
+                        <Badge variant="emerald" size="sm" dot>Active</Badge>
+                      )}
+                      {isParsing && (
+                        <Badge variant="amber" size="sm">Parsing…</Badge>
+                      )}
+                      {isError && (
+                        <Badge variant="red" size="sm">Parse failed</Badge>
+                      )}
+                      {isReady && (
+                        <Badge variant="blue" size="sm">Ready</Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {format(new Date(r.created_at), "MMM d, yyyy")}
+                      {/* ★ FIX: file_size_bytes not file_size */}
+                      {activeVer?.file_size_bytes
+                        ? ` · ${(activeVer.file_size_bytes / 1024).toFixed(0)} KB`
+                        : ""}
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {!isActive && (
+                      <Button
+                        variant="secondary"
+                        size="xs"
+                        onClick={() => docMgr.setActiveResume(r.id)}
+                        leftIcon={<Star className="w-3 h-3" />}
+                      >
+                        Set active
+                      </Button>
+                    )}
+                    {isReady && (
+                      <button
+                        onClick={() => setPreviewId(r.id)}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/5 transition-all"
+                        title="Preview parsed data"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    {/* ★ FIX: retry uses "error" not "failed" */}
+                    {isError && (
+                      <button
+                        onClick={() => handleRetryParse(r.id)}
+                        disabled={retrying === r.id}
+                        className="p-1.5 rounded-lg text-amber-600 hover:text-amber-400 hover:bg-accent/5 transition-all disabled:opacity-40"
+                        title="Retry parsing"
+                      >
+                        <RefreshCw className={cn("w-3.5 h-3.5", retrying === r.id && "animate-spin")} />
+                      </button>
+                    )}
                     <button
-                      onClick={() => docMgr.retryParse(r.id)}
-                      className="p-1.5 rounded-lg text-amber-600 hover:text-amber-400 hover:bg-accent/5 transition-all"
+                      onClick={() => setDeleteId(r.id)}
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-accent/5 transition-all"
                     >
-                      <RefreshCw className="w-3.5 h-3.5" />
+                      <Trash2 className="w-3.5 h-3.5" />
                     </button>
-                  )}
-                  <button
-                    onClick={() => setDeleteId(r.id)}
-                    className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-accent/5 transition-all"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                  </div>
                 </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
 
-      {/* Preview modal */}
+      {/* Preview modal — ★ FIX: read parsed_data not parsed_text */}
       <Modal
         open={!!previewId}
         onClose={() => setPreviewId(null)}
-        title={preview?.file_name ?? "Preview"}
+        title={previewVer?.file_name ?? "Preview"}
         size="xl"
       >
-        {preview?.parsed_text ? (
-          <div className="max-h-96 overflow-y-auto bg-secondary rounded-xl p-4">
-            <pre className="text-xs text-foreground whitespace-pre-wrap leading-relaxed font-mono">
-              {preview.parsed_text}
-            </pre>
+        {previewVer?.parsed_data ? (
+          <div className="max-h-96 overflow-y-auto bg-secondary rounded-xl p-4 space-y-3">
+            {previewVer.parsed_data.name && (
+              <p className="text-sm font-semibold text-foreground">
+                {previewVer.parsed_data.name}
+              </p>
+            )}
+            {previewVer.parsed_data.summary && (
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {previewVer.parsed_data.summary}
+              </p>
+            )}
+            {previewVer.parsed_data.skills?.length > 0 && (
+              <div className="flex flex-wrap gap-1.5">
+                {previewVer.parsed_data.skills.slice(0, 12).map((s: string) => (
+                  <span key={s} className="px-2 py-0.5 bg-violet-500/10 text-violet-300 text-[11px] rounded-md border border-violet-500/20">
+                    {s}
+                  </span>
+                ))}
+              </div>
+            )}
+            {previewVer.parsed_data.experience?.length > 0 && (
+              <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Experience</p>
+                {previewVer.parsed_data.experience.slice(0, 3).map((exp: any, i: number) => (
+                  <p key={i} className="text-xs text-foreground">
+                    <span className="font-medium">{exp.title}</span>
+                    {exp.company && <span className="text-muted-foreground"> @ {exp.company}</span>}
+                    {exp.duration && <span className="text-muted-foreground"> · {exp.duration}</span>}
+                  </p>
+                ))}
+              </div>
+            )}
           </div>
         ) : (
-          <p className="text-muted-foreground text-sm">No parsed text available.</p>
+          <p className="text-muted-foreground text-sm">
+            {previewVer?.parse_status === "parsing" || previewVer?.parse_status === "processing"
+              ? "Still parsing… check back in a moment."
+              : "No parsed data available."}
+          </p>
         )}
       </Modal>
 
@@ -231,7 +325,7 @@ function ResumeManager() {
         size="sm"
       >
         <p className="text-sm text-muted-foreground mb-5">
-          This will permanently delete the resume. This action cannot be undone.
+          This will permanently delete the resume and all versions. This cannot be undone.
         </p>
         <div className="flex gap-3">
           <Button variant="secondary" size="sm" fullWidth onClick={() => setDeleteId(null)}>
@@ -244,6 +338,7 @@ function ResumeManager() {
             onClick={async () => {
               await docMgr.deleteResume(deleteId!);
               setDeleteId(null);
+              toast.success("Resume deleted.");
             }}
           >
             Delete
@@ -261,7 +356,6 @@ function ResumeManager() {
 function JDManager() {
   const docStore = useDocumentStore();
   const docMgr   = useDocumentManager();
-  const { user } = useAuthStore();
 
   const [addOpen,  setAddOpen]  = useState(false);
   const [title,    setTitle]    = useState("");
@@ -270,26 +364,42 @@ function JDManager() {
   const [saving,   setSaving]   = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
 
-  const jds = docStore.jds ?? [];
+  const jds          = docStore.jds ?? [];
+  const activeJdId   = docStore.active_jd_id;
 
   async function handleAdd() {
     if (!title.trim() || !text.trim()) return;
     setSaving(true);
     try {
-      await docMgr.addJobDescription({ title, company, text });
-      setAddOpen(false);
-      setTitle(""); setCompany(""); setText("");
+      // ★ FIX: correct shape — rawText/method/roleTitle, not title/company/text
+      const { jdId, error } = await docMgr.addJobDescription({
+        rawText:   text,
+        method:    "paste",
+        roleTitle: title,
+        company,
+      });
+      if (error) toast.error(error);
+      else {
+        toast.success("Job description saved.");
+        setAddOpen(false);
+        setTitle(""); setCompany(""); setText("");
+      }
     } catch (err) {
-      console.error("handleAdd failed:", err);
       toast.error("Failed to save job description. Please try again.");
     } finally {
       setSaving(false);
     }
   }
 
+  // ★ FIX: deleteJD wasn't in hook — call supabase + store directly
+  const handleDeleteJD = useCallback(async (jdId: string) => {
+    await supabase.from("job_descriptions").delete().eq("id", jdId);
+    docStore.removeJD(jdId);
+    toast.success("Job description deleted.");
+  }, []);
+
   return (
     <div className="space-y-4">
-      {/* Add JD button */}
       <div className="flex justify-end">
         <Button
           variant="primary"
@@ -301,7 +411,6 @@ function JDManager() {
         </Button>
       </div>
 
-      {/* JD list */}
       {jds.length === 0 ? (
         <Card className="text-center py-10">
           <ClipboardList className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
@@ -312,45 +421,53 @@ function JDManager() {
         </Card>
       ) : (
         <div className="space-y-2">
-          {jds.map((jd) => (
-            <Card key={jd.id} padding="sm">
-              <div className="flex items-center gap-3 sm:gap-4">
-                <div className="w-9 h-9 bg-violet-500/10 rounded-xl flex items-center justify-center shrink-0 hidden sm:flex">
-                  <ClipboardList className="w-4 h-4 text-violet-400" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-xs sm:text-sm font-medium text-foreground truncate">{jd.title}</p>
-                    {jd.is_active && (
-                      <Badge variant="emerald" size="sm" dot>Active</Badge>
-                    )}
+          {jds.map((jd) => {
+            const isActive = jd.id === activeJdId;
+            return (
+              <Card key={jd.id} padding="sm">
+                <div className="flex items-center gap-3 sm:gap-4">
+                  <div className="w-9 h-9 bg-violet-500/10 rounded-xl items-center justify-center shrink-0 hidden sm:flex">
+                    <ClipboardList className="w-4 h-4 text-violet-400" />
                   </div>
-                  <p className="text-xs text-muted-foreground mt-0.5">
-                    {jd.company && `${jd.company} · `}
-                    {format(new Date(jd.created_at), "MMM d, yyyy")}
-                  </p>
-                </div>
-                <div className="flex items-center gap-1.5 shrink-0">
-                  {!jd.is_active && (
-                    <Button
-                      variant="secondary"
-                      size="xs"
-                      onClick={() => docMgr.setActiveJD(jd.id)}
-                      leftIcon={<Star className="w-3 h-3" />}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      {/* ★ FIX: role_title not title */}
+                      <p className="text-xs sm:text-sm font-medium text-foreground truncate">
+                        {jd.role_title}
+                      </p>
+                      {isActive && <Badge variant="emerald" size="sm" dot>Active</Badge>}
+                      {jd.parse_status === "parsing" && (
+                        <Badge variant="amber" size="sm">Parsing…</Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {/* ★ FIX: company_name not company */}
+                      {jd.company_name && `${jd.company_name} · `}
+                      {format(new Date(jd.created_at), "MMM d, yyyy")}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    {!isActive && (
+                      <Button
+                        variant="secondary"
+                        size="xs"
+                        onClick={() => docMgr.setActiveJD(jd.id)}
+                        leftIcon={<Star className="w-3 h-3" />}
+                      >
+                        Set active
+                      </Button>
+                    )}
+                    <button
+                      onClick={() => setDeleteId(jd.id)}
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-accent/5 transition-all"
                     >
-                      Set active
-                    </Button>
-                  )}
-                  <button
-                    onClick={() => setDeleteId(jd.id)}
-                    className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-accent/5 transition-all"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
                 </div>
-              </div>
-            </Card>
-          ))}
+              </Card>
+            );
+          })}
         </div>
       )}
 
@@ -359,7 +476,7 @@ function JDManager() {
         <div className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <p className="text-xs text-muted-foreground mb-1.5">Job title</p>
+              <p className="text-xs text-muted-foreground mb-1.5">Job title *</p>
               <input
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
@@ -378,7 +495,7 @@ function JDManager() {
             </div>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Job description text</p>
+            <p className="text-xs text-muted-foreground mb-1.5">Job description text *</p>
             <textarea
               value={text}
               onChange={(e) => setText(e.target.value)}
@@ -419,7 +536,7 @@ function JDManager() {
             size="sm"
             fullWidth
             onClick={async () => {
-              await docMgr.deleteJD(deleteId!);
+              await handleDeleteJD(deleteId!);
               setDeleteId(null);
             }}
           >
