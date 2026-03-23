@@ -1,3 +1,4 @@
+// src/components/overlay/OverlayWindow.tsx
 import { createPortal } from "react-dom";
 import { useRef, useCallback, useState, useEffect } from "react";
 import { Link } from "react-router-dom";
@@ -29,15 +30,18 @@ import { Loader2, SlidersHorizontal, Maximize2 } from "lucide-react";
 import type { LiveSessionConfig } from "@/types/session.types";
 import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 
+// ★ NEW: import DPiP helper
+import { useDocumentPiP } from "@/lib/overlay/useDocumentPiP";
+
 interface OverlayWindowProps {
-  onToggleMic?:        () => void;
+  onToggleMic?: () => void;
   onToggleSystemAudio?: () => void;
-  onGenerate?:         () => void;
-  onEndSession?:       () => void;
-  onManualQuestion?:   (question: string) => void;
-  onStartSession?:     (config: LiveSessionConfig) => void;
-  onSetupNewSession?:  () => void;
-  lastSessionId?:      string | null;
+  onGenerate?: () => void;
+  onEndSession?: () => void;
+  onManualQuestion?: (question: string) => void;
+  onStartSession?: (config: LiveSessionConfig) => void;
+  onSetupNewSession?: () => void;
+  lastSessionId?: string | null;
 }
 
 export function OverlayWindow({
@@ -54,52 +58,59 @@ export function OverlayWindow({
   const resizeContainerRef = useRef<HTMLDivElement>(null);
   const [showOpacitySlider, setShowOpacitySlider] = useState(false);
 
-  const is_visible            = useOverlayStore((s) => s.is_visible);
-  const is_stealth_mode       = useOverlayStore((s) => s.is_stealth_mode);
-  const is_proctor_safe       = useOverlayStore((s) => s.is_proctor_safe);
-  const is_panic_visible      = useOverlayStore((s) => s.is_panic_visible);
-  const panic_content         = useOverlayStore((s) => s.panic_content);
-  const position              = useOverlayStore((s) => s.position);
-  const overlay_width         = useOverlayStore((s) => s.overlay_width);
-  const overlay_height        = useOverlayStore((s) => s.overlay_height);
-  const current_question      = useOverlayStore((s) => s.current_question);
-  const current_hint          = useOverlayStore((s) => s.current_hint);
-  const streaming_buffer      = useOverlayStore((s) => s.streaming_buffer);
-  const hint_state            = useOverlayStore((s) => s.hint_state);
-  const hint_style            = useOverlayStore((s) => s.hint_style);
-  const network_color         = useOverlayStore((s) => s.network_color);
-  const error_message         = useOverlayStore((s) => s.error_message);
-  const screenshot_hint       = useOverlayStore((s) => s.screenshot_hint);
+  const is_visible = useOverlayStore((s) => s.is_visible);
+  const is_stealth_mode = useOverlayStore((s) => s.is_stealth_mode);
+  const is_proctor_safe = useOverlayStore((s) => s.is_proctor_safe);
+  const is_panic_visible = useOverlayStore((s) => s.is_panic_visible);
+  const panic_content = useOverlayStore((s) => s.panic_content);
+  const position = useOverlayStore((s) => s.position);
+  const overlay_width = useOverlayStore((s) => s.overlay_width);
+  const overlay_height = useOverlayStore((s) => s.overlay_height);
+  const current_question = useOverlayStore((s) => s.current_question);
+  const current_hint = useOverlayStore((s) => s.current_hint);
+  const streaming_buffer = useOverlayStore((s) => s.streaming_buffer);
+  const hint_state = useOverlayStore((s) => s.hint_state);
+  const hint_style = useOverlayStore((s) => s.hint_style);
+  const network_color = useOverlayStore((s) => s.network_color);
+  const error_message = useOverlayStore((s) => s.error_message);
+  const screenshot_hint = useOverlayStore((s) => s.screenshot_hint);
   const is_screenshot_loading = useOverlayStore((s) => s.is_screenshot_loading);
-  const active_tab            = useOverlayStore((s) => s.active_tab);
-  const stealth_opacity       = useOverlayStore((s) => s.stealth_opacity);
-  const is_peek_active        = useOverlayStore((s) => s.is_peek_active);
-  const is_minimal_mode       = useOverlayStore((s) => s.is_minimal_mode);
-  const sessionStatus         = useSessionStore((s) => s.status);
-  const isSessionActive       = sessionStatus === "active";
-  const deepgramStatus        = useAudioStore((s) => s.deepgram_status);
-  const stream_error          = useAudioStore((s) => s.streams?.error ?? null);
-  const isRecording           = deepgramStatus === "connected";
-  const isGenerating          = hint_state === "generating" || hint_state === "streaming";
+  const active_tab = useOverlayStore((s) => s.active_tab);
+  const stealth_opacity = useOverlayStore((s) => s.stealth_opacity);
+  const is_peek_active = useOverlayStore((s) => s.is_peek_active);
+  const is_minimal_mode = useOverlayStore((s) => s.is_minimal_mode);
+
+  const sessionStatus = useSessionStore((s) => s.status);
+  const isSessionActive = sessionStatus === "active";
+
+  const deepgramStatus = useAudioStore((s) => s.deepgram_status);
+  const stream_error = useAudioStore((s) => s.streams?.error ?? null);
+  const isRecording = deepgramStatus === "connected";
+  const isGenerating = hint_state === "generating" || hint_state === "streaming";
 
   const handlePositionChange = useCallback(
-    (pos: import("@/store/overlayStore").OverlayPosition) => useOverlayStore.getState().setPosition(pos),
+    (pos: import("@/store/overlayStore").OverlayPosition) =>
+      useOverlayStore.getState().setPosition(pos),
     []
   );
 
   useStealthMouse(panelRef, is_stealth_mode);
 
-  const overlayRoot =
-    typeof document !== "undefined"
-      ? document.getElementById("overlay-root")
-      : null;
+  // ★ NEW: open DPiP window when overlay is visible
+  const pipDoc = useDocumentPiP(is_visible);
+  const targetDoc = pipDoc ?? (typeof document !== "undefined" ? document : null);
+  const overlayRoot = targetDoc?.getElementById("overlay-root");
+
+  // ★ NEW: inform store so other modules (e.g., WindowVisibilityManager) can adapt
+  useEffect(() => {
+    (useOverlayStore.getState().setPipActive as any)?.(!!pipDoc);
+    return () => (useOverlayStore.getState().setPipActive as any)?.(false);
+  }, [pipDoc]);
 
   if (!overlayRoot || (!is_visible && !is_peek_active)) return null;
 
   const displayText = hint_state === "streaming" ? streaming_buffer : current_hint;
-
   const effectiveOpacity = stealth_opacity / 100;
-
   const proctorSafeClass = is_proctor_safe ? "overlay-proctor-safe" : "";
 
   return createPortal(
@@ -120,14 +131,14 @@ export function OverlayWindow({
             proctorSafeClass,
           )}
           style={{
-            width:  overlay_width,
+            width: overlay_width,
             height: is_minimal_mode ? "auto" : overlay_height,
             opacity: effectiveOpacity,
           }}
           role="dialog"
           aria-label="Clarify AI Overlay"
         >
-          {/* ── HEADER ─────────────────────────────────────────────── */}
+          {/* ── HEADER ───────────────────────────────────────────────────────────── */}
           <div
             data-drag-handle
             className="flex cursor-grab items-center justify-between border-b border-white/8 px-3 py-2 active:cursor-grabbing shrink-0"
@@ -138,41 +149,38 @@ export function OverlayWindow({
                 Clarify AI
               </span>
               <OverlayNetworkBadge color={network_color} />
-
               {isRecording && (
                 <span className="flex items-center gap-1 text-[10px] font-semibold text-red-400 bg-red-500/10 px-1.5 py-0.5 rounded shrink-0">
-                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
-                  REC
+                  <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" /> REC
                 </span>
               )}
-
               {is_stealth_mode && (
                 <span className="font-mono text-[10px] font-semibold text-violet-300 bg-violet-500/15 px-1.5 py-0.5 rounded shrink-0">
                   STEALTH
                 </span>
               )}
-
               {is_proctor_safe && (
                 <span className="font-mono text-[10px] font-semibold text-emerald-300 bg-emerald-500/15 px-1.5 py-0.5 rounded shrink-0">
                   SAFE
                 </span>
               )}
-
               {is_peek_active && (
                 <span className="font-mono text-[10px] font-semibold text-sky-300 bg-sky-500/15 px-1.5 py-0.5 rounded shrink-0 animate-pulse">
                   PEEK
                 </span>
               )}
-
               {isSessionActive && !is_minimal_mode && <OverlayAudioBadge />}
               {isSessionActive && !is_minimal_mode && <OverlayAnswerTimer />}
             </div>
 
             <div className="flex items-center gap-1 shrink-0">
-              {/* Opacity control — one-click toggle */}
+              {/* Opacity control */}
               <div className="relative">
                 <button
-                  onClick={(e) => { e.stopPropagation(); setShowOpacitySlider((v) => !v); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowOpacitySlider((v) => !v);
+                  }}
                   className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/8 text-muted-foreground/40 hover:text-muted-foreground/80 transition-colors"
                   title={`Opacity: ${stealth_opacity}%`}
                 >
@@ -183,13 +191,17 @@ export function OverlayWindow({
                     className="absolute top-full right-0 mt-1 px-3 py-2 bg-[#1a1a2e] border border-white/10 rounded-xl shadow-xl z-50 flex items-center gap-2"
                     onClick={(e) => e.stopPropagation()}
                   >
-                    <span className="text-[10px] text-muted-foreground/60 font-mono w-8 text-right">{stealth_opacity}%</span>
+                    <span className="text-[10px] text-muted-foreground/60 font-mono w-8 text-right">
+                      {stealth_opacity}%
+                    </span>
                     <input
                       type="range"
                       min={20}
                       max={100}
                       value={stealth_opacity}
-                      onChange={(e) => useOverlayStore.getState().setStealthOpacity(Number(e.target.value))}
+                      onChange={(e) =>
+                        useOverlayStore.getState().setStealthOpacity(Number(e.target.value))
+                      }
                       className="w-20 h-1 accent-brand-400 cursor-pointer"
                     />
                   </div>
@@ -198,7 +210,10 @@ export function OverlayWindow({
 
               {is_minimal_mode && (
                 <button
-                  onClick={(e) => { e.stopPropagation(); useOverlayStore.getState().setMinimalMode(false); }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    useOverlayStore.getState().setMinimalMode(false);
+                  }}
                   className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/8 text-amber-400/70 hover:text-amber-300 transition-colors"
                   title="Exit minimal mode"
                 >
@@ -207,7 +222,10 @@ export function OverlayWindow({
               )}
 
               <button
-                onClick={(e) => { e.stopPropagation(); useOverlayStore.getState().hideOverlay(); }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  useOverlayStore.getState().hideOverlay();
+                }}
                 className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-white/8 text-muted-foreground/40 hover:text-white transition-colors"
                 title="Hide overlay (Ctrl+Shift+H)"
               >
@@ -218,10 +236,10 @@ export function OverlayWindow({
             </div>
           </div>
 
-          {/* ── SCREEN CAPTURE WARNING BANNER ──────────────────────── */}
+          {/* Screen-capture warning banner remains as-is */}
           <ScreenCaptureBanner isProctorSafe={is_proctor_safe} />
 
-          {/* ── SESSION-END DEBRIEF ──────────────────────────────────── */}
+          {/* Session end debrief block */}
           {!isSessionActive && lastSessionId && (
             <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 py-8 text-center">
               <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
@@ -271,20 +289,16 @@ export function OverlayWindow({
             </div>
           )}
 
-          {/* ── MINIMAL MODE: only FAB + slim strip ─────────────────── */}
+          {/* Minimal-mode */}
           {is_minimal_mode && isSessionActive && (
             <div className="flex items-center gap-2 px-3 py-2 shrink-0">
               <OverlayActivityTimer />
               <div className="flex-1" />
-              <FloatingAIButton
-                onGenerate={onGenerate}
-                isGenerating={isGenerating}
-                compact
-              />
+              <FloatingAIButton onGenerate={onGenerate} isGenerating={isGenerating} compact />
             </div>
           )}
 
-          {/* ── FULL MODE CONTENT ────────────────────────────────────── */}
+          {/* Full content */}
           {!is_minimal_mode && (
             <>
               {!is_panic_visible && isSessionActive && (
@@ -336,18 +350,10 @@ export function OverlayWindow({
 
                   {isSessionActive && (
                     <>
-                      {current_question && (
-                        <OverlayQuestionBar question={current_question} />
-                      )}
-
+                      {current_question && <OverlayQuestionBar question={current_question} />}
                       <OverlayQuestionPreview />
-
                       <OverlayTabBar />
-
-                      <div className={cn(
-                        "min-h-0",
-                        active_tab === "chat" ? "flex-1 flex flex-col" : "overflow-y-auto flex-1"
-                      )}>
+                      <div className={cn("min-h-0", active_tab === "chat" ? "flex-1 flex flex-col" : "overflow-y-auto flex-1")}>
                         {active_tab === "answer" && (
                           <OverlayHintPanel
                             text={displayText}
@@ -358,56 +364,35 @@ export function OverlayWindow({
                             isScreenshotLoading={is_screenshot_loading}
                           />
                         )}
-
-                        {active_tab === "chat" && onManualQuestion && (
-                          <OverlayChatPanel onSubmit={onManualQuestion} />
-                        )}
-
+                        {active_tab === "chat" && onManualQuestion && <OverlayChatPanel onSubmit={onManualQuestion} />}
                         {active_tab === "transcript" && (
                           <div className="p-3">
                             <LiveTranscriptStream />
                           </div>
                         )}
-
-                        {active_tab === "resume" && (
-                          <OverlayResumePanel />
-                        )}
-
-                        {active_tab === "audit" && (
-                          <OverlayAuditPanel />
-                        )}
+                        {active_tab === "resume" && <OverlayResumePanel />}
+                        {active_tab === "audit" && <OverlayAuditPanel />}
                       </div>
                     </>
                   )}
                 </>
               )}
-
-              {isSessionActive && <OverlaySessionStats />}
-
-              {isSessionActive && (
-                <div className="flex items-center justify-between border-t border-white/5 px-3 py-1.5 font-mono text-[11px] text-muted-foreground/40 shrink-0">
-                  <span className="truncate">
-                    ⌃⇧H hide · Esc clear · ⌃⇧P panic · ⌃⇧/ help
-                  </span>
-                  <div className="flex items-center gap-2">
-                    <OverlayActivityTimer />
-                    <span className="capitalize">{hint_style.replace("_", " ")}</span>
-                  </div>
-                </div>
-              )}
-
-              {/* ── FLOATING AI ANSWER BUTTON ───────────────────── */}
-              {isSessionActive && (
-                <div className="px-3 pb-3 shrink-0">
-                  <FloatingAIButton
-                    onGenerate={onGenerate}
-                    isGenerating={isGenerating}
-                  />
-                </div>
-              )}
             </>
           )}
 
+          {isSessionActive && <OverlaySessionStats />}
+
+          {isSessionActive && (
+            <div className="flex items-center justify-between border-t border-white/5 px-3 py-1.5 font-mono text-[11px] text-muted-foreground/40 shrink-0">
+              <span className="truncate"> ⌃⇧H hide · Esc clear · ⌃⇧P panic · ⌃⇧/ help </span>
+              <div className="flex items-center gap-2">
+                <OverlayActivityTimer />
+                <span className="capitalize">{hint_style.replace("_", " ")}</span>
+              </div>
+            </div>
+          )}
+
+          {/* resize handles */}
           <div className={cn(is_stealth_mode && "opacity-50 hover:opacity-80 transition-opacity")} style={{ pointerEvents: "auto" }}>
             <OverlayResizeHandles containerRef={resizeContainerRef} />
           </div>
@@ -419,7 +404,6 @@ export function OverlayWindow({
     overlayRoot
   );
 }
-
 
 function FloatingAIButton({
   onGenerate,
@@ -479,18 +463,13 @@ function ScreenCaptureBanner({ isProctorSafe }: { isProctorSafe: boolean }) {
       <span className="text-amber-400 text-[11px] font-semibold flex-1">
         ⚠ {detected === "recording" ? "Screen recording" : "Screen sharing"} detected — enable Stealth Mode to hide overlay
       </span>
-      <button
-        onClick={toggleAppStealthMode}
-        className="text-[10px] font-semibold text-amber-300 bg-amber-500/20 hover:bg-amber-500/30 px-2 py-0.5 rounded transition-colors shrink-0"
-      >
+      <button onClick={toggleAppStealthMode} className="text-[10px] font-semibold text-amber-300 bg-amber-500/20 hover:bg-amber-500/30 px-2 py-0.5 rounded transition-colors shrink-0">
         Enable Stealth
       </button>
-      <button
-        onClick={() => setDismissed(true)}
-        className="text-amber-400/50 hover:text-amber-400 text-[10px] shrink-0"
-      >
+      <button onClick={() => setDismissed(true)} className="text-amber-400/50 hover:text-amber-400 text-[10px] shrink-0">
         ✕
       </button>
     </div>
   );
 }
+``
