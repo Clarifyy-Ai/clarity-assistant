@@ -221,7 +221,7 @@ export function OverlayWindow({
           <ScreenCaptureBanner isProctorSafe={is_proctor_safe} />
 
           {/* ── SESSION-END DEBRIEF ──────────────────────────────────── */}
-          {!isSessionActive && (
+          {!isSessionActive && lastSessionId && (
             <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 py-8 text-center">
               <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
                 <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -329,7 +329,7 @@ export function OverlayWindow({
                     </div>
                   )}
 
-                  {!isSessionActive && onStartSession && (
+                  {!isSessionActive && !lastSessionId && onStartSession && (
                     <OverlayQuickStart onStart={onStartSession} />
                   )}
 
