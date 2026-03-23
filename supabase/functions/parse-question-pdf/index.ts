@@ -1,5 +1,5 @@
 import { corsHeaders } from "../_shared/cors.ts";
-import { requireAuth, getAdminClient, errorResponse, successResponse } from "../_shared/utils.ts";
+import { requireAuth, getAdminClient, errorResponse, successResponse, deductCredits } from "../_shared/utils.ts";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // parse-question-pdf — Extract questions from a PDF using Claude's native
@@ -140,7 +140,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Credit check
+    // Credit check and pre-deduction (deduct before AI call to prevent free usage on DB failure)
     if (credits < CREDIT_COST && credits !== -1) {
       return errorResponse(
         `Insufficient credits. PDF parsing costs ${CREDIT_COST} credits.`,
@@ -149,46 +149,84 @@ Deno.serve(async (req) => {
       );
     }
 
+    let creditDeducted = false;
+    if (credits !== -1) {
+      const deduction = await deductCredits(userId, "resume_analysis", CREDIT_COST);
+      if (!deduction.success) {
+        console.error("[parse-question-pdf] Pre-deduction failed:", deduction.error);
+        return errorResponse("Failed to deduct credits. Please try again.", "CREDIT_ERROR", 500);
+      }
+      creditDeducted = true;
+    }
+
     const admin = getAdminClient();
 
+    // Helper: refund credits if they were deducted
+    async function refundCredits(reason: string): Promise<void> {
+      try {
+        const { data: profile } = await admin.from("profiles").select("credits").eq("id", userId).single();
+        if (profile) {
+          await admin.from("profiles").update({ credits: (profile as Record<string, unknown>).credits as number + CREDIT_COST }).eq("id", userId);
+          const { error: txErr } = await admin.from("credit_transactions").insert({ user_id: userId, amount: CREDIT_COST, action: "pdf_import_refund" });
+          if (txErr) console.error("[parse-question-pdf] Credit refund tx insert failed:", txErr.message);
+        }
+      } catch (refundErr) {
+        console.error(`[parse-question-pdf] Credit refund failed (${reason}):`, refundErr);
+      }
+    }
+
     // Call Claude with the PDF as a native document type
-    const anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type":      "application/json",
-        "x-api-key":         anthropicKey,
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model:      "claude-sonnet-4-5",
-        max_tokens: 8192,
-        system:     EXTRACTION_SYSTEM_PROMPT,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type:   "document",
-                source: {
-                  type:       "base64",
-                  media_type: "application/pdf",
-                  data:       pdfBase64,
+    const anthropicController = new AbortController();
+    const anthropicTimeout = setTimeout(() => anthropicController.abort(), 50_000);
+    let anthropicRes: Response;
+    try {
+      anthropicRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: {
+          "Content-Type":      "application/json",
+          "x-api-key":         anthropicKey,
+          "anthropic-version": "2023-06-01",
+        },
+        signal: anthropicController.signal,
+        body: JSON.stringify({
+          model:      "claude-3-5-sonnet-20241022",
+          max_tokens: 8192,
+          system:     EXTRACTION_SYSTEM_PROMPT,
+          messages: [
+            {
+              role: "user",
+              content: [
+                {
+                  type:   "document",
+                  source: {
+                    type:       "base64",
+                    media_type: "application/pdf",
+                    data:       pdfBase64,
+                  },
                 },
-              },
-              {
-                type: "text",
-                text: "Extract all questions from this document and return them as a JSON array.",
-              },
-            ],
-          },
-        ],
-      }),
-    });
+                {
+                  type: "text",
+                  text: "Extract all questions from this document and return them as a JSON array.",
+                },
+              ],
+            },
+          ],
+        }),
+      });
+    } catch (fetchErr) {
+      clearTimeout(anthropicTimeout);
+      console.error("[parse-question-pdf] AI fetch threw (timeout or network):", fetchErr);
+      if (creditDeducted) await refundCredits("fetch_throw");
+      return errorResponse("AI request failed (network or timeout).", "AI_TIMEOUT", 504);
+    } finally {
+      clearTimeout(anthropicTimeout);
+    }
 
     if (!anthropicRes.ok) {
       const errBody = await anthropicRes.json().catch(() => ({}));
       const msg = (errBody as Record<string, unknown>)?.error?.["message"] ?? anthropicRes.statusText;
       console.error("[parse-question-pdf] Anthropic error:", msg);
+      if (creditDeducted) await refundCredits("ai_error");
       return errorResponse(`AI parsing failed: ${msg}`, "AI_ERROR", 502);
     }
 
@@ -206,6 +244,7 @@ Deno.serve(async (req) => {
       questions = Array.isArray(parsed) ? parsed : (parsed.questions ?? []);
     } catch (parseErr) {
       console.error("[parse-question-pdf] JSON parse error:", parseErr, "Raw:", rawText.slice(0, 500));
+      if (creditDeducted) await refundCredits("parse_error");
       return errorResponse("Failed to parse AI response as JSON.", "PARSE_ERROR", 502);
     }
 
@@ -250,20 +289,6 @@ Deno.serve(async (req) => {
           latex_present:  Boolean(q.latex_present),
         };
       });
-
-    // Deduct credits only after successful parse (user-friendly — no charge on AI failure)
-    if (credits !== -1) {
-      const newBalance = credits - CREDIT_COST;
-      await admin.from("profiles")
-        .update({ credits: newBalance })
-        .eq("id", userId);
-
-      await admin.from("credit_transactions").insert({
-        user_id: userId,
-        amount:  -CREDIT_COST,
-        action:  "pdf_import",
-      }).catch(() => null);
-    }
 
     // Build subject summary
     const subjectCounts: Record<string, number> = {};

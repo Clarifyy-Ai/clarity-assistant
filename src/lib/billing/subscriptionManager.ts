@@ -7,6 +7,7 @@
 
 import { supabase } from "@/lib/supabase/client";
 import { BillingError, ErrorCode, tryCatch } from "@/lib/errors";
+import { ENV } from "@/lib/env";
 
 // ─── Plan Definitions ─────────────────────────────────────────────────────────
 
@@ -68,8 +69,8 @@ export const PLANS: Record<PlanId, Plan> = {
     monthlyPrice: 1900,   // $19/mo
     yearlyPrice: 1500,    // $15/mo billed yearly
     creditsPerMonth: 100,
-    stripePriceIdMonthly: import.meta.env.VITE_STRIPE_PRICE_STARTER_MONTHLY,
-    stripePriceIdYearly:  import.meta.env.VITE_STRIPE_PRICE_STARTER_YEARLY,
+    stripePriceIdMonthly: ENV.STRIPE_PRICE_STARTER_MONTHLY,
+    stripePriceIdYearly:  ENV.STRIPE_PRICE_STARTER_YEARLY,
     color: "blue",
     features: [
       { key: "live_assist",        label: "Live interview assist",     included: true,  limit: 10 },
@@ -92,8 +93,8 @@ export const PLANS: Record<PlanId, Plan> = {
     monthlyPrice: 3900,   // $39/mo
     yearlyPrice: 2900,    // $29/mo billed yearly
     creditsPerMonth: 300,
-    stripePriceIdMonthly: import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY,
-    stripePriceIdYearly:  import.meta.env.VITE_STRIPE_PRICE_PRO_YEARLY,
+    stripePriceIdMonthly: ENV.STRIPE_PRICE_PRO_MONTHLY,
+    stripePriceIdYearly:  ENV.STRIPE_PRICE_PRO_YEARLY,
     color: "violet",
     isPopular: true,
     features: [
@@ -117,8 +118,8 @@ export const PLANS: Record<PlanId, Plan> = {
     monthlyPrice: 7900,   // $79/mo
     yearlyPrice: 5900,    // $59/mo billed yearly
     creditsPerMonth: 1000,
-    stripePriceIdMonthly: import.meta.env.VITE_STRIPE_PRICE_ELITE_MONTHLY,
-    stripePriceIdYearly:  import.meta.env.VITE_STRIPE_PRICE_ELITE_YEARLY,
+    stripePriceIdMonthly: ENV.STRIPE_PRICE_ELITE_MONTHLY,
+    stripePriceIdYearly:  ENV.STRIPE_PRICE_ELITE_YEARLY,
     color: "amber",
     features: [
       { key: "live_assist",        label: "Live interview assist",     included: true,  limit: "unlimited" },

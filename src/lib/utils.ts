@@ -1,3 +1,4 @@
+import { ENV } from "@/lib/env";
 import { type ClassValue, clsx } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { format, formatDistanceToNow, parseISO, isValid } from "date-fns";
@@ -219,7 +220,7 @@ export function generateShareToken(): string {
 // ─────────────────────────────────────────────────────────────────
 
 export function buildShareUrl(token: string, path: string): string {
-  const base = import.meta.env.VITE_APP_URL ?? window.location.origin;
+  const base = ENV.APP_URL || window.location.origin;
   return `${base}${path}?token=${token}`;
 }
 

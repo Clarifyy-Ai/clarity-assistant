@@ -2,6 +2,7 @@
 // Supabase generated DB row types don't match our manual schema additions (questions, sessions, etc.)
 // causing ~50+ implicit-any cascade errors in callers. Full typing requires aligning all generated
 // types with migration schema — tracked as a future refactor task.
+import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
 import { useCallback, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSessionStore } from "@/store/sessionStore";
@@ -248,10 +249,7 @@ async function fetchQuestions(
   config: SessionConfig,
   sessionId: string
 ): Promise<SessionQuestion[]> {
-  const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-  const anonKey   =
-    import.meta.env.VITE_SUPABASE_ANON_KEY ??
-    import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
+  const anonKey = SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
 
   const controller = new AbortController();
   const timeout    = setTimeout(() => controller.abort(), 8_000);

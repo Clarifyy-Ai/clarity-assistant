@@ -3,6 +3,7 @@
 // ─────────────────────────────────────────────────────────────────
 
 import type { UserPlan } from "./user.types";
+import { ENV } from "@/lib/env";
 
 // ── Plans ─────────────────────────────────────────────────────────
 
@@ -69,7 +70,7 @@ export const PLAN_DEFINITIONS: Record<UserPlan, PlanFeatures> = {
     ai_models: ["Gemini Flash", "Gemini Pro", "GPT-4o", "Claude"],
     is_popular: true,
     cta_label: "Start Pro — $12/mo",
-    stripe_price_monthly: import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY ?? "",
+    stripe_price_monthly: ENV.STRIPE_PRICE_PRO_MONTHLY ?? "",
     stripe_price_annual: null,
   },
   team: {
@@ -141,7 +142,7 @@ export const CREDIT_PACKS: CreditPack[] = [
     credits: 10,
     price_usd: 3,
     label: "10 Credits",
-    stripe_price_id: import.meta.env.VITE_STRIPE_PRICE_CREDITS_10 ?? "",
+    stripe_price_id: ENV.STRIPE_PRICE_CREDITS_10 ?? "",
     is_best_value: false,
   },
   {

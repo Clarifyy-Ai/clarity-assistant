@@ -87,7 +87,9 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
       navigator.permissions.query({ name: "microphone" as PermissionName }).then((result) => {
         if (result.state === "granted") setMicPermission("granted");
         else if (result.state === "denied") setMicPermission("denied");
-      }).catch(() => {});
+      }).catch((err) => {
+        console.error("[PreSessionSetup] microphone permissions query failed:", err);
+      });
     }
   }, []);
 

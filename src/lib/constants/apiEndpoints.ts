@@ -3,12 +3,14 @@
 // and internal route constants. Single source of truth for every endpoint.
 // ─────────────────────────────────────────────────────────────────────────────
 
+import { ENV } from "@/lib/env";
+
 // ─── Environment Base URLs ────────────────────────────────────────────────────
 
 export const BASE_URLS = {
-  SUPABASE:   import.meta.env.VITE_SUPABASE_URL          ?? "",
-  APP:        import.meta.env.VITE_APP_URL               ?? window.location.origin,
-  API:        import.meta.env.VITE_API_URL               ?? "/api",
+  SUPABASE:   ENV.SUPABASE_URL,
+  APP:        ENV.APP_URL || window.location.origin,
+  API:        ENV.API_URL,
 } as const;
 
 // ─── Supabase Edge Functions ──────────────────────────────────────────────────

@@ -1,3 +1,4 @@
+import { ENV } from "@/lib/env";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
@@ -13,9 +14,9 @@ import { toast } from "sonner";
 import { CREDIT_PACKS, formatPrice } from "@/lib/billing/priceCalculator";
 
 const STRIPE_CONFIGURED =
-  !!import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY ||
-  !!import.meta.env.VITE_STRIPE_PRICE_STARTER_MONTHLY ||
-  !!import.meta.env.VITE_STRIPE_PRICE_CREDITS_50;
+  !!ENV.STRIPE_PRICE_PRO_MONTHLY ||
+  !!ENV.STRIPE_PRICE_STARTER_MONTHLY ||
+  !!ENV.STRIPE_PRICE_CREDITS_50;
 
 const CREDIT_COSTS = [
   { action: "AI Hint",            cost: 2,   icon: "💡" },

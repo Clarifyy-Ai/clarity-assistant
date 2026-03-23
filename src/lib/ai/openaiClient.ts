@@ -1,3 +1,4 @@
+import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
 import { consumeSSEStream } from "./geminiClient";
 import { retry } from "@/lib/utils";
 import type { CoachingContext } from "@/types/ai.types";
@@ -8,7 +9,7 @@ import type { CoachingContext } from "@/types/ai.types";
 //       is deployed server-side.
 // ─────────────────────────────────────────────────────────────────
 
-const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+
 
 export interface OpenAIStreamOptions {
   question: string;
@@ -55,7 +56,7 @@ export async function streamOpenAIHint(opts: OpenAIStreamOptions): Promise<void>
           method: "POST",
           headers: {
             "Content-Type":  "application/json",
-            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
           },
           body,
           signal,
@@ -98,7 +99,7 @@ export async function callOpenAI(payload: {
     method: "POST",
     headers: {
       "Content-Type":  "application/json",
-      "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
     },
     body: JSON.stringify({ tool_id: "raw_prompt", input: combined }),
   });
@@ -151,7 +152,7 @@ export async function streamCoachChat(opts: {
       method: "POST",
       headers: {
         "Content-Type":  "application/json",
-        "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
       },
       body,
       signal,

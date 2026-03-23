@@ -30,7 +30,7 @@ export default function Analytics() {
     return (
       <div className="space-y-5">
         <SkeletonCard />
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
         </div>
       </div>
@@ -45,7 +45,7 @@ export default function Analytics() {
       />
 
       {/* ── KPI row ───────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <KPICard
           label="Avg score (30d)"
           value={`${analytics.avgScore30d ?? 0}`}

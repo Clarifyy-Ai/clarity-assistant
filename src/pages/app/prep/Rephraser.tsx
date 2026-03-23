@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
 import { useState } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { useAuthStore } from "@/store/userStore";
@@ -52,14 +53,14 @@ export default function Rephraser() {
     }
 
     try {
-      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      
       const styleLabel = REPHRASE_STYLES.find((s) => s.id === style)?.label ?? style;
       const input = `Style: ${styleLabel}\n\nOriginal answer:\n${original}`;
       const res = await fetch(`${EDGE_BASE}/prep-tool`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({
           tool_id: "rephrase",

@@ -1,3 +1,4 @@
+import { ENV } from "@/lib/env";
 import { useState } from "react"
 import { Modal } from "@/components/ui/Modal"
 import { useUIStore } from "@/store/uiStore"
@@ -13,8 +14,8 @@ import { supabase } from "@/lib/supabase/client"
 import { toast } from "sonner"
 
 const STRIPE_CONFIGURED =
-  !!import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY ||
-  !!import.meta.env.VITE_STRIPE_PRICE_STARTER_MONTHLY
+  !!ENV.STRIPE_PRICE_PRO_MONTHLY ||
+  !!ENV.STRIPE_PRICE_STARTER_MONTHLY
 
 const MODAL_PLANS: Array<{
   id: PlanId

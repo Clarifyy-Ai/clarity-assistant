@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { EDGE_BASE, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/env";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { useUIStore } from "@/store/uiStore";
@@ -90,7 +91,7 @@ export async function deductCredits(
   model: PreferredAIModel,
   sessionId: string
 ): Promise<CreditDeductionResult> {
-  const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+  
   const cost      = getCreditCost(model);
 
   try {
@@ -98,7 +99,7 @@ export async function deductCredits(
       method: "POST",
       headers: {
         "Content-Type":  "application/json",
-        "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
       },
       body: JSON.stringify({
         model,

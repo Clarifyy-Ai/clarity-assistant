@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { useState, useRef } from "react";
+import { toast } from "sonner";
 import { useDocumentStore } from "@/store/documentStore";
 import { useAuthStore } from "@/store/userStore";
 import { useDocumentManager } from "@/hooks/useDocumentManager";
@@ -63,11 +64,23 @@ function ResumeManager() {
   const activeResume = docStore.activeResume;
 
   async function handleFile(file: File) {
-    if (file.size > 5 * 1024 * 1024) return;
-    if (!file.name.endsWith(".pdf") && !file.name.endsWith(".docx")) return;
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error("File too large. Maximum size is 5 MB.");
+      return;
+    }
+    if (!file.name.endsWith(".pdf") && !file.name.endsWith(".docx")) {
+      toast.error("Only PDF or DOCX files are supported.");
+      return;
+    }
     setUploading(true);
-    await docMgr.uploadResume(file);
-    setUploading(false);
+    try {
+      await docMgr.uploadResume(file);
+    } catch (err) {
+      console.error("handleFile failed:", err);
+      toast.error("Failed to upload document. Please try again.");
+    } finally {
+      setUploading(false);
+    }
   }
 
   const preview = resumes.find((r) => r.id === previewId);
@@ -262,10 +275,16 @@ function JDManager() {
   async function handleAdd() {
     if (!title.trim() || !text.trim()) return;
     setSaving(true);
-    await docMgr.addJobDescription({ title, company, text });
-    setSaving(false);
-    setAddOpen(false);
-    setTitle(""); setCompany(""); setText("");
+    try {
+      await docMgr.addJobDescription({ title, company, text });
+      setAddOpen(false);
+      setTitle(""); setCompany(""); setText("");
+    } catch (err) {
+      console.error("handleAdd failed:", err);
+      toast.error("Failed to save job description. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (

@@ -23,10 +23,20 @@ import { CREDIT_COSTS } from "./types.ts";
 
 // ─── Environment ──────────────────────────────────────────────────────────────
 
+const REQUIRED_ENV_VARS = ["SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"] as const;
+
+for (const key of REQUIRED_ENV_VARS) {
+  if (!Deno.env.get(key)) {
+    const msg = `[shared/utils] FATAL: required environment variable "${key}" is missing or empty.`;
+    console.error(msg);
+    throw new Error(msg);
+  }
+}
+
 export const ENV = {
-  SUPABASE_URL:        Deno.env.get("SUPABASE_URL")!,
-  SUPABASE_ANON_KEY:   Deno.env.get("SUPABASE_ANON_KEY")!,
-  SUPABASE_SERVICE_KEY: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  SUPABASE_URL:        Deno.env.get("SUPABASE_URL") ?? "",
+  SUPABASE_ANON_KEY:   Deno.env.get("SUPABASE_ANON_KEY") ?? "",
+  SUPABASE_SERVICE_KEY: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
   OPENAI_API_KEY:      Deno.env.get("OPENAI_API_KEY") ?? "",
   ANTHROPIC_API_KEY:   Deno.env.get("ANTHROPIC_API_KEY") ?? "",
   GEMINI_API_KEY:      Deno.env.get("GEMINI_API_KEY") ?? "",
@@ -248,20 +258,30 @@ export async function callAI(req: AICompletionRequest): Promise<AICompletionResp
   throw new Error(`Unknown provider for model: ${req.model}`);
 }
 
+const AI_TIMEOUT_MS = 50_000;
+
 async function callOpenAI(req: AICompletionRequest, start: number): Promise<AICompletionResponse> {
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    method:  "POST",
-    headers: {
-      "Content-Type":  "application/json",
-      "Authorization": `Bearer ${ENV.OPENAI_API_KEY}`,
-    },
-    body: JSON.stringify({
-      model:       req.model,
-      messages:    req.messages,
-      max_tokens:  req.maxTokens  ?? 1024,
-      temperature: req.temperature ?? 0.7,
-    }),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method:  "POST",
+      headers: {
+        "Content-Type":  "application/json",
+        "Authorization": `Bearer ${ENV.OPENAI_API_KEY}`,
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model:       req.model,
+        messages:    req.messages,
+        max_tokens:  req.maxTokens  ?? 1024,
+        temperature: req.temperature ?? 0.7,
+      }),
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -287,20 +307,28 @@ async function callAnthropic(req: AICompletionRequest, start: number): Promise<A
   const systemMsg = req.messages.find((m) => m.role === "system")?.content ?? "";
   const userMsgs  = req.messages.filter((m) => m.role !== "system");
 
-  const res = await fetch("https://api.anthropic.com/v1/messages", {
-    method:  "POST",
-    headers: {
-      "Content-Type":      "application/json",
-      "x-api-key":         ENV.ANTHROPIC_API_KEY,
-      "anthropic-version": "2023-06-01",
-    },
-    body: JSON.stringify({
-      model:      req.model,
-      max_tokens: req.maxTokens  ?? 1024,
-      system:     systemMsg,
-      messages:   userMsgs,
-    }),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch("https://api.anthropic.com/v1/messages", {
+      method:  "POST",
+      headers: {
+        "Content-Type":      "application/json",
+        "x-api-key":         ENV.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01",
+      },
+      signal: controller.signal,
+      body: JSON.stringify({
+        model:      req.model,
+        max_tokens: req.maxTokens  ?? 1024,
+        system:     systemMsg,
+        messages:   userMsgs,
+      }),
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -346,11 +374,19 @@ async function callGemini(req: AICompletionRequest, start: number): Promise<AICo
     body.systemInstruction = { parts: systemParts };
   }
 
-  const res = await fetch(url, {
-    method:  "POST",
-    headers: { "Content-Type": "application/json" },
-    body:    JSON.stringify(body),
-  });
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method:  "POST",
+      headers: { "Content-Type": "application/json" },
+      signal:  controller.signal,
+      body:    JSON.stringify(body),
+    });
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));

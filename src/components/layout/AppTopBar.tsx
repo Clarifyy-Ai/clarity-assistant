@@ -71,7 +71,7 @@ export function AppTopBar() {
           onClick={toggleAppStealthMode}
           title={stealthMode ? "Disable stealth mode" : "Enable stealth mode"}
           className={cn(
-            "hidden sm:flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl border text-[10px] sm:text-xs font-medium transition-all",
+            "flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl border text-[10px] sm:text-xs font-medium transition-all",
             stealthMode
               ? "bg-blue-500/10 border-blue-500/30 text-blue-500 dark:text-blue-400"
               : "bg-secondary/60 border-border text-muted-foreground hover:bg-secondary hover:text-foreground"

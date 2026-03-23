@@ -2,6 +2,7 @@
 // urlUtils.ts — URL parsing, query string building/parsing, route helpers,
 // and deep-link construction for the app.
 // ─────────────────────────────────────────────────────────────────────────────
+import { SUPABASE_URL, ENV } from "@/lib/env";
 
 // ─── Query String ─────────────────────────────────────────────────────────────
 
@@ -170,7 +171,7 @@ export function getBasename(url: string): string {
 export function buildDeepLink(path: string, params?: QueryParams): string {
   const base = typeof window !== "undefined"
     ? window.location.origin
-    : (import.meta.env.VITE_APP_URL ?? "");
+    : ENV.APP_URL;
 
   const url = `${base}${path.startsWith("/") ? "" : "/"}${path}`;
   return params ? appendQuery(url, params) : url;
@@ -180,7 +181,7 @@ export function buildDeepLink(path: string, params?: QueryParams): string {
  * Build a Supabase storage public URL.
  */
 export function buildStorageURL(bucket: string, path: string): string {
-  const base = import.meta.env.VITE_SUPABASE_URL ?? "";
+  const base = SUPABASE_URL ?? "";
   return `${base}/storage/v1/object/public/${bucket}/${path}`;
 }
 

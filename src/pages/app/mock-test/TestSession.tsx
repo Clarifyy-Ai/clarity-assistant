@@ -1,3 +1,4 @@
+import { EDGE_BASE, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/env";
 import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import {
@@ -296,10 +297,10 @@ export default function TestSession(): React.ReactElement {
       // Using the Supabase REST API directly to avoid TS type-depth limits
       const { data: sessionForResp } = await supabase.auth.getSession();
       const respFetch = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/test_responses?select=question_id,user_answer,is_marked_review,is_attempted,time_spent_seconds&test_id=eq.${testId}&user_id=eq.${user!.id}`,
+        `${SUPABASE_URL}/rest/v1/test_responses?select=question_id,user_answer,is_marked_review,is_attempted,time_spent_seconds&test_id=eq.${testId}&user_id=eq.${user!.id}`,
         {
           headers: {
-            apikey:        import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+            apikey:        SUPABASE_ANON_KEY as string,
             Authorization: `Bearer ${sessionForResp?.session?.access_token ?? ""}`,
           },
         }

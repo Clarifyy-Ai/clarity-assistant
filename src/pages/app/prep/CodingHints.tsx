@@ -1,3 +1,4 @@
+import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
 import { useState, useMemo } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -105,13 +106,13 @@ export default function CodingHints() {
     }
 
     try {
-      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      
       const input = `Problem: ${activeProblem.title}\n\n${activeProblem.description}\n\nExamples:\n${activeProblem.examples}\n\nTags: ${activeProblem.tags.join(", ")}`;
       const res = await fetch(`${EDGE_BASE}/prep-tool`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({
           tool_id: "coding_hint",
@@ -144,13 +145,13 @@ export default function CodingHints() {
     }
 
     try {
-      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      
       const input = `Problem: ${activeProblem.title}\n\n${activeProblem.description}\n\nExamples:\n${activeProblem.examples}\n\nTags: ${activeProblem.tags.join(", ")}`;
       const res = await fetch(`${EDGE_BASE}/prep-tool`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({
           tool_id: "coding_solution",

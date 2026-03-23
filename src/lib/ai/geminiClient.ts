@@ -1,3 +1,4 @@
+import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
 import type { CoachingContext } from "@/types/ai.types";
 import type { HintStyle } from "@/types/user.types";
 import { retry } from "@/lib/utils";
@@ -7,7 +8,7 @@ import { retry } from "@/lib/utils";
 // All API keys live server-side only, never exposed to the browser.
 // ─────────────────────────────────────────────────────────────────
 
-const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+
 
 export type GeminiModel = "gemini-1.5-flash" | "gemini-1.5-pro";
 
@@ -58,7 +59,7 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
           method: "POST",
           headers: {
             "Content-Type":  "application/json",
-            "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+            "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
           },
           body,
           signal,
@@ -101,7 +102,7 @@ export async function callGemini(payload: {
     method: "POST",
     headers: {
       "Content-Type":  "application/json",
-      "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
     },
     body: JSON.stringify({
       tool_id: "raw_prompt",

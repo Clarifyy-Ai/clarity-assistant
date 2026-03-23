@@ -48,7 +48,9 @@ export function ScreenCaptureBlocker({
             break;
           }
         }
-      }).catch(() => {});
+      }).catch((err) => {
+        console.error('[ScreenCaptureBlocker] enumerateDevices failed:', err);
+      });
     };
 
     checkDevicesForCapture();

@@ -1,3 +1,4 @@
+import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
@@ -32,12 +33,12 @@ export default function SettingsDanger() {
   async function handleExport() {
     setExporting(true);
     try {
-      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      
       const res = await fetch(`${EDGE_BASE}/export-user-data`, {
         method:  "POST",
         headers: {
           "Content-Type":  "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({ user_id: user?.id }),
       });
@@ -90,12 +91,12 @@ export default function SettingsDanger() {
     if (!user || confirm !== user.email) return;
     setDeleting(true);
     try {
-      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      
       const res = await fetch(`${EDGE_BASE}/delete-account`, {
         method:  "POST",
         headers: {
           "Content-Type":  "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({ user_id: user.id }),
       });

@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
 import { useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
@@ -170,12 +171,12 @@ export function useGamification() {
 
     // Persist to DB via Edge Function
     try {
-      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      
       await fetch(`${EDGE_BASE}/award-xp`, {
         method: "POST",
         headers: {
           "Content-Type":  "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({ event_type: eventType, xp: amount, metadata }),
       });
@@ -202,12 +203,12 @@ export function useGamification() {
 
     // Persist badge + bonus XP
     try {
-      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      
       await fetch(`${EDGE_BASE}/unlock-badge`, {
         method: "POST",
         headers: {
           "Content-Type":  "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({ badge_id: badgeId }),
       });

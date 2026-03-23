@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
@@ -43,12 +44,12 @@ export function useAnalytics() {
     setError(null);
 
     try {
-      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      
       const response  = await fetch(`${EDGE_BASE}/analytics-dashboard`, {
         method: "POST",
         headers: {
           "Content-Type":  "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({ filter }),
       });

@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";
 import { refreshCredits } from "@/lib/billing/creditsManager";
+import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
 
 // ─────────────────────────────────────────────────────────────────
 // PrepLab — STAR builder, question bank, AI tools
@@ -102,7 +103,7 @@ function STARBuilder() {
       const token = sessionData.session?.access_token;
       if (!token) throw new Error("Not authenticated");
 
-      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+
       const res = await fetch(`${EDGE_BASE}/polish-star-section`, {
         method:  "POST",
         headers: {
@@ -123,7 +124,9 @@ function STARBuilder() {
         setStar((p) => ({ ...p, [key]: envelope.data.polished }));
         await refreshCredits();
       }
-    } catch {
+    } catch (err) {
+      console.error("polishSection failed:", err);
+      toast.error("Failed to polish section. Please try again.");
     } finally {
       setAiLoading(null);
     }
@@ -140,7 +143,7 @@ function STARBuilder() {
       const token = sessionData.session?.access_token;
       if (!token) throw new Error("Not authenticated");
 
-      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+
       const res = await fetch(`${EDGE_BASE}/generate-star-answer`, {
         method:  "POST",
         headers: {
@@ -160,7 +163,9 @@ function STARBuilder() {
         setGenerated(envelope.data.fullAnswer ?? "");
         await refreshCredits();
       }
-    } catch {
+    } catch (err) {
+      console.error("generateFull failed:", err);
+      toast.error("Failed to generate answer. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -600,19 +605,27 @@ function AIToolModal({
     if (!input.trim()) return;
     setLoading(true);
 
-    const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-    const res = await fetch(`${EDGE_BASE}/prep-tool`, {
-      method:  "POST",
-      headers: {
-        "Content-Type":  "application/json",
-        "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({ tool_id: toolId, input }),
-    });
+    try {
 
-    const data = await res.json();
-    setOutput(data.result ?? "");
-    setLoading(false);
+      const res = await fetch(`${EDGE_BASE}/prep-tool`, {
+        method:  "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ tool_id: toolId, input }),
+      });
+
+      if (!res.ok) throw new Error(`AI tool returned ${res.status}`);
+
+      const data = await res.json();
+      setOutput(data.result ?? "");
+    } catch (err) {
+      console.error("AI tool run() failed:", err);
+      toast.error("The AI tool failed to run. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (!tool) return null;
@@ -676,12 +689,12 @@ function CompanyPrep() {
     if (!company.trim() || !role.trim()) return;
     setLoading(true);
 
-    const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+
     const res = await fetch(`${EDGE_BASE}/company-research`, {
       method:  "POST",
       headers: {
         "Content-Type":  "application/json",
-        "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
       },
       body: JSON.stringify({ company, role }),
     });

@@ -1,3 +1,4 @@
+import { EDGE_BASE, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/env";
 import { useNetworkStore } from "@/store/networkStore";
 import { useOverlayStore } from "@/store/overlayStore";
 
@@ -11,7 +12,7 @@ const PROBE_INTERVAL_MS  = 10_000;   // probe every 10s
 const FAST_PROBE_TIMEOUT = 5_000;    // abort probe if no response in 5s
 
 // Lightweight probe endpoint — returns HTTP 200 with minimal payload
-const PROBE_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ping`;
+const PROBE_URL = `${SUPABASE_URL}/functions/v1/ping`;
 
 // ─────────────────────────────────────────────────────────────────
 // Network Monitor class

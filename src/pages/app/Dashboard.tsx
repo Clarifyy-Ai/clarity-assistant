@@ -17,6 +17,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Skeleton, SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { EmptyState } from "@/components/common/EmptyState";
 import {
   Mic, ClipboardList, FlaskConical, BarChart2,
   CalendarDays, Flame, Zap, ChevronRight,
@@ -175,7 +176,7 @@ export default function Dashboard() {
       </div>
 
       {/* ── Stats row ─────────────────────────────────── */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           label="Total sessions"
           value={sessionCount}
@@ -342,21 +343,17 @@ function RecentSessions() {
       </div>
       {loading ? (
         <div className="space-y-2">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-12 bg-accent/5 rounded-xl animate-pulse" />
-          ))}
+          {[...Array(3)].map((_, i) => <SkeletonCard key={i} />)}
         </div>
       ) : sessions.length === 0 ? (
-        <div className="text-center py-6">
-          <ClipboardList className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
-          <p className="text-muted-foreground text-xs">No sessions yet.</p>
-          <Link
-            to="/app/mock"
-            className="text-xs text-primary hover:opacity-80 mt-1 inline-block transition-opacity"
-          >
-            Start your first mock →
-          </Link>
-        </div>
+        <EmptyState
+          icon={ClipboardList}
+          title="No sessions yet"
+          description="Start a mock interview to see your recent activity here."
+          actionLabel="Start mock interview"
+          onAction={() => window.location.href = "/app/mock"}
+          compact
+        />
       ) : (
         <div className="space-y-2">
           {sessions.map((s) => {
@@ -427,18 +424,14 @@ function UpcomingInterviews({ interviews }: { interviews: any[] }) {
         </Link>
       </div>
       {interviews.length === 0 ? (
-        <div className="text-center py-6">
-          <CalendarDays className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
-          <p className="text-muted-foreground text-xs">
-            {stealth ? "No upcoming meetings scheduled." : "No upcoming interviews scheduled."}
-          </p>
-          <Link
-            to="/app/interviews/new"
-            className="text-xs text-primary hover:opacity-80 mt-1 inline-block transition-opacity"
-          >
-            {stealth ? "+ Add meeting" : "+ Add interview"}
-          </Link>
-        </div>
+        <EmptyState
+          icon={CalendarDays}
+          title={stealth ? "No upcoming meetings" : "No upcoming interviews"}
+          description={stealth ? "Add a meeting to track it here." : "Schedule an interview to see it here."}
+          actionLabel={stealth ? "+ Add meeting" : "+ Add interview"}
+          onAction={() => window.location.href = "/app/interviews/new"}
+          compact
+        />
       ) : (
         <div className="space-y-2">
           {interviews.map((iv) => (

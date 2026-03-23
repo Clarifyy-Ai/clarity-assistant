@@ -1,6 +1,7 @@
 // @ts-nocheck -- retained: Supabase .from() data types for profiles/sessions/answer_bank/etc.
 // are typed as `any` in current generated schema due to manual migration columns; removing
 // suppression produces ~15 implicit-any errors on data row field accesses.
+import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
 import { useState } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
@@ -76,13 +77,13 @@ export default function SettingsData() {
   async function handleExport(type: string) {
     setExporting(type);
 
-    const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+    
     try {
       const res = await fetch(`${EDGE_BASE}/export-user-data`, {
         method:  "POST",
         headers: {
           "Content-Type":  "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({ user_id: user?.id, type }),
       });

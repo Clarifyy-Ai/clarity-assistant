@@ -1,3 +1,4 @@
+import { ENV } from "@/lib/env";
 import { useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
@@ -35,8 +36,8 @@ import { supabase } from "@/lib/supabase/client";
 import { cn } from "@/lib/utils";
 
 const STRIPE_CONFIGURED =
-  !!import.meta.env.VITE_STRIPE_PRICE_PRO_MONTHLY ||
-  !!import.meta.env.VITE_STRIPE_PRICE_STARTER_MONTHLY;
+  !!ENV.STRIPE_PRICE_PRO_MONTHLY ||
+  !!ENV.STRIPE_PRICE_STARTER_MONTHLY;
 
 const STATUS_LABELS: Record<string, { label: string; color: string }> = {
   active:     { label: "Active",     color: "text-emerald-400" },

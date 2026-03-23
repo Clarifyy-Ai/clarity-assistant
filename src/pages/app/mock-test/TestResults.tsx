@@ -1,3 +1,4 @@
+import { EDGE_BASE, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/env";
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import {
@@ -165,10 +166,10 @@ export default function TestResults(): React.ReactElement {
       // for columns not in generated schema types.
       const { data: respSession } = await supabase.auth.getSession();
       const rFetch = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL}/rest/v1/test_responses?select=question_id,user_answer,is_correct,is_attempted,is_marked_review,time_spent_seconds&test_id=eq.${testId}&user_id=eq.${user!.id}`,
+        `${SUPABASE_URL}/rest/v1/test_responses?select=question_id,user_answer,is_correct,is_attempted,is_marked_review,time_spent_seconds&test_id=eq.${testId}&user_id=eq.${user!.id}`,
         {
           headers: {
-            apikey:        import.meta.env.VITE_SUPABASE_ANON_KEY as string,
+            apikey:        SUPABASE_ANON_KEY as string,
             Authorization: `Bearer ${respSession?.session?.access_token ?? ""}`,
           },
         }

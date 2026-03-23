@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
+import { toast } from "sonner";
 import { useInterviewScheduler } from "@/hooks/useInterviewScheduler";
 import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
 import { Card } from "@/components/ui/Card";
@@ -75,12 +76,24 @@ export default function InterviewDetail() {
 
   async function handleDelete() {
     setDeleting(true);
-    await scheduler.deleteInterview(iv.id);
-    navigate("/app/interviews");
+    try {
+      await scheduler.deleteInterview(iv.id);
+      navigate("/app/interviews");
+    } catch (err) {
+      console.error("handleDelete failed:", err);
+      toast.error("Failed to delete interview. Please try again.");
+    } finally {
+      setDeleting(false);
+    }
   }
 
   async function handleComplete() {
-    await scheduler.updateInterview(iv.id, { status: "completed" });
+    try {
+      await scheduler.updateInterview(iv.id, { status: "completed" });
+    } catch (err) {
+      console.error("handleComplete failed:", err);
+      toast.error("Failed to mark interview as completed. Please try again.");
+    }
   }
 
   return (

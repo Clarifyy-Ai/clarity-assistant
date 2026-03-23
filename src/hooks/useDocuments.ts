@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
 import { useState, useEffect, useCallback } from "react";
 import { supabase, uploadFile, deleteFile, STORAGE_BUCKETS } from "@/lib/supabase/client";
 import { useDocumentStore } from "@/store/documentStore";
@@ -177,7 +178,9 @@ export function useDocuments() {
         body: { resume_id: resumeId, version_id: versionId, file_url: fileUrl, mime_type: mimeType },
       });
       await loadDocuments();
-    } catch { /* non-fatal */ }
+    } catch (err) {
+      console.error("[useDocuments] parseResume failed:", err);
+    }
     finally { setIsParsing(false); }
   }
 
@@ -270,7 +273,8 @@ ${rawText.slice(0, 4000)}`;
         .eq("id", jdId);
 
       await loadDocuments();
-    } catch {
+    } catch (err) {
+      console.error("[useDocuments] parseJD failed:", err);
       await supabase
         .from("job_descriptions")
         .update({ parse_status: "error", parse_error: "Parse failed" })
@@ -294,12 +298,12 @@ ${rawText.slice(0, 4000)}`;
     if (!activeVersion?.parsed_data) return;
 
     try {
-      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      
       const response  = await fetch(`${EDGE_BASE}/gap-analysis`, {
         method: "POST",
         headers: {
           "Content-Type":  "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({
           resume_id:         resumeId,
@@ -311,7 +315,9 @@ ${rawText.slice(0, 4000)}`;
       if (!response.ok) return;
       const gap = await response.json();
       docStore.setGapAnalysis(gap);
-    } catch { /* non-fatal */ }
+    } catch (err) {
+      console.error("[useDocuments] runGapAnalysis failed:", err);
+    }
   }, [docStore.resumes, docStore.jds]);
 
   // ── Answer Bank CRUD ──────────────────────────────────────────

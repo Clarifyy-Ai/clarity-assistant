@@ -1,4 +1,5 @@
 // @ts-nocheck -- retained: complex Supabase row types with manual schema columns not in generated types; removing suppression produces implicit-any cascade across all data accesses.
+import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
@@ -71,12 +72,12 @@ export default function DebriefDetail() {
   async function generateDebrief(sessionId: string) {
     setGenning(true);
     try {
-      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      
       const res = await fetch(`${EDGE_BASE}/generate-debrief`, {
         method:  "POST",
         headers: {
           "Content-Type":  "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
         },
         body: JSON.stringify({ session_id: sessionId, user_id: user?.id }),
       });

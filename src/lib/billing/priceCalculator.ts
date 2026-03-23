@@ -4,6 +4,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { PLANS, PLAN_ORDER, type PlanId, type BillingInterval } from "./subscriptionManager";
+import { ENV } from "@/lib/env";
 
 // ─── Credit Top-Up Packs ──────────────────────────────────────────────────────
 
@@ -22,7 +23,7 @@ export const CREDIT_PACKS: CreditPack[] = [
     credits: 50,
     priceUsdCents: 499,
     label: "50 Credits",
-    stripePriceId: import.meta.env.VITE_STRIPE_PRICE_CREDITS_50,
+    stripePriceId: ENV.STRIPE_PRICE_CREDITS_50,
   },
   {
     id: "pack_150",
@@ -30,7 +31,7 @@ export const CREDIT_PACKS: CreditPack[] = [
     priceUsdCents: 1299,
     label: "150 Credits",
     badge: "Most Popular",
-    stripePriceId: import.meta.env.VITE_STRIPE_PRICE_CREDITS_150,
+    stripePriceId: ENV.STRIPE_PRICE_CREDITS_150,
   },
   {
     id: "pack_500",
@@ -38,7 +39,7 @@ export const CREDIT_PACKS: CreditPack[] = [
     priceUsdCents: 3999,
     label: "500 Credits",
     badge: "Best Value",
-    stripePriceId: import.meta.env.VITE_STRIPE_PRICE_CREDITS_500,
+    stripePriceId: ENV.STRIPE_PRICE_CREDITS_500,
   },
 ];
 

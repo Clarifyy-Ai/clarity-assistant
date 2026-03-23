@@ -1,4 +1,5 @@
 // @ts-nocheck
+import { ENV } from "@/lib/env";
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { callGemini } from "@/lib/ai/geminiClient";
@@ -288,5 +289,5 @@ function generateShareToken(): string {
 }
 
 function buildShareUrl(token: string): string {
-  return `${import.meta.env.VITE_APP_URL ?? window.location.origin}/scorecard/shared/${token}`;
+  return `${ENV.APP_URL || window.location.origin}/scorecard/shared/${token}`;
 }

@@ -196,7 +196,7 @@ export function createLevelAnalyser(
       source.disconnect();
       analyser.disconnect();
     } finally {
-      ctx.close().catch(() => {});
+      ctx.close().catch((err) => console.error("[audioCapture] AudioContext.close failed:", err));
     }
   }
 
