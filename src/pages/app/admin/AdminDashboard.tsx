@@ -164,7 +164,7 @@ interface SignupRow {
   id:         string;
   full_name:  string | null;
   email:      string | null;
-  plan:       string | null;
+  plan_id:    string | null;
   created_at: string;
 }
 
