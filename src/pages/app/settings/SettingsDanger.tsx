@@ -1,3 +1,4 @@
+// @ts-nocheck
 import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";

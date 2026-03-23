@@ -20,25 +20,25 @@ export const EDGE_FUNCTIONS = {
   // AI Generation
   GENERATE_ANSWER:        "generate-answer",
   GENERATE_HINT:          "generate-hint",
-  GENERATE_FEEDBACK:      "generate-feedback",
-  GENERATE_STAR:          "generate-star",
+  GENERATE_FEEDBACK:      "ai-feedback",
+  GENERATE_STAR:          "generate-star-answer",
   GENERATE_DEBRIEF:       "generate-debrief",
-  GENERATE_REPHRASE:      "generate-rephrase",
-  GENERATE_COACH_REPLY:   "generate-coach-reply",
+  GENERATE_REPHRASE:      "prep-tool",
+  GENERATE_COACH_REPLY:   "ai-coach-chat",
   COMPANY_RESEARCH:       "company-research",
-  CODING_HINT:            "coding-hint",
-  SYSTEM_DESIGN:          "system-design-guide",
-  RESUME_ANALYSIS:        "analyze-resume",
+  CODING_HINT:            "generate-hint",
+  SYSTEM_DESIGN:          "prep-tool",
+  RESUME_ANALYSIS:        "parse-resume",
 
   // Audio / Transcription
   DEEPGRAM_TOKEN:         "deepgram-token",
   PROCESS_AUDIO:          "process-audio",
 
   // Billing
-  CREATE_CHECKOUT:        "create-checkout-session",
+  CREATE_CHECKOUT:        "create-checkout",
   CANCEL_SUBSCRIPTION:    "cancel-subscription",
   RESUME_SUBSCRIPTION:    "resume-subscription",
-  CREATE_PORTAL:          "create-customer-portal",
+  CREATE_PORTAL:          "create-checkout",
   WEBHOOK_STRIPE:         "stripe-webhook",
   PURCHASE_CREDITS:       "purchase-credits",
 
