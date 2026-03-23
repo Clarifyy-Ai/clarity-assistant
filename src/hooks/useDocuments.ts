@@ -1,6 +1,7 @@
 // @ts-nocheck
-import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
-import { useState, useEffect, useCallback } from "react";
+// src/hooks/useDocuments.ts
+import { EDGE_BASE } from "@/lib/env";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase, uploadFile, deleteFile, STORAGE_BUCKETS } from "@/lib/supabase/client";
 import { useDocumentStore } from "@/store/documentStore";
 import { useAnswerBankStore } from "@/store/answerBankStore";
@@ -18,8 +19,7 @@ import type {
 import type { ParsedResume, ParsedJD } from "@/types/ai.types";
 
 // ─────────────────────────────────────────────────────────────────
-// answer_bank table row → SavedAnswer adapter
-// answer_bank uses question_text/answer_text; SavedAnswer uses question/title.
+// answer_bank row → SavedAnswer adapter
 // ─────────────────────────────────────────────────────────────────
 
 function mapAnswerBankRowToSavedAnswer(row: any): SavedAnswer {
@@ -43,7 +43,6 @@ function mapAnswerBankRowToSavedAnswer(row: any): SavedAnswer {
 
 // ─────────────────────────────────────────────────────────────────
 // useDocuments
-// Manages resumes, job descriptions, gap analysis, and answer bank.
 // ─────────────────────────────────────────────────────────────────
 
 export function useDocuments() {
@@ -52,7 +51,12 @@ export function useDocuments() {
   const answerStore = useAnswerBankStore();
   const [isParsing, setIsParsing] = useState(false);
 
-  // ── Load all documents on mount ───────────────────────────────
+  // ★ Guard: prevent state updates after unmount
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   useEffect(() => {
     if (!user) return;
@@ -60,36 +64,51 @@ export function useDocuments() {
     loadAnswerBank();
   }, [user?.id]);
 
-  async function loadDocuments(): Promise<void> {
-    docStore.setIsLoading(true);
-    const [resumeRes, jdRes] = await Promise.all([
-      supabase
-        .from("resumes")
-        .select("*, resume_versions(*)")
-        .eq("user_id", user!.id)
-        .order("updated_at", { ascending: false }),
-      supabase
-        .from("job_descriptions")
-        .select("*")
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false }),
-    ]);
+  // ── Load documents ────────────────────────────────────────────
 
-    if (resumeRes.data) docStore.setResumes(resumeRes.data as ResumeDocument[]);
-    if (jdRes.data)     docStore.setJDs(jdRes.data as JDDocument[]);
-    docStore.setIsLoading(false);
+  async function loadDocuments(): Promise<void> {
+    if (!user) return;
+    docStore.setIsLoading(true);
+    try {
+      const [resumeRes, jdRes] = await Promise.all([
+        supabase
+          .from("resumes")
+          .select("*, resume_versions(*)")
+          .eq("user_id", user.id)
+          .order("updated_at", { ascending: false }),
+        supabase
+          .from("job_descriptions")
+          .select("*")
+          .eq("user_id", user.id)
+          .order("created_at", { ascending: false }),
+      ]);
+      if (!mountedRef.current) return;
+      if (resumeRes.data) docStore.setResumes(resumeRes.data as ResumeDocument[]);
+      if (jdRes.data)     docStore.setJDs(jdRes.data as JDDocument[]);
+    } catch (err) {
+      console.error("[useDocuments] loadDocuments failed:", err);
+    } finally {
+      // ★ FIX: always clear loading even on error
+      if (mountedRef.current) docStore.setIsLoading(false);
+    }
   }
 
   async function loadAnswerBank(): Promise<void> {
+    if (!user) return;
     answerStore.setIsLoading(true);
-    const { data } = await supabase
-      .from("answer_bank")
-      .select("*")
-      .eq("user_id", user!.id)
-      .order("created_at", { ascending: false });
-
-    if (data) answerStore.setAnswers(data.map(mapAnswerBankRowToSavedAnswer));
-    answerStore.setIsLoading(false);
+    try {
+      const { data } = await supabase
+        .from("answer_bank")
+        .select("*")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+      if (!mountedRef.current) return;
+      if (data) answerStore.setAnswers(data.map(mapAnswerBankRowToSavedAnswer));
+    } catch (err) {
+      console.error("[useDocuments] loadAnswerBank failed:", err);
+    } finally {
+      if (mountedRef.current) answerStore.setIsLoading(false);
+    }
   }
 
   // ── Upload resume ─────────────────────────────────────────────
@@ -102,24 +121,35 @@ export function useDocuments() {
 
     const resumeId  = generateId();
     const versionId = generateId();
-    const path      = `${user.id}/${resumeId}/${versionId}.${file.name.split(".").pop()}`;
+    const ext       = file.name.split(".").pop() ?? "pdf";
+    const path      = `${user.id}/${resumeId}/${versionId}.${ext}`;
 
     docStore.setUploadProgress(0);
 
     try {
-      // Upload file
       const uploaded = await uploadFile(
         STORAGE_BUCKETS.RESUMES,
         path,
         file,
         (pct) => docStore.setUploadProgress(pct)
       );
-
       if (!uploaded) throw new Error("Upload failed");
 
-      // Create resume + version records
-      const version: Partial<ResumeVersion> = {
+      // ★ FIX: two separate inserts — Supabase doesn't support nested inserts
+      const { error: resumeErr } = await supabase.from("resumes").insert({
+        id:                resumeId,
+        user_id:           user.id,
+        // ★ FIX: correct regex \. not \\.
+        title:             title ?? file.name.replace(/\.[^/.]+$/, ""),
+        active_version_id: versionId,
+        created_at:        new Date().toISOString(),
+        updated_at:        new Date().toISOString(),
+      });
+      if (resumeErr) throw new Error(resumeErr.message);
+
+      const { error: versionErr } = await supabase.from("resume_versions").insert({
         id:              versionId,
+        resume_id:       resumeId,      // ← required FK
         version_number:  1,
         label:           null,
         file_name:       file.name,
@@ -130,24 +160,10 @@ export function useDocuments() {
         parse_status:    "parsing",
         parse_error:     null,
         uploaded_at:     new Date().toISOString(),
-      };
+      });
+      if (versionErr) throw new Error(versionErr.message);
 
-      const resume: Partial<ResumeDocument> = {
-        id:                resumeId,
-        user_id:           user.id,
-        title:             title ?? file.name.replace(/\.[^/.]+$/, ""),
-        active_version_id: versionId,
-        created_at:        new Date().toISOString(),
-        updated_at:        new Date().toISOString(),
-      };
-
-      const { error: dbError } = await supabase
-        .from("resumes")
-        .insert({ ...resume, resume_versions: [version] });
-
-      if (dbError) throw new Error(dbError.message);
-
-      // Trigger async parsing via Edge Function
+      // Fire-and-forget parse (does NOT block upload success)
       parseResume(resumeId, versionId, uploaded.url, file.type);
 
       await loadDocuments();
@@ -162,7 +178,7 @@ export function useDocuments() {
     }
   }, [user]);
 
-  // ── Parse resume via AI ───────────────────────────────────────
+  // ── Parse resume via Edge Function ────────────────────────────
 
   async function parseResume(
     resumeId: string,
@@ -170,18 +186,18 @@ export function useDocuments() {
     fileUrl: string,
     mimeType: string
   ): Promise<void> {
+    if (!mountedRef.current) return;
     setIsParsing(true);
     try {
-      // Use supabase.functions.invoke so the user's JWT is forwarded automatically,
-      // enabling the edge function to verify resume ownership via RLS.
       await supabase.functions.invoke("parse-resume", {
         body: { resume_id: resumeId, version_id: versionId, file_url: fileUrl, mime_type: mimeType },
       });
-      await loadDocuments();
+      if (mountedRef.current) await loadDocuments();
     } catch (err) {
       console.error("[useDocuments] parseResume failed:", err);
+    } finally {
+      if (mountedRef.current) setIsParsing(false);
     }
-    finally { setIsParsing(false); }
   }
 
   // ── Delete resume ─────────────────────────────────────────────
@@ -190,10 +206,16 @@ export function useDocuments() {
     const resume = docStore.resumes.find((r) => r.id === resumeId);
     if (!resume) return;
 
-    // Delete storage files
-    for (const version of resume.versions) {
-      const path = new URL(version.file_url).pathname.split("/storage/v1/object/public/resumes/")[1];
-      if (path) await deleteFile(STORAGE_BUCKETS.RESUMES, path);
+    // ★ FIX: DB returns resume_versions not .versions
+    const versions: ResumeVersion[] = (resume as any).resume_versions ?? [];
+    for (const version of versions) {
+      try {
+        const path = new URL(version.file_url).pathname
+          .split("/storage/v1/object/public/resumes/")[1];
+        if (path) await deleteFile(STORAGE_BUCKETS.RESUMES, path);
+      } catch (err) {
+        console.warn("[useDocuments] deleteFile failed for version:", version.id, err);
+      }
     }
 
     await supabase.from("resumes").delete().eq("id", resumeId);
@@ -211,9 +233,9 @@ export function useDocuments() {
   }): Promise<{ jdId: string | null; error: string | null }> => {
     if (!user) return { jdId: null, error: "Not authenticated" };
 
-    const jdId: string = generateId();
+    const jdId = generateId();
 
-    const jd: Partial<JDDocument> = {
+    const { error } = await supabase.from("job_descriptions").insert({
       id:           jdId,
       user_id:      user.id,
       raw_text:     params.rawText,
@@ -227,15 +249,12 @@ export function useDocuments() {
       parse_error:  null,
       created_at:   new Date().toISOString(),
       updated_at:   new Date().toISOString(),
-    };
+    });
 
-    const { error } = await supabase.from("job_descriptions").insert(jd);
     if (error) return { jdId: null, error: error.message };
 
-    // Async parse
     parseJobDescription(jdId, params.rawText);
     await loadDocuments();
-
     return { jdId, error: null };
   }, [user]);
 
@@ -263,26 +282,27 @@ Return ONLY valid JSON matching this schema:
 Job description:
 ${rawText.slice(0, 4000)}`;
 
-      const text  = await callGemini({ prompt, model: "gemini-1.5-flash" });
+      // ★ FIX: upgraded model + maxOutputTokens
+      const text  = await callGemini({ prompt, model: "gemini-2.0-flash", maxOutputTokens: 2048 });
       const clean = text.replace(/```json|```/g, "").trim();
       const data: ParsedJD = JSON.parse(clean);
 
       await supabase
         .from("job_descriptions")
-        .update({ parsed_data: data, parse_status: "ready" })
+        .update({ parsed_data: data, parse_status: "ready", parse_error: null })
         .eq("id", jdId);
 
-      await loadDocuments();
+      if (mountedRef.current) await loadDocuments();
     } catch (err) {
       console.error("[useDocuments] parseJD failed:", err);
       await supabase
         .from("job_descriptions")
-        .update({ parse_status: "error", parse_error: "Parse failed" })
+        .update({ parse_status: "error", parse_error: String(err) })
         .eq("id", jdId);
     }
   }
 
-  // ── Run gap analysis ──────────────────────────────────────────
+  // ── Gap analysis ──────────────────────────────────────────────
 
   const runGapAnalysis = useCallback(async (
     resumeId: string,
@@ -292,18 +312,22 @@ ${rawText.slice(0, 4000)}`;
     const jd     = docStore.jds.find((j) => j.id === jdId);
     if (!resume || !jd) return;
 
-    const activeVersion = resume.versions.find(
+    // ★ FIX: DB returns resume_versions not .versions
+    const versions: ResumeVersion[] = (resume as any).resume_versions ?? [];
+    const activeVersion = versions.find(
       (v) => v.id === resume.active_version_id
-    ) ?? resume.versions[0];
+    ) ?? versions[0];
     if (!activeVersion?.parsed_data) return;
 
     try {
-      
-      const response  = await fetch(`${EDGE_BASE}/gap-analysis`, {
+      // ★ FIX: use live session JWT, not anon key
+      const { data: { session } } = await supabase.auth.getSession();
+
+      const response = await fetch(`${EDGE_BASE}/gap-analysis`, {
         method: "POST",
         headers: {
           "Content-Type":  "application/json",
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
+          "Authorization": `Bearer ${session?.access_token ?? ""}`,
         },
         body: JSON.stringify({
           resume_id:         resumeId,
@@ -312,9 +336,12 @@ ${rawText.slice(0, 4000)}`;
         }),
       });
 
-      if (!response.ok) return;
+      if (!response.ok) {
+        console.error("[useDocuments] gap-analysis failed:", response.status);
+        return;
+      }
       const gap = await response.json();
-      docStore.setGapAnalysis(gap);
+      if (mountedRef.current) docStore.setGapAnalysis(gap);
     } catch (err) {
       console.error("[useDocuments] runGapAnalysis failed:", err);
     }
@@ -332,40 +359,22 @@ ${rawText.slice(0, 4000)}`;
   }): Promise<{ error: string | null }> => {
     if (!user) return { error: "Not authenticated" };
 
-    const answer: Partial<SavedAnswer> = {
-      id:             generateId(),
-      user_id:        user.id,
-      title:          params.title,
-      question:       params.question,
-      answer_text:    params.answerText,
-      category:       params.category,
-      tags:           params.tags           ?? [],
-      company_tags:   params.companyTags    ?? [],
-      star_components: null,
-      is_favourite:   false,
-      times_used:     0,
-      last_used_at:   null,
-      created_at:     new Date().toISOString(),
-      updated_at:     new Date().toISOString(),
-    };
-
     const { data: inserted, error } = await supabase
       .from("answer_bank")
       .insert({
-        id:            answer.id,
-        user_id:       answer.user_id,
-        question_text: answer.question ?? "",
-        answer_text:   answer.answer_text ?? "",
-        category:      answer.category ?? "general",
-        tags:          answer.tags ?? [],
+        id:            generateId(),
+        user_id:       user.id,
+        question_text: params.question,
+        answer_text:   params.answerText,
+        category:      params.category ?? "general",
+        tags:          params.tags     ?? [],
         source:        "manual",
       })
       .select()
       .single();
-    if (error) return { error: error.message };
 
-    // Map DB row to SavedAnswer shape before adding to store
-    answerStore.addAnswer(mapAnswerBankRowToSavedAnswer(inserted ?? answer));
+    if (error) return { error: error.message };
+    answerStore.addAnswer(mapAnswerBankRowToSavedAnswer(inserted));
     return { error: null };
   }, [user]);
 
@@ -377,48 +386,41 @@ ${rawText.slice(0, 4000)}`;
   const toggleFavourite = useCallback(async (answerId: string): Promise<void> => {
     const answer = answerStore.answers.find((a) => a.id === answerId);
     if (!answer) return;
-
     const newFav = !answer.is_favourite;
     await supabase
       .from("answer_bank")
       .update({ is_favourite: newFav, updated_at: new Date().toISOString() })
       .eq("id", answerId);
-
     answerStore.toggleFavourite(answerId);
   }, [answerStore.answers]);
 
   return {
-    // State
-    resumes:          docStore.resumes,
-    jds:              docStore.jds,
-    activeContext:    docStore.active_context,
-    answers:          answerStore.filtered_answers,
-    allAnswers:       answerStore.answers,
-    isLoading:        docStore.is_loading,
-    uploadProgress:   docStore.upload_progress,
+    resumes:        docStore.resumes,
+    jds:            docStore.jds,
+    activeContext:  docStore.active_context,
+    answers:        answerStore.filtered_answers,
+    allAnswers:     answerStore.answers,
+    isLoading:      docStore.is_loading,
+    uploadProgress: docStore.upload_progress,
     isParsing,
 
-    // Actions — resumes
     uploadResume,
     deleteResume,
-    setActiveResume:  docStore.setActiveResumeId,
+    setActiveResume: docStore.setActiveResumeId,
 
-    // Actions — JD
     addJobDescription,
-    setActiveJD:      docStore.setActiveJDId,
+    setActiveJD:     docStore.setActiveJDId,
     runGapAnalysis,
 
-    // Actions — answers
     saveAnswer,
     deleteAnswer,
     toggleFavourite,
-    incrementUsage:   answerStore.incrementUsageCount,
-    setFilter:        answerStore.setFilter,
-    setSearch:        answerStore.setSearchQuery,
-    activeFilter:     answerStore.active_filter,
-    searchQuery:      answerStore.search_query,
+    incrementUsage:  answerStore.incrementUsageCount,
+    setFilter:       answerStore.setFilter,
+    setSearch:       answerStore.setSearchQuery,
+    activeFilter:    answerStore.active_filter,
+    searchQuery:     answerStore.search_query,
 
-    // Reload
     reload: loadDocuments,
   };
 }
