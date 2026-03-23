@@ -51,7 +51,7 @@ export function OverlayHotkeyHelp() {
           {HOTKEYS.map((hk) => (
             <div key={hk.label} className="flex items-center justify-between">
               <span className="text-[11px] text-muted-foreground/80">{hk.label}</span>
-              <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-[9px] text-muted-foreground font-mono">
+              <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-[11px] text-muted-foreground font-mono">
                 {hk.keys.includes("1-4")
                   ? "⌃⇧1–4"
                   : formatHotkeyLabel(hk.keys)}
@@ -59,7 +59,7 @@ export function OverlayHotkeyHelp() {
             </div>
           ))}
         </div>
-        <p className="text-[9px] text-muted-foreground/40 mt-3 text-center">
+        <p className="text-[11px] text-muted-foreground/40 mt-3 text-center">
           Auto-closes in 5s · Press any key to dismiss
         </p>
       </div>

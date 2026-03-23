@@ -3,19 +3,20 @@ import { useOverlayStore } from "@/store/overlayStore";
 import { useAudioStore } from "@/store/audioStore";
 import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 import { PANIC_RESPONSE } from "@/types/session.types";
+import { captureAndAnalyseCodingProblem } from "@/lib/audio/screenshotCapture";
 import {
   Mic, MicOff, Volume2, VolumeX, Zap, RefreshCw,
   Eye, EyeOff, Square, AlertCircle, Type, ChevronDown,
-  Minimize2, Star, FileText, Pin,
+  Minimize2, Star, FileText, Pin, Camera,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatHotkeyLabel } from "@/lib/overlay/hotkeys";
 import type { LucideIcon } from "lucide-react";
 import type { PreferredAIModel } from "@/types/user.types";
 
-const MODEL_OPTIONS: { id: PreferredAIModel; label: string }[] = [
-  { id: "gpt-4o",            label: "GPT-4o" },
-  { id: "claude-3-5-sonnet", label: "Claude" },
+const MODEL_OPTIONS: { id: PreferredAIModel; label: string; note?: string }[] = [
+  { id: "gpt-4o",            label: "GPT-4o",      note: "via Gemini" },
+  { id: "claude-3-5-sonnet", label: "Claude",       note: "via Gemini" },
   { id: "gemini-1-5-pro",    label: "Gemini Pro" },
   { id: "gemini-flash",      label: "Flash" },
 ];
@@ -46,15 +47,17 @@ interface OverlayToolbarProps {
 }
 
 export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, onEndSession }: OverlayToolbarProps) {
-  const isMuted        = useAudioStore((s) => s.is_muted);
-  const isCapturing    = useAudioStore((s) => s.streams?.is_capturing ?? false);
-  const hasSystemAudio = useAudioStore((s) => !!s.streams?.system_stream);
-  const isStealth      = useOverlayStore((s) => s.is_stealth_mode);
-  const autoGenerate   = useOverlayStore((s) => s.auto_generate);
-  const hintState      = useOverlayStore((s) => s.hint_state);
-  const hintStyle      = useOverlayStore((s) => s.hint_style);
-  const activeModel    = useOverlayStore((s) => s.active_model);
-  const isMinimal      = useOverlayStore((s) => s.is_minimal_mode);
+  const isMuted           = useAudioStore((s) => s.is_muted);
+  const isCapturing       = useAudioStore((s) => s.streams?.is_capturing ?? false);
+  const hasSystemAudio    = useAudioStore((s) => !!s.streams?.system_stream);
+  const isStealth         = useOverlayStore((s) => s.is_stealth_mode);
+  const autoGenerate      = useOverlayStore((s) => s.auto_generate);
+  const hintState         = useOverlayStore((s) => s.hint_state);
+  const hintStyle         = useOverlayStore((s) => s.hint_style);
+  const activeModel       = useOverlayStore((s) => s.active_model);
+  const isMinimal         = useOverlayStore((s) => s.is_minimal_mode);
+  const simpleLanguage    = useOverlayStore((s) => s.simple_language);
+  const isScreenshotLoading = useOverlayStore((s) => s.is_screenshot_loading);
 
   const pinnedHints      = useOverlayStore((s) => s.pinned_hints);
   const resumePoints     = useOverlayStore((s) => s.resume_talking_points);
@@ -107,6 +110,15 @@ export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, o
         active={isStealth}
         color={isStealth ? "violet" : "gray"}
         onClick={toggleAppStealthMode}
+      />
+
+      <ToolbarButton
+        icon={Camera}
+        label="Screenshot & analyse coding problem (Ctrl+Shift+C)"
+        active={isScreenshotLoading}
+        color="blue"
+        onClick={() => captureAndAnalyseCodingProblem()}
+        disabled={isScreenshotLoading}
       />
 
       <div className="relative" ref={resumeQuickPeekRef}>
@@ -167,7 +179,7 @@ export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, o
         disabled={isGenerating}
       />
 
-      {/* Auto-generate button — with label + status dot from HEAD, redesign styling */}
+      {/* Auto-generate button */}
       <button
         onClick={() => useOverlayStore.getState().setAutoGenerate(!autoGenerate)}
         title={autoGenerate ? "Auto-generate ON — click to disable" : "Auto-generate OFF — click to enable"}
@@ -185,6 +197,16 @@ export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, o
           autoGenerate ? "bg-emerald-400" : "bg-gray-600"
         )} />
       </button>
+
+      {/* Simple language indicator */}
+      {simpleLanguage && (
+        <span
+          title="Simple language mode — plain, jargon-free answers"
+          className="flex items-center gap-0.5 px-1.5 py-0.5 h-8 rounded-lg text-[11px] font-semibold text-emerald-300 bg-emerald-500/10 border border-emerald-500/20 shrink-0 cursor-default"
+        >
+          <span>Abc</span>
+        </span>
+      )}
 
       <button
         onClick={() => useOverlayStore.getState().cycleHintStyle()}
@@ -205,7 +227,7 @@ export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, o
           <ChevronDown className="w-2.5 h-2.5" />
         </button>
         {showModelMenu && (
-          <div className="absolute top-full left-0 mt-1 w-32 bg-[#1a1a2e] border border-white/10 rounded-xl shadow-xl z-50 py-1 overflow-hidden">
+          <div className="absolute top-full left-0 mt-1 w-44 bg-[#1a1a2e] border border-white/10 rounded-xl shadow-xl z-50 py-1 overflow-hidden">
             {MODEL_OPTIONS.map((m) => (
               <button
                 key={m.id}
@@ -220,7 +242,10 @@ export function OverlayToolbar({ onToggleMic, onToggleSystemAudio, onGenerate, o
                     : "text-muted-foreground hover:text-white hover:bg-white/5"
                 )}
               >
-                {m.label}
+                <span>{m.label}</span>
+                {m.note && (
+                  <span className="ml-1.5 text-[10px] text-muted-foreground/40">({m.note})</span>
+                )}
               </button>
             ))}
           </div>
@@ -372,6 +397,7 @@ function ToolbarButton({
     amber:   "text-amber-400 bg-amber-500/10",
     emerald: "text-emerald-400 bg-emerald-500/10",
     violet:  "text-violet-400 bg-violet-500/10",
+    blue:    "text-blue-400 bg-blue-500/10",
     gray:    "text-gray-400 bg-white/5",
   };
 

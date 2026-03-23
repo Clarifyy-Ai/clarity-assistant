@@ -46,7 +46,7 @@ export function OverlayAnswerStrength() {
 
   return (
     <div className="flex items-center gap-1.5 px-1" title={`Answer strength: ${LABEL[strength]}`}>
-      <span className="text-[8px] font-mono text-muted-foreground/40 uppercase tracking-wide">
+      <span className="text-[11px] font-mono text-muted-foreground/40 uppercase tracking-wide">
         Strength
       </span>
       <div className="flex items-center gap-0.5">
@@ -61,7 +61,7 @@ export function OverlayAnswerStrength() {
         ))}
       </div>
       <span className={cn(
-        "text-[8px] font-mono transition-colors duration-500",
+        "text-[11px] font-mono transition-colors duration-500",
         strength === "strong" ? "text-emerald-400/70" :
         strength === "ok"     ? "text-amber-400/70"   :
         strength === "weak"   ? "text-red-400/70"     :

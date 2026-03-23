@@ -10,7 +10,7 @@ export function OverlayQuestionBar({ question }: OverlayQuestionBarProps) {
       <div className="flex items-start gap-2">
         <MessageSquare className="w-3 h-3 text-brand-400 shrink-0 mt-0.5" />
         <div className="flex-1 min-w-0">
-          <p className="text-[9px] uppercase tracking-wider text-brand-400/60 font-semibold mb-0.5">
+          <p className="text-[11px] uppercase tracking-wider text-brand-400/60 font-semibold mb-0.5">
             Detected Question
           </p>
           <p className="text-xs text-overlay-text leading-relaxed line-clamp-3">

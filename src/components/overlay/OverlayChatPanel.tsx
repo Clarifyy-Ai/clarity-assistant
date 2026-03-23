@@ -1,8 +1,9 @@
-import { useRef, useEffect } from "react";
+import { useRef, useEffect, useState } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
 import type { ChatMessage } from "@/store/overlayStore";
 import { OverlayChatInput } from "./OverlayChatInput";
 import { cn } from "@/lib/utils";
+import { ChevronDown, StickyNote } from "lucide-react";
 
 interface OverlayChatPanelProps {
   onSubmit: (question: string) => void;
@@ -12,6 +13,8 @@ export function OverlayChatPanel({ onSubmit }: OverlayChatPanelProps) {
   const chatHistory = useOverlayStore((s) => s.chat_history);
   const isGenerating = useOverlayStore((s) => s.is_chat_generating);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const [padOpen, setPadOpen] = useState(false);
+  const [padText, setPadText] = useState("");
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -50,6 +53,27 @@ export function OverlayChatPanel({ onSubmit }: OverlayChatPanelProps) {
               </div>
             </div>
           </div>
+        )}
+      </div>
+
+      {/* Scratch-pad notes */}
+      <div className="border-t border-white/5 shrink-0">
+        <button
+          onClick={() => setPadOpen((p) => !p)}
+          className="flex w-full items-center gap-1.5 px-3 py-1.5 text-[11px] text-muted-foreground/40 hover:text-muted-foreground/60 transition-colors"
+        >
+          <StickyNote className="w-3 h-3" />
+          <span className="font-semibold uppercase tracking-wide">Scratch-pad</span>
+          <ChevronDown className={cn("w-3 h-3 ml-auto transition-transform", padOpen && "rotate-180")} />
+        </button>
+        {padOpen && (
+          <textarea
+            value={padText}
+            onChange={(e) => setPadText(e.target.value)}
+            placeholder="Quick notes — not saved, not sent to AI…"
+            className="w-full px-3 pb-2 bg-transparent text-[12px] text-overlay-text placeholder:text-muted-foreground/25 resize-none focus:outline-none leading-relaxed"
+            rows={4}
+          />
         )}
       </div>
 

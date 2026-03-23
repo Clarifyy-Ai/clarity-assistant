@@ -39,7 +39,7 @@ export function OverlayQuestionPreview() {
     <div className="border-b border-white/5 shrink-0">
       <button
         onClick={() => setOpen((p) => !p)}
-        className="flex w-full items-center gap-1.5 px-3 py-1 text-[9px] text-muted-foreground/40 hover:text-muted-foreground/60 transition-colors"
+        className="flex w-full items-center gap-1.5 px-3 py-1 text-[11px] text-muted-foreground/40 hover:text-muted-foreground/60 transition-colors"
       >
         {open ? <ChevronDown className="w-2.5 h-2.5" /> : <ChevronRight className="w-2.5 h-2.5" />}
         <span className="uppercase tracking-wide font-semibold">
@@ -58,7 +58,7 @@ export function OverlayQuestionPreview() {
             <div>
               <div className="flex items-center gap-1 mb-1">
                 <ListOrdered className="w-2.5 h-2.5 text-brand-400/50" />
-                <span className="text-[8px] font-semibold uppercase tracking-wider text-brand-300/50">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-300/50">
                   Upcoming
                 </span>
               </div>
@@ -77,7 +77,7 @@ export function OverlayQuestionPreview() {
             <div>
               <div className="flex items-center gap-1 mb-1">
                 <History className="w-2.5 h-2.5 text-muted-foreground/40" />
-                <span className="text-[8px] font-semibold uppercase tracking-wider text-muted-foreground/40">
+                <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground/40">
                   Recent
                 </span>
               </div>

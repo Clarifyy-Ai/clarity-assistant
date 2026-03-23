@@ -24,7 +24,7 @@ import { OverlayAnswerTimer } from "./OverlayAnswerTimer";
 import { OverlayAudioBadge } from "./OverlayAudioBadge";
 import { OverlayQuestionPreview } from "./OverlayQuestionPreview";
 import { cn } from "@/lib/utils";
-import { Zap, Loader2, SlidersHorizontal, Maximize2 } from "lucide-react";
+import { Loader2, SlidersHorizontal, Maximize2 } from "lucide-react";
 import type { LiveSessionConfig } from "@/types/session.types";
 import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 
@@ -35,6 +35,8 @@ interface OverlayWindowProps {
   onEndSession?:       () => void;
   onManualQuestion?:   (question: string) => void;
   onStartSession?:     (config: LiveSessionConfig) => void;
+  onSetupNewSession?:  () => void;
+  lastSessionId?:      string | null;
 }
 
 export function OverlayWindow({
@@ -44,6 +46,8 @@ export function OverlayWindow({
   onEndSession,
   onManualQuestion,
   onStartSession,
+  onSetupNewSession,
+  lastSessionId,
 }: OverlayWindowProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const resizeContainerRef = useRef<HTMLDivElement>(null);
@@ -216,6 +220,45 @@ export function OverlayWindow({
           {/* ── SCREEN CAPTURE WARNING BANNER ──────────────────────── */}
           <ScreenCaptureBanner isProctorSafe={is_proctor_safe} />
 
+          {/* ── SESSION-END DEBRIEF ──────────────────────────────────── */}
+          {!isSessionActive && (
+            <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 py-8 text-center">
+              <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4M7.835 4.697a3.42 3.42 0 001.946-.806 3.42 3.42 0 014.438 0 3.42 3.42 0 001.946.806 3.42 3.42 0 013.138 3.138 3.42 3.42 0 00.806 1.946 3.42 3.42 0 010 4.438 3.42 3.42 0 00-.806 1.946 3.42 3.42 0 01-3.138 3.138 3.42 3.42 0 00-1.946.806 3.42 3.42 0 01-4.438 0 3.42 3.42 0 00-1.946-.806 3.42 3.42 0 01-3.138-3.138 3.42 3.42 0 00-.806-1.946 3.42 3.42 0 010-4.438 3.42 3.42 0 00.806-1.946 3.42 3.42 0 013.138-3.138z" />
+                </svg>
+              </div>
+              <div>
+                <p className="text-[14px] font-semibold text-overlay-text">Session Complete</p>
+                <p className="text-[12px] text-muted-foreground/50 mt-1">Great work! Review your results below.</p>
+              </div>
+              <div className="flex flex-col gap-2 w-full max-w-[200px]">
+                {lastSessionId && (
+                  <a
+                    href={`/app/scorecard/${lastSessionId}`}
+                    className="flex items-center justify-center gap-2 px-4 py-2 bg-brand-500/20 hover:bg-brand-500/30 text-brand-300 text-[12px] font-medium rounded-xl border border-brand-500/20 transition-all"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+                    </svg>
+                    View Scorecard
+                  </a>
+                )}
+                {onSetupNewSession && (
+                  <button
+                    onClick={onSetupNewSession}
+                    className="flex items-center justify-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-muted-foreground/70 hover:text-white text-[12px] font-medium rounded-xl border border-white/8 transition-all"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    New Session
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* ── MINIMAL MODE: only FAB + slim strip ─────────────────── */}
           {is_minimal_mode && isSessionActive && (
             <div className="flex items-center gap-2 px-3 py-2 shrink-0">
@@ -330,7 +373,7 @@ export function OverlayWindow({
               {isSessionActive && <OverlaySessionStats />}
 
               {isSessionActive && (
-                <div className="flex items-center justify-between border-t border-white/5 px-3 py-1.5 font-mono text-[10px] text-muted-foreground/40 shrink-0">
+                <div className="flex items-center justify-between border-t border-white/5 px-3 py-1.5 font-mono text-[11px] text-muted-foreground/40 shrink-0">
                   <span className="truncate">
                     ⌃⇧H hide · Esc clear · ⌃⇧P panic · ⌃⇧/ help
                   </span>
@@ -353,49 +396,6 @@ export function OverlayWindow({
             </>
           )}
 
-          {isSessionActive && false && (
-            <div className="px-3 py-2 shrink-0">
-              <button
-                onClick={onGenerate}
-                disabled={hint_state === "generating" || hint_state === "streaming"}
-                className={cn(
-                  "w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold text-sm transition-all",
-                  hint_state === "generating" || hint_state === "streaming"
-                    ? "bg-amber-500/20 border border-amber-500/30 text-amber-400 cursor-not-allowed"
-                    : "bg-gradient-to-r from-emerald-600/80 to-teal-600/80 hover:from-emerald-500/80 hover:to-teal-500/80 text-white border border-emerald-500/20 hover:border-emerald-400/30 active:scale-[0.98]"
-                )}
-                title="Get AI Answer (Ctrl+Shift+G)"
-              >
-                {hint_state === "generating" || hint_state === "streaming" ? (
-                  <>
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                    Generating…
-                  </>
-                ) : (
-                  <>
-                    <Zap className="w-4 h-4" />
-                    Get AI Answer
-                    <span className="text-[10px] opacity-50 font-normal ml-0.5">⌃⇧G</span>
-                  </>
-                )}
-              </button>
-            </div>
-          )}
-
-          {!is_minimal_mode && isSessionActive && <OverlaySessionStats />}
-
-          {!is_minimal_mode && isSessionActive && (
-            <div className="flex items-center justify-between border-t border-white/5 px-2 sm:px-4 py-1 font-mono text-[11px] sm:text-[11px] text-muted-foreground/40 shrink-0">
-              <span className="truncate">
-                ⌃⇧H hide · Esc clear · ⌃⇧P panic · ⌃⇧/ help
-              </span>
-              <div className="flex items-center gap-2">
-                <OverlayActivityTimer />
-                <span className="capitalize">{hint_style.replace("_", " ")}</span>
-              </div>
-            </div>
-          )}
-
           <div className={cn(is_stealth_mode && "opacity-50 hover:opacity-80 transition-opacity")} style={{ pointerEvents: "auto" }}>
             <OverlayResizeHandles containerRef={resizeContainerRef} />
           </div>
@@ -407,6 +407,7 @@ export function OverlayWindow({
     overlayRoot
   );
 }
+
 
 function FloatingAIButton({
   onGenerate,

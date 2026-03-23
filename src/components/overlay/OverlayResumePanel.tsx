@@ -38,7 +38,7 @@ export function OverlayResumePanel() {
           <div className="mt-2 space-y-2 p-2.5 bg-white/3 border border-white/5 rounded-lg">
             {/* Resume selector */}
             <div>
-              <p className="text-[9px] text-muted-foreground/40 uppercase tracking-wider mb-1 flex items-center gap-1">
+              <p className="text-[11px] text-muted-foreground/40 uppercase tracking-wider mb-1 flex items-center gap-1">
                 <FileText className="w-2.5 h-2.5" /> Resume
               </p>
               <select
@@ -55,7 +55,7 @@ export function OverlayResumePanel() {
 
             {/* JD selector */}
             <div>
-              <p className="text-[9px] text-muted-foreground/40 uppercase tracking-wider mb-1 flex items-center gap-1">
+              <p className="text-[11px] text-muted-foreground/40 uppercase tracking-wider mb-1 flex items-center gap-1">
                 <Briefcase className="w-2.5 h-2.5" /> Job Description
               </p>
               <select
@@ -74,13 +74,13 @@ export function OverlayResumePanel() {
             {(activeResume || activeJd) && (
               <div className="flex flex-wrap gap-1 pt-1 border-t border-white/5">
                 {activeResume && (
-                  <span className="px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-300 text-[9px] flex items-center gap-0.5">
+                  <span className="px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-300 text-[11px] flex items-center gap-0.5">
                     <FileText className="w-2 h-2" />
                     {activeResume.title}
                   </span>
                 )}
                 {activeJd && (
-                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[9px] flex items-center gap-0.5">
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[11px] flex items-center gap-0.5">
                     <Briefcase className="w-2 h-2" />
                     {activeJd.role_title}{activeJd.company_name ? ` — ${activeJd.company_name}` : ""}
                   </span>
@@ -95,7 +95,7 @@ export function OverlayResumePanel() {
       <div className="flex items-center justify-between px-2.5 py-2 bg-white/3 border border-white/5 rounded-lg">
         <div>
           <p className="text-[10px] font-medium text-muted-foreground/70">Simple Language</p>
-          <p className="text-[9px] text-muted-foreground/40 mt-0.5">Plain, jargon-free answers</p>
+          <p className="text-[11px] text-muted-foreground/40 mt-0.5">Plain, jargon-free answers</p>
         </div>
         <button
           onClick={() => setSimpleLanguage(!simpleLanguage)}
