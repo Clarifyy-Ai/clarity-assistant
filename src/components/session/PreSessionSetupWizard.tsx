@@ -604,7 +604,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   { label: "Save Transcript", value: saveTranscript ? "Yes" : "No (real-time only)" },
                   ...(company || role ? [{ label: "Role", value: [company, role].filter(Boolean).join(" — ") }] : []),
                   ...(resumeId ? [{ label: "Resume", value: resumes.find(r=>r.id===resumeId)?.title || "Selected" }] : []),
-                  ...(jdId ? [{ label: "Job Description", value: jds.find(j=>j.id===jdId)?.title || "Selected" }] : []),
+                  ...(jdId ? [{ label: "Job Description", value: (jds.find(j=>j.id===jdId) as any)?.title || "Selected" }] : []),
                 ].map((item) => (
                   <div key={item.label} className="flex items-center justify-between text-xs">
                     <span className="text-gray-500">{item.label}</span>
