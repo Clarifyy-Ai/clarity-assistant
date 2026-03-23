@@ -1,0 +1,169 @@
+Got it, Gopi. Here’s a **ready-to-copy engineering prompt** you can paste into your favorite code assistant (Copilot/Claude/GPT) to generate a clean patch/PR. I’ve also added a shorter TL;DR version at the end.
+
+***
+
+# ✅ Engineering Prompt (Complete)
+
+**Goal:**  
+Make the overlay stay **always on top** even when the browser window is minimized (but not when the tab is closed), and ensure the overlay **never appears in screen share**.
+
+**Key platform facts to respect (do not ignore):**
+
+*   Use **Document Picture‑in‑Picture (DPiP)** to render the overlay in an always‑on‑top companion window. DPiP **cannot** outlive the opener tab (closing the tab closes the PiP window by spec). [\[developer.chrome.com\]](https://developer.chrome.com/docs/web-platform/screen-sharing-controls/), [\[developer....ozilla.org\]](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Capture_API)
+*   To keep the overlay out of screen share, prefer **Element Capture** (strict subtree capture), and fall back to **Region Capture** (crop to bounding box) if Element Capture isn’t available. Also pass Chrome’s screen‑sharing privacy hints in `getDisplayMedia` to reduce oversharing. [\[developer.chrome.com\]](https://developer.chrome.com/docs/web-platform/region-capture/), [\[geeksforgeeks.org\]](https://www.geeksforgeeks.org/css/how-to-hide-elements-in-responsive-layout-using-css/), [\[developer....ozilla.org\]](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia)
+
+***
+
+## Project context
+
+**Repo structure (relevant parts):**
+
+*   `src/components/overlay/OverlayWindow.tsx` – overlay composition & portal
+*   `src/components/overlay/WindowVisibilityManager.tsx` – hides overlay on blur
+*   `src/components/overlay/OverlayPositionManager.tsx` – drag/positioning (keep as-is)
+*   `src/components/overlay/ScreenCaptureBlocker.tsx` – heuristic warnings (keep)
+*   `src/components/overlay/OverlayToolbar.tsx`, `OverlaySettings.tsx` – UI
+*   **Create**: `src/lib/overlay/useDocumentPiP.ts` – DPiP helper (new)
+*   **Create**: `src/lib/capture/screenShare.ts` – Region/Element Capture helpers (optional but preferred)
+
+***
+
+## Tasks
+
+1.  **Always-on-top overlay via DPiP**
+    *   Add a new hook `useDocumentPiP(enabled: boolean)` that:
+        *   Calls `await documentPictureInPicture.requestWindow({ width, height })` when `enabled` is true.
+        *   Copies stylesheets and inline styles from the opener document into the PiP document.
+        *   Creates `<div id="overlay-root">` in the PiP document `body`.
+        *   Returns the **PiP document** so we can render React there with `createPortal`.
+        *   Cleans up if the PiP window is closed.
+    *   In `OverlayWindow.tsx`, when the overlay becomes visible, use this hook and **render the overlay portal** into the PiP document’s `#overlay-root`.
+    *   Export a `setPipActive(boolean)` action in the overlay store and set it true/false based on PiP availability.
+
+2.  **Do not auto‑hide overlay when PiP is active**
+    *   Update `WindowVisibilityManager.tsx` so `autoHideOnBlur` **does nothing** when `is_pip_active === true`.
+    *   Existing behavior should remain unchanged when PiP is not active.
+
+3.  **Keep overlay out of screen share**
+    *   Create `src/lib/capture/screenShare.ts` with two helpers:
+        *   `startTabShareElementCapture(targetElement: HTMLElement): Promise<MediaStream>`
+            *   Starts `getDisplayMedia` with `video: { displaySurface: 'browser' }` and privacy hints `selfBrowserSurface: 'exclude'`, `monitorTypeSurfaces: 'exclude'`, `surfaceSwitching: 'include'`.
+            *   If supported, derive `RestrictionTarget.fromElement(targetElement)` and call `track.restrictTo(target)`.
+            *   Fallback to Region Capture if Element Capture unsupported.
+        *   `startTabShareRegionCapture(targetElement: HTMLElement): Promise<MediaStream>`
+            *   Same `getDisplayMedia` hints as above.
+            *   Derive `CropTarget.fromElement(targetElement)` and call `track.cropTo(cropTarget)`.
+    *   Replace your share start points (where you call `getDisplayMedia`) to share **only** the main app DOM region (e.g., `#app-share-root`) using the helpers above.
+
+4.  **Leave business logic/UI intact**
+    *   Don’t change existing overlay UI, hints, hotkeys, or toolbar logic except minimal code needed to satisfy the above.
+
+***
+
+## Acceptance criteria
+
+*   **Always on top:**
+    *   When overlay is visible, a DPiP window opens and stays **above other apps** while the main browser window is minimized.
+    *   Closing the tab closes the DPiP window (expected per spec; don’t try to bypass). [\[developer....ozilla.org\]](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Capture_API)
+
+*   **No overlay in screen share:**
+    *   When user shares “This Tab”, remote viewers never see the overlay (because we capture only the main app element via Element/Region Capture). [\[developer.chrome.com\]](https://developer.chrome.com/docs/web-platform/region-capture/), [\[geeksforgeeks.org\]](https://www.geeksforgeeks.org/css/how-to-hide-elements-in-responsive-layout-using-css/)
+    *   If user shares “Entire Screen”, overlay can be visible (allowed/expected). UI should still nudge users to share a tab.
+
+*   **No unwanted auto‑hide:**
+    *   With PiP active, minimizing the tab does **not** auto‑hide the overlay.
+    *   Without PiP, current auto‑hide behavior remains unchanged.
+
+*   **No regressions:**
+    *   Overlay dragging/positioning, opacity, minimal mode, banners, and hotkeys work as before.
+
+***
+
+## Implementation details (exact file work)
+
+1.  **Create** `src/lib/overlay/useDocumentPiP.ts` (hook)
+    *   Open DPiP window when `enabled` is true, copy styles, create an `#overlay-root`, return `document`.
+    *   Cleanup on effect teardown or window unload.
+
+2.  **Update** `src/components/overlay/OverlayWindow.tsx`
+    *   `import { useDocumentPiP } from '@/lib/overlay/useDocumentPiP'`
+    *   Compute `const pipDoc = useDocumentPiP(is_visible);`
+    *   `const targetDoc = pipDoc ?? document;`
+    *   `const overlayRoot = targetDoc.getElementById('overlay-root');`
+    *   `createPortal(<OverlayRoot/>, overlayRoot)`
+    *   `useEffect(() => setPipActive(!!pipDoc), [pipDoc])`
+
+3.  **Update** `src/components/overlay/WindowVisibilityManager.tsx`
+    *   Read `is_pip_active` from store; if true, bypass auto‑hide on blur.
+
+4.  **(Optional, but recommended)** Create `src/lib/capture/screenShare.ts` with:
+    *   `startTabShareElementCapture(targetElem)` and `startTabShareRegionCapture(targetElem)` as described.
+
+5.  **Overlay store** (`overlayStore.ts`)
+    *   Add state: `is_pip_active: boolean` (default `false`)
+    *   Add action: `setPipActive(active: boolean)`
+
+***
+
+## Test plan
+
+1.  **Always-on-top**:
+    *   Show overlay → minimize browser → overlay remains visible (DPiP).
+    *   Close tab → PiP window closes (by spec). [\[developer....ozilla.org\]](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Capture_API)
+
+2.  **Screen share**:
+    *   Start “This Tab” share (use helpers) → interviewer does **not** see overlay. [\[developer.chrome.com\]](https://developer.chrome.com/docs/web-platform/region-capture/), [\[geeksforgeeks.org\]](https://www.geeksforgeeks.org/css/how-to-hide-elements-in-responsive-layout-using-css/)
+    *   Start “Entire Screen” share → overlay visible (expected).
+    *   Verify share privacy hints are applied (e.g., picker defaults emphasize tab, no “Entire Screen” when excluded). [\[developer....ozilla.org\]](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia)
+
+3.  **Visibility manager**:
+    *   With PiP active → blur/minimize → overlay remains.
+    *   Without PiP → current auto‑hide behavior remains.
+
+***
+
+## Deliverables
+
+*   Commit(s) touching:
+    *   `src/lib/overlay/useDocumentPiP.ts` **(new)**
+    *   `src/components/overlay/OverlayWindow.tsx`
+    *   `src/components/overlay/WindowVisibilityManager.tsx`
+    *   `src/lib/capture/screenShare.ts` **(new, optional)**
+    *   `src/store/overlayStore.ts` (state + action)
+*   A short README note in the PR describing limits (DPiP tied to tab; share “This Tab” + Region/Element Capture).
+
+***
+
+## Notes for the assistant (don’t skip)
+
+*   **Do not** attempt to keep the overlay alive after tab close; that’s impossible with plain web—only extensions/native shells can do that. [\[developer....ozilla.org\]](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Capture_API)
+*   Prefer **Element Capture** (`restrictTo`) and fallback to **Region Capture** (`cropTo`) with graceful detection. [\[developer.chrome.com\]](https://developer.chrome.com/docs/web-platform/region-capture/), [\[geeksforgeeks.org\]](https://www.geeksforgeeks.org/css/how-to-hide-elements-in-responsive-layout-using-css/)
+*   When calling `getDisplayMedia`, pass:
+    *   `video: { displaySurface: 'browser' }`
+    *   `selfBrowserSurface: 'exclude'`
+    *   `monitorTypeSurfaces: 'exclude'`
+    *   `surfaceSwitching: 'include'`  
+        These are privacy‑preserving Chrome hints. TypeScript may need `as any`. [\[developer....ozilla.org\]](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia)
+
+***
+
+### References to respect
+
+*   **Document Picture‑in‑Picture (always‑on‑top HTML)** — MDN, Chrome Devs. [\[developer.chrome.com\]](https://developer.chrome.com/docs/web-platform/screen-sharing-controls/), [\[developer....ozilla.org\]](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Capture_API)
+*   **Region Capture (`CropTarget.fromElement` + `track.cropTo`)** — Chrome Devs, MDN. [\[geeksforgeeks.org\]](https://www.geeksforgeeks.org/css/how-to-hide-elements-in-responsive-layout-using-css/), [\[developer....ozilla.org\]](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Capture_API/Element_Region_Capture)
+*   **Element Capture (`RestrictionTarget.fromElement` + `track.restrictTo`)** — Chrome Devs/spec. [\[developer.chrome.com\]](https://developer.chrome.com/docs/web-platform/region-capture/)
+*   **Screen‑sharing privacy controls** — Chrome Devs (`selfBrowserSurface`, `monitorTypeSurfaces`, etc.). [\[developer....ozilla.org\]](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia)
+
+***
+
+# ⚡ TL;DR Prompt (short)
+
+> Implement an always‑on‑top overlay using **Document Picture‑in‑Picture** and ensure it never appears in screen shares by using **Element/Region Capture**.
+>
+> *   Create `useDocumentPiP(enabled)` that opens `documentPictureInPicture.requestWindow()`, copies CSS, adds `#overlay-root`, returns PiP `document`. Render overlay into that via `createPortal` in `OverlayWindow.tsx`. Track `is_pip_active` in store, and update `WindowVisibilityManager.tsx` so auto‑hide on blur is disabled when PiP is active. (DPiP closes when opener tab closes—by spec; do not try to persist beyond tab lifecycle.) [\[developer.chrome.com\]](https://developer.chrome.com/docs/web-platform/screen-sharing-controls/), [\[developer....ozilla.org\]](https://developer.mozilla.org/en-US/docs/Web/API/Screen_Capture_API)
+> *   Add `screenShare.ts`: `startTabShareElementCapture(elem)` → `getDisplayMedia({ video:{displaySurface:'browser'}, selfBrowserSurface:'exclude', monitorTypeSurfaces:'exclude', surfaceSwitching:'include' })`, then `RestrictionTarget.fromElement(elem)` + `track.restrictTo(target)`. Fallback to `CropTarget.fromElement(elem)` + `track.cropTo(cropTarget)`. Replace all share start points to call these so overlay never leaks. [\[developer.chrome.com\]](https://developer.chrome.com/docs/web-platform/region-capture/), [\[geeksforgeeks.org\]](https://www.geeksforgeeks.org/css/how-to-hide-elements-in-responsive-layout-using-css/), [\[developer....ozilla.org\]](https://developer.mozilla.org/en-US/docs/Web/API/MediaDevices/getDisplayMedia)
+> *   Don’t change business logic/UX beyond this. Provide tests confirming overlay stays when minimized, closes on tab close, and is excluded from tab shares.
+
+***
+
+If you want, I can run this prompt myself and deliver a **ready PR** against your repo.
