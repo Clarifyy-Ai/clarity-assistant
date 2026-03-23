@@ -275,7 +275,7 @@ export default function MockSession() {
   if (panicMode) {
     return (
       <div
-        className="min-h-screen bg-[#0a0a0f] flex items-center justify-center cursor-pointer"
+        className="min-h-screen bg-background flex items-center justify-center cursor-pointer"
         onClick={() => setPanicMode(false)}
       >
         <div className="text-center space-y-3">
@@ -283,7 +283,7 @@ export default function MockSession() {
             <Eye className="w-7 h-7 text-muted-foreground" />
           </div>
           <p className="text-muted-foreground text-sm">Click anywhere to restore</p>
-          <kbd className="text-[10px] text-gray-700 bg-accent/5 px-2 py-1 rounded">
+          <kbd className="text-[10px] text-muted-foreground bg-secondary px-2 py-1 rounded">
             Ctrl+Shift+P
           </kbd>
         </div>
@@ -305,7 +305,7 @@ export default function MockSession() {
   const questionText = typeof question === "string" ? question : question?.question_text ?? "";
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white">
+    <div className="min-h-screen bg-background text-foreground">
       <LiveSessionController isActive={true} />
 
       <div className="flex items-center justify-center min-h-screen">
@@ -338,14 +338,14 @@ export default function MockSession() {
             </div>
           </div>
 
-          <div className="w-full h-1 bg-white/8 rounded-full overflow-hidden">
+          <div className="w-full h-1 bg-secondary rounded-full overflow-hidden">
             <div
-              className="h-full bg-violet-500 rounded-full transition-all duration-500"
+              className="h-full bg-primary rounded-full transition-all duration-500"
               style={{ width: `${((qIndex + 1) / totalQ) * 100}%` }}
             />
           </div>
 
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 sm:p-6">
+          <div className="bg-card border border-border rounded-2xl p-4 sm:p-6">
             <div className="flex items-center justify-between mb-3 sm:mb-4">
               <div className={cn(
                 "flex items-center gap-1.5 text-xs sm:text-sm font-bold tabular-nums",
@@ -357,7 +357,7 @@ export default function MockSession() {
               </div>
               <button
                 onClick={() => setSkipConfirm(true)}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-white transition-colors"
+                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
               >
                 <SkipForward className="w-3 h-3" />
                 Skip
@@ -369,12 +369,12 @@ export default function MockSession() {
             </p>
           </div>
 
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-4 sm:p-6">
+          <div className="bg-card border border-border rounded-2xl p-4 sm:p-6">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <div className={cn(
                   "w-2 h-2 rounded-full",
-                  stt.isListening ? "bg-red-500 animate-pulse" : "bg-gray-700"
+                  stt.isListening ? "bg-red-500 animate-pulse" : "bg-muted-foreground/30"
                 )} />
                 <span className="text-xs font-medium text-foreground">Your answer</span>
                 <span className={cn(
@@ -434,7 +434,7 @@ export default function MockSession() {
 
           <p className="text-center text-xs text-muted-foreground/40">
             The overlay window provides AI hints, transcript, and session status.
-            Use <kbd className="px-1 py-0.5 bg-white/10 rounded font-mono">Ctrl+Shift+H</kbd> to toggle it.
+            Use <kbd className="px-1 py-0.5 bg-secondary rounded font-mono">Ctrl+Shift+H</kbd> to toggle it.
           </p>
         </div>
       </div>

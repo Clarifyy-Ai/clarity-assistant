@@ -209,7 +209,7 @@ export default function DebriefDetail() {
                     </span>
                   </div>
                 </div>
-                <div className="relative h-2 bg-white/8 rounded-full overflow-hidden">
+                <div className="relative h-2 bg-secondary rounded-full overflow-hidden">
                   {/* Target marker */}
                   <div
                     className="absolute top-0 h-full w-0.5 bg-violet-400 z-10"
@@ -282,7 +282,7 @@ export default function DebriefDetail() {
             {debrief.action_plan.map((step: any, i: number) => (
               <div
                 key={i}
-                className="flex items-start gap-3 p-3 bg-white/3 border border-white/8 rounded-xl"
+                className="flex items-start gap-3 p-3 bg-secondary border border-border rounded-xl"
               >
                 <div className="w-7 h-7 bg-blue-500/10 rounded-lg flex items-center justify-center text-[11px] font-bold text-blue-400 shrink-0">
                   D{step.day ?? i + 1}
@@ -320,7 +320,7 @@ export default function DebriefDetail() {
             {debrief.resources.map((r: any, i: number) => (
               <div
                 key={i}
-                className="flex items-center justify-between p-3 bg-white/3 border border-white/8 rounded-xl"
+                className="flex items-center justify-between p-3 bg-secondary border border-border rounded-xl"
               >
                 <div className="flex items-start gap-3">
                   <span className="text-lg">{

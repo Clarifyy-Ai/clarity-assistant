@@ -224,18 +224,18 @@ export function PricingCard({
         )}
 
         <div className="flex-1">
-          <h3 className="text-lg font-bold text-white">{label}</h3>
-          {subtitle && <p className="text-xs text-gray-500 mt-1">{subtitle}</p>}
+          <h3 className="text-lg font-bold text-foreground">{label}</h3>
+          {subtitle && <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>}
           {credits && (
-            <p className="text-xs text-gray-400 mt-1">{credits} credits/month</p>
+            <p className="text-xs text-muted-foreground mt-1">{credits} credits/month</p>
           )}
         </div>
 
         <div className="text-right">
-          <div className={cn('font-black text-white', sizes.price)}>
+          <div className={cn('font-black text-foreground', sizes.price)}>
             {price}
           </div>
-          <div className="text-xs text-gray-500">{period}</div>
+          <div className="text-xs text-muted-foreground">{period}</div>
           {yearlyPrice && (
             <div className="text-xs text-emerald-400 mt-1">
               or ${yearlyPrice}/year
@@ -255,12 +255,12 @@ export function PricingCard({
             {feature.included ? (
               <Check className="h-4 w-4 shrink-0 text-emerald-400 mt-0.5" />
             ) : (
-              <X className="h-4 w-4 shrink-0 text-gray-500 mt-0.5" />
+              <X className="h-4 w-4 shrink-0 text-muted-foreground mt-0.5" />
             )}
             <span
               className={cn(
                 sizes.featureText,
-                feature.included ? 'text-gray-300' : 'text-gray-600 line-through'
+                feature.included ? 'text-muted-foreground' : 'text-muted-foreground line-through'
               )}
             >
               {feature.label}
@@ -274,10 +274,10 @@ export function PricingCard({
         onClick={onUpgrade}
         disabled={isCurrent}
         className={cn(
-          'mt-6 w-full rounded-xl text-white font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900',
+          'mt-6 w-full rounded-xl text-foreground font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900',
           sizes.button,
           isCurrent
-            ? 'bg-white/10 text-gray-500 cursor-not-allowed'
+            ? 'bg-secondary text-muted-foreground cursor-not-allowed'
             : colors.button
         )}
       >

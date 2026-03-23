@@ -20,23 +20,23 @@ interface BadgeProps {
 }
 
 const VARIANT_STYLES: Record<BadgeVariant, string> = {
-  default: "bg-white/8  border-white/10  text-gray-300",
-  violet:  "bg-violet-500/10 border-violet-500/20 text-violet-300",
-  emerald: "bg-emerald-500/10 border-emerald-500/20 text-emerald-300",
-  red:     "bg-red-500/10 border-red-500/20 text-red-400",
-  amber:   "bg-amber-500/10 border-amber-500/20 text-amber-400",
-  blue:    "bg-blue-500/10 border-blue-500/20 text-blue-300",
-  gray:    "bg-white/5 border-white/8 text-gray-500",
+  default: "bg-secondary border-border text-muted-foreground",
+  violet:  "bg-violet-500/10 border-violet-500/20 text-violet-600 dark:text-violet-300",
+  emerald: "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-300",
+  red:     "bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400",
+  amber:   "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400",
+  blue:    "bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-300",
+  gray:    "bg-secondary border-border text-muted-foreground",
 };
 
 const DOT_COLORS: Record<BadgeVariant, string> = {
-  default: "bg-gray-400",
+  default: "bg-muted-foreground",
   violet:  "bg-violet-400",
   emerald: "bg-emerald-400",
   red:     "bg-red-400",
   amber:   "bg-amber-400",
   blue:    "bg-blue-400",
-  gray:    "bg-gray-600",
+  gray:    "bg-muted-foreground",
 };
 
 export function Badge({

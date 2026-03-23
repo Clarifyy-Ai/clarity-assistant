@@ -184,7 +184,7 @@ export default function CodingHints() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search problems…"
-              className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
+              className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
             />
           </div>
 
@@ -196,8 +196,8 @@ export default function CodingHints() {
                 className={cn(
                   "px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-all",
                   category === c.id
-                    ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                    : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
+                    ? "bg-primary/10 border-primary/30 text-primary"
+                    : "bg-secondary border-border text-muted-foreground hover:text-foreground"
                 )}
               >
                 {c.icon} {c.label}
@@ -216,8 +216,8 @@ export default function CodingHints() {
                     ? d === "easy" ? "bg-emerald-500/20 border-emerald-500/30 text-emerald-300"
                     : d === "medium" ? "bg-amber-500/20 border-amber-500/30 text-amber-300"
                     : d === "hard" ? "bg-red-500/20 border-red-500/30 text-red-300"
-                    : "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                    : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
+                    : "bg-primary/10 border-primary/30 text-primary"
+                    : "bg-secondary border-border text-muted-foreground hover:text-foreground"
                 )}
               >
                 {d}
@@ -234,7 +234,7 @@ export default function CodingHints() {
                   "w-full text-left px-4 py-3 rounded-xl border transition-all",
                   selected === p.id
                     ? "bg-violet-600/10 border-violet-500/30"
-                    : "bg-white/[0.02] border-white/8 hover:bg-accent/5 hover:border-white/15"
+                    : "bg-secondary/50 border-border hover:bg-secondary"
                 )}
               >
                 <div className="flex items-center justify-between">
@@ -254,7 +254,7 @@ export default function CodingHints() {
             ))}
             {filtered.length === 0 && (
               <div className="text-center py-8">
-                <Code2 className="w-8 h-8 text-gray-700 mx-auto mb-2" />
+                <Code2 className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
                 <p className="text-sm text-muted-foreground">No problems match your filters.</p>
               </div>
             )}
@@ -279,7 +279,7 @@ export default function CodingHints() {
                   </div>
                 </div>
                 <p className="text-sm text-foreground leading-relaxed">{activeProblem.description}</p>
-                <div className="mt-4 bg-black/40 rounded-xl p-4 font-mono text-xs text-foreground whitespace-pre-wrap">
+                <div className="mt-4 bg-muted/40 rounded-xl p-4 font-mono text-xs text-foreground whitespace-pre-wrap">
                   {activeProblem.examples}
                 </div>
               </Card>
@@ -331,7 +331,7 @@ export default function CodingHints() {
                       <Copy className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <p className="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap">{hintText}</p>
+                  <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{hintText}</p>
                 </Card>
               )}
 
@@ -348,13 +348,13 @@ export default function CodingHints() {
                       <Copy className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <p className="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap">{solutionText}</p>
+                  <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{solutionText}</p>
                 </Card>
               )}
             </>
           ) : (
             <Card className="text-center py-20">
-              <Code2 className="w-12 h-12 text-gray-700 mx-auto mb-3" />
+              <Code2 className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
               <p className="text-muted-foreground text-sm">Select a problem to view details</p>
               <p className="text-muted-foreground text-xs mt-1">Get AI-powered hints and solution explanations</p>
             </Card>

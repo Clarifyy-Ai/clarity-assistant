@@ -96,7 +96,7 @@ export default function CompanyProfile() {
         <div className="flex items-center gap-3 mb-6">
           <div className="w-10 h-10 bg-violet-600/20 rounded-xl animate-pulse" />
           <div className="space-y-2">
-            <div className="h-5 w-32 bg-white/8 rounded animate-pulse" />
+            <div className="h-5 w-32 bg-secondary rounded animate-pulse" />
             <div className="h-3 w-48 bg-accent/5 rounded animate-pulse" />
           </div>
         </div>
@@ -166,7 +166,7 @@ export default function CompanyProfile() {
 
       {/* Company header */}
       <div className="flex items-center gap-4">
-        <div className="w-14 h-14 bg-gradient-to-br from-violet-600/30 to-blue-600/30 border border-white/10 rounded-2xl flex items-center justify-center text-2xl font-black text-foreground shrink-0">
+        <div className="w-14 h-14 bg-gradient-to-br from-violet-600/30 to-blue-600/30 border border-border rounded-2xl flex items-center justify-center text-2xl font-black text-foreground shrink-0">
           {companyName[0]?.toUpperCase()}
         </div>
         <div>
@@ -231,7 +231,7 @@ export default function CompanyProfile() {
                   {String(i + 1).padStart(2, "0")}
                 </span>
                 <div className="flex-1">
-                  <p className="text-sm text-gray-200">{q}</p>
+                  <p className="text-sm text-foreground">{q}</p>
                 </div>
                 <Button
                   variant="ghost"

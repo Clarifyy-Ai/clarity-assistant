@@ -114,7 +114,7 @@ export default function LiveRehearsal() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white">
+    <div className="min-h-screen bg-background text-foreground">
       <OverlayWindow
         onToggleMic={copilot.toggleMute}
         onToggleSystemAudio={copilot.toggleSystemAudio}
@@ -172,7 +172,7 @@ export default function LiveRehearsal() {
             </div>
           </div>
 
-          <Card className="!bg-white/5 !border-white/10">
+          <Card className="!bg-secondary !border-border">
             <div className="flex items-center justify-between mb-3">
               <LiveSessionTimer />
               <div className="flex items-center gap-2">
@@ -200,7 +200,7 @@ export default function LiveRehearsal() {
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all",
                   is_stealth_mode
                     ? "bg-violet-500/10 border-violet-500/20 text-violet-400"
-                    : "bg-white/5 border-white/10 text-muted-foreground"
+                    : "bg-secondary border-border text-muted-foreground"
                 )}
               >
                 <Ghost className="w-3 h-3" />
@@ -212,7 +212,7 @@ export default function LiveRehearsal() {
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all",
                   is_proctor_safe
                     ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                    : "bg-white/5 border-white/10 text-muted-foreground"
+                    : "bg-secondary border-border text-muted-foreground"
                 )}
               >
                 <Shield className="w-3 h-3" />
@@ -227,7 +227,7 @@ export default function LiveRehearsal() {
                   "flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-medium border transition-all",
                   is_visible
                     ? "bg-primary/10 border-primary/20 text-primary"
-                    : "bg-white/5 border-white/10 text-muted-foreground"
+                    : "bg-secondary border-border text-muted-foreground"
                 )}
               >
                 {is_visible ? <Eye className="w-3 h-3" /> : <EyeOff className="w-3 h-3" />}
@@ -236,7 +236,7 @@ export default function LiveRehearsal() {
             </div>
           </Card>
 
-          <Card className="!bg-white/5 !border-white/10">
+          <Card className="!bg-secondary !border-border">
             <div className="flex items-center justify-between mb-3">
               <h3 className="text-sm font-semibold text-foreground">{is_stealth_mode ? "AI Response" : "AI Answer"}</h3>
               {current_question && (
@@ -252,7 +252,7 @@ export default function LiveRehearsal() {
             <LiveAnswerStream />
           </Card>
 
-          <Card className="!bg-white/5 !border-white/10">
+          <Card className="!bg-secondary !border-border">
             <h3 className="text-sm font-semibold text-foreground mb-3">Live Transcript</h3>
             <LiveTranscriptStream />
           </Card>
@@ -266,20 +266,20 @@ export default function LiveRehearsal() {
           </button>
 
           <div className="space-y-1.5 text-center text-xs text-gray-500">
-            <p><kbd className="px-1.5 py-0.5 bg-white/10 rounded font-mono">Ctrl+Shift+H</kbd> Toggle overlay</p>
-            <p><kbd className="px-1.5 py-0.5 bg-white/10 rounded font-mono">Ctrl+Shift+S</kbd> Stealth mode</p>
-            <p><kbd className="px-1.5 py-0.5 bg-white/10 rounded font-mono">Ctrl+Shift+P</kbd> Panic button</p>
-            <p><kbd className="px-1.5 py-0.5 bg-white/10 rounded font-mono">Ctrl+Shift+M</kbd> Mute/unmute</p>
+            <p><kbd className="px-1.5 py-0.5 bg-secondary rounded font-mono">Ctrl+Shift+H</kbd> Toggle overlay</p>
+            <p><kbd className="px-1.5 py-0.5 bg-secondary rounded font-mono">Ctrl+Shift+S</kbd> Stealth mode</p>
+            <p><kbd className="px-1.5 py-0.5 bg-secondary rounded font-mono">Ctrl+Shift+P</kbd> Panic button</p>
+            <p><kbd className="px-1.5 py-0.5 bg-secondary rounded font-mono">Ctrl+Shift+M</kbd> Mute/unmute</p>
           </div>
         </div>
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 z-30 pointer-events-none">
-        <div className="max-w-xs mx-auto h-1 bg-white/5 rounded-full overflow-hidden">
+        <div className="max-w-xs mx-auto h-1 bg-secondary rounded-full overflow-hidden">
           <div
             className={cn(
               "h-full rounded-full transition-all duration-75",
-              copilot.isSpeaking ? "bg-emerald-400" : "bg-white/20"
+              copilot.isSpeaking ? "bg-emerald-400" : "bg-muted-foreground/20"
             )}
             style={{ width: `${Math.min(100, copilot.currentLevel * 100)}%` }}
           />

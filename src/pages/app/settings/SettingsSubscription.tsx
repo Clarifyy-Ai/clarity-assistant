@@ -82,7 +82,7 @@ export default function SettingsSubscription() {
         <h2 className="text-lg font-bold text-foreground">Subscription</h2>
 
         {/* Billing toggle */}
-        <div className="flex items-center gap-2 bg-accent/5 border border-white/10 rounded-xl p-1">
+        <div className="flex items-center gap-2 bg-accent/5 border border-border rounded-xl p-1">
           {(["monthly", "annual"] as const).map((b) => (
             <button
               key={b}

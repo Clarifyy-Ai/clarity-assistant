@@ -75,8 +75,8 @@ export default function Interviews() {
             className={cn(
               "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all capitalize",
               filter === f
-                ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
+                ? "bg-primary/10 border-primary/30 text-primary"
+                : "bg-secondary border-border text-muted-foreground hover:text-foreground"
             )}
           >
             {f}
@@ -96,7 +96,7 @@ export default function Interviews() {
         </div>
       ) : filtered.length === 0 ? (
         <Card className="text-center py-16">
-          <CalendarDays className="w-10 h-10 text-gray-700 mx-auto mb-3" />
+          <CalendarDays className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
           <p className="text-muted-foreground text-sm">No interviews found.</p>
           <Button
             variant="secondary"
@@ -163,15 +163,15 @@ function InterviewRow({
       isNow
         ? "bg-violet-600/10 border-violet-500/30"
         : isCancelled
-        ? "bg-white/2 border-white/6 opacity-60"
-        : "bg-white/3 border-white/8 hover:bg-accent/5 hover:border-white/15"
+        ? "bg-card border-border opacity-60"
+        : "bg-card border-border hover:bg-secondary/60"
     )}>
       {/* Date block */}
       <div className={cn(
         "w-12 h-14 rounded-xl flex flex-col items-center justify-center shrink-0 border",
         isNow
           ? "bg-violet-600 border-violet-500"
-          : "bg-accent/5 border-white/10"
+          : "bg-accent/5 border-border"
       )}>
         <p className={cn(
           "text-[10px] font-semibold uppercase",
@@ -257,7 +257,7 @@ function InterviewRow({
       {/* Delete */}
       <button
         onClick={onDelete}
-        className="p-1.5 rounded-lg text-gray-700 hover:text-red-400 hover:bg-accent/5 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+        className="p-1.5 rounded-lg text-muted-foreground/40 hover:text-red-400 hover:bg-accent/5 opacity-0 group-hover:opacity-100 transition-all shrink-0"
       >
         <Trash2 className="w-3.5 h-3.5" />
       </button>

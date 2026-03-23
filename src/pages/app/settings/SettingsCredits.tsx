@@ -177,7 +177,7 @@ export default function SettingsCredits() {
           {CREDIT_COSTS.map((c) => (
             <div
               key={c.action}
-              className="flex items-center justify-between p-2 bg-white/3 rounded-lg"
+              className="flex items-center justify-between p-2 bg-secondary rounded-lg"
             >
               <div className="flex items-center gap-2">
                 <span className="text-sm">{c.icon}</span>

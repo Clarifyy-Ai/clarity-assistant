@@ -46,7 +46,7 @@ const INTEGRATIONS = [
     desc:   "Link your repos for technical interview context.",
     status: "coming_soon",
     color:  "text-foreground",
-    bg:     "bg-white/8",
+    bg:     "bg-secondary",
     live:   false,
   },
   {
@@ -209,7 +209,7 @@ export default function SettingsIntegrations() {
                 </div>
 
                 {isConnected && (
-                  <div className="mt-3 pt-3 border-t border-white/8">
+                  <div className="mt-3 pt-3 border-t border-border">
                     <p className="text-[10px] text-muted-foreground mb-1.5">
                       Permissions granted:
                     </p>
@@ -221,7 +221,7 @@ export default function SettingsIntegrations() {
                 )}
 
                 {!isConnected && (
-                  <div className="mt-3 pt-3 border-t border-white/8">
+                  <div className="mt-3 pt-3 border-t border-border">
                     <p className="text-[10px] text-muted-foreground leading-relaxed">
                       Connects via Google OAuth. Only upcoming events with interview-related keywords are imported. Read-only access — Clarify AI never modifies your calendar.
                     </p>
@@ -275,7 +275,7 @@ export default function SettingsIntegrations() {
           <input
             readOnly
             value="sk-clarify-••••••••••••••••••••••"
-            className="flex-1 bg-black/30 border border-white/10 text-muted-foreground rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none"
+            className="flex-1 bg-background border border-input text-muted-foreground rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none"
           />
           <Button variant="secondary" size="sm">
             Reveal

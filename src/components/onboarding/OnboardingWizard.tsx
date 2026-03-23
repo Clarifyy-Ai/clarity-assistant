@@ -164,9 +164,9 @@ export function OnboardingWizard({
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950">
+    <div className="min-h-screen bg-background">
       {/* Top Progress Bar */}
-      <div className="sticky top-0 z-40 border-b border-white/10 bg-slate-900/80 backdrop-blur">
+      <div className="sticky top-0 z-40 border-b border-border bg-background/80 backdrop-blur">
         <div className="mx-auto max-w-4xl px-4 py-3">
           <div className="flex items-center justify-between">
             {/* Left: Step info */}
@@ -177,7 +177,7 @@ export function OnboardingWizard({
                 </span>
               </div>
               <div>
-                <h1 className="text-sm font-semibold text-white">
+                <h1 className="text-sm font-semibold text-foreground">
                   {currentStep.title}
                 </h1>
                 <p className="text-xs text-gray-500">
@@ -191,7 +191,7 @@ export function OnboardingWizard({
               <div className="text-xs font-medium text-gray-400">
                 {Math.round((currentStepIndex / steps.length) * 100)}%
               </div>
-              <div className="mt-1 h-1.5 w-32 overflow-hidden rounded-full bg-white/10">
+              <div className="mt-1 h-1.5 w-32 overflow-hidden rounded-full bg-secondary">
                 <div
                   className="h-full bg-gradient-to-r from-violet-500 to-violet-400 transition-all duration-300"
                   style={{
@@ -207,12 +207,12 @@ export function OnboardingWizard({
       {/* Main Content */}
       <div className="mx-auto max-w-4xl px-4 py-8">
         {/* Page outlet - Step content renders here */}
-        <div className="rounded-lg border border-white/10 bg-white/[0.01] p-8 backdrop-blur-sm">
+        <div className="rounded-lg border border-border bg-secondary/20 p-8 backdrop-blur-sm">
           {/* Steps content will be rendered by router */}
         </div>
 
         {/* Bottom Navigation */}
-        <div className="mt-8 flex items-center justify-between border-t border-white/10 pt-6">
+        <div className="mt-8 flex items-center justify-between border-t border-border pt-6">
           {/* Left: Back Button */}
           <Button
             variant="outline"
@@ -262,7 +262,7 @@ export function OnboardingWizard({
       </div>
 
       {/* Mobile Bottom Navigation (Fixed) */}
-      <div className="sticky bottom-0 border-t border-white/10 bg-slate-900 px-4 py-3 sm:hidden">
+      <div className="sticky bottom-0 border-t border-border bg-background px-4 py-3 sm:hidden">
         <div className="flex gap-3">
           <Button
             variant="outline"

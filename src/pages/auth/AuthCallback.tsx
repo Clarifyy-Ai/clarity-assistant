@@ -24,7 +24,7 @@ export default function AuthCallback() {
   }, [status, isOnboarded, navigate]);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center">
+    <div className="min-h-screen bg-background flex items-center justify-center">
       <div className="text-center space-y-4">
         <div className="h-10 w-10 animate-spin rounded-full border-2 border-violet-500 border-t-transparent mx-auto" />
         <p className="text-sm text-gray-400">Signing you in…</p>

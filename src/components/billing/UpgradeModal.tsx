@@ -149,7 +149,7 @@ export function UpgradeModal() {
                   ? mp.color === "violet"
                     ? "border-violet-500/50 bg-violet-500/5"
                     : "border-amber-500/50 bg-amber-500/5"
-                  : "border-white/10 bg-white/[0.03]"
+                  : "border-border bg-secondary/50"
               )}
             >
               <div className="flex items-center gap-3">
@@ -164,14 +164,14 @@ export function UpgradeModal() {
                   <Icon className="h-4 w-4" />
                 </div>
                 <div>
-                  <p className="text-sm font-bold text-white">{plan.name}</p>
-                  <p className="text-xs text-gray-400">{plan.creditsPerMonth} credits/mo</p>
+                  <p className="text-sm font-bold text-foreground">{plan.name}</p>
+                  <p className="text-xs text-muted-foreground">{plan.creditsPerMonth} credits/mo</p>
                 </div>
                 <div className="ml-auto text-right">
-                  <span className="text-xl font-black text-white">
+                  <span className="text-xl font-black text-foreground">
                     {formatPrice(plan.monthlyPrice, true)}
                   </span>
-                  <span className="text-xs text-gray-500">/mo</span>
+                  <span className="text-xs text-muted-foreground">/mo</span>
                 </div>
               </div>
 
@@ -180,11 +180,11 @@ export function UpgradeModal() {
                   .filter((f) => f.included)
                   .slice(0, 6)
                   .map((f) => (
-                    <li key={f.key} className="flex items-center gap-2 text-xs text-gray-300">
+                    <li key={f.key} className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Check className="h-3 w-3 shrink-0 text-emerald-400" />
                       {f.label}
                       {f.limit && f.limit !== "unlimited" && (
-                        <span className="text-gray-500">({f.limit})</span>
+                        <span className="text-muted-foreground">({f.limit})</span>
                       )}
                     </li>
                   ))}
@@ -198,7 +198,7 @@ export function UpgradeModal() {
                 className={cn(
                   "mt-auto w-full rounded-xl py-2.5 text-sm font-semibold transition-all focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-transparent",
                   isCurrentPlan
-                    ? "cursor-not-allowed bg-white/10 text-gray-500"
+                    ? "cursor-not-allowed bg-secondary text-muted-foreground"
                     : mp.color === "violet"
                     ? "bg-violet-600 text-white hover:bg-violet-500 focus:ring-violet-500"
                     : "bg-amber-500 text-black hover:bg-amber-400 focus:ring-amber-500"
@@ -215,10 +215,10 @@ export function UpgradeModal() {
         })}
       </div>
 
-      <div className="mt-4 flex items-center justify-between rounded-xl border border-white/10 bg-white/[0.03] p-4">
+      <div className="mt-4 flex items-center justify-between rounded-xl border border-border bg-secondary/50 p-4">
         <div>
-          <p className="text-sm font-medium text-white">Pay as you go</p>
-          <p className="text-xs text-gray-400">
+          <p className="text-sm font-medium text-foreground">Pay as you go</p>
+          <p className="text-xs text-muted-foreground">
             {defaultPack
               ? `${defaultPack.credits} credits for ${formatPrice(defaultPack.priceUsdCents)} — no subscription`
               : "Credit packs — no subscription"}
@@ -228,7 +228,7 @@ export function UpgradeModal() {
           type="button"
           onClick={handleBuyCredits}
           disabled={loading === "credits"}
-          className="rounded-xl border border-white/[0.15] bg-white/10 px-4 py-2 text-xs font-medium text-white transition-all hover:bg-white/[0.15] focus:outline-none focus:ring-2 focus:ring-white/30"
+          className="rounded-xl border border-border bg-secondary px-4 py-2 text-xs font-medium text-foreground transition-all hover:bg-secondary/80 focus:outline-none focus:ring-2 focus:ring-white/30"
         >
           {loading === "credits" ? "Redirecting…" : "Buy credits"}
         </button>

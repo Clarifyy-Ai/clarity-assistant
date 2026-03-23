@@ -186,7 +186,7 @@ export function BillingHistory({
 
   if (loading) {
     return (
-      <div className={cn('rounded-lg border border-white/10 bg-white/[0.02] p-6', className)}>
+      <div className={cn('rounded-lg border border-border bg-secondary/50 p-6', className)}>
         <div className="flex items-center justify-center py-12">
           <div className="animate-spin rounded-full h-8 w-8 border-2 border-violet-500/30 border-t-violet-500" />
         </div>
@@ -199,8 +199,8 @@ export function BillingHistory({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-bold text-white">Billing History</h3>
-          <p className="text-xs text-gray-500 mt-1">
+          <h3 className="text-lg font-bold text-foreground">Billing History</h3>
+          <p className="text-xs text-muted-foreground mt-1">
             View your transactions and invoices
           </p>
         </div>
@@ -221,14 +221,14 @@ export function BillingHistory({
       {showFilters && (
         <div className="flex flex-wrap gap-3">
           <div className="flex items-center gap-2">
-            <Filter className="h-4 w-4 text-gray-500" />
+            <Filter className="h-4 w-4 text-muted-foreground" />
             <select
               value={filterType}
               onChange={(e) => {
                 setFilterType(e.target.value as any);
                 setCurrentPage(1);
               }}
-              className="rounded-lg bg-white/[0.05] border border-white/10 px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+              className="rounded-lg bg-secondary border border-border px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
             >
               <option value="all">All Transactions</option>
               <option value="purchase">Purchases</option>
@@ -241,7 +241,7 @@ export function BillingHistory({
           <select
             value={sortBy}
             onChange={(e) => setSortBy(e.target.value as any)}
-            className="rounded-lg bg-white/[0.05] border border-white/10 px-3 py-1.5 text-xs text-white focus:outline-none focus:ring-2 focus:ring-violet-500"
+            className="rounded-lg bg-secondary border border-border px-3 py-1.5 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
           >
             <option value="date-desc">Newest First</option>
             <option value="date-asc">Oldest First</option>
@@ -252,33 +252,33 @@ export function BillingHistory({
 
       {/* Transactions Table */}
       {displayedTransactions.length === 0 ? (
-        <div className="rounded-lg border border-white/10 bg-white/[0.02] p-8 text-center">
-          <Calendar className="h-8 w-8 text-gray-600 mx-auto mb-2" />
-          <p className="text-sm text-gray-500">No transactions found</p>
+        <div className="rounded-lg border border-border bg-secondary/50 p-8 text-center">
+          <Calendar className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+          <p className="text-sm text-muted-foreground">No transactions found</p>
         </div>
       ) : (
         <div className="space-y-2">
           {/* Desktop Table */}
-          <div className="hidden md:block rounded-lg border border-white/10 bg-white/[0.02] overflow-hidden">
+          <div className="hidden md:block rounded-lg border border-border bg-secondary/50 overflow-hidden">
             <table className="w-full">
               <thead>
-                <tr className="border-b border-white/10 bg-white/[0.03]">
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400">
+                <tr className="border-b border-border bg-secondary/50">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">
                     Date
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold text-gray-400">
+                  <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">
                     Description
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-400">
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">
                     Amount
                   </th>
-                  <th className="px-4 py-3 text-right text-xs font-semibold text-gray-400">
+                  <th className="px-4 py-3 text-right text-xs font-semibold text-muted-foreground">
                     Credits
                   </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-400">
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">
                     Status
                   </th>
-                  <th className="px-4 py-3 text-center text-xs font-semibold text-gray-400">
+                  <th className="px-4 py-3 text-center text-xs font-semibold text-muted-foreground">
                     Action
                   </th>
                 </tr>
@@ -287,25 +287,25 @@ export function BillingHistory({
                 {displayedTransactions.map((transaction) => (
                   <tr
                     key={transaction.id}
-                    className="border-b border-white/5 hover:bg-white/[0.02] transition-colors"
+                    className="border-b border-border hover:bg-secondary/40 transition-colors"
                   >
-                    <td className="px-4 py-3 text-xs text-gray-300">
+                    <td className="px-4 py-3 text-xs text-muted-foreground">
                       <div className="flex items-center gap-2">
-                        <Calendar className="h-3.5 w-3.5 text-gray-600" />
+                        <Calendar className="h-3.5 w-3.5 text-muted-foreground" />
                         {transaction.date.toLocaleDateString()}
                       </div>
                     </td>
                     <td className="px-4 py-3">
                       <div>
-                        <p className="text-xs font-medium text-white">
+                        <p className="text-xs font-medium text-foreground">
                           {transaction.description}
                         </p>
-                        <p className="text-[10px] text-gray-500 mt-1 capitalize">
+                        <p className="text-[10px] text-muted-foreground mt-1 capitalize">
                           {transaction.type}
                         </p>
                       </div>
                     </td>
-                    <td className="px-4 py-3 text-right text-xs font-semibold text-white">
+                    <td className="px-4 py-3 text-right text-xs font-semibold text-foreground">
                       {transaction.amount > 0 ? '-' : '+'}${Math.abs(transaction.amount)}
                     </td>
                     <td className="px-4 py-3 text-right">
@@ -338,10 +338,10 @@ export function BillingHistory({
                       {transaction.invoice_url && (
                         <button
                           onClick={() => handleDownloadInvoice(transaction)}
-                          className="p-1.5 rounded hover:bg-white/[0.05] transition-colors"
+                          className="p-1.5 rounded hover:bg-secondary transition-colors"
                           title="Download invoice"
                         >
-                          <Download className="h-3.5 w-3.5 text-gray-500 hover:text-white" />
+                          <Download className="h-3.5 w-3.5 text-muted-foreground hover:text-foreground" />
                         </button>
                       )}
                     </td>
@@ -356,25 +356,25 @@ export function BillingHistory({
             {displayedTransactions.map((transaction) => (
               <div
                 key={transaction.id}
-                className="rounded-lg border border-white/10 bg-white/[0.02] p-4"
+                className="rounded-lg border border-border bg-secondary/50 p-4"
               >
                 <div className="flex items-start justify-between mb-2">
                   <div>
-                    <p className="text-sm font-medium text-white">
+                    <p className="text-sm font-medium text-foreground">
                       {transaction.description}
                     </p>
                     <div className="flex items-center gap-2 mt-1">
-                      <Calendar className="h-3 w-3 text-gray-600" />
-                      <p className="text-xs text-gray-500">
+                      <Calendar className="h-3 w-3 text-muted-foreground" />
+                      <p className="text-xs text-muted-foreground">
                         {transaction.date.toLocaleDateString()}
                       </p>
                     </div>
                   </div>
                   <div className="text-right">
-                    <p className="text-sm font-bold text-white">
+                    <p className="text-sm font-bold text-foreground">
                       {transaction.amount > 0 ? '-' : '+'}${Math.abs(transaction.amount)}
                     </p>
-                    <p className="text-xs text-gray-500 mt-1 capitalize">
+                    <p className="text-xs text-muted-foreground mt-1 capitalize">
                       {transaction.type}
                     </p>
                   </div>
@@ -409,9 +409,9 @@ export function BillingHistory({
                   {transaction.invoice_url && (
                     <button
                       onClick={() => handleDownloadInvoice(transaction)}
-                      className="p-1.5 rounded hover:bg-white/[0.05]"
+                      className="p-1.5 rounded hover:bg-secondary"
                     >
-                      <Download className="h-4 w-4 text-gray-500" />
+                      <Download className="h-4 w-4 text-muted-foreground" />
                     </button>
                   )}
                 </div>
@@ -423,8 +423,8 @@ export function BillingHistory({
 
       {/* Pagination */}
       {totalPages > 1 && (
-        <div className="flex items-center justify-between mt-6 pt-4 border-t border-white/10">
-          <p className="text-xs text-gray-500">
+        <div className="flex items-center justify-between mt-6 pt-4 border-t border-border">
+          <p className="text-xs text-muted-foreground">
             Page {currentPage} of {totalPages} • {filteredTransactions.length} total
           </p>
 

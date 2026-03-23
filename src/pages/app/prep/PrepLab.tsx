@@ -197,7 +197,7 @@ function STARBuilder() {
           value={question}
           onChange={(e) => setQuestion(e.target.value)}
           placeholder="e.g. Tell me about a time you resolved a conflict at work."
-          className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
+          className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
         />
       </Card>
 
@@ -244,7 +244,7 @@ function STARBuilder() {
               onChange={(e) => setStar((p) => ({ ...p, [key]: e.target.value }))}
               placeholder={`Write your ${key}…`}
               rows={3}
-              className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-violet-500"
+              className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
             />
           </Card>
         ))}
@@ -306,7 +306,7 @@ function STARBuilder() {
               <Copy className="w-3.5 h-3.5" />
             </button>
           </div>
-          <p className="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap">
+          <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
             {generated}
           </p>
         </Card>
@@ -357,7 +357,7 @@ function QuestionBank() {
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           placeholder="Search questions…"
-          className="w-full sm:w-64 bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-violet-500"
+          className="w-full sm:w-64 bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
         />
         <div className="flex flex-wrap gap-1.5">
           {BANK_CATEGORIES.map((c) => (
@@ -367,8 +367,8 @@ function QuestionBank() {
               className={cn(
                 "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
                 category === c
-                  ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                  : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
+                  ? "bg-primary/10 border-primary/30 text-primary"
+                  : "bg-secondary border-border text-muted-foreground hover:text-foreground"
               )}
             >
               {c}
@@ -451,7 +451,7 @@ function QuestionBank() {
               onChange={(e) => setAnswer(e.target.value)}
               placeholder="Type your answer using STAR format…"
               rows={6}
-              className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
+              className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
             />
             <div className="flex gap-3">
               <Button
@@ -626,7 +626,7 @@ function AIToolModal({
           onChange={(e) => setInput(e.target.value)}
           placeholder="Paste your resume, job description, or context here…"
           rows={5}
-          className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
+          className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
         />
         <Button
           variant="primary"
@@ -640,9 +640,9 @@ function AIToolModal({
           Run AI tool
         </Button>
         {output && (
-          <div className="bg-white/3 border border-white/10 rounded-xl p-4">
+          <div className="bg-secondary border border-border rounded-xl p-4">
             <div className="flex items-center justify-between mb-2">
-              <p className="text-[10px] font-semibold text-violet-400 uppercase tracking-widest">
+              <p className="text-[10px] font-semibold text-primary uppercase tracking-widest">
                 Result
               </p>
               <button
@@ -652,7 +652,7 @@ function AIToolModal({
                 <Copy className="w-3.5 h-3.5" />
               </button>
             </div>
-            <p className="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap">
+            <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
               {output}
             </p>
           </div>
@@ -704,7 +704,7 @@ function CompanyPrep() {
               value={company}
               onChange={(e) => setCompany(e.target.value)}
               placeholder="e.g. Google"
-              className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
+              className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
             />
           </div>
           <div>
@@ -713,7 +713,7 @@ function CompanyPrep() {
               value={role}
               onChange={(e) => setRole(e.target.value)}
               placeholder="e.g. Senior Software Engineer"
-              className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
+              className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
             />
           </div>
         </div>

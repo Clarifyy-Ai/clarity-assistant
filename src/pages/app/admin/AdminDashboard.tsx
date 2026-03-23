@@ -163,7 +163,7 @@ function RecentSignups() {
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
         <thead>
-          <tr className="border-b border-white/8">
+          <tr className="border-b border-border">
             {["Name", "Email", "Plan", "Joined"].map((h) => (
               <th key={h} className="text-left text-[10px] text-muted-foreground uppercase tracking-widest pb-3 pr-4">
                 {h}
@@ -238,7 +238,7 @@ function SessionVolumeChart() {
             {format(new Date(d.day), "EEE")}
           </span>
           {/* Tooltip */}
-          <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-[#1a1a2e] border border-white/15 rounded-lg px-2 py-1 text-[10px] text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none">
+          <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-popover border border-border rounded-lg px-2 py-1 text-[10px] text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none">
             {d.count} sessions
           </div>
         </div>

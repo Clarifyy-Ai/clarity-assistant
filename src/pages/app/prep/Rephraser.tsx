@@ -111,7 +111,7 @@ export default function Rephraser() {
               "px-4 py-2.5 rounded-xl border text-left transition-all",
               style === s.id
                 ? "bg-violet-600/15 border-violet-500/30"
-                : "bg-white/[0.02] border-white/8 hover:bg-accent/5 hover:border-white/15"
+                : "bg-secondary/50 border-border hover:bg-secondary"
             )}
           >
             <div className="flex items-center gap-2">
@@ -136,7 +136,7 @@ export default function Rephraser() {
 
 Example: 'In my previous role, I was basically responsible for kind of leading the migration to microservices. We sort of had some issues with the monolith and I think I helped make things better.'"
             rows={10}
-            className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
+            className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
           />
         </Card>
 
@@ -152,10 +152,10 @@ Example: 'In my previous role, I was basically responsible for kind of leading t
           </div>
           {rephrased ? (
             <div className="space-y-3">
-              <p className="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap min-h-[200px]">
+              <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap min-h-[200px]">
                 {rephrased}
               </p>
-              <div className="flex gap-2 pt-2 border-t border-white/5">
+              <div className="flex gap-2 pt-2 border-t border-border">
                 <button
                   onClick={() => { navigator.clipboard.writeText(rephrased); toast.success("Copied!"); }}
                   className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"

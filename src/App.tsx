@@ -199,7 +199,14 @@ const queryClient = new QueryClient({
 
 function AppShell() {
   const profile = useAuthStore((s) => s.profile);
-  const showSetupChecklist = profile && !profile.onboarding_completed;
+  const location = useLocation();
+  // Show global checklist banner on all pages EXCEPT /app/dashboard,
+  // where SetupChecklist is rendered inline in the right-column widget
+  const showSetupChecklist =
+    profile && !profile.onboarding_completed &&
+    !location.pathname.startsWith("/app/dashboard");
+  const mobileNavOpen = useUIStore((s) => s.mobile_nav_open);
+  const setMobileNavOpen = useUIStore((s) => s.setMobileNavOpen);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -214,6 +221,18 @@ function AppShell() {
 
   return (
     <div className="flex h-screen w-full overflow-hidden bg-background">
+      {/* Mobile sidebar drawer — slides in from left on small screens */}
+      {mobileNavOpen && (
+        <>
+          <div
+            className="fixed inset-0 z-40 bg-black/50 md:hidden"
+            onClick={() => setMobileNavOpen(false)}
+          />
+          <div className="fixed inset-y-0 left-0 z-50 md:hidden">
+            <AppSidebar onNavClick={() => setMobileNavOpen(false)} />
+          </div>
+        </>
+      )}
       <AppSidebar />
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         <AppTopBar />
@@ -423,9 +442,13 @@ export default function App() {
     initialize();
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Bootstrap: re-apply persisted theme immediately on mount so the
+  // document class matches state (catches any mismatch from hydration).
+  // Always call setTheme so resolved_theme is computed from the current
+  // preference; this also ensures system-mode tracks the OS correctly.
   useEffect(() => {
+    useUIStore.getState().setTheme(useUIStore.getState().theme);
     if (theme !== "system") return;
-    useUIStore.getState().setTheme("system");
     const mq = window.matchMedia("(prefers-color-scheme: dark)");
     const handler = () => useUIStore.getState().setTheme("system");
     mq.addEventListener("change", handler);

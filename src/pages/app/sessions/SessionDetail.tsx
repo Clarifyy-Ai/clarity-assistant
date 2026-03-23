@@ -300,7 +300,7 @@ export default function SessionDetail() {
                   onClick={() => setExpanded((p) => ({ ...p, [ans.id]: !p[ans.id] }))}
                 >
                   {/* Index bubble */}
-                  <div className="w-7 h-7 bg-white/8 rounded-lg flex items-center justify-center text-xs font-bold text-muted-foreground shrink-0 mt-0.5">
+                  <div className="w-7 h-7 bg-secondary rounded-lg flex items-center justify-center text-xs font-bold text-muted-foreground shrink-0 mt-0.5">
                     {i + 1}
                   </div>
 
@@ -326,7 +326,7 @@ export default function SessionDetail() {
                         qColor === "emerald" ? "bg-emerald-500/10 text-emerald-400" :
                         qColor === "amber"   ? "bg-amber-500/10 text-amber-400"     :
                         qColor === "red"     ? "bg-red-500/10 text-red-400"         :
-                                              "bg-white/8 text-muted-foreground"
+                                              "bg-secondary text-muted-foreground"
                       )}>
                         {qScore}
                       </span>
@@ -340,7 +340,7 @@ export default function SessionDetail() {
 
                 {/* Expanded content */}
                 {isOpen && (
-                  <div className="mt-4 space-y-4 pt-4 border-t border-white/8">
+                  <div className="mt-4 space-y-4 pt-4 border-t border-border">
 
                     {/* Transcript */}
                     {ans.transcript && (
@@ -388,7 +388,7 @@ export default function SessionDetail() {
 
                     {/* AI feedback for this question */}
                     {ans.ai_feedback && (
-                      <div className="bg-white/3 border border-white/8 rounded-xl p-4">
+                      <div className="bg-secondary border border-border rounded-xl p-4">
                         <p className="text-[10px] font-semibold text-violet-400 uppercase tracking-widest mb-2">
                           AI feedback
                         </p>
@@ -414,7 +414,7 @@ export default function SessionDetail() {
                     {ans.star_breakdown && (
                       <div className="grid grid-cols-2 gap-2">
                         {Object.entries(ans.star_breakdown).map(([key, val]) => (
-                          <div key={key} className="bg-white/3 border border-white/8 rounded-xl p-3">
+                          <div key={key} className="bg-secondary border border-border rounded-xl p-3">
                             <p className="text-[10px] font-bold text-violet-400 uppercase mb-1">{key}</p>
                             <p className="text-xs text-muted-foreground">{val as string}</p>
                           </div>
@@ -499,7 +499,7 @@ export default function SessionDetail() {
             <input
               readOnly
               value={`https://confideq.app/share/${session.id}`}
-              className="flex-1 bg-black/30 border border-white/10 text-foreground rounded-xl px-3 py-2 text-xs focus:outline-none"
+              className="flex-1 bg-background border border-input text-foreground rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-ring transition-colors"
             />
             <Button
               variant="secondary"

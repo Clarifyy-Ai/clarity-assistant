@@ -235,7 +235,7 @@ export function LiveAIFeedback({
       case 'down':
         return <TrendingDown className="h-3.5 w-3.5 text-green-500" />;
       case 'stable':
-        return <Minus className="h-3.5 w-3.5 text-gray-500" />;
+        return <Minus className="h-3.5 w-3.5 text-muted-foreground" />;
     }
   };
 
@@ -244,7 +244,7 @@ export function LiveAIFeedback({
       <div className={cn('space-y-3', className)}>
         {/* Sentiment Badge */}
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-gray-300">Sentiment</span>
+          <span className="text-xs font-medium text-muted-foreground">Sentiment</span>
           <div className="flex items-center gap-2">
             <span className="text-lg">{metrics.sentiment.emoji}</span>
             <div className="w-16 h-1.5 rounded-full bg-gray-700 overflow-hidden">
@@ -262,7 +262,7 @@ export function LiveAIFeedback({
                 }}
               />
             </div>
-            <span className="text-xs font-semibold text-gray-400 w-8">
+            <span className="text-xs font-semibold text-muted-foreground w-8">
               {metrics.sentiment.score}%
             </span>
           </div>
@@ -270,10 +270,10 @@ export function LiveAIFeedback({
 
         {/* Filler Words Badge */}
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-gray-300">Filler</span>
+          <span className="text-xs font-medium text-muted-foreground">Filler</span>
           <div className="flex items-center gap-2">
             {showTrends && <TrendIcon trend={metrics.fillerWords.trend} />}
-            <span className="text-xs font-semibold text-gray-400 w-12">
+            <span className="text-xs font-semibold text-muted-foreground w-12">
               {metrics.fillerWords.count}
             </span>
           </div>
@@ -281,7 +281,7 @@ export function LiveAIFeedback({
 
         {/* Pace Badge */}
         <div className="flex items-center justify-between">
-          <span className="text-xs font-medium text-gray-300">Pace</span>
+          <span className="text-xs font-medium text-muted-foreground">Pace</span>
           <span
             className={cn(
               'text-xs font-semibold w-16 text-right',
@@ -303,15 +303,15 @@ export function LiveAIFeedback({
   return (
     <div className={cn('space-y-4', className)}>
       {/* Header */}
-      <div className="flex items-center gap-2 pb-3 border-b border-white/10">
+      <div className="flex items-center gap-2 pb-3 border-b border-border">
         <BarChart3 className="h-4 w-4 text-brand-400" />
-        <h3 className="text-sm font-semibold text-white">Live Feedback</h3>
+        <h3 className="text-sm font-semibold text-foreground">Live Feedback</h3>
       </div>
 
       {/* Sentiment */}
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-medium text-gray-300">Sentiment</label>
+          <label className="text-xs font-medium text-muted-foreground">Sentiment</label>
           <span className="text-lg">{metrics.sentiment.emoji}</span>
         </div>
         <div className="space-y-1">
@@ -331,36 +331,36 @@ export function LiveAIFeedback({
                 }}
               />
             </div>
-            <span className="text-xs font-semibold text-gray-400 w-8">
+            <span className="text-xs font-semibold text-muted-foreground w-8">
               {metrics.sentiment.score}%
             </span>
           </div>
-          <p className="text-[10px] text-gray-500 capitalize">
+          <p className="text-[10px] text-muted-foreground capitalize">
             {metrics.sentiment.label}
           </p>
         </div>
       </div>
 
       {/* Filler Words */}
-      <div className="space-y-2 p-2.5 bg-white/[0.02] rounded-lg border border-white/[0.05]">
+      <div className="space-y-2 p-2.5 bg-secondary/50 rounded-lg border border-border">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-medium text-gray-300">
+          <label className="text-xs font-medium text-muted-foreground">
             Filler Words
           </label>
           {showTrends && (
             <div className="flex items-center gap-1">
               <TrendIcon trend={metrics.fillerWords.trend} />
-              <span className="text-[10px] text-gray-500">
+              <span className="text-[10px] text-muted-foreground">
                 {Math.abs(metrics.fillerWords.trendPercent).toFixed(1)}%
               </span>
             </div>
           )}
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-sm font-semibold text-white">
+          <span className="text-sm font-semibold text-foreground">
             {metrics.fillerWords.count}
           </span>
-          <span className="text-xs text-gray-500">
+          <span className="text-xs text-muted-foreground">
             {metrics.fillerWords.percentage}% of words
           </span>
         </div>
@@ -372,9 +372,9 @@ export function LiveAIFeedback({
       </div>
 
       {/* Speaking Pace */}
-      <div className="space-y-2 p-2.5 bg-white/[0.02] rounded-lg border border-white/[0.05]">
+      <div className="space-y-2 p-2.5 bg-secondary/50 rounded-lg border border-border">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-medium text-gray-300">
+          <label className="text-xs font-medium text-muted-foreground">
             Speaking Pace
           </label>
           <span
@@ -392,19 +392,19 @@ export function LiveAIFeedback({
             {metrics.speakingPace.quality === 'fast' && '⚠️'}
           </span>
         </div>
-        <div className="text-sm font-semibold text-white">
+        <div className="text-sm font-semibold text-foreground">
           {metrics.speakingPace.current} WPM
         </div>
-        <div className="text-[10px] text-gray-500">
+        <div className="text-[10px] text-muted-foreground">
           Optimal: {metrics.speakingPace.optimal[0]}-
           {metrics.speakingPace.optimal[1]} WPM
         </div>
       </div>
 
       {/* Confidence Score */}
-      <div className="space-y-2 p-2.5 bg-white/[0.02] rounded-lg border border-white/[0.05]">
+      <div className="space-y-2 p-2.5 bg-secondary/50 rounded-lg border border-border">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-medium text-gray-300">
+          <label className="text-xs font-medium text-muted-foreground">
             Confidence
           </label>
           {showTrends && (
@@ -422,16 +422,16 @@ export function LiveAIFeedback({
               }}
             />
           </div>
-          <span className="text-xs font-semibold text-gray-400 w-8">
+          <span className="text-xs font-semibold text-muted-foreground w-8">
             {metrics.confidence.score}%
           </span>
         </div>
       </div>
 
       {/* Topic Relevance */}
-      <div className="space-y-2 p-2.5 bg-white/[0.02] rounded-lg border border-white/[0.05]">
+      <div className="space-y-2 p-2.5 bg-secondary/50 rounded-lg border border-border">
         <div className="flex items-center justify-between">
-          <label className="text-xs font-medium text-gray-300">
+          <label className="text-xs font-medium text-muted-foreground">
             Topic Relevance
           </label>
           <span className={cn('text-xs font-semibold')}>
@@ -454,7 +454,7 @@ export function LiveAIFeedback({
               }}
             />
           </div>
-          <span className="text-xs font-semibold text-gray-400 w-8">
+          <span className="text-xs font-semibold text-muted-foreground w-8">
             {metrics.topicRelevance.score}%
           </span>
         </div>

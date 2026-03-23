@@ -1,5 +1,6 @@
+import { useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle, Circle, ChevronRight } from "lucide-react";
+import { CheckCircle, Circle, ChevronRight, ChevronDown } from "lucide-react";
 import { useAuthStore } from "@/store/userStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { cn } from "@/lib/utils";
@@ -7,11 +8,13 @@ import { cn } from "@/lib/utils";
 // ─────────────────────────────────────────────────────────────────
 // SetupChecklist
 // Dashboard widget: "Complete your setup" — disappears when done.
+// Collapsible on mobile so it doesn't dominate the viewport.
 // ─────────────────────────────────────────────────────────────────
 
 export function SetupChecklist() {
   const { profile } = useAuthStore();
   const docStore = useDocumentStore();
+  const [expanded, setExpanded] = useState(false);
 
   const steps = [
     {
@@ -47,17 +50,30 @@ export function SetupChecklist() {
   const pct = Math.max(0, Math.min(100, pctRaw));
 
   return (
-    <div className="rounded-2xl border border-white/10 bg-white/5 p-5">
-      <div className="mb-3 flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white">Complete your setup</h3>
-        <span className="text-xs text-gray-500">
-          {completed}/{steps.length}
-        </span>
-      </div>
+    <div className="rounded-2xl border border-border bg-secondary p-5">
+      <button
+        type="button"
+        onClick={() => setExpanded((v) => !v)}
+        className="mb-3 flex w-full items-center justify-between md:cursor-default"
+        aria-expanded={expanded}
+      >
+        <h3 className="text-sm font-semibold text-foreground">Complete your setup</h3>
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-muted-foreground">
+            {completed}/{steps.length}
+          </span>
+          <ChevronDown
+            className={cn(
+              "h-4 w-4 text-muted-foreground transition-transform md:hidden",
+              expanded && "rotate-180"
+            )}
+          />
+        </div>
+      </button>
 
-      {/* Progress bar */}
+      {/* Progress bar — always visible */}
       <div
-        className="mb-4 h-1.5 overflow-hidden rounded-full bg-white/10"
+        className="mb-4 h-1.5 overflow-hidden rounded-full bg-muted"
         role="progressbar"
         aria-valuemin={0}
         aria-valuemax={steps.length}
@@ -71,31 +87,32 @@ export function SetupChecklist() {
         />
       </div>
 
-      <ul className="space-y-2">
+      {/* Steps — always shown on desktop (md+), toggled on mobile */}
+      <ul className={cn("space-y-2", "hidden md:block", expanded && "!block")}>
         {steps.map((step) => (
           <li key={step.id}>
             <Link
               to={step.to}
               className={cn(
-                "group flex items-center gap-3 rounded-xl px-2 py-1.5 transition-all hover:bg-white/5",
+                "group flex items-center gap-3 rounded-xl px-2 py-1.5 transition-all hover:bg-secondary/80",
                 step.done && "opacity-50"
               )}
             >
               {step.done ? (
                 <CheckCircle className="h-4 w-4 shrink-0 text-emerald-400" />
               ) : (
-                <Circle className="h-4 w-4 shrink-0 text-gray-600" />
+                <Circle className="h-4 w-4 shrink-0 text-muted-foreground" />
               )}
               <span
                 className={cn(
                   "flex-1 text-xs",
-                  step.done ? "text-gray-500 line-through" : "text-gray-300"
+                  step.done ? "text-muted-foreground line-through" : "text-muted-foreground"
                 )}
               >
                 {step.label}
               </span>
               {!step.done && (
-                <ChevronRight className="h-3.5 w-3.5 text-gray-600 transition-colors group-hover:text-gray-400" />
+                <ChevronRight className="h-3.5 w-3.5 text-muted-foreground transition-colors group-hover:text-foreground" />
               )}
             </Link>
           </li>

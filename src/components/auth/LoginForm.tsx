@@ -140,10 +140,10 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
     <div className="w-full max-w-md">
       <Card className="p-6 shadow-lg">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-2xl font-bold text-foreground">
             Welcome Back
           </h1>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+          <p className="mt-2 text-sm text-muted-foreground">
             Sign in to your Clarify Assistant account
           </p>
         </div>
@@ -158,11 +158,11 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Email Field */}
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="email" className="block text-sm font-medium text-muted-foreground mb-1">
               Email Address
             </label>
             <div className="relative">
-              <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+              <Mail className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
               <Input
                 id="email"
                 name="email"
@@ -185,11 +185,11 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
 
           {/* Password Field */}
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="password" className="block text-sm font-medium text-muted-foreground mb-1">
               Password
             </label>
             <div className="relative">
-              <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+              <Lock className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
               <Input
                 id="password"
                 name="password"
@@ -208,7 +208,7 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 disabled={isLoading}
-                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
               >
                 {showPassword ? (
                   <EyeOff className="h-5 w-5" />
@@ -232,7 +232,7 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
                 disabled={isLoading}
                 className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
-              <span className="ml-2 text-sm text-gray-600 dark:text-gray-400">
+              <span className="ml-2 text-sm text-muted-foreground">
                 Remember me
               </span>
             </label>
@@ -265,7 +265,7 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
 
         {/* Sign Up Link */}
         <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
+          <p className="text-sm text-muted-foreground">
             Don't have an account?{' '}
             <button
               onClick={() => navigate('/auth/signup')}

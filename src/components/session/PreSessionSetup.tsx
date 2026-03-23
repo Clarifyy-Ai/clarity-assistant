@@ -116,31 +116,31 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white flex items-center justify-center p-6">
+    <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
       <div className="w-full max-w-lg space-y-6">
         <div className="text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-sm font-medium mb-4">
             <Radio className="w-3.5 h-3.5 animate-pulse" />
             Session Setup
           </div>
-          <h1 className="text-3xl font-bold text-white">
+          <h1 className="text-3xl font-bold text-foreground">
             Configure Your Session
           </h1>
-          <p className="text-gray-400 mt-2 text-sm">
+          <p className="text-muted-foreground mt-2 text-sm">
             Configure your session below, then start when ready.
           </p>
         </div>
 
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-6 space-y-5">
+        <div className="bg-secondary border border-border rounded-2xl p-6 space-y-5">
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-muted-foreground mb-2">
               Interview Type
             </label>
             <select
               value={interviewType}
               onChange={(e) => setInterviewType(e.target.value)}
-              className="w-full bg-white/5 border border-white/10 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500"
+              className="w-full bg-secondary border border-border text-foreground rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500"
             >
               {INTERVIEW_TYPES.map((t) => (
                 <option key={t.value} value={t.value}>{t.label}</option>
@@ -150,13 +150,13 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-gray-300 mb-2">
+              <label className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground mb-2">
                 <FileText className="w-3.5 h-3.5" /> Resume
               </label>
               <select
                 value={resumeId ?? ""}
                 onChange={(e) => setResumeId(e.target.value || null)}
-                className="w-full bg-white/5 border border-white/10 text-white rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 text-sm"
+                className="w-full bg-secondary border border-border text-foreground rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 text-sm"
               >
                 <option value="">None selected</option>
                 {resumes.map((r) => (
@@ -165,13 +165,13 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
               </select>
             </div>
             <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-gray-300 mb-2">
+              <label className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground mb-2">
                 <Briefcase className="w-3.5 h-3.5" /> Job Description
               </label>
               <select
                 value={jdId ?? ""}
                 onChange={(e) => setJdId(e.target.value || null)}
-                className="w-full bg-white/5 border border-white/10 text-white rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 text-sm"
+                className="w-full bg-secondary border border-border text-foreground rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 text-sm"
               >
                 <option value="">None selected</option>
                 {jds.map((j) => (
@@ -182,7 +182,7 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-2">
+            <label className="block text-sm font-medium text-muted-foreground mb-2">
               Instructions (optional)
             </label>
             <textarea
@@ -190,13 +190,13 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
               onChange={(e) => setInstructions(e.target.value)}
               placeholder="e.g. Focus on STAR method, emphasise leadership examples, keep answers under 2 minutes..."
               rows={3}
-              className="w-full bg-white/5 border border-white/10 text-white placeholder-gray-500 rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500 text-sm resize-none"
+              className="w-full bg-secondary border border-border text-foreground placeholder-gray-500 rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500 text-sm resize-none"
             />
           </div>
 
           <div>
             <div className="flex items-center justify-between mb-2">
-              <label className="flex items-center gap-1.5 text-sm font-medium text-gray-300">
+              <label className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
                 <Brain className="w-3.5 h-3.5" /> AI Model
               </label>
               <label className="flex items-center gap-2 cursor-pointer">
@@ -204,15 +204,15 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
                   type="checkbox"
                   checked={smartRouting}
                   onChange={(e) => setSmartRouting(e.target.checked)}
-                  className="rounded border-white/20 bg-white/5 text-emerald-500"
+                  className="rounded border-border bg-secondary text-emerald-500"
                 />
-                <span className="text-xs text-gray-400">Smart routing</span>
+                <span className="text-xs text-muted-foreground">Smart routing</span>
               </label>
             </div>
             {smartRouting ? (
               <div className="bg-emerald-500/5 border border-emerald-500/15 rounded-xl p-3">
                 <p className="text-xs text-emerald-400 font-medium">Auto-select best model</p>
-                <p className="text-[10px] text-gray-400 mt-1">Routes to the optimal model based on question type and complexity.</p>
+                <p className="text-[10px] text-muted-foreground mt-1">Routes to the optimal model based on question type and complexity.</p>
               </div>
             ) : (
               <div className="grid grid-cols-2 gap-2">
@@ -224,7 +224,7 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
                       "text-left px-3 py-2 rounded-xl border text-sm transition-all",
                       model === m.id
                         ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                        : "bg-white/5 border-white/10 text-gray-400 hover:border-white/20"
+                        : "bg-secondary border-border text-muted-foreground hover:border-border"
                     )}
                   >
                     <p className="font-medium text-xs">{m.label}</p>
@@ -245,13 +245,13 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
                 checked={enableSystemAudio}
                 onChange={(e) => setEnableSystemAudio(e.target.checked)}
                 disabled={!systemAudioSupported}
-                className="rounded border-white/20 bg-white/5 text-emerald-500"
+                className="rounded border-border bg-secondary text-emerald-500"
               />
               <div>
-                <p className="text-sm font-medium text-white flex items-center gap-1.5">
+                <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
                   <Volume2 className="w-3.5 h-3.5" /> System Audio
                 </p>
-                <p className="text-[10px] text-gray-400 mt-0.5">
+                <p className="text-[10px] text-muted-foreground mt-0.5">
                   {systemAudioSupported
                     ? "Capture interviewer audio"
                     : "Not supported in this browser"}
@@ -264,20 +264,20 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
                 type="checkbox"
                 checked={stealthMode}
                 onChange={(e) => setStealthMode(e.target.checked)}
-                className="rounded border-white/20 bg-white/5 text-emerald-500"
+                className="rounded border-border bg-secondary text-emerald-500"
               />
               <div>
-                <p className="text-sm font-medium text-white flex items-center gap-1.5">
+                <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
                   <Shield className="w-3.5 h-3.5" /> Stealth Mode
                 </p>
-                <p className="text-[10px] text-gray-400 mt-0.5">Hidden from screen share</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Hidden from screen share</p>
               </div>
             </label>
           </div>
 
           <button
             onClick={() => setShowAdvanced((p) => !p)}
-            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-300 transition-colors"
+            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-muted-foreground transition-colors"
           >
             <Settings2 className="w-3 h-3" />
             Advanced settings
@@ -285,13 +285,13 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
           </button>
 
           {showAdvanced && (
-            <div className="space-y-4 pt-2 border-t border-white/5">
+            <div className="space-y-4 pt-2 border-t border-border">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Hint Style</label>
+                <label className="block text-sm font-medium text-muted-foreground mb-2">Hint Style</label>
                 <select
                   value={hintStyle}
                   onChange={(e) => setHintStyle(e.target.value as HintStyle)}
-                  className="w-full bg-white/5 border border-white/10 text-white rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500 text-sm"
+                  className="w-full bg-secondary border border-border text-foreground rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500 text-sm"
                 >
                   <option value="full_answer">Full Answer</option>
                   <option value="short_hints">Short Hints</option>
@@ -299,8 +299,8 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
                 </select>
               </div>
 
-              <div className="bg-black/30 rounded-xl p-3 space-y-1.5">
-                <p className="text-xs font-medium text-gray-400 uppercase tracking-wider mb-2">
+              <div className="bg-background rounded-xl p-3 space-y-1.5">
+                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
                   <Keyboard className="w-3 h-3 inline mr-1" />
                   Hotkeys
                 </p>
@@ -312,8 +312,8 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
                   { keys: ["escape"],             label: "Clear hint" },
                 ].map((hk) => (
                   <div key={hk.label} className="flex items-center justify-between text-xs">
-                    <span className="text-gray-400">{hk.label}</span>
-                    <kbd className="px-2 py-0.5 bg-white/10 rounded text-gray-300 font-mono">
+                    <span className="text-muted-foreground">{hk.label}</span>
+                    <kbd className="px-2 py-0.5 bg-secondary rounded text-muted-foreground font-mono">
                       {formatHotkeyLabel(hk.keys)}
                     </kbd>
                   </div>
@@ -336,11 +336,11 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
           <button
             onClick={checkMicPermission}
             disabled={micPermission === "checking"}
-            className="w-full py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-white font-medium rounded-xl transition-all flex items-center justify-center gap-2 text-sm mb-2"
+            className="w-full py-3 bg-secondary hover:bg-secondary border border-border text-foreground font-medium rounded-xl transition-all flex items-center justify-center gap-2 text-sm mb-2"
           >
             {micPermission === "checking" ? (
               <>
-                <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="w-3.5 h-3.5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
                 Checking permissions…
               </>
             ) : (
@@ -358,8 +358,8 @@ export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSet
           className={cn(
             "w-full py-3.5 font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
             micPermission === "denied"
-              ? "bg-gray-700 text-gray-400 cursor-not-allowed"
-              : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white"
+              ? "bg-gray-700 text-muted-foreground cursor-not-allowed"
+              : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-foreground"
           )}
         >
           <Zap className="w-4 h-4" />

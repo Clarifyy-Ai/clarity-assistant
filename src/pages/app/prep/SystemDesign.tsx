@@ -135,7 +135,7 @@ export default function SystemDesign() {
                 "w-full text-left px-4 py-3 rounded-xl border transition-all",
                 selected === topic.id
                   ? "bg-violet-600/10 border-violet-500/30"
-                  : "bg-white/[0.02] border-white/8 hover:bg-accent/5 hover:border-white/15"
+                  : "bg-secondary/50 border-border hover:bg-secondary"
               )}
             >
               <div className="flex items-center justify-between">
@@ -175,7 +175,7 @@ export default function SystemDesign() {
                   onChange={(e) => setNotes(e.target.value)}
                   placeholder="Sketch your approach here — components, data flow, scaling strategy…"
                   rows={5}
-                  className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
+                  className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
                 />
               </Card>
 
@@ -225,13 +225,13 @@ export default function SystemDesign() {
                       <Copy className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <div className="text-sm text-gray-200 leading-relaxed whitespace-pre-wrap">{breakdown}</div>
+                  <div className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{breakdown}</div>
                 </Card>
               )}
             </>
           ) : (
             <Card className="text-center py-20">
-              <Server className="w-12 h-12 text-gray-700 mx-auto mb-3" />
+              <Server className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
               <p className="text-muted-foreground text-sm">Select a system design topic</p>
               <p className="text-muted-foreground text-xs mt-1">Get AI-powered component breakdowns and scaling strategies</p>
             </Card>

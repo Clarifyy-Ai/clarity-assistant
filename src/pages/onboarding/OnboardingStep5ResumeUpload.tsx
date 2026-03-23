@@ -125,17 +125,17 @@ export default function OnboardingStep5ResumeUpload() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-lg">
 
         <div className="w-9 h-9 bg-violet-600 rounded-xl flex items-center justify-center mb-8">
-          <span className="text-white text-sm font-bold">CQ</span>
+          <span className="text-foreground text-sm font-bold">CQ</span>
         </div>
 
         <OnboardingProgress current={5} />
 
-        <h2 className="text-2xl font-bold text-white mb-1">Upload your resume</h2>
-        <p className="text-gray-400 text-sm mb-8">
+        <h2 className="text-2xl font-bold text-foreground mb-1">Upload your resume</h2>
+        <p className="text-muted-foreground text-sm mb-8">
           We parse your resume so every AI answer references your actual experience.
           This makes hints dramatically more relevant.
         </p>
@@ -149,8 +149,8 @@ export default function OnboardingStep5ResumeUpload() {
                 <CheckCircle className="w-7 h-7 text-emerald-400" />
               </div>
               <div>
-                <p className="text-white font-semibold">Resume uploaded!</p>
-                <p className="text-gray-400 text-sm mt-1">
+                <p className="text-foreground font-semibold">Resume uploaded!</p>
+                <p className="text-muted-foreground text-sm mt-1">
                   {parsing ? "Parsing your resume…" : "AI parse complete. Your profile is ready."}
                 </p>
               </div>
@@ -183,25 +183,25 @@ export default function OnboardingStep5ResumeUpload() {
                   "cursor-pointer transition-all",
                   dragOver
                     ? "border-violet-500/60 bg-violet-500/5"
-                    : "border-white/15 hover:border-white/25 bg-white/3"
+                    : "border-border hover:border-primary/30 bg-secondary/50"
                 )}
               >
                 {file ? (
                   <>
                     <FileText className="w-10 h-10 text-violet-400" />
-                    <p className="text-sm font-medium text-white">{file.name}</p>
-                    <p className="text-xs text-gray-500">
+                    <p className="text-sm font-medium text-foreground">{file.name}</p>
+                    <p className="text-xs text-muted-foreground">
                       {(file.size / 1024).toFixed(0)} KB
                     </p>
                   </>
                 ) : (
                   <>
-                    <Upload className="w-10 h-10 text-gray-600" />
+                    <Upload className="w-10 h-10 text-muted-foreground" />
                     <div className="text-center">
-                      <p className="text-sm font-medium text-gray-300">
+                      <p className="text-sm font-medium text-muted-foreground">
                         Drop your resume here
                       </p>
-                      <p className="text-xs text-gray-600 mt-1">
+                      <p className="text-xs text-muted-foreground mt-1">
                         PDF or DOCX · Max 5 MB
                       </p>
                     </div>

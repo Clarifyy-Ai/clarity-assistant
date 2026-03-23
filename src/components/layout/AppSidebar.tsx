@@ -71,15 +71,38 @@ const NAV_SECTIONS: Array<{ label: string; items: NavItem[] }> = [
   },
 ];
 
-export function AppSidebar() {
+interface AppSidebarProps {
+  onNavClick?: () => void;
+}
+
+export function AppSidebar({ onNavClick }: AppSidebarProps = {}) {
   const uiStore = useUIStore();
   const { profile, clearAuth } = useAuthStore();
   const user = useAuthStore((s) => s.user);
   const location = useLocation();
-  const collapsed = uiStore.sidebar_collapsed;
   const stealth = uiStore.stealth_mode;
 
   const [questionCount, setQuestionCount] = useState<number | null>(null);
+
+  // Auto-collapse on tablet (md breakpoint, <1024px); restore on desktop
+  useEffect(() => {
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const handleChange = (e: MediaQueryListEvent | MediaQueryList) => {
+      // Only auto-set if not manually overridden at a larger size
+      if (!e.matches) {
+        uiStore.setSidebarCollapsed(true);
+      } else {
+        uiStore.setSidebarCollapsed(false);
+      }
+    };
+    handleChange(mq); // apply on mount
+    mq.addEventListener("change", handleChange);
+    return () => mq.removeEventListener("change", handleChange);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When rendered as mobile drawer (onNavClick prop present), always show expanded
+  // so that labels and section text are visible despite sidebar_collapsed being true
+  const collapsed = onNavClick ? false : uiStore.sidebar_collapsed;
 
   // Fetch the user's question bank count for the badge
   useEffect(() => {
@@ -113,10 +136,11 @@ export function AppSidebar() {
   return (
     <aside
       className={cn(
-        "hidden md:flex flex-col flex-shrink-0",
+        "flex flex-col flex-shrink-0",
+        onNavClick ? "flex" : "hidden md:flex", // mobile drawer: always flex; desktop: hidden on mobile
         "h-screen bg-sidebar-background border-r border-sidebar-border",
         "transition-all duration-200 relative z-30",
-        collapsed ? "w-16" : "w-56"
+        onNavClick ? "w-56" : (collapsed ? "w-16" : "w-56") // drawer always expanded
       )}
     >
       <div className="flex min-h-[56px] items-center gap-3 border-b border-sidebar-border px-4 py-4">
@@ -155,6 +179,7 @@ export function AppSidebar() {
                     to={item.to}
                     end={false}
                     title={collapsed ? item.label : undefined}
+                    onClick={onNavClick}
                     className={({ isActive: navIsActive }) => {
                       // Prevent /app/mock from matching /app/mock-test/* (raw prefix overlap)
                       const isActive = navIsActive && (
@@ -211,6 +236,7 @@ export function AppSidebar() {
                             key={sub.to}
                             to={sub.to}
                             end={sub.to === "/app/mock-test"}
+                            onClick={onNavClick}
                             className={cn(
                               "flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
                               subActive
@@ -241,6 +267,7 @@ export function AppSidebar() {
           label={stealth ? "Inbox" : "Notifications"}
           collapsed={collapsed}
           stealth={stealth}
+          onClick={onNavClick}
         />
         <SidebarLink
           to="/app/settings"
@@ -248,6 +275,7 @@ export function AppSidebar() {
           label={stealth ? "Preferences" : "Settings"}
           collapsed={collapsed}
           stealth={stealth}
+          onClick={onNavClick}
         />
 
         <div
@@ -308,6 +336,7 @@ function SidebarLink({
   collapsed,
   exact,
   stealth,
+  onClick,
 }: {
   to: string;
   icon: React.ElementType;
@@ -315,12 +344,14 @@ function SidebarLink({
   collapsed: boolean;
   exact?: boolean;
   stealth?: boolean;
+  onClick?: () => void;
 }) {
   return (
     <NavLink
       to={to}
       end={exact}
       title={collapsed ? label : undefined}
+      onClick={onClick}
       className={({ isActive }) =>
         cn(
           "mx-1 flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all",

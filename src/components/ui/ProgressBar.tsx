@@ -52,7 +52,7 @@ export function ProgressBar({
           )}
         </div>
       )}
-      <div className={cn("w-full bg-white/10 rounded-full overflow-hidden", SIZES[size])}>
+      <div className={cn("w-full bg-secondary rounded-full overflow-hidden", SIZES[size])}>
         <div
           className={cn(
             "h-full rounded-full transition-all duration-500",

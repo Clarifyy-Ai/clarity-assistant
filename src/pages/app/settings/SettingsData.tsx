@@ -63,7 +63,7 @@ const EXPORT_TYPES = [
     desc:   "Everything — profile, sessions, answers, settings.",
     format: "ZIP",
     color:  "text-foreground",
-    bg:     "bg-white/8",
+    bg:     "bg-secondary",
   },
 ];
 
@@ -120,7 +120,7 @@ export default function SettingsData() {
           ].map((item) => (
             <div
               key={item.label}
-              className="flex flex-col items-center gap-1.5 p-3 bg-white/3 border border-white/8 rounded-xl"
+              className="flex flex-col items-center gap-1.5 p-3 bg-secondary border border-border rounded-xl"
             >
               <span className="text-xl">{item.icon}</span>
               <p className="text-sm font-bold text-foreground">{item.value}</p>

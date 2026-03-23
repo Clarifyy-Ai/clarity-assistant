@@ -159,7 +159,7 @@ function ScoreTrendChart({ data }: { data: { date: string; score: number }[] }) 
   if (!data.length) {
     return (
       <Card className="text-center py-10">
-        <BarChart2 className="w-8 h-8 text-gray-700 mx-auto mb-2" />
+        <BarChart2 className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
         <p className="text-muted-foreground text-sm">No session data yet.</p>
       </Card>
     );
@@ -188,7 +188,7 @@ function ScoreTrendChart({ data }: { data: { date: string; score: number }[] }) 
                 style={{ height: `${pct}%` }}
               />
               {/* Tooltip */}
-              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-[#1a1a2e] border border-white/15 rounded-lg px-2 py-1 text-[10px] text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
+              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-popover border border-border rounded-lg px-2 py-1 text-[10px] text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
                 {d.score} · {format(new Date(d.date), "MMM d")}
               </div>
             </div>
@@ -258,7 +258,7 @@ function CategoryBreakdown({
   if (!categories.length) {
     return (
       <Card className="text-center py-10">
-        <Target className="w-8 h-8 text-gray-700 mx-auto mb-2" />
+        <Target className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
         <p className="text-muted-foreground text-sm">No category data yet.</p>
       </Card>
     );

@@ -32,7 +32,7 @@ const PRIORITY_COLORS: Record<string, string> = {
   critical: "text-red-400",
   high:     "text-orange-400",
   medium:   "text-yellow-400",
-  low:      "text-gray-400",
+  low:      "text-muted-foreground",
 };
 
 export default function InterviewScheduler() {
@@ -84,27 +84,27 @@ export default function InterviewScheduler() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white">
+    <div className="min-h-screen bg-background text-foreground">
       <div className="max-w-full px-4 sm:px-6 lg:px-8 py-8 space-y-6">
 
         {/* ── Header ─────────────────────────────────── */}
         <div className="flex items-center justify-between flex-wrap gap-3">
           <div>
-            <h1 className="text-3xl font-bold text-white">Interview Tracker</h1>
-            <p className="text-gray-400 mt-1 text-sm">
+            <h1 className="text-3xl font-bold text-foreground">Interview Tracker</h1>
+            <p className="text-muted-foreground mt-1 text-sm">
               Manage your active job applications and interview pipeline
             </p>
           </div>
           <div className="flex items-center gap-2">
             {/* View toggle */}
-            <div className="flex gap-1 bg-white/5 border border-white/10 rounded-xl p-1">
+            <div className="flex gap-1 bg-secondary border border-border rounded-xl p-1">
               {(["kanban", "list"] as const).map((v) => (
                 <button
                   key={v}
                   onClick={() => setActiveView(v)}
                   className={cn(
                     "px-4 py-1.5 rounded-lg text-xs font-medium capitalize transition-all",
-                    activeView === v ? "bg-violet-600 text-white" : "text-gray-400 hover:text-white"
+                    activeView === v ? "bg-violet-600 text-foreground" : "text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {v}
@@ -114,7 +114,7 @@ export default function InterviewScheduler() {
 
             <button
               onClick={() => setAddDialogOpen(true)}
-              className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-500 text-white text-sm font-medium rounded-xl transition-all"
+              className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-500 text-foreground text-sm font-medium rounded-xl transition-all"
             >
               <Plus className="w-4 h-4" />
               Add Interview
@@ -133,11 +133,11 @@ export default function InterviewScheduler() {
               {scheduler.todayInterviews.map((i) => (
                 <div
                   key={i.id}
-                  className="flex items-center gap-3 bg-white/5 rounded-xl px-4 py-2.5"
+                  className="flex items-center gap-3 bg-secondary rounded-xl px-4 py-2.5"
                 >
                   <div>
-                    <p className="text-sm font-medium text-white">{i.company_name}</p>
-                    <p className="text-xs text-gray-400">
+                    <p className="text-sm font-medium text-foreground">{i.company_name}</p>
+                    <p className="text-xs text-muted-foreground">
                       {i.next_round?.scheduled_at
                         ? new Date(i.next_round.scheduled_at).toLocaleTimeString([], {
                             hour: "2-digit", minute: "2-digit",
@@ -148,7 +148,7 @@ export default function InterviewScheduler() {
                   </div>
                   <button
                     onClick={() => navigate(`/live/setup?interview=${i.id}`)}
-                    className="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs rounded-lg transition-all"
+                    className="px-3 py-1.5 bg-violet-600 hover:bg-violet-500 text-foreground text-xs rounded-lg transition-all"
                   >
                     Launch Co-pilot
                   </button>
@@ -180,10 +180,10 @@ export default function InterviewScheduler() {
                   >
                     {/* Column header */}
                     <div className="flex items-center justify-between">
-                      <span className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
+                      <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                         {stage.label}
                       </span>
-                      <span className="text-xs text-gray-500 bg-white/10 rounded-full px-2 py-0.5">
+                      <span className="text-xs text-muted-foreground bg-secondary/80 rounded-full px-2 py-0.5">
                         {column.length}
                       </span>
                     </div>
@@ -206,7 +206,7 @@ export default function InterviewScheduler() {
                     ))}
 
                     {column.length === 0 && (
-                      <div className="text-center py-6 text-gray-600 text-xs">
+                      <div className="text-center py-6 text-muted-foreground text-xs">
                         Drop here
                       </div>
                     )}
@@ -227,8 +227,8 @@ export default function InterviewScheduler() {
                 <Loader2 className="w-6 h-6 text-violet-400 animate-spin" />
               </div>
             ) : scheduler.interviews.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-20 text-gray-500 text-sm">
-                <Briefcase className="w-10 h-10 mb-3 text-gray-600" />
+              <div className="flex flex-col items-center justify-center py-20 text-muted-foreground text-sm">
+                <Briefcase className="w-10 h-10 mb-3 text-muted-foreground" />
                 No interviews tracked yet
               </div>
             ) : (
@@ -250,34 +250,34 @@ export default function InterviewScheduler() {
         ══════════════════════════════════════════════ */}
         {addDialogOpen && (
           <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-md bg-[#12121a] border border-white/15 rounded-2xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
-              <h3 className="text-lg font-semibold text-white">Track New Interview</h3>
+            <div className="w-full max-w-md bg-popover border border-border rounded-2xl p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto">
+              <h3 className="text-lg font-semibold text-foreground">Track New Interview</h3>
 
               <div className="grid grid-cols-2 gap-3">
                 <div className="col-span-2">
-                  <label className="block text-xs text-gray-400 mb-1.5">Company *</label>
+                  <label className="block text-xs text-muted-foreground mb-1.5">Company *</label>
                   <input
                     value={form.company_name ?? ""}
                     onChange={(e) => setForm((f) => ({ ...f, company_name: e.target.value }))}
                     placeholder="e.g. Stripe"
-                    className="w-full bg-white/5 border border-white/10 text-white placeholder-gray-500 rounded-xl px-4 py-2.5 focus:outline-none focus:border-violet-500 text-sm"
+                    className="w-full bg-secondary border border-border text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 focus:outline-none focus:border-violet-500 text-sm"
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs text-gray-400 mb-1.5">Role Title *</label>
+                  <label className="block text-xs text-muted-foreground mb-1.5">Role Title *</label>
                   <input
                     value={form.role_title ?? ""}
                     onChange={(e) => setForm((f) => ({ ...f, role_title: e.target.value }))}
                     placeholder="e.g. Senior Software Engineer"
-                    className="w-full bg-white/5 border border-white/10 text-white placeholder-gray-500 rounded-xl px-4 py-2.5 focus:outline-none focus:border-violet-500 text-sm"
+                    className="w-full bg-secondary border border-border text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 focus:outline-none focus:border-violet-500 text-sm"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1.5">Stage</label>
+                  <label className="block text-xs text-muted-foreground mb-1.5">Stage</label>
                   <select
                     value={form.stage}
                     onChange={(e) => setForm((f) => ({ ...f, stage: e.target.value as InterviewStage }))}
-                    className="w-full bg-white/5 border border-white/10 text-white rounded-xl px-3 py-2 focus:outline-none focus:border-violet-500 text-sm"
+                    className="w-full bg-secondary border border-border text-foreground rounded-xl px-3 py-2 focus:outline-none focus:border-violet-500 text-sm"
                   >
                     {STAGES.map((s) => (
                       <option key={s.value} value={s.value}>{s.label}</option>
@@ -285,11 +285,11 @@ export default function InterviewScheduler() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs text-gray-400 mb-1.5">Priority</label>
+                  <label className="block text-xs text-muted-foreground mb-1.5">Priority</label>
                   <select
                     value={form.priority}
                     onChange={(e) => setForm((f) => ({ ...f, priority: e.target.value as any }))}
-                    className="w-full bg-white/5 border border-white/10 text-white rounded-xl px-3 py-2 focus:outline-none focus:border-violet-500 text-sm"
+                    className="w-full bg-secondary border border-border text-foreground rounded-xl px-3 py-2 focus:outline-none focus:border-violet-500 text-sm"
                   >
                     <option value="critical">🔴 Critical</option>
                     <option value="high">🟠 High</option>
@@ -298,22 +298,22 @@ export default function InterviewScheduler() {
                   </select>
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs text-gray-400 mb-1.5">Job Posting URL</label>
+                  <label className="block text-xs text-muted-foreground mb-1.5">Job Posting URL</label>
                   <input
                     value={form.job_posting_url ?? ""}
                     onChange={(e) => setForm((f) => ({ ...f, job_posting_url: e.target.value }))}
                     placeholder="https://…"
-                    className="w-full bg-white/5 border border-white/10 text-white placeholder-gray-500 rounded-xl px-4 py-2.5 focus:outline-none focus:border-violet-500 text-sm"
+                    className="w-full bg-secondary border border-border text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 focus:outline-none focus:border-violet-500 text-sm"
                   />
                 </div>
                 <div className="col-span-2">
-                  <label className="block text-xs text-gray-400 mb-1.5">Notes</label>
+                  <label className="block text-xs text-muted-foreground mb-1.5">Notes</label>
                   <textarea
                     value={form.notes ?? ""}
                     onChange={(e) => setForm((f) => ({ ...f, notes: e.target.value }))}
                     placeholder="Recruiter name, salary expectations, special notes…"
                     rows={3}
-                    className="w-full bg-white/5 border border-white/10 text-white placeholder-gray-500 rounded-xl px-4 py-3 resize-none focus:outline-none focus:border-violet-500 text-sm"
+                    className="w-full bg-secondary border border-border text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 resize-none focus:outline-none focus:border-violet-500 text-sm"
                   />
                 </div>
               </div>
@@ -323,9 +323,9 @@ export default function InterviewScheduler() {
                   type="checkbox"
                   checked={form.is_remote ?? true}
                   onChange={(e) => setForm((f) => ({ ...f, is_remote: e.target.checked }))}
-                  className="rounded border-white/20 bg-white/5 text-violet-500"
+                  className="rounded border-border bg-secondary text-violet-500"
                 />
-                <span className="text-sm text-gray-300">Remote position</span>
+                <span className="text-sm text-muted-foreground">Remote position</span>
               </label>
 
               {formError && (
@@ -335,14 +335,14 @@ export default function InterviewScheduler() {
               <div className="flex gap-2 pt-1">
                 <button
                   onClick={() => { setAddDialogOpen(false); setFormError(null); }}
-                  className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 text-sm rounded-xl transition-all"
+                  className="flex-1 py-2.5 bg-secondary hover:bg-secondary/80 border border-border text-muted-foreground text-sm rounded-xl transition-all"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleAdd}
                   disabled={isSaving}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-all"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-foreground text-sm font-medium rounded-xl transition-all"
                 >
                   {isSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />}
                   Add
@@ -371,15 +371,15 @@ function KanbanCard({
       draggable
       onDragStart={onDragStart}
       onClick={onClick}
-      className="bg-[#0d0d14] border border-white/10 rounded-xl p-3 cursor-grab active:cursor-grabbing hover:border-white/20 transition-all group"
+      className="bg-card border border-border rounded-xl p-3 cursor-grab active:cursor-grabbing hover:border-border transition-all group"
     >
       <div className="flex items-start justify-between gap-2 mb-1.5">
-        <p className="text-sm font-semibold text-white leading-snug">{interview.company_name}</p>
+        <p className="text-sm font-semibold text-foreground leading-snug">{interview.company_name}</p>
         <span className={cn("text-xs shrink-0", PRIORITY_COLORS[interview.priority])}>
           ●
         </span>
       </div>
-      <p className="text-xs text-gray-400 truncate">{interview.role_title}</p>
+      <p className="text-xs text-muted-foreground truncate">{interview.role_title}</p>
 
       {interview.next_round && (
         <div className="flex items-center gap-1 mt-2 text-xs text-violet-300">
@@ -402,7 +402,7 @@ function KanbanCard({
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onDelete(); }}
-          className="text-gray-600 hover:text-red-400 transition-colors"
+          className="text-muted-foreground hover:text-red-400 transition-colors"
         >
           <Trash2 className="w-3.5 h-3.5" />
         </button>
@@ -424,16 +424,16 @@ function ListInterviewRow({
 }) {
   const stage = STAGES.find((s) => s.value === interview.stage);
   return (
-    <div className="bg-white/5 border border-white/10 hover:border-white/20 rounded-2xl px-5 py-4 flex items-center gap-4 transition-all">
+    <div className="bg-secondary border border-border hover:border-border rounded-2xl px-5 py-4 flex items-center gap-4 transition-all">
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 mb-0.5">
-          <p className="font-semibold text-white">{interview.company_name}</p>
+          <p className="font-semibold text-foreground">{interview.company_name}</p>
           <span className={cn("text-xs px-2 py-0.5 rounded-full border capitalize", stage?.color)}>
             {stage?.label}
           </span>
           <span className={cn("text-xs", PRIORITY_COLORS[interview.priority])}>●</span>
         </div>
-        <p className="text-sm text-gray-400">{interview.role_title}</p>
+        <p className="text-sm text-muted-foreground">{interview.role_title}</p>
         {interview.next_round?.scheduled_at && (
           <p className="text-xs text-violet-300 mt-1 flex items-center gap-1">
             <Calendar className="w-3 h-3" />
@@ -453,7 +453,7 @@ function ListInterviewRow({
         </button>
         <button
           onClick={onDelete}
-          className="p-1.5 text-gray-600 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10"
+          className="p-1.5 text-muted-foreground hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10"
         >
           <Trash2 className="w-4 h-4" />
         </button>

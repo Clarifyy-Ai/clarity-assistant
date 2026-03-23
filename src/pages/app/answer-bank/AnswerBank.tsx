@@ -133,8 +133,8 @@ export default function AnswerBank() {
               className={cn(
                 "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
                 category === c
-                  ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                  : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
+                  ? "bg-primary/10 border-primary/30 text-primary"
+                  : "bg-secondary border-border text-muted-foreground hover:text-foreground"
               )}
             >
               {c}
@@ -150,7 +150,7 @@ export default function AnswerBank() {
         </div>
       ) : filtered.length === 0 ? (
         <Card className="text-center py-16">
-          <BookOpen className="w-10 h-10 text-gray-700 mx-auto mb-3" />
+          <BookOpen className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
           <p className="text-muted-foreground text-sm">No saved answers yet.</p>
           <p className="text-muted-foreground text-xs mt-1">
             Save answers from sessions or build them in Prep Lab.
@@ -233,14 +233,14 @@ export default function AnswerBank() {
 
                 {/* Expanded */}
                 {isOpen && (
-                  <div className="mt-4 pt-4 border-t border-white/8 space-y-3">
+                  <div className="mt-4 pt-4 border-t border-border space-y-3">
                     {isEditing ? (
                       <>
                         <textarea
                           value={editText}
                           onChange={(e) => setEditText(e.target.value)}
                           rows={6}
-                          className="w-full bg-black/30 border border-violet-500/50 text-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none"
+                          className="w-full bg-background border border-primary/50 text-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-colors"
                         />
                         <div className="flex gap-2">
                           <Button
@@ -272,7 +272,7 @@ export default function AnswerBank() {
                         {Object.entries(ans.star_breakdown).map(([k, v]) => (
                           <div
                             key={k}
-                            className="bg-white/3 border border-white/8 rounded-xl p-3"
+                            className="bg-secondary border border-border rounded-xl p-3"
                           >
                             <p className="text-[10px] font-bold text-violet-400 uppercase mb-1">
                               {k}
@@ -365,7 +365,7 @@ function AddAnswerModal({
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             placeholder="e.g. Tell me about a time you failed…"
-            className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
+            className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
           />
         </div>
         <div>
@@ -375,7 +375,7 @@ function AddAnswerModal({
             onChange={(e) => setAnswer(e.target.value)}
             placeholder="Write your STAR answer here…"
             rows={6}
-            className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
+            className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
           />
         </div>
         <div>
@@ -388,8 +388,8 @@ function AddAnswerModal({
                 className={cn(
                   "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
                   category === c
-                    ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                    : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
+                    ? "bg-primary/10 border-primary/30 text-primary"
+                    : "bg-secondary border-border text-muted-foreground hover:text-foreground"
                 )}
               >
                 {c}

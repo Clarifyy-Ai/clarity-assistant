@@ -78,7 +78,7 @@ export default function OnboardingStep3Preferences() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-lg">
 
         <div className="w-9 h-9 bg-violet-600 rounded-xl flex items-center justify-center mb-8">
@@ -87,8 +87,8 @@ export default function OnboardingStep3Preferences() {
 
         <OnboardingProgress current={3} />
 
-        <h2 className="text-2xl font-bold text-white mb-1">Your preferences</h2>
-        <p className="text-gray-400 text-sm mb-8">
+        <h2 className="text-2xl font-bold text-foreground mb-1">Your preferences</h2>
+        <p className="text-muted-foreground text-sm mb-8">
           Customise how Clarify AI coaches you. You can change these any time in settings.
         </p>
 
@@ -96,7 +96,7 @@ export default function OnboardingStep3Preferences() {
 
           {/* Hint style */}
           <div>
-            <p className="text-xs font-medium text-gray-300 mb-2">
+            <p className="text-xs font-medium text-muted-foreground mb-2">
               How much help do you want during live sessions?
             </p>
             <div className="grid grid-cols-3 gap-2">
@@ -108,17 +108,17 @@ export default function OnboardingStep3Preferences() {
                     "flex flex-col items-center gap-1.5 p-3 rounded-xl border text-center transition-all",
                     hintStyle === h.value
                       ? "bg-violet-600/20 border-violet-500/50"
-                      : "bg-white/3 border-white/10 hover:border-white/20"
+                      : "bg-secondary/50 border-border hover:border-border"
                   )}
                 >
                   <span className="text-xl">{h.icon}</span>
                   <span className={cn(
                     "text-xs font-semibold",
-                    hintStyle === h.value ? "text-violet-200" : "text-gray-300"
+                    hintStyle === h.value ? "text-violet-200" : "text-muted-foreground"
                   )}>
                     {h.label}
                   </span>
-                  <span className="text-[10px] text-gray-500">{h.sub}</span>
+                  <span className="text-[10px] text-muted-foreground">{h.sub}</span>
                 </button>
               ))}
             </div>
@@ -126,7 +126,7 @@ export default function OnboardingStep3Preferences() {
 
           {/* Coach tone */}
           <div>
-            <p className="text-xs font-medium text-gray-300 mb-2">AI coach tone</p>
+            <p className="text-xs font-medium text-muted-foreground mb-2">AI coach tone</p>
             <div className="grid grid-cols-2 gap-2">
               {COACH_TONES.map((t) => (
                 <button
@@ -136,18 +136,18 @@ export default function OnboardingStep3Preferences() {
                     "flex items-center gap-3 p-3 rounded-xl border text-left transition-all",
                     coachTone === t.value
                       ? "bg-violet-600/20 border-violet-500/50"
-                      : "bg-white/3 border-white/10 hover:border-white/20"
+                      : "bg-secondary/50 border-border hover:border-border"
                   )}
                 >
                   <span className="text-xl">{t.icon}</span>
                   <div>
                     <p className={cn(
                       "text-xs font-semibold",
-                      coachTone === t.value ? "text-violet-200" : "text-gray-300"
+                      coachTone === t.value ? "text-violet-200" : "text-muted-foreground"
                     )}>
                       {t.label}
                     </p>
-                    <p className="text-[10px] text-gray-500">{t.sub}</p>
+                    <p className="text-[10px] text-muted-foreground">{t.sub}</p>
                   </div>
                 </button>
               ))}
@@ -156,7 +156,7 @@ export default function OnboardingStep3Preferences() {
 
           {/* Model preference */}
           <div>
-            <p className="text-xs font-medium text-gray-300 mb-2">
+            <p className="text-xs font-medium text-muted-foreground mb-2">
               Preferred AI model
             </p>
             <div className="space-y-2">
@@ -171,16 +171,16 @@ export default function OnboardingStep3Preferences() {
                       "w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all",
                       model === m.value && !locked
                         ? "bg-violet-600/20 border-violet-500/50"
-                        : "bg-white/3 border-white/10",
+                        : "bg-secondary/50 border-border",
                       locked
                         ? "opacity-40 cursor-not-allowed"
-                        : "hover:border-white/20 cursor-pointer"
+                        : "hover:border-border cursor-pointer"
                     )}
                   >
                     <div className="flex-1">
                       <span className={cn(
                         "text-sm font-semibold",
-                        model === m.value ? "text-violet-200" : "text-gray-300"
+                        model === m.value ? "text-violet-200" : "text-muted-foreground"
                       )}>
                         {m.label}
                       </span>

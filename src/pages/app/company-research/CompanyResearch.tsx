@@ -75,7 +75,7 @@ export default function CompanyResearch() {
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleSearch()}
               placeholder="Enter a company name…"
-              className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-violet-500"
+              className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl pl-10 pr-4 py-3 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
               autoFocus
             />
           </div>
@@ -99,7 +99,7 @@ export default function CompanyResearch() {
               <button
                 key={c}
                 onClick={() => handleSearch(c)}
-                className="px-3 py-1.5 bg-white/3 hover:bg-white/8 border border-white/10 hover:border-white/20 rounded-xl text-xs text-muted-foreground hover:text-foreground transition-all"
+                className="px-3 py-1.5 bg-secondary hover:bg-secondary/80 border border-border hover:border-primary/30 rounded-xl text-xs text-muted-foreground hover:text-foreground transition-all"
               >
                 {c}
               </button>

@@ -1,5 +1,5 @@
 import { Link } from "react-router-dom";
-import { Bell, Zap, AlertTriangle, Shield, ShieldOff } from "lucide-react";
+import { Bell, Zap, AlertTriangle, Shield, ShieldOff, Menu, X } from "lucide-react";
 import { useAuthStore } from "@/store/userStore";
 import { useNotificationStore } from "@/store/notificationStore";
 import { useUIStore } from "@/store/uiStore";
@@ -12,6 +12,7 @@ export function AppTopBar() {
   const notifStore  = useNotificationStore();
   const uiStore     = useUIStore();
   const stealthMode = uiStore.stealth_mode;
+  const mobileNavOpen = uiStore.mobile_nav_open;
 
   const credits = profile?.credits ?? 0;
   const isLow   = credits <= 2;
@@ -26,12 +27,22 @@ export function AppTopBar() {
   return (
     <header className="sticky top-0 z-40 h-14 w-full flex-shrink-0 bg-background/95 backdrop-blur border-b border-border flex items-center justify-between px-2 sm:px-4">
 
+      {/* Mobile hamburger — only visible on small screens */}
+      <button
+        type="button"
+        onClick={() => uiStore.setMobileNavOpen(!mobileNavOpen)}
+        className="md:hidden flex items-center justify-center w-9 h-9 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all mr-1"
+        aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
+      >
+        {mobileNavOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+      </button>
+
       <div
-        className="flex items-center gap-2 min-w-0"
+        className="flex items-center gap-2 min-w-0 flex-1"
         id="topbar-breadcrumb"
       />
 
-      <div className="flex items-center gap-1.5 sm:gap-3 ml-auto flex-shrink-0">
+      <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
 
         <button
           type="button"
@@ -60,7 +71,7 @@ export function AppTopBar() {
           onClick={toggleAppStealthMode}
           title={stealthMode ? "Disable stealth mode" : "Enable stealth mode"}
           className={cn(
-            "flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl border text-[10px] sm:text-xs font-medium transition-all",
+            "hidden sm:flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl border text-[10px] sm:text-xs font-medium transition-all",
             stealthMode
               ? "bg-blue-500/10 border-blue-500/30 text-blue-500 dark:text-blue-400"
               : "bg-secondary/60 border-border text-muted-foreground hover:bg-secondary hover:text-foreground"

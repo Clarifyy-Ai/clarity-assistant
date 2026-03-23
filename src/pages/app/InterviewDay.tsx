@@ -168,7 +168,7 @@ export default function InterviewDay() {
               href={todayIv.meeting_link}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-4 flex items-center justify-between p-3 bg-accent/5 hover:bg-accent/10 border border-white/10 rounded-xl transition-all"
+              className="mt-4 flex items-center justify-between p-3 bg-accent/5 hover:bg-accent/10 border border-border rounded-xl transition-all"
             >
               <span className="text-xs text-foreground">
                 🔗 {todayIv.meeting_link.slice(0, 50)}…
@@ -302,7 +302,7 @@ export default function InterviewDay() {
                 "w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all",
                 checklist[item.id]
                   ? "bg-emerald-500 border-emerald-500"
-                  : "border-white/20"
+                  : "border-border"
               )}>
                 {checklist[item.id] && (
                   <CheckCircle className="w-3 h-3 text-foreground" />

@@ -108,7 +108,7 @@ export default function AdminUsers() {
                 "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all capitalize",
                 filter === f
                   ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                  : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
+                  : "bg-secondary/50 border-border text-muted-foreground hover:text-foreground"
               )}
             >
               {f}
@@ -121,7 +121,7 @@ export default function AdminUsers() {
       <Card padding="none" className="overflow-hidden">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
-            <thead className="border-b border-white/8">
+            <thead className="border-b border-border">
               <tr>
                 {["Name", "Email", "Plan", "Credits", "Role", "Joined", ""].map((h) => (
                   <th
@@ -148,7 +148,7 @@ export default function AdminUsers() {
                 <tr
                   key={u.id}
                   className={cn(
-                    "hover:bg-white/3 transition-colors",
+                    "hover:bg-secondary/50 transition-colors",
                     u.is_banned && "opacity-50"
                   )}
                 >
@@ -193,7 +193,7 @@ export default function AdminUsers() {
         </div>
 
         {/* Pagination */}
-        <div className="flex items-center justify-between px-4 py-3 border-t border-white/8">
+        <div className="flex items-center justify-between px-4 py-3 border-t border-border">
           <p className="text-xs text-muted-foreground">
             {page * PAGE_SIZE + 1}–{Math.min((page + 1) * PAGE_SIZE, total)} of {total}
           </p>
@@ -236,7 +236,7 @@ export default function AdminUsers() {
               <span>Banned: <strong className="text-foreground">{selected.is_banned ? "Yes" : "No"}</strong></span>
             </div>
 
-            <div className="space-y-2 pt-2 border-t border-white/8">
+            <div className="space-y-2 pt-2 border-t border-border">
               {[
                 { action: "grant_pro",    label: "Grant Pro plan",    icon: <Zap className="w-3.5 h-3.5" /> },
                 { action: "add_credits",  label: "Add 100 credits",   icon: <Zap className="w-3.5 h-3.5" /> },

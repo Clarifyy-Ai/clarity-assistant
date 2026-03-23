@@ -139,8 +139,8 @@ export default function NewInterview() {
                     className={cn(
                       "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
                       interviewType === t
-                        ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                        : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
+                        ? "bg-primary/10 border-primary/30 text-primary"
+                        : "bg-secondary border-border text-muted-foreground hover:text-foreground"
                     )}
                   >
                     {t}
@@ -161,8 +161,8 @@ export default function NewInterview() {
                     className={cn(
                       "w-9 h-9 rounded-xl border text-xs font-bold transition-all",
                       roundNumber === r
-                        ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                        : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
+                        ? "bg-primary/10 border-primary/30 text-primary"
+                        : "bg-secondary border-border text-muted-foreground hover:text-foreground"
                     )}
                   >
                     {r}
@@ -189,7 +189,7 @@ export default function NewInterview() {
                 value={scheduledAt}
                 onChange={(e) => setScheduledAt(e.target.value)}
                 required
-                className="w-full bg-black/30 border border-white/10 text-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500 [color-scheme:dark]"
+                className="w-full bg-background border border-input text-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
               />
             </div>
 
@@ -206,8 +206,8 @@ export default function NewInterview() {
                     className={cn(
                       "flex-1 py-2 rounded-xl border text-xs font-medium transition-all",
                       duration === d
-                        ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                        : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
+                        ? "bg-primary/10 border-primary/30 text-primary"
+                        : "bg-secondary border-border text-muted-foreground hover:text-foreground"
                     )}
                   >
                     {d}m
@@ -234,8 +234,8 @@ export default function NewInterview() {
                   className={cn(
                     "py-2.5 px-3 rounded-xl border text-xs font-medium transition-all",
                     platform === p.value
-                      ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                      : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
+                      ? "bg-primary/10 border-primary/30 text-primary"
+                      : "bg-secondary border-border text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {p.label}
@@ -274,7 +274,7 @@ export default function NewInterview() {
                 onChange={(e) => setNotes(e.target.value)}
                 placeholder="Any reminders, prep notes, or links…"
                 rows={3}
-                className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
+                className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
               />
             </div>
           </div>

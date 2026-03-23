@@ -196,7 +196,7 @@ export default function InterviewDetail() {
 
         {/* Interviewer */}
         {iv.interviewer_name && (
-          <div className="flex items-center gap-3 mt-4 pt-4 border-t border-white/8">
+          <div className="flex items-center gap-3 mt-4 pt-4 border-t border-border">
             <User className="w-4 h-4 text-muted-foreground shrink-0" />
             <div>
               <p className="text-[10px] text-muted-foreground">Interviewer</p>
@@ -207,7 +207,7 @@ export default function InterviewDetail() {
 
         {/* Meeting link */}
         {iv.meeting_link && (
-          <div className="flex items-center justify-between mt-3 pt-3 border-t border-white/8">
+          <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
             <div className="flex items-center gap-2">
               <ExternalLink className="w-4 h-4 text-muted-foreground shrink-0" />
               <p className="text-xs text-muted-foreground truncate">{iv.meeting_link}</p>
@@ -225,7 +225,7 @@ export default function InterviewDetail() {
 
         {/* Notes */}
         {iv.notes && (
-          <div className="mt-4 pt-4 border-t border-white/8">
+          <div className="mt-4 pt-4 border-t border-border">
             <p className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1.5">
               Notes
             </p>
@@ -258,7 +258,7 @@ export default function InterviewDetail() {
                   "w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all",
                   checklist[i]
                     ? "bg-emerald-500 border-emerald-500"
-                    : "border-white/20 group-hover:border-white/40"
+                    : "border-border group-hover:border-primary/40"
                 )}>
                   {checklist[i] && (
                     <CheckCircle className="w-3 h-3 text-foreground" />
@@ -274,7 +274,7 @@ export default function InterviewDetail() {
             ))}
           </div>
           <div className="mt-3 flex items-center gap-2">
-            <div className="flex-1 h-1 bg-white/8 rounded-full overflow-hidden">
+            <div className="flex-1 h-1 bg-secondary rounded-full overflow-hidden">
               <div
                 className="h-full bg-emerald-500 rounded-full transition-all"
                 style={{

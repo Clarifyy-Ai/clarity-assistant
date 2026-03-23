@@ -264,7 +264,7 @@ function CreateRoomModal({
                     "flex items-center gap-2 p-3 rounded-xl border text-left transition-all",
                     type === rt.id
                       ? "bg-violet-600/20 border-violet-500/30"
-                      : "bg-white/3 border-white/10 hover:border-white/20",
+                      : "bg-secondary border-border hover:border-primary/30",
                     locked && "opacity-50 cursor-default"
                   )}
                 >
@@ -288,7 +288,7 @@ function CreateRoomModal({
             value={topic}
             onChange={(e) => setTopic(e.target.value)}
             placeholder="e.g. Google Behavioural · FAANG SWE"
-            className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
+            className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
           />
         </div>
 

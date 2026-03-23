@@ -341,7 +341,7 @@ export default function MyQuestions() {
           <div className="flex gap-2">
             <Link
               to="/app/mock-test/upload"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 px-3 py-1.5 text-xs font-medium text-gray-300 transition-all hover:bg-white/5 hover:border-white/25"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-all hover:bg-secondary/60"
             >
               <Upload className="h-4 w-4" /> Import PDF
             </Link>
@@ -423,7 +423,7 @@ export default function MyQuestions() {
             </Button>
             <Link
               to={`/app/mock-test/configure?question_ids=${[...selected].join(",")}`}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 px-3 py-1.5 text-xs font-medium text-gray-300 transition-all hover:bg-white/5 hover:border-white/25"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-all hover:bg-secondary/60"
             >
               <FlaskConical className="h-4 w-4" /> Create Test
             </Link>

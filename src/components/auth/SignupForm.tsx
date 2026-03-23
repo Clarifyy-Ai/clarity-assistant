@@ -184,10 +184,10 @@ export const SignupForm = ({ onSuccess }: SignupFormProps) => {
     <div className="w-full max-w-md">
       <Card className="p-6 shadow-lg">
         <div className="mb-6">
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+          <h1 className="text-2xl font-bold text-foreground">
             Create Account
           </h1>
-          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+          <p className="mt-2 text-sm text-muted-foreground">
             Join Clarify Assistant and start your interview preparation
           </p>
         </div>
@@ -202,11 +202,11 @@ export const SignupForm = ({ onSuccess }: SignupFormProps) => {
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Full Name Field */}
           <div>
-            <label htmlFor="fullName" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="fullName" className="block text-sm font-medium text-muted-foreground mb-1">
               Full Name
             </label>
             <div className="relative">
-              <User className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+              <User className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
               <Input
                 id="fullName"
                 name="fullName"
@@ -229,11 +229,11 @@ export const SignupForm = ({ onSuccess }: SignupFormProps) => {
 
           {/* Email Field */}
           <div>
-            <label htmlFor="email" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="email" className="block text-sm font-medium text-muted-foreground mb-1">
               Email Address
             </label>
             <div className="relative">
-              <Mail className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+              <Mail className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
               <Input
                 id="email"
                 name="email"
@@ -256,11 +256,11 @@ export const SignupForm = ({ onSuccess }: SignupFormProps) => {
 
           {/* Password Field */}
           <div>
-            <label htmlFor="password" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="password" className="block text-sm font-medium text-muted-foreground mb-1">
               Password
             </label>
             <div className="relative">
-              <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+              <Lock className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
               <Input
                 id="password"
                 name="password"
@@ -279,7 +279,7 @@ export const SignupForm = ({ onSuccess }: SignupFormProps) => {
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 disabled={isLoading}
-                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
               >
                 {showPassword ? (
                   <EyeOff className="h-5 w-5" />
@@ -296,7 +296,7 @@ export const SignupForm = ({ onSuccess }: SignupFormProps) => {
             {formData.password && (
               <div className="mt-2">
                 <div className="flex items-center justify-between mb-1">
-                  <span className="text-xs text-gray-600 dark:text-gray-400">
+                  <span className="text-xs text-muted-foreground">
                     Password strength:
                   </span>
                   <span className={`text-xs font-semibold ${
@@ -327,11 +327,11 @@ export const SignupForm = ({ onSuccess }: SignupFormProps) => {
 
           {/* Confirm Password Field */}
           <div>
-            <label htmlFor="confirmPassword" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+            <label htmlFor="confirmPassword" className="block text-sm font-medium text-muted-foreground mb-1">
               Confirm Password
             </label>
             <div className="relative">
-              <Lock className="absolute left-3 top-3 h-5 w-5 text-gray-400" />
+              <Lock className="absolute left-3 top-3 h-5 w-5 text-muted-foreground" />
               <Input
                 id="confirmPassword"
                 name="confirmPassword"
@@ -352,7 +352,7 @@ export const SignupForm = ({ onSuccess }: SignupFormProps) => {
                 type="button"
                 onClick={() => setShowConfirmPassword(!showConfirmPassword)}
                 disabled={isLoading}
-                className="absolute right-3 top-3 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+                className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
               >
                 {showConfirmPassword ? (
                   <EyeOff className="h-5 w-5" />
@@ -396,7 +396,7 @@ export const SignupForm = ({ onSuccess }: SignupFormProps) => {
                 className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                 required
               />
-              <span className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="text-sm text-muted-foreground">
                 I agree to the{' '}
                 <a
                   href="/terms"
@@ -426,7 +426,7 @@ export const SignupForm = ({ onSuccess }: SignupFormProps) => {
                 disabled={isLoading}
                 className="mt-1 h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
               />
-              <span className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="text-sm text-muted-foreground">
                 Send me tips and updates about interview preparation
               </span>
             </label>
@@ -451,7 +451,7 @@ export const SignupForm = ({ onSuccess }: SignupFormProps) => {
 
         {/* Sign In Link */}
         <div className="mt-6 text-center">
-          <p className="text-sm text-gray-600 dark:text-gray-400">
+          <p className="text-sm text-muted-foreground">
             Already have an account?{' '}
             <button
               onClick={() => navigate('/auth/login')}

@@ -148,12 +148,12 @@ export const VerifyEmailModal = ({
                     <Mail className="h-8 w-8 text-blue-600 dark:text-blue-400" />
                   </div>
                 </div>
-                <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                <h2 className="text-2xl font-bold text-foreground">
                   Verify Your Email
                 </h2>
-                <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+                <p className="mt-2 text-sm text-muted-foreground">
                   We've sent a verification code to{' '}
-                  <span className="font-semibold text-gray-900 dark:text-white">
+                  <span className="font-semibold text-foreground">
                     {email}
                   </span>
                 </p>
@@ -169,7 +169,7 @@ export const VerifyEmailModal = ({
               <form onSubmit={handleVerify} className="space-y-4">
                 {/* Verification Code Input */}
                 <div>
-                  <label htmlFor="code" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  <label htmlFor="code" className="block text-sm font-medium text-muted-foreground mb-2">
                     Verification Code
                   </label>
                   <Input
@@ -215,7 +215,7 @@ export const VerifyEmailModal = ({
 
               {/* Resend Section */}
               <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
-                <p className="text-center text-sm text-gray-600 dark:text-gray-400 mb-3">
+                <p className="text-center text-sm text-muted-foreground mb-3">
                   Didn't receive the code?
                 </p>
                 <Button
@@ -254,10 +254,10 @@ export const VerifyEmailModal = ({
                   <Check className="h-8 w-8 text-green-600 dark:text-green-400" />
                 </div>
               </div>
-              <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">
+              <h2 className="text-2xl font-bold text-foreground mb-2">
                 Email Verified!
               </h2>
-              <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
+              <p className="text-sm text-muted-foreground mb-6">
                 Your email has been successfully verified. You can now log in to your account.
               </p>
               <Button

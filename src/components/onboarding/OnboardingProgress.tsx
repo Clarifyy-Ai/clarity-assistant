@@ -32,7 +32,7 @@ export function OnboardingProgress({ current }: { current: number }) {
                     ? "bg-violet-600 border-violet-600 text-white"
                     : active
                     ? "bg-transparent border-violet-500 text-violet-400"
-                    : "bg-transparent border-white/15 text-gray-600"
+                    : "bg-transparent border-border text-muted-foreground"
                 )}
               >
                 {done ? <Check className="h-3.5 w-3.5" /> : step.n}
@@ -57,7 +57,7 @@ export function OnboardingProgress({ current }: { current: number }) {
               <div
                 className={cn(
                   "mx-1 h-px flex-1 transition-all",
-                  done ? "bg-violet-600" : "bg-white/10"
+                  done ? "bg-primary" : "bg-secondary"
                 )}
               />
             )}

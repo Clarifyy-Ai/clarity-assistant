@@ -91,8 +91,8 @@ export default function SessionHistory() {
               className={cn(
                 "px-3 py-1.5 rounded-xl text-xs font-medium border transition-all capitalize",
                 filter === t
-                  ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                  : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
+                  ? "bg-primary/10 border-primary/30 text-primary"
+                  : "bg-card border-border text-muted-foreground hover:text-foreground"
               )}
             >
               {t}
@@ -108,11 +108,11 @@ export default function SessionHistory() {
         </div>
       ) : filtered.length === 0 ? (
         <Card className="text-center py-16">
-          <ClipboardList className="w-10 h-10 text-gray-700 mx-auto mb-3" />
+          <ClipboardList className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
           <p className="text-muted-foreground text-sm">No sessions found.</p>
           <Link
             to="/app/mock"
-            className="text-xs text-violet-400 hover:text-violet-300 mt-2 inline-block transition-colors"
+            className="text-xs text-primary hover:opacity-80 mt-2 inline-block transition-opacity"
           >
             Start your first mock →
           </Link>
@@ -151,7 +151,7 @@ function SessionRow({ session: s }: { session: any }) {
   return (
     <Link
       to={`/app/sessions/${s.id}`}
-      className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 bg-white/3 border border-white/8 rounded-2xl hover:bg-accent/5 hover:border-white/15 transition-all group"
+      className="flex items-center gap-3 sm:gap-4 p-3 sm:p-4 bg-card border border-border rounded-2xl hover:bg-secondary/60 hover:border-border transition-all group"
     >
       <div className={cn(
         "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
@@ -193,7 +193,7 @@ function SessionRow({ session: s }: { session: any }) {
             {s.overall_score}
           </span>
         )}
-        <ChevronRight className="w-4 h-4 text-gray-700 group-hover:text-muted-foreground transition-colors" />
+        <ChevronRight className="w-4 h-4 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
       </div>
     </Link>
   );

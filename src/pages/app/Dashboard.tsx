@@ -93,16 +93,16 @@ export default function Dashboard() {
             {format(new Date(), "EEEE, MMMM d")}
           </p>
         </div>
-        <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
           <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-            <Flame className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-400" />
-            <span className="text-[10px] sm:text-xs font-bold text-amber-400">
+            <Flame className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500 dark:text-amber-400" />
+            <span className="text-[10px] sm:text-xs font-bold text-amber-600 dark:text-amber-400">
               {gamification.streakCurrent} day streak
             </span>
           </div>
-          <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-violet-500/10 border border-violet-500/20 rounded-xl">
-            <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-violet-400" />
-            <span className="text-[10px] sm:text-xs font-bold text-violet-400">
+          <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-primary/10 border border-primary/20 rounded-xl">
+            <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-primary" />
+            <span className="text-[10px] sm:text-xs font-bold text-primary">
               {profile?.credits ?? 0} credits
             </span>
           </div>
@@ -143,33 +143,32 @@ export default function Dashboard() {
               to={action.to}
               className={cn(
                 "flex flex-col gap-2 sm:gap-3 p-3 sm:p-4 rounded-2xl border transition-all group",
-                "hover:border-white/20",
                 action.highlight
-                  ? "bg-violet-600/10 border-violet-500/30 hover:bg-violet-600/15"
-                  : "bg-accent/5 border-white/10 hover:bg-white/8"
+                  ? "bg-primary/10 border-primary/30 hover:bg-primary/15 hover:border-primary/40"
+                  : "bg-card border-border hover:bg-secondary/60 hover:border-border"
               )}
             >
               <div className={cn(
                 "w-9 h-9 rounded-xl flex items-center justify-center",
                 action.highlight
-                  ? "bg-violet-600/30"
-                  : "bg-white/8"
+                  ? "bg-primary/20"
+                  : "bg-secondary"
               )}>
                 <Icon className={cn(
                   "w-4 h-4",
-                  action.highlight ? "text-violet-300" : "text-muted-foreground"
+                  action.highlight ? "text-primary" : "text-muted-foreground"
                 )} />
               </div>
               <div>
                 <p className={cn(
                   "text-sm font-semibold",
-                  action.highlight ? "text-violet-200" : "text-foreground"
+                  action.highlight ? "text-primary" : "text-foreground"
                 )}>
                   {label}
                 </p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>
               </div>
-              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground group-hover:text-muted-foreground transition-colors mt-auto" />
+              <ChevronRight className="w-3.5 h-3.5 text-muted-foreground transition-colors mt-auto" />
             </Link>
           );
         })}
@@ -349,11 +348,11 @@ function RecentSessions() {
         </div>
       ) : sessions.length === 0 ? (
         <div className="text-center py-6">
-          <ClipboardList className="w-8 h-8 text-gray-700 mx-auto mb-2" />
+          <ClipboardList className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
           <p className="text-muted-foreground text-xs">No sessions yet.</p>
           <Link
             to="/app/mock"
-            className="text-xs text-violet-400 hover:text-violet-300 mt-1 inline-block transition-colors"
+            className="text-xs text-primary hover:opacity-80 mt-1 inline-block transition-opacity"
           >
             Start your first mock →
           </Link>
@@ -397,7 +396,7 @@ function RecentSessions() {
                     {score}
                   </span>
                 )}
-                <ChevronRight className="w-3.5 h-3.5 text-gray-700 group-hover:text-muted-foreground transition-colors" />
+                <ChevronRight className="w-3.5 h-3.5 text-muted-foreground/40 group-hover:text-muted-foreground transition-colors" />
               </Link>
             );
           })}
@@ -429,13 +428,13 @@ function UpcomingInterviews({ interviews }: { interviews: any[] }) {
       </div>
       {interviews.length === 0 ? (
         <div className="text-center py-6">
-          <CalendarDays className="w-8 h-8 text-gray-700 mx-auto mb-2" />
+          <CalendarDays className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
           <p className="text-muted-foreground text-xs">
             {stealth ? "No upcoming meetings scheduled." : "No upcoming interviews scheduled."}
           </p>
           <Link
             to="/app/interviews/new"
-            className="text-xs text-violet-400 hover:text-violet-300 mt-1 inline-block transition-colors"
+            className="text-xs text-primary hover:opacity-80 mt-1 inline-block transition-opacity"
           >
             {stealth ? "+ Add meeting" : "+ Add interview"}
           </Link>

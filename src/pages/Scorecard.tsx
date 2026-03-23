@@ -38,21 +38,21 @@ export default function Scorecard() {
 
   if (isLoading || isGenerating) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] text-white flex flex-col items-center justify-center gap-4">
+      <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center gap-4">
         <Loader2 className="w-10 h-10 text-violet-400 animate-spin" />
-        <p className="text-gray-400">
+        <p className="text-muted-foreground">
           {isGenerating ? "Analysing your session…" : "Loading scorecard…"}
         </p>
-        <p className="text-xs text-gray-500">This may take a few seconds</p>
+        <p className="text-xs text-muted-foreground">This may take a few seconds</p>
       </div>
     );
   }
 
   if (error || !scorecard) {
     return (
-      <div className="min-h-screen bg-[#0a0a0f] text-white flex flex-col items-center justify-center gap-4">
+      <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center gap-4">
         <AlertTriangle className="w-10 h-10 text-red-400" />
-        <p className="text-gray-300">Unable to load scorecard</p>
+        <p className="text-muted-foreground">Unable to load scorecard</p>
         <Link to="/dashboard" className="text-sm text-violet-400 hover:underline">
           Back to Dashboard
         </Link>
@@ -63,14 +63,14 @@ export default function Scorecard() {
   const scoreGrade = getScoreGrade(scorecard.overall_score);
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white">
+    <div className="min-h-screen bg-background text-foreground">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-8">
 
         {/* ── Header ─────────────────────────────────── */}
         <div className="flex items-start justify-between">
           <div>
-            <h1 className="text-3xl font-bold text-white">Session Scorecard</h1>
-            <p className="text-gray-400 mt-1 text-sm">
+            <h1 className="text-3xl font-bold text-foreground">Session Scorecard</h1>
+            <p className="text-muted-foreground mt-1 text-sm">
               {new Date(scorecard.generated_at).toLocaleDateString("en-GB", {
                 weekday: "long", year: "numeric", month: "long", day: "numeric",
               })}
@@ -79,14 +79,14 @@ export default function Scorecard() {
           <div className="flex items-center gap-2">
             <button
               onClick={handleShare}
-              className="flex items-center gap-1.5 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 text-sm rounded-xl transition-all"
+              className="flex items-center gap-1.5 px-3 py-2 bg-secondary hover:bg-secondary border border-border text-muted-foreground text-sm rounded-xl transition-all"
             >
               <Share2 className="w-3.5 h-3.5" />
               {copyFeedback ? "Copied!" : isShared ? "Share again" : "Share"}
             </button>
             <button
               onClick={exportPDF}
-              className="flex items-center gap-1.5 px-3 py-2 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 text-sm rounded-xl transition-all"
+              className="flex items-center gap-1.5 px-3 py-2 bg-secondary hover:bg-secondary border border-border text-muted-foreground text-sm rounded-xl transition-all"
             >
               <Download className="w-3.5 h-3.5" />
               Export PDF
@@ -102,8 +102,8 @@ export default function Scorecard() {
           <div className={cn("text-7xl font-black mb-2", scoreGrade.color)}>
             {scorecard.overall_score}
           </div>
-          <div className="text-lg font-semibold text-white">{scoreGrade.label}</div>
-          <p className="text-gray-400 text-sm mt-1">Overall performance score</p>
+          <div className="text-lg font-semibold text-foreground">{scoreGrade.label}</div>
+          <p className="text-muted-foreground text-sm mt-1">Overall performance score</p>
 
           {/* 4 sub-scores */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mt-6">
@@ -114,8 +114,8 @@ export default function Scorecard() {
               { label: "Relevance",  value: scorecard.relevance_score },
             ].map((s) => (
               <div key={s.label} className="bg-black/20 rounded-xl p-3">
-                <div className="text-xl font-bold text-white">{s.value}</div>
-                <div className="text-xs text-gray-400">{s.label}</div>
+                <div className="text-xl font-bold text-foreground">{s.value}</div>
+                <div className="text-xs text-muted-foreground">{s.label}</div>
                 <MiniScoreBar value={s.value} />
               </div>
             ))}
@@ -154,8 +154,8 @@ export default function Scorecard() {
 
         {/* ── Top fillers ────────────────────────────── */}
         {scorecard.top_filler_words.length > 0 && (
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
-            <h2 className="text-base font-semibold text-white mb-3 flex items-center gap-2">
+          <div className="bg-secondary border border-border rounded-2xl p-5">
+            <h2 className="text-base font-semibold text-foreground mb-3 flex items-center gap-2">
               <MessageSquare className="w-4 h-4 text-orange-400" />
               Top Filler Words
             </h2>
@@ -203,7 +203,7 @@ export default function Scorecard() {
 
         {/* ── Per-question breakdown ──────────────────── */}
         <div>
-          <h2 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+          <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
             <BarChart2 className="w-5 h-5 text-violet-400" />
             Question Breakdown
           </h2>
@@ -225,13 +225,13 @@ export default function Scorecard() {
         <div className="flex flex-col sm:flex-row gap-3 pt-4">
           <Link
             to="/mock/setup"
-            className="flex-1 text-center py-3 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-white font-semibold rounded-xl transition-all"
+            className="flex-1 text-center py-3 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-foreground font-semibold rounded-xl transition-all"
           >
             Practice Again
           </Link>
           <Link
             to="/analytics"
-            className="flex-1 text-center py-3 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 font-medium rounded-xl transition-all"
+            className="flex-1 text-center py-3 bg-secondary hover:bg-secondary border border-border text-muted-foreground font-medium rounded-xl transition-all"
           >
             View Analytics
           </Link>
@@ -252,10 +252,10 @@ function QuestionScoreCard({
 }) {
   const grade = getScoreGrade(question.score);
   return (
-    <div className="bg-white/5 border border-white/10 rounded-xl overflow-hidden">
+    <div className="bg-secondary border border-border rounded-xl overflow-hidden">
       <button
         onClick={onToggle}
-        className="w-full flex items-center gap-4 p-4 text-left hover:bg-white/5 transition-colors"
+        className="w-full flex items-center gap-4 p-4 text-left hover:bg-secondary transition-colors"
       >
         <div className={cn(
           "w-10 h-10 rounded-xl flex items-center justify-center text-sm font-bold shrink-0",
@@ -264,28 +264,28 @@ function QuestionScoreCard({
           {question.score}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm text-white truncate">{question.question_text}</p>
-          <p className="text-xs text-gray-400 mt-0.5">
+          <p className="text-sm text-foreground truncate">{question.question_text}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
             {question.star_used ? "✓ STAR framework used" : "× STAR not detected"}
           </p>
         </div>
         {isExpanded ? (
-          <ChevronUp className="w-4 h-4 text-gray-400 shrink-0" />
+          <ChevronUp className="w-4 h-4 text-muted-foreground shrink-0" />
         ) : (
-          <ChevronDown className="w-4 h-4 text-gray-400 shrink-0" />
+          <ChevronDown className="w-4 h-4 text-muted-foreground shrink-0" />
         )}
       </button>
 
       {isExpanded && (
-        <div className="px-4 pb-4 space-y-3 border-t border-white/10 pt-3">
+        <div className="px-4 pb-4 space-y-3 border-t border-border pt-3">
           <div className="grid grid-cols-2 gap-3 text-sm">
             <div>
               <p className="text-xs text-green-400 font-medium mb-1">Strength</p>
-              <p className="text-gray-300">{question.key_strength}</p>
+              <p className="text-muted-foreground">{question.key_strength}</p>
             </div>
             <div>
               <p className="text-xs text-orange-400 font-medium mb-1">Weakness</p>
-              <p className="text-gray-300">{question.key_weakness}</p>
+              <p className="text-muted-foreground">{question.key_weakness}</p>
             </div>
           </div>
           {question.coach_tip && (
@@ -317,7 +317,7 @@ function FeedbackPanel({
       </h3>
       <ul className="space-y-2">
         {items.map((item, i) => (
-          <li key={i} className="flex items-start gap-2 text-sm text-gray-300">
+          <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
             <div className={cn("w-1.5 h-1.5 rounded-full mt-1.5 shrink-0", c.dot)} />
             {item}
           </li>
@@ -334,26 +334,26 @@ function MetricCard({
   sub?: string; good?: boolean; lowerIsBetter?: boolean;
 }) {
   return (
-    <div className="bg-white/5 border border-white/10 rounded-xl p-4">
-      <div className="flex items-center gap-2 text-gray-400 mb-1">
+    <div className="bg-secondary border border-border rounded-xl p-4">
+      <div className="flex items-center gap-2 text-muted-foreground mb-1">
         <Icon className="w-4 h-4" />
         <span className="text-xs">{label}</span>
       </div>
       <div className={cn(
         "text-2xl font-bold",
-        good === undefined ? "text-white" :
+        good === undefined ? "text-foreground" :
         good ? "text-green-400" : "text-orange-400"
       )}>
         {value}
       </div>
-      {sub && <p className="text-xs text-gray-500 mt-0.5">{sub}</p>}
+      {sub && <p className="text-xs text-muted-foreground mt-0.5">{sub}</p>}
     </div>
   );
 }
 
 function MiniScoreBar({ value }: { value: number }) {
   return (
-    <div className="mt-2 h-1 bg-white/10 rounded-full overflow-hidden">
+    <div className="mt-2 h-1 bg-secondary rounded-full overflow-hidden">
       <div
         className={cn(
           "h-full rounded-full",

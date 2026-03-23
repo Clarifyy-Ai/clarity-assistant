@@ -78,11 +78,11 @@ export function PlanGate({
             <Lock className="h-5 w-5 text-amber-400" />
           </div>
 
-          <p className="text-sm font-semibold text-white">
+          <p className="text-sm font-semibold text-foreground">
             {requiredPlan === "pro" ? "Pro" : "Team"} Feature
           </p>
 
-          <p className="text-xs leading-relaxed text-gray-400">
+          <p className="text-xs leading-relaxed text-muted-foreground">
             Upgrade to unlock this feature and all{" "}
             {requiredPlan === "pro" ? "Pro" : "Team"} benefits.
           </p>

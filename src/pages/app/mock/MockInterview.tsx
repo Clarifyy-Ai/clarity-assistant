@@ -92,14 +92,14 @@ export default function MockInterview() {
               className={cn(
                 "flex flex-col items-center gap-1.5 p-3 rounded-xl border text-center transition-all",
                 type === t.value
-                  ? "bg-violet-600/20 border-violet-500/40"
-                  : "bg-white/3 border-white/10 hover:border-white/20"
+                  ? "bg-primary/10 border-primary/40"
+                  : "bg-card border-border hover:border-primary/30"
               )}
             >
               <span className="text-xl">{t.icon}</span>
               <span className={cn(
                 "text-xs font-semibold",
-                type === t.value ? "text-violet-200" : "text-foreground"
+                type === t.value ? "text-primary" : "text-foreground"
               )}>
                 {t.label}
               </span>
@@ -120,7 +120,7 @@ export default function MockInterview() {
             value={company}
             onChange={(e) => setCompany(e.target.value)}
             placeholder="e.g. Google, Stripe…"
-            className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500 mb-3"
+            className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring mb-3 transition-colors"
           />
           <div className="flex flex-wrap gap-1.5">
             {COMPANIES.slice(0, 6).map((c) => (
@@ -130,8 +130,8 @@ export default function MockInterview() {
                 className={cn(
                   "px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-all",
                   company === c
-                    ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                    : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
+                    ? "bg-primary/10 border-primary/30 text-primary"
+                    : "bg-secondary border-border text-muted-foreground hover:text-foreground"
                 )}
               >
                 {c}
@@ -154,8 +154,8 @@ export default function MockInterview() {
                   className={cn(
                     "flex-1 py-2 rounded-lg border text-xs font-medium transition-all",
                     numQ === n
-                      ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                      : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
+                      ? "bg-primary/10 border-primary/30 text-primary"
+                      : "bg-secondary border-border text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {n}
@@ -164,7 +164,7 @@ export default function MockInterview() {
             </div>
           </div>
 
-          <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground bg-white/3 rounded-xl px-3 py-2">
+          <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground bg-secondary rounded-xl px-3 py-2">
             <span className="flex items-center gap-1.5">
               <Timer className="w-3.5 h-3.5" />
               5 min session
@@ -192,8 +192,8 @@ export default function MockInterview() {
           className={cn(
             "w-10 h-5 rounded-full border transition-all relative shrink-0",
             warmup
-              ? "bg-violet-600 border-violet-500"
-              : "bg-accent/10 border-white/20"
+              ? "bg-primary border-primary/80"
+              : "bg-secondary border-border"
           )}
         >
           <span className={cn(

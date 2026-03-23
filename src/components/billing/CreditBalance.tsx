@@ -90,9 +90,9 @@ export function CreditBalance({
 
   if (!creditStatus) {
     return (
-      <div className={cn('flex items-center gap-2 rounded-lg bg-white/[0.02] p-3', className)}>
+      <div className={cn('flex items-center gap-2 rounded-lg bg-secondary/40 p-3', className)}>
         <div className="h-4 w-4 animate-spin rounded-full border-2 border-violet-500/30 border-t-violet-500" />
-        <span className="text-xs text-gray-500">Loading credits...</span>
+        <span className="text-xs text-muted-foreground">Loading credits...</span>
       </div>
     );
   }
@@ -152,11 +152,11 @@ export function CreditBalance({
             <Zap className={cn('h-4 w-4', colors.icon)} />
           </div>
           <div>
-            <div className={cn('font-medium text-white', textSizes[size].label)}>
+            <div className={cn('font-medium text-foreground', textSizes[size].label)}>
               Credits
             </div>
             {size === 'sm' && (
-              <div className="text-[10px] text-gray-500">
+              <div className="text-[10px] text-muted-foreground">
                 {creditStatus.current} left
               </div>
             )}
@@ -165,11 +165,11 @@ export function CreditBalance({
 
         {/* Big number */}
         <div className="text-right">
-          <div className={cn('font-bold text-white', textSizes[size].value)}>
+          <div className={cn('font-bold text-foreground', textSizes[size].value)}>
             {creditStatus.current}
           </div>
           {size !== 'sm' && (
-            <div className={cn('text-gray-500', textSizes[size].detail)}>
+            <div className={cn('text-muted-foreground', textSizes[size].detail)}>
               of {creditStatus.limit}
             </div>
           )}
@@ -180,7 +180,7 @@ export function CreditBalance({
       {showDetails && (
         <>
           {/* Progress bar */}
-          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-black/30">
+          <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-secondary">
             <div
               className={cn('h-full transition-all duration-300', colors.bar)}
               style={{ width: `${creditStatus.percentage}%` }}
@@ -192,12 +192,12 @@ export function CreditBalance({
             <div className="mt-2 flex items-center justify-between">
               <div className="flex items-center gap-1">
                 <TrendingUp className={cn('h-3 w-3', colors.icon)} />
-                <span className={cn('text-gray-500', textSizes[size].detail)}>
+                <span className={cn('text-muted-foreground', textSizes[size].detail)}>
                   {Math.round(creditStatus.percentage)}% used
                 </span>
               </div>
 
-              <span className={cn('text-gray-500', textSizes[size].detail)}>
+              <span className={cn('text-muted-foreground', textSizes[size].detail)}>
                 Resets in {creditStatus.daysUntilReset}d
               </span>
             </div>
@@ -205,9 +205,9 @@ export function CreditBalance({
 
           {/* Status message */}
           {creditStatus.status !== 'healthy' && size === 'lg' && (
-            <div className="mt-3 flex items-center gap-2 rounded-lg bg-black/30 p-2">
+            <div className="mt-3 flex items-center gap-2 rounded-lg bg-secondary p-2">
               <AlertCircle className={cn('h-4 w-4', colors.icon)} />
-              <span className={cn('text-xs text-white')}>
+              <span className={cn('text-xs text-foreground')}>
                 {creditStatus.status === 'critical'
                   ? '⚠️ You\'re almost out of credits. Buy more to continue.'
                   : '⚠️ Getting low on credits. Consider buying more.'}
@@ -220,7 +220,7 @@ export function CreditBalance({
             <button
               onClick={onBuyCreditClick}
               className={cn(
-                'mt-3 w-full rounded-lg px-3 py-2 text-xs font-medium text-white transition-all',
+                'mt-3 w-full rounded-lg px-3 py-2 text-xs font-medium text-foreground transition-all',
                 colors.bg,
                 'hover:brightness-110 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-offset-slate-900',
                 colors.border

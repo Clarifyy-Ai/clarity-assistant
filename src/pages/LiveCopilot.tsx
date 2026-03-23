@@ -76,7 +76,7 @@ export default function LiveCopilot() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white">
+    <div className="min-h-screen bg-background text-foreground">
       <LiveSessionController isActive={phase === "active"} />
 
       <div className="flex items-center justify-center min-h-screen">
@@ -87,18 +87,18 @@ export default function LiveCopilot() {
               isCapturing && !isMuted ? "bg-emerald-400 animate-pulse" : "bg-gray-600"
             )} />
           </div>
-          <h2 className="text-xl font-bold text-white">Session Active</h2>
-          <p className="text-sm text-gray-400">
+          <h2 className="text-xl font-bold text-foreground">Session Active</h2>
+          <p className="text-sm text-muted-foreground">
             {deepgramStatus === "connected"
               ? "Listening for interview questions…"
               : deepgramStatus === "connecting"
               ? "Connecting to speech recognition…"
               : "The overlay is active. Use hotkeys to control it."}
           </p>
-          <div className="space-y-2 text-xs text-gray-500">
-            <p><kbd className="px-1.5 py-0.5 bg-white/10 rounded font-mono">Ctrl+Shift+H</kbd> Toggle overlay</p>
-            <p><kbd className="px-1.5 py-0.5 bg-white/10 rounded font-mono">Ctrl+Shift+S</kbd> Stealth mode</p>
-            <p><kbd className="px-1.5 py-0.5 bg-white/10 rounded font-mono">Ctrl+Shift+P</kbd> Panic button</p>
+          <div className="space-y-2 text-xs text-muted-foreground">
+            <p><kbd className="px-1.5 py-0.5 bg-secondary/80 rounded font-mono">Ctrl+Shift+H</kbd> Toggle overlay</p>
+            <p><kbd className="px-1.5 py-0.5 bg-secondary/80 rounded font-mono">Ctrl+Shift+S</kbd> Stealth mode</p>
+            <p><kbd className="px-1.5 py-0.5 bg-secondary/80 rounded font-mono">Ctrl+Shift+P</kbd> Panic button</p>
           </div>
           <button
             onClick={handleEndSession}
@@ -121,11 +121,11 @@ export default function LiveCopilot() {
       />
 
       <div className="fixed bottom-0 left-0 right-0 z-30 pointer-events-none">
-        <div className="max-w-xs mx-auto h-1 bg-white/5 rounded-full overflow-hidden">
+        <div className="max-w-xs mx-auto h-1 bg-secondary rounded-full overflow-hidden">
           <div
             className={cn(
               "h-full rounded-full transition-all duration-75",
-              copilot.isSpeaking ? "bg-emerald-400" : "bg-white/20"
+              copilot.isSpeaking ? "bg-emerald-400" : "bg-muted"
             )}
             style={{ width: `${Math.min(100, copilot.currentLevel * 100)}%` }}
           />

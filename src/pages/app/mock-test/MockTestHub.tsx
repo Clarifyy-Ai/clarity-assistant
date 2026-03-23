@@ -231,7 +231,7 @@ export default function MockTestHub(): React.ReactElement {
           <div className="flex gap-2">
             <Link
               to="/app/mock-test/my-questions"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 px-3 py-1.5 text-xs font-medium text-gray-300 transition-all hover:bg-white/5 hover:border-white/25"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-all hover:bg-secondary/60"
             >
               <BookOpen className="h-4 w-4" />
               My Questions

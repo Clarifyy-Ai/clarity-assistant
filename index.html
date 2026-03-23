@@ -23,6 +23,29 @@
   <meta property="og:type" content="website">
 </head>
   <body>
+    <!-- Pre-hydration theme script: ensures light mode on first load.
+         New users get light; returning users get their saved preference.
+         Resolves before React renders to prevent flash-of-wrong-theme. -->
+    <script>
+      (function () {
+        try {
+          var stored = localStorage.getItem("confideq-ui");
+          var isDark = false;
+          if (stored) {
+            var state = JSON.parse(stored);
+            var resolved = state.state && state.state.resolved_theme;
+            // Only apply dark if user explicitly chose it (theme !== 'light')
+            var theme = state.state && state.state.theme;
+            isDark = (theme === "dark") || (theme === "system" && resolved === "dark");
+          }
+          // Default: no saved theme = light mode
+          document.documentElement.classList.toggle("dark", isDark);
+        } catch (e) {
+          // On any error, default to light mode
+          document.documentElement.classList.remove("dark");
+        }
+      })();
+    </script>
     <div id="root"></div>
     <!-- Overlay portal root — kept OUTSIDE #root so it sits on a separate compositor layer -->
     <div id="overlay-root"></div>

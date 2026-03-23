@@ -95,7 +95,7 @@ export function NetworkBanner() {
             : "bg-amber-500/10 text-amber-300"
         )}
       >
-        <div className="flex items-center justify-center rounded-md border border-white/[0.08] bg-white/[0.04] p-1.5">
+        <div className="flex items-center justify-center rounded-md border border-border bg-secondary p-1.5">
           {!isOnline ? (
             <WifiOff className="h-4 w-4" />
           ) : (
@@ -147,7 +147,7 @@ export function NetworkBanner() {
             href="https://fast.com/"
             target="_blank"
             rel="noreferrer"
-            className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.12] bg-white/5 px-2.5 py-1 text-xs font-semibold text-white transition-colors hover:bg-white/10"
+            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-secondary text-foreground transition-colors hover:bg-secondary/80"
             title="Run a quick speed test"
           >
             <Wifi className="h-3.5 w-3.5" />

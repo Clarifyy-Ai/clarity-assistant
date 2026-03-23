@@ -177,8 +177,8 @@ export default function SettingsAudio() {
               className={cn(
                 "px-3 py-2.5 rounded-xl border text-xs font-medium text-left transition-all",
                 language === lang.code
-                  ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                  : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
+                  ? "bg-primary/10 border-primary/30 text-primary"
+                  : "bg-secondary border-border text-muted-foreground hover:text-foreground"
               )}
             >
               {lang.label}
@@ -211,7 +211,7 @@ export default function SettingsAudio() {
             onChange={(e) => setNewFiller(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && addFiller()}
             placeholder="Add a filler word…"
-            className="flex-1 bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-violet-500"
+            className="flex-1 bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
           />
           <Button variant="secondary" size="sm" onClick={addFiller}>
             Add

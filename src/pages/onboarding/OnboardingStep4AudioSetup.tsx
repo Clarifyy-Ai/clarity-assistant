@@ -92,7 +92,7 @@ export default function OnboardingStep4AudioSetup() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-lg">
 
         <div className="w-9 h-9 bg-violet-600 rounded-xl flex items-center justify-center mb-8">
@@ -101,8 +101,8 @@ export default function OnboardingStep4AudioSetup() {
 
         <OnboardingProgress current={4} />
 
-        <h2 className="text-2xl font-bold text-white mb-1">Audio setup</h2>
-        <p className="text-gray-400 text-sm mb-8">
+        <h2 className="text-2xl font-bold text-foreground mb-1">Audio setup</h2>
+        <p className="text-muted-foreground text-sm mb-8">
           Clarify AI needs your microphone to transcribe interview questions in real time.
           System audio capture enables it to hear the interviewer through Zoom or Teams.
         </p>
@@ -110,11 +110,11 @@ export default function OnboardingStep4AudioSetup() {
         <div className="space-y-4">
 
           {/* ── Mic test card ─────────────────────────── */}
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <div className="bg-secondary border border-border rounded-2xl p-5">
             <div className="flex items-center justify-between mb-4">
               <div className="flex items-center gap-2">
                 <Mic className="w-4 h-4 text-violet-400" />
-                <span className="text-sm font-semibold text-white">Microphone</span>
+                <span className="text-sm font-semibold text-foreground">Microphone</span>
               </div>
               {micOk && (
                 <span className="flex items-center gap-1 text-xs text-emerald-400">
@@ -124,7 +124,7 @@ export default function OnboardingStep4AudioSetup() {
             </div>
 
             {/* Level meter */}
-            <div className="h-2 bg-white/10 rounded-full overflow-hidden mb-4">
+            <div className="h-2 bg-secondary rounded-full overflow-hidden mb-4">
               <div
                 className={cn(
                   "h-full rounded-full transition-all duration-75",
@@ -155,22 +155,22 @@ export default function OnboardingStep4AudioSetup() {
                 ✓ Microphone detected successfully
               </p>
             ) : (
-              <p className="text-xs text-gray-400 animate-pulse">
+              <p className="text-xs text-muted-foreground animate-pulse">
                 Listening… speak a few words…
               </p>
             )}
           </div>
 
           {/* ── System audio info card ─────────────────── */}
-          <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+          <div className="bg-secondary border border-border rounded-2xl p-5">
             <div className="flex items-center gap-2 mb-3">
               <Monitor className="w-4 h-4 text-blue-400" />
-              <span className="text-sm font-semibold text-white">System audio</span>
+              <span className="text-sm font-semibold text-foreground">System audio</span>
               <span className="text-[10px] px-1.5 py-0.5 bg-blue-500/10 border border-blue-500/20 text-blue-400 rounded-full">
                 Optional
               </span>
             </div>
-            <p className="text-xs text-gray-400 leading-relaxed mb-3">
+            <p className="text-xs text-muted-foreground leading-relaxed mb-3">
               When enabled, Clarify AI captures sound from your Zoom / Google Meet /
               Teams tab so it can hear the interviewer's questions automatically.
               You'll be prompted to share your screen audio when you start a live session.

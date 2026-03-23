@@ -71,7 +71,7 @@ export default function OnboardingStep2Experience() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-lg">
 
         <div className="flex items-center gap-3 mb-8">
@@ -82,8 +82,8 @@ export default function OnboardingStep2Experience() {
 
         <OnboardingProgress current={2} />
 
-        <h2 className="text-2xl font-bold text-white mb-1">Your experience</h2>
-        <p className="text-gray-400 text-sm mb-8">
+        <h2 className="text-2xl font-bold text-foreground mb-1">Your experience</h2>
+        <p className="text-muted-foreground text-sm mb-8">
           This calibrates question difficulty and answer depth to your exact level.
         </p>
 
@@ -91,7 +91,7 @@ export default function OnboardingStep2Experience() {
 
           {/* Level selector */}
           <div>
-            <p className="text-xs font-medium text-gray-300 mb-2">Experience level</p>
+            <p className="text-xs font-medium text-muted-foreground mb-2">Experience level</p>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {LEVELS.map((l) => (
                 <button
@@ -101,16 +101,16 @@ export default function OnboardingStep2Experience() {
                     "flex flex-col items-start gap-0.5 p-3 rounded-xl border text-left transition-all",
                     level === l.value
                       ? "bg-violet-600/20 border-violet-500/50"
-                      : "bg-white/3 border-white/10 hover:border-white/20"
+                      : "bg-secondary/50 border-border hover:border-border"
                   )}
                 >
                   <span className={cn(
                     "text-sm font-semibold",
-                    level === l.value ? "text-violet-200" : "text-gray-300"
+                    level === l.value ? "text-violet-200" : "text-muted-foreground"
                   )}>
                     {l.label}
                   </span>
-                  <span className="text-[10px] text-gray-500">{l.sub}</span>
+                  <span className="text-[10px] text-muted-foreground">{l.sub}</span>
                 </button>
               ))}
             </div>
@@ -128,7 +128,7 @@ export default function OnboardingStep2Experience() {
           {/* Anxiety score */}
           <div>
             <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-medium text-gray-300">
+              <p className="text-xs font-medium text-muted-foreground">
                 How do you feel about interviews?
               </p>
               <span className="text-xs text-violet-300 font-medium">

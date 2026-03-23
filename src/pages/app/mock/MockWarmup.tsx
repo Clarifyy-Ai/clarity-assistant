@@ -73,7 +73,7 @@ export default function MockWarmup() {
   const currentBreath = BREATH_PHASES[breathIdx];
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center px-4">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="w-full max-w-lg text-center">
 
         {/* ── Breathing phase ──────────────────────────── */}
@@ -158,7 +158,7 @@ export default function MockWarmup() {
               onChange={(e) => setAnswer(e.target.value)}
               placeholder="Type or just speak naturally…"
               rows={4}
-              className="w-full bg-accent/5 border border-white/10 text-foreground placeholder-gray-600 rounded-2xl px-4 py-3 resize-none focus:outline-none focus:border-violet-500 text-sm"
+              className="w-full bg-accent/5 border border-border text-foreground placeholder:text-muted-foreground rounded-2xl px-4 py-3 resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors text-sm"
             />
 
             <Button

@@ -61,7 +61,7 @@ export default function Debrief() {
         </div>
       ) : debriefs.length === 0 ? (
         <Card className="text-center py-16">
-          <Brain className="w-10 h-10 text-gray-700 mx-auto mb-3" />
+          <Brain className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
           <p className="text-muted-foreground text-sm">No debriefs yet.</p>
           <p className="text-muted-foreground text-xs mt-1">
             Complete a mock session to get your first debrief.

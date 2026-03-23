@@ -120,7 +120,7 @@ export default function SettingsProfile() {
                 className="w-16 h-16 rounded-2xl object-cover"
               />
             ) : (
-              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-violet-600/40 to-blue-600/40 border border-white/10 flex items-center justify-center text-xl font-black text-foreground">
+              <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-primary/30 to-accent/30 border border-border flex items-center justify-center text-xl font-black text-foreground">
                 {initials || <User className="w-6 h-6" />}
               </div>
             )}
@@ -170,7 +170,7 @@ export default function SettingsProfile() {
               placeholder="A short bio about your background…"
               rows={3}
               maxLength={280}
-              className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
+              className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
             />
             <p className="text-[10px] text-muted-foreground text-right mt-1">
               {bio.length}/280
@@ -214,8 +214,8 @@ export default function SettingsProfile() {
                   className={cn(
                     "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
                     experience === lvl
-                      ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                      : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
+                      ? "bg-primary/10 border-primary/30 text-primary"
+                      : "bg-secondary border-border text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {lvl}
@@ -235,8 +235,8 @@ export default function SettingsProfile() {
                   className={cn(
                     "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
                     targetRole === role
-                      ? "bg-violet-600/20 border-violet-500/30 text-violet-300"
-                      : "bg-white/3 border-white/10 text-muted-foreground hover:text-foreground"
+                      ? "bg-primary/10 border-primary/30 text-primary"
+                      : "bg-secondary border-border text-muted-foreground hover:text-foreground"
                   )}
                 >
                   {role}

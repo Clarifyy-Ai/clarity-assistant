@@ -17,13 +17,13 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANTS = {
-  primary:     "bg-violet-600 hover:bg-violet-500 text-white border-transparent",
-  secondary:   "bg-white/5 hover:bg-white/10 text-gray-200 border-white/10",
-  ghost:       "bg-transparent hover:bg-white/5 text-gray-400 hover:text-white border-transparent",
-  danger:      "bg-red-600/20 hover:bg-red-600/30 text-red-400 border-red-500/30",
-  destructive: "bg-red-600/20 hover:bg-red-600/30 text-red-400 border-red-500/30",
-  success:     "bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 border-emerald-500/30",
-  outline:     "bg-transparent hover:bg-white/5 text-gray-300 border-white/15 hover:border-white/25",
+  primary:     "bg-primary hover:bg-primary/90 text-primary-foreground border-transparent",
+  secondary:   "bg-secondary hover:bg-secondary/80 text-secondary-foreground border-border",
+  ghost:       "bg-transparent hover:bg-secondary text-muted-foreground hover:text-foreground border-transparent",
+  danger:      "bg-red-600/20 hover:bg-red-600/30 text-red-500 dark:text-red-400 border-red-500/30",
+  destructive: "bg-red-600/20 hover:bg-red-600/30 text-red-500 dark:text-red-400 border-red-500/30",
+  success:     "bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+  outline:     "bg-transparent hover:bg-secondary text-foreground border-border hover:border-primary/30",
 };
 
 const SIZES = {
@@ -57,7 +57,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         className={cn(
           "inline-flex items-center justify-center font-medium border transition-all",
           "disabled:opacity-40 disabled:cursor-not-allowed",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-violet-500/50",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
           VARIANTS[variant],
           SIZES[size],
           fullWidth && "w-full",

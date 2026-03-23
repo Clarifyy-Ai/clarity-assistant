@@ -74,7 +74,7 @@ export default function OnboardingStep1Role() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex items-center justify-center px-4 py-12">
+    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-12">
       <div className="w-full max-w-lg">
 
         {/* Logo */}
@@ -82,15 +82,15 @@ export default function OnboardingStep1Role() {
           <div className="w-9 h-9 bg-violet-600 rounded-xl flex items-center justify-center">
             <Mic className="w-4 h-4 text-white" />
           </div>
-          <span className="text-white font-bold text-lg">Clarify AI</span>
+          <span className="text-foreground font-bold text-lg">Clarify AI</span>
         </div>
 
         <OnboardingProgress current={1} />
 
-        <h2 className="text-2xl font-bold text-white mb-1">
+        <h2 className="text-2xl font-bold text-foreground mb-1">
           Tell us about yourself
         </h2>
-        <p className="text-gray-400 text-sm mb-8">
+        <p className="text-muted-foreground text-sm mb-8">
           We use this to personalise every AI answer to your exact role and industry.
         </p>
 
@@ -112,7 +112,7 @@ export default function OnboardingStep1Role() {
 
           {/* Role */}
           <div>
-            <p className="text-xs font-medium text-gray-300 mb-2">
+            <p className="text-xs font-medium text-muted-foreground mb-2">
               What role are you interviewing for?
             </p>
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -124,7 +124,7 @@ export default function OnboardingStep1Role() {
                     "flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-all",
                     role === r.value
                       ? "bg-violet-600/20 border-violet-500/50 text-violet-200"
-                      : "bg-white/3 border-white/10 text-gray-400 hover:border-white/20"
+                      : "bg-secondary/50 border-border text-muted-foreground hover:border-border"
                   )}
                 >
                   <span className="text-xl">{r.icon}</span>
@@ -136,7 +136,7 @@ export default function OnboardingStep1Role() {
 
           {/* Domain */}
           <div>
-            <p className="text-xs font-medium text-gray-300 mb-2">Industry / domain</p>
+            <p className="text-xs font-medium text-muted-foreground mb-2">Industry / domain</p>
             <div className="flex flex-wrap gap-2">
               {DOMAINS.map((d) => (
                 <button
@@ -146,7 +146,7 @@ export default function OnboardingStep1Role() {
                     "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
                     domain === d
                       ? "bg-violet-600/20 border-violet-500/40 text-violet-200"
-                      : "bg-white/3 border-white/10 text-gray-400 hover:border-white/20"
+                      : "bg-secondary/50 border-border text-muted-foreground hover:border-border"
                   )}
                 >
                   {d}

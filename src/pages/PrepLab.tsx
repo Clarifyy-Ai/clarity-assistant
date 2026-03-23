@@ -89,19 +89,19 @@ export default function PrepLab() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white">
+    <div className="min-h-screen bg-background text-foreground">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
 
         {/* ── Header ─────────────────────────────────── */}
         <div className="mb-6">
-          <h1 className="text-3xl font-bold text-white">Prep Lab</h1>
-          <p className="text-gray-400 mt-1 text-sm">
+          <h1 className="text-3xl font-bold text-foreground">Prep Lab</h1>
+          <p className="text-muted-foreground mt-1 text-sm">
             Build STAR answers and manage your personal answer bank
           </p>
         </div>
 
         {/* ── Tab switcher ───────────────────────────── */}
-        <div className="flex gap-1 bg-white/5 border border-white/10 rounded-xl p-1 mb-6 w-fit">
+        <div className="flex gap-1 bg-secondary border border-border rounded-xl p-1 mb-6 w-fit">
           {(["builder", "bank"] as const).map((tab) => (
             <button
               key={tab}
@@ -109,8 +109,8 @@ export default function PrepLab() {
               className={cn(
                 "px-5 py-2 rounded-lg text-sm font-medium transition-all",
                 activeTab === tab
-                  ? "bg-violet-600 text-white shadow"
-                  : "text-gray-400 hover:text-white"
+                  ? "bg-violet-600 text-foreground shadow"
+                  : "text-muted-foreground hover:text-foreground"
               )}
             >
               {tab === "builder" ? "🧩 STAR Builder" : "📚 Answer Bank"}
@@ -128,7 +128,7 @@ export default function PrepLab() {
             <div className="space-y-4">
 
               {/* Question input */}
-              <div className="bg-white/5 border border-white/10 rounded-2xl p-5">
+              <div className="bg-secondary border border-border rounded-2xl p-5">
                 <label className="block text-sm font-semibold text-gray-200 mb-2">
                   Interview Question
                 </label>
@@ -137,7 +137,7 @@ export default function PrepLab() {
                   onChange={(e) => builder.setQuestion(e.target.value)}
                   placeholder="e.g. Tell me about a time you led a difficult project under pressure…"
                   rows={3}
-                  className="w-full bg-black/30 border border-white/10 text-white placeholder-gray-500 rounded-xl px-4 py-3 resize-none focus:outline-none focus:border-violet-500 text-sm leading-relaxed"
+                  className="w-full bg-muted/30 border border-border text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 resize-none focus:outline-none focus:border-violet-500 text-sm leading-relaxed"
                 />
 
                 <div className="flex gap-2 mt-3">
@@ -158,7 +158,7 @@ export default function PrepLab() {
                   {/* Reset */}
                   <button
                     onClick={builder.reset}
-                    className="p-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-white rounded-xl transition-all"
+                    className="p-2.5 bg-secondary hover:bg-secondary/80 border border-border text-muted-foreground hover:text-foreground rounded-xl transition-all"
                     title="Clear all"
                   >
                     <RefreshCw className="w-4 h-4" />
@@ -226,15 +226,15 @@ export default function PrepLab() {
 
               {/* Formatted answer preview */}
               {builder.formattedAnswer && (
-                <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden">
-                  <div className="flex items-center justify-between px-5 py-3 border-b border-white/10">
-                    <h3 className="text-sm font-semibold text-white">
+                <div className="bg-secondary border border-border rounded-2xl overflow-hidden">
+                  <div className="flex items-center justify-between px-5 py-3 border-b border-border">
+                    <h3 className="text-sm font-semibold text-foreground">
                       Full Answer Preview
                     </h3>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={handleCopy}
-                        className="flex items-center gap-1.5 px-3 py-1.5 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-400 hover:text-white text-xs rounded-lg transition-all"
+                        className="flex items-center gap-1.5 px-3 py-1.5 bg-secondary hover:bg-secondary/80 border border-border text-muted-foreground hover:text-foreground text-xs rounded-lg transition-all"
                       >
                         {copied ? (
                           <><Check className="w-3 h-3 text-green-400" /> Copied</>
@@ -262,7 +262,7 @@ export default function PrepLab() {
                           <p className={cn("text-xs font-bold uppercase tracking-wider mb-1", meta.color)}>
                             {meta.label}
                           </p>
-                          <p className="text-sm text-gray-300 leading-relaxed">{content}</p>
+                          <p className="text-sm text-muted-foreground leading-relaxed">{content}</p>
                         </div>
                       );
                     })}
@@ -272,10 +272,10 @@ export default function PrepLab() {
 
               {/* Empty state */}
               {!builder.formattedAnswer && !builder.isGenerating && (
-                <div className="bg-white/5 border border-white/10 rounded-2xl p-10 flex flex-col items-center justify-center text-center">
-                  <Star className="w-10 h-10 text-gray-600 mb-3" />
-                  <p className="text-gray-400 text-sm">
-                    Enter a question and click <strong className="text-white">AI Generate</strong>,
+                <div className="bg-secondary border border-border rounded-2xl p-10 flex flex-col items-center justify-center text-center">
+                  <Star className="w-10 h-10 text-muted-foreground mb-3" />
+                  <p className="text-muted-foreground text-sm">
+                    Enter a question and click <strong className="text-foreground">AI Generate</strong>,
                     or fill in the STAR fields manually.
                   </p>
                 </div>
@@ -293,12 +293,12 @@ export default function PrepLab() {
             {/* Search + filter */}
             <div className="flex flex-col sm:flex-row gap-3">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-500" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
                 <input
                   value={documents.searchQuery}
                   onChange={(e) => documents.setSearch(e.target.value)}
                   placeholder="Search answers…"
-                  className="w-full pl-9 pr-4 py-2.5 bg-white/5 border border-white/10 text-white placeholder-gray-500 rounded-xl focus:outline-none focus:border-violet-500 text-sm"
+                  className="w-full pl-9 pr-4 py-2.5 bg-secondary border border-border text-foreground placeholder:text-muted-foreground rounded-xl focus:outline-none focus:border-violet-500 text-sm"
                 />
               </div>
 
@@ -309,8 +309,8 @@ export default function PrepLab() {
                   className={cn(
                     "px-3 py-1.5 rounded-xl text-xs font-medium transition-all",
                     documents.activeFilter === ("all" as any)
-                      ? "bg-violet-600 text-white"
-                      : "bg-white/5 text-gray-400 hover:text-white border border-white/10"
+                      ? "bg-violet-600 text-foreground"
+                      : "bg-secondary text-muted-foreground hover:text-foreground border border-border"
                   )}
                 >
                   All
@@ -322,8 +322,8 @@ export default function PrepLab() {
                     className={cn(
                       "px-3 py-1.5 rounded-xl text-xs font-medium transition-all",
                       documents.activeFilter === cat.value
-                        ? "bg-violet-600 text-white"
-                        : "bg-white/5 text-gray-400 hover:text-white border border-white/10"
+                        ? "bg-violet-600 text-foreground"
+                        : "bg-secondary text-muted-foreground hover:text-foreground border border-border"
                     )}
                   >
                     {cat.icon} {cat.label}
@@ -335,8 +335,8 @@ export default function PrepLab() {
             {/* Answer cards grid */}
             {documents.answers.length === 0 ? (
               <div className="flex flex-col items-center justify-center py-20 text-center">
-                <BookOpen className="w-12 h-12 text-gray-600 mb-3" />
-                <p className="text-gray-400 text-sm">
+                <BookOpen className="w-12 h-12 text-muted-foreground mb-3" />
+                <p className="text-muted-foreground text-sm">
                   No saved answers yet. Build one in the STAR Builder and save it here.
                 </p>
               </div>
@@ -364,23 +364,23 @@ export default function PrepLab() {
         ══════════════════════════════════════════════ */}
         {saveDialogOpen && (
           <div className="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm flex items-center justify-center p-4">
-            <div className="w-full max-w-sm bg-[#12121a] border border-white/15 rounded-2xl p-6 space-y-4 shadow-2xl">
-              <h3 className="text-lg font-semibold text-white">Save to Answer Bank</h3>
+            <div className="w-full max-w-sm bg-popover border border-border rounded-2xl p-6 space-y-4 shadow-2xl">
+              <h3 className="text-lg font-semibold text-foreground">Save to Answer Bank</h3>
 
               {/* Title */}
               <div>
-                <label className="block text-xs text-gray-400 mb-1.5">Title</label>
+                <label className="block text-xs text-muted-foreground mb-1.5">Title</label>
                 <input
                   value={saveTitle}
                   onChange={(e) => setSaveTitle(e.target.value)}
                   placeholder={builder.question.slice(0, 50) || "Answer title…"}
-                  className="w-full bg-white/5 border border-white/10 text-white placeholder-gray-500 rounded-xl px-4 py-2.5 focus:outline-none focus:border-violet-500 text-sm"
+                  className="w-full bg-secondary border border-border text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 focus:outline-none focus:border-violet-500 text-sm"
                 />
               </div>
 
               {/* Category */}
               <div>
-                <label className="block text-xs text-gray-400 mb-1.5">Category</label>
+                <label className="block text-xs text-muted-foreground mb-1.5">Category</label>
                 <div className="grid grid-cols-2 gap-2">
                   {ANSWER_CATEGORIES.map((cat) => (
                     <button
@@ -390,7 +390,7 @@ export default function PrepLab() {
                         "flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-medium transition-all",
                         saveCategory === cat.value
                           ? "bg-violet-600/30 border-violet-500/50 text-violet-200"
-                          : "bg-white/5 border-white/10 text-gray-400 hover:border-white/20"
+                          : "bg-secondary border-border text-muted-foreground hover:border-border"
                       )}
                     >
                       <span>{cat.icon}</span>
@@ -402,14 +402,14 @@ export default function PrepLab() {
 
               {/* Tags */}
               <div>
-                <label className="block text-xs text-gray-400 mb-1.5">
-                  Tags <span className="text-gray-500">(comma-separated)</span>
+                <label className="block text-xs text-muted-foreground mb-1.5">
+                  Tags <span className="text-muted-foreground">(comma-separated)</span>
                 </label>
                 <input
                   value={saveTags}
                   onChange={(e) => setSaveTags(e.target.value)}
                   placeholder="e.g. google, senior, pressure"
-                  className="w-full bg-white/5 border border-white/10 text-white placeholder-gray-500 rounded-xl px-4 py-2.5 focus:outline-none focus:border-violet-500 text-sm"
+                  className="w-full bg-secondary border border-border text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 focus:outline-none focus:border-violet-500 text-sm"
                 />
               </div>
 
@@ -425,14 +425,14 @@ export default function PrepLab() {
                     setSaveDialogOpen(false);
                     setSaveError(null);
                   }}
-                  className="flex-1 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-gray-300 text-sm rounded-xl transition-all"
+                  className="flex-1 py-2.5 bg-secondary hover:bg-secondary/80 border border-border text-muted-foreground text-sm rounded-xl transition-all"
                 >
                   Cancel
                 </button>
                 <button
                   onClick={handleSave}
                   disabled={builder.isSaving}
-                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-white text-sm font-medium rounded-xl transition-all"
+                  className="flex-1 flex items-center justify-center gap-2 py-2.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-50 text-foreground text-sm font-medium rounded-xl transition-all"
                 >
                   {builder.isSaving ? (
                     <Loader2 className="w-4 h-4 animate-spin" />
@@ -467,7 +467,7 @@ function STARField({
 }) {
   const meta = STAR_COLORS[fieldKey];
   return (
-    <div className={cn("bg-white/5 rounded-2xl border p-4 space-y-2", meta.bg)}>
+    <div className={cn("bg-secondary rounded-2xl border p-4 space-y-2", meta.bg)}>
       <div className="flex items-center justify-between">
         <label className={cn("text-xs font-bold uppercase tracking-wider", meta.color)}>
           {meta.label}
@@ -481,7 +481,7 @@ function STARField({
         onChange={(e) => onChange(e.target.value)}
         placeholder={STAR_PLACEHOLDERS[fieldKey]}
         rows={fieldKey === "action" ? 4 : 3}
-        className="w-full bg-black/20 border border-white/5 text-white placeholder-gray-600 rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:border-white/20 text-sm leading-relaxed"
+        className="w-full bg-muted/20 border border-border text-foreground placeholder:text-muted-foreground rounded-xl px-3 py-2.5 resize-none focus:outline-none focus:border-border text-sm leading-relaxed"
       />
     </div>
   );
@@ -493,9 +493,9 @@ function STARField({
 
 function STARAnalysisPanel({ analysis }: { analysis: any }) {
   return (
-    <div className="bg-white/5 border border-white/10 rounded-2xl p-5 space-y-4">
+    <div className="bg-secondary border border-border rounded-2xl p-5 space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-white flex items-center gap-2">
+        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
           <BarChart2 className="w-4 h-4 text-blue-400" />
           Answer Analysis
         </h3>
@@ -512,7 +512,7 @@ function STARAnalysisPanel({ analysis }: { analysis: any }) {
               <span className={cn("text-xs font-medium w-16", meta.color)}>
                 {key.charAt(0).toUpperCase() + key.slice(1)}
               </span>
-              <div className="flex-1 h-1.5 bg-white/10 rounded-full overflow-hidden">
+              <div className="flex-1 h-1.5 bg-secondary/80 rounded-full overflow-hidden">
                 <div
                   className={cn(
                     "h-full rounded-full",
@@ -521,7 +521,7 @@ function STARAnalysisPanel({ analysis }: { analysis: any }) {
                   style={{ width: `${s}%` }}
                 />
               </div>
-              <span className="text-xs text-gray-400 w-6 text-right">{s}</span>
+              <span className="text-xs text-muted-foreground w-6 text-right">{s}</span>
             </div>
           );
         })}
@@ -552,10 +552,10 @@ function STARAnalysisPanel({ analysis }: { analysis: any }) {
       {/* Suggestions */}
       {analysis.suggestions?.length > 0 && (
         <div>
-          <p className="text-xs font-medium text-gray-400 mb-1.5">Suggestions</p>
+          <p className="text-xs font-medium text-muted-foreground mb-1.5">Suggestions</p>
           <ul className="space-y-1">
             {analysis.suggestions.map((s: string, i: number) => (
-              <li key={i} className="flex items-start gap-2 text-xs text-gray-300">
+              <li key={i} className="flex items-start gap-2 text-xs text-muted-foreground">
                 <span className="text-violet-400 mt-0.5 shrink-0">→</span>
                 {s}
               </li>
@@ -598,27 +598,27 @@ function AnswerBankCard({
   const cat = ANSWER_CATEGORIES.find((c) => c.value === answer.category);
 
   return (
-    <div className="bg-white/5 border border-white/10 rounded-2xl overflow-hidden flex flex-col hover:border-white/20 transition-all">
+    <div className="bg-secondary border border-border rounded-2xl overflow-hidden flex flex-col hover:border-border transition-all">
       {/* Header */}
       <div className="px-4 pt-4 pb-3 flex-1">
         <div className="flex items-start justify-between gap-2 mb-2">
           <div className="flex items-center gap-1.5">
             <span className="text-sm">{cat?.icon ?? "📝"}</span>
-            <span className="text-xs text-gray-400 capitalize">{cat?.label ?? answer.category}</span>
+            <span className="text-xs text-muted-foreground capitalize">{cat?.label ?? answer.category}</span>
           </div>
           <button
             onClick={onFavourite}
             className={cn(
               "shrink-0 transition-colors",
-              answer.is_favourite ? "text-red-400" : "text-gray-600 hover:text-gray-400"
+              answer.is_favourite ? "text-red-400" : "text-muted-foreground hover:text-muted-foreground"
             )}
           >
             <Heart className={cn("w-4 h-4", answer.is_favourite && "fill-current")} />
           </button>
         </div>
 
-        <p className="text-sm font-medium text-white leading-snug">{answer.title}</p>
-        <p className="text-xs text-gray-400 mt-1 line-clamp-2">{answer.question}</p>
+        <p className="text-sm font-medium text-foreground leading-snug">{answer.title}</p>
+        <p className="text-xs text-muted-foreground mt-1 line-clamp-2">{answer.question}</p>
 
         {/* Tags */}
         {answer.tags?.length > 0 && (
@@ -626,7 +626,7 @@ function AnswerBankCard({
             {answer.tags.slice(0, 3).map((tag: string) => (
               <span
                 key={tag}
-                className="px-1.5 py-0.5 bg-white/5 border border-white/10 text-gray-400 rounded text-xs"
+                className="px-1.5 py-0.5 bg-secondary border border-border text-muted-foreground rounded text-xs"
               >
                 {tag}
               </span>
@@ -636,7 +636,7 @@ function AnswerBankCard({
 
         {/* Expanded answer preview */}
         {expanded && (
-          <div className="mt-3 pt-3 border-t border-white/10 space-y-2">
+          <div className="mt-3 pt-3 border-t border-border space-y-2">
             {(["situation", "task", "action", "result"] as const).map((key) => {
               const part = answer.answer_text
                 ?.split("\n\n")
@@ -648,7 +648,7 @@ function AnswerBankCard({
                   <p className={cn("text-xs font-bold uppercase tracking-wider mb-0.5", meta.color)}>
                     {key}
                   </p>
-                  <p className="text-xs text-gray-400 leading-relaxed">{part.replace(/^.+:\s*/, "")}</p>
+                  <p className="text-xs text-muted-foreground leading-relaxed">{part.replace(/^.+:\s*/, "")}</p>
                 </div>
               );
             })}
@@ -660,7 +660,7 @@ function AnswerBankCard({
       <div className="px-4 pb-4 flex items-center justify-between gap-2">
         <button
           onClick={() => setExpanded((v) => !v)}
-          className="text-xs text-gray-500 hover:text-gray-300 transition-colors"
+          className="text-xs text-muted-foreground hover:text-muted-foreground transition-colors"
         >
           {expanded ? "Show less" : "Preview"}
         </button>
@@ -674,7 +674,7 @@ function AnswerBankCard({
           </button>
           <button
             onClick={onDelete}
-            className="p-1.5 text-gray-600 hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10"
+            className="p-1.5 text-muted-foreground hover:text-red-400 transition-colors rounded-lg hover:bg-red-500/10"
           >
             <Trash2 className="w-3.5 h-3.5" />
           </button>

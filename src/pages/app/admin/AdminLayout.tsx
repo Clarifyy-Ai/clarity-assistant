@@ -27,11 +27,11 @@ export default function AdminLayout() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] flex">
+    <div className="min-h-screen bg-background flex">
 
       {/* Sidebar */}
-      <aside className="w-52 shrink-0 border-r border-white/8 flex flex-col">
-        <div className="p-4 border-b border-white/8">
+      <aside className="w-52 shrink-0 border-r border-border flex flex-col">
+        <div className="p-4 border-b border-border">
           <div className="flex items-center gap-2">
             <Shield className="w-5 h-5 text-red-400" />
             <span className="text-sm font-bold text-foreground">Admin</span>
@@ -59,7 +59,7 @@ export default function AdminLayout() {
           ))}
         </nav>
 
-        <div className="p-3 border-t border-white/8">
+        <div className="p-3 border-t border-border">
           <NavLink
             to="/app/dashboard"
             className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs text-muted-foreground hover:text-foreground transition-colors"

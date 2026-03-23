@@ -101,7 +101,7 @@ export default function AdminAnalytics() {
               <span className="text-[9px] text-gray-700">
                 {format(new Date(d.day), "d")}
               </span>
-              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-[#1a1a2e] border border-white/15 rounded-lg px-2 py-1 text-[10px] text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none">
+              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-popover border border-border rounded-lg px-2 py-1 text-[10px] text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none">
                 {d.count} signups · {format(new Date(d.day), "MMM d")}
               </div>
             </div>

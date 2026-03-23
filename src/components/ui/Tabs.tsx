@@ -55,7 +55,7 @@ export function TabsList({
   return (
     <div
       className={cn(
-        "flex gap-1 bg-white/5 border border-white/10 rounded-xl p-1 w-fit",
+        "flex gap-1 bg-secondary border border-border rounded-xl p-1 w-fit",
         className
       )}
     >

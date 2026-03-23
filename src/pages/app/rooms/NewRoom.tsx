@@ -116,7 +116,7 @@ export default function NewRoom() {
                 className={cn(
                   "px-4 py-2 rounded-xl border text-sm font-medium transition-all",
                   difficulty === d
-                    ? "border-violet-500/40 bg-violet-500/10 text-foreground"
+                    ? "border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300"
                     : "border-border text-muted-foreground hover:bg-accent/5"
                 )}
               >
@@ -136,7 +136,7 @@ export default function NewRoom() {
                 className={cn(
                   "px-4 py-2 rounded-xl border text-sm font-medium transition-all",
                   duration === d
-                    ? "border-violet-500/40 bg-violet-500/10 text-foreground"
+                    ? "border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300"
                     : "border-border text-muted-foreground hover:bg-accent/5"
                 )}
               >
@@ -156,7 +156,7 @@ export default function NewRoom() {
                 className={cn(
                   "px-4 py-2 rounded-xl border text-sm font-medium transition-all",
                   maxParticipants === n
-                    ? "border-violet-500/40 bg-violet-500/10 text-foreground"
+                    ? "border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300"
                     : "border-border text-muted-foreground hover:bg-accent/5"
                 )}
               >

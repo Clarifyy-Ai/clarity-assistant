@@ -54,18 +54,18 @@ export function Modal({
 
       {/* Panel */}
       <div className={cn(
-        "relative w-full bg-[#12121a] border border-white/15 rounded-2xl shadow-2xl",
+        "relative w-full bg-popover border border-border rounded-2xl shadow-2xl",
         "animate-in fade-in zoom-in-95 duration-150",
         SIZES[size],
         className
       )}>
         {/* Header */}
         {title && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-white/10">
-            <h2 className="text-base font-semibold text-white">{title}</h2>
+          <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+            <h2 className="text-base font-semibold text-foreground">{title}</h2>
             <button
               onClick={onClose}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-gray-500 hover:text-white hover:bg-white/10 transition-all"
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
             >
               <X className="w-4 h-4" />
             </button>

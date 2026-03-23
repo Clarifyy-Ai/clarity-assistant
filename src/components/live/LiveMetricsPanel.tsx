@@ -271,7 +271,7 @@ export function LiveMetricsPanel({
     return (
       <div className={cn('space-y-3', className)}>
         {/* Overall Score - Compact */}
-        <div className="flex items-center justify-between p-3 bg-white/[0.02] rounded-lg border border-white/[0.05]">
+        <div className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg border border-border">
           <div className="flex items-center gap-2">
             <Star className="h-4 w-4 text-brand-400" />
             <span className="text-xs font-medium text-gray-300">Score</span>
@@ -294,7 +294,7 @@ export function LiveMetricsPanel({
         className={cn(
           'p-4 rounded-lg border',
           getTierBg(metrics.tier),
-          'border-white/[0.1]'
+          'border-border'
         )}
       >
         <div className="flex items-start justify-between mb-3">
@@ -342,7 +342,7 @@ export function LiveMetricsPanel({
       </div>
 
       {/* Answer Quality */}
-      <div className="p-3 bg-white/[0.02] rounded-lg border border-white/[0.05]">
+      <div className="p-3 bg-secondary/50 rounded-lg border border-border">
         <h4 className="text-xs font-semibold text-gray-300 mb-3">
           Answer Quality
         </h4>
@@ -382,7 +382,7 @@ export function LiveMetricsPanel({
       </div>
 
       {/* Communication */}
-      <div className="p-3 bg-white/[0.02] rounded-lg border border-white/[0.05]">
+      <div className="p-3 bg-secondary/50 rounded-lg border border-border">
         <h4 className="text-xs font-semibold text-gray-300 mb-3">
           Communication
         </h4>
@@ -422,7 +422,7 @@ export function LiveMetricsPanel({
       </div>
 
       {/* Technical */}
-      <div className="p-3 bg-white/[0.02] rounded-lg border border-white/[0.05]">
+      <div className="p-3 bg-secondary/50 rounded-lg border border-border">
         <h4 className="text-xs font-semibold text-gray-300 mb-3">Technical</h4>
         <div className="space-y-2">
           <div className="flex items-center justify-between">

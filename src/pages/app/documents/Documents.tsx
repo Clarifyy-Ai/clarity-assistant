@@ -89,7 +89,7 @@ function ResumeManager() {
           "border-2 border-dashed rounded-2xl p-5 sm:p-8 text-center cursor-pointer transition-all",
           dragOver
             ? "border-violet-500/60 bg-violet-500/5"
-            : "border-white/10 hover:border-white/20 bg-white/3"
+            : "border-border hover:border-border bg-card"
         )}
       >
         {uploading ? (
@@ -118,7 +118,7 @@ function ResumeManager() {
       {/* Resume list */}
       {resumes.length === 0 ? (
         <Card className="text-center py-10">
-          <FileText className="w-8 h-8 text-gray-700 mx-auto mb-2" />
+          <FileText className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
           <p className="text-muted-foreground text-sm">No resumes uploaded yet.</p>
         </Card>
       ) : (
@@ -200,7 +200,7 @@ function ResumeManager() {
         size="xl"
       >
         {preview?.parsed_text ? (
-          <div className="max-h-96 overflow-y-auto bg-black/30 rounded-xl p-4">
+          <div className="max-h-96 overflow-y-auto bg-secondary rounded-xl p-4">
             <pre className="text-xs text-foreground whitespace-pre-wrap leading-relaxed font-mono">
               {preview.parsed_text}
             </pre>
@@ -285,7 +285,7 @@ function JDManager() {
       {/* JD list */}
       {jds.length === 0 ? (
         <Card className="text-center py-10">
-          <ClipboardList className="w-8 h-8 text-gray-700 mx-auto mb-2" />
+          <ClipboardList className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
           <p className="text-muted-foreground text-sm">No job descriptions added yet.</p>
           <p className="text-muted-foreground text-xs mt-1">
             Add a JD to improve AI answer relevance.
@@ -345,7 +345,7 @@ function JDManager() {
                 value={title}
                 onChange={(e) => setTitle(e.target.value)}
                 placeholder="e.g. Senior Software Engineer"
-                className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
+                className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
               />
             </div>
             <div>
@@ -354,7 +354,7 @@ function JDManager() {
                 value={company}
                 onChange={(e) => setCompany(e.target.value)}
                 placeholder="e.g. Google"
-                className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-violet-500"
+                className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
               />
             </div>
           </div>
@@ -365,7 +365,7 @@ function JDManager() {
               onChange={(e) => setText(e.target.value)}
               placeholder="Paste the full job description here…"
               rows={8}
-              className="w-full bg-black/30 border border-white/10 text-foreground placeholder-gray-600 rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-violet-500"
+              className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
             />
           </div>
           <div className="flex gap-3">
