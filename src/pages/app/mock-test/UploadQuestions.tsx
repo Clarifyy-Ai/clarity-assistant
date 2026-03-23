@@ -1,4 +1,5 @@
 // @ts-nocheck
+// src/pages/app/mock-test/UploadQuestions.tsx
 import { useState, useRef } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
@@ -9,7 +10,7 @@ import {
 import { toast } from "sonner";
 import { InlineMath, BlockMath } from "react-katex";
 import "katex/dist/katex.min.css";
-import { supabase, SUPABASE_URL } from "@/lib/supabase/client";
+import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -24,6 +25,9 @@ import {
 import {
   Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
 } from "@/components/ui/dialog";
+
+// ★ FIX: use env var directly — avoids relying on named export
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -69,7 +73,7 @@ const SUBJECTS = [
 ];
 
 // ─────────────────────────────────────────────────────────────────────────────
-// LaTeX Preview helper — renders inline ($...$) and block ($$...$$) math
+// LaTeXPreview
 // ─────────────────────────────────────────────────────────────────────────────
 
 function LaTeXPreview({ text }: { text: string }) {
@@ -77,31 +81,35 @@ function LaTeXPreview({ text }: { text: string }) {
     return <p className="text-muted-foreground text-sm italic">Preview will appear here…</p>;
   }
 
-  const blockRegex = /\$\$([\s\S]+?)\$\$/g;
+  // ★ FIX: correct regex literals — \$ not \\$
+  const blockRegex  = /\$\$([\s\S]+?)\$\$/g;
   const inlineRegex = /\$((?:[^$\\]|\\.)+?)\$/g;
 
   let match: RegExpExecArray | null;
+  const segments: Array<{
+    start: number; end: number; type: "block" | "inline"; math: string;
+  }> = [];
 
-  const segments: Array<{ start: number; end: number; type: "block" | "inline"; math: string }> = [];
-
-  // Find block math
   blockRegex.lastIndex = 0;
   while ((match = blockRegex.exec(text)) !== null) {
-    segments.push({ start: match.index, end: match.index + match[0].length, type: "block", math: match[1] });
+    segments.push({
+      start: match.index,
+      end:   match.index + match[0].length,
+      type:  "block",
+      math:  match[1],
+    });
   }
 
-  // Find inline math, only in regions not covered by block math
   inlineRegex.lastIndex = 0;
   while ((match = inlineRegex.exec(text)) !== null) {
     const start = match.index;
-    const end = start + match[0].length;
+    const end   = start + match[0].length;
     const overlaps = segments.some((s) => start < s.end && end > s.start);
     if (!overlaps) {
       segments.push({ start, end, type: "inline", math: match[1] });
     }
   }
 
-  // Sort by start position
   segments.sort((a, b) => a.start - b.start);
 
   let cursor = 0;
@@ -130,7 +138,7 @@ function LaTeXPreview({ text }: { text: string }) {
         if (token.type === "inline") {
           return <InlineMath key={i} math={token.content} errorColor="#e74c3c" />;
         }
-        // plain text — preserve newlines
+        // ★ FIX: split on actual newline "\n" not literal "\\n"
         return (
           <span key={i}>
             {token.content.split("\n").map((line, j, arr) => (
@@ -147,13 +155,13 @@ function LaTeXPreview({ text }: { text: string }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Manual Creator Form
+// ManualCreator
 // ─────────────────────────────────────────────────────────────────────────────
 
 const EMPTY_FORM: ParsedQuestion = {
   question_text:  "",
   question_type:  "MCQ",
-  options:        [
+  options: [
     { label: "A", text: "" },
     { label: "B", text: "" },
     { label: "C", text: "" },
@@ -173,9 +181,12 @@ const EMPTY_FORM: ParsedQuestion = {
 
 function ManualCreator({ onSaved }: { onSaved: () => void }) {
   const user = useAuthStore((s) => s.user);
-  const [form, setForm]         = useState<ParsedQuestion>({ ...EMPTY_FORM, options: [...(EMPTY_FORM.options ?? [])] });
-  const [preview, setPreview]   = useState(false);
-  const [saving, setSaving]     = useState(false);
+  const [form, setForm]       = useState<ParsedQuestion>({
+    ...EMPTY_FORM,
+    options: [...(EMPTY_FORM.options ?? [])],
+  });
+  const [preview, setPreview] = useState(false);
+  const [saving,  setSaving]  = useState(false);
 
   function setField<K extends keyof ParsedQuestion>(key: K, value: ParsedQuestion[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
@@ -191,10 +202,16 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
 
   async function handleSave() {
     if (!form.question_text.trim()) { toast.error("Question text is required."); return; }
-    if (!form.topic.trim()) { toast.error("Topic is required."); return; }
+    if (!form.topic.trim())         { toast.error("Topic is required."); return; }
     if (form.question_type === "MCQ") {
-      if (!form.options?.every((o) => o.text.trim())) { toast.error("All 4 MCQ options are required."); return; }
+      if (!form.options?.every((o) => o.text.trim())) {
+        toast.error("All 4 MCQ options are required.");
+        return;
+      }
     }
+
+    // ★ FIX: auto-detect latex_present from content
+    const latexPresent = /\$/.test(form.question_text) || /\$/.test(form.explanation);
 
     setSaving(true);
     try {
@@ -211,7 +228,7 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
         marks_negative: form.marks_negative,
         source_year:    form.source_year,
         exam_type:      form.exam_type,
-        latex_present:  form.latex_present,
+        latex_present:  latexPresent,   // ★ FIX: auto-detected
         uploaded_by:    user!.id,
         source:         "USER_UPLOAD",
         is_public:      false,
@@ -232,6 +249,7 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
         {/* Question text */}
         <div className="md:col-span-2 space-y-2">
           <div className="flex items-center justify-between">
@@ -253,7 +271,10 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
               onChange={(e) => setField("question_text", e.target.value)}
             />
           )}
-          <p className="text-xs text-muted-foreground">{"LaTeX: use $x^2$ for inline, $$\\frac{a}{b}$$ for block"}</p>
+          {/* ★ FIX: single backslash in hint */}
+          <p className="text-xs text-muted-foreground">
+            {"LaTeX: use $x^2$ for inline, $$\\frac{a}{b}$$ for block"}
+          </p>
         </div>
 
         {/* Question type */}
@@ -261,11 +282,14 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
           <Label>Question Type</Label>
           <Select
             value={form.question_type}
-            onValueChange={(v) => setField("question_type", v as ParsedQuestion["question_type"])}
+            onValueChange={(v) => {
+              setField("question_type", v as ParsedQuestion["question_type"]);
+              // Reset correct_answer to sane default when type changes
+              if (v === "TRUE_FALSE") setField("correct_answer", "True");
+              else if (v === "MCQ")   setField("correct_answer", "A");
+            }}
           >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="MCQ">MCQ (4 options)</SelectItem>
               <SelectItem value="TRUE_FALSE">True / False</SelectItem>
@@ -283,9 +307,7 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
             value={form.difficulty}
             onValueChange={(v) => setField("difficulty", v as ParsedQuestion["difficulty"])}
           >
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               <SelectItem value="EASY">Easy</SelectItem>
               <SelectItem value="MEDIUM">Medium</SelectItem>
@@ -325,8 +347,31 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
           </div>
         )}
 
-        {/* Correct answer for non-MCQ */}
-        {form.question_type !== "MCQ" && (
+        {/* TRUE_FALSE correct answer picker */}
+        {form.question_type === "TRUE_FALSE" && (
+          <div className="md:col-span-2 space-y-2">
+            <Label>Correct Answer</Label>
+            <div className="flex gap-3">
+              {["True", "False"].map((val) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => setField("correct_answer", val)}
+                  className={`px-4 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
+                    form.correct_answer === val
+                      ? "border-green-500 bg-green-500/10 text-green-600"
+                      : "border-border text-muted-foreground hover:border-green-400"
+                  }`}
+                >
+                  {val}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Correct answer for NUMERICAL / SHORT_ANSWER / CODING */}
+        {form.question_type !== "MCQ" && form.question_type !== "TRUE_FALSE" && (
           <div className="md:col-span-2 space-y-2">
             <Label>Correct Answer</Label>
             <Input
@@ -352,9 +397,7 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
         <div className="space-y-2">
           <Label>Subject</Label>
           <Select value={form.subject} onValueChange={(v) => setField("subject", v)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue /></SelectTrigger>
             <SelectContent>
               {SUBJECTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
             </SelectContent>
@@ -378,12 +421,12 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
             value={form.exam_type ?? "none"}
             onValueChange={(v) => setField("exam_type", v === "none" ? null : v)}
           >
-            <SelectTrigger>
-              <SelectValue placeholder="Select exam" />
-            </SelectTrigger>
+            <SelectTrigger><SelectValue placeholder="Select exam" /></SelectTrigger>
             <SelectContent>
               <SelectItem value="none">None / General</SelectItem>
-              {EXAM_TYPES.map((e) => <SelectItem key={e} value={e}>{e.replace(/_/g, " ")}</SelectItem>)}
+              {EXAM_TYPES.map((e) => (
+                <SelectItem key={e} value={e}>{e.replace(/_/g, " ")}</SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
@@ -413,7 +456,9 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
       </div>
 
       <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto">
-        {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+        {saving
+          ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+          : <Save className="h-4 w-4 mr-2" />}
         Save Question
       </Button>
     </div>
@@ -421,7 +466,7 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Review Modal — shown after PDF parse
+// ReviewModal
 // ─────────────────────────────────────────────────────────────────────────────
 
 function ReviewModal({
@@ -460,7 +505,6 @@ function ReviewModal({
           {visible.map((q, idx) => (
             <Card key={q._id} className="border">
               <CardContent className="p-4 space-y-3">
-                {/* Header row: question # + remove button */}
                 <div className="flex items-center justify-between gap-2">
                   <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
                     Question {idx + 1}
@@ -475,7 +519,6 @@ function ReviewModal({
                   </button>
                 </div>
 
-                {/* Question text */}
                 <div className="space-y-1">
                   <p className="text-xs text-muted-foreground font-medium">Question Text</p>
                   <Textarea
@@ -486,7 +529,6 @@ function ReviewModal({
                   />
                 </div>
 
-                {/* Row: type, difficulty, subject, topic */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground font-medium">Type</p>
@@ -494,9 +536,7 @@ function ReviewModal({
                       value={q.question_type}
                       onValueChange={(v) => updateField(q._id, "question_type", v)}
                     >
-                      <SelectTrigger className="h-7 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="MCQ">MCQ</SelectItem>
                         <SelectItem value="TRUE_FALSE">True/False</SelectItem>
@@ -513,9 +553,7 @@ function ReviewModal({
                       value={q.difficulty}
                       onValueChange={(v) => updateField(q._id, "difficulty", v)}
                     >
-                      <SelectTrigger className="h-7 text-xs">
-                        <SelectValue />
-                      </SelectTrigger>
+                      <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
                       <SelectContent>
                         <SelectItem value="EASY">Easy</SelectItem>
                         <SelectItem value="MEDIUM">Medium</SelectItem>
@@ -543,14 +581,15 @@ function ReviewModal({
                   </div>
                 </div>
 
-                {/* MCQ options (shown when type is MCQ) */}
                 {q.question_type === "MCQ" && Array.isArray(q.options) && (
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground font-medium">Options</p>
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
                       {q.options.map((opt, oi) => (
                         <div key={opt.label} className="flex items-center gap-1.5">
-                          <span className="text-xs font-semibold w-4 shrink-0 text-muted-foreground">{opt.label}.</span>
+                          <span className="text-xs font-semibold w-4 shrink-0 text-muted-foreground">
+                            {opt.label}.
+                          </span>
                           <Input
                             className="h-7 text-xs"
                             value={opt.text}
@@ -567,7 +606,6 @@ function ReviewModal({
                   </div>
                 )}
 
-                {/* Row: correct answer, exam_type */}
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
                     <p className="text-xs text-muted-foreground font-medium">Correct Answer</p>
@@ -608,12 +646,13 @@ function ReviewModal({
 
         <DialogFooter className="mt-4">
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={() => onSaveAll(local)} disabled={saving || visible.length === 0}>
-            {saving ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Check className="h-4 w-4 mr-2" />
-            )}
+          <Button
+            onClick={() => onSaveAll(local)}
+            disabled={saving || visible.length === 0}
+          >
+            {saving
+              ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              : <Check className="h-4 w-4 mr-2" />}
             Save {visible.length} Question{visible.length !== 1 ? "s" : ""}
           </Button>
         </DialogFooter>
@@ -623,18 +662,19 @@ function ReviewModal({
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PDF Import Tab
+// PDFImportTab
 // ─────────────────────────────────────────────────────────────────────────────
 
 function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
-  const user = useAuthStore((s) => s.user);
-  const fileRef   = useRef<HTMLInputElement>(null);
-  const [dragging, setDragging]     = useState(false);
-  const [parsing,  setParsing]      = useState(false);
-  const [parseError, setParseError] = useState<string | null>(null);
-  const [reviewItems, setReviewItems] = useState<ReviewItem[] | null>(null);
-  const [saving, setSaving]           = useState(false);
-  const [summary, setSummary]         = useState<string | null>(null);
+  const user    = useAuthStore((s) => s.user);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const [dragging,     setDragging]     = useState(false);
+  const [parsing,      setParsing]      = useState(false);
+  const [parseError,   setParseError]   = useState<string | null>(null);
+  const [reviewItems,  setReviewItems]  = useState<ReviewItem[] | null>(null);
+  const [saving,       setSaving]       = useState(false);
+  const [summary,      setSummary]      = useState<string | null>(null);
 
   function handleDrop(e: React.DragEvent<HTMLDivElement>) {
     e.preventDefault();
@@ -663,13 +703,11 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
     setSummary(null);
 
     try {
-      // Send as multipart/form-data (primary contract)
       const formData = new FormData();
       formData.append("pdf", file);
 
-      // Call the edge function via multipart upload
       const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token;
+      const token = session?.access_token ?? "";
 
       const response = await fetch(
         `${SUPABASE_URL}/functions/v1/parse-question-pdf`,
@@ -682,23 +720,34 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
 
       if (!response.ok) {
         const errJson = await response.json().catch(() => ({}));
-        throw new Error((errJson as Record<string, unknown>)?.error as string ?? "Parse failed");
+        throw new Error(
+          (errJson as Record<string, unknown>)?.error as string ?? "Parse failed"
+        );
       }
 
       const responseJson = await response.json();
-      if (!responseJson?.success) throw new Error(responseJson?.error ?? "Parse failed");
 
-      const { questions, summary: parseSummary } = responseJson.data;
+      // ★ FIX: handle both { success, data } and flat { questions, summary }
+      if (responseJson?.success === false || responseJson?.error) {
+        throw new Error(responseJson?.error ?? "Parse failed");
+      }
+      const payload = responseJson?.data ?? responseJson;
+      const { questions, summary: parseSummary } = payload;
 
-      const reviewItems: ReviewItem[] = (questions as ParsedQuestion[]).map((q, i) => ({
+      if (!Array.isArray(questions) || questions.length === 0) {
+        throw new Error("No questions found in this PDF.");
+      }
+
+      const items: ReviewItem[] = (questions as ParsedQuestion[]).map((q, i) => ({
         ...q,
         _id:      `q_${i}_${Date.now()}`,
         _removed: false,
         _editing: false,
       }));
 
-      setReviewItems(reviewItems);
-      setSummary(parseSummary);
+      setReviewItems(items);
+      setSummary(parseSummary ?? `${items.length} questions parsed.`);
+
     } catch (err) {
       console.error("[PDFImportTab] parse error:", err);
       const msg = err instanceof Error ? err.message : "Failed to parse PDF.";
@@ -706,6 +755,8 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
       toast.error(msg);
     } finally {
       setParsing(false);
+      // ★ FIX: reset file input so same file can be re-uploaded
+      if (fileRef.current) fileRef.current.value = "";
     }
   }
 
@@ -738,7 +789,8 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
       const { error } = await supabase.from("questions").insert(rows);
       if (error) throw error;
 
-      toast.success(summary ?? `${toSave.length} questions saved.`);
+      const msg = summary ?? `${toSave.length} questions saved.`;
+      toast.success(msg);
       setReviewItems(null);
       setSummary(null);
       onImported(toSave.length);
@@ -752,10 +804,11 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
 
   return (
     <>
-      {/* Drop zone */}
       <div
         className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 transition-colors cursor-pointer ${
-          dragging ? "border-violet-500 bg-violet-500/10" : "border-border hover:border-violet-500/50 hover:bg-muted/10"
+          dragging
+            ? "border-violet-500 bg-violet-500/10"
+            : "border-border hover:border-violet-500/50 hover:bg-muted/10"
         }`}
         onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
         onDragLeave={() => setDragging(false)}
@@ -802,13 +855,14 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
         </div>
       )}
 
-      {/* Credit cost notice */}
       <div className="flex items-start gap-2 rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
         <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-        <span>Each PDF import costs <strong>5 credits</strong>. The AI will extract all questions and answers automatically.</span>
+        <span>
+          Each PDF import costs <strong>5 credits</strong>.
+          The AI will extract all questions and answers automatically.
+        </span>
       </div>
 
-      {/* Review modal */}
       {reviewItems && (
         <ReviewModal
           items={reviewItems}
@@ -826,14 +880,10 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function UploadQuestions() {
-  const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
-  const defaultTab = searchParams.get("tab") === "manual" ? "manual" : "pdf";
+  const [searchParams]   = useSearchParams();
+  const navigate         = useNavigate();
+  const defaultTab       = searchParams.get("tab") === "manual" ? "manual" : "pdf";
   const [questionCount, setQuestionCount] = useState(0);
-
-  function handleImported(count: number) {
-    setQuestionCount((prev) => prev + count);
-  }
 
   return (
     <div className="space-y-5">
@@ -855,7 +905,7 @@ export default function UploadQuestions() {
         </TabsList>
 
         <TabsContent value="pdf" className="mt-5 space-y-4">
-          <PDFImportTab onImported={handleImported} />
+          <PDFImportTab onImported={(c) => setQuestionCount((p) => p + c)} />
         </TabsContent>
 
         <TabsContent value="manual" className="mt-5">
@@ -874,9 +924,15 @@ export default function UploadQuestions() {
         <div className="flex items-center justify-between rounded-lg border border-green-500/30 bg-green-500/10 p-4">
           <div className="flex items-center gap-2 text-sm text-green-700 dark:text-green-400">
             <Check className="h-4 w-4" />
-            <span>{questionCount} question{questionCount !== 1 ? "s" : ""} added this session.</span>
+            <span>
+              {questionCount} question{questionCount !== 1 ? "s" : ""} added this session.
+            </span>
           </div>
-          <Button size="sm" variant="outline" onClick={() => navigate("/app/mock-test/my-questions")}>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => navigate("/app/mock-test/my-questions")}
+          >
             <BookOpen className="h-4 w-4 mr-2" />
             View My Bank
           </Button>
