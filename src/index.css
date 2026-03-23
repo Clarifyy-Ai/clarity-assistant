@@ -311,6 +311,37 @@
     user-select: none;
   }
 
+  /* Stealth frosted glass appearance */
+  .overlay-stealth-glass {
+    background: rgba(12, 12, 24, 0.78);
+    backdrop-filter: blur(24px) saturate(160%);
+    -webkit-backdrop-filter: blur(24px) saturate(160%);
+  }
+
+  /* Proctor Safe CSS isolation — removes visual artifacts */
+  .overlay-proctor-safe {
+    box-shadow: none !important;
+    outline: none !important;
+    mix-blend-mode: normal !important;
+  }
+  .overlay-proctor-safe * {
+    box-shadow: none !important;
+    text-shadow: none !important;
+    transition: none !important;
+    animation: none !important;
+  }
+
+  /* Floating AI Answer button glow when generating */
+  .overlay-fab-glow {
+    box-shadow: 0 0 16px rgba(99, 102, 241, 0.5), 0 0 32px rgba(139, 92, 246, 0.3);
+    animation: fab-pulse 1.5s ease-in-out infinite;
+  }
+
+  @keyframes fab-pulse {
+    0%, 100% { box-shadow: 0 0 16px rgba(99, 102, 241, 0.5), 0 0 32px rgba(139, 92, 246, 0.25); }
+    50%       { box-shadow: 0 0 24px rgba(99, 102, 241, 0.7), 0 0 48px rgba(139, 92, 246, 0.4); }
+  }
+
   /* Gradient text */
   .gradient-text {
     @apply bg-clip-text text-transparent;

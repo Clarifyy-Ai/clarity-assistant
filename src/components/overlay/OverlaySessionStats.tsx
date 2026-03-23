@@ -14,8 +14,8 @@ export function OverlaySessionStats() {
   const timeStr = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
 
   return (
-    <div className="flex items-center justify-between border-t border-white/5 px-3 py-1 shrink-0">
-      <StatItem icon={Clock} value={timeStr} />
+    <div className="flex items-center justify-between border-t border-white/5 px-3 py-1.5 shrink-0">
+      <StatItem icon={Clock} value={timeStr} label="session" />
       <StatItem icon={MessageSquare} value={String(questionCount)} label="Q" />
       <StatItem icon={Zap} value={String(hintCount)} label="hints" />
       <StatItem icon={CreditCard} value={String(creditsRemaining)} label="cr" />
@@ -25,10 +25,10 @@ export function OverlaySessionStats() {
 
 function StatItem({ icon: Icon, value, label }: { icon: React.ElementType; value: string; label?: string }) {
   return (
-    <div className="flex items-center gap-1 text-[11px] text-muted-foreground/50 font-mono">
-      <Icon className="w-2.5 h-2.5" />
-      <span className="text-muted-foreground/70">{value}</span>
-      {label && <span>{label}</span>}
+    <div className="flex items-center gap-1.5 text-[11px] text-muted-foreground/50 font-mono">
+      <Icon className="w-3 h-3" />
+      <span className="text-muted-foreground/70 tabular-nums">{value}</span>
+      {label && <span className="text-[10px]">{label}</span>}
     </div>
   );
 }

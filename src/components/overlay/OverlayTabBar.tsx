@@ -14,18 +14,19 @@ export function OverlayTabBar() {
   const hasResume = useOverlayStore((s) => !!s.resume_talking_points);
 
   return (
-    <div className="flex border-b border-white/5 px-2 shrink-0">
+    <div className="flex gap-0.5 border-b border-white/5 px-2 pt-1 shrink-0">
       {TABS.map((tab) => {
         if (tab.id === "resume" && !hasResume) return null;
+        const isActive = activeTab === tab.id;
         return (
           <button
             key={tab.id}
             onClick={() => useOverlayStore.getState().setActiveTab(tab.id)}
             className={cn(
-              "px-3 py-1.5 text-[11px] font-semibold uppercase tracking-wider transition-all border-b-2",
-              activeTab === tab.id
-                ? "text-brand-300 border-brand-400"
-                : "text-muted-foreground/40 border-transparent hover:text-muted-foreground/60"
+              "relative px-3 py-1.5 text-[12px] font-medium rounded-t-lg transition-all border-b-2 -mb-px",
+              isActive
+                ? "text-brand-300 border-brand-400 bg-brand-500/8"
+                : "text-muted-foreground/50 border-transparent hover:text-muted-foreground/80 hover:bg-white/5"
             )}
           >
             {tab.label}

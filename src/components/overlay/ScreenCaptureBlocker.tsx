@@ -1,5 +1,4 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { toast } from 'sonner';
 
 interface ScreenCaptureBlockerProps {
   isActive?: boolean;
@@ -18,12 +17,7 @@ export function ScreenCaptureBlocker({
     if (notifiedTypes.current.has(type)) return;
     notifiedTypes.current.add(type);
     onCaptureDetected?.(type);
-    toast.warning(
-      type === 'recording'
-        ? 'Screen recording detected — overlay may be visible to capture software.'
-        : 'Screen sharing detected — consider enabling Stealth Mode (Ctrl+Shift+S).',
-      { duration: 8000 }
-    );
+    window.dispatchEvent(new CustomEvent('clarify:screencapture', { detail: { type } }));
   }, [onCaptureDetected]);
 
   useEffect(() => {

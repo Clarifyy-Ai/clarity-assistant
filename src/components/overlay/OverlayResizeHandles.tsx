@@ -8,9 +8,9 @@ interface OverlayResizeHandlesProps {
 type Edge = "e" | "s" | "se";
 
 const HANDLE_STYLES: Record<Edge, React.CSSProperties> = {
-  e:  { position: "absolute", top: 8, right: -8, bottom: 8, width: 16, cursor: "ew-resize" },
-  s:  { position: "absolute", left: 8, right: 8, bottom: -8, height: 16, cursor: "ns-resize" },
-  se: { position: "absolute", right: -8, bottom: -8, width: 20, height: 20, cursor: "nwse-resize" },
+  e:  { position: "absolute", top: 8, right: -4, bottom: 8, width: 8, cursor: "ew-resize" },
+  s:  { position: "absolute", left: 8, right: 8, bottom: -4, height: 8, cursor: "ns-resize" },
+  se: { position: "absolute", right: -4, bottom: -4, width: 16, height: 16, cursor: "nwse-resize" },
 };
 
 export function OverlayResizeHandles({ containerRef }: OverlayResizeHandlesProps) {
@@ -61,15 +61,23 @@ export function OverlayResizeHandles({ containerRef }: OverlayResizeHandlesProps
           onPointerDown={(e) => handlePointerDown(edge, e)}
           className="z-50 group touch-none"
         >
+          {edge === "e" && (
+            <div className="absolute inset-y-4 right-0 w-0.5 rounded-full bg-white/0 group-hover:bg-white/20 transition-colors" />
+          )}
+          {edge === "s" && (
+            <div className="absolute bottom-0 inset-x-4 h-0.5 rounded-full bg-white/0 group-hover:bg-white/20 transition-colors" />
+          )}
           {edge === "se" && (
             <svg
-              className="absolute bottom-1 right-1 w-3 h-3 text-white/10 group-hover:text-white/30 transition-colors"
+              className="absolute bottom-1 right-1 w-4 h-4 text-white/0 group-hover:text-white/30 transition-colors"
               viewBox="0 0 12 12"
               fill="currentColor"
             >
               <circle cx="10" cy="10" r="1.5" />
               <circle cx="6" cy="10" r="1.5" />
               <circle cx="10" cy="6" r="1.5" />
+              <circle cx="2" cy="10" r="1.5" />
+              <circle cx="10" cy="2" r="1.5" />
             </svg>
           )}
         </div>
