@@ -8,7 +8,9 @@ import { OverlayKeyboardHandler } from "@/components/overlay/OverlayKeyboardHand
 import { LiveSessionController } from "@/components/live/LiveSessionController";
 import { ScreenCaptureBlocker } from "@/components/overlay/ScreenCaptureBlocker";
 import { PreSessionSetup } from "@/components/session/PreSessionSetup";
-import { ClipboardCheck } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import { ClipboardCheck, AlertTriangle, RefreshCw } from "lucide-react";
+import { toast } from "sonner";
 import type { LiveSessionConfig } from "@/types/session.types";
 
 const DEFAULT_CONFIG: LiveSessionConfig = {
@@ -38,6 +40,7 @@ export default function LiveOverlay() {
   const isActive = sessionStatus === "active";
   const endSessionRef = useRef(copilot.endLiveSession);
   endSessionRef.current = copilot.endLiveSession;
+  const streamError = copilot.streamError;
 
   const handleSetup = useCallback((sessionConfig: LiveSessionConfig) => {
     useSessionStore.getState().resetSession();
@@ -57,7 +60,10 @@ export default function LiveOverlay() {
     if (phase === "active" && !hasStartedRef.current) {
       hasStartedRef.current = true;
       useOverlayStore.getState().showOverlay();
-      copilot.startLiveSession();
+      copilot.startLiveSession().catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : "Failed to start live session";
+        toast.error(message);
+      });
     }
   }, [phase, copilot.startLiveSession]);
 
@@ -113,6 +119,12 @@ export default function LiveOverlay() {
         onManualQuestion={handleManualQuestion}
         onStartSession={handleSetup}
       />
+      {streamError && (
+        <div className="mx-auto max-w-md mb-4 flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>{streamError.message ?? "Microphone stream error. Please check your audio settings."}</span>
+        </div>
+      )}
       <div className="flex items-center justify-center h-[60vh]">
         <div className="text-center space-y-3">
           {isActive ? (
@@ -129,17 +141,27 @@ export default function LiveOverlay() {
             <>
               <p className="text-lg font-semibold text-foreground">Session Ended</p>
               <p className="text-sm text-muted-foreground max-w-sm">
-                Start a new session from the overlay, or review your results.
+                Review your results or start a new session.
               </p>
-              {lastSessionId && (
-                <Link
-                  to={`/app/scorecard/${lastSessionId}`}
-                  className="inline-flex items-center gap-2 mt-2 px-4 py-2 bg-brand-500/20 hover:bg-brand-500/30 text-brand-300 text-sm font-medium rounded-xl transition-all"
+              <div className="flex items-center justify-center gap-3 mt-3 flex-wrap">
+                {lastSessionId && (
+                  <Link
+                    to={`/app/scorecard/${lastSessionId}`}
+                    className="inline-flex items-center gap-2 px-4 py-2 bg-brand-500/20 hover:bg-brand-500/30 text-brand-300 text-sm font-medium rounded-xl transition-all"
+                  >
+                    <ClipboardCheck className="w-4 h-4" />
+                    View Scorecard
+                  </Link>
+                )}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<RefreshCw className="w-4 h-4" />}
+                  onClick={() => setPhase("setup")}
                 >
-                  <ClipboardCheck className="w-4 h-4" />
-                  View Scorecard
-                </Link>
-              )}
+                  Start New Session
+                </Button>
+              </div>
             </>
           )}
         </div>

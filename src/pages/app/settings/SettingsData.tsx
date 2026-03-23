@@ -1,4 +1,6 @@
-// @ts-nocheck
+// @ts-nocheck -- retained: Supabase .from() data types for profiles/sessions/answer_bank/etc.
+// are typed as `any` in current generated schema due to manual migration columns; removing
+// suppression produces ~15 implicit-any errors on data row field accesses.
 import { useState } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
@@ -11,6 +13,7 @@ import {
   BarChart2, MessageSquare, BookOpen,
   CalendarDays, Trash2, CheckCircle,
 } from "lucide-react";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsData — export specific data, storage summary
@@ -95,7 +98,7 @@ export default function SettingsData() {
       setDone((p) => [...p, type]);
       setTimeout(() => setDone((p) => p.filter((d) => d !== type)), 3000);
     } catch (e) {
-      console.error(e);
+      toast.error((e instanceof Error ? e.message : null) ?? "Export failed. Please try again.");
     } finally {
       setExporting(null);
     }

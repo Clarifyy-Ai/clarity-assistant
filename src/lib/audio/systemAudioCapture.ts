@@ -29,11 +29,11 @@ export async function startSystemAudioCapture(): Promise<MediaStream> {
     }
 
     return stream;
-  } catch (err: any) {
-    if (err?.name === "NotAllowedError") {
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "NotAllowedError") {
       throw new Error("Permission denied. Please allow system audio capture.");
     }
-    throw new Error("System audio capture failed: " + (err?.message ?? err));
+    throw new Error("System audio capture failed: " + (err instanceof Error ? err.message : String(err)));
   }
 }
 

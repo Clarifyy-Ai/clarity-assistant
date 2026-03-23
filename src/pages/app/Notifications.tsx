@@ -45,20 +45,30 @@ export default function Notifications() {
   }, [user?.id]);
 
   async function markRead(id: string) {
-    await supabase.from("notifications").update({ is_read: true }).eq("id", id);
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
+    const { error } = await supabase.from("notifications").update({ is_read: true }).eq("id", id);
+    if (!error) {
+      setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
+    }
   }
 
   async function markAllRead() {
     if (!user?.id) return;
-    await supabase.from("notifications").update({ is_read: true }).eq("user_id", user.id).eq("is_read", false);
-    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-    toast.success("All notifications marked as read");
+    const { error } = await supabase.from("notifications").update({ is_read: true }).eq("user_id", user.id).eq("is_read", false);
+    if (error) {
+      toast.error("Failed to mark notifications as read.");
+    } else {
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      toast.success("All notifications marked as read");
+    }
   }
 
   async function deleteNotification(id: string) {
-    await supabase.from("notifications").delete().eq("id", id);
-    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    const { error } = await supabase.from("notifications").delete().eq("id", id);
+    if (!error) {
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+    } else {
+      toast.error("Failed to delete notification.");
+    }
   }
 
   const unreadCount = notifications.filter((n) => !n.is_read).length;

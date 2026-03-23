@@ -10,6 +10,7 @@ import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -197,8 +198,10 @@ export default function MockTestHub(): React.ReactElement {
       const streakDays = calcStreakDays(completedDates);
 
       setStats({ totalTests, totalQuestions, avgAccuracy, streakDays });
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("[MockTestHub] load error:", err);
+      const _m = err instanceof Error ? err.message : "Failed to load test history.";
+      toast.error(_m);
     } finally {
       setLoading(false);
     }

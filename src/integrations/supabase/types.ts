@@ -59,6 +59,59 @@ export type Database = {
         }
         Relationships: []
       }
+      answer_bank: {
+        Row: {
+          answer_text: string
+          category: string | null
+          created_at: string
+          id: string
+          question_text: string
+          score: number | null
+          session_id: string | null
+          source: string | null
+          star_breakdown: Json | null
+          tags: string[] | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          answer_text: string
+          category?: string | null
+          created_at?: string
+          id?: string
+          question_text: string
+          score?: number | null
+          session_id?: string | null
+          source?: string | null
+          star_breakdown?: Json | null
+          tags?: string[] | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          answer_text?: string
+          category?: string | null
+          created_at?: string
+          id?: string
+          question_text?: string
+          score?: number | null
+          session_id?: string | null
+          source?: string | null
+          star_breakdown?: Json | null
+          tags?: string[] | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "answer_bank_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       admin_audit_log: {
         Row: {
           action: string
@@ -1051,54 +1104,42 @@ export type Database = {
       }
       referrals: {
         Row: {
-          converted_at: string | null
+          code: string
           created_at: string
-          credits_awarded: number | null
+          credits_awarded: number
           id: string
-          referred_email: string
-          referred_id: string | null
+          referee_id: string
           referrer_id: string
-          rewarded_at: string | null
-          signed_up_at: string | null
-          status: Database["public"]["Enums"]["referral_status"]
         }
         Insert: {
-          converted_at?: string | null
+          code: string
           created_at?: string
-          credits_awarded?: number | null
+          credits_awarded?: number
           id?: string
-          referred_email: string
-          referred_id?: string | null
+          referee_id: string
           referrer_id: string
-          rewarded_at?: string | null
-          signed_up_at?: string | null
-          status?: Database["public"]["Enums"]["referral_status"]
         }
         Update: {
-          converted_at?: string | null
+          code?: string
           created_at?: string
-          credits_awarded?: number | null
+          credits_awarded?: number
           id?: string
-          referred_email?: string
-          referred_id?: string | null
+          referee_id?: string
           referrer_id?: string
-          rewarded_at?: string | null
-          signed_up_at?: string | null
-          status?: Database["public"]["Enums"]["referral_status"]
         }
         Relationships: [
           {
-            foreignKeyName: "referrals_referred_id_fkey"
-            columns: ["referred_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
+            foreignKeyName: "referrals_referee_id_fkey"
+            columns: ["referee_id"]
+            isOneToOne: true
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "referrals_referrer_id_fkey"
             columns: ["referrer_id"]
             isOneToOne: false
-            referencedRelation: "profiles"
+            referencedRelation: "users"
             referencedColumns: ["id"]
           },
         ]
@@ -1203,6 +1244,57 @@ export type Database = {
             columns: ["host_id"]
             isOneToOne: false
             referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      session_answers: {
+        Row: {
+          ai_feedback: string | null
+          answer: string | null
+          created_at: string
+          duration_ms: number | null
+          id: string
+          question: string
+          score: number | null
+          session_id: string | null
+          user_id: string
+        }
+        Insert: {
+          ai_feedback?: string | null
+          answer?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          id?: string
+          question: string
+          score?: number | null
+          session_id?: string | null
+          user_id: string
+        }
+        Update: {
+          ai_feedback?: string | null
+          answer?: string | null
+          created_at?: string
+          duration_ms?: number | null
+          id?: string
+          question?: string
+          score?: number | null
+          session_id?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "session_answers_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "users"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "session_answers_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "sessions"
             referencedColumns: ["id"]
           },
         ]

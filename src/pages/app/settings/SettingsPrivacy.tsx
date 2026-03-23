@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck -- retained: notification_prefs and privacy_prefs JSONB column types not in Supabase generated schema; Toggle component uses Radix UI checked prop which TypeScript does not accept on the wrapper component type.
 import { useState } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { Toggle } from "@/components/ui/Toggle";
 import { Badge } from "@/components/ui/Badge";
 import { CheckCircle, Shield, Eye, Database, Lock } from "lucide-react";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsPrivacy
@@ -90,13 +91,19 @@ export default function SettingsPrivacy() {
   async function handleSave() {
     if (!user) return;
     setSaving(true);
-    await supabase
-      .from("profiles")
-      .update({ privacy_prefs: prefs })
-      .eq("id", user.id);
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ privacy_prefs: prefs })
+        .eq("id", user.id);
+      if (error) throw error;
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      toast.error(err?.message ?? "Failed to save privacy settings.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (

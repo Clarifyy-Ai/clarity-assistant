@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck -- retained: complex Supabase row types with manual schema columns not in generated types; removing suppression produces implicit-any cascade across all data accesses.
 import { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase/client";
@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SkeletonCard, SkeletonText } from "@/components/ui/SkeletonLoader";
 import { Modal } from "@/components/ui/Modal";
+import { toast } from "sonner";
 import {
   BarChart2, Clock, MessageSquare, Download,
   ChevronLeft, ChevronDown, ChevronUp,
@@ -428,13 +429,19 @@ export default function SessionDetail() {
                         size="xs"
                         leftIcon={<Star className="w-3 h-3" />}
                         onClick={async () => {
-                          await supabase.from("answer_bank").insert({
-                            user_id:       user?.id,
-                            session_id:    ans.session_id,
-                            question_text: ans.question_text,
-                            answer_text:   ans.transcript,
-                            score:         ans.score,
-                          });
+                          try {
+                            const { error } = await supabase.from("answer_bank").insert({
+                              user_id:       user?.id,
+                              session_id:    ans.session_id,
+                              question_text: ans.question_text,
+                              answer_text:   ans.transcript,
+                              score:         ans.score,
+                            });
+                            if (error) throw error;
+                            toast.success("Saved to Answer Bank");
+                          } catch (err) {
+                            toast.error(err?.message ?? "Failed to save answer.");
+                          }
                         }}
                       >
                         Save to Answer Bank

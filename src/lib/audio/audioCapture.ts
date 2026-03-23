@@ -274,6 +274,8 @@ function buildAudioError(code: AudioErrorCode, original: unknown): AudioError {
       "Your microphone is being used by another app. Close other apps and try again.",
     SYSTEM_AUDIO_NOT_SUPPORTED:
       "System audio requires Chrome or Edge. Select 'Share audio' when prompted.",
+    SYSTEM_AUDIO_FAILED:
+      "System audio capture failed. Make sure you selected 'Share audio' in the dialog. Try again.",
     STREAM_ENDED:
       "Your audio stream stopped unexpectedly. Click 'Reconnect' to resume.",
     DEEPGRAM_CONNECTION_FAILED:

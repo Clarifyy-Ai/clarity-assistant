@@ -81,8 +81,10 @@ export default function TestRevision() {
 
       if (error) throw error;
       setItems((data ?? []) as unknown as RevisionItem[]);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("[TestRevision] load error:", err);
+      const _m = err instanceof Error ? err.message : "Failed to load revision items. Please try again.";
+      toast.error(_m);
     } finally {
       setLoading(false);
     }

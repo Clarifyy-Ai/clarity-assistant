@@ -14,28 +14,90 @@ export type JSONB   = Record<string, unknown>;
 
 export interface ProfileRow {
   id:                 UUID;
-  email:              string;
+  email:              string | null;
   full_name:          string | null;
   avatar_url:         string | null;
   plan_id:            string;
+  plan?:              string | null;
   credits:            number;
   stripe_customer_id: string | null;
-  stripe_subscription_id: string | null;
+  stripe_subscription_id?: string | null;
   subscription_status: string | null;
-  subscription_ends_at: ISODate | null;
-  byok_openai:        string | null;   // encrypted
-  byok_anthropic:     string | null;   // encrypted
-  byok_gemini:        string | null;   // encrypted
+  subscription_ends_at?: ISODate | null;
+  byok_openai:        string | null;
+  byok_anthropic:     string | null;
+  byok_gemini:        string | null;
+  byok_openai_hint?:  string | null;
+  byok_anthropic_hint?: string | null;
+  byok_gemini_hint?:  string | null;
   preferred_model:    string | null;
   preferred_language: string | null;
   timezone:           string | null;
-  ui_preferences:     JSONB | null;
-  overlay_settings:   JSONB | null;
-  hotkey_overrides:   JSONB | null;
+  ui_preferences?:    JSONB | null;
+  overlay_settings?:  JSONB | null;
+  hotkey_overrides?:  JSONB | null;
   onboarding_completed: boolean;
   is_admin:           boolean;
+  referral_code:      string | null;
+  referred_by:        string | null;
   created_at:         ISODate;
   updated_at:         ISODate;
+  // Profile details
+  bio:                string | null;
+  location?:          string | null;
+  website?:           string | null;
+  website_url?:       string | null;
+  headline?:          string | null;
+  current_title?:     string | null;
+  current_company?:   string | null;
+  target_role:        string | null;
+  experience_level?:  string | null;
+  experience_years?:  number | null;
+  years_of_exp?:      number | null;
+  role_type?:         string | null;
+  linkedin_url?:      string | null;
+  github_url?:        string | null;
+  phone?:             string | null;
+  // Audio settings
+  stt_language?:      string | null;
+  custom_filler_words?: string[] | null;
+  auto_gain?:         boolean;
+  noise_suppression:  boolean;
+  audio_input_device?: string | null;
+  audio_output_device?: string | null;
+  auto_transcript?:   boolean;
+  deepgram_model?:    string;
+  // Notification preferences
+  notification_prefs?: JSONB | null;
+  email_notifications?: boolean;
+  session_reminders?:   boolean;
+  marketing_emails?:    boolean;
+  // Privacy preferences
+  privacy_prefs?:     JSONB | null;
+  profile_visibility?: string;
+  data_collection?:   boolean;
+  // Overlay settings
+  stealth_mode?:      boolean;
+  overlay_opacity?:   number;
+  overlay_position?:  string;
+  overlay_font_size?: number;
+  overlay_hotkey?:    string;
+  // Gamification
+  xp?:                number;
+  level?:             number;
+  streak_days?:       number;
+  longest_streak?:    number;
+  total_sessions?:    number;
+  total_practice_minutes?: number;
+  last_active_date?:  ISODate | null;
+  response_style?:    string;
+  domain?:            string | null;
+  locale?:            string | null;
+  onboarding_step?:   number;
+  is_actively_looking?: boolean | null;
+  is_banned?:         boolean;
+  deleted_at?:        ISODate | null;
+  subscription_id?:   string | null;
 }
 
 export interface ProfileInsert extends Partial<Omit<ProfileRow, "id" | "created_at" | "updated_at">> {

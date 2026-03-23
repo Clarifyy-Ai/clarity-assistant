@@ -25,6 +25,7 @@ import {
   AlertTriangle, Shield, Ghost,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import type { LiveSessionConfig } from "@/types/session.types";
 
 const DEFAULT_CONFIG: LiveSessionConfig = {
@@ -77,7 +78,10 @@ export default function LiveRehearsal() {
   useEffect(() => {
     if (phase === "active" && !hasStartedRef.current) {
       hasStartedRef.current = true;
-      copilot.startLiveSession();
+      copilot.startLiveSession().catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : "Failed to start live session";
+        toast.error(message);
+      });
     }
   }, [phase, copilot.startLiveSession]);
 

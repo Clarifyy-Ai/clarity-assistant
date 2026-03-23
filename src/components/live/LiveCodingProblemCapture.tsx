@@ -27,11 +27,12 @@ export function LiveCodingProblemCapture({
 
     try {
       await captureAndAnalyseCodingProblem();
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Graceful error surface (perm denied, no active tab, etc.)
       const message =
-        err?.message ||
-        "Could not capture the screen. Please allow screen capture and try again.";
+        err instanceof Error
+          ? err.message
+          : "Could not capture the screen. Please allow screen capture and try again.";
       // Use .getState() to call action inside callback — avoids stale closure
       useOverlayStore.getState().setError(message);
       // eslint-disable-next-line no-console

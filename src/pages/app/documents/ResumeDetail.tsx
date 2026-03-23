@@ -75,9 +75,13 @@ export default function ResumeDetail() {
 
   async function handleDelete() {
     if (!id || !user?.id || !confirm("Delete this resume?")) return;
-    await supabase.from("documents").delete().eq("id", id).eq("user_id", user.id);
-    toast.success("Resume deleted");
-    navigate("/app/documents");
+    const { error } = await supabase.from("documents").delete().eq("id", id).eq("user_id", user.id);
+    if (error) {
+      toast.error("Failed to delete resume. Please try again.");
+    } else {
+      toast.success("Resume deleted");
+      navigate("/app/documents");
+    }
   }
 
   function formatSize(bytes: number) {

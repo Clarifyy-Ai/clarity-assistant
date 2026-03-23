@@ -178,8 +178,10 @@ export default function TestResults(): React.ReactElement {
       const rMap: Record<string, TestResponse> = {};
       for (const r of rData) rMap[r.question_id] = r;
       setResponses(rMap);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("[TestResults] load error:", err);
+      const _m = err instanceof Error ? err.message : "Failed to load results. Please go back and try again.";
+      toast.error(_m);
     } finally {
       setLoading(false);
     }

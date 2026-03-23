@@ -168,6 +168,12 @@ export default function TestConfigure() {
       return;
     }
 
+    const difficultyTotal = Object.values(config.difficulty_distribution).reduce((a, b) => a + b, 0);
+    if (difficultyTotal !== 100) {
+      toast.error(`Difficulty percentages must total 100% (currently ${difficultyTotal}%). Please adjust the sliders.`);
+      return;
+    }
+
     setLoading(true);
     try {
       const { data: sessionData } = await supabase.auth.getSession();

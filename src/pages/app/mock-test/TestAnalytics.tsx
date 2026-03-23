@@ -11,6 +11,7 @@ import { useAuthStore } from "@/store/userStore";
 import { Card, CardContent } from "@/components/ui/Card";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
 // Types
@@ -104,8 +105,10 @@ export default function TestAnalytics(): React.ReactElement {
       setTests((testsRes.data ?? []) as unknown as MockTestSummary[]);
       setAnalyses((analysesRes.data ?? []) as unknown as TestAnalysisSummary[]);
       setTopicPerf((topicRes.data ?? []) as unknown as TopicPerformance[]);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("[TestAnalytics] load error:", err);
+      const _m = err instanceof Error ? err.message : "Failed to load analytics. Please try again.";
+      toast.error(_m);
     } finally {
       setLoading(false);
     }

@@ -231,9 +231,9 @@ export async function captureAndAnalyseCodingProblem(): Promise<void> {
     const hint = formatCodingAnalysis(analysis);
     overlayStore.setScreenshotHint?.(hint);
     overlayStore.setHintState?.("ready");
-  } catch (err: any) {
+  } catch (err: unknown) {
     const message =
-      err?.message || "Screenshot capture failed. Please allow screen capture and try again.";
+      err instanceof Error ? err.message : "Screenshot capture failed. Please allow screen capture and try again.";
     overlayStore.setError?.(message);
     // eslint-disable-next-line no-console
     console.error("[captureAndAnalyseCodingProblem] error:", err);

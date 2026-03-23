@@ -1,4 +1,6 @@
-// @ts-nocheck
+// @ts-nocheck -- retained: answer_bank table types not yet in Supabase generated schema (added via
+// manual migration); removed type annotation would produce ~20 implicit-any errors on row access.
+// Full fix requires regenerating types from DB schema.
 import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
@@ -9,6 +11,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { toast } from "sonner";
 import {
   BookOpen, Search, Star, Trash2,
   ChevronDown, ChevronUp, Copy,
@@ -54,21 +57,33 @@ export default function AnswerBank() {
 
   async function saveEdit() {
     if (!editId) return;
-    await supabase
-      .from("answer_bank")
-      .update({ answer_text: editText })
-      .eq("id", editId);
-    setAnswers((p) =>
-      p.map((a) => a.id === editId ? { ...a, answer_text: editText } : a)
-    );
-    setEditId(null);
+    try {
+      const { error } = await supabase
+        .from("answer_bank")
+        .update({ answer_text: editText })
+        .eq("id", editId);
+      if (error) throw error;
+      setAnswers((p) =>
+        p.map((a) => a.id === editId ? { ...a, answer_text: editText } : a)
+      );
+      setEditId(null);
+      toast.success("Answer updated");
+    } catch (err) {
+      toast.error(err?.message ?? "Failed to update answer.");
+    }
   }
 
   async function deleteAnswer() {
     if (!deleteId) return;
-    await supabase.from("answer_bank").delete().eq("id", deleteId);
-    setAnswers((p) => p.filter((a) => a.id !== deleteId));
-    setDeleteId(null);
+    try {
+      const { error } = await supabase.from("answer_bank").delete().eq("id", deleteId);
+      if (error) throw error;
+      setAnswers((p) => p.filter((a) => a.id !== deleteId));
+      setDeleteId(null);
+      toast.success("Answer deleted");
+    } catch (err) {
+      toast.error(err?.message ?? "Failed to delete answer.");
+    }
   }
 
   const filtered = answers.filter((a) => {

@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck -- retained: complex Supabase row types with manual schema columns not in generated types; removing suppression produces implicit-any cascade across all data accesses.
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { useDocumentStore } from "@/store/documentStore";
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
 import { PlanGate } from "@/components/layout/PlanGate";
 import { Modal } from "@/components/ui/Modal";
+import { toast } from "sonner";
 import {
   FlaskConical, Star, BookOpen, Zap,
   Brain, FileText, ChevronRight, RefreshCw,
@@ -169,15 +170,20 @@ function STARBuilder() {
 
   async function saveToBank() {
     if (!user || !generated) return;
-    await supabase.from("answer_bank").insert({
-      user_id:       user.id,
-      question_text: question,
-      answer_text:   generated,
-      star_breakdown: star,
-      source:        "prep_lab",
-    });
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    try {
+      const { error } = await supabase.from("answer_bank").insert({
+        user_id:       user.id,
+        question_text: question,
+        answer_text:   generated,
+        star_breakdown: star,
+        source:        "prep_lab",
+      });
+      if (error) throw error;
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2500);
+    } catch (err) {
+      toast.error(err?.message ?? "Failed to save answer. Please try again.");
+    }
   }
 
   return (

@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck -- retained: notification_prefs and privacy_prefs JSONB column types not in Supabase generated schema; Toggle component uses Radix UI checked prop which TypeScript does not accept on the wrapper component type.
 import { useState, useRef, useEffect } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -9,6 +9,7 @@ import { CheckCircle, Mic, Volume2, Settings2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsAudio — mic, language, filler config
@@ -94,18 +95,24 @@ export default function SettingsAudio() {
   async function handleSave() {
     if (!user) return;
     setSaving(true);
-    await supabase
-      .from("profiles")
-      .update({
-        stt_language:        language,
-        custom_filler_words: fillerWords,
-        auto_gain:           autoGain,
-        noise_suppression:   noiseSup,
-      })
-      .eq("id", user.id);
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update({
+          stt_language:        language,
+          custom_filler_words: fillerWords,
+          auto_gain:           autoGain,
+          noise_suppression:   noiseSup,
+        })
+        .eq("id", user.id);
+      if (error) throw error;
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      toast.error(err?.message ?? "Failed to save audio settings.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (

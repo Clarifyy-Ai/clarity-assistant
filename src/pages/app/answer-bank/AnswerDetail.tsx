@@ -70,9 +70,13 @@ export default function AnswerDetail() {
 
   async function handleDelete() {
     if (!id || !user?.id || !confirm("Delete this answer?")) return;
-    await supabase.from("answer_bank").delete().eq("id", id).eq("user_id", user.id);
-    toast.success("Answer deleted");
-    navigate("/app/answers");
+    const { error } = await supabase.from("answer_bank").delete().eq("id", id).eq("user_id", user.id);
+    if (error) {
+      toast.error("Failed to delete answer. Please try again.");
+    } else {
+      toast.success("Answer deleted");
+      navigate("/app/answers");
+    }
   }
 
   if (loading) {

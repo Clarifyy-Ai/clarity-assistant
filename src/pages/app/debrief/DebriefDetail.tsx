@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck -- retained: complex Supabase row types with manual schema columns not in generated types; removing suppression produces implicit-any cascade across all data accesses.
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
@@ -17,6 +17,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
 // DebriefDetail — full AI post-session debrief page
@@ -69,21 +70,26 @@ export default function DebriefDetail() {
 
   async function generateDebrief(sessionId: string) {
     setGenning(true);
-
-    const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-    const res = await fetch(`${EDGE_BASE}/generate-debrief`, {
-      method:  "POST",
-      headers: {
-        "Content-Type":  "application/json",
-        "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({ session_id: sessionId, user_id: user?.id }),
-    });
-
-    const data = await res.json();
-    if (data?.debrief) setDebrief(data.debrief);
-    if (data?.session) setSession(data.session);
-    setGenning(false);
+    try {
+      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      const res = await fetch(`${EDGE_BASE}/generate-debrief`, {
+        method:  "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ session_id: sessionId, user_id: user?.id }),
+      });
+      if (!res.ok) throw new Error(`Server error ${res.status}`);
+      const data = await res.json();
+      if (data?.debrief) setDebrief(data.debrief);
+      if (data?.session) setSession(data.session);
+    } catch (err) {
+      console.error("generateDebrief error:", err);
+      toast.error(err?.message ?? "Failed to generate debrief. Please try again.");
+    } finally {
+      setGenning(false);
+    }
   }
 
   if (loading || genning) {

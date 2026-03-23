@@ -1,4 +1,6 @@
-// @ts-nocheck
+// @ts-nocheck -- retained: useSessionOrchestrator and useSpeechRecognition hooks return inferred
+// any[] types due to conditional generics; MediaStream/AudioContext Web API typings also vary by
+// lib target. Suppression avoids ~40 cascading implicit-any errors until orchestrator is refactored.
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSessionOrchestrator } from "@/hooks/useSessionOrchestrator";
@@ -25,6 +27,7 @@ import {
   SkipForward, Eye, EyeOff, Timer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import type { LiveSessionConfig } from "@/types/session.types";
 
 export default function MockSession() {
@@ -171,6 +174,8 @@ export default function MockSession() {
         });
       } catch (err) {
         console.error("[MockSession] Failed to create session record:", err);
+        toast.error("Failed to start session — could not save to database. Check your connection and try again.");
+        return;
       }
     }
 

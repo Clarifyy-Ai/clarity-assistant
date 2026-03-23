@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
 // Types
@@ -61,8 +62,10 @@ export default function ExamPapers(): React.ReactElement {
         .eq("exam_type", (examType ?? "").toUpperCase())
         .order("year", { ascending: false });
       setPapers((data ?? []) as unknown as ExamPaper[]);
-    } catch (err) {
+    } catch (err: unknown) {
       console.error("[ExamPapers] load error:", err);
+      const _m = err instanceof Error ? err.message : "Failed to load exam papers. Please try again.";
+      toast.error(_m);
     } finally {
       setLoading(false);
     }

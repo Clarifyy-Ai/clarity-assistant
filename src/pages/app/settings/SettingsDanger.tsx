@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
@@ -11,6 +10,7 @@ import {
   Trash2, Download, AlertTriangle,
   LogOut, RefreshCw,
 } from "lucide-react";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsDanger — delete account, export data, reset
@@ -31,24 +31,33 @@ export default function SettingsDanger() {
 
   async function handleExport() {
     setExporting(true);
-    const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-    const res = await fetch(`${EDGE_BASE}/export-user-data`, {
-      method:  "POST",
-      headers: {
-        "Content-Type":  "application/json",
-        "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({ user_id: user?.id }),
-    });
+    try {
+      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      const res = await fetch(`${EDGE_BASE}/export-user-data`, {
+        method:  "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ user_id: user?.id }),
+      });
 
-    const blob = await res.blob();
-    const url  = URL.createObjectURL(blob);
-    const a    = document.createElement("a");
-    a.href     = url;
-    a.download = `clarify-ai-export-${new Date().toISOString().slice(0, 10)}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    setExporting(false);
+      if (!res.ok) throw new Error(`Export failed: ${res.statusText}`);
+
+      const blob = await res.blob();
+      const url  = URL.createObjectURL(blob);
+      const a    = document.createElement("a");
+      a.href     = url;
+      a.download = `clarify-ai-export-${new Date().toISOString().slice(0, 10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("Export downloaded successfully");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Export failed. Please try again.";
+      toast.error(message);
+    } finally {
+      setExporting(false);
+    }
   }
 
   // ── Reset progress ───────────────────────────────────────────
@@ -56,12 +65,23 @@ export default function SettingsDanger() {
   async function handleReset() {
     if (!user) return;
     setResetting(true);
-    await supabase.from("sessions").delete().eq("user_id", user.id);
-    await supabase.from("session_answers").delete().eq("user_id", user.id);
-    await supabase.from("answer_bank").delete().eq("user_id", user.id);
-    setResetting(false);
-    setResetOpen(false);
-    navigate("/app/dashboard");
+    try {
+      const { error: e1 } = await supabase.from("sessions").delete().eq("user_id", user.id);
+      if (e1) throw e1;
+      const { error: e2 } = await supabase.from("session_answers").delete().eq("user_id", user.id);
+      if (e2) throw e2;
+      const { error: e3 } = await supabase.from("answer_bank").delete().eq("user_id", user.id);
+      if (e3) throw e3;
+
+      toast.success("Progress reset successfully");
+      setResetOpen(false);
+      navigate("/app/dashboard");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : (err as { message?: string })?.message ?? "Reset failed. Please try again.";
+      toast.error(message);
+    } finally {
+      setResetting(false);
+    }
   }
 
   // ── Delete account ───────────────────────────────────────────
@@ -69,17 +89,26 @@ export default function SettingsDanger() {
   async function handleDelete() {
     if (!user || confirm !== user.email) return;
     setDeleting(true);
-    const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-    await fetch(`${EDGE_BASE}/delete-account`, {
-      method:  "POST",
-      headers: {
-        "Content-Type":  "application/json",
-        "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({ user_id: user.id }),
-    });
-    await signOut();
-    navigate("/");
+    try {
+      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
+      const res = await fetch(`${EDGE_BASE}/delete-account`, {
+        method:  "POST",
+        headers: {
+          "Content-Type":  "application/json",
+          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
+        },
+        body: JSON.stringify({ user_id: user.id }),
+      });
+
+      if (!res.ok) throw new Error(`Account deletion failed: ${res.statusText}`);
+
+      await signOut();
+      navigate("/");
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to delete account. Please contact support.";
+      toast.error(message);
+      setDeleting(false);
+    }
   }
 
   return (
@@ -117,7 +146,7 @@ export default function SettingsDanger() {
             subscription remain intact.
           </p>
           <Button
-            variant="warning"
+            variant="danger"
             size="sm"
             className="mt-3"
             onClick={() => setResetOpen(true)}
@@ -173,7 +202,7 @@ export default function SettingsDanger() {
             Cancel
           </Button>
           <Button
-            variant="warning"
+            variant="danger"
             size="sm"
             fullWidth
             loading={resetting}

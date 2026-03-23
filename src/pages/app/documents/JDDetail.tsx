@@ -74,9 +74,13 @@ export default function JDDetail() {
 
   async function handleDelete() {
     if (!id || !user?.id || !confirm("Delete this job description?")) return;
-    await supabase.from("documents").delete().eq("id", id).eq("user_id", user.id);
-    toast.success("Job description deleted");
-    navigate("/app/documents");
+    const { error } = await supabase.from("documents").delete().eq("id", id).eq("user_id", user.id);
+    if (error) {
+      toast.error("Failed to delete job description. Please try again.");
+    } else {
+      toast.success("Job description deleted");
+      navigate("/app/documents");
+    }
   }
 
   if (loading) return <Card className="animate-pulse h-48" />;

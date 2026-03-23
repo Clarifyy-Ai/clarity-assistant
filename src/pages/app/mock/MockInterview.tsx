@@ -1,4 +1,7 @@
-// @ts-nocheck
+// @ts-nocheck -- retained: useSessionOrchestrator return type is inferred as any[] by TS due to
+// conditional generic resolution; removing suppression causes ~30 cascading "implicit any" errors
+// across destructured hook values (warmupQuestions, sessionQuestions, etc.). Full typing requires
+// rewriting the orchestrator generics — tracked as future refactor.
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSessionOrchestrator } from "@/hooks/useSessionOrchestrator";
@@ -11,6 +14,7 @@ import {
   ClipboardList, ChevronRight, Timer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
 // MockInterview — session config page
@@ -42,18 +46,23 @@ export default function MockInterview() {
 
   async function handleStart() {
     setLoading(true);
-    await orchestrator.createSession({
-      session_type:     "mock",
-      interview_type:   type,
-      target_company:   company || null,
-      question_count:   numQ,
-    });
-    setLoading(false);
-
-    if (warmup) {
-      navigate("/app/mock/warmup");
-    } else {
-      navigate("/app/mock/session");
+    try {
+      await orchestrator.createSession({
+        session_type:     "mock",
+        interview_type:   type,
+        target_company:   company || null,
+        question_count:   numQ,
+      });
+      if (warmup) {
+        navigate("/app/mock/warmup");
+      } else {
+        navigate("/app/mock/session");
+      }
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : "Failed to start session";
+      toast.error(message);
+    } finally {
+      setLoading(false);
     }
   }
 

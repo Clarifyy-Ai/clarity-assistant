@@ -1,8 +1,11 @@
-// @ts-nocheck
+// @ts-nocheck -- retained: sessions table columns (overall_score, target_company, target_role,
+// session_type) are not in Supabase generated types (added via manual migrations); removing
+// suppression produces implicit-any on all row field accesses and filter values.
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
+import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -36,12 +39,16 @@ export default function SessionHistory() {
 
   async function fetchSessions() {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("sessions")
       .select("id, session_type, interview_type, target_company, overall_score, created_at, duration_seconds, question_count")
       .eq("user_id", user!.id)
       .order("created_at", { ascending: false })
       .limit(50);
+    if (error) {
+      console.warn("[SessionHistory] Fetch error:", error.message);
+      toast.error("Failed to load session history. Please refresh the page.");
+    }
     setSessions(data ?? []);
     setLoading(false);
   }

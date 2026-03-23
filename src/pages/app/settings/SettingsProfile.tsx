@@ -1,4 +1,4 @@
-// @ts-nocheck
+// @ts-nocheck -- retained: notification_prefs and privacy_prefs JSONB column types not in Supabase generated schema; Toggle component uses Radix UI checked prop which TypeScript does not accept on the wrapper component type.
 import { useState, useRef } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
@@ -11,6 +11,7 @@ import {
   Briefcase, MapPin, Globe,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsProfile — edit name, avatar, role, bio
@@ -54,9 +55,12 @@ export default function SettingsProfile() {
       .from("avatars")
       .upload(path, file, { upsert: true });
 
-    if (!error) {
+    if (error) {
+      toast.error("Failed to upload avatar. Please try again.");
+    } else {
       const { data } = supabase.storage.from("avatars").getPublicUrl(path);
       setAvatarUrl(data.publicUrl);
+      toast.success("Avatar updated!");
     }
     setUploading(false);
   }
@@ -76,15 +80,22 @@ export default function SettingsProfile() {
       updated_at:       new Date().toISOString(),
     };
 
-    await supabase
-      .from("profiles")
-      .update(updates)
-      .eq("id", user.id);
+    try {
+      const { error } = await supabase
+        .from("profiles")
+        .update(updates)
+        .eq("id", user.id);
 
-    setProfile({ ...profile, ...updates } as any);
-    setSaving(false);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
+      if (error) throw error;
+
+      setProfile({ ...profile, ...updates } as any);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch (err) {
+      toast.error(err?.message ?? "Failed to save profile. Please try again.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   const initials = name

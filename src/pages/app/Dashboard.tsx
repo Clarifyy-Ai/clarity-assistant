@@ -1,5 +1,8 @@
-// @ts-nocheck
+// @ts-nocheck -- retained: gamification hook, interviewScheduler hook, and documentStore all return
+// inferred any[] types; Supabase generated types also predate manual schema additions
+// (sessions.overall_score, target_company) causing implicit-any cascades on data access.
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
@@ -319,7 +322,7 @@ function RecentSessions() {
       .order("created_at", { ascending: false })
       .limit(5)
       .then(({ data, error }) => {
-        if (error) console.warn("[Dashboard] Recent sessions fetch error:", error.message);
+        if (error) toast.error("Failed to load recent sessions");
         setSessions(data ?? []);
         setLoading(false);
       });
