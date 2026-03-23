@@ -72,7 +72,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const activeResumeId = useDocumentStore((s) => s.active_resume_id);
   const activeJdId     = useDocumentStore((s) => s.active_jd_id);
 
-  const typedProfile = profile as UserProfile | null;
+  const typedProfile = profile as unknown as UserProfile | null;
 
   const [step, setStep] = useState(1);
 
@@ -423,7 +423,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 >
                   <option value="">None selected</option>
                   {resumes.map((r) => (
-                    <option key={r.id} value={r.id}>{r.title || r.file_name}</option>
+                    <option key={r.id} value={r.id}>{r.title || (r as any).file_name}</option>
                   ))}
                 </select>
               </div>
@@ -439,7 +439,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 >
                   <option value="">None selected</option>
                   {jds.map((j) => (
-                    <option key={j.id} value={j.id}>{j.title || j.company_name}</option>
+                    <option key={j.id} value={j.id}>{(j as any).title || j.company_name}</option>
                   ))}
                 </select>
               </div>
@@ -604,7 +604,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   { label: "Save Transcript", value: saveTranscript ? "Yes" : "No (real-time only)" },
                   ...(company || role ? [{ label: "Role", value: [company, role].filter(Boolean).join(" — ") }] : []),
                   ...(resumeId ? [{ label: "Resume", value: resumes.find(r=>r.id===resumeId)?.title || "Selected" }] : []),
-                  ...(jdId ? [{ label: "Job Description", value: jds.find(j=>j.id===jdId)?.title || "Selected" }] : []),
+                  ...(jdId ? [{ label: "Job Description", value: (jds.find(j=>j.id===jdId) as any)?.title || "Selected" }] : []),
                 ].map((item) => (
                   <div key={item.label} className="flex items-center justify-between text-xs">
                     <span className="text-gray-500">{item.label}</span>
