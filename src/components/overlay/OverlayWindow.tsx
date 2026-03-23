@@ -1,5 +1,6 @@
 import { createPortal } from "react-dom";
 import { useRef, useCallback, useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";
 import { useAudioStore } from "@/store/audioStore";
@@ -234,26 +235,26 @@ export function OverlayWindow({
               </div>
               <div className="flex flex-col gap-2 w-full max-w-[220px]">
                 {lastSessionId && (
-                  <a
-                    href={`/app/debrief/${lastSessionId}`}
+                  <Link
+                    to={`/app/debrief/${lastSessionId}`}
                     className="flex items-center justify-center gap-2 px-4 py-2 bg-brand-500/20 hover:bg-brand-500/30 text-brand-300 text-[12px] font-medium rounded-xl border border-brand-500/20 transition-all"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
                     </svg>
                     Generate Debrief
-                  </a>
+                  </Link>
                 )}
                 {lastSessionId && (
-                  <a
-                    href={`/app/scorecard/${lastSessionId}`}
+                  <Link
+                    to={`/app/scorecard/${lastSessionId}`}
                     className="flex items-center justify-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-muted-foreground/60 hover:text-white text-[12px] font-medium rounded-xl border border-white/8 transition-all"
                   >
                     <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
                     </svg>
                     View Scorecard
-                  </a>
+                  </Link>
                 )}
                 {onSetupNewSession && (
                   <button
