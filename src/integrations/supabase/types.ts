@@ -59,59 +59,6 @@ export type Database = {
         }
         Relationships: []
       }
-      answer_bank: {
-        Row: {
-          answer_text: string
-          category: string | null
-          created_at: string
-          id: string
-          question_text: string
-          score: number | null
-          session_id: string | null
-          source: string | null
-          star_breakdown: Json | null
-          tags: string[] | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          answer_text: string
-          category?: string | null
-          created_at?: string
-          id?: string
-          question_text: string
-          score?: number | null
-          session_id?: string | null
-          source?: string | null
-          star_breakdown?: Json | null
-          tags?: string[] | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          answer_text?: string
-          category?: string | null
-          created_at?: string
-          id?: string
-          question_text?: string
-          score?: number | null
-          session_id?: string | null
-          source?: string | null
-          star_breakdown?: Json | null
-          tags?: string[] | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "answer_bank_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       admin_audit_log: {
         Row: {
           action: string
@@ -1104,42 +1051,54 @@ export type Database = {
       }
       referrals: {
         Row: {
-          code: string
+          converted_at: string | null
           created_at: string
-          credits_awarded: number
+          credits_awarded: number | null
           id: string
-          referee_id: string
+          referred_email: string
+          referred_id: string | null
           referrer_id: string
+          rewarded_at: string | null
+          signed_up_at: string | null
+          status: Database["public"]["Enums"]["referral_status"]
         }
         Insert: {
-          code: string
+          converted_at?: string | null
           created_at?: string
-          credits_awarded?: number
+          credits_awarded?: number | null
           id?: string
-          referee_id: string
+          referred_email: string
+          referred_id?: string | null
           referrer_id: string
+          rewarded_at?: string | null
+          signed_up_at?: string | null
+          status?: Database["public"]["Enums"]["referral_status"]
         }
         Update: {
-          code?: string
+          converted_at?: string | null
           created_at?: string
-          credits_awarded?: number
+          credits_awarded?: number | null
           id?: string
-          referee_id?: string
+          referred_email?: string
+          referred_id?: string | null
           referrer_id?: string
+          rewarded_at?: string | null
+          signed_up_at?: string | null
+          status?: Database["public"]["Enums"]["referral_status"]
         }
         Relationships: [
           {
-            foreignKeyName: "referrals_referee_id_fkey"
-            columns: ["referee_id"]
-            isOneToOne: true
-            referencedRelation: "users"
+            foreignKeyName: "referrals_referred_id_fkey"
+            columns: ["referred_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
             foreignKeyName: "referrals_referrer_id_fkey"
             columns: ["referrer_id"]
             isOneToOne: false
-            referencedRelation: "users"
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1244,57 +1203,6 @@ export type Database = {
             columns: ["host_id"]
             isOneToOne: false
             referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      session_answers: {
-        Row: {
-          ai_feedback: string | null
-          answer: string | null
-          created_at: string
-          duration_ms: number | null
-          id: string
-          question: string
-          score: number | null
-          session_id: string | null
-          user_id: string
-        }
-        Insert: {
-          ai_feedback?: string | null
-          answer?: string | null
-          created_at?: string
-          duration_ms?: number | null
-          id?: string
-          question: string
-          score?: number | null
-          session_id?: string | null
-          user_id: string
-        }
-        Update: {
-          ai_feedback?: string | null
-          answer?: string | null
-          created_at?: string
-          duration_ms?: number | null
-          id?: string
-          question?: string
-          score?: number | null
-          session_id?: string | null
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "session_answers_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "users"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "session_answers_session_id_fkey"
-            columns: ["session_id"]
-            isOneToOne: false
-            referencedRelation: "sessions"
             referencedColumns: ["id"]
           },
         ]
@@ -1666,365 +1574,6 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
-      }
-      questions: {
-        Row: {
-          id: string
-          question_text: string
-          question_type: "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER" | "NUMERICAL" | "CODING"
-          options: Json | null
-          correct_answer: string
-          explanation: string | null
-          subject: string
-          topic: string
-          difficulty: "EASY" | "MEDIUM" | "HARD"
-          marks_positive: number
-          marks_negative: number
-          source_year: number | null
-          exam_type: string | null
-          latex_present: boolean
-          is_public: boolean
-          is_verified: boolean
-          source: string | null
-          uploaded_by: string | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          question_text: string
-          question_type?: "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER" | "NUMERICAL" | "CODING"
-          options?: Json | null
-          correct_answer: string
-          explanation?: string | null
-          subject: string
-          topic: string
-          difficulty?: "EASY" | "MEDIUM" | "HARD"
-          marks_positive?: number
-          marks_negative?: number
-          source_year?: number | null
-          exam_type?: string | null
-          latex_present?: boolean
-          is_public?: boolean
-          is_verified?: boolean
-          source?: string | null
-          uploaded_by?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          question_text?: string
-          question_type?: "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER" | "NUMERICAL" | "CODING"
-          options?: Json | null
-          correct_answer?: string
-          explanation?: string | null
-          subject?: string
-          topic?: string
-          difficulty?: "EASY" | "MEDIUM" | "HARD"
-          marks_positive?: number
-          marks_negative?: number
-          source_year?: number | null
-          exam_type?: string | null
-          latex_present?: boolean
-          is_public?: boolean
-          is_verified?: boolean
-          source?: string | null
-          uploaded_by?: string | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "questions_uploaded_by_fkey"
-            columns: ["uploaded_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      exam_papers: {
-        Row: {
-          id: string
-          title: string
-          exam_type: string
-          year: number | null
-          subject: string | null
-          description: string | null
-          created_by: string | null
-          is_public: boolean
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          title: string
-          exam_type: string
-          year?: number | null
-          subject?: string | null
-          description?: string | null
-          created_by?: string | null
-          is_public?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          title?: string
-          exam_type?: string
-          year?: number | null
-          subject?: string | null
-          description?: string | null
-          created_by?: string | null
-          is_public?: boolean
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: []
-      }
-      mock_tests: {
-        Row: {
-          id: string
-          user_id: string
-          test_name: string
-          exam_type: string
-          status: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "ABANDONED"
-          time_limit_minutes: number | null
-          started_at: string | null
-          completed_at: string | null
-          total_questions: number
-          attempted: number
-          correct: number
-          score_pct: number | null
-          config: Json | null
-          created_at: string
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          test_name: string
-          exam_type?: string
-          status?: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "ABANDONED"
-          time_limit_minutes?: number | null
-          started_at?: string | null
-          completed_at?: string | null
-          total_questions?: number
-          attempted?: number
-          correct?: number
-          score_pct?: number | null
-          config?: Json | null
-          created_at?: string
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          test_name?: string
-          exam_type?: string
-          status?: "NOT_STARTED" | "IN_PROGRESS" | "COMPLETED" | "ABANDONED"
-          time_limit_minutes?: number | null
-          started_at?: string | null
-          completed_at?: string | null
-          total_questions?: number
-          attempted?: number
-          correct?: number
-          score_pct?: number | null
-          config?: Json | null
-          created_at?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "mock_tests_user_id_fkey"
-            columns: ["user_id"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      test_responses: {
-        Row: {
-          id: string
-          test_id: string
-          question_id: string
-          user_answer: string | null
-          is_correct: boolean | null
-          time_taken_seconds: number | null
-          marked_for_review: boolean
-          sequence_no: number | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          test_id: string
-          question_id: string
-          user_answer?: string | null
-          is_correct?: boolean | null
-          time_taken_seconds?: number | null
-          marked_for_review?: boolean
-          sequence_no?: number | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          test_id?: string
-          question_id?: string
-          user_answer?: string | null
-          is_correct?: boolean | null
-          time_taken_seconds?: number | null
-          marked_for_review?: boolean
-          sequence_no?: number | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "test_responses_test_id_fkey"
-            columns: ["test_id"]
-            isOneToOne: false
-            referencedRelation: "mock_tests"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "test_responses_question_id_fkey"
-            columns: ["question_id"]
-            isOneToOne: false
-            referencedRelation: "questions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      test_analyses: {
-        Row: {
-          id: string
-          test_id: string
-          user_id: string
-          summary: string | null
-          accuracy: number | null
-          subject_breakdown: Json | null
-          topic_breakdown: Json | null
-          weak_topics: Json | null
-          strong_topics: Json | null
-          recommendations: Json | null
-          time_analysis: Json | null
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          test_id: string
-          user_id: string
-          summary?: string | null
-          accuracy?: number | null
-          subject_breakdown?: Json | null
-          topic_breakdown?: Json | null
-          weak_topics?: Json | null
-          strong_topics?: Json | null
-          recommendations?: Json | null
-          time_analysis?: Json | null
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          test_id?: string
-          user_id?: string
-          summary?: string | null
-          accuracy?: number | null
-          subject_breakdown?: Json | null
-          topic_breakdown?: Json | null
-          weak_topics?: Json | null
-          strong_topics?: Json | null
-          recommendations?: Json | null
-          time_analysis?: Json | null
-          created_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "test_analyses_test_id_fkey"
-            columns: ["test_id"]
-            isOneToOne: false
-            referencedRelation: "mock_tests"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      revision_list: {
-        Row: {
-          id: string
-          user_id: string
-          question_id: string
-          added_at: string
-          is_mastered: boolean
-          next_review_at: string | null
-          review_count: number
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          question_id: string
-          added_at?: string
-          is_mastered?: boolean
-          next_review_at?: string | null
-          review_count?: number
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          question_id?: string
-          added_at?: string
-          is_mastered?: boolean
-          next_review_at?: string | null
-          review_count?: number
-        }
-        Relationships: [
-          {
-            foreignKeyName: "revision_list_question_id_fkey"
-            columns: ["question_id"]
-            isOneToOne: false
-            referencedRelation: "questions"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      user_topic_performance: {
-        Row: {
-          id: string
-          user_id: string
-          exam_type: string
-          subject: string
-          topic: string
-          attempted: number
-          correct: number
-          accuracy_pct: number
-          last_attempted_at: string | null
-          updated_at: string
-        }
-        Insert: {
-          id?: string
-          user_id: string
-          exam_type?: string
-          subject: string
-          topic: string
-          attempted?: number
-          correct?: number
-          accuracy_pct?: number
-          last_attempted_at?: string | null
-          updated_at?: string
-        }
-        Update: {
-          id?: string
-          user_id?: string
-          exam_type?: string
-          subject?: string
-          topic?: string
-          attempted?: number
-          correct?: number
-          accuracy_pct?: number
-          last_attempted_at?: string | null
-          updated_at?: string
-        }
-        Relationships: []
       }
     }
     Views: {
