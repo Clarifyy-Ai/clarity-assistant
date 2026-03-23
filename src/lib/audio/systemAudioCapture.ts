@@ -1,39 +1,24 @@
 // System audio capture (Chrome / Edge only)
 // NOTE: User MUST choose "Share audio" in the share picker.
+import { captureSystemAudioViaTabShare } from "@/lib/capture/screenShare";
+
 export async function startSystemAudioCapture(): Promise<MediaStream> {
-  if (!navigator.mediaDevices?.getDisplayMedia) {
-    throw new Error("System audio capture not supported in this browser.");
-  }
-
   try {
-    const stream = await navigator.mediaDevices.getDisplayMedia({
-      audio: {
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-      },
-      // A video track is REQUIRED in Chrome/Edge for system audio
-      video: {
-        width: { ideal: 1 },
-        height: { ideal: 1 },
-      },
-    });
-
-    // Stop video track immediately – we only want audio
-    stream.getVideoTracks().forEach((t) => t.stop());
-
-    if (stream.getAudioTracks().length === 0) {
-      throw new Error(
-        "No system audio track detected. Make sure you selected ‘Share audio’ in the screen share dialog."
-      );
-    }
-
-    return stream;
+    // Route through the centralised tab-share helper so privacy hints are
+    // applied (guides picker to "This Tab", suppresses monitor surfaces).
+    return await captureSystemAudioViaTabShare({
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+    } as MediaTrackConstraints);
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "NotAllowedError") {
       throw new Error("Permission denied. Please allow system audio capture.");
     }
-    throw new Error("System audio capture failed: " + (err instanceof Error ? err.message : String(err)));
+    throw new Error(
+      "System audio capture failed: " +
+        (err instanceof Error ? err.message : String(err))
+    );
   }
 }
 

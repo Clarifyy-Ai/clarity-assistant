@@ -1,9 +1,12 @@
 import { useCallback, useRef, useState } from "react";
+import { captureSystemAudioViaTabShare } from "@/lib/capture/screenShare";
 
 // ─────────────────────────────────────────────────────────────────
 // useSystemAudio
 // Captures interviewer audio through getDisplayMedia (screen share).
 // Returns the audio-only MediaStream; caller passes it to Deepgram.
+// Routes through captureSystemAudioViaTabShare so that privacy hints
+// are applied (guides the picker toward "This Tab").
 // ─────────────────────────────────────────────────────────────────
 
 export function useSystemAudio() {
@@ -16,14 +19,11 @@ export function useSystemAudio() {
     setError(null);
     setIsPrompting(true);
     try {
-      const stream = await (navigator.mediaDevices as any).getDisplayMedia({
-        video: false,
-        audio: {
-          echoCancellation: false,
-          noiseSuppression: false,
-          sampleRate:       16000,
-        },
-      });
+      const stream = await captureSystemAudioViaTabShare({
+        echoCancellation: false,
+        noiseSuppression: false,
+        sampleRate: 16000,
+      } as MediaTrackConstraints);
       streamRef.current = stream;
       setIsActive(true);
 

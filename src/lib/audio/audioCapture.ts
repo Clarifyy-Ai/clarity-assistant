@@ -4,6 +4,7 @@ import type {
   AudioErrorCode,
 } from "@/types/audio.types";
 import { useAudioStore } from "@/store/audioStore";
+import { captureSystemAudioViaTabShare } from "@/lib/capture/screenShare";
 
 // ─────────────────────────────────────────────────────────────────
 // Audio Capture Engine
@@ -82,38 +83,15 @@ export async function captureMicrophone(
 // The video track is immediately discarded.
 
 export async function captureSystemAudio(): Promise<MediaStream> {
-  if (!navigator.mediaDevices.getDisplayMedia) {
-    throw buildAudioError(
-      "SYSTEM_AUDIO_NOT_SUPPORTED",
-      new Error("getDisplayMedia not supported in this browser")
-    );
-  }
-
   try {
-    const stream = await navigator.mediaDevices.getDisplayMedia({
-      audio: {
-        echoCancellation: false,
-        noiseSuppression: false,
-        autoGainControl: false,
-        sampleRate: 16000,
-      },
-      video: {
-        width: { ideal: 1 }, // Minimal video — user just shares the tab
-        height: { ideal: 1 },
-      },
-    });
-
-    // Stop video tracks immediately — we only need audio
-    stream.getVideoTracks().forEach((t) => t.stop());
-
-    if (stream.getAudioTracks().length === 0) {
-      throw buildAudioError(
-        "SYSTEM_AUDIO_NOT_SUPPORTED",
-        new Error("No audio track in display media stream. Ensure 'Share audio' was checked.")
-      );
-    }
-
-    return stream;
+    // Route through the centralised tab-share helper so privacy hints are applied
+    // (guides picker to "This Tab", suppresses monitor surfaces).
+    return await captureSystemAudioViaTabShare({
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      sampleRate: 16000,
+    } as MediaTrackConstraints);
   } catch (err) {
     const name = (err as Error)?.name;
     if (name === "NotAllowedError") {

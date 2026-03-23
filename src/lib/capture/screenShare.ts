@@ -63,17 +63,26 @@ declare const CropTarget: CropTargetStatic;
 //   - Exclude the page's own tab from the share candidates (selfBrowserSurface: 'exclude')
 //   - Hide monitor-level entries in the picker (monitorTypeSurfaces: 'exclude')
 //   - Allow the user to switch surfaces after sharing starts (surfaceSwitching: 'include')
+
+/**
+ * Chrome-specific privacy extras that can be spread into any getDisplayMedia
+ * call to guide the picker toward "This Tab" and suppress monitor/screen-level
+ * entries. These are non-standard and cast to `any` because TypeScript's
+ * lib.dom.d.ts doesn't include them yet.
+ */
+export const DISPLAY_MEDIA_PRIVACY_EXTRAS = {
+  selfBrowserSurface: "exclude",
+  monitorTypeSurfaces: "exclude",
+  surfaceSwitching: "include",
+} as const;
+
 const DISPLAY_MEDIA_CONSTRAINTS: MediaStreamConstraints = {
   video: {
     displaySurface: "browser",
   } as MediaTrackConstraints,
   audio: false,
   // Chrome-specific privacy hints (cast to any — not in the TS types yet)
-  ...({
-    selfBrowserSurface: "exclude",
-    monitorTypeSurfaces: "exclude",
-    surfaceSwitching: "include",
-  } as any),
+  ...(DISPLAY_MEDIA_PRIVACY_EXTRAS as any),
 };
 
 /**
@@ -183,4 +192,55 @@ export async function startTabShareBestEffort(
   return (navigator.mediaDevices as any).getDisplayMedia(
     DISPLAY_MEDIA_CONSTRAINTS
   );
+}
+
+// ─── System audio capture (tab-share audio only) ──────────────────────────────
+
+/**
+ * captureSystemAudioViaTabShare
+ *
+ * Starts a `getDisplayMedia` stream specifically for capturing system / tab
+ * audio (e.g. the interviewer's voice from a browser-based video call).
+ * Applies the same privacy hints as the video-share helpers so the picker
+ * defaults to "This Tab" and de-emphasises monitor-level surfaces.
+ *
+ * The minimal video track is discarded immediately — only the audio track is
+ * returned. Throws if the user denies permission or if no audio track is
+ * present (i.e. the user forgot to check "Share audio").
+ *
+ * This is the single entry point that ALL system-audio capture call sites
+ * should use so that privacy hints are consistently applied.
+ */
+export async function captureSystemAudioViaTabShare(audioConstraints?: MediaTrackConstraints): Promise<MediaStream> {
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    throw new Error("getDisplayMedia not supported in this browser");
+  }
+
+  const constraints = {
+    audio: audioConstraints ?? {
+      echoCancellation: false,
+      noiseSuppression: false,
+      autoGainControl: false,
+      sampleRate: 16000,
+    },
+    video: {
+      width: { ideal: 1 },
+      height: { ideal: 1 },
+    },
+    // Privacy hints — guide picker to "This Tab", suppress monitor entries
+    ...(DISPLAY_MEDIA_PRIVACY_EXTRAS as any),
+  };
+
+  const stream = await (navigator.mediaDevices as any).getDisplayMedia(constraints);
+
+  // Discard the video track — we only need audio
+  stream.getVideoTracks().forEach((t: MediaStreamTrack) => t.stop());
+
+  if (stream.getAudioTracks().length === 0) {
+    throw new Error(
+      "No audio track detected. Please check 'Share audio' / 'Share tab audio' in the picker."
+    );
+  }
+
+  return stream;
 }
