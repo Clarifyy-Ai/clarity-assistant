@@ -35,11 +35,11 @@ export async function recordReferral(userId: string, codeRaw: string | null | un
     const { error } = await supabase.from("referrals").upsert(
       {
         referrer_id:     referrerId,
-        referee_id:      userId,
-        code,
+        referred_id:     userId,
+        referred_email:  "",
         credits_awarded: 0,
       },
-      { onConflict: "referee_id", ignoreDuplicates: true }
+      { onConflict: "referred_id" as any, ignoreDuplicates: true }
     );
 
     if (error) console.warn("[referrals] Insert failed:", error.message);

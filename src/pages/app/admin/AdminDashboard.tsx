@@ -203,10 +203,10 @@ function RecentSignups() {
               </td>
               <td className="py-3 pr-4">
                 <Badge
-                  variant={row.plan === "free" ? "default" : "violet"}
+                  variant={row.plan_id === "free" ? "default" : "violet"}
                   size="sm"
                 >
-                  {row.plan}
+                  {row.plan_id}
                 </Badge>
               </td>
               <td className="py-3 text-muted-foreground text-xs">

@@ -35,10 +35,10 @@ export const EDGE_FUNCTIONS = {
   PROCESS_AUDIO:          "process-audio",
 
   // Billing
-  CREATE_CHECKOUT:        "create-checkout-session",
+  CREATE_CHECKOUT:        "create-checkout",
   CANCEL_SUBSCRIPTION:    "cancel-subscription",
   RESUME_SUBSCRIPTION:    "resume-subscription",
-  CREATE_PORTAL:          "create-customer-portal",
+  CREATE_PORTAL:          "create-checkout",
   WEBHOOK_STRIPE:         "stripe-webhook",
   PURCHASE_CREDITS:       "purchase-credits",
 
