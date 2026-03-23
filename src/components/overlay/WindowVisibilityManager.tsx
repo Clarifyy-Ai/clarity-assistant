@@ -83,23 +83,23 @@ export function WindowVisibilityManager({
     };
   }, [autoHideOnBlur, isPipActive, hideOverlay, onVisibilityChange]);
 
-  // Fullscreen changes (proctor detection)
+  // ★ FIX: Fullscreen changes — respect isPipActive + added to deps
   useEffect(() => {
     const handleFullscreenChange = () => {
-      if (document.fullscreenElement !== null) hideOverlay?.();
+      if (document.fullscreenElement !== null && !isPipActive) hideOverlay?.();
     };
     document.addEventListener('fullscreenchange', handleFullscreenChange);
     return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
-  }, [hideOverlay]);
+  }, [hideOverlay, isPipActive]); // ← isPipActive added
 
-  // Orientation change (best-effort screen-lock detection)
+  // ★ FIX: Orientation change — respect isPipActive + added to deps
   useEffect(() => {
     const handleOrientationChange = () => {
-      if ((window.screen as any).lockOrientation) hideOverlay?.();
+      if ((window.screen as any).lockOrientation && !isPipActive) hideOverlay?.();
     };
     window.addEventListener('orientationchange', handleOrientationChange);
     return () => window.removeEventListener('orientationchange', handleOrientationChange);
-  }, [hideOverlay]);
+  }, [hideOverlay, isPipActive]); // ← isPipActive added
 
   return null;
 }
