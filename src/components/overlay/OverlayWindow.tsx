@@ -101,10 +101,10 @@ export function OverlayWindow({
   const targetDoc = pipDoc ?? (typeof document !== "undefined" ? document : null);
   const overlayRoot = targetDoc?.getElementById("overlay-root");
 
-  // ★ NEW: inform store so other modules (e.g., WindowVisibilityManager) can adapt
+  // Inform store so other modules (e.g., WindowVisibilityManager) can adapt
   useEffect(() => {
-    (useOverlayStore.getState().setPipActive as any)?.(!!pipDoc);
-    return () => (useOverlayStore.getState().setPipActive as any)?.(false);
+    useOverlayStore.getState().setPipActive(!!pipDoc);
+    return () => useOverlayStore.getState().setPipActive(false);
   }, [pipDoc]);
 
   if (!overlayRoot || (!is_visible && !is_peek_active)) return null;

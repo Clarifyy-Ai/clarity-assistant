@@ -1,3 +1,6 @@
+// ─── Document Picture-in-Picture ──────────────────────────────────────────────
+export { useDocumentPiP } from "./useDocumentPiP";
+
 // ─── Hotkeys ──────────────────────────────────────────────────────────────────
 export {
   buildHotkeyDefinitions,

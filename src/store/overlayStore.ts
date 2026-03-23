@@ -103,6 +103,9 @@ interface OverlayStore {
   // Hotkey help overlay
   is_hotkey_help_visible: boolean;
 
+  // Document Picture-in-Picture state (runtime only — not persisted)
+  is_pip_active: boolean;
+
   // Chat history (not persisted)
   chat_history: ChatMessage[];
   is_chat_generating: boolean;
@@ -194,6 +197,9 @@ interface OverlayStore {
   // Actions — hotkey help
   setHotkeyHelpVisible: (visible: boolean) => void;
   toggleHotkeyHelp: () => void;
+
+  // Actions — PiP
+  setPipActive: (active: boolean) => void;
 }
 
 const DEFAULT_POSITION: OverlayPosition = { x: 24, y: 80 };
@@ -257,6 +263,7 @@ export const useOverlayStore = create<OverlayStore>()(
       is_peek_active: false,
       is_minimal_mode: false,
       is_hotkey_help_visible: false,
+      is_pip_active: false,
 
       chat_history: [],
       is_chat_generating: false,
@@ -492,6 +499,9 @@ export const useOverlayStore = create<OverlayStore>()(
       // ── Hotkey Help ─────────────────────────────────────────
       setHotkeyHelpVisible: (is_hotkey_help_visible) => set({ is_hotkey_help_visible }),
       toggleHotkeyHelp: () => set((s) => ({ is_hotkey_help_visible: !s.is_hotkey_help_visible })),
+
+      // ── PiP ─────────────────────────────────────────────────
+      setPipActive: (is_pip_active) => set({ is_pip_active }),
     })),
     {
       name: "confideq-overlay",

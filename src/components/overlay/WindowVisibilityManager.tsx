@@ -23,8 +23,7 @@ export function WindowVisibilityManager({
   onIdleStateChange,
 }: WindowVisibilityManagerProps) {
   const hideOverlay = useOverlayStore((s) => s.hideOverlay);
-  // ★ NEW: read PiP flag from store (added below)
-  const isPipActive = useOverlayStore((s: any) => s.is_pip_active ?? false);
+  const isPipActive = useOverlayStore((s) => s.is_pip_active);
 
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isIdleRef = useRef<boolean>(false);
