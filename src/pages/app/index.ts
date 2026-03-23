@@ -19,7 +19,6 @@ export {
   AdminDashboard,
   AdminUsers,
   AdminAnalytics,
-  AdminFlags,
   AdminRevenue,
   AdminFeatureFlags,
   AdminModelCosts,

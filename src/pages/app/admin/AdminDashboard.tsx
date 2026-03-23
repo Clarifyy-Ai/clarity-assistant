@@ -1,23 +1,37 @@
-// @ts-nocheck
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
-  Users, BarChart2, CreditCard, Zap,
+  Users,
   TrendingUp, TrendingDown, Activity,
-  CalendarDays, DollarSign,
+  DollarSign,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, subDays } from "date-fns";
 
-// ─────────────────────────────────────────────────────────────────
-// AdminDashboard — platform-wide KPIs
-// ─────────────────────────────────────────────────────────────────
+interface DashboardStats {
+  totalUsers:    number;
+  proUsers:      number;
+  freeUsers:     number;
+  todaySessions: number;
+  totalSessions: number;
+  mrr:           number;
+  convRate:      string;
+}
+
+interface KPIItem {
+  label: string;
+  value: string;
+  sub:   string;
+  icon:  React.ReactNode;
+  delta: string | null;
+  up:    boolean;
+}
 
 export default function AdminDashboard() {
-  const [stats,   setStats]   = useState<any>(null);
+  const [stats,   setStats]   = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { fetchStats(); }, []);
@@ -32,29 +46,32 @@ export default function AdminDashboard() {
       { count: totalSessions },
     ] = await Promise.all([
       supabase.from("profiles").select("*", { count: "exact", head: true }),
-      supabase.from("profiles").select("*", { count: "exact", head: true }).neq("plan", "free"),
+      (supabase.from("profiles") as ReturnType<typeof supabase.from>).select("*", { count: "exact", head: true }).not("plan", "eq", "free"),
       supabase.from("sessions").select("*", { count: "exact", head: true })
         .gte("created_at", new Date().toISOString().slice(0, 10)),
       supabase.from("sessions").select("*", { count: "exact", head: true }),
     ]);
 
+    const total = totalUsers ?? 0;
+    const pro   = proUsers   ?? 0;
+
     setStats({
-      totalUsers,
-      proUsers,
-      freeUsers:   (totalUsers ?? 0) - (proUsers ?? 0),
-      todaySessions,
-      totalSessions,
-      mrr:         (proUsers ?? 0) * 19,
-      convRate:    totalUsers ? (((proUsers ?? 0) / totalUsers) * 100).toFixed(1) : "0",
+      totalUsers:    total,
+      proUsers:      pro,
+      freeUsers:     total - pro,
+      todaySessions: todaySessions ?? 0,
+      totalSessions: totalSessions ?? 0,
+      mrr:           pro * 19,
+      convRate:      total ? ((pro / total) * 100).toFixed(1) : "0",
     });
 
     setLoading(false);
   }
 
-  const KPIs = stats ? [
+  const KPIs: KPIItem[] = stats ? [
     {
       label: "Total users",
-      value: stats.totalUsers?.toLocaleString() ?? "—",
+      value: stats.totalUsers.toLocaleString(),
       sub:   `${stats.freeUsers} free · ${stats.proUsers} pro`,
       icon:  <Users className="w-4 h-4 text-violet-400" />,
       delta: "+12%",
@@ -70,7 +87,7 @@ export default function AdminDashboard() {
     },
     {
       label: "Est. MRR",
-      value: `$${stats.mrr?.toLocaleString() ?? "—"}`,
+      value: `$${stats.mrr.toLocaleString()}`,
       sub:   "Monthly recurring revenue",
       icon:  <DollarSign className="w-4 h-4 text-amber-400" />,
       delta: "+8%",
@@ -78,8 +95,8 @@ export default function AdminDashboard() {
     },
     {
       label: "Sessions today",
-      value: stats.todaySessions?.toLocaleString() ?? "—",
-      sub:   `${stats.totalSessions?.toLocaleString()} total`,
+      value: stats.todaySessions.toLocaleString(),
+      sub:   `${stats.totalSessions.toLocaleString()} total`,
       icon:  <Activity className="w-4 h-4 text-blue-400" />,
       delta: null,
       up:    true,
@@ -143,12 +160,16 @@ export default function AdminDashboard() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// RecentSignups
-// ─────────────────────────────────────────────────────────────────
+interface SignupRow {
+  id:         string;
+  full_name:  string | null;
+  email:      string | null;
+  plan:       string | null;
+  created_at: string;
+}
 
 function RecentSignups() {
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<SignupRow[]>([]);
 
   useEffect(() => {
     supabase
@@ -156,7 +177,7 @@ function RecentSignups() {
       .select("id, full_name, email, plan, created_at")
       .order("created_at", { ascending: false })
       .limit(10)
-      .then(({ data }) => setRows(data ?? []));
+      .then(({ data }) => setRows((data as unknown as SignupRow[]) ?? []));
   }, []);
 
   return (
@@ -199,12 +220,13 @@ function RecentSignups() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// SessionVolumeChart — simple bar chart
-// ─────────────────────────────────────────────────────────────────
+interface DayCount {
+  day:   string;
+  count: number;
+}
 
 function SessionVolumeChart() {
-  const [data, setData] = useState<{ day: string; count: number }[]>([]);
+  const [data, setData] = useState<DayCount[]>([]);
 
   useEffect(() => {
     const days = [...Array(7)].map((_, i) => {
@@ -237,7 +259,6 @@ function SessionVolumeChart() {
           <span className="text-[9px] text-muted-foreground">
             {format(new Date(d.day), "EEE")}
           </span>
-          {/* Tooltip */}
           <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-popover border border-border rounded-lg px-2 py-1 text-[10px] text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none">
             {d.count} sessions
           </div>

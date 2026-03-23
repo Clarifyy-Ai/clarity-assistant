@@ -1,28 +1,26 @@
-// @ts-nocheck
 import { NavLink, Outlet, Navigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import {
   LayoutDashboard, Users, BarChart2,
-  Settings, Flag, Shield, ChevronRight,
+  Flag, Shield, ChevronRight, DollarSign, Cpu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { ProfileRow } from "@/types";
 
-// ─────────────────────────────────────────────────────────────────
-// AdminLayout — protected admin shell
-// ─────────────────────────────────────────────────────────────────
-
-const ADMIN_NAV = [
-  { to: "/admin/dashboard",  icon: LayoutDashboard, label: "Dashboard"    },
-  { to: "/admin/users",      icon: Users,           label: "Users"        },
-  { to: "/admin/analytics",  icon: BarChart2,       label: "Analytics"    },
-  { to: "/admin/flags",      icon: Flag,            label: "Feature flags"},
-  { to: "/admin/settings",   icon: Settings,        label: "Settings"     },
+const ADMIN_NAV: { to: string; icon: React.ElementType; label: string }[] = [
+  { to: "/app/admin",              icon: LayoutDashboard, label: "Dashboard"     },
+  { to: "/app/admin/users",        icon: Users,           label: "Users"         },
+  { to: "/app/admin/analytics",    icon: BarChart2,       label: "Analytics"     },
+  { to: "/app/admin/feature-flags",icon: Flag,            label: "Feature Flags" },
+  { to: "/app/admin/revenue",      icon: DollarSign,      label: "Revenue"       },
+  { to: "/app/admin/model-costs",  icon: Cpu,             label: "Model Costs"   },
 ];
 
 export default function AdminLayout() {
   const { profile } = useAuthStore();
+  const p = profile as ProfileRow | null;
 
-  if (profile?.role !== "admin" && profile?.role !== "super_admin") {
+  if (!p?.is_admin) {
     return <Navigate to="/app/dashboard" replace />;
   }
 
@@ -44,6 +42,7 @@ export default function AdminLayout() {
             <NavLink
               key={item.to}
               to={item.to}
+              end={item.to === "/app/admin"}
               className={({ isActive }) =>
                 cn(
                   "flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all",

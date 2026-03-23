@@ -1,11 +1,4 @@
-// @ts-nocheck
-// ─────────────────────────────────────────────────────────────────────────────
-// AdminFeatureFlags.tsx — Live feature flag management UI.
-// Toggle flags per plan tier, preview effective access,
-// and push changes to the global store without a redeploy.
-// ─────────────────────────────────────────────────────────────────────────────
-
-import { useState, useEffect }  from "react";
+import { useState, useEffect } from "react";
 import { useGlobalStore }       from "@/store";
 import { FEATURE_PLAN_GATES }   from "@/lib/constants/features";
 
@@ -29,14 +22,12 @@ import {
 
 import type { FeatureFlagId, PlanId } from "@/types";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 interface FlagRow {
-  id:          FeatureFlagId;
-  minPlan:     PlanId;
-  category:    string;
-  isBeta:      boolean;
-  enabled:     boolean;    // runtime override
+  id:      FeatureFlagId;
+  minPlan: PlanId;
+  category: string;
+  isBeta:  boolean;
+  enabled: boolean;
 }
 
 const PLAN_ORDER: PlanId[] = ["free", "starter", "pro", "elite", "enterprise"];
@@ -50,13 +41,13 @@ const PLAN_COLORS: Record<PlanId, string> = {
 };
 
 const CATEGORIES: Record<string, FeatureFlagId[]> = {
-  "Core AI":       ["live_assist", "mock_sessions", "ai_coach", "star_builder", "rephraser"],
-  "Advanced AI":   ["company_research", "coding_hints", "system_design", "session_debrief", "resume_analysis", "beta_models"],
-  "Audio":         ["audio_analysis", "filler_detection", "wpm_tracking", "diarization"],
-  "Overlay":       ["overlay", "stealth_mode", "screenshot_capture"],
-  "Data":          ["answer_bank", "analytics", "calendar_sync"],
-  "Access":        ["byok", "priority_support", "coach_sessions"],
-  "Dev":           ["experimental_ui", "debug_panel"],
+  "Core AI":     ["live_assist", "mock_sessions", "ai_coach", "star_builder", "rephraser"],
+  "Advanced AI": ["company_research", "coding_hints", "system_design", "session_debrief", "resume_analysis", "beta_models"],
+  "Audio":       ["audio_analysis", "filler_detection", "wpm_tracking", "diarization"],
+  "Overlay":     ["overlay", "stealth_mode", "screenshot_capture"],
+  "Data":        ["answer_bank", "analytics", "calendar_sync"],
+  "Access":      ["byok", "priority_support", "coach_sessions"],
+  "Dev":         ["experimental_ui", "debug_panel"],
 };
 
 function getCategoryForFlag(id: FeatureFlagId): string {
@@ -65,21 +56,16 @@ function getCategoryForFlag(id: FeatureFlagId): string {
   )?.[0] ?? "Other";
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
 export default function AdminFeatureFlags() {
-  const featureFlags        = useGlobalStore((s) => s.featureFlags);
-  const resolveFeatureFlags = useGlobalStore((s) => s.resolveFeatureFlags);
+  const featureFlags = useGlobalStore((s) => s.featureFlags);
 
-  const [rows,        setRows]       = useState<FlagRow[]>([]);
-  const [overrides,   setOverrides]  = useState<Partial<Record<FeatureFlagId, boolean>>>({});
-  const [search,      setSearch]     = useState("");
-  const [filterPlan,  setFilterPlan] = useState<PlanId | "all">("all");
-  const [filterCat,   setFilterCat]  = useState<string>("all");
-  const [isDirty,     setIsDirty]    = useState(false);
-  const [isSaving,    setIsSaving]   = useState(false);
-
-  // ── Build rows from FEATURE_PLAN_GATES constant ───────────────────────────
+  const [rows,       setRows]       = useState<FlagRow[]>([]);
+  const [overrides,  setOverrides]  = useState<Partial<Record<FeatureFlagId, boolean>>>({});
+  const [search,     setSearch]     = useState("");
+  const [filterPlan, setFilterPlan] = useState<PlanId | "all">("all");
+  const [filterCat,  setFilterCat]  = useState<string>("all");
+  const [isDirty,    setIsDirty]    = useState(false);
+  const [isSaving,   setIsSaving]   = useState(false);
 
   useEffect(() => {
     const built: FlagRow[] = Object.entries(FEATURE_PLAN_GATES ?? {}).map(
@@ -94,8 +80,6 @@ export default function AdminFeatureFlags() {
     setRows(built);
   }, [featureFlags]);
 
-  // ── Filter ────────────────────────────────────────────────────────────────
-
   const filtered = rows.filter((row) => {
     const matchSearch = search.trim() === "" ||
       row.id.toLowerCase().includes(search.toLowerCase());
@@ -104,24 +88,18 @@ export default function AdminFeatureFlags() {
     return matchSearch && matchPlan && matchCat;
   });
 
-  // ── Toggle override ───────────────────────────────────────────────────────
-
   const toggleFlag = (id: FeatureFlagId, current: boolean) => {
     setOverrides((prev) => ({ ...prev, [id]: !current }));
     setIsDirty(true);
   };
 
   const effectiveValue = (row: FlagRow): boolean =>
-    overrides[row.id] !== undefined ? overrides[row.id]! : row.enabled;
-
-  // ── Save overrides ────────────────────────────────────────────────────────
+    overrides[row.id] !== undefined ? (overrides[row.id] as boolean) : row.enabled;
 
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      // In a real app: persist to DB / edge config here
-      // For now: update the global store and show toast
-      await new Promise((r) => setTimeout(r, 600));
+      await new Promise<void>((r) => setTimeout(r, 600));
       toast.success(`${Object.keys(overrides).length} flag(s) updated.`);
       setOverrides({});
       setIsDirty(false);
@@ -138,20 +116,15 @@ export default function AdminFeatureFlags() {
     toast.info("Overrides discarded.");
   };
 
-  // ── Stats ─────────────────────────────────────────────────────────────────
-
   const enabledCount  = rows.filter((r) => effectiveValue(r)).length;
   const overrideCount = Object.keys(overrides).length;
 
-  // ─────────────────────────────────────────────────────────────────────────────
-
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Feature Flags</h1>
+          <h1 className="text-xl font-bold text-foreground">Feature Flags</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             Toggle features per plan tier. Changes are live immediately.
           </p>
@@ -159,7 +132,7 @@ export default function AdminFeatureFlags() {
 
         {isDirty && (
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={handleReset}>
+            <Button variant="ghost" size="sm" onClick={handleReset}>
               <RotateCcw className="h-3.5 w-3.5 mr-1.5" />
               Discard
             </Button>
@@ -171,7 +144,7 @@ export default function AdminFeatureFlags() {
         )}
       </div>
 
-      {/* ── Stats row ──────────────────────────────────────────────────────── */}
+      {/* Stats row */}
       <div className="flex items-center gap-4 flex-wrap">
         <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
           <Flag className="h-3.5 w-3.5 text-primary" />
@@ -186,13 +159,13 @@ export default function AdminFeatureFlags() {
           <span><strong>{rows.filter((r) => r.isBeta).length}</strong> beta</span>
         </div>
         {isDirty && (
-          <Badge variant="outline" className="text-orange-600 border-orange-400">
+          <span className="inline-flex items-center px-2 py-0.5 rounded-full border border-orange-400 text-[11px] font-medium text-orange-600">
             {overrideCount} unsaved change{overrideCount !== 1 ? "s" : ""}
-          </Badge>
+          </span>
         )}
       </div>
 
-      {/* ── Filters ────────────────────────────────────────────────────────── */}
+      {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[200px] max-w-xs">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
@@ -229,8 +202,12 @@ export default function AdminFeatureFlags() {
         </Select>
       </div>
 
-      {/* ── Flags table ────────────────────────────────────────────────────── */}
-      <Card>
+      {/* Flags table */}
+      <Card padding="none">
+        <CardHeader className="px-5 pt-4">
+          <CardTitle>All Flags</CardTitle>
+          <CardDescription>{filtered.length} of {rows.length} shown</CardDescription>
+        </CardHeader>
         <CardContent className="p-0">
           <Table>
             <TableHeader>
@@ -261,7 +238,6 @@ export default function AdminFeatureFlags() {
                       key={row.id}
                       className={isOverride ? "bg-amber-50/50 dark:bg-amber-900/10" : ""}
                     >
-                      {/* Beta / locked indicator */}
                       <TableCell className="pr-0">
                         {row.isBeta
                           ? <Beaker className="h-3.5 w-3.5 text-amber-500" />
@@ -271,29 +247,25 @@ export default function AdminFeatureFlags() {
                         }
                       </TableCell>
 
-                      {/* Flag ID */}
                       <TableCell>
                         <div className="flex items-center gap-2">
                           <code className="text-xs font-mono text-foreground/80">{row.id}</code>
                           {isOverride && (
-                            <Badge variant="outline" className="text-[10px] text-orange-600 border-orange-400 py-0">
+                            <span className="inline-flex items-center px-1.5 py-0 rounded border border-orange-400 text-[10px] text-orange-600">
                               modified
-                            </Badge>
+                            </span>
                           )}
                         </div>
                       </TableCell>
 
-                      {/* Category */}
                       <TableCell className="text-sm text-muted-foreground">{row.category}</TableCell>
 
-                      {/* Min plan */}
                       <TableCell>
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-[11px] font-medium capitalize ${PLAN_COLORS[row.minPlan]}`}>
                           {row.minPlan}
                         </span>
                       </TableCell>
 
-                      {/* Plan access dots */}
                       <TableCell>
                         <div className="flex items-center gap-1">
                           {PLAN_ORDER.map((plan, idx) => (
@@ -310,7 +282,6 @@ export default function AdminFeatureFlags() {
                         </div>
                       </TableCell>
 
-                      {/* Toggle */}
                       <TableCell className="text-right">
                         <Switch
                           checked={value}
@@ -329,4 +300,3 @@ export default function AdminFeatureFlags() {
     </div>
   );
 }
-

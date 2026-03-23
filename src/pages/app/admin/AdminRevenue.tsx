@@ -1,14 +1,7 @@
-// @ts-nocheck
-// ─────────────────────────────────────────────────────────────────────────────
-// AdminRevenue.tsx — Revenue analytics dashboard for admins.
-// MRR, ARR, churn, plan distribution, credit purchases, and
-// Stripe transaction history with CSV export.
-// ─────────────────────────────────────────────────────────────────────────────
-
-import { useState, useEffect }  from "react";
-import { supabase }             from "@/lib/supabase/client";
+import { useState, useEffect } from "react";
+import { supabase }            from "@/lib/supabase/client";
 import { formatCents, formatNumber, formatPercent, formatDate } from "@/lib/utils/formatters";
-import { timeAgo }              from "@/lib/utils/dateUtils";
+import { timeAgo }             from "@/lib/utils/dateUtils";
 
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
@@ -24,27 +17,25 @@ import { Button }  from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   DollarSign, TrendingUp, TrendingDown, Users,
-  CreditCard, Download, RefreshCw, ArrowUpRight,
+  CreditCard, Download, RefreshCw,
 } from "lucide-react";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 interface RevenueMetrics {
-  mrr:              number;    // cents
-  arr:              number;    // cents
-  mrrGrowth:        number;    // percent
+  mrr:               number;
+  arr:               number;
+  mrrGrowth:         number;
   activeSubscribers: number;
-  churnRate:        number;    // percent
-  ltv:              number;    // cents, average
-  totalRevenue:     number;    // cents, all-time
-  creditRevenue:    number;    // cents, this month
+  churnRate:         number;
+  ltv:               number;
+  totalRevenue:      number;
+  creditRevenue:     number;
 }
 
 interface PlanDistribution {
   planId:     string;
   planName:   string;
   userCount:  number;
-  mrr:        number;    // cents
+  mrr:        number;
   percentage: number;
 }
 
@@ -53,7 +44,7 @@ interface RevenueTransaction {
   userId:      string;
   userEmail:   string;
   type:        "subscription" | "credits" | "refund";
-  amount:      number;    // cents
+  amount:      number;
   description: string;
   createdAt:   string;
   status:      "succeeded" | "refunded" | "failed";
@@ -61,11 +52,7 @@ interface RevenueTransaction {
 
 type DateRange = "7d" | "30d" | "90d" | "12m";
 
-// ─── Metric Card ──────────────────────────────────────────────────────────────
-
-function MetricCard({
-  title, value, subtitle, trend, trendLabel, icon: Icon, loading,
-}: {
+interface MetricCardProps {
   title:      string;
   value:      string;
   subtitle?:  string;
@@ -73,7 +60,11 @@ function MetricCard({
   trendLabel?: string;
   icon:       React.ElementType;
   loading:    boolean;
-}) {
+}
+
+function MetricCard({
+  title, value, subtitle, trend, trendLabel, icon: Icon, loading,
+}: MetricCardProps) {
   const isPositive = (trend ?? 0) >= 0;
 
   return (
@@ -112,17 +103,15 @@ function MetricCard({
   );
 }
 
-// ─── Plan Badge ───────────────────────────────────────────────────────────────
+type BadgeVariant = "default" | "violet" | "emerald" | "red" | "amber" | "blue" | "gray";
 
-const PLAN_COLORS: Record<string, string> = {
-  free:       "secondary",
-  starter:    "outline",
-  pro:        "default",
-  elite:      "destructive",
-  enterprise: "destructive",
+const PLAN_BADGE_VARIANTS: Record<string, BadgeVariant> = {
+  free:       "default",
+  starter:    "blue",
+  pro:        "violet",
+  elite:      "red",
+  enterprise: "red",
 };
-
-// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AdminRevenue() {
   const [metrics,      setMetrics]      = useState<RevenueMetrics | null>(null);
@@ -132,14 +121,11 @@ export default function AdminRevenue() {
   const [isLoading,    setIsLoading]    = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // ── Fetch data ─────────────────────────────────────────────────────────────
-
   const fetchData = async (showRefresh = false) => {
     if (showRefresh) setIsRefreshing(true);
     else             setIsLoading(true);
 
     try {
-      // Plan distribution from profiles
       const { data: profileData } = await supabase
         .from("profiles")
         .select("plan, credits, stripe_subscription_id, subscription_status");
@@ -149,9 +135,10 @@ export default function AdminRevenue() {
         let activeSubscribers = 0;
 
         profileData.forEach((p) => {
-          const planId = (p as Record<string, unknown>).plan as string ?? "free";
+          const row = p as { plan?: string; subscription_status?: string };
+          const planId = row.plan ?? "free";
           planCounts[planId] = (planCounts[planId] ?? 0) + 1;
-          if ((p as Record<string, unknown>).subscription_status === "active") activeSubscribers++;
+          if (row.subscription_status === "active") activeSubscribers++;
         });
 
         const planPrices: Record<string, number> = {
@@ -166,7 +153,7 @@ export default function AdminRevenue() {
           planId,
           planName:   planNames[planId] ?? planId,
           userCount:  count,
-          mrr:        planPrices[planId] * count,
+          mrr:        (planPrices[planId] ?? 0) * count,
           percentage: (count / total) * 100,
         }));
 
@@ -185,19 +172,18 @@ export default function AdminRevenue() {
         });
       }
 
-      // Recent transactions from credit_transactions
       const { data: txData } = await supabase
         .from("credit_transactions")
-        .select("id, user_id, amount, action, model, created_at")
+        .select("id, user_id, amount, action, created_at")
         .order("created_at", { ascending: false })
-        .limit(50);
+        .limit(50) as unknown as { data: Record<string, unknown>[] | null };
 
       if (txData) {
-        const txs: RevenueTransaction[] = (txData as Record<string, unknown>[]).map((tx) => ({
+        const txs: RevenueTransaction[] = txData.map((tx) => ({
           id:          tx.id as string,
           userId:      tx.user_id as string,
           userEmail:   `user-${(tx.user_id as string).slice(0, 8)}`,
-          type:        (tx.action as string ?? "").includes("purchase") ? "credits" : "subscription",
+          type:        ((tx.action as string) ?? "").includes("purchase") ? "credits" : "subscription",
           amount:      Math.abs(tx.amount as number) * 10,
           description: (tx.action as string) ?? "",
           createdAt:   tx.created_at as string,
@@ -213,9 +199,7 @@ export default function AdminRevenue() {
     }
   };
 
-  useEffect(() => { fetchData(); }, [dateRange]);
-
-  // ── CSV export ─────────────────────────────────────────────────────────────
+  useEffect(() => { fetchData(); }, [dateRange]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const exportCSV = () => {
     const rows = [
@@ -240,15 +224,12 @@ export default function AdminRevenue() {
     URL.revokeObjectURL(url);
   };
 
-  // ─────────────────────────────────────────────────────────────────────────────
-
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Revenue</h1>
+          <h1 className="text-xl font-bold text-foreground">Revenue</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             MRR, subscriptions, and credit purchases.
           </p>
@@ -267,22 +248,23 @@ export default function AdminRevenue() {
           </Select>
 
           <Button
-            variant="outline" size="sm"
+            variant="ghost" size="sm"
             onClick={() => fetchData(true)}
             disabled={isRefreshing}
+            leftIcon={<RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />}
           >
-            <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${isRefreshing ? "animate-spin" : ""}`} />
             Refresh
           </Button>
 
-          <Button size="sm" onClick={exportCSV} disabled={isLoading}>
-            <Download className="h-3.5 w-3.5 mr-1.5" />
+          <Button size="sm" onClick={exportCSV} disabled={isLoading}
+            leftIcon={<Download className="h-3.5 w-3.5" />}
+          >
             Export CSV
           </Button>
         </div>
       </div>
 
-      {/* ── KPI Cards ──────────────────────────────────────────────────────── */}
+      {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard
           title="MRR"
@@ -317,7 +299,7 @@ export default function AdminRevenue() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* ── Plan Distribution ─────────────────────────────────────────────── */}
+        {/* Plan Distribution */}
         <Card className="lg:col-span-1">
           <CardHeader>
             <CardTitle className="text-base">Plan Distribution</CardTitle>
@@ -334,7 +316,7 @@ export default function AdminRevenue() {
                     <div key={plan.planId} className="space-y-1.5">
                       <div className="flex items-center justify-between text-sm">
                         <div className="flex items-center gap-2">
-                          <Badge variant={PLAN_COLORS[plan.planId] as "default" | "secondary" | "outline" | "destructive"}>
+                          <Badge variant={PLAN_BADGE_VARIANTS[plan.planId] ?? "default"}>
                             {plan.planName}
                           </Badge>
                           <span className="text-muted-foreground tabular-nums">
@@ -355,7 +337,7 @@ export default function AdminRevenue() {
           </CardContent>
         </Card>
 
-        {/* ── Transaction History ───────────────────────────────────────────── */}
+        {/* Transaction History */}
         <Card className="lg:col-span-2">
           <CardHeader>
             <CardTitle className="text-base">Recent Transactions</CardTitle>
@@ -397,9 +379,9 @@ export default function AdminRevenue() {
                             </TableCell>
                             <TableCell>
                               <Badge variant={
-                                tx.type === "subscription" ? "default"
-                                : tx.type === "credits"     ? "secondary"
-                                : "destructive"
+                                tx.type === "subscription" ? "violet"
+                                : tx.type === "credits"     ? "blue"
+                                : "red"
                               } className="capitalize">
                                 {tx.type}
                               </Badge>
@@ -427,4 +409,3 @@ export default function AdminRevenue() {
     </div>
   );
 }
-

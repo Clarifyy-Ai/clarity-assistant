@@ -11,8 +11,9 @@ import {
   Briefcase, ListTodo, PenTool, FolderOpen,
   FileSpreadsheet, BarChart3, Calendar, Building,
   Inbox, Wrench, GraduationCap, Upload, LayoutGrid,
-  RotateCcw, TrendingUp, BookMarked,
+  RotateCcw, TrendingUp, BookMarked, ShieldAlert,
 } from "lucide-react";
+import type { ProfileRow } from "@/types";
 import { supabase } from "@/lib/supabase/client";
 import {
   STEALTH_NAV_LABELS,
@@ -125,6 +126,8 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}) {
       console.error("Sign out failed:", e);
     }
   }
+
+  const isAdmin = !!(profile as ProfileRow | null)?.is_admin;
 
   const initial =
     profile?.full_name?.trim()?.charAt(0)?.toUpperCase() ??
@@ -285,6 +288,16 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}) {
           stealth={stealth}
           onClick={onNavClick}
         />
+        {isAdmin && (
+          <SidebarLink
+            to="/app/admin"
+            icon={ShieldAlert}
+            label="Admin Panel"
+            collapsed={collapsed}
+            stealth={stealth}
+            onClick={onNavClick}
+          />
+        )}
 
         <div
           className={cn(

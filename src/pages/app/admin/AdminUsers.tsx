@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
@@ -9,67 +8,85 @@ import { Modal } from "@/components/ui/Modal";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
   Search, Users, ChevronLeft, ChevronRight,
-  Shield, Zap, Trash2, Eye, Ban,
-  MoreHorizontal, CheckCircle,
+  Shield, Zap, Ban,
+  MoreHorizontal,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 
-// ─────────────────────────────────────────────────────────────────
-// AdminUsers — paginated user management table
-// ─────────────────────────────────────────────────────────────────
-
 const PAGE_SIZE = 20;
 
+interface UserRow {
+  id:           string;
+  full_name:    string | null;
+  email:        string | null;
+  plan:         string | null;
+  role:         string | null;
+  created_at:   string;
+  credits:      number | null;
+  is_admin:     boolean | null;
+  is_banned?:   boolean | null;
+}
+
 export default function AdminUsers() {
-  const [users,    setUsers]    = useState<any[]>([]);
+  const [users,    setUsers]    = useState<UserRow[]>([]);
   const [total,    setTotal]    = useState(0);
   const [page,     setPage]     = useState(0);
   const [search,   setSearch]   = useState("");
   const [filter,   setFilter]   = useState("all");
   const [loading,  setLoading]  = useState(true);
-  const [selected, setSelected] = useState<any | null>(null);
+  const [selected, setSelected] = useState<UserRow | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  useEffect(() => { fetchUsers(); }, [page, search, filter]);
+  useEffect(() => { fetchUsers(); }, [page, search, filter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   async function fetchUsers() {
     setLoading(true);
+
+    type AnyQuery = ReturnType<typeof supabase.from> & {
+      or: (filter: string) => AnyQuery;
+      not: (col: string, op: string, val: string) => AnyQuery;
+      eq: (col: string, val: string) => AnyQuery;
+    };
 
     let q = supabase
       .from("profiles")
       .select("id, full_name, email, plan, role, created_at, credits, is_admin", { count: "exact" })
       .order("created_at", { ascending: false })
-      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1);
+      .range(page * PAGE_SIZE, (page + 1) * PAGE_SIZE - 1) as unknown as AnyQuery;
 
     if (search) q = q.or(`full_name.ilike.%${search}%,email.ilike.%${search}%`);
-    if (filter === "pro")    q = q.neq("plan", "free");
-    if (filter === "free")   q = q.eq("plan", "free");
-    if (filter === "banned") q = q.eq("is_admin", false);  // no is_banned col; filter by non-admin as approximation
+    if (filter === "pro")  q = q.not("plan", "eq", "free");
+    if (filter === "free") q = q.eq("plan", "free");
 
-    const { data, count } = await q;
-    setUsers(data ?? []);
+    const { data, count } = await (q as unknown as Promise<{ data: unknown; count: number | null }>);
+    setUsers((data as unknown as UserRow[]) ?? []);
     setTotal(count ?? 0);
     setLoading(false);
   }
 
   async function handleAction(action: string, userId: string) {
     setActionLoading(true);
+    const profilesTable = supabase.from("profiles") as unknown as {
+      update: (v: Record<string, unknown>) => { eq: (col: string, val: string) => Promise<unknown> };
+    };
     switch (action) {
       case "ban":
-        await supabase.from("profiles").update({ plan: "free", credits: 0 }).eq("id", userId);
+        await profilesTable.update({ credits: 0 }).eq("id", userId);
         break;
       case "unban":
-        await supabase.from("profiles").update({ credits: 5 }).eq("id", userId);
+        await profilesTable.update({ credits: 5 }).eq("id", userId);
         break;
       case "make_admin":
-        await supabase.from("profiles").update({ is_admin: true }).eq("id", userId);
+        await profilesTable.update({ is_admin: true }).eq("id", userId);
         break;
       case "grant_pro":
-        await supabase.from("profiles").update({ plan: "pro" }).eq("id", userId);
+        await profilesTable.update({ plan: "pro" }).eq("id", userId);
         break;
       case "add_credits":
-        await supabase.rpc("add_credits", { uid: userId, amount: 100 });
+        await (supabase.rpc as unknown as (n: string, a: Record<string, unknown>) => Promise<unknown>)(
+          "add_credits", { p_user_id: userId, p_amount: 100 }
+        );
         break;
     }
     setActionLoading(false);
@@ -100,7 +117,7 @@ export default function AdminUsers() {
           fullWidth={false}
         />
         <div className="flex gap-1.5">
-          {["all", "pro", "free", "banned"].map((f) => (
+          {["all", "pro", "free"].map((f) => (
             <button
               key={f}
               onClick={() => { setFilter(f); setPage(0); }}
@@ -168,11 +185,11 @@ export default function AdminUsers() {
                     </Badge>
                   </td>
                   <td className="px-4 py-3 text-muted-foreground">
-                    {u.credits_remaining ?? 0}
+                    {u.credits ?? 0}
                   </td>
                   <td className="px-4 py-3">
-                    {u.role && u.role !== "user" && (
-                      <Badge variant="red" size="sm">{u.role}</Badge>
+                    {u.is_admin && (
+                      <Badge variant="red" size="sm">admin</Badge>
                     )}
                   </td>
                   <td className="px-4 py-3 text-muted-foreground text-xs">
@@ -231,8 +248,8 @@ export default function AdminUsers() {
           <div className="space-y-3">
             <div className="grid grid-cols-2 gap-2 text-xs text-muted-foreground">
               <span>Plan: <strong className="text-foreground">{selected.plan}</strong></span>
-              <span>Credits: <strong className="text-foreground">{selected.credits_remaining}</strong></span>
-              <span>Role: <strong className="text-foreground">{selected.role ?? "user"}</strong></span>
+              <span>Credits: <strong className="text-foreground">{selected.credits ?? 0}</strong></span>
+              <span>Admin: <strong className="text-foreground">{selected.is_admin ? "Yes" : "No"}</strong></span>
               <span>Banned: <strong className="text-foreground">{selected.is_banned ? "Yes" : "No"}</strong></span>
             </div>
 

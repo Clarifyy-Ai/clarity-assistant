@@ -1,24 +1,33 @@
-// @ts-nocheck
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
-import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import {
-  BarChart2, Users, Activity,
-  TrendingUp, Zap, Globe,
+  BarChart2, Globe,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
-import { cn } from "@/lib/utils";
 
-// ─────────────────────────────────────────────────────────────────
-// AdminAnalytics — platform-wide analytics
-// ─────────────────────────────────────────────────────────────────
+interface DayCount {
+  day:   string;
+  count: number;
+}
+
+interface CompanyCount {
+  name:  string;
+  count: number;
+}
+
+interface PlanDist {
+  free:  number;
+  pro:   number;
+  team:  number;
+  total: number;
+}
 
 export default function AdminAnalytics() {
-  const [dailySignups, setDailySignups] = useState<{day: string; count: number}[]>([]);
-  const [topCompanies, setTopCompanies] = useState<any[]>([]);
-  const [planDist,     setPlanDist]     = useState<any>({});
+  const [dailySignups, setDailySignups] = useState<DayCount[]>([]);
+  const [topCompanies, setTopCompanies] = useState<CompanyCount[]>([]);
+  const [planDist,     setPlanDist]     = useState<PlanDist>({ free: 0, pro: 0, team: 0, total: 0 });
   const [loading,      setLoading]      = useState(true);
 
   useEffect(() => { fetchAll(); }, []);
@@ -44,14 +53,22 @@ export default function AdminAnalytics() {
     );
     setDailySignups(signupData);
 
-    // Plan distribution
+    // Plan distribution — use raw filter to avoid TS deep-type issues with "plan" column
+    const countByPlan = async (plan: string) => {
+      const res = await (supabase.from("profiles") as unknown as {
+        select: (cols: string, opts: object) => {
+          eq: (col: string, val: string) => Promise<{ count: number | null }>;
+        };
+      }).select("*", { count: "exact", head: true }).eq("plan", plan);
+      return res;
+    };
     const [{ count: free }, { count: pro }, { count: team }] = await Promise.all([
-      supabase.from("profiles").select("*", { count: "exact", head: true }).eq("plan", "free"),
-      supabase.from("profiles").select("*", { count: "exact", head: true }).eq("plan", "pro"),
-      supabase.from("profiles").select("*", { count: "exact", head: true }).eq("plan", "team"),
+      countByPlan("free"),
+      countByPlan("pro"),
+      countByPlan("team"),
     ]);
     const total = (free ?? 0) + (pro ?? 0) + (team ?? 0);
-    setPlanDist({ free, pro, team, total });
+    setPlanDist({ free: free ?? 0, pro: pro ?? 0, team: team ?? 0, total });
 
     // Top companies practiced for
     const { data: companyData } = await supabase
@@ -61,8 +78,9 @@ export default function AdminAnalytics() {
       .limit(500);
 
     const counts: Record<string, number> = {};
-    (companyData ?? []).forEach((s: any) => {
-      if (s.target_company) counts[s.target_company] = (counts[s.target_company] ?? 0) + 1;
+    (companyData ?? []).forEach((s) => {
+      const company = (s as { target_company?: string }).target_company;
+      if (company) counts[company] = (counts[company] ?? 0) + 1;
     });
     const sorted = Object.entries(counts)
       .sort(([, a], [, b]) => b - a)
@@ -73,8 +91,18 @@ export default function AdminAnalytics() {
     setLoading(false);
   }
 
-  const maxSignup = Math.max(...dailySignups.map((d) => d.count), 1);
+  const maxSignup  = Math.max(...dailySignups.map((d) => d.count), 1);
   const maxCompany = Math.max(...topCompanies.map((c) => c.count), 1);
+
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        {[...Array(3)].map((_, i) => (
+          <div key={i} className="h-32 rounded-2xl bg-card border border-border animate-pulse" />
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -98,7 +126,7 @@ export default function AdminAnalytics() {
                 className="w-full bg-violet-500/50 hover:bg-violet-500 rounded-sm transition-all"
                 style={{ height: `${(d.count / maxSignup) * 100}%`, minHeight: "2px" }}
               />
-              <span className="text-[9px] text-gray-700">
+              <span className="text-[9px] text-muted-foreground">
                 {format(new Date(d.day), "d")}
               </span>
               <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-popover border border-border rounded-lg px-2 py-1 text-[10px] text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none">
@@ -115,11 +143,13 @@ export default function AdminAnalytics() {
         <Card>
           <h3 className="text-sm font-semibold text-foreground mb-4">Plan distribution</h3>
           <div className="space-y-3">
-            {[
-              { key: "free", label: "Free",  color: "gray"   as const },
-              { key: "pro",  label: "Pro",   color: "violet" as const },
-              { key: "team", label: "Team",  color: "amber"  as const },
-            ].map((p) => {
+            {(
+              [
+                { key: "free" as const, label: "Free",  color: "blue"   as const },
+                { key: "pro"  as const, label: "Pro",   color: "violet" as const },
+                { key: "team" as const, label: "Team",  color: "amber"  as const },
+              ] satisfies { key: keyof PlanDist; label: string; color: "blue" | "violet" | "amber" }[]
+            ).map((p) => {
               const count = planDist[p.key] ?? 0;
               const pct   = planDist.total ? ((count / planDist.total) * 100).toFixed(1) : "0";
               return (
@@ -127,12 +157,12 @@ export default function AdminAnalytics() {
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-xs text-muted-foreground capitalize">{p.label}</span>
                     <span className="text-xs font-bold text-foreground">
-                      {count?.toLocaleString()} ({pct}%)
+                      {count.toLocaleString()} ({pct}%)
                     </span>
                   </div>
                   <ProgressBar
                     value={count}
-                    max={planDist.total ?? 1}
+                    max={planDist.total || 1}
                     color={p.color}
                     size="sm"
                   />

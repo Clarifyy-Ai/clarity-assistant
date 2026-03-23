@@ -1,10 +1,3 @@
-// @ts-nocheck
-// ─────────────────────────────────────────────────────────────────────────────
-// AdminModelCosts.tsx — AI model usage and cost analytics.
-// Tracks token consumption, cost per model, per-feature breakdown,
-// and lets admins adjust credit costs without a redeploy.
-// ─────────────────────────────────────────────────────────────────────────────
-
 import { useState, useEffect } from "react";
 import { supabase }            from "@/lib/supabase/client";
 import { formatNumber, formatCents, formatPercent } from "@/lib/utils/formatters";
@@ -18,17 +11,14 @@ import {
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Badge }    from "@/components/ui/Badge";
 import { Button }   from "@/components/ui/Button";
 import { Input }    from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast }    from "sonner";
 import {
   Bot, Cpu, DollarSign, TrendingUp,
-  RefreshCw, Save, Info,
+  RefreshCw, Save,
 } from "lucide-react";
-
-// ─── Types ────────────────────────────────────────────────────────────────────
 
 interface ModelUsageStat {
   modelId:        string;
@@ -36,24 +26,22 @@ interface ModelUsageStat {
   callCount:      number;
   tokensIn:       number;
   tokensOut:      number;
-  costUSDCents:   number;     // our cost
-  revenueCredits: number;     // credits charged to users
+  costUSDCents:   number;
+  revenueCredits: number;
   avgLatencyMs:   number;
-  errorRate:      number;     // 0–1
+  errorRate:      number;
 }
 
 interface FeatureCreditCost {
-  feature:       string;
-  label:         string;
-  currentCredits: number;
+  feature:          string;
+  label:            string;
+  currentCredits:   number;
   suggestedCredits: number;
-  callsThisMonth: number;
-  revenueCredits: number;
+  callsThisMonth:   number;
+  revenueCredits:   number;
 }
 
 type DateRange = "7d" | "30d" | "90d";
-
-// ─── Provider badge ───────────────────────────────────────────────────────────
 
 const PROVIDER_COLORS: Record<string, string> = {
   openai:    "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300",
@@ -62,21 +50,17 @@ const PROVIDER_COLORS: Record<string, string> = {
   deepgram:  "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
 };
 
-// ─── Static credit cost config (editable in UI) ───────────────────────────────
-
 const DEFAULT_CREDIT_COSTS: FeatureCreditCost[] = [
-  { feature: "generate_answer",   label: "Generate Answer",    currentCredits: 2,  suggestedCredits: 2,  callsThisMonth: 0, revenueCredits: 0 },
-  { feature: "generate_feedback", label: "AI Feedback",        currentCredits: 3,  suggestedCredits: 3,  callsThisMonth: 0, revenueCredits: 0 },
-  { feature: "generate_star",     label: "STAR Builder",       currentCredits: 2,  suggestedCredits: 2,  callsThisMonth: 0, revenueCredits: 0 },
-  { feature: "generate_hint",     label: "Hints",              currentCredits: 1,  suggestedCredits: 1,  callsThisMonth: 0, revenueCredits: 0 },
-  { feature: "generate_debrief",  label: "Session Debrief",    currentCredits: 5,  suggestedCredits: 5,  callsThisMonth: 0, revenueCredits: 0 },
-  { feature: "coach_message",     label: "Coach Reply",        currentCredits: 2,  suggestedCredits: 2,  callsThisMonth: 0, revenueCredits: 0 },
-  { feature: "company_research",  label: "Company Research",   currentCredits: 3,  suggestedCredits: 3,  callsThisMonth: 0, revenueCredits: 0 },
-  { feature: "resume_analysis",   label: "Resume Analysis",    currentCredits: 5,  suggestedCredits: 5,  callsThisMonth: 0, revenueCredits: 0 },
-  { feature: "rephrase",          label: "Rephrase",           currentCredits: 1,  suggestedCredits: 1,  callsThisMonth: 0, revenueCredits: 0 },
+  { feature: "generate_answer",   label: "Generate Answer",  currentCredits: 2, suggestedCredits: 2, callsThisMonth: 0, revenueCredits: 0 },
+  { feature: "generate_feedback", label: "AI Feedback",      currentCredits: 3, suggestedCredits: 3, callsThisMonth: 0, revenueCredits: 0 },
+  { feature: "generate_star",     label: "STAR Builder",     currentCredits: 2, suggestedCredits: 2, callsThisMonth: 0, revenueCredits: 0 },
+  { feature: "generate_hint",     label: "Hints",            currentCredits: 1, suggestedCredits: 1, callsThisMonth: 0, revenueCredits: 0 },
+  { feature: "generate_debrief",  label: "Session Debrief",  currentCredits: 5, suggestedCredits: 5, callsThisMonth: 0, revenueCredits: 0 },
+  { feature: "coach_message",     label: "Coach Reply",      currentCredits: 2, suggestedCredits: 2, callsThisMonth: 0, revenueCredits: 0 },
+  { feature: "company_research",  label: "Company Research", currentCredits: 3, suggestedCredits: 3, callsThisMonth: 0, revenueCredits: 0 },
+  { feature: "resume_analysis",   label: "Resume Analysis",  currentCredits: 5, suggestedCredits: 5, callsThisMonth: 0, revenueCredits: 0 },
+  { feature: "rephrase",          label: "Rephrase",         currentCredits: 1, suggestedCredits: 1, callsThisMonth: 0, revenueCredits: 0 },
 ];
-
-// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AdminModelCosts() {
   const [modelStats,   setModelStats]   = useState<ModelUsageStat[]>([]);
@@ -87,8 +71,6 @@ export default function AdminModelCosts() {
   const [isDirty,      setIsDirty]      = useState(false);
   const [isSaving,     setIsSaving]     = useState(false);
 
-  // ── Fetch usage from credit_transactions ──────────────────────────────────
-
   const fetchData = async (showRefresh = false) => {
     if (showRefresh) setIsRefreshing(true);
     else             setIsLoading(true);
@@ -96,16 +78,14 @@ export default function AdminModelCosts() {
     try {
       const { data } = await supabase
         .from("credit_transactions")
-        .select("amount, type, description")
-        .eq("type", "deduction")
+        .select("id, user_id, amount, action, created_at")
         .order("created_at", { ascending: false })
-        .limit(2000);
+        .limit(2000) as unknown as { data: Record<string, unknown>[] | null };
 
       if (data) {
-        // Aggregate by feature/model from description field
         const featureMap: Record<string, number> = {};
-        (data as Record<string, unknown>[]).forEach((tx) => {
-          const desc    = (tx.description as string ?? "").toLowerCase();
+        data.forEach((tx) => {
+          const desc    = ((tx.description as string) ?? "").toLowerCase();
           const feature = DEFAULT_CREDIT_COSTS.find((c) =>
             desc.includes(c.feature.replace("_", " ")) || desc.includes(c.label.toLowerCase())
           )?.feature ?? "other";
@@ -121,14 +101,13 @@ export default function AdminModelCosts() {
         );
       }
 
-      // Mock model stats (replace with real edge function logs when available)
       const mockStats: ModelUsageStat[] = [
-        { modelId: "gpt-4o",             provider: "openai",    callCount: 4820, tokensIn: 2_410_000, tokensOut: 724_000, costUSDCents: 14_460, revenueCredits: 9640,  avgLatencyMs: 1240, errorRate: 0.008 },
-        { modelId: "gpt-4o-mini",        provider: "openai",    callCount: 8301, tokensIn: 4_150_500, tokensOut: 830_100, costUSDCents:  2_490, revenueCredits: 8301,  avgLatencyMs:  540, errorRate: 0.003 },
-        { modelId: "claude-3-5-sonnet",  provider: "anthropic", callCount: 1204, tokensIn:   602_000, tokensOut: 180_600, costUSDCents:  4_816, revenueCredits: 3612,  avgLatencyMs: 1840, errorRate: 0.012 },
-        { modelId: "claude-3-haiku",     provider: "anthropic", callCount: 2891, tokensIn: 1_445_500, tokensOut: 289_100, costUSDCents:  1_446, revenueCredits: 2891,  avgLatencyMs:  620, errorRate: 0.004 },
-        { modelId: "gemini-2.0-flash",   provider: "gemini",    callCount: 3102, tokensIn: 1_551_000, tokensOut: 465_300, costUSDCents:    310, revenueCredits: 3102,  avgLatencyMs:  780, errorRate: 0.006 },
-        { modelId: "deepgram-nova-3",    provider: "deepgram",  callCount: 6450, tokensIn:          0, tokensOut:       0, costUSDCents:  1_290, revenueCredits: 0,     avgLatencyMs:  120, errorRate: 0.001 },
+        { modelId: "gpt-4o",            provider: "openai",    callCount: 4820, tokensIn: 2_410_000, tokensOut: 724_000, costUSDCents: 14_460, revenueCredits: 9640, avgLatencyMs: 1240, errorRate: 0.008 },
+        { modelId: "gpt-4o-mini",       provider: "openai",    callCount: 8301, tokensIn: 4_150_500, tokensOut: 830_100, costUSDCents:  2_490, revenueCredits: 8301, avgLatencyMs:  540, errorRate: 0.003 },
+        { modelId: "claude-3-5-sonnet", provider: "anthropic", callCount: 1204, tokensIn:   602_000, tokensOut: 180_600, costUSDCents:  4_816, revenueCredits: 3612, avgLatencyMs: 1840, errorRate: 0.012 },
+        { modelId: "claude-3-haiku",    provider: "anthropic", callCount: 2891, tokensIn: 1_445_500, tokensOut: 289_100, costUSDCents:  1_446, revenueCredits: 2891, avgLatencyMs:  620, errorRate: 0.004 },
+        { modelId: "gemini-2.0-flash",  provider: "gemini",    callCount: 3102, tokensIn: 1_551_000, tokensOut: 465_300, costUSDCents:    310, revenueCredits: 3102, avgLatencyMs:  780, errorRate: 0.006 },
+        { modelId: "deepgram-nova-3",   provider: "deepgram",  callCount: 6450, tokensIn:          0, tokensOut:       0, costUSDCents:  1_290, revenueCredits:    0, avgLatencyMs:  120, errorRate: 0.001 },
       ];
       setModelStats(mockStats);
     } catch (err) {
@@ -139,9 +118,7 @@ export default function AdminModelCosts() {
     }
   };
 
-  useEffect(() => { fetchData(); }, [dateRange]);
-
-  // ── Edit credit cost ──────────────────────────────────────────────────────
+  useEffect(() => { fetchData(); }, [dateRange]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleCreditChange = (feature: string, value: string) => {
     const num = parseInt(value, 10);
@@ -155,7 +132,7 @@ export default function AdminModelCosts() {
   const handleSaveCosts = async () => {
     setIsSaving(true);
     try {
-      await new Promise((r) => setTimeout(r, 500));
+      await new Promise<void>((r) => setTimeout(r, 500));
       toast.success("Credit costs updated successfully.");
       setIsDirty(false);
     } catch {
@@ -165,21 +142,16 @@ export default function AdminModelCosts() {
     }
   };
 
-  // ── Totals ────────────────────────────────────────────────────────────────
-
   const totalCost    = modelStats.reduce((s, m) => s + m.costUSDCents, 0);
   const totalRevCred = modelStats.reduce((s, m) => s + m.revenueCredits, 0);
   const totalCalls   = modelStats.reduce((s, m) => s + m.callCount, 0);
 
-  // ─────────────────────────────────────────────────────────────────────────────
-
   return (
-    <div className="space-y-6 p-6">
+    <div className="space-y-6">
 
-      {/* ── Header ─────────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Model Costs</h1>
+          <h1 className="text-xl font-bold text-foreground">Model Costs</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             AI token usage, per-model costs, and credit pricing configuration.
           </p>
@@ -195,19 +167,20 @@ export default function AdminModelCosts() {
               <SelectItem value="90d">Last 90 days</SelectItem>
             </SelectContent>
           </Select>
-          <Button variant="outline" size="sm" onClick={() => fetchData(true)} disabled={isRefreshing}>
-            <RefreshCw className={`h-3.5 w-3.5 mr-1.5 ${isRefreshing ? "animate-spin" : ""}`} />
+          <Button variant="ghost" size="sm" onClick={() => fetchData(true)} disabled={isRefreshing}
+            leftIcon={<RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? "animate-spin" : ""}`} />}
+          >
             Refresh
           </Button>
         </div>
       </div>
 
-      {/* ── Summary KPIs ───────────────────────────────────────────────────── */}
+      {/* Summary KPIs */}
       <div className="grid grid-cols-3 gap-4">
         {[
-          { label: "Total API Cost",    value: formatCents(totalCost),       icon: DollarSign, sub: "across all models" },
-          { label: "Total API Calls",   value: formatNumber(totalCalls),     icon: Cpu,        sub: "completions + transcriptions" },
-          { label: "Credits Consumed",  value: formatNumber(totalRevCred),   icon: TrendingUp, sub: "by users this period" },
+          { label: "Total API Cost",   value: formatCents(totalCost),     icon: DollarSign, sub: "across all models" },
+          { label: "Total API Calls",  value: formatNumber(totalCalls),   icon: Cpu,        sub: "completions + transcriptions" },
+          { label: "Credits Consumed", value: formatNumber(totalRevCred), icon: TrendingUp, sub: "by users this period" },
         ].map(({ label, value, icon: Icon, sub }) => (
           <Card key={label}>
             <CardHeader className="flex flex-row items-center justify-between pb-2">
@@ -225,9 +198,9 @@ export default function AdminModelCosts() {
         ))}
       </div>
 
-      {/* ── Model usage table ──────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader>
+      {/* Model usage table */}
+      <Card padding="none">
+        <CardHeader className="px-5 pt-4">
           <CardTitle className="text-base flex items-center gap-2">
             <Bot className="h-4 w-4 text-primary" />
             Model Usage Breakdown
@@ -261,9 +234,7 @@ export default function AdminModelCosts() {
                     <TableRow key={model.modelId}>
                       <TableCell>
                         <div className="flex items-center gap-2">
-                          <span
-                            className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium capitalize ${PROVIDER_COLORS[model.provider] ?? ""}`}
-                          >
+                          <span className={`inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium capitalize ${PROVIDER_COLORS[model.provider] ?? ""}`}>
                             {model.provider}
                           </span>
                           <code className="text-xs font-mono">{model.modelId}</code>
@@ -288,9 +259,9 @@ export default function AdminModelCosts() {
         </CardContent>
       </Card>
 
-      {/* ── Credit cost editor ─────────────────────────────────────────────── */}
-      <Card>
-        <CardHeader className="flex flex-row items-start justify-between">
+      {/* Credit cost editor */}
+      <Card padding="none">
+        <CardHeader className="px-5 pt-4 flex flex-row items-start justify-between">
           <div>
             <CardTitle className="text-base">Credit Cost Configuration</CardTitle>
             <CardDescription>
@@ -298,8 +269,9 @@ export default function AdminModelCosts() {
             </CardDescription>
           </div>
           {isDirty && (
-            <Button size="sm" onClick={handleSaveCosts} disabled={isSaving}>
-              <Save className="h-3.5 w-3.5 mr-1.5" />
+            <Button size="sm" onClick={handleSaveCosts} disabled={isSaving}
+              leftIcon={<Save className="h-3.5 w-3.5" />}
+            >
               {isSaving ? "Saving…" : "Save changes"}
             </Button>
           )}
@@ -348,4 +320,3 @@ export default function AdminModelCosts() {
     </div>
   );
 }
-

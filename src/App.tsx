@@ -131,7 +131,6 @@ const Guide = lazy(() => import("@/pages/app/guide/Guide"));
 const AdminDashboard    = lazy(() => import("@/pages/app/admin/AdminDashboard"));
 const AdminUsers        = lazy(() => import("@/pages/app/admin/AdminUsers"));
 const AdminAnalytics    = lazy(() => import("@/pages/app/admin/AdminAnalytics"));
-const AdminFlags        = lazy(() => import("@/pages/app/admin/AdminFlags"));
 const AdminRevenue      = lazy(() => import("@/pages/app/admin/AdminRevenue"));
 const AdminModelCosts   = lazy(() => import("@/pages/app/admin/AdminModelCosts"));
 const AdminFeatureFlags = lazy(() => import("@/pages/app/admin/AdminFeatureFlags"));
@@ -419,7 +418,6 @@ const router = createBrowserRouter([
               { index: true,          element: <Page component={AdminDashboard} /> },
               { path: "users",         element: <Page component={AdminUsers} /> },
               { path: "analytics",     element: <Page component={AdminAnalytics} /> },
-              { path: "flags",         element: <Page component={AdminFlags} /> },
               { path: "revenue",       element: <Page component={AdminRevenue} /> },
               { path: "model-costs",   element: <Page component={AdminModelCosts} /> },
               { path: "feature-flags", element: <Page component={AdminFeatureFlags} /> },
