@@ -1,21 +1,21 @@
-// ─────────────────────────────────────────────────────────────────
-// Document Types — Resume, Job Description, Answer Bank
-// ─────────────────────────────────────────────────────────────────
+// src/types/document.types.ts
 
 import type { ParsedResume, ParsedJD, GapAnalysisResult } from "./ai.types";
 import type { ExperienceLevel } from "./user.types";
 
 // ── Resume ────────────────────────────────────────────────────────
 
-export type ResumeStatus = "uploading" | "parsing" | "ready" | "error";
+// ★ FIX: added "processing" — set by edge function before AI call
+export type ResumeStatus = "uploading" | "parsing" | "processing" | "ready" | "error";
 
 export interface ResumeVersion {
   id: string;
+  resume_id: string;               // ★ ADD: FK needed for inserts
   version_number: number;
-  label: string | null;            // e.g. "Google version", "General"
+  label: string | null;
   file_name: string;
   file_size_bytes: number;
-  file_url: string;                // Supabase Storage signed URL
+  file_url: string;
   is_active: boolean;
   parsed_data: ParsedResume | null;
   parse_status: ResumeStatus;
@@ -26,10 +26,13 @@ export interface ResumeVersion {
 export interface ResumeDocument {
   id: string;
   user_id: string;
-  title: string;                   // user-defined label
-  versions: ResumeVersion[];
+  title: string;
+  // ★ FIX: was "versions" — Supabase join returns "resume_versions"
+  // This was the root cause of all .versions === undefined bugs
+  resume_versions: ResumeVersion[];
   active_version_id: string | null;
-  active_version: ResumeVersion | null;
+  // ★ FIX: not returned by DB — computed client-side only, mark optional
+  active_version?: ResumeVersion | null;
   created_at: string;
   updated_at: string;
 }
@@ -68,7 +71,6 @@ export interface DocumentGapAnalysis {
 }
 
 // ── Active Document Context ───────────────────────────────────────
-// What's currently "loaded" into the session context
 
 export interface ActiveDocumentContext {
   resume: ResumeDocument | null;
@@ -87,12 +89,14 @@ export interface DocumentStoreState {
   active_jd_id: string | null;
   active_context: ActiveDocumentContext;
   is_loading: boolean;
-  upload_progress: number;         // 0–100 for current upload
+  upload_progress: number;
 }
 
 // ── Answer Bank ───────────────────────────────────────────────────
 
+// ★ FIX: added "general" — used as default fallback in mapAnswerBankRowToSavedAnswer
 export type AnswerCategory =
+  | "general"
   | "behavioural"
   | "technical"
   | "system_design"
@@ -113,7 +117,7 @@ export interface SavedAnswer {
   answer_text: string;
   category: AnswerCategory;
   tags: string[];
-  company_tags: string[];          // companies this answer is good for
+  company_tags: string[];
   star_components: STARComponents | null;
   is_favourite: boolean;
   times_used: number;
