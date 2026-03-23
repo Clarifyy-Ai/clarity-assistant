@@ -17,6 +17,30 @@ import type {
 import type { ParsedResume, ParsedJD } from "@/types/ai.types";
 
 // ─────────────────────────────────────────────────────────────────
+// answer_bank table row → SavedAnswer adapter
+// answer_bank uses question_text/answer_text; SavedAnswer uses question/title.
+// ─────────────────────────────────────────────────────────────────
+
+function mapAnswerBankRowToSavedAnswer(row: any): SavedAnswer {
+  return {
+    id:              row.id,
+    user_id:         row.user_id,
+    title:           row.question_text ?? "",
+    question:        row.question_text ?? "",
+    answer_text:     row.answer_text   ?? "",
+    category:        (row.category as AnswerCategory) ?? "general",
+    tags:            row.tags          ?? [],
+    company_tags:    [],
+    star_components: row.star_breakdown ?? null,
+    is_favourite:    row.is_favourite   ?? false,
+    times_used:      row.times_used     ?? 0,
+    last_used_at:    row.last_used_at   ?? null,
+    created_at:      row.created_at,
+    updated_at:      row.updated_at,
+  };
+}
+
+// ─────────────────────────────────────────────────────────────────
 // useDocuments
 // Manages resumes, job descriptions, gap analysis, and answer bank.
 // ─────────────────────────────────────────────────────────────────
@@ -58,12 +82,12 @@ export function useDocuments() {
   async function loadAnswerBank(): Promise<void> {
     answerStore.setIsLoading(true);
     const { data } = await supabase
-      .from("saved_answers")
+      .from("answer_bank")
       .select("*")
       .eq("user_id", user!.id)
       .order("created_at", { ascending: false });
 
-    if (data) answerStore.setAnswers(data as SavedAnswer[]);
+    if (data) answerStore.setAnswers(data.map(mapAnswerBankRowToSavedAnswer));
     answerStore.setIsLoading(false);
   }
 
@@ -147,14 +171,10 @@ export function useDocuments() {
   ): Promise<void> {
     setIsParsing(true);
     try {
-      const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-      await fetch(`${EDGE_BASE}/parse-resume`, {
-        method: "POST",
-        headers: {
-          "Content-Type":  "application/json",
-          "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ resume_id: resumeId, version_id: versionId, file_url: fileUrl, mime_type: mimeType }),
+      // Use supabase.functions.invoke so the user's JWT is forwarded automatically,
+      // enabling the edge function to verify resume ownership via RLS.
+      await supabase.functions.invoke("parse-resume", {
+        body: { resume_id: resumeId, version_id: versionId, file_url: fileUrl, mime_type: mimeType },
       });
       await loadDocuments();
     } catch { /* non-fatal */ }
@@ -323,15 +343,28 @@ ${rawText.slice(0, 4000)}`;
       updated_at:     new Date().toISOString(),
     };
 
-    const { error } = await supabase.from("saved_answers").insert(answer);
+    const { data: inserted, error } = await supabase
+      .from("answer_bank")
+      .insert({
+        id:            answer.id,
+        user_id:       answer.user_id,
+        question_text: answer.question ?? "",
+        answer_text:   answer.answer_text ?? "",
+        category:      answer.category ?? "general",
+        tags:          answer.tags ?? [],
+        source:        "manual",
+      })
+      .select()
+      .single();
     if (error) return { error: error.message };
 
-    answerStore.addAnswer(answer as SavedAnswer);
+    // Map DB row to SavedAnswer shape before adding to store
+    answerStore.addAnswer(mapAnswerBankRowToSavedAnswer(inserted ?? answer));
     return { error: null };
   }, [user]);
 
   const deleteAnswer = useCallback(async (answerId: string): Promise<void> => {
-    await supabase.from("saved_answers").delete().eq("id", answerId);
+    await supabase.from("answer_bank").delete().eq("id", answerId);
     answerStore.removeAnswer(answerId);
   }, []);
 
@@ -341,8 +374,8 @@ ${rawText.slice(0, 4000)}`;
 
     const newFav = !answer.is_favourite;
     await supabase
-      .from("saved_answers")
-      .update({ is_favourite: newFav })
+      .from("answer_bank")
+      .update({ is_favourite: newFav, updated_at: new Date().toISOString() })
       .eq("id", answerId);
 
     answerStore.toggleFavourite(answerId);

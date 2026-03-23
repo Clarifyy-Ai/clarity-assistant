@@ -199,18 +199,15 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
 
   const exportPDF = useCallback(async (): Promise<void> => {
     if (!state.scorecard) return;
-    const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
-    const response = await fetch(`${EDGE_BASE}/export-scorecard-pdf`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}` },
-      body: JSON.stringify({ session_id: sessionId }),
-    });
-    if (!response.ok) return;
-    const blob = await response.blob();
+
+    // Client-side JSON download — the export-scorecard-pdf edge function
+    // is not yet deployed. Print/save as PDF via the browser for a formatted view.
+    const json = JSON.stringify(state.scorecard, null, 2);
+    const blob = new Blob([json], { type: "application/json" });
     const url  = URL.createObjectURL(blob);
     const a    = document.createElement("a");
     a.href     = url;
-    a.download = `clarify-ai-scorecard-${sessionId.slice(0, 8)}.pdf`;
+    a.download = `clarify-ai-scorecard-${sessionId.slice(0, 8)}.json`;
     a.click();
     URL.revokeObjectURL(url);
   }, [state.scorecard, sessionId]);

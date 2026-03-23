@@ -27,32 +27,29 @@ export interface GeminiStreamOptions {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Stream a Gemini hint answer via SSE
+// Generate a hint via the generate-hint edge function (returns JSON)
 // ─────────────────────────────────────────────────────────────────
 
 export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void> {
   const {
-    question, context, model, isLive,
-    sessionId, questionId, screenshotBase64,
+    question, context,
+    sessionId, questionId,
     onChunk, onDone, onError, signal,
   } = opts;
 
-  const systemPrompt = buildSystemPrompt(context, isLive);
-
   const body = JSON.stringify({
-    model,
-    system_prompt: systemPrompt,
+    user_id:        context.user_id ?? "",
     question,
-    session_id: sessionId,
-    question_id: questionId,
-    screenshot_base64: screenshotBase64 ?? null,
-    stream: true,
+    interview_type: context.session_type ?? "behavioural",
+    target_company: context.target_company ?? null,
+    transcript:     null,
+    resume_text:    context.resume_experience_summary ?? null,
   });
 
   try {
     const response = await retry(
       () =>
-        fetch(`${EDGE_BASE}/ai-hint-gemini`, {
+        fetch(`${EDGE_BASE}/generate-hint`, {
           method: "POST",
           headers: {
             "Content-Type":  "application/json",
@@ -70,11 +67,12 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
       throw new Error(`Gemini hint failed: ${response.status} — ${errText}`);
     }
 
-    if (!response.body) {
-      throw new Error("Gemini response has no body");
-    }
+    const data = await response.json();
+    const hint: string = data.hint ?? "";
 
-    await consumeSSEStream(response.body, onChunk, onDone, onError);
+    // Deliver the full hint as a single chunk then done — no SSE stream
+    if (hint) onChunk(hint);
+    onDone(hint);
   } catch (err) {
     if ((err as Error).name === "AbortError") return; // cancelled intentionally
     onError(err instanceof Error ? err : new Error(String(err)));
@@ -83,24 +81,26 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
 
 // ─────────────────────────────────────────────────────────────────
 // Non-streaming Gemini call (for scorecard, STAR builder, etc.)
+// Uses the prep-tool edge function with tool_id="raw_prompt" which
+// passes the prompt through as-is without credit deduction (no user_id).
 // ─────────────────────────────────────────────────────────────────
 
 export async function callGemini(payload: {
   prompt: string;
-  model: GeminiModel;
+  model?: GeminiModel;
   max_tokens?: number;
   temperature?: number;
   session_id?: string;
 }): Promise<string> {
-  const response = await fetch(`${EDGE_BASE}/ai-gemini`, {
+  const response = await fetch(`${EDGE_BASE}/prep-tool`, {
     method: "POST",
     headers: {
       "Content-Type":  "application/json",
       "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
     },
     body: JSON.stringify({
-      ...payload,
-      stream: false,
+      tool_id: "raw_prompt",
+      input:   payload.prompt,
     }),
   });
 
@@ -110,7 +110,7 @@ export async function callGemini(payload: {
   }
 
   const data = await response.json();
-  return data.text ?? "";
+  return data.result ?? "";
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -159,7 +159,7 @@ Return ONLY valid JSON. No explanation, no markdown.`.trim();
 }
 
 // ─────────────────────────────────────────────────────────────────
-// SSE stream consumer (shared across AI clients)
+// SSE stream consumer (kept for ai-coach-chat which uses SSE format)
 // ─────────────────────────────────────────────────────────────────
 
 export async function consumeSSEStream(

@@ -109,6 +109,10 @@ behavioural/technical interviews. Include:
 - 3 likely follow-up questions and how to answer them
 
 ${input}`,
+
+  // Internal use: pass prompt through as-is for system-level generation
+  // (scorecard, JD parsing, etc.) without a user-facing template wrapper.
+  raw_prompt: (input) => input,
 };
 
 Deno.serve(async (req) => {

@@ -4,8 +4,10 @@ import { retry } from "@/lib/utils";
 import type { CoachingContext } from "@/types/ai.types";
 
 // ─────────────────────────────────────────────────────────────────
-// Anthropic Claude Client — proxied via Supabase Edge Function
-// Best for: system design, architecture, leadership, complex reasoning
+// Anthropic Claude Client — redirects to generate-hint (Gemini).
+// Best for: system design, architecture, leadership, complex reasoning.
+// TODO: restore native Claude support once an anthropic edge function
+//       is deployed server-side.
 // ─────────────────────────────────────────────────────────────────
 
 const EDGE_BASE = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1`;
@@ -23,34 +25,29 @@ export interface ClaudeStreamOptions {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Stream Claude hint
+// Stream Claude hint — falls back to generate-hint (Gemini)
 // ─────────────────────────────────────────────────────────────────
 
 export async function streamClaudeHint(opts: ClaudeStreamOptions): Promise<void> {
   const {
-    question, context, isLive,
+    question, context,
     sessionId, questionId,
     onChunk, onDone, onError, signal,
   } = opts;
 
-  const systemPrompt = buildSystemPrompt(context, isLive);
-
   const body = JSON.stringify({
-    model:       "claude-3-5-sonnet-20241022",
-    system:      systemPrompt,
-    messages: [
-      { role: "user", content: question },
-    ],
-    stream:      true,
-    max_tokens:  600,
-    session_id:  sessionId,
-    question_id: questionId,
+    user_id:        context.user_id ?? "",
+    question,
+    interview_type: context.session_type ?? "behavioural",
+    target_company: context.target_company ?? null,
+    transcript:     null,
+    resume_text:    context.resume_experience_summary ?? null,
   });
 
   try {
     const response = await retry(
       () =>
-        fetch(`${EDGE_BASE}/ai-hint-claude`, {
+        fetch(`${EDGE_BASE}/generate-hint`, {
           method: "POST",
           headers: {
             "Content-Type":  "application/json",
@@ -64,12 +61,13 @@ export async function streamClaudeHint(opts: ClaudeStreamOptions): Promise<void>
     );
 
     if (!response.ok) {
-      throw new Error(`Claude hint failed: ${response.status}`);
+      throw new Error(`Hint failed: ${response.status}`);
     }
 
-    if (!response.body) throw new Error("Claude response has no body");
-
-    await consumeSSEStream(response.body, onChunk, onDone, onError);
+    const data = await response.json();
+    const hint: string = data.hint ?? "";
+    if (hint) onChunk(hint);
+    onDone(hint);
   } catch (err) {
     if ((err as Error).name === "AbortError") return;
     onError(err instanceof Error ? err : new Error(String(err)));
@@ -77,7 +75,7 @@ export async function streamClaudeHint(opts: ClaudeStreamOptions): Promise<void>
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Non-streaming Claude call
+// Non-streaming Claude call — falls back to generate-hint (Gemini)
 // ─────────────────────────────────────────────────────────────────
 
 export async function callClaude(payload: {
@@ -87,32 +85,30 @@ export async function callClaude(payload: {
   max_tokens?: number;
   session_id?: string;
 }): Promise<string> {
-  const response = await fetch(`${EDGE_BASE}/ai-claude`, {
+  const userMessage = payload.messages.find((m) => m.role === "user")?.content ?? "";
+  const combinedPrompt = payload.system
+    ? `${payload.system}\n\n${userMessage}`
+    : userMessage;
+
+  const response = await fetch(`${EDGE_BASE}/prep-tool`, {
     method: "POST",
     headers: {
       "Content-Type":  "application/json",
       "Authorization": `Bearer ${import.meta.env.VITE_SUPABASE_ANON_KEY}`,
     },
-    body: JSON.stringify({
-      model:      payload.model ?? "claude-3-5-sonnet-20241022",
-      system:     payload.system,
-      messages:   payload.messages,
-      max_tokens: payload.max_tokens ?? 800,
-      stream:     false,
-      session_id: payload.session_id,
-    }),
+    body: JSON.stringify({ tool_id: "raw_prompt", input: combinedPrompt }),
   });
 
   if (!response.ok) {
-    throw new Error(`Claude call failed: ${response.status}`);
+    throw new Error(`AI call failed: ${response.status}`);
   }
 
   const data = await response.json();
-  return data.content?.[0]?.text ?? "";
+  return data.result ?? "";
 }
 
 // ─────────────────────────────────────────────────────────────────
-// System Design specialised prompt
+// System Design specialised prompt — routes through generate-hint
 // ─────────────────────────────────────────────────────────────────
 
 export async function generateSystemDesignGuide(payload: {
@@ -123,15 +119,7 @@ export async function generateSystemDesignGuide(payload: {
 }): Promise<string> {
   const { scenario, scale, constraints, context } = payload;
 
-  const system = `You are a senior systems architect and technical interviewer coach.
-Generate comprehensive system design interview guidance.
-Candidate: ${context.role ?? "Engineer"}, ${context.experience_level}-level
-${context.target_company ? `Target company: ${context.target_company}` : ""}
-
-Return structured guidance covering: components, database choices, scaling strategy, trade-offs.
-Be specific with technology choices. Explain the WHY behind each decision.`;
-
-  const userMessage = `Design a ${scenario}.
+  const question = `Design a ${scenario}.
 Scale: ${scale} (${getScaleDescription(scale)})
 ${constraints.length > 0 ? `Constraints: ${constraints.join(", ")}` : ""}
 
@@ -143,8 +131,10 @@ Provide:
 5. What interviewers are really testing here`;
 
   return callClaude({
-    system,
-    messages: [{ role: "user", content: userMessage }],
+    system: `You are a senior systems architect and technical interviewer coach.
+Candidate: ${context.role ?? "Engineer"}, ${context.experience_level}-level
+${context.target_company ? `Target company: ${context.target_company}` : ""}`,
+    messages: [{ role: "user", content: question }],
     max_tokens: 1200,
   });
 }
