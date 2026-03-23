@@ -124,6 +124,9 @@ const Shortcuts   = lazy(() => import("@/pages/marketing/Shortcuts"));
 const Blog        = lazy(() => import("@/pages/marketing/Blog"));
 const BlogPost    = lazy(() => import("@/pages/marketing/BlogPost"));
 
+// Guide
+const Guide = lazy(() => import("@/pages/app/guide/Guide"));
+
 // Admin
 const AdminDashboard    = lazy(() => import("@/pages/app/admin/AdminDashboard"));
 const AdminUsers        = lazy(() => import("@/pages/app/admin/AdminUsers"));
@@ -375,6 +378,8 @@ const router = createBrowserRouter([
 
           { path: "debrief",    element: <Page component={Debrief} /> },
           { path: "debrief/:id",element: <Page component={DebriefDetail} /> },
+
+          { path: "guide",    element: <Page component={Guide} /> },
 
           { path: "rooms",    element: <Page component={PracticeRooms} /> },
           { path: "rooms/new",element: <Page component={NewRoom} /> },

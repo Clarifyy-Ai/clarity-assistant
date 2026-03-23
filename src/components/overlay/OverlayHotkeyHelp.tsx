@@ -2,17 +2,19 @@ import { useEffect, useRef } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
 import { formatHotkeyLabel } from "@/lib/overlay/hotkeys";
 
-const HOTKEYS = [
-  { keys: ["ctrl", "shift", "h"], label: "Toggle overlay" },
-  { keys: ["ctrl", "shift", "s"], label: "Stealth mode" },
-  { keys: ["ctrl", "shift", "y"], label: "Cycle hint style" },
-  { keys: ["ctrl", "shift", "c"], label: "Screenshot + analyse" },
-  { keys: ["ctrl", "shift", "p"], label: "Panic button" },
-  { keys: ["ctrl", "shift", "m"], label: "Mute / unmute" },
-  { keys: ["ctrl", "shift", "/"], label: "This help" },
-  { keys: ["ctrl", "shift", "1-4"], label: "Quick dock positions" },
-  { keys: ["escape"], label: "Clear hint / close" },
+export const OVERLAY_HOTKEYS = [
+  { keys: ["ctrl", "shift", "h"],   label: "Toggle overlay",    description: "Show or hide the Clarify AI overlay" },
+  { keys: ["ctrl", "shift", "s"],   label: "Stealth mode",      description: "Switch overlay to minimal stealth view" },
+  { keys: ["ctrl", "shift", "y"],   label: "Cycle hint style",  description: "Switch between Full Answer → Short Hints → Keywords" },
+  { keys: ["ctrl", "shift", "c"],   label: "Screenshot + analyse", description: "Screenshot current problem and get AI analysis" },
+  { keys: ["ctrl", "shift", "p"],   label: "Panic button",      description: "Show immediate calming steps" },
+  { keys: ["ctrl", "shift", "m"],   label: "Mute / unmute",     description: "Toggle microphone during a live session" },
+  { keys: ["ctrl", "shift", "/"],   label: "Hotkey help",       description: "Show this keyboard shortcut reference" },
+  { keys: ["ctrl", "shift", "1-4"], label: "Quick dock positions", description: "Dock overlay to corner positions 1–4" },
+  { keys: ["escape"],               label: "Clear hint / close", description: "Clear current hint or dismiss the overlay panel" },
 ];
+
+const HOTKEYS = OVERLAY_HOTKEYS;
 
 export function OverlayHotkeyHelp() {
   const isVisible = useOverlayStore((s) => s.is_hotkey_help_visible);

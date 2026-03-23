@@ -11,7 +11,7 @@ import {
   Briefcase, ListTodo, PenTool, FolderOpen,
   FileSpreadsheet, BarChart3, Calendar, Building,
   Inbox, Wrench, GraduationCap, Upload, LayoutGrid,
-  RotateCcw, TrendingUp,
+  RotateCcw, TrendingUp, BookMarked,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import {
@@ -261,6 +261,14 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}) {
       </nav>
 
       <div className="space-y-1 border-t border-sidebar-border py-3">
+        <SidebarLink
+          to="/app/guide"
+          icon={BookMarked}
+          label="Guide"
+          collapsed={collapsed}
+          stealth={stealth}
+          onClick={onNavClick}
+        />
         <SidebarLink
           to="/app/notifications"
           icon={stealth ? Inbox : Bell}
