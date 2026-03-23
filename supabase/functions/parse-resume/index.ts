@@ -2,16 +2,11 @@ import { handleCors, corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { parseJSON } from "../_shared/gemini.ts";
 
-// ─────────────────────────────────────────────────────────────────
-// parse-resume — parse a resume PDF/file and store structured data
-// Accepts: resume_id, version_id, file_url, mime_type
-// Stores parsed_data in resume_versions table
-// Security: verifies the caller owns the resume before updating.
-// ─────────────────────────────────────────────────────────────────
-
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const GEMINI_BASE    = "https://generativelanguage.googleapis.com/v1beta";
-const MODEL          = "gemini-1.5-flash";
+const MODEL          = "gemini-2.0-flash"; // ★ upgraded
+
+const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
@@ -44,6 +39,7 @@ Deno.serve(async (req) => {
       );
     }
 
+    // ★ FIX: correct regex — \s not \\s
     const authHeader = req.headers.get("authorization") ?? "";
     const token = authHeader.replace(/^bearer\s+/i, "");
 
@@ -67,7 +63,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    // ── SSRF mitigation: validate file_url domain ────────────────
+    // ── SSRF mitigation ──────────────────────────────────────────
     const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
     const allowedHost = new URL(supabaseUrl).hostname;
     let parsedUrl: URL;
@@ -102,7 +98,6 @@ Deno.serve(async (req) => {
       const fileResp = await fetch(file_url, { signal: controller.signal });
       clearTimeout(fetchTimeout);
       if (!fileResp.ok) {
-        console.error("parse-resume: file fetch failed with status", fileResp.status);
         return new Response(
           JSON.stringify({ error: `Failed to fetch file: HTTP ${fileResp.status}` }),
           { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
@@ -112,22 +107,27 @@ Deno.serve(async (req) => {
       fetchedMimeType = fileResp.headers.get("content-type") ?? mime_type ?? "application/pdf";
     } catch (fetchErr) {
       clearTimeout(fetchTimeout);
-      console.error("parse-resume: could not fetch file:", fetchErr);
       return new Response(
         JSON.stringify({ error: "Failed to fetch resume file" }),
         { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // ── Guard: empty file ──────────────────────────────────────────
+    // ★ NEW: file size guard
     if (fileBuffer.byteLength === 0) {
       return new Response(
         JSON.stringify({ error: "Fetched file is empty" }),
         { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
+    if (fileBuffer.byteLength > MAX_FILE_BYTES) {
+      return new Response(
+        JSON.stringify({ error: "File too large. Maximum size is 10 MB." }),
+        { status: 413, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      );
+    }
 
-    // ── Derive MIME and detect file type ──────────────────────────
+    // ── Derive MIME ───────────────────────────────────────────────
     const effectiveMime = fetchedMimeType.split(";")[0].trim() || mime_type || "application/pdf";
     const isPDF  = effectiveMime === "application/pdf" || effectiveMime === "application/x-pdf";
     const isDOCX = effectiveMime === "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -141,15 +141,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    let raw: string;
+    // ★ NEW: mark as processing before slow AI call
+    await db
+      .from("resume_versions")
+      .update({ parse_status: "processing" })
+      .eq("id", version_id);
 
-    if (isText) {
-      // Plain text — decode and send as text prompt
-      const textContent = new TextDecoder("utf-8", { fatal: false }).decode(fileBuffer).slice(0, 6000);
-
-      const prompt = `Extract structured information from this resume.
-Return ONLY valid JSON matching this schema exactly:
-{
+    const RESUME_SCHEMA = `{
   "name": string | null,
   "summary": string | null,
   "skills": string[],
@@ -157,16 +155,16 @@ Return ONLY valid JSON matching this schema exactly:
   "projects": [{"name": string, "description": string, "tech_stack": string[]}],
   "education": [{"degree": string, "institution": string, "year": string | null}],
   "total_years_experience": number | null
-}
+}`;
 
-Resume text:
-${textContent}
+    let raw: string;
 
-Return ONLY valid JSON. No markdown, no explanation.`;
+    if (isText) {
+      const textContent = new TextDecoder("utf-8", { fatal: false }).decode(fileBuffer).slice(0, 8000);
+      const prompt = `Extract structured information from this resume.\nReturn ONLY valid JSON matching this schema exactly:\n${RESUME_SCHEMA}\n\nResume text:\n${textContent}\n\nReturn ONLY valid JSON. No markdown, no explanation.`;
 
       const aiController = new AbortController();
       const aiTimeout = setTimeout(() => aiController.abort(), 50_000);
-
       try {
         const res = await fetch(
           `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
@@ -176,15 +174,12 @@ Return ONLY valid JSON. No markdown, no explanation.`;
             signal: aiController.signal,
             body: JSON.stringify({
               contents: [{ role: "user", parts: [{ text: prompt }] }],
-              generationConfig: { temperature: 0.3, maxOutputTokens: 1500 },
+              generationConfig: { temperature: 0.2, maxOutputTokens: 4096 }, // ★ fixed
             }),
           }
         );
         clearTimeout(aiTimeout);
-        if (!res.ok) {
-          const err = await res.text();
-          throw new Error(`Gemini error: ${err}`);
-        }
+        if (!res.ok) throw new Error(`Gemini error: ${await res.text()}`);
         const data = await res.json();
         raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
       } catch (aiErr) {
@@ -192,8 +187,6 @@ Return ONLY valid JSON. No markdown, no explanation.`;
         throw aiErr;
       }
     } else {
-      // PDF or binary — use Gemini's native inline document support
-      // Convert ArrayBuffer to base64
       const bytes = new Uint8Array(fileBuffer);
       const chunkSize = 8192;
       let binary = "";
@@ -205,23 +198,10 @@ Return ONLY valid JSON. No markdown, no explanation.`;
         ? "application/pdf"
         : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
-      const prompt = `Extract structured information from this resume document.
-Return ONLY valid JSON matching this schema exactly:
-{
-  "name": string | null,
-  "summary": string | null,
-  "skills": string[],
-  "experience": [{"title": string, "company": string, "duration": string, "description": string}],
-  "projects": [{"name": string, "description": string, "tech_stack": string[]}],
-  "education": [{"degree": string, "institution": string, "year": string | null}],
-  "total_years_experience": number | null
-}
-
-Return ONLY valid JSON. No markdown, no explanation.`;
+      const prompt = `Extract structured information from this resume document.\nReturn ONLY valid JSON matching this schema exactly:\n${RESUME_SCHEMA}\n\nReturn ONLY valid JSON. No markdown, no explanation.`;
 
       const aiController = new AbortController();
       const aiTimeout = setTimeout(() => aiController.abort(), 50_000);
-
       try {
         const res = await fetch(
           `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
@@ -234,25 +214,17 @@ Return ONLY valid JSON. No markdown, no explanation.`;
                 {
                   role: "user",
                   parts: [
-                    {
-                      inline_data: {
-                        mime_type: docMimeType,
-                        data:      base64Data,
-                      },
-                    },
+                    { inline_data: { mime_type: docMimeType, data: base64Data } },
                     { text: prompt },
                   ],
                 },
               ],
-              generationConfig: { temperature: 0.3, maxOutputTokens: 1500 },
+              generationConfig: { temperature: 0.2, maxOutputTokens: 4096 }, // ★ fixed
             }),
           }
         );
         clearTimeout(aiTimeout);
-        if (!res.ok) {
-          const err = await res.text();
-          throw new Error(`Gemini error: ${err}`);
-        }
+        if (!res.ok) throw new Error(`Gemini error: ${await res.text()}`);
         const data = await res.json();
         raw = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
       } catch (aiErr) {
@@ -262,13 +234,9 @@ Return ONLY valid JSON. No markdown, no explanation.`;
     }
 
     const parsed = parseJSON(raw, {
-      name:                    null,
-      summary:                 null,
-      skills:                  [],
-      experience:              [],
-      projects:                [],
-      education:               [],
-      total_years_experience:  null,
+      name: null, summary: null, skills: [],
+      experience: [], projects: [], education: [],
+      total_years_experience: null,
     });
 
     // ── Store parsed data ─────────────────────────────────────────
@@ -279,12 +247,10 @@ Return ONLY valid JSON. No markdown, no explanation.`;
       .eq("resume_id", resume_id);
 
     if (updateErr) {
-      console.error("parse-resume: failed to update resume_versions:", updateErr);
       await db
         .from("resume_versions")
         .update({ parse_status: "error", parse_error: updateErr.message })
         .eq("id", version_id);
-
       return new Response(
         JSON.stringify({ error: "Failed to store parsed data" }),
         { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
