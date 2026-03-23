@@ -5,7 +5,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";
 import { useAudioStore } from "@/store/audioStore";
-import { PreSessionSetup } from "@/components/session/PreSessionSetup";
+import { PreSessionSetupWizard } from "@/components/session/PreSessionSetupWizard";
 import { OverlayWindow } from "@/components/overlay/OverlayWindow";
 import { LiveSessionController } from "@/components/live/LiveSessionController";
 import { cn } from "@/lib/utils";
@@ -68,7 +68,7 @@ export default function LiveCopilot() {
 
   if (phase === "setup") {
     return (
-      <PreSessionSetup
+      <PreSessionSetupWizard
         onStart={handleStart}
         sessionType="live"
       />

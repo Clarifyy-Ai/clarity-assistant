@@ -24,7 +24,7 @@ import { OverlayAnswerTimer } from "./OverlayAnswerTimer";
 import { OverlayAudioBadge } from "./OverlayAudioBadge";
 import { OverlayQuestionPreview } from "./OverlayQuestionPreview";
 import { cn } from "@/lib/utils";
-import { Loader2, SlidersHorizontal, Maximize2 } from "lucide-react";
+import { Zap, Loader2, SlidersHorizontal, Maximize2 } from "lucide-react";
 import type { LiveSessionConfig } from "@/types/session.types";
 import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 
@@ -351,6 +351,49 @@ export function OverlayWindow({
                 </div>
               )}
             </>
+          )}
+
+          {isSessionActive && false && (
+            <div className="px-3 py-2 shrink-0">
+              <button
+                onClick={onGenerate}
+                disabled={hint_state === "generating" || hint_state === "streaming"}
+                className={cn(
+                  "w-full flex items-center justify-center gap-2 py-2.5 rounded-xl font-semibold text-sm transition-all",
+                  hint_state === "generating" || hint_state === "streaming"
+                    ? "bg-amber-500/20 border border-amber-500/30 text-amber-400 cursor-not-allowed"
+                    : "bg-gradient-to-r from-emerald-600/80 to-teal-600/80 hover:from-emerald-500/80 hover:to-teal-500/80 text-white border border-emerald-500/20 hover:border-emerald-400/30 active:scale-[0.98]"
+                )}
+                title="Get AI Answer (Ctrl+Shift+G)"
+              >
+                {hint_state === "generating" || hint_state === "streaming" ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Generating…
+                  </>
+                ) : (
+                  <>
+                    <Zap className="w-4 h-4" />
+                    Get AI Answer
+                    <span className="text-[10px] opacity-50 font-normal ml-0.5">⌃⇧G</span>
+                  </>
+                )}
+              </button>
+            </div>
+          )}
+
+          {!is_minimal_mode && isSessionActive && <OverlaySessionStats />}
+
+          {!is_minimal_mode && isSessionActive && (
+            <div className="flex items-center justify-between border-t border-white/5 px-2 sm:px-4 py-1 font-mono text-[11px] sm:text-[11px] text-muted-foreground/40 shrink-0">
+              <span className="truncate">
+                ⌃⇧H hide · Esc clear · ⌃⇧P panic · ⌃⇧/ help
+              </span>
+              <div className="flex items-center gap-2">
+                <OverlayActivityTimer />
+                <span className="capitalize">{hint_style.replace("_", " ")}</span>
+              </div>
+            </div>
           )}
 
           <div className={cn(is_stealth_mode && "opacity-50 hover:opacity-80 transition-opacity")} style={{ pointerEvents: "auto" }}>

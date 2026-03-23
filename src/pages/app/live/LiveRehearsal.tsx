@@ -19,7 +19,7 @@ import { LiveSessionTimer } from "@/components/live/LiveSessionTimer";
 import { LivePanicButton } from "@/components/live/LivePanicButton";
 import { LiveCodingProblemCapture } from "@/components/live/LiveCodingProblemCapture";
 import { ScreenCaptureBlocker } from "@/components/overlay/ScreenCaptureBlocker";
-import { PreSessionSetup } from "@/components/session/PreSessionSetup";
+import { PreSessionSetupWizard } from "@/components/session/PreSessionSetupWizard";
 import {
   Mic, MicOff, Square, Eye, EyeOff,
   AlertTriangle, Shield, Ghost,
@@ -106,7 +106,7 @@ export default function LiveRehearsal() {
 
   if (phase === "setup") {
     return (
-      <PreSessionSetup
+      <PreSessionSetupWizard
         onStart={handleSetup}
         sessionType="live"
       />

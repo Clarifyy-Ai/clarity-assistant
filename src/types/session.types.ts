@@ -56,6 +56,11 @@ export interface LiveSessionConfig {
   interview_type: string;
   instructions: string;
   enable_system_audio: boolean;
+  simple_language?: boolean;
+  save_transcript?: boolean;
+  session_call_type?: "interview" | "regular_call";
+  context_document_ids?: string[];
+  language?: string;
 }
 
 // ── Question ──────────────────────────────────────────────────────

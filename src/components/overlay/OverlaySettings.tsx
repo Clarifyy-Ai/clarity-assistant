@@ -41,9 +41,11 @@ export function OverlaySettings({
   onClose,
   className,
 }: OverlaySettingsProps) {
-  const is_stealth_mode = useOverlayStore((s) => s.is_stealth_mode);
-  const is_proctor_safe = useOverlayStore((s) => s.is_proctor_safe);
-  const hint_style      = useOverlayStore((s) => s.hint_style);
+  const is_stealth_mode  = useOverlayStore((s) => s.is_stealth_mode);
+  const is_proctor_safe  = useOverlayStore((s) => s.is_proctor_safe);
+  const hint_style       = useOverlayStore((s) => s.hint_style);
+  const simple_language  = useOverlayStore((s) => s.simple_language);
+  const auto_generate    = useOverlayStore((s) => s.auto_generate);
 
   const stealth_opacity = useOverlayStore((s) => s.stealth_opacity);
   const is_minimal_mode = useOverlayStore((s) => s.is_minimal_mode);
@@ -125,6 +127,42 @@ export function OverlaySettings({
 
       {/* Settings Content */}
       <div className="p-4 space-y-4 max-h-96 overflow-y-auto">
+        {/* Simple Language */}
+        <div className="flex items-center justify-between p-3 bg-white/[0.02] rounded border border-white/[0.05]">
+          <div>
+            <label className="text-sm font-medium text-gray-300">
+              Simple Language
+            </label>
+            <p className="text-xs text-gray-500">
+              Plain, jargon-free AI responses
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            checked={simple_language}
+            onChange={(e) => useOverlayStore.getState().setSimpleLanguage(e.target.checked)}
+            className="w-4 h-4 rounded"
+          />
+        </div>
+
+        {/* Auto-Generate */}
+        <div className="flex items-center justify-between p-3 bg-white/[0.02] rounded border border-white/[0.05]">
+          <div>
+            <label className="text-sm font-medium text-gray-300">
+              Auto-Generate
+            </label>
+            <p className="text-xs text-gray-500">
+              Automatically generate answers on question detection
+            </p>
+          </div>
+          <input
+            type="checkbox"
+            checked={auto_generate}
+            onChange={(e) => useOverlayStore.getState().setAutoGenerate(e.target.checked)}
+            className="w-4 h-4 rounded"
+          />
+        </div>
+
         {/* Stealth Mode */}
         <div className="space-y-2">
           <div className="flex items-center justify-between">

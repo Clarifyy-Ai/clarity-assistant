@@ -64,6 +64,10 @@ interface OverlayStore {
 
   // Session controls
   auto_generate: boolean;
+  simple_language: boolean;
+  save_transcript: boolean;
+  session_call_type: "interview" | "regular_call";
+  session_language: string;
   active_tab: "answer" | "chat" | "transcript" | "audit" | "resume";
 
   // Network indicator shown in overlay
@@ -141,6 +145,10 @@ interface OverlayStore {
 
   // Actions — session controls
   setAutoGenerate: (enabled: boolean) => void;
+  setSimpleLanguage: (enabled: boolean) => void;
+  setSaveTranscript: (enabled: boolean) => void;
+  setSessionCallType: (type: "interview" | "regular_call") => void;
+  setSessionLanguage: (language: string) => void;
   setActiveTab: (tab: "answer" | "chat" | "transcript" | "audit" | "resume") => void;
 
   // Actions — chat history
@@ -224,6 +232,10 @@ export const useOverlayStore = create<OverlayStore>()(
       overlay_height: DEFAULT_HEIGHT,
 
       auto_generate: true,
+      simple_language: false,
+      save_transcript: true,
+      session_call_type: "interview" as const,
+      session_language: "English",
       active_tab: "answer" as const,
 
       network_color: "green",
@@ -378,6 +390,10 @@ export const useOverlayStore = create<OverlayStore>()(
 
       // ── Session Controls ─────────────────────────────────
       setAutoGenerate: (auto_generate) => set({ auto_generate }),
+      setSimpleLanguage: (simple_language) => set({ simple_language }),
+      setSaveTranscript: (save_transcript) => set({ save_transcript }),
+      setSessionCallType: (session_call_type) => set({ session_call_type }),
+      setSessionLanguage: (session_language) => set({ session_language }),
       setActiveTab: (active_tab) => set({ active_tab }),
 
       // ── Chat History ────────────────────────────────────────
@@ -442,6 +458,7 @@ export const useOverlayStore = create<OverlayStore>()(
         resume_context: null,
         resume_talking_points: null,
         pinned_hints: [],
+        session_call_type: "interview" as const,
       }),
 
       // ── Coding ─────────────────────────────────────────────
@@ -487,6 +504,9 @@ export const useOverlayStore = create<OverlayStore>()(
         is_stealth_mode: state.is_stealth_mode,
         is_proctor_safe: state.is_proctor_safe,
         auto_generate: state.auto_generate,
+        simple_language: state.simple_language,
+        save_transcript: state.save_transcript,
+        session_language: state.session_language,
         stealth_opacity: state.stealth_opacity,
         is_minimal_mode: state.is_minimal_mode,
       }),

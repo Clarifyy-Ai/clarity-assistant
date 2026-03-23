@@ -129,6 +129,9 @@ export interface CoachingContext {
   session_type: InterviewType;
   question_number: number;
   total_questions: number;
+
+  // Extra document snippets (from context_document_ids)
+  additional_context?: string[];
 }
 
 export interface ResumeProject {

@@ -30,6 +30,9 @@ export interface RouteHintOptions {
   sessionId: string;
   questionId: string;
   screenshotBase64?: string | null;
+  simpleLanguage?: boolean;
+  callType?: "interview" | "regular_call";
+  language?: string;
   onChunk: (chunk: string) => void;
   onDone: (fullText: string) => void;
   onError: (error: Error) => void;

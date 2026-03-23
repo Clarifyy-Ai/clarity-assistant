@@ -85,6 +85,20 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     overlay.setResumeContext(resumeCtx);
     overlay.setResumeTalkingPoints(talkingPoints);
 
+    if (cfg.simple_language !== undefined) {
+      overlay.setSimpleLanguage(cfg.simple_language);
+    }
+    if (cfg.save_transcript !== undefined) {
+      overlay.setSaveTranscript(cfg.save_transcript);
+    }
+    if (cfg.session_call_type !== undefined) {
+      overlay.setSessionCallType(cfg.session_call_type);
+    }
+    const liveConfig = cfg as LiveSessionConfig;
+    if (liveConfig.language) {
+      overlay.setSessionLanguage(liveConfig.language);
+    }
+
     const sessionStore = useSessionStore.getState();
     sessionStore.setSessionId(sessionIdRef.current);
     sessionStore.setMode("live");
@@ -125,6 +139,11 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
   const requestLiveHint = useCallback(async (question: string) => {
     if (!profile) return;
 
+    // Rebuild context from current document store state (supports mid-session doc changes)
+    const currentDocContext = useDocumentStore.getState().active_context;
+    const freshContext = buildCoachingContext(profile, configRef.current, currentDocContext);
+    coachStore.initContext(freshContext);
+
     const context = coachStore.getContext();
     if (!context) return;
 
@@ -158,6 +177,9 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
       isLive:         true,
       sessionId:      sessionIdRef.current,
       questionId:     requestId,
+      simpleLanguage: useOverlayStore.getState().simple_language,
+      callType:       useOverlayStore.getState().session_call_type,
+      language:       useOverlayStore.getState().session_language,
       onChunk:  (chunk) => useOverlayStore.getState().appendStreamChunk(chunk),
       onDone:   async (_fullText) => {
         useOverlayStore.getState().commitStreamedHint();
@@ -173,6 +195,11 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
 
   const submitManualQuestion = useCallback(async (question: string) => {
     if (!profile) return;
+
+    // Rebuild context from current document store state (supports mid-session doc changes)
+    const currentDocContext = useDocumentStore.getState().active_context;
+    const freshContext = buildCoachingContext(profile, configRef.current, currentDocContext);
+    coachStore.initContext(freshContext);
 
     const context = coachStore.getContext();
     if (!context) return;
@@ -213,6 +240,9 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
       isLive: true,
       sessionId: sessionIdRef.current,
       questionId: requestId,
+      simpleLanguage: useOverlayStore.getState().simple_language,
+      callType:       useOverlayStore.getState().session_call_type,
+      language:       useOverlayStore.getState().session_language,
       onChunk: (chunk) => { chatBuffer += chunk; },
       onDone: async () => {
         if (chatBuffer) {
@@ -281,6 +311,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
         const questionCount = utterances.filter((u) => u.is_interviewer_question).length;
 
         const dbModel = toDbModel(overlay.active_model);
+        const saveTranscript = useOverlayStore.getState().save_transcript;
 
         await sessionsDB.update(session.session_id, {
           status:            "completed",
@@ -292,10 +323,10 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
           hints_used:        overlay.hint_history.length,
           answers_generated: overlay.hint_history.length,
           questions_asked:   questionCount,
-          notes:             fullTranscript || null,
+          notes:             (saveTranscript && fullTranscript) ? fullTranscript : null,
         });
 
-        if (fullTranscript && userId) {
+        if (fullTranscript && userId && saveTranscript) {
           try {
             await supabase.from("session_transcripts").insert({
               session_id: session.session_id,

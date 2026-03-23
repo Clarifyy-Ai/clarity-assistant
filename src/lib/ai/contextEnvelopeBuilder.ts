@@ -47,6 +47,28 @@ export function buildCoachingContext(
   const liveConfig = config as LiveSessionConfig;
   const targetCompany = sessionConfig.company ?? liveConfig.company ?? null;
 
+  // Build additional context snippets from extra context_document_ids
+  const additionalContext: string[] = [];
+  const extraDocIds: string[] = liveConfig.context_document_ids ?? [];
+  if (extraDocIds.length > 0) {
+    const { resumes, jds } = useDocumentStore.getState();
+    for (const docId of extraDocIds) {
+      const resume = resumes.find((r) => r.id === docId);
+      if (resume) {
+        const activeVersion = resume.versions.find((v) => v.id === resume.active_version_id) ?? resume.versions[0];
+        if (activeVersion?.parsed_data?.summary) {
+          additionalContext.push(`Resume (${resume.title}): ${activeVersion.parsed_data.summary}`);
+        }
+      }
+      const jd = jds.find((j) => j.id === docId);
+      if (jd) {
+        const jdLabel = jd.role_title + (jd.company_name ? ` at ${jd.company_name}` : "");
+        const snippet = jd.parsed_data?.responsibilities?.slice(0, 3).join("; ") ?? jd.raw_text?.slice(0, 200);
+        if (snippet) additionalContext.push(`Job Description (${jdLabel}): ${snippet}`);
+      }
+    }
+  }
+
   const context: CoachingContext = {
     user_id:            profile.id,
     full_name:          profile.full_name,
@@ -80,6 +102,8 @@ export function buildCoachingContext(
     session_type:    (sessionConfig.interview_type) ?? "mixed",
     question_number: 1,
     total_questions: sessionConfig.question_count ?? 5,
+
+    additional_context: additionalContext.length > 0 ? additionalContext : undefined,
 
     ...sessionOverrides,
   };
@@ -124,6 +148,9 @@ export function serialiseContextForPrompt(ctx: CoachingContext): string {
           .map((a) => `  Q: "${a.question}" → Score: ${a.score}${a.key_weakness ? `, Weakness: ${a.key_weakness}` : ""}`)
           .join("\n")}`
       : "",
+    (ctx.additional_context && ctx.additional_context.length > 0)
+      ? `Additional context documents:\n${ctx.additional_context.map((c) => `  - ${c}`).join("\n")}`
+      : "",
   ].filter(Boolean);
 
   return lines.join("\n");
@@ -133,29 +160,51 @@ export function serialiseContextForPrompt(ctx: CoachingContext): string {
 
 export function buildSystemPrompt(
   ctx: CoachingContext,
-  isLive: boolean
+  isLive: boolean,
+  simpleLanguage?: boolean,
+  callType?: "interview" | "regular_call",
+  language?: string
 ): string {
   const ctxStr = serialiseContextForPrompt(ctx);
   const hintStyle = ctx.hint_style;
+  const isRegularCall = callType === "regular_call";
 
   const styleInstruction =
     hintStyle === "full_answer"
-      ? "Provide a complete, well-structured 2-3 paragraph answer the candidate can use as a guide."
+      ? "Provide a complete, well-structured 2-3 paragraph answer the person can use as a guide."
       : hintStyle === "short_hints"
       ? "Provide 3-4 concise bullet point talking points only."
       : "Provide 5-8 keywords and key phrases only. One per line.";
 
-  const urgencyInstruction = isLive
-    ? "This is a LIVE interview. Speed is critical. Start with the most important point immediately."
-    : "This is a practice session. Be thorough and educational.";
+  const personaInstruction = isRegularCall
+    ? `You are Clarify AI, a real-time conversation assistant. Your role is to help the person navigate a live professional call — this is NOT a job interview. Provide relevant talking points, factual context, and suggested responses appropriate for a business or professional conversation.`
+    : `You are Clarify AI, an expert interview coach AI. Your role is to help the candidate answer interview questions effectively.`;
 
-  return `You are Clarify AI, an expert interview coach AI.
+  const urgencyInstruction = isLive
+    ? isRegularCall
+      ? "This is a LIVE call. Be concise and practical. Start with the most actionable point immediately."
+      : "This is a LIVE interview. Speed is critical. Start with the most important point immediately."
+    : isRegularCall
+      ? "This is a practice call scenario. Be thorough and constructive."
+      : "This is a practice session. Be thorough and educational.";
+
+  const languageInstruction = simpleLanguage
+    ? "Use plain, jargon-free language. Avoid technical acronyms and industry buzzwords. Write as if explaining to a smart friend who is not a specialist."
+    : "";
+
+  const responseLanguageInstruction = (language && language !== "English")
+    ? `Respond entirely in ${language}. All output must be in ${language}.`
+    : "";
+
+  const contextLabel = isRegularCall ? "Participant context:" : "Candidate context:";
+
+  return `${personaInstruction}
 
 ${urgencyInstruction}
 
 ${styleInstruction}
-
-Candidate context:
+${languageInstruction ? `\n${languageInstruction}` : ""}${responseLanguageInstruction ? `\n${responseLanguageInstruction}` : ""}
+${contextLabel}
 ${ctxStr}
 
 Rules:

@@ -1,4 +1,3 @@
-import { buildSystemPrompt } from "./contextEnvelopeBuilder";
 import { consumeSSEStream } from "./geminiClient";
 import { retry } from "@/lib/utils";
 import type { CoachingContext } from "@/types/ai.types";
@@ -18,6 +17,9 @@ export interface ClaudeStreamOptions {
   isLive: boolean;
   sessionId: string;
   questionId: string;
+  simpleLanguage?: boolean;
+  callType?: "interview" | "regular_call";
+  language?: string;
   onChunk: (chunk: string) => void;
   onDone: (fullText: string) => void;
   onError: (error: Error) => void;
@@ -32,16 +34,18 @@ export async function streamClaudeHint(opts: ClaudeStreamOptions): Promise<void>
   const {
     question, context,
     sessionId, questionId,
+    simpleLanguage, callType, language,
     onChunk, onDone, onError, signal,
   } = opts;
 
   const body = JSON.stringify({
-    user_id:        context.user_id ?? "",
+    user_id:         context.user_id ?? "",
     question,
-    interview_type: context.session_type ?? "behavioural",
-    target_company: context.target_company ?? null,
-    transcript:     null,
-    resume_text:    context.resume_experience_summary ?? null,
+    interview_type:  context.session_type ?? "behavioural",
+    target_company:  context.target_company ?? null,
+    transcript:      null,
+    resume_text:     context.resume_experience_summary ?? null,
+    simple_language: simpleLanguage ?? false,
   });
 
   try {

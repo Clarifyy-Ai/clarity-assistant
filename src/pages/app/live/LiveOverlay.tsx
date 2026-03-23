@@ -7,7 +7,7 @@ import { OverlayWindow } from "@/components/overlay/OverlayWindow";
 import { OverlayKeyboardHandler } from "@/components/overlay/OverlayKeyboardHandler";
 import { LiveSessionController } from "@/components/live/LiveSessionController";
 import { ScreenCaptureBlocker } from "@/components/overlay/ScreenCaptureBlocker";
-import { PreSessionSetup } from "@/components/session/PreSessionSetup";
+import { PreSessionSetupWizard } from "@/components/session/PreSessionSetupWizard";
 import { Button } from "@/components/ui/Button";
 import { ClipboardCheck, AlertTriangle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
@@ -96,7 +96,7 @@ export default function LiveOverlay() {
 
   if (phase === "setup") {
     return (
-      <PreSessionSetup
+      <PreSessionSetupWizard
         onStart={handleSetup}
         sessionType="live"
       />
