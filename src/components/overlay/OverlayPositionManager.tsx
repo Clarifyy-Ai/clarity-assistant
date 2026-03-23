@@ -1,11 +1,5 @@
-import {
-  forwardRef,
-  useEffect,
-  useRef,
-  useLayoutEffect,
-  type ReactNode,
-  type Ref,
-} from "react";
+// src/components/overlay/OverlayPositionManager.tsx
+import { forwardRef, useEffect, useRef, useLayoutEffect, type ReactNode, type Ref, } from "react";
 import { createDragHandler, createTouchDragHandler, getProctorSafePosition } from "@/lib/overlay/stealthMouse";
 import type { OverlayPosition } from "@/store/overlayStore";
 
@@ -36,7 +30,7 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
     { position, onPositionChange, isProctorSafe, overlayWidth, overlayHeight, children },
     ref
   ) {
-    const localRef = useRef<HTMLDivElement>(null);
+    const localRef = useRef<HTMLDivElement | null>(null);
     const mergedRef = setRefs<HTMLDivElement>(ref, localRef);
     const lastSafePos = useRef<OverlayPosition | null>(null);
 
@@ -46,6 +40,7 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
 
       const cleanupMouse = createDragHandler(el, onPositionChange);
       const cleanupTouch = createTouchDragHandler(el, onPositionChange);
+
       return () => {
         cleanupMouse?.();
         cleanupTouch?.();
@@ -76,14 +71,14 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
 
       const onWinResize = () => applySafe();
       window.addEventListener("resize", onWinResize);
-
       return () => {
         window.removeEventListener("resize", onWinResize);
       };
     }, [isProctorSafe, onPositionChange, overlayWidth, overlayHeight]);
 
-    return (
+     return (
       <div
+      <div ref={mergedRef} style={{ position: "fixed", left: position.x, top: position.y }}>
         ref={mergedRef}
         className="fixed animate-fade-in"
         style={{
@@ -96,8 +91,12 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
           transform: "translateZ(0)",
         }}
       >
-        {children}
-      </div>
-    );
-  }
-);
+         {children}
+         {children}
+       </div>
+       </div>
+     );
+     );
+   }
+   }
+ );
