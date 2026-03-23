@@ -439,7 +439,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 >
                   <option value="">None selected</option>
                   {jds.map((j) => (
-                    <option key={j.id} value={j.id}>{j.title || j.company_name}</option>
+                    <option key={j.id} value={j.id}>{(j as any).title || j.company_name}</option>
                   ))}
                 </select>
               </div>
