@@ -228,7 +228,10 @@ function AppShell() {
 
   return (
     // ★ FIX: h-[100vh] instead of h-screen — more reliable in Electron
-    <div className="flex h-[100vh] w-full overflow-hidden bg-background">
+    <div className={cn(
+      "flex h-[100vh] w-full overflow-hidden",
+      IS_ELECTRON ? "electron-shell" : "bg-background"
+    )}>
 
       {/* ★ FIX: drag region for frameless Electron window — only shown in Electron */}
       {IS_ELECTRON && (
