@@ -57,7 +57,7 @@ export default function RoomSession() {
       setSession(data as Session | null);
 
       const { data: parts } = await supabase
-        .from("practice_room_participants")
+        .from("room_participants")
         .select("id, user_id, display_name, joined_at")
         .eq("room_id", id);
       setParticipants((parts as Participant[]) ?? []);

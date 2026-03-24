@@ -48,7 +48,7 @@ export default function SettingsNotifications() {
   const { profile, user } = useAuthStore();
 
   const [prefs,   setPrefs]   = useState<Record<string, boolean>>(
-    profile?.notification_prefs ?? {}
+    (profile as any)?.metadata?.notification_prefs ?? {}
   );
   const [saving,  setSaving]  = useState(false);
   const [saved,   setSaved]   = useState(false);
@@ -63,7 +63,7 @@ export default function SettingsNotifications() {
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({ notification_prefs: prefs })
+        .update({ metadata: { ...((profile as any)?.metadata ?? {}), notification_prefs: prefs } } as any)
         .eq("id", user.id);
       if (error) throw error;
       setSaved(true);

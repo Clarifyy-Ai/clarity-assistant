@@ -76,9 +76,8 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
       };
     }, [isProctorSafe, onPositionChange, overlayWidth, overlayHeight]);
 
-     return (
+    return (
       <div
-      <div ref={mergedRef} style={{ position: "fixed", left: position.x, top: position.y }}>
         ref={mergedRef}
         className="fixed animate-fade-in"
         style={{
@@ -91,12 +90,8 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
           transform: "translateZ(0)",
         }}
       >
-         {children}
-         {children}
-       </div>
-       </div>
-     );
-     );
-   }
-   }
- );
+        {children}
+      </div>
+    );
+  }
+);
