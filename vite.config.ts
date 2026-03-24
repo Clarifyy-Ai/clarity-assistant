@@ -6,6 +6,7 @@ const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
+  const isElectron = process.env.BUILD_TARGET === "electron";
 
   const plugins = [react()];
 
@@ -13,11 +14,11 @@ export default defineConfig(({ mode }) => {
     import("@sentry/vite-plugin").then(({ sentryVitePlugin }) => {
       plugins.push(
         sentryVitePlugin({
-          org: env.SENTRY_ORG,
-          project: env.SENTRY_PROJECT,
-          authToken: env.SENTRY_AUTH_TOKEN,
+          org:        env.SENTRY_ORG,
+          project:    env.SENTRY_PROJECT,
+          authToken:  env.SENTRY_AUTH_TOKEN,
           sourcemaps: { assets: "./dist/**" },
-          telemetry: false,
+          telemetry:  false,
         }) as never
       );
     });
@@ -25,6 +26,9 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins,
+
+    // ★ ADDED: "./" for Electron file:// paths, "/" for web/Lovable
+    base: isElectron ? "./" : "/",
 
     resolve: {
       alias: {
@@ -34,6 +38,7 @@ export default defineConfig(({ mode }) => {
 
     build: {
       sourcemap: true,
+      outDir:    "dist",
       rollupOptions: {
         output: {
           manualChunks: {
@@ -59,14 +64,15 @@ export default defineConfig(({ mode }) => {
     },
 
     server: {
-      port: 5000,
+      // ★ CHANGED: 5173 for Electron dev (main.cjs expects this port)
+      port: isElectron ? 5173 : 5000,
       host: "0.0.0.0",
       allowedHosts: true,
       proxy: {
         "/functions/v1": {
-          target: env.VITE_SUPABASE_URL || "https://qzgvjrvtkwlzxpmlddkx.supabase.co",
+          target:       env.VITE_SUPABASE_URL || "https://qzgvjrvtkwlzxpmlddkx.supabase.co",
           changeOrigin: true,
-          rewrite: (p) => p.replace(/^\/functions\/v1/, "/functions/v1"),
+          rewrite:      (p) => p.replace(/^\/functions\/v1/, "/functions/v1"),
         },
       },
     },
@@ -77,9 +83,9 @@ export default defineConfig(({ mode }) => {
     },
 
     test: {
-      globals: true,
+      globals:     true,
       environment: "jsdom",
-      setupFiles: ["./src/test/setup.ts"],
+      setupFiles:  ["./src/test/setup.ts"],
       coverage: {
         provider: "v8",
         reporter: ["text", "lcov", "html"],
