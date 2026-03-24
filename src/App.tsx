@@ -1,4 +1,5 @@
 import { lazy, Suspense, useEffect } from "react";
+import { cn } from "@/lib/utils";
 import {
   createBrowserRouter,
   createHashRouter,
