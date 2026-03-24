@@ -2,19 +2,45 @@
   "name": "clarify-ai",
   "version": "1.0.0",
   "private": true,
-  "type": "module",
+  "main": "electron/main.cjs",
   "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "build:dev": "vite build --mode development",
-    "preview": "vite preview",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest",
-    "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage",
-    "format": "prettier --write .",
-    "supabase:gen": "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > src/types/supabase.ts"
+    "dev":            "vite",
+    "dev:electron":   "concurrently \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "build":          "vite build",
+    "dist:mac":       "vite build && electron-builder --mac",
+    "dist:win":       "vite build && electron-builder --win",
+    "dist:linux":     "vite build && electron-builder --linux",
+    "preview":        "vite preview",
+    "lint":           "eslint . --ext ts,tsx",
+    "typecheck":      "tsc --noEmit",
+    "test":           "vitest",
+    "supabase:gen":   "supabase gen types typescript --project-id $SUPABASE_PROJECT_ID > src/types/supabase.ts"
+  },
+  "build": {
+    "appId":          "com.clarify.ai",
+    "productName":    "ClarifyAI",
+    "asar":           true,
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "mac": {
+      "target":       [{ "target": "dmg", "arch": ["arm64", "x64"] }],
+      "category":     "public.app-category.productivity",
+      "darkModeSupport": true
+    },
+    "win": {
+      "target":       [{ "target": "nsis", "arch": ["x64"] }],
+      "icon":         "public/icon.ico"
+    },
+    "linux": {
+      "target":       ["AppImage"],
+      "category":     "Utility"
+    },
+    "nsis": {
+      "oneClick":         false,
+      "allowToChangeInstallationDirectory": true
+    }
   },
   "dependencies": {
     "@deepgram/sdk": "^3.3.0",
@@ -95,6 +121,10 @@
     "@vitest/coverage-v8": "^2.1.1",
     "@vitest/ui": "^2.1.1",
     "autoprefixer": "^10.4.20",
+    "concurrently": "^9.0.0",
+    "cross-env": "^7.0.3",
+    "electron": "^32.0.0",
+    "electron-builder": "^25.0.0",
     "eslint": "^9.11.1",
     "eslint-plugin-react-hooks": "^5.1.0-rc.0",
     "eslint-plugin-react-refresh": "^0.4.12",
@@ -105,6 +135,7 @@
     "tailwindcss": "^3.4.13",
     "typescript": "^5.5.3",
     "vite": "^5.4.8",
-    "vitest": "^2.1.1"
+    "vitest": "^2.1.1",
+    "wait-on": "^8.0.0"
   }
 }
