@@ -4,7 +4,7 @@ import type {
   AudioErrorCode,
 } from "@/types/audio.types";
 import { useAudioStore } from "@/store/audioStore";
-import { captureSystemAudioViaTabShare } from "@/lib/capture/screenShare";
+import { captureSystemAudioViaTabShare } from "@/lib/capture/tabAudioCapture";
 
 // ─────────────────────────────────────────────────────────────────
 // Audio Capture Engine
