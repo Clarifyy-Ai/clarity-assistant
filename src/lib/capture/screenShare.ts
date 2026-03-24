@@ -1,4 +1,4 @@
-// src/lib/capture/screenShare.ts
+// src/lib/capture/screenShare.ts — Screen-share helpers with privacy capture
 
 /**
  * Screen-share helpers that keep the overlay out of shared video.
