@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { startTabShareBestEffort } from "@/lib/capture/screenShare";
+import { startTabShareBestEffort } from "@/lib/capture/tabAudioCapture";
 
 // ─────────────────────────────────────────────────────────────────
 // useSafeTabShare

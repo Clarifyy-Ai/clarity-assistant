@@ -1,5 +1,5 @@
 import { useCallback, useRef, useState } from "react";
-import { captureSystemAudioViaTabShare } from "@/lib/capture/screenShare";
+import { captureSystemAudioViaTabShare } from "@/lib/capture/tabAudioCapture";
 
 // ─────────────────────────────────────────────────────────────────
 // useSystemAudio

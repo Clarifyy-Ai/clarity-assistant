@@ -1,6 +1,6 @@
 // System audio capture (Chrome / Edge only)
 // NOTE: User MUST choose "Share audio" in the share picker.
-import { captureSystemAudioViaTabShare } from "@/lib/capture/screenShare";
+import { captureSystemAudioViaTabShare } from "@/lib/capture/tabAudioCapture";
 
 export async function startSystemAudioCapture(): Promise<MediaStream> {
   try {

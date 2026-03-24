@@ -1,4 +1,4 @@
-// src/lib/capture/screenShare.ts
+// src/lib/capture/screenShare.ts — Screen-share helpers with privacy capture
 
 /**
  * Screen-share helpers that keep the overlay out of shared video.
@@ -44,15 +44,6 @@ declare const CropTarget: CropTargetConstructor | undefined;
 
 // ── Shared getDisplayMedia constraints ──────────────────────────────────────
 
-/**
- * Privacy-preserving display-media constraints.
- * - `displaySurface: 'browser'`  — nudges picker to select a browser tab.
- * - `selfBrowserSurface: 'exclude'` — hides the current tab from the list
- *    (prevents accidental self-share that would reveal the overlay).
- * - `monitorTypeSurfaces: 'exclude'` — removes "Entire Screen" option.
- * - `surfaceSwitching: 'include'`  — shows the surface switcher in the
- *    browser toolbar so the user can change source mid-share.
- */
 function getDisplayMediaConstraints(): DisplayMediaStreamOptions {
   return {
     video: {
@@ -70,14 +61,6 @@ function getDisplayMediaConstraints(): DisplayMediaStreamOptions {
 
 // ── 1. Element Capture ───────────────────────────────────────────────────────
 
-/**
- * Starts a tab share that captures **only** `targetElement` and its subtree.
- * The overlay (rendered outside this element via DPiP) is never included.
- *
- * Falls back to Region Capture if Element Capture is unsupported.
- *
- * @param targetElement  The DOM element to share (e.g. `#app-share-root`).
- */
 export async function startTabShareElementCapture(
   targetElement: HTMLElement
 ): Promise<MediaStream> {
@@ -87,7 +70,6 @@ export async function startTabShareElementCapture(
 
   const [track] = stream.getVideoTracks();
 
-  // ── Element Capture (Chrome 116+) ─────────────────────────────────────────
   if (
     typeof RestrictionTarget !== "undefined" &&
     typeof track.restrictTo === "function"
@@ -102,18 +84,11 @@ export async function startTabShareElementCapture(
     }
   }
 
-  // ── Fallback: Region Capture ──────────────────────────────────────────────
   return applyRegionCapture(stream, track, targetElement);
 }
 
 // ── 2. Region Capture ────────────────────────────────────────────────────────
 
-/**
- * Starts a tab share and crops the video to `targetElement`'s bounding rect.
- * The overlay (outside the cropped region) is not visible to remote viewers.
- *
- * @param targetElement  The DOM element to share (e.g. `#app-share-root`).
- */
 export async function startTabShareRegionCapture(
   targetElement: HTMLElement
 ): Promise<MediaStream> {
@@ -149,36 +124,20 @@ async function applyRegionCapture(
   return stream;
 }
 
-// ── Usage helper ─────────────────────────────────────────────────────────────
+// ── Convenience helpers ──────────────────────────────────────────────────────
 
-/**
- * Convenience: auto-selects the best available capture strategy.
- * Call this wherever you previously called `navigator.mediaDevices.getDisplayMedia()`.
- *
- * @example
- *   const stream = await startBestTabShare(
- *     document.getElementById("app-share-root")!
- *   );
- */
 export async function startBestTabShare(
   targetElement: HTMLElement
 ): Promise<MediaStream> {
   return startTabShareElementCapture(targetElement);
 }
 
-/**
- * Alias used by useSafeTabShare — accepts Element (not just HTMLElement).
- */
 export async function startTabShareBestEffort(
   targetElement: Element
 ): Promise<MediaStream> {
   return startTabShareElementCapture(targetElement as HTMLElement);
 }
 
-/**
- * Capture system (tab) audio via getDisplayMedia with audio enabled.
- * Used by useSystemAudio, audioCapture, and systemAudioCapture.
- */
 export async function captureSystemAudioViaTabShare(
   audioConstraints?: MediaTrackConstraints
 ): Promise<MediaStream> {
