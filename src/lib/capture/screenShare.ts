@@ -131,35 +131,3 @@ export async function startBestTabShare(
 ): Promise<MediaStream> {
   return startTabShareElementCapture(targetElement);
 }
-
-export async function startTabShareBestEffort(
-  targetElement: Element
-): Promise<MediaStream> {
-  return startTabShareElementCapture(targetElement as HTMLElement);
-}
-
-export async function captureSystemAudioViaTabShare(
-  audioConstraints?: MediaTrackConstraints
-): Promise<MediaStream> {
-  const stream = await navigator.mediaDevices.getDisplayMedia({
-    video: {
-      // @ts-ignore
-      displaySurface: "browser",
-    },
-    audio: audioConstraints ?? true,
-    // @ts-ignore
-    selfBrowserSurface: "exclude",
-    monitorTypeSurfaces: "exclude",
-    surfaceSwitching: "include",
-    systemAudio: "include",
-  } as any);
-
-  // Strip the video track — caller only needs audio
-  stream.getVideoTracks().forEach((t) => t.stop());
-
-  if (stream.getAudioTracks().length === 0) {
-    throw new Error("No audio track — user may not have checked 'Share audio'.");
-  }
-
-  return new MediaStream(stream.getAudioTracks());
-}

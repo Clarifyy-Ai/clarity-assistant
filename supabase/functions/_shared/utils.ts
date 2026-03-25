@@ -223,8 +223,7 @@ export async function deductCredits(
     user_id:       userId,
     amount:        -cost,
     balance_after: newBalance,
-    type:          "deduction",
-    feature,
+    action:        "usage",
     description:   `${feature.replace(/_/g, " ")} — ${cost} credit${cost !== 1 ? "s" : ""}`,
     created_at:    new Date().toISOString(),
   });

@@ -98,10 +98,11 @@ async function extractPdfBase64(req: Request): Promise<string | null> {
 async function refundCredits(userId: string, amount: number, reason: string): Promise<void> {
   try {
     const admin = getAdminClient();
-    // Use atomic RPC instead of read-modify-write
-    const { error } = await admin.rpc("increment_credits", {
-      user_id: userId,
-      amount,
+    const { error } = await admin.rpc("add_credits", {
+      p_user_id: userId,
+      p_amount: amount,
+      p_action: "refund",
+      p_description: `PDF parse refund: ${reason}`,
     });
     if (error) {
       console.error(`[parse-question-pdf] Credit refund RPC failed (${reason}):`, error.message);
