@@ -5,6 +5,7 @@ import { Check, X, ArrowRight, Zap } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 const CREDIT_PACKS = [
   { credits: 50, price: 499, label: "50 credits" },
@@ -23,6 +24,7 @@ const PLAN_COLORS: Record<string, string> = {
 };
 
 export default function Pricing() {
+  usePageMeta({ title: "Pricing — Clarify AI", description: "Simple, transparent pricing for interview prep. Start free, upgrade when ready." });
   const [annual, setAnnual] = useState(false);
 
   return (

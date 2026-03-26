@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import {
   Brain, BarChart2, Shield, Zap, ArrowRight, CheckCircle2,
   Mic, Star, Play, TrendingUp, Clock, Target,
@@ -252,6 +253,11 @@ function CellValue({ value }: { value: boolean | string }) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Landing() {
+  usePageMeta({
+    title: "Clarify AI — Ace Every Interview with AI by Your Side",
+    description: "Real-time AI coaching during live interviews, mock sessions with deep analytics, and a full prep lab. Start free today.",
+  });
+
   return (
     <MarketingLayout>
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
