@@ -1,6 +1,4 @@
-// @ts-nocheck -- retained: sessions table columns (overall_score, target_company, target_role,
-// session_type) are not in Supabase generated types (added via manual migrations); removing
-// suppression produces implicit-any on all row field accesses and filter values.
+// @ts-nocheck
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase/client";
@@ -11,9 +9,10 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import {
   ClipboardList, Mic, FlaskConical,
-  Search, ChevronRight, Filter, SlidersHorizontal,
+  Search, ChevronRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -22,10 +21,12 @@ import { format } from "date-fns";
 // SessionHistory — all sessions list with filter + search
 // ─────────────────────────────────────────────────────────────────
 
-const SESSION_TYPES = ["all", "mock", "live", "prep"] as const;
+const SESSION_TYPES = ["all", "mock", "live", "practice"] as const;
 type FilterType = typeof SESSION_TYPES[number];
 
 export default function SessionHistory() {
+  usePageMeta({ title: "Session History | Clarify AI", description: "Review all your interview practice sessions." });
+
   const { user }    = useAuthStore();
   const [sessions,  setSessions]  = useState<any[]>([]);
   const [loading,   setLoading]   = useState(true);
@@ -39,28 +40,37 @@ export default function SessionHistory() {
 
   async function fetchSessions() {
     setLoading(true);
-    const { data, error } = await supabase
-      .from("sessions")
-      .select("id, session_type, interview_type, target_company, overall_score, created_at, duration_seconds, question_count")
-      .eq("user_id", user!.id)
-      .order("created_at", { ascending: false })
-      .limit(50);
-    if (error) {
-      console.warn("[SessionHistory] Fetch error:", error.message);
-      toast.error("Failed to load session history. Please refresh the page.");
+    try {
+      const { data, error } = await supabase
+        .from("sessions")
+        .select("id, type, title, overall_score, created_at, started_at, ended_at, questions_asked, status, tags")
+        .eq("user_id", user!.id)
+        .order("created_at", { ascending: false })
+        .limit(50);
+
+      if (error) {
+        console.warn("[SessionHistory] Fetch error:", error.message);
+        toast.error("Failed to load session history. Please try again.");
+        setSessions([]);
+      } else {
+        setSessions(data ?? []);
+      }
+    } catch (err) {
+      console.error("[SessionHistory] Unexpected error:", err);
+      toast.error("Something went wrong loading sessions.");
+      setSessions([]);
     }
-    setSessions(data ?? []);
     setLoading(false);
   }
 
   const filtered = sessions.filter((s) => {
-    if (filter !== "all" && s.session_type !== filter) return false;
+    if (filter !== "all" && s.type !== filter) return false;
     if (search) {
       const q = search.toLowerCase();
       return (
-        s.target_company?.toLowerCase().includes(q) ||
-        s.interview_type?.toLowerCase().includes(q) ||
-        s.session_type?.toLowerCase().includes(q)
+        s.title?.toLowerCase().includes(q) ||
+        s.type?.toLowerCase().includes(q) ||
+        s.tags?.some((t: string) => t.toLowerCase().includes(q))
       );
     }
     return true;
@@ -109,7 +119,9 @@ export default function SessionHistory() {
       ) : filtered.length === 0 ? (
         <Card className="text-center py-16">
           <ClipboardList className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-          <p className="text-muted-foreground text-sm">No sessions found.</p>
+          <p className="text-muted-foreground text-sm">
+            {sessions.length === 0 ? "No sessions yet. Start your first mock interview!" : "No sessions match your filter."}
+          </p>
           <Link
             to="/app/mock"
             className="text-xs text-primary hover:opacity-80 mt-2 inline-block transition-opacity"
@@ -129,24 +141,29 @@ export default function SessionHistory() {
 }
 
 function SessionRow({ session: s }: { session: any }) {
+  const sessionType = s.type ?? "practice";
+
   const icon =
-    s.session_type === "mock"  ? <ClipboardList className="w-4 h-4" /> :
-    s.session_type === "live"  ? <Mic className="w-4 h-4" /> :
+    sessionType === "mock"     ? <ClipboardList className="w-4 h-4" /> :
+    sessionType === "live"     ? <Mic className="w-4 h-4" /> :
                                  <FlaskConical className="w-4 h-4" />;
 
   const iconBg =
-    s.session_type === "mock"  ? "bg-blue-500/10 text-blue-400" :
-    s.session_type === "live"  ? "bg-red-500/10 text-red-400"   :
+    sessionType === "mock"     ? "bg-blue-500/10 text-blue-400" :
+    sessionType === "live"     ? "bg-red-500/10 text-red-400"   :
                                  "bg-violet-500/10 text-violet-400";
 
   const scoreColor =
-    s.overall_score === null ? "text-muted-foreground" :
-    s.overall_score >= 75    ? "text-emerald-400" :
-    s.overall_score >= 50    ? "text-amber-400"   : "text-red-400";
+    s.overall_score === null    ? "text-muted-foreground" :
+    s.overall_score >= 75       ? "text-emerald-400" :
+    s.overall_score >= 50       ? "text-amber-400"   : "text-red-400";
 
-  const duration = s.duration_seconds
-    ? `${Math.floor(s.duration_seconds / 60)}m`
-    : null;
+  // Calculate duration from started_at / ended_at
+  let duration: string | null = null;
+  if (s.started_at && s.ended_at) {
+    const ms = new Date(s.ended_at).getTime() - new Date(s.started_at).getTime();
+    if (ms > 0) duration = `${Math.floor(ms / 60000)}m`;
+  }
 
   return (
     <Link
@@ -163,22 +180,20 @@ function SessionRow({ session: s }: { session: any }) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-xs sm:text-sm font-semibold text-foreground capitalize">
-            {s.session_type} Interview
+            {s.title ?? `${sessionType} session`}
           </span>
-          {s.interview_type && (
-            <Badge variant="default" size="sm">{s.interview_type}</Badge>
-          )}
-          {s.target_company && (
-            <Badge variant="violet" size="sm">{s.target_company}</Badge>
+          <Badge variant="default" size="sm">{sessionType}</Badge>
+          {s.status && s.status !== "completed" && (
+            <Badge variant="violet" size="sm">{s.status}</Badge>
           )}
         </div>
         <div className="flex items-center gap-3 mt-0.5">
           <span className="text-[10px] sm:text-xs text-muted-foreground">
             {format(new Date(s.created_at), "MMM d, yyyy · h:mm a")}
           </span>
-          {s.question_count && (
+          {s.questions_asked != null && s.questions_asked > 0 && (
             <span className="text-xs text-muted-foreground">
-              {s.question_count} questions
+              {s.questions_asked} questions
             </span>
           )}
           {duration && (

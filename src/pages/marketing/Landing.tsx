@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import {
   Brain, BarChart2, Shield, Zap, ArrowRight, CheckCircle2,
   Mic, Star, Play, TrendingUp, Clock, Target,
@@ -252,6 +253,11 @@ function CellValue({ value }: { value: boolean | string }) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Landing() {
+  usePageMeta({
+    title: "Clarify AI — Ace Every Interview with AI by Your Side",
+    description: "Real-time AI coaching during live interviews, mock sessions with deep analytics, and a full prep lab. Start free today.",
+  });
+
   return (
     <MarketingLayout>
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
@@ -637,8 +643,8 @@ export default function Landing() {
                 name: "Pro",
                 price: "$39",
                 period: "/month",
-                tagline: "For active job seekers",
-                features: ["300 credits/month", "Stealth overlay (live co-pilot)", "Advanced analytics", "BYOK support"],
+                tagline: "Everything you need to land the role",
+                features: ["300 credits/month", "Stealth overlay (live co-pilot)", "Advanced analytics", "BYOK support", "Calendar sync"],
                 cta: "Get Pro",
                 to: "/signup?plan=pro",
                 highlight: true,
@@ -647,8 +653,8 @@ export default function Landing() {
                 name: "Elite",
                 price: "$79",
                 period: "/month",
-                tagline: "For those who want it all",
-                features: ["Unlimited credits", "All Pro features", "Priority AI routing", "Practice rooms"],
+                tagline: "For FAANG-level prep",
+                features: ["1000 credits/month", "All Pro features", "Priority AI routing", "Practice rooms", "1-on-1 coaching"],
                 cta: "Get Elite",
                 to: "/signup?plan=elite",
                 highlight: false,

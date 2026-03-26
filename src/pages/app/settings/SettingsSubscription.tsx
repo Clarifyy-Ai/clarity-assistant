@@ -4,77 +4,37 @@ import { useAuthStore } from "@/store/userStore";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { PLANS, type PlanId } from "@/lib/billing/subscriptionManager";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import {
-  CreditCard, CheckCircle, Zap,
-  Star, Shield, ChevronRight,
-  Crown, AlertTriangle,
+  CheckCircle, Zap,
+  Shield, ChevronRight,
+  Crown, AlertTriangle, ArrowRight,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { Link } from "react-router-dom";
 
 // ─────────────────────────────────────────────────────────────────
-// SettingsSubscription
+// SettingsSubscription — uses the same PLANS from subscriptionManager
 // ─────────────────────────────────────────────────────────────────
 
-const PLANS = [
-  {
-    id:       "free",
-    label:    "Free",
-    price:    0,
-    billing:  "",
-    features: [
-      "5 mock sessions / month",
-      "Basic AI feedback",
-      "Question bank access",
-      "STAR builder",
-    ],
-    color: "default",
-  },
-  {
-    id:       "pro",
-    label:    "Pro",
-    price:    19,
-    billing:  "/month",
-    popular:  true,
-    features: [
-      "Unlimited mock sessions",
-      "Advanced AI feedback",
-      "Live co-pilot with hints",
-      "Company research briefs",
-      "Analytics & score trends",
-      "AI Tools (cover letter, etc.)",
-      "PDF export",
-      "Priority support",
-    ],
-    color: "violet",
-  },
-  {
-    id:       "team",
-    label:    "Team",
-    price:    49,
-    billing:  "/month",
-    features: [
-      "Everything in Pro",
-      "5 team seats",
-      "Shared answer bank",
-      "Team analytics",
-      "Admin dashboard",
-      "Custom branding",
-    ],
-    color: "amber",
-  },
-];
+const DISPLAY_PLANS: PlanId[] = ["free", "starter", "pro", "elite"];
+
+const PLAN_COLORS: Record<string, string> = {
+  slate: "from-gray-500 to-gray-600",
+  blue: "from-blue-500 to-blue-600",
+  violet: "from-violet-500 to-purple-600",
+  amber: "from-amber-500 to-orange-500",
+};
 
 export default function SettingsSubscription() {
+  usePageMeta({ title: "Subscription | Clarify AI" });
+
   const { profile } = useAuthStore();
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
-  const currentPlan = profile?.plan ?? "free";
+  const currentPlan = profile?.plan_id ?? "free";
   const renewDate   = profile?.subscription_renews_at;
-
-  function getPrice(base: number) {
-    if (base === 0) return 0;
-    return billing === "annual" ? Math.floor(base * 0.75) : base;
-  }
 
   return (
     <div className="space-y-5">
@@ -94,9 +54,9 @@ export default function SettingsSubscription() {
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
-              {b}
+              {b === "monthly" ? "Monthly" : "Annual"}
               {b === "annual" && (
-                <span className="ml-1 text-emerald-400">-25%</span>
+                <span className="ml-1 text-emerald-400">-20%</span>
               )}
             </button>
           ))}
@@ -123,60 +83,72 @@ export default function SettingsSubscription() {
         </Card>
       )}
 
-      {/* Plan cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-        {PLANS.map((plan) => {
-          const isCurrent = plan.id === currentPlan;
-          const price     = getPrice(plan.price);
+      {/* Plan cards — sourced from the single PLANS catalogue */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {DISPLAY_PLANS.map((planId) => {
+          const plan = PLANS[planId];
+          const isCurrent = planId === currentPlan;
+          const price = billing === "annual" ? plan.yearlyPrice : plan.monthlyPrice;
+          const priceDisplay = price === 0 ? "Free" : `$${(price / 100).toFixed(0)}`;
+
           return (
             <Card
               key={plan.id}
               className={cn(
                 "flex flex-col relative",
-                plan.popular && "border-violet-500/40 bg-violet-600/5",
-                isCurrent && "ring-1 ring-violet-500/30"
+                plan.isPopular && "border-primary/40 bg-primary/[0.04]",
+                isCurrent && "ring-1 ring-primary/30"
               )}
             >
-              {plan.popular && (
+              {plan.isPopular && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
                   <Badge variant="violet" size="sm">Most popular</Badge>
                 </div>
               )}
 
+              <div className={cn("w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center mb-4", PLAN_COLORS[plan.color] ?? PLAN_COLORS.slate)}>
+                <Zap className="w-5 h-5 text-white" />
+              </div>
+
               <div className="mb-4">
-                <p className="text-sm font-bold text-foreground">{plan.label}</p>
-                <div className="flex items-baseline gap-0.5 mt-1">
+                <p className="text-sm font-bold text-foreground">{plan.name}</p>
+                <p className="text-xs text-muted-foreground mt-0.5">{plan.tagline}</p>
+                <div className="flex items-baseline gap-0.5 mt-2">
                   <span className="text-3xl font-black text-foreground">
-                    ${price}
+                    {priceDisplay}
                   </span>
-                  <span className="text-xs text-muted-foreground">{plan.billing}</span>
+                  {price > 0 && <span className="text-xs text-muted-foreground">/mo</span>}
                 </div>
-                {billing === "annual" && price > 0 && (
-                  <p className="text-[10px] text-emerald-400 mt-0.5">
-                    Save ${(plan.price - price) * 12}/year
-                  </p>
-                )}
+                <p className="text-[10px] text-muted-foreground/70 mt-1">
+                  {plan.creditsPerMonth === -1 ? "Unlimited credits" : `${plan.creditsPerMonth} credits/mo`}
+                </p>
               </div>
 
               <ul className="space-y-2 flex-1">
-                {plan.features.map((f) => (
-                  <li key={f} className="flex items-start gap-2 text-xs text-foreground">
-                    <CheckCircle className="w-3.5 h-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                    {f}
+                {plan.features.slice(0, 6).map((f) => (
+                  <li key={f.key} className="flex items-start gap-2 text-xs">
+                    {f.included ? (
+                      <CheckCircle className="w-3.5 h-3.5 text-primary shrink-0 mt-0.5" />
+                    ) : (
+                      <Shield className="w-3.5 h-3.5 text-muted-foreground/30 shrink-0 mt-0.5" />
+                    )}
+                    <span className={f.included ? "text-muted-foreground" : "text-muted-foreground/40"}>
+                      {f.label}
+                    </span>
                   </li>
                 ))}
               </ul>
 
               <Button
-                variant={isCurrent ? "ghost" : plan.popular ? "primary" : "secondary"}
+                variant={isCurrent ? "ghost" : plan.isPopular ? "primary" : "secondary"}
                 size="sm"
                 fullWidth
                 className="mt-4"
                 disabled={isCurrent}
               >
                 {isCurrent ? "Current plan" :
-                 currentPlan === "free" ? `Upgrade to ${plan.label}` :
-                 plan.id === "free" ? "Downgrade" : `Switch to ${plan.label}`}
+                 currentPlan === "free" ? `Upgrade to ${plan.name}` :
+                 planId === "free" ? "Downgrade" : `Switch to ${plan.name}`}
               </Button>
             </Card>
           );

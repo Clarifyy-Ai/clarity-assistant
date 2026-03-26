@@ -33,6 +33,8 @@ const FOOTER_COLUMNS = [
     heading: "Company",
     links: [
       { href: "mailto:sales@clarifyai.com", label: "Contact Sales" },
+      { to: "/terms", label: "Terms of Service" },
+      { to: "/privacy", label: "Privacy Policy" },
       { to: "/signup", label: "Sign up free" },
       { to: "/login", label: "Log in" },
     ],
@@ -204,6 +206,8 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
           <div className="border-t border-border pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
             <span>&copy; {new Date().getFullYear()} Payara Labs. All rights reserved.</span>
             <div className="flex gap-4 flex-wrap justify-center">
+              <Link to="/terms" className="hover:text-foreground transition-colors">Terms</Link>
+              <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
               <Link to="/help" className="hover:text-foreground transition-colors">Help</Link>
               <Link to="/pricing" className="hover:text-foreground transition-colors">Pricing</Link>
               <Link to="/blog" className="hover:text-foreground transition-colors">Blog</Link>
