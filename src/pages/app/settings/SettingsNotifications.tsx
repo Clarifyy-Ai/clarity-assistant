@@ -1,4 +1,4 @@
-// @ts-nocheck -- retained: notification_prefs and privacy_prefs JSONB column types not in Supabase generated schema; Toggle component uses Radix UI checked prop which TypeScript does not accept on the wrapper component type.
+// @ts-nocheck
 import { useState } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
@@ -9,49 +9,25 @@ import { CheckCircle, Bell, Mail, Smartphone } from "lucide-react";
 import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
-// SettingsNotifications
+// SettingsNotifications — uses actual profile columns
 // ─────────────────────────────────────────────────────────────────
 
-const NOTIFICATION_GROUPS = [
-  {
-    label: "Session reminders",
-    items: [
-      { key: "session_reminder_email",  label: "Email reminder before scheduled interview", channel: "email" },
-      { key: "session_reminder_push",   label: "Push notification 30 min before interview",  channel: "push"  },
-    ],
-  },
-  {
-    label: "Progress updates",
-    items: [
-      { key: "weekly_report_email",     label: "Weekly performance digest (email)",           channel: "email" },
-      { key: "streak_reminder_push",    label: "Daily practice streak reminder",              channel: "push"  },
-      { key: "milestone_push",          label: "Achievement & milestone notifications",        channel: "push"  },
-    ],
-  },
-  {
-    label: "AI & credits",
-    items: [
-      { key: "low_credits_email",       label: "Alert when credits are running low",          channel: "email" },
-      { key: "debrief_ready_push",      label: "Notify when AI debrief is ready",             channel: "push"  },
-    ],
-  },
-  {
-    label: "Community",
-    items: [
-      { key: "room_invite_push",        label: "Peer practice room invitations",              channel: "push"  },
-      { key: "product_updates_email",   label: "Product updates and new features",            channel: "email" },
-    ],
-  },
+const NOTIFICATION_ITEMS = [
+  { key: "email_notifications",  label: "Email notifications",                    channel: "email" },
+  { key: "session_reminders",    label: "Session reminder notifications",          channel: "push"  },
+  { key: "marketing_emails",     label: "Product updates and marketing emails",    channel: "email" },
 ];
 
 export default function SettingsNotifications() {
   const { profile, user } = useAuthStore();
 
-  const [prefs,   setPrefs]   = useState<Record<string, boolean>>(
-    (profile as any)?.metadata?.notification_prefs ?? {}
-  );
-  const [saving,  setSaving]  = useState(false);
-  const [saved,   setSaved]   = useState(false);
+  const [prefs, setPrefs] = useState<Record<string, boolean>>({
+    email_notifications: (profile as any)?.email_notifications ?? true,
+    session_reminders:   (profile as any)?.session_reminders   ?? true,
+    marketing_emails:    (profile as any)?.marketing_emails    ?? false,
+  });
+  const [saving, setSaving] = useState(false);
+  const [saved,  setSaved]  = useState(false);
 
   function toggle(key: string) {
     setPrefs((p) => ({ ...p, [key]: !p[key] }));
@@ -63,11 +39,17 @@ export default function SettingsNotifications() {
     try {
       const { error } = await supabase
         .from("profiles")
-        .update({ metadata: { ...((profile as any)?.metadata ?? {}), notification_prefs: prefs } } as any)
+        .update({
+          email_notifications: prefs.email_notifications,
+          session_reminders:   prefs.session_reminders,
+          marketing_emails:    prefs.marketing_emails,
+          updated_at:          new Date().toISOString(),
+        })
         .eq("id", user.id);
       if (error) throw error;
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      toast.success("Notification preferences saved");
     } catch (err) {
       toast.error(err?.message ?? "Failed to save notification preferences.");
     } finally {
@@ -84,27 +66,22 @@ export default function SettingsNotifications() {
     <div className="space-y-5">
       <h2 className="text-lg font-bold text-foreground">Notifications</h2>
 
-      {NOTIFICATION_GROUPS.map((group) => (
-        <Card key={group.label}>
-          <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-4">
-            {group.label}
-          </h3>
-          <div className="space-y-4">
-            {group.items.map((item) => (
-              <div key={item.key} className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  {channelIcon(item.channel)}
-                  <span className="text-sm text-foreground">{item.label}</span>
-                </div>
-                <Toggle
-                  checked={prefs[item.key] ?? false}
-                  onChange={() => toggle(item.key)}
-                />
+      <Card>
+        <div className="space-y-4">
+          {NOTIFICATION_ITEMS.map((item) => (
+            <div key={item.key} className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                {channelIcon(item.channel)}
+                <span className="text-sm text-foreground">{item.label}</span>
               </div>
-            ))}
-          </div>
-        </Card>
-      ))}
+              <Toggle
+                checked={prefs[item.key] ?? false}
+                onChange={() => toggle(item.key)}
+              />
+            </div>
+          ))}
+        </div>
+      </Card>
 
       <Button
         variant={saved ? "success" : "primary"}

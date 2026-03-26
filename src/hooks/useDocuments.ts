@@ -10,13 +10,12 @@ import { callGemini } from "@/lib/ai/geminiClient";
 import { generateId } from "@/lib/utils";
 import type {
   ResumeDocument,
-  ResumeVersion,
   JDDocument,
   JDInputMethod,
   SavedAnswer,
   AnswerCategory,
 } from "@/types/document.types";
-import type { ParsedResume, ParsedJD } from "@/types/ai.types";
+import type { ParsedJD } from "@/types/ai.types";
 
 // ─────────────────────────────────────────────────────────────────
 // answer_bank row → SavedAnswer adapter
@@ -42,7 +41,7 @@ function mapAnswerBankRowToSavedAnswer(row: any): SavedAnswer {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// useDocuments
+// useDocuments — adapted to match actual DB schema
 // ─────────────────────────────────────────────────────────────────
 
 export function useDocuments() {
@@ -51,7 +50,6 @@ export function useDocuments() {
   const answerStore = useAnswerBankStore();
   const [isParsing, setIsParsing] = useState(false);
 
-  // ★ Guard: prevent state updates after unmount
   const mountedRef = useRef(true);
   useEffect(() => {
     mountedRef.current = true;
@@ -73,9 +71,9 @@ export function useDocuments() {
       const [resumeRes, jdRes] = await Promise.all([
         supabase
           .from("resumes")
-          .select("*, resume_versions(*)")
+          .select("*")
           .eq("user_id", user.id)
-          .order("updated_at", { ascending: false }),
+          .order("created_at", { ascending: false }),
         supabase
           .from("job_descriptions")
           .select("*")
@@ -83,12 +81,27 @@ export function useDocuments() {
           .order("created_at", { ascending: false }),
       ]);
       if (!mountedRef.current) return;
-      if (resumeRes.data) docStore.setResumes(resumeRes.data as ResumeDocument[]);
-      if (jdRes.data)     docStore.setJDs(jdRes.data as JDDocument[]);
+
+      // Map DB schema → frontend expected shape
+      if (resumeRes.data) {
+        const mapped = resumeRes.data.map((r: any) => ({
+          ...r,
+          title: r.name ?? r.title ?? "Untitled",
+        }));
+        docStore.setResumes(mapped as ResumeDocument[]);
+      }
+      if (jdRes.data) {
+        const mapped = jdRes.data.map((j: any) => ({
+          ...j,
+          role_title:   j.target_role ?? j.role_title ?? "Unknown Role",
+          company_name: j.company ?? j.company_name ?? null,
+          raw_text:     j.content ?? j.raw_text ?? "",
+        }));
+        docStore.setJDs(mapped as JDDocument[]);
+      }
     } catch (err) {
       console.error("[useDocuments] loadDocuments failed:", err);
     } finally {
-      // ★ FIX: always clear loading even on error
       if (mountedRef.current) docStore.setIsLoading(false);
     }
   }
@@ -111,7 +124,7 @@ export function useDocuments() {
     }
   }
 
-  // ── Upload resume ─────────────────────────────────────────────
+  // ── Upload resume (adapted to actual resumes table: name, file_path, url, content, is_primary) ──
 
   const uploadResume = useCallback(async (
     file: File,
@@ -119,10 +132,9 @@ export function useDocuments() {
   ): Promise<{ resumeId: string | null; error: string | null }> => {
     if (!user) return { resumeId: null, error: "Not authenticated" };
 
-    const resumeId  = generateId();
-    const versionId = generateId();
-    const ext       = file.name.split(".").pop() ?? "pdf";
-    const path      = `${user.id}/${resumeId}/${versionId}.${ext}`;
+    const resumeId = generateId();
+    const ext      = file.name.split(".").pop() ?? "pdf";
+    const path     = `${user.id}/${resumeId}.${ext}`;
 
     docStore.setUploadProgress(0);
 
@@ -135,36 +147,19 @@ export function useDocuments() {
       );
       if (!uploaded) throw new Error("Upload failed");
 
-      // ★ FIX: two separate inserts — Supabase doesn't support nested inserts
       const { error: resumeErr } = await supabase.from("resumes").insert({
-        id:                resumeId,
-        user_id:           user.id,
-        // ★ FIX: correct regex \. not \\.
-        title:             title ?? file.name.replace(/\.[^/.]+$/, ""),
-        active_version_id: versionId,
-        created_at:        new Date().toISOString(),
-        updated_at:        new Date().toISOString(),
+        id:        resumeId,
+        user_id:   user.id,
+        name:      title ?? file.name.replace(/\.[^/.]+$/, ""),
+        file_path: path,
+        url:       uploaded.url,
+        content:   null,
+        is_primary: false,
       });
       if (resumeErr) throw new Error(resumeErr.message);
 
-      const { error: versionErr } = await supabase.from("resume_versions").insert({
-        id:              versionId,
-        resume_id:       resumeId,      // ← required FK
-        version_number:  1,
-        label:           null,
-        file_name:       file.name,
-        file_size_bytes: file.size,
-        file_url:        uploaded.url,
-        is_active:       true,
-        parsed_data:     null,
-        parse_status:    "parsing",
-        parse_error:     null,
-        uploaded_at:     new Date().toISOString(),
-      });
-      if (versionErr) throw new Error(versionErr.message);
-
-      // Fire-and-forget parse (does NOT block upload success)
-      parseResume(resumeId, versionId, uploaded.url, file.type);
+      // Fire-and-forget parse
+      parseResume(resumeId, uploaded.url, file.type);
 
       await loadDocuments();
       return { resumeId, error: null };
@@ -173,7 +168,7 @@ export function useDocuments() {
       docStore.setUploadProgress(0);
       return {
         resumeId: null,
-        error:    err instanceof Error ? err.message : "Upload failed",
+        error: err instanceof Error ? err.message : "Upload failed",
       };
     }
   }, [user]);
@@ -182,16 +177,19 @@ export function useDocuments() {
 
   async function parseResume(
     resumeId: string,
-    versionId: string,
     fileUrl: string,
     mimeType: string
   ): Promise<void> {
     if (!mountedRef.current) return;
     setIsParsing(true);
     try {
-      await supabase.functions.invoke("parse-resume", {
-        body: { resume_id: resumeId, version_id: versionId, file_url: fileUrl, mime_type: mimeType },
+      const { data } = await supabase.functions.invoke("parse-resume", {
+        body: { resume_id: resumeId, file_url: fileUrl, mime_type: mimeType },
       });
+      // Update content if parsed
+      if (data?.content) {
+        await supabase.from("resumes").update({ content: data.content }).eq("id", resumeId);
+      }
       if (mountedRef.current) await loadDocuments();
     } catch (err) {
       console.error("[useDocuments] parseResume failed:", err);
@@ -206,15 +204,12 @@ export function useDocuments() {
     const resume = docStore.resumes.find((r) => r.id === resumeId);
     if (!resume) return;
 
-    // ★ FIX: DB returns resume_versions not .versions
-    const versions: ResumeVersion[] = (resume as any).resume_versions ?? [];
-    for (const version of versions) {
+    // Delete file from storage
+    if ((resume as any).file_path) {
       try {
-        const path = new URL(version.file_url).pathname
-          .split("/storage/v1/object/public/resumes/")[1];
-        if (path) await deleteFile(STORAGE_BUCKETS.RESUMES, path);
+        await deleteFile(STORAGE_BUCKETS.RESUMES, (resume as any).file_path);
       } catch (err) {
-        console.warn("[useDocuments] deleteFile failed for version:", version.id, err);
+        console.warn("[useDocuments] deleteFile failed:", err);
       }
     }
 
@@ -222,7 +217,7 @@ export function useDocuments() {
     docStore.removeResume(resumeId);
   }, [docStore.resumes]);
 
-  // ── Add Job Description ───────────────────────────────────────
+  // ── Add Job Description (adapted to actual DB columns) ────────
 
   const addJobDescription = useCallback(async (params: {
     rawText:    string;
@@ -238,17 +233,17 @@ export function useDocuments() {
     const { error } = await supabase.from("job_descriptions").insert({
       id:           jdId,
       user_id:      user.id,
-      raw_text:     params.rawText,
-      role_title:   params.roleTitle ?? "Unknown Role",
-      company_name: params.company   ?? null,
+      title:        params.roleTitle ?? "Unknown Role",
+      target_role:  params.roleTitle ?? "Unknown Role",
+      company:      params.company   ?? null,
+      content:      params.rawText,
+      url:          params.fileUrl   ?? null,
       input_method: params.method,
       file_url:     params.fileUrl   ?? null,
       is_active:    true,
       parse_status: "parsing",
       parsed_data:  null,
       parse_error:  null,
-      created_at:   new Date().toISOString(),
-      updated_at:   new Date().toISOString(),
     });
 
     if (error) return { jdId: null, error: error.message };
@@ -282,7 +277,6 @@ Return ONLY valid JSON matching this schema:
 Job description:
 ${rawText.slice(0, 4000)}`;
 
-      // ★ FIX: upgraded model + maxOutputTokens
       const text  = await callGemini({ prompt, model: "gemini-2.0-flash", maxOutputTokens: 2048 });
       const clean = text.replace(/```json|```/g, "").trim();
       const data: ParsedJD = JSON.parse(clean);
@@ -312,15 +306,7 @@ ${rawText.slice(0, 4000)}`;
     const jd     = docStore.jds.find((j) => j.id === jdId);
     if (!resume || !jd) return;
 
-    // ★ FIX: DB returns resume_versions not .versions
-    const versions: ResumeVersion[] = (resume as any).resume_versions ?? [];
-    const activeVersion = versions.find(
-      (v) => v.id === resume.active_version_id
-    ) ?? versions[0];
-    if (!activeVersion?.parsed_data) return;
-
     try {
-      // ★ FIX: use live session JWT, not anon key
       const { data: { session } } = await supabase.auth.getSession();
 
       const response = await fetch(`${EDGE_BASE}/gap-analysis`, {
@@ -330,9 +316,8 @@ ${rawText.slice(0, 4000)}`;
           "Authorization": `Bearer ${session?.access_token ?? ""}`,
         },
         body: JSON.stringify({
-          resume_id:         resumeId,
-          resume_version_id: activeVersion.id,
-          jd_id:             jdId,
+          resume_id: resumeId,
+          jd_id:     jdId,
         }),
       });
 
