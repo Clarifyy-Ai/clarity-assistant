@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -11,7 +10,6 @@ export function CookieConsent() {
   useEffect(() => {
     const consent = localStorage.getItem(CONSENT_KEY);
     if (!consent) {
-      // Small delay so it doesn't flash on initial load
       const timer = setTimeout(() => setVisible(true), 1500);
       return () => clearTimeout(timer);
     }
@@ -36,9 +34,12 @@ export function CookieConsent() {
           <p className="text-sm font-semibold text-foreground mb-1">🍪 Cookie Notice</p>
           <p className="text-xs text-muted-foreground leading-relaxed">
             We use essential cookies for authentication and optional analytics cookies to improve the experience.{" "}
-            <Link to="/privacy" className="text-primary hover:underline">
+            <a
+              href="/privacy"
+              className="text-primary hover:underline"
+            >
               Learn more
-            </Link>
+            </a>
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">
