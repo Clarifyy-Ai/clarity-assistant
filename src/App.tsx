@@ -24,6 +24,7 @@ import { SetupChecklist } from "@/components/layout/SetupChecklist";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
 import { Toaster } from "@/components/ui/sonner";
+import { CookieConsent } from "@/components/common/CookieConsent";
 
 // ★ Detect Electron at module level — used for router + IPC decisions
 const IS_ELECTRON = !!(window as any).electronAPI?.isElectron;
@@ -134,6 +135,8 @@ const HelpArticle  = lazy(() => import("@/pages/marketing/HelpArticle"));
 const Shortcuts    = lazy(() => import("@/pages/marketing/Shortcuts"));
 const Blog         = lazy(() => import("@/pages/marketing/Blog"));
 const BlogPost     = lazy(() => import("@/pages/marketing/BlogPost"));
+const Terms        = lazy(() => import("@/pages/marketing/Terms"));
+const Privacy      = lazy(() => import("@/pages/marketing/Privacy"));
 
 // Guide / Admin / Scorecard / 404
 const Guide             = lazy(() => import("@/pages/app/guide/Guide"));
@@ -302,6 +305,8 @@ const routes = [
   { path: "/shortcuts",  element: <Page component={Shortcuts} /> },
   { path: "/blog",       element: <Page component={Blog} /> },
   { path: "/blog/:slug", element: <Page component={BlogPost} /> },
+  { path: "/terms",      element: <Page component={Terms} /> },
+  { path: "/privacy",    element: <Page component={Privacy} /> },
 
   { path: "/dashboard",  element: <Navigate to="/app/dashboard" replace /> },
 
@@ -512,6 +517,7 @@ export default function App() {
             classNames: { toast: "font-sans text-sm" },
           }}
         />
+        <CookieConsent />
       </QueryClientProvider>
     </ErrorBoundary>
   );
