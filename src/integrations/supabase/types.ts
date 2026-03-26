@@ -836,42 +836,66 @@ export type Database = {
       interview_rounds: {
         Row: {
           created_at: string
+          debrief_id: string | null
           duration_minutes: number | null
           id: string
+          interview_type: string | null
           interviewer_name: string | null
           interviewer_title: string | null
+          meeting_link: string | null
           notes: string | null
           outcome: string | null
+          platform: string | null
+          round_label: string | null
           round_number: number
           round_type: string | null
           scheduled_at: string | null
           scheduled_interview_id: string
+          session_id: string | null
+          status: string | null
+          updated_at: string | null
         }
         Insert: {
           created_at?: string
+          debrief_id?: string | null
           duration_minutes?: number | null
           id?: string
+          interview_type?: string | null
           interviewer_name?: string | null
           interviewer_title?: string | null
+          meeting_link?: string | null
           notes?: string | null
           outcome?: string | null
+          platform?: string | null
+          round_label?: string | null
           round_number?: number
           round_type?: string | null
           scheduled_at?: string | null
           scheduled_interview_id: string
+          session_id?: string | null
+          status?: string | null
+          updated_at?: string | null
         }
         Update: {
           created_at?: string
+          debrief_id?: string | null
           duration_minutes?: number | null
           id?: string
+          interview_type?: string | null
           interviewer_name?: string | null
           interviewer_title?: string | null
+          meeting_link?: string | null
           notes?: string | null
           outcome?: string | null
+          platform?: string | null
+          round_label?: string | null
           round_number?: number
           round_type?: string | null
           scheduled_at?: string | null
           scheduled_interview_id?: string
+          session_id?: string | null
+          status?: string | null
+          updated_at?: string | null
         }
         Relationships: [
           {
@@ -979,9 +1003,16 @@ export type Database = {
           company: string | null
           content: string | null
           created_at: string
+          file_url: string | null
           id: string
+          input_method: string | null
+          is_active: boolean | null
+          parse_error: string | null
+          parse_status: string | null
+          parsed_data: Json | null
           target_role: string | null
           title: string
+          updated_at: string | null
           url: string | null
           user_id: string
         }
@@ -989,9 +1020,16 @@ export type Database = {
           company?: string | null
           content?: string | null
           created_at?: string
+          file_url?: string | null
           id?: string
+          input_method?: string | null
+          is_active?: boolean | null
+          parse_error?: string | null
+          parse_status?: string | null
+          parsed_data?: Json | null
           target_role?: string | null
           title: string
+          updated_at?: string | null
           url?: string | null
           user_id: string
         }
@@ -999,9 +1037,16 @@ export type Database = {
           company?: string | null
           content?: string | null
           created_at?: string
+          file_url?: string | null
           id?: string
+          input_method?: string | null
+          is_active?: boolean | null
+          parse_error?: string | null
+          parse_status?: string | null
+          parsed_data?: Json | null
           target_role?: string | null
           title?: string
+          updated_at?: string | null
           url?: string | null
           user_id?: string
         }
@@ -1889,10 +1934,12 @@ export type Database = {
           created_at: string
           id: string
           is_remote: boolean
+          jd_id: string | null
           job_posting_url: string | null
           location: string | null
           notes: string | null
           priority: string
+          resume_id: string | null
           role_title: string
           salary_range: string | null
           stage: string
@@ -1905,10 +1952,12 @@ export type Database = {
           created_at?: string
           id?: string
           is_remote?: boolean
+          jd_id?: string | null
           job_posting_url?: string | null
           location?: string | null
           notes?: string | null
           priority?: string
+          resume_id?: string | null
           role_title: string
           salary_range?: string | null
           stage?: string
@@ -1921,10 +1970,12 @@ export type Database = {
           created_at?: string
           id?: string
           is_remote?: boolean
+          jd_id?: string | null
           job_posting_url?: string | null
           location?: string | null
           notes?: string | null
           priority?: string
+          resume_id?: string | null
           role_title?: string
           salary_range?: string | null
           stage?: string

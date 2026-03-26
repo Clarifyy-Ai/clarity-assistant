@@ -199,7 +199,7 @@ export function useAuth() {
     const profile = useAuthStore.getState()?.profile;
     if (!profile) return false;
 
-    const plan = profile.plan;
+    const plan = profile.plan_id;
     const featureMap: Record<string, string[]> = {
       live_copilot:        ["pro", "team", "enterprise"],
       team_rooms:          ["team", "enterprise"],

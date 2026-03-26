@@ -13,13 +13,13 @@ interface KeyField {
   label: string;
   provider: string;
   placeholder: string;
-  profileField: string;
+  profileField: string; // actual DB column name (byok_*_hint)
 }
 
 const KEY_FIELDS: KeyField[] = [
-  { id: "openai", label: "OpenAI API Key", provider: "OpenAI", placeholder: "sk-...", profileField: "byok_openai" },
-  { id: "anthropic", label: "Anthropic API Key", provider: "Anthropic", placeholder: "sk-ant-...", profileField: "byok_anthropic" },
-  { id: "gemini", label: "Google AI API Key", provider: "Google", placeholder: "AIza...", profileField: "byok_gemini" },
+  { id: "openai",    label: "OpenAI API Key",    provider: "OpenAI",    placeholder: "sk-...",     profileField: "byok_openai_hint" },
+  { id: "anthropic", label: "Anthropic API Key",  provider: "Anthropic", placeholder: "sk-ant-...", profileField: "byok_anthropic_hint" },
+  { id: "gemini",    label: "Google AI API Key",   provider: "Google",    placeholder: "AIza...",    profileField: "byok_gemini_hint" },
 ];
 
 export default function SettingsBYOK() {
@@ -43,9 +43,10 @@ export default function SettingsBYOK() {
     setSaving(true);
     try {
       const updates: Record<string, string> = {};
-      if (keys.openai) updates.byok_openai = keys.openai;
-      if (keys.anthropic) updates.byok_anthropic = keys.anthropic;
-      if (keys.gemini) updates.byok_gemini = keys.gemini;
+      // Save to correct DB column names (byok_*_hint)
+      if (keys.openai)    updates.byok_openai_hint    = keys.openai;
+      if (keys.anthropic) updates.byok_anthropic_hint  = keys.anthropic;
+      if (keys.gemini)    updates.byok_gemini_hint     = keys.gemini;
 
       if (Object.keys(updates).length === 0) {
         toast.info("No keys to save.");

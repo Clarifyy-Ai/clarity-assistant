@@ -12,7 +12,7 @@ export async function deductCredits(
   db: ReturnType<typeof createClient>,
   userId: string,
   amount: number,
-  reason: string,
+  description: string,
 ): Promise<boolean> {
   // Check current balance
   const { data: profile } = await db
@@ -23,19 +23,23 @@ export async function deductCredits(
 
   if (!profile || (profile.credits ?? 0) < amount) return false;
 
+  const newBalance = (profile.credits ?? 0) - amount;
+
   // Deduct
   const { error } = await db
     .from("profiles")
-    .update({ credits: (profile.credits ?? 0) - amount })
+    .update({ credits: newBalance, credits_used_this_month: profile.credits_used_this_month + amount })
     .eq("id", userId);
 
   if (error) return false;
 
-  // Log transaction
+  // Log transaction with correct column names
   await db.from("credit_transactions").insert({
     user_id: userId,
     amount: -amount,
-    reason,
+    balance_after: newBalance,
+    action: "usage",
+    description,
   });
 
   return true;
