@@ -1,21 +1,19 @@
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
+// sync-calendar/index.ts — FIXED PRODUCTION VERSION
+
+import { corsHeaders } from "../_shared/cors.ts";
+import {
+  handleCors,
+  parseBody,
+  requireAuth,
+  successResponse,
+  errorResponse,
+  log
+} from "../_shared/utils.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// sync-calendar — Import upcoming interview events from Google Calendar
-//
-// The frontend passes the user's Google OAuth provider_token from the active
-// Supabase session. If that token is expired, the function automatically
-// refreshes it server-side using the stored refresh_token from auth.identities
-// before retrying the Calendar API call.
-//
-// Body: {
-//   provider_token: string   — Google OAuth access token from the Supabase session
-//   days_ahead?:    number   — How many days ahead to fetch (default 30)
-// }
-//
-// Returns: { imported: number, skipped: number, events: EventSummary[] }
-// ─────────────────────────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                                 TYPES                                       */
+/* -------------------------------------------------------------------------- */
 
 interface GoogleCalendarEvent {
   id: string;
@@ -30,311 +28,289 @@ interface GoogleCalendarEvent {
   };
 }
 
-const INTERVIEW_KEYWORDS = [
-  "interview", "screening", "screen", "hiring", "recruiter",
-  "technical", "onsite", "on-site", "assessment", "coding",
-  "panel interview", "phone screen", "video call with", "loop",
+type InterviewStage =
+  | "phone_screen"
+  | "technical_round"
+  | "final_round"
+  | "general";
+
+const KEYWORDS = [
+  "interview",
+  "screening",
+  "screen",
+  "hiring",
+  "recruiter",
+  "technical",
+  "onsite",
+  "on-site",
+  "assessment",
+  "coding",
+  "panel interview",
+  "phone screen",
+  "video call",
+  "loop"
 ];
 
-function isInterviewEvent(event: GoogleCalendarEvent): boolean {
-  const summaryLower = (event.summary ?? "").toLowerCase();
-  const descLower = (event.description ?? "").toLowerCase();
-  return INTERVIEW_KEYWORDS.some(
-    (kw) => summaryLower.includes(kw) || descLower.includes(kw)
-  );
+function safe(text: any, max = 120): string {
+  return String(text ?? "")
+    .replace(/[<>]/g, "")
+    .replace(/[`"]/g, "")
+    .slice(0, max)
+    .trim();
 }
 
-function extractMeetingUrl(event: GoogleCalendarEvent): string | null {
-  if (event.hangoutLink) return event.hangoutLink;
-  const videoEntry = event.conferenceData?.entryPoints?.find(
-    (e) => e.entryPointType === "video"
-  );
-  return videoEntry?.uri ?? null;
+/* -------------------------------------------------------------------------- */
+/*                         CLASSIFIERS & EXTRACTORS                            */
+/* -------------------------------------------------------------------------- */
+
+function isInterviewEvent(evt: GoogleCalendarEvent): boolean {
+  const s = (evt.summary ?? "").toLowerCase();
+  const d = (evt.description ?? "").toLowerCase();
+  return KEYWORDS.some(k => s.includes(k) || d.includes(k));
 }
 
-function guessInterviewType(summary: string): string {
-  const lower = summary.toLowerCase();
-  if (lower.includes("technical") || lower.includes("coding")) return "technical";
-  if (lower.includes("phone") || lower.includes("screen")) return "phone_screen";
-  if (lower.includes("panel") || lower.includes("onsite") || lower.includes("on-site")) return "panel";
-  if (lower.includes("hr") || lower.includes("recruiter") || lower.includes("hiring")) return "hr";
-  if (lower.includes("take-home") || lower.includes("takehome") || lower.includes("assessment")) return "take_home";
+function extractMeetingUrl(evt: GoogleCalendarEvent): string | null {
+  if (evt.hangoutLink) return evt.hangoutLink;
+  const v = evt.conferenceData?.entryPoints?.find(
+    e => e.entryPointType === "video"
+  );
+  return v?.uri ?? null;
+}
+
+function classifyType(summary: string): string {
+  const s = summary.toLowerCase();
+  if (s.includes("technical") || s.includes("coding")) return "technical";
+  if (s.includes("phone") || s.includes("screen")) return "phone_screen";
+  if (s.includes("panel") || s.includes("onsite")) return "panel";
+  if (s.includes("hr") || s.includes("recruiter")) return "hr";
+  if (s.includes("assessment") || s.includes("take-home")) return "take_home";
   return "general";
 }
 
-function guessStage(interviewType: string): string {
-  if (interviewType === "phone_screen" || interviewType === "hr") return "phone_screen";
-  if (interviewType === "technical") return "technical_round";
-  if (interviewType === "panel") return "final_round";
-  return "phone_screen";
+function classifyStage(type: string): InterviewStage {
+  if (type === "phone_screen" || type === "hr") return "phone_screen";
+  if (type === "technical") return "technical_round";
+  if (type === "panel") return "final_round";
+  return "general";
 }
 
-function extractCompanyFromTitle(summary: string): string {
+function extractCompany(summary: string): string {
   const patterns = [
     /interview\s+(?:at|with|@)\s+(.+?)(?:\s*[-–—|]|$)/i,
     /(.+?)\s+interview/i,
-    /(.+?)\s+(?:phone\s+screen|screening|technical|onsite)/i,
+    /(.+?)\s+(?:phone\s+screen|screening|technical|onsite)/i
   ];
-  for (const pattern of patterns) {
-    const match = summary.match(pattern);
-    if (match?.[1]) return match[1].trim().slice(0, 80);
+  for (const p of patterns) {
+    const m = summary.match(p);
+    if (m?.[1]) return safe(m[1], 80);
   }
-  return summary.slice(0, 60);
+  return safe(summary, 60);
 }
 
-function extractRoleFromTitle(summary: string): string {
-  const match = summary.match(
+function extractRole(summary: string): string {
+  const m = summary.match(
     /(?:for\s+(?:the\s+)?|role:\s*)(.+?)(?:\s+(?:at|with|@|interview)|$)/i
   );
-  if (match?.[1]) return match[1].trim().slice(0, 80);
-  return "Role TBD";
+  return safe(m?.[1] ?? "Role TBD", 80);
 }
 
-// ── Token refresh ────────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                               TOKEN REFRESH                                 */
+/* -------------------------------------------------------------------------- */
 
-async function refreshGoogleToken(userId: string): Promise<string | null> {
-  const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-  const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-
-  // Query auth.identities for the stored Google refresh_token via service role
-  const res = await fetch(
-    `${supabaseUrl}/rest/v1/rpc/get_google_refresh_token`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "apikey": serviceKey,
-        "Authorization": `Bearer ${serviceKey}`,
-      },
-      body: JSON.stringify({ p_user_id: userId }),
-    }
-  );
-
-  // Fallback: query auth.identities directly
-  if (!res.ok) {
-    const identRes = await fetch(
-      `${supabaseUrl}/auth/v1/admin/users/${userId}`,
-      {
-        headers: {
-          "apikey": serviceKey,
-          "Authorization": `Bearer ${serviceKey}`,
-        },
-      }
-    );
-    if (!identRes.ok) return null;
-
-    const userData = await identRes.json();
-    const googleIdentity = userData?.identities?.find(
-      (i: any) => i.provider === "google"
-    );
-    const refreshToken = googleIdentity?.identity_data?.refresh_token
-      ?? googleIdentity?.refresh_token;
-
-    if (!refreshToken) return null;
-    return await exchangeRefreshToken(refreshToken);
-  }
-
-  const data = await res.json();
-  const refreshToken = data?.refresh_token;
-  if (!refreshToken) return null;
-  return await exchangeRefreshToken(refreshToken);
-}
-
-async function exchangeRefreshToken(refreshToken: string): Promise<string | null> {
-  const clientId     = Deno.env.get("GOOGLE_CLIENT_ID") ?? "";
+async function refreshGoogleAccessToken(userId: string): Promise<string | null> {
+  const url = Deno.env.get("SUPABASE_URL") ?? "";
+  const key = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+  const clientId = Deno.env.get("GOOGLE_CLIENT_ID") ?? "";
   const clientSecret = Deno.env.get("GOOGLE_CLIENT_SECRET") ?? "";
 
-  if (!clientId || !clientSecret) {
-    console.warn("[sync-calendar] GOOGLE_CLIENT_ID or GOOGLE_CLIENT_SECRET not set — cannot refresh token");
-    return null;
+  if (!clientId || !clientSecret) return null;
+
+  // Prefer RPC for refresh token
+  const rpcRes = await fetch(`${url}/rest/v1/rpc/get_google_refresh_token`, {
+    method: "POST",
+    headers: {
+      apikey: key,
+      Authorization: `Bearer ${key}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ p_user_id: userId })
+  }).catch(() => null);
+
+  let refreshToken: string | undefined = undefined;
+
+  if (rpcRes?.ok) {
+    const data = await rpcRes.json();
+    refreshToken = data?.refresh_token;
   }
+
+  // Fallback: fetch directly from admin endpoint
+  if (!refreshToken) {
+    const ures = await fetch(`${url}/auth/v1/admin/users/${userId}`, {
+      headers: { apikey: key, Authorization: `Bearer ${key}` }
+    });
+
+    if (!ures.ok) return null;
+
+    const u = await ures.json();
+    const ident = u?.identities?.find((i: any) => i.provider === "google");
+    refreshToken =
+      ident?.identity_data?.refresh_token ?? ident?.refresh_token ?? null;
+  }
+
+  if (!refreshToken) return null;
 
   const params = new URLSearchParams({
-    client_id:     clientId,
+    client_id: clientId,
     client_secret: clientSecret,
     refresh_token: refreshToken,
-    grant_type:    "refresh_token",
+    grant_type: "refresh_token"
   });
 
-  const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+  const tRes = await fetch("https://oauth2.googleapis.com/token", {
     method: "POST",
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
-    body: params.toString(),
+    body: params.toString()
   });
 
-  if (!tokenRes.ok) {
-    console.error("[sync-calendar] Token refresh failed:", await tokenRes.text());
-    return null;
-  }
+  if (!tRes.ok) return null;
 
-  const tokenData = await tokenRes.json();
-  return tokenData.access_token ?? null;
+  const t = await tRes.json();
+  return t.access_token ?? null;
 }
 
-// ── Fetch calendar events ─────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                              EVENTS FETCHER                                 */
+/* -------------------------------------------------------------------------- */
 
-async function fetchCalendarEvents(
-  accessToken: string,
-  daysAhead: number
-): Promise<{ events: GoogleCalendarEvent[] | null; status: number }> {
+async function fetchEvents(token: string, days: number) {
   const now = new Date();
-  const timeMin = now.toISOString();
-  const timeMax = new Date(now.getTime() + daysAhead * 24 * 60 * 60 * 1000).toISOString();
+  const tMin = now.toISOString();
+  const tMax = new Date(now.getTime() + days * 86400000).toISOString();
 
-  const calendarUrl = new URL(
+  const url = new URL(
     "https://www.googleapis.com/calendar/v3/calendars/primary/events"
   );
-  calendarUrl.searchParams.set("timeMin", timeMin);
-  calendarUrl.searchParams.set("timeMax", timeMax);
-  calendarUrl.searchParams.set("singleEvents", "true");
-  calendarUrl.searchParams.set("orderBy", "startTime");
-  calendarUrl.searchParams.set("maxResults", "50");
+  url.searchParams.set("timeMin", tMin);
+  url.searchParams.set("timeMax", tMax);
+  url.searchParams.set("singleEvents", "true");
+  url.searchParams.set("orderBy", "startTime");
+  url.searchParams.set("maxResults", "50");
 
-  const calRes = await fetch(calendarUrl.toString(), {
-    headers: { Authorization: `Bearer ${accessToken}` },
+  const res = await fetch(url.toString(), {
+    headers: { Authorization: `Bearer ${token}` }
   });
 
-  if (!calRes.ok) {
-    return { events: null, status: calRes.status };
-  }
+  if (!res.ok) return { events: null, status: res.status };
 
-  const calData = await calRes.json();
-  return { events: calData.items ?? [], status: 200 };
+  const json = await res.json().catch(() => null);
+  return { events: json?.items ?? [], status: 200 };
 }
 
-// ── Main handler ──────────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                                MAIN HANDLER                                 */
+/* -------------------------------------------------------------------------- */
 
-Deno.serve(async (req) => {
+Deno.serve(async req => {
   const cors = handleCors(req);
   if (cors) return cors;
 
   const db = createServiceClient();
+  const FN = "sync-calendar";
 
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
-      return new Response(
-        JSON.stringify({ error: "Missing Authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    /* ------------------------------ AUTH ------------------------------ */
+    const auth = await requireAuth(req);
+    const user = auth.user;
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await db.auth.getUser(token);
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    /* ------------------------------ BODY ------------------------------ */
+    const body = await parseBody<{ provider_token?: string; days_ahead?: number }>(
+      req
+    );
 
-    const body = await req.json().catch(() => ({}));
-    let providerToken: string | undefined = body.provider_token;
-    const daysAhead: number = body.days_ahead ?? 30;
+    let providerToken = body?.provider_token;
+    const daysAhead = Number(body?.days_ahead ?? 30);
 
-    let events: GoogleCalendarEvent[] | null = null;
-    let calStatus = 0;
+    /* --------------------------- FETCH EVENTS -------------------------- */
+    let cal = await (providerToken
+      ? fetchEvents(providerToken, daysAhead)
+      : Promise.resolve({ events: null, status: 0 }));
 
-    if (providerToken) {
-      // Try with the provided session token first
-      const result = await fetchCalendarEvents(providerToken, daysAhead);
-      events = result.events;
-      calStatus = result.status;
-    }
-
-    // If provider_token was missing, or the access token returned 401 (expired),
-    // attempt a server-side token refresh using the stored Google refresh_token
-    if (events === null && (calStatus === 401 || !providerToken)) {
-      console.log("[sync-calendar] Attempting server-side token refresh for user:", user.id);
-      const refreshedToken = await refreshGoogleToken(user.id);
-
-      if (refreshedToken) {
-        const retry = await fetchCalendarEvents(refreshedToken, daysAhead);
-        events = retry.events;
-        calStatus = retry.status;
-        providerToken = refreshedToken;
+    if (!cal.events && (cal.status === 401 || !providerToken)) {
+      const refreshed = await refreshGoogleAccessToken(user.id);
+      if (refreshed) {
+        providerToken = refreshed;
+        cal = await fetchEvents(refreshed, daysAhead);
       }
     }
 
-    // If we still have no events, the token cannot be refreshed
-    if (!providerToken && events === null) {
-      return new Response(
-        JSON.stringify({
-          error: "Google Calendar not connected. Please connect it first.",
-          code: "NO_TOKEN",
-        }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (events === null) {
-      console.error("[sync-calendar] Google Calendar API error:", calStatus);
-
-      if (calStatus === 401 || calStatus === 403) {
-        return new Response(
-          JSON.stringify({
-            error: "Google Calendar permission revoked. Please reconnect your calendar.",
-            code: "TOKEN_REVOKED",
-          }),
-          { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    if (!cal.events) {
+      if (cal.status === 401 || cal.status === 403) {
+        return errorResponse(
+          "Google Calendar access revoked. Reconnect your calendar.",
+          "TOKEN_REVOKED",
+          401
         );
       }
 
-      return new Response(
-        JSON.stringify({
-          error: "Google Calendar API error. Your token may have expired — reconnect Google Calendar.",
-          code: "GOOGLE_API_ERROR",
-          status: calStatus,
-        }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      return errorResponse(
+        "Failed to fetch Google Calendar events",
+        "GOOGLE_API_ERROR",
+        502
       );
     }
 
-    const interviewEvents = events.filter(isInterviewEvent);
+    /* ------------------------- FILTER INTERVIEWS ------------------------- */
+    const interviewEvents = cal.events.filter(isInterviewEvent);
 
     let imported = 0;
     let updated = 0;
     let skipped = 0;
-    const summaries: Array<{ title: string; scheduledAt: string | null; action: "imported" | "updated" }> = [];
 
-    for (const event of interviewEvents) {
-      const title = event.summary ?? "Interview";
-      const scheduledAt = event.start?.dateTime ?? event.start?.date ?? null;
-      const meetingUrl = extractMeetingUrl(event);
-      const interviewType = guessInterviewType(title);
-      const companyName = extractCompanyFromTitle(title);
-      const roleTitle = extractRoleFromTitle(title);
-      const stage = guessStage(interviewType);
+    const summaries: Array<{ title: string; scheduledAt: string | null; action: string }> = [];
 
-      // Check if this Google Calendar event was already imported (upsert logic)
+    /* ------------------------ PROCESS EACH EVENT ------------------------ */
+    for (const evt of interviewEvents) {
+      const summary = safe(evt.summary ?? "Interview");
+      const scheduledAt =
+        evt.start?.dateTime ??
+        evt.start?.date ??
+        null;
+
+      const meetingLink = extractMeetingUrl(evt);
+      const type = classifyType(summary);
+      const stage = classifyStage(type);
+      const company = extractCompany(summary);
+      const role = extractRole(summary);
+
+      // Check if this event already exists
       const { data: existing } = await db
         .from("scheduled_interviews")
         .select("id")
         .eq("user_id", user.id)
-        .eq("calendar_event_id", event.id)
+        .eq("calendar_event_id", evt.id)
         .maybeSingle();
 
+      /* ----------------------------- UPDATE ----------------------------- */
       if (existing) {
-        // Update the existing interview with latest data from Google Calendar
-        const { error: updateErr } = await db
+        const { error: uErr } = await db
           .from("scheduled_interviews")
           .update({
-            company_name: companyName,
-            role_title:   roleTitle,
+            company_name: company,
+            role_title: role,
             stage,
-            location:     event.location ?? null,
-            notes:        event.description ?? null,
-            updated_at:   new Date().toISOString(),
+            notes: evt.description ?? null,
+            location: evt.location ?? null,
+            updated_at: new Date().toISOString()
           })
           .eq("id", existing.id);
 
-        if (updateErr) {
-          console.error("[sync-calendar] Update scheduled_interviews error:", updateErr.message);
+        if (uErr) {
+          log(FN, "error", "Update failed", uErr);
           skipped++;
           continue;
         }
 
-        // Update the first round's scheduled time and meeting link
         const { data: rounds } = await db
           .from("interview_rounds")
           .select("id")
@@ -343,85 +319,78 @@ Deno.serve(async (req) => {
           .limit(1);
 
         if (rounds?.[0]) {
-          await db.from("interview_rounds")
+          await db
+            .from("interview_rounds")
             .update({
-              round_label:   title,
-              interview_type: interviewType,
-              scheduled_at:  scheduledAt,
-              meeting_link:  meetingUrl,
-              notes:         event.description ?? null,
-              updated_at:    new Date().toISOString(),
+              round_label: summary,
+              interview_type: type,
+              scheduled_at: scheduledAt,
+              meeting_link: meetingLink,
+              notes: evt.description ?? null,
+              updated_at: new Date().toISOString()
             })
             .eq("id", rounds[0].id);
         }
 
         updated++;
-        summaries.push({ title, scheduledAt, action: "updated" });
+        summaries.push({ title: summary, scheduledAt, action: "updated" });
         continue;
       }
 
-      // Create the parent scheduled_interview record
-      const { data: newInterview, error: insertErr } = await db
+      /* ----------------------------- INSERT ----------------------------- */
+      const { data: newInterview, error: iErr } = await db
         .from("scheduled_interviews")
         .insert({
-          user_id:           user.id,
-          company_name:      companyName,
-          role_title:        roleTitle,
+          user_id: user.id,
+          company_name: company,
+          role_title: role,
           stage,
-          priority:          "medium",
-          is_remote:         true,
-          location:          event.location ?? null,
-          notes:             event.description ?? null,
-          status:            "upcoming",
-          calendar_event_id: event.id,
-          calendar_provider: "google",
+          priority: "medium",
+          is_remote: true,
+          location: evt.location ?? null,
+          notes: evt.description ?? null,
+          status: "upcoming",
+          calendar_event_id: evt.id,
+          calendar_provider: "google"
         })
         .select("id")
         .single();
 
-      if (insertErr || !newInterview) {
-        console.error("[sync-calendar] Insert scheduled_interviews error:", insertErr?.message);
+      if (iErr || !newInterview) {
+        log(FN, "error", "Insert failed", iErr);
         skipped++;
         continue;
       }
 
-      // Create the associated interview round
-      const { error: roundErr } = await db.from("interview_rounds").insert({
+      const { error: rErr } = await db.from("interview_rounds").insert({
         scheduled_interview_id: newInterview.id,
-        round_number:           1,
-        round_type:             interviewType,
-        round_label:            title,
-        interview_type:         interviewType,
-        scheduled_at:           scheduledAt,
-        meeting_link:           meetingUrl,
-        status:                 "scheduled",
-        notes:                  event.description ?? null,
+        round_number: 1,
+        round_type: type,
+        round_label: summary,
+        interview_type: type,
+        scheduled_at: scheduledAt,
+        meeting_link: meetingLink,
+        notes: evt.description ?? null,
+        status: "scheduled"
       });
 
-      if (roundErr) {
-        console.error("[sync-calendar] Insert interview_rounds error:", roundErr.message);
-      }
+      if (rErr) log(FN, "warn", "Round insert failed", rErr);
 
       imported++;
-      summaries.push({ title, scheduledAt, action: "imported" });
+      summaries.push({ title: summary, scheduledAt, action: "imported" });
     }
 
-    return new Response(
-      JSON.stringify({
-        imported,
-        updated,
-        skipped,
-        total_found: interviewEvents.length,
-        events: summaries,
-      }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    /* ---------------------------- SUCCESS ---------------------------- */
+    return successResponse({
+      imported,
+      updated,
+      skipped,
+      total_found: interviewEvents.length,
+      events: summaries
+    });
+
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[sync-calendar] Error:", message);
-    return new Response(
-      JSON.stringify({ error: message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    log("sync-calendar", "error", "Unhandled error", err);
+    return errorResponse("Internal server error", "INTERNAL", 500);
   }
 });
