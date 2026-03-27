@@ -626,7 +626,7 @@ export default function TestConfigure() {
 
       {/* Options */}
       <Card>
-        <CardContent className="py-4">
+        <CardContent className="py-4 space-y-3">
           <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
@@ -636,14 +636,62 @@ export default function TestConfigure() {
             />
             <span className="text-sm text-foreground">Randomize question order</span>
           </label>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={config.shuffle_options}
+              onChange={(e) => setConfig((c) => ({ ...c, shuffle_options: e.target.checked }))}
+              className="accent-violet-500 w-4 h-4"
+            />
+            <span className="text-sm text-foreground">Shuffle answer options (A/B/C/D)</span>
+          </label>
         </CardContent>
       </Card>
 
+      {/* Question count presets */}
+      <Card>
+        <CardContent className="py-4 space-y-3">
+          <SectionLabel>Quick Select — Questions</SectionLabel>
+          <div className="flex gap-2 flex-wrap">
+            {QUESTION_COUNT_PRESETS.map((n) => (
+              <button key={n} type="button" onClick={() => setConfig((c) => ({ ...c, question_count: n }))}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${config.question_count === n ? "border-violet-500/50 bg-violet-500/15 text-violet-300" : "border-border text-muted-foreground hover:border-violet-500/30"}`}
+              >{n} Qs</button>
+            ))}
+          </div>
+          <SectionLabel>Quick Select — Duration</SectionLabel>
+          <div className="flex gap-2 flex-wrap">
+            {DURATION_PRESETS.map((m) => (
+              <button key={m} type="button" onClick={() => setConfig((c) => ({ ...c, duration_minutes: m }))}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${config.duration_minutes === m ? "border-violet-500/50 bg-violet-500/15 text-violet-300" : "border-border text-muted-foreground hover:border-violet-500/30"}`}
+              >{m} min</button>
+            ))}
+            <button type="button" onClick={() => setConfig((c) => ({ ...c, duration_minutes: 0 }))}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${config.duration_minutes === 0 ? "border-violet-500/50 bg-violet-500/15 text-violet-300" : "border-border text-muted-foreground hover:border-violet-500/30"}`}
+            >No limit</button>
+          </div>
+        </CardContent>
+      </Card>
+
+      </>
+      )}
+
+      {/* Step 3: Summary + Start */}
+      {(isQuick || step >= 2) && (
+      <>
       {/* Credit notice */}
       <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-4 py-3">
         <p className="text-xs text-muted-foreground">
           <span className="text-violet-300 font-semibold">2 credits</span> will be deducted when the
           test is created successfully. Free plan: up to 2 tests per month.
+        </p>
+      </div>
+
+      {/* Summary */}
+      <div className="rounded-xl border border-border bg-card p-4 text-sm text-foreground">
+        <p className="font-semibold mb-1">Test Summary</p>
+        <p className="text-muted-foreground text-xs">
+          {config.question_count} questions · {config.duration_minutes > 0 ? `${config.duration_minutes} minutes` : "No time limit"} · {selectedPreset ?? "Custom"} difficulty · {config.subjects.length > 0 ? config.subjects.join(" + ") : "All subjects"}
         </p>
       </div>
 
@@ -657,6 +705,8 @@ export default function TestConfigure() {
           Start Test
         </Button>
       </div>
+      </>
+      )}
     </div>
   );
 }
