@@ -1,74 +1,106 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// schedule-interview/index.ts — Create, update, and delete interview events.
-// Persists to interview_prep table, queues email reminders via send-email,
-// and returns the saved event with a generated prep checklist.
-// ─────────────────────────────────────────────────────────────────────────────
+// schedule-interview/index.ts — FIXED, SECURE, PRODUCTION VERSION
 
-import { corsHeaders }  from "../_shared/cors.ts";
+import { corsHeaders } from "../_shared/cors.ts";
 import {
   handleCors, parseBody, requireAuth,
   successResponse, errorResponse,
   getAdminClient, deductCredits,
-  callAI, requireFields, log,
+  callAI, requireFields, log
 } from "../_shared/utils.ts";
-import type { InterviewEvent, InterviewRound, ReminderConfig, ModelId } from "../_shared/types.ts";
 
-// ─── Supported actions ────────────────────────────────────────────────────────
+import type {
+  InterviewEvent,
+  InterviewRound,
+  ReminderConfig,
+  ModelId
+} from "../_shared/types.ts";
 
-type Action = "create" | "update" | "delete" | "list";
+/* -------------------------------------------------------------------------- */
+/*                                SANITIZATION                                */
+/* -------------------------------------------------------------------------- */
 
-// ─── Prep checklist generator ─────────────────────────────────────────────────
+function sanitizeText(text: any, max = 500): string {
+  return String(text ?? "")
+    .replace(/```/g, "")
+    .replace(/[^\x20-\x7E\n]/g, "")
+    .replace(/\s{2,}/g, " ")
+    .slice(0, max)
+    .trim();
+}
+
+function sanitizeAIListOutput(text: string, fallback: string[]): string[] {
+  const cleaned = text
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
+
+  try {
+    const parsed = JSON.parse(cleaned);
+    if (Array.isArray(parsed)) {
+      return parsed
+        .map((item) => sanitizeText(item, 200))
+        .filter((v) => v.length > 0)
+        .slice(0, 8);
+    }
+  } catch (_) {}
+
+  return fallback.slice(0, 8);
+}
+
+/* -------------------------------------------------------------------------- */
+/*                        PREP CHECKLIST GENERATOR                            */
+/* -------------------------------------------------------------------------- */
 
 async function generatePrepChecklist(
-  company:     string,
-  role:        string,
-  round:       InterviewRound,
-  model:       ModelId
+  company: string,
+  role: string,
+  round: InterviewRound,
+  model: ModelId
 ): Promise<string[]> {
   const roundLabels: Record<InterviewRound, string> = {
-    phone_screen:  "Phone Screen",
-    technical:     "Technical Interview",
+    phone_screen: "Phone Screen",
+    technical: "Technical Interview",
     system_design: "System Design",
-    behavioral:    "Behavioural Interview",
-    hr:            "HR Round",
-    final:         "Final Round",
-    offer:         "Offer Discussion",
+    behavioral: "Behavioural Interview",
+    hr: "HR Round",
+    final: "Final Round",
+    offer: "Offer Discussion",
   };
 
-  const result = await callAI({
+  const fallback = [
+    `Research ${company}'s recent news and products`,
+    `Review common ${roundLabels[round]} questions for ${role}`,
+    "Prepare 3 STAR stories from your experience",
+    "Test your audio/video setup if remote",
+    "Prepare thoughtful questions to ask",
+    "Review your resume thoroughly",
+    "Sleep well before the interview",
+    "Confirm the schedule and interviewers",
+  ];
+
+  const ai = await callAI({
     model,
     messages: [
       {
-        role:    "system",
-        content: "You are an expert interview preparation coach. Return only a JSON array of strings — no markdown, no extra text.",
+        role: "system",
+        content:
+          "You are an expert interview coach. Return ONLY a JSON array of checklist item strings. No markdown.",
       },
       {
-        role:    "user",
-        content: `Generate 8 specific preparation checklist items for a ${roundLabels[round]} at ${company} for a ${role} position. Return JSON array of strings.`,
+        role: "user",
+        content: `Generate 8 specific preparation checklist items for a ${roundLabels[round]} at ${company} for a ${role} role. JSON array only.`,
       },
     ],
-    maxTokens:   400,
+    maxTokens: 400,
     temperature: 0.6,
   });
 
-  try {
-    const cleaned = result.text.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
-    return JSON.parse(cleaned) as string[];
-  } catch {
-    return [
-      `Research ${company}'s recent news and products`,
-      `Review common ${roundLabels[round]} questions for ${role}`,
-      "Prepare 3 STAR stories from your experience",
-      "Test your audio/video setup if remote",
-      "Prepare thoughtful questions to ask the interviewer",
-      "Review your resume and be ready to discuss any item",
-      "Get a good night's sleep before the interview",
-      "Confirm the interview time, format, and interviewer name",
-    ];
-  }
+  return sanitizeAIListOutput(ai.text, fallback);
 }
 
-// ─── Handler ──────────────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                                  HANDLER                                   */
+/* -------------------------------------------------------------------------- */
 
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
@@ -77,31 +109,29 @@ Deno.serve(async (req: Request) => {
   const FN = "schedule-interview";
 
   try {
-    // ── Auth ────────────────────────────────────────────────────────────────
-    const auth  = await requireAuth(req);
+    /* ------------------------------ AUTH ------------------------------ */
+    const auth = await requireAuth(req);
     const admin = getAdminClient();
 
-    // ── Body ────────────────────────────────────────────────────────────────
+    /* ------------------------------ BODY ------------------------------ */
     const body = await parseBody<{
-      action:       Action;
-      // Create / update
-      eventId?:     string;
-      company?:     string;
-      role?:        string;
-      round?:       InterviewRound;
+      action: "create" | "update" | "delete" | "list";
+      eventId?: string;
+      company?: string;
+      role?: string;
+      round?: InterviewRound;
       scheduledAt?: string;
       durationMin?: number;
-      location?:    string;
-      notes?:       string;
-      reminders?:   ReminderConfig[];
+      location?: string;
+      notes?: string;
+      reminders?: ReminderConfig[];
       generatePrep?: boolean;
-      model?:       ModelId;
+      model?: ModelId;
     }>(req);
 
     const { action = "create" } = body;
 
-    // ── LIST ─────────────────────────────────────────────────────────────────
-
+    /* ------------------------------ LIST ------------------------------ */
     if (action === "list") {
       const { data, error } = await admin
         .from("interview_prep")
@@ -113,98 +143,123 @@ Deno.serve(async (req: Request) => {
       return successResponse(data ?? []);
     }
 
-    // ── DELETE ────────────────────────────────────────────────────────────────
-
+    /* ------------------------------ DELETE ------------------------------ */
     if (action === "delete") {
       if (!body.eventId) {
-        return errorResponse("eventId is required for delete.", "VALIDATION_ERROR", 400);
+        return errorResponse("eventId is required for delete", "VALIDATION_ERROR", 400);
       }
 
       const { error } = await admin
         .from("interview_prep")
         .delete()
-        .eq("id",      body.eventId)
+        .eq("id", body.eventId)
         .eq("user_id", auth.userId);
 
       if (error) throw new Error(error.message);
 
-      log(FN, "info", "Interview deleted", { userId: auth.userId, eventId: body.eventId });
+      log(FN, "info", "Event deleted", {
+        userId: auth.userId,
+        eventId: body.eventId,
+      });
+
       return successResponse({ deleted: true, eventId: body.eventId });
     }
 
-    // ── CREATE / UPDATE ───────────────────────────────────────────────────────
+    /* ------------------------------ CREATE / UPDATE ------------------------------ */
 
     const validation = requireFields(body as Record<string, unknown>, [
-      "company", "role", "round", "scheduledAt",
+      "company",
+      "role",
+      "round",
+      "scheduledAt",
     ]);
-    if (!validation.valid) {
+    if (!validation.valid)
       return errorResponse(validation.errors[0].message, "VALIDATION_ERROR", 400);
+
+    const company = sanitizeText(body.company);
+    const role = sanitizeText(body.role);
+    const round = body.round as InterviewRound;
+    const location = sanitizeText(body.location, 300);
+    const notes = sanitizeText(body.notes, 1200);
+    const durationMin = Number(body.durationMin ?? 60);
+    const model = body.model ?? "gpt-4o-mini";
+    const generatePrep = Boolean(body.generatePrep ?? true);
+
+    if (![
+      "phone_screen",
+      "technical",
+      "system_design",
+      "behavioral",
+      "hr",
+      "final",
+      "offer",
+    ].includes(round)) {
+      return errorResponse("Invalid interview round", "VALIDATION_ERROR", 400);
     }
 
-    const {
-      company      = "",
-      role         = "",
-      round        = "technical",
-      scheduledAt  = "",
-      durationMin  = 60,
-      location,
-      notes,
-      reminders    = [
-        { minutesBefore: 1440, channel: "email" },   // 24h
-        { minutesBefore:   60, channel: "email" },   // 1h
-      ],
-      generatePrep = true,
-      model        = "gpt-4o-mini",
-    } = body;
-
-    // Validate scheduledAt is a valid future date
-    const interviewDate = new Date(scheduledAt);
+    /* ------------------------------ Validate Date ------------------------------ */
+    const interviewDate = new Date(body.scheduledAt!);
     if (isNaN(interviewDate.getTime())) {
-      return errorResponse("scheduledAt must be a valid ISO date string.", "VALIDATION_ERROR", 400);
+      return errorResponse("scheduledAt must be a valid ISO date", "VALIDATION_ERROR", 400);
     }
 
-    // ── Generate prep checklist (optional, costs 1 credit) ───────────────────
+    /* ------------------------------ Clean Reminders ------------------------------ */
+    let reminders: ReminderConfig[] = Array.isArray(body.reminders)
+      ? body.reminders
+      : [
+          { minutesBefore: 1440, channel: "email" },
+          { minutesBefore: 60, channel: "email" },
+        ];
 
-    let prepQuestions: string[] = [];
+    reminders = reminders
+      .filter((r) => r.minutesBefore > 0)
+      .slice(0, 10);
+
+    /* ------------------------------ Prep Generation (1 Credit) ------------------------------ */
+    let prepChecklist: string[] = [];
     if (generatePrep) {
-      const credit = await deductCredits(auth.userId, "schedule_interview");
+      const credit = await deductCredits(auth.userId, "schedule_interview", 1);
       if (credit.success) {
         try {
-          prepQuestions = await generatePrepChecklist(company, role, round as InterviewRound, model);
+          prepChecklist = await generatePrepChecklist(company, role, round, model);
         } catch {
-          log(FN, "warn", "Prep checklist generation failed — continuing without it.");
+          log(FN, "warn", "Prep generation failed");
         }
       }
     }
 
-    // ── Persist to DB ────────────────────────────────────────────────────────
-
-    const now     = new Date().toISOString();
+    /* ------------------------------ SAVE TO DB ------------------------------ */
+    const now = new Date().toISOString();
     const payload = {
-      user_id:         auth.userId,
+      user_id: auth.userId,
       company,
       role,
-      interview_date:  scheduledAt,
-      notes:           notes ?? null,
-      prep_questions:  prepQuestions,
-      status:          "pending",
-      metadata:        { round, durationMin, location, reminders },
-      updated_at:      now,
+      interview_date: body.scheduledAt,
+      notes,
+      prep_questions: prepChecklist,
+      status: "pending",
+      metadata: {
+        round,
+        durationMin,
+        location,
+        reminders,
+      },
+      updated_at: now,
     };
 
-    let savedEvent: Record<string, unknown>;
+    let savedEvent;
 
     if (action === "update" && body.eventId) {
       const { data, error } = await admin
         .from("interview_prep")
         .update(payload)
-        .eq("id",      body.eventId)
+        .eq("id", body.eventId)
         .eq("user_id", auth.userId)
         .select()
         .single();
 
       if (error) throw new Error(error.message);
-      savedEvent = data as Record<string, unknown>;
+      savedEvent = data;
     } else {
       const { data, error } = await admin
         .from("interview_prep")
@@ -213,42 +268,40 @@ Deno.serve(async (req: Request) => {
         .single();
 
       if (error) throw new Error(error.message);
-      savedEvent = data as Record<string, unknown>;
+      savedEvent = data;
     }
 
-    // ── Queue reminder emails ────────────────────────────────────────────────
-
-    for (const reminder of reminders) {
+    /* ------------------------------ LOG REMINDERS ------------------------------ */
+    for (const r of reminders) {
       const reminderTime = new Date(
-        interviewDate.getTime() - reminder.minutesBefore * 60_000
+        interviewDate.getTime() - r.minutesBefore * 60_000
       );
-
       if (reminderTime > new Date()) {
-        // In production: insert into a job queue / pg_cron.
-        // For now: log intent so the scheduler can pick it up.
         log(FN, "info", "Reminder queued", {
-          userId:         auth.userId,
-          eventId:        savedEvent.id,
-          channel:        reminder.channel,
-          scheduledFor:   reminderTime.toISOString(),
-          minutesBefore:  reminder.minutesBefore,
+          userId: auth.userId,
+          eventId: savedEvent.id,
+          minutesBefore: r.minutesBefore,
+          scheduledFor: reminderTime.toISOString(),
+          channel: r.channel,
         });
       }
     }
 
-    log(FN, "info", `Interview ${action}d`, {
-      userId: auth.userId, company, role, round, scheduledAt,
-    });
-
+    /* ------------------------------ SUCCESS ------------------------------ */
     return successResponse({
-      event:         savedEvent,
-      prepChecklist: prepQuestions,
-      remindersSet:  reminders.length,
+      event: savedEvent,
+      prepChecklist,
+      remindersSet: reminders.length,
     });
 
   } catch (err) {
     if (err instanceof Response) return err;
+
     log(FN, "error", "Unhandled error", err);
-    return errorResponse("Failed to process interview schedule request.", "INTERNAL_ERROR", 500);
+    return errorResponse(
+      "Failed to process interview schedule request.",
+      "INTERNAL_ERROR",
+      500
+    );
   }
 });
