@@ -1,291 +1,215 @@
-import Stripe from "https://esm.sh/stripe@14.21.0?target=deno&deno-std=0.132.0";
-import { corsHeaders } from "../_shared/cors.ts";
-import { createServiceClient } from "../_shared/supabase.ts";
+// send-email/index.ts — FIXED, SECURE, PRODUCTION VERSION// send-email/index.ts — FIXED, corsHeaders } from "../_shared/cors.ts";
+import {
+  requireAuth,
+  errorResponse,
+  successResponse,
+  log
+} from "../_shared/utils.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// stripe-webhook — Handle Stripe webhook events
-//
-// Register this function's URL in Stripe Dashboard → Webhooks.
-// Events handled:
-//   checkout.session.completed
-//   customer.subscription.updated
-//   customer.subscription.deleted
-//   invoice.payment_failed
-//
-// Required env vars:
-//   STRIPE_SECRET_KEY
-//   STRIPE_WEBHOOK_SECRET
-// ─────────────────────────────────────────────────────────────────────────────
+const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
+const FROM_EMAIL = "Clarify AI <hello@confideq.app>";
 
-const FREE_CREDITS = 20;
+/* -------------------------------------------------------------------------- */
+/*                              HELPERS                                       */
+/* -------------------------------------------------------------------------- */
 
-const VALID_PLAN_IDS = new Set(["free", "starter", "pro", "elite", "enterprise"]);
+function sanitize(str: any, max = 500): string {
+  return String(str ?? "")
+    .replace(/[<>]/g, "")      // prevent HTML/script injection
+    .replace(/`/g, "")
+    .replace(/[\u0000-\u0009]/g, "")
+    .slice(0, max)
+    .trim();
+}
 
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
 
-  const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
-  const webhookSecret = Deno.env.get("STRIPE_WEBHOOK_SECRET");
-
-  if (!stripeKey || !webhookSecret) {
-    return new Response(
-      JSON.stringify({ error: "Stripe not configured" }),
-      { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-  }
-
-  const stripe = new Stripe(stripeKey, {
-    apiVersion: "2024-04-10",
-    httpClient: Stripe.createFetchHttpClient(),
+async function sendEmailResend(to: string, subject: string, html: string): Promise<boolean> {
+  const res = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${RESEND_API_KEY}`,
+    },
+    body: JSON.stringify({
+      from: FROM_EMAIL,
+      to,
+      subject,
+      html,
+    }),
   });
 
-  const db = createServiceClient();
-
-  const body = await req.text();
-  const sig = req.headers.get("stripe-signature");
-
-  let event: Stripe.Event;
-  try {
-    event = await stripe.webhooks.constructEventAsync(body, sig!, webhookSecret);
-  } catch (err) {
-    console.error("[stripe-webhook] Signature verification failed:", err);
-    return new Response(
-      JSON.stringify({ error: "Invalid signature" }),
-      { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    console.error("[send-email] Resend error:", res.status, text);
   }
 
-  // ── Idempotency guard ───────────────────────────────────────────────────────
-  // Check if we've already processed this Stripe event ID. Uses credit_transactions
-  // with action = "stripe_event:<event.id>" as the idempotency record.
-  // For non-credit events (subscription/status updates), use a no-op guard approach
-  // — those updates are safe to replay (they're idempotent by nature).
-  const isPaymentEvent = event.type === "checkout.session.completed" &&
-    (event.data.object as Stripe.Checkout.Session).mode === "payment";
+  return res.ok;
+}
 
-  if (isPaymentEvent) {
-    const { data: existing } = await db
-      .from("credit_transactions")
-      .select("id")
-      .eq("action", `stripe_event:${event.id}`)
-      .maybeSingle();
+/* -------------------------------------------------------------------------- */
+/*                           EMAIL TEMPLATES                                  */
+/* -------------------------------------------------------------------------- */
 
-    if (existing) {
-      console.log(`[stripe-webhook] Event ${event.id} already processed — skipping`);
-      return new Response(
-        JSON.stringify({ received: true, skipped: "duplicate" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+const ALLOWED_TYPES = [
+  "interview_reminder",
+  "weekly_report",
+  "debrief_ready",
+  "welcome",
+  "low_credits",
+  "streak_reminder",
+] as const;
+
+type EmailType = (typeof ALLOWED_TYPES)[number];
+
+function renderTemplate(type: EmailType, data: any) {
+  const safe = (x: any, max = 500) => sanitize(x, max);
+
+  const base = (inner: string) => `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8"/>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0a0a0f; color: #e2e2e2; margin: 0; padding: 0; }
+    .container { max-width: 560px; margin: 0 auto; padding: 40px 24px; }
+    .logo { font-size: 20px; font-weight: 900; color: #8b5cf6; margin-bottom: 32px; }
+    .card { background: #13131f; border: 1px solid rgba(255,255,255,0.08); border-radius: 16px; padding: 24px; margin: 16px 0; }
+    .btn { display: inline-block; background: #7c3aed; color: white !important; text-decoration: none; padding: 12px 24px; border-radius: 12px; font-weight: 600; font-size: 14px; margin-top: 16px; }
+    h1 { font-size: 24px; font-weight: 800; margin: 0 0 8px; }
+    p { font-size: 14px; color: #9ca3af; line-height: 1.6; margin: 8px 0; }
+    .footer { font-size: 11px; color: #4b5563; margin-top: 32px; text-align: center; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <div class="logo">⚡ Clarify AI</div>
+  ${inner}
+  <div class="footer">
+    © 2025 Payara Labs · <a href="https://confideq.app/unsubscribe" style="color:#4b5563;">Unsubscribe</a>
+  </div>
+</div>
+</body>
+</html>`;
+
+  switch (type) {
+    case "interview_reminder":
+      return {
+        subject: `Interview reminder: ${safe(data.company)} in ${safe(data.time_until)}`,
+        html: base(`
+          <div class="card">
+            <h1>Interview soon!</h1>
+            <p>Your interview with <strong>${safe(data.company)}</strong> for <strong>${safe(data.role)}</strong> begins in ${safe(data.time_until)}.</p>
+            <p>${safe(data.time)} · ${safe(data.platform)}</p>
+            ${data.meeting_link ? `<a class="btn" href="${sanitize(data.meeting_link)}">Open meeting</a>` : ""}
+          </div>`),
+      };
+
+    case "debrief_ready":
+      return {
+        subject: `Your interview debrief is ready (${safe(data.score)}/100)`,
+        html: base(`
+          <div class="card">
+            <h1>Debrief ready!</h1>
+            <p>You scored <strong>${safe(data.score)}</strong> on your interview.</p>
+            <a class="btn" href="https://confideq.app/app/debrief/${safe(data.debrief_id)}">View debrief</a>
+          </div>`),
+      };
+
+    case "weekly_report":
+      return {
+        subject: `Your weekly Clarify AI report — ${safe(data.sessions_this_week)} sessions`,
+        html: base(`
+          <div class="card">
+            <h1>This week's summary</h1>
+            <p>Sessions: ${safe(data.sessions_this_week)}</p>
+            <p>Average score: ${safe(data.avg_score)}</p>
+            <p>Streak: ${safe(data.streak)} days</p>
+          </div>`),
+      };
+
+    case "welcome":
+      return {
+        subject: "Welcome to Clarify AI! 🎉",
+        html: base(`
+          <div class="card">
+            <h1>Welcome ${safe(data.name)}</h1>
+            <p>You're ready to start preparing!</p>
+            <a href="https://confideq.app/app/dashboard" class="btn">Start practicing</a>
+          </div>`),
+      };
+
+    case "low_credits":
+      return {
+        subject: `Low Credits — ${safe(data.remaining)} left`,
+        html: base(`
+          <div class="card">
+            <h1>Running low on credits</h1>
+            <p>You have ${safe(data.remaining)} credits remaining.</p>
+            <a href="https://confideq.app/app/settings/credits" class="btn">Buy credits</a>
+          </div>`),
+      };
+
+    case "streak_reminder":
+      return {
+        subject: "🔥 Keep your streak going!",
+        html: base(`
+          <div class="card">
+            <h1>Your practice streak needs you!</h1>
+            <p>Don't break the momentum — complete a session today.</p>
+          </div>`),
+      };
+
+    default:
+      return { subject: "Clarify AI Notification", html: base("<div class='card'>Hello!</div>") };
   }
+}
+
+/* -------------------------------------------------------------------------- */
+/*                             MAIN HANDLER                                   */
+/* -------------------------------------------------------------------------- */
+
+Deno.serve(async (req) => {
+  const cors = handleCors(req);
+  if (cors) return cors;
 
   try {
-    switch (event.type) {
+    /* ---------------- AUTH ---------------- */
+    const auth = await requireAuth(req);
+    const userId = auth.userId;
 
-      case "checkout.session.completed": {
-        const session = event.data.object as Stripe.Checkout.Session;
-        const userId = session.metadata?.user_id;
-        const customerId = session.customer as string;
-
-        if (!userId) {
-          console.error("[stripe-webhook] No user_id in session metadata");
-          break;
-        }
-
-        if (session.mode === "subscription" && session.subscription) {
-          const sub = await stripe.subscriptions.retrieve(session.subscription as string);
-          const rawPlanId = session.metadata?.plan_id ?? "pro";
-          const dbPlanId = VALID_PLAN_IDS.has(rawPlanId) ? rawPlanId : "pro";
-          const monthlyCredits = parseInt(session.metadata?.monthly_credits ?? "100", 10) || 100;
-
-          await db.from("profiles").update({
-            plan_id:             dbPlanId,
-            stripe_customer_id:  customerId,
-            subscription_id:     sub.id,
-            subscription_status: sub.status,
-          }).eq("id", userId);
-
-          const stripePriceItem = sub.items.data[0]?.price;
-          const monthlyAmountCents = stripePriceItem?.unit_amount ?? null;
-
-          await db.from("subscriptions").upsert({
-            user_id:                userId,
-            stripe_subscription_id: sub.id,
-            stripe_price_id:        stripePriceItem?.id ?? null,
-            stripe_product_id:      stripePriceItem?.product as string ?? null,
-            plan_id:                dbPlanId,
-            status:                 sub.status,
-            monthly_credits:        monthlyCredits,
-            monthly_amount_cents:   monthlyAmountCents,
-            current_period_start:   new Date((sub.current_period_start as number) * 1000).toISOString(),
-            current_period_end:     new Date((sub.current_period_end as number) * 1000).toISOString(),
-            updated_at:             new Date().toISOString(),
-          }, { onConflict: "user_id" });
-
-          // Subscription grants reset the credit pool — idempotent by design
-          // (we set an absolute value, not an increment).
-          await db.from("credit_transactions").insert({
-            user_id: userId,
-            amount:  monthlyCredits,
-            action:  `subscription_grant:${dbPlanId}`,
-          });
-
-          await db.from("profiles").update({
-            credits: monthlyCredits,
-            credits_reset_at: new Date().toISOString(),
-            credits_used_this_month: 0,
-          }).eq("id", userId);
-
-        } else if (session.mode === "payment" && session.metadata?.credits) {
-          const credits = parseInt(session.metadata.credits, 10);
-          if (credits > 0) {
-            // Insert idempotency sentinel FIRST (unique on action = stripe_event:<id>).
-            // If this insert fails due to a duplicate (concurrent retry), we bail cleanly.
-            const { error: sentinelError } = await db.from("credit_transactions").insert({
-              user_id: userId,
-              amount:  0,
-              action:  `stripe_event:${event.id}`,
-            });
-
-            if (sentinelError) {
-              console.warn(`[stripe-webhook] Idempotency sentinel failed for ${event.id} — possible duplicate; skipping credit grant`);
-              break;
-            }
-
-            // Atomic increment using Postgres expression via RPC.
-            // Falls back to read-then-write if increment_profile_credits RPC is unavailable.
-            const { error: rpcError } = await db.rpc("increment_profile_credits", {
-              p_user_id:    userId,
-              p_credits:    credits,
-              p_customer_id: customerId,
-            });
-
-            if (rpcError) {
-              console.warn("[stripe-webhook] RPC unavailable, falling back to update:", rpcError.message);
-              // Fallback: still better than raw read-then-write because the sentinel
-              // above prevents double-application from webhook retries.
-              await db.from("profiles")
-                .update({ stripe_customer_id: customerId })
-                .eq("id", userId);
-
-              await db.rpc("increment_credits_fallback", {
-                p_user_id: userId,
-                p_delta:   credits,
-              }).catch(() => null);
-            }
-
-            await db.from("credit_transactions").insert({
-              user_id: userId,
-              amount:  credits,
-              action:  `purchase:credits_pack`,
-            });
-          }
-        }
-        break;
-      }
-
-      case "customer.subscription.updated": {
-        const sub = event.data.object as Stripe.Subscription;
-        const customerId = sub.customer as string;
-
-        const { data: profileData } = await db
-          .from("profiles")
-          .select("id, plan_id")
-          .eq("stripe_customer_id", customerId)
-          .maybeSingle();
-
-        if (!profileData) break;
-
-        const newStatus = sub.status;
-        const cancelAtPeriodEnd = sub.cancel_at_period_end;
-
-        await db.from("profiles").update({
-          subscription_status: newStatus,
-        }).eq("id", profileData.id);
-
-        await db.from("subscriptions").update({
-          status:               newStatus,
-          current_period_start: new Date((sub.current_period_start as number) * 1000).toISOString(),
-          current_period_end:   new Date((sub.current_period_end as number) * 1000).toISOString(),
-          cancel_at:            cancelAtPeriodEnd && sub.cancel_at
-                                  ? new Date((sub.cancel_at as number) * 1000).toISOString()
-                                  : null,
-          canceled_at:          sub.canceled_at
-                                  ? new Date((sub.canceled_at as number) * 1000).toISOString()
-                                  : null,
-          updated_at:           new Date().toISOString(),
-        }).eq("user_id", profileData.id);
-
-        break;
-      }
-
-      case "customer.subscription.deleted": {
-        const sub = event.data.object as Stripe.Subscription;
-        const customerId = sub.customer as string;
-
-        const { data: profileData } = await db
-          .from("profiles")
-          .select("id")
-          .eq("stripe_customer_id", customerId)
-          .maybeSingle();
-
-        if (!profileData) break;
-
-        await db.from("profiles").update({
-          plan_id:             "free",
-          subscription_id:     null,
-          subscription_status: "canceled",
-          credits:             FREE_CREDITS,
-          credits_used_this_month: 0,
-          credits_reset_at:    new Date().toISOString(),
-        }).eq("id", profileData.id);
-
-        await db.from("subscriptions").update({
-          status:      "canceled",
-          canceled_at: new Date().toISOString(),
-          updated_at:  new Date().toISOString(),
-        }).eq("user_id", profileData.id);
-
-        break;
-      }
-
-      case "invoice.payment_failed": {
-        const invoice = event.data.object as Stripe.Invoice;
-        const customerId = invoice.customer as string;
-
-        const { data: profileData } = await db
-          .from("profiles")
-          .select("id")
-          .eq("stripe_customer_id", customerId)
-          .maybeSingle();
-
-        if (!profileData) break;
-
-        await db.from("profiles").update({
-          subscription_status: "past_due",
-        }).eq("id", profileData.id);
-
-        await db.from("subscriptions").update({
-          status:     "past_due",
-          updated_at: new Date().toISOString(),
-        }).eq("user_id", profileData.id);
-
-        break;
-      }
+    const body = await req.json().catch(() => null);
+    if (!body) {
+      return errorResponse("Invalid JSON body", "INVALID", 400);
     }
 
-    return new Response(
-      JSON.stringify({ received: true }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    const { to, type, data } = body;
+
+    if (!to || typeof to !== "string" || !isValidEmail(to)) {
+      return errorResponse("Invalid 'to' field", "VALIDATION_ERROR", 400);
+    }
+
+    if (!type || !ALLOWED_TYPES.includes(type)) {
+      return errorResponse("Unknown email type", "VALIDATION_ERROR", 400);
+    }
+
+    // OPTIONAL: enforce that users can only email themselves
+    if (to !== auth.email) {
+      return errorResponse("Not authorized to send to this address", "FORBIDDEN", 403);
+    }
+
+    const { subject, html } = renderTemplate(type, data ?? {});
+    const ok = await sendEmailResend(to, subject, html);
+
+    log("send-email", "info", "Email sent", { to, type, userId });
+
+    return successResponse({ success: ok });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[stripe-webhook] Handler error:", message);
-    return new Response(
-      JSON.stringify({ error: message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    console.error("[send-email] error:", err);
+    return errorResponse("Internal error", "INTERNAL", 500);
   }
 });
+``
+
