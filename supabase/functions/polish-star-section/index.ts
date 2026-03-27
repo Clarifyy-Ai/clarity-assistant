@@ -1,15 +1,11 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// polish-star-section/index.ts — Polish or rewrite a single STAR section
-// (situation / task / action / result) without regenerating the full answer.
-// Useful for in-place editing in the STAR Builder UI.
-// ─────────────────────────────────────────────────────────────────────────────
+// polish-star-section/index.ts — SECURE, FIXED PRODUCTION VERSION
 
-import { corsHeaders }  from "../_shared/cors.ts";
+import { corsHeaders } from "../_shared/cors.ts";
 import {
   handleCors, parseBody, requireAuth,
   successResponse, errorResponse,
   deductCredits, callAI,
-  requireFields, log,
+  requireFields, log
 } from "../_shared/utils.ts";
 import type { ModelId } from "../_shared/types.ts";
 
@@ -25,14 +21,29 @@ const SECTION_GUIDANCE: Record<STARKey, string> = {
 const POLISH_STYLES = ["concise", "detailed", "impactful", "natural"] as const;
 type PolishStyle = (typeof POLISH_STYLES)[number];
 
-const STYLE_INSTRUCTIONS: Record<PolishStyle, string> = {
-  concise:   "Make it shorter and punchier. Remove filler words. Keep only the most impactful detail.",
-  detailed:  "Expand with more context and specific details. Add metrics if plausible.",
-  impactful: "Rewrite to maximise impact. Lead with the strongest point. Use power verbs.",
-  natural:   "Make it sound more natural and conversational while keeping it professional.",
-};
+/* -----------------------------------------------
+   SANITIZATION HELPERS
+----------------------------------------------- */
+function sanitizeInput(text: string, max = 1200): string {
+  if (!text) return "";
+  return String(text)
+    .replace(/```/g, "")               // remove code fences
+    .replace(/[^\x20-\x7E\n]/g, "")    // remove non-printable
+    .replace(/\s{2,}/g, " ")
+    .slice(0, max)
+    .trim();
+}
 
-// ─── Handler ──────────────────────────────────────────────────────────────────
+function sanitizeAIOutput(text: string): string {
+  return String(text)
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
+}
+
+/* -----------------------------------------------
+   MAIN HANDLER
+----------------------------------------------- */
 
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
@@ -41,27 +52,30 @@ Deno.serve(async (req: Request) => {
   const FN = "polish-star-section";
 
   try {
-    // ── Auth ────────────────────────────────────────────────────────────────
+    // AUTH
     const auth = await requireAuth(req);
 
-    // ── Body ────────────────────────────────────────────────────────────────
-    const body = await parseBody<{
-      section:       STARKey;
-      currentText:   string;
+    // BODY
+    const rawBody = await parseBody<{
+      section: STARKey;
+      currentText: string;
       questionText?: string;
-      style?:        PolishStyle;
-      instruction?:  string;    // custom free-text instruction
-      model?:        ModelId;
+      style?: PolishStyle;
+      instruction?: string;  
+      model?: ModelId;
     }>(req);
 
-    const validation = requireFields(body as Record<string, unknown>, [
-      "section", "currentText",
+    // Required fields
+    const validation = requireFields(rawBody as Record<string, unknown>, [
+      "section",
+      "currentText",
     ]);
     if (!validation.valid) {
       return errorResponse(validation.errors[0].message, "VALIDATION_ERROR", 400);
     }
 
-    if (!["situation", "task", "action", "result"].includes(body.section)) {
+    // Validate section key
+    if (!["situation", "task", "action", "result"].includes(rawBody.section)) {
       return errorResponse(
         "section must be one of: situation, task, action, result",
         "VALIDATION_ERROR",
@@ -69,73 +83,89 @@ Deno.serve(async (req: Request) => {
       );
     }
 
-    const {
-      section,
-      currentText,
-      questionText,
-      style        = "impactful",
-      instruction,
-      model        = "gpt-4o-mini",
-    } = body;
+    const section = rawBody.section;
+    const sectionLabel = section.charAt(0).toUpperCase() + section.slice(1);
 
-    // ── Credits ─────────────────────────────────────────────────────────────
-    const credit = await deductCredits(auth.userId, "polish_star");
+    // Sanitize inputs
+    const currentText   = sanitizeInput(rawBody.currentText, 1200);
+    const questionText  = rawBody.questionText ? sanitizeInput(rawBody.questionText, 400) : null;
+    const instruction   = rawBody.instruction ? sanitizeInput(rawBody.instruction, 600) : null;
+    const style         = POLISH_STYLES.includes(rawBody.style ?? "impactful")
+                          ? rawBody.style ?? "impactful"
+                          : "impactful";
+
+    // AI model
+    const model: ModelId = rawBody.model ?? "gpt-4o-mini";
+
+    // CREDITS (FIXED: cost must be explicit)
+    const credit = await deductCredits(auth.userId, "polish_star", 1);
     if (!credit.success) {
       return errorResponse(credit.error ?? "Insufficient credits.", "INSUFFICIENT_CREDITS", 402);
     }
 
-    // ── Prompt ──────────────────────────────────────────────────────────────
-    const sectionLabel = section.charAt(0).toUpperCase() + section.slice(1);
-    const styleInstr   = instruction ?? STYLE_INSTRUCTIONS[style];
+    // Prompt construction
+    const styleInstruction = instruction ?? {
+      concise:   "Make it shorter and punchier. Remove filler words. Keep only the strongest detail.",
+      detailed:  "Expand with more useful and concrete context. Add metrics when plausible.",
+      impactful: "Maximize impact. Lead with the strongest point. Use crisp action verbs.",
+      natural:   "Make it sound natural and conversational while staying professional."
+    }[style];
 
-    const systemPrompt = `You are an expert interview coach. Your job is to polish a single STAR answer section.
-Return ONLY the improved text for the ${sectionLabel} section — no labels, no JSON, no extra commentary.
-Keep it within the expected length for this section.
+    const systemPrompt = `
+You are an expert interview coach. Your task is to refine ONLY the ${sectionLabel} section of a STAR answer.
+Return ONLY the polished text — no labels, no metadata, no commentary.
+Follow guidance strictly:
 
-Section guidance: ${SECTION_GUIDANCE[section]}`;
+${SECTION_GUIDANCE[sectionLabel.toLowerCase() as STARKey]}
+`.trim();
 
-    const userPrompt = [
-      questionText ? `Interview Question: "${questionText}"` : null,
-      ``,
-      `Current ${sectionLabel} section:`,
-      `"${currentText}"`,
-      ``,
-      `Polish instruction: ${styleInstr}`,
-      ``,
-      `Return only the improved ${sectionLabel} text:`,
-    ]
-      .filter((l) => l !== null)
-      .join("\n");
+    const userPrompt = `
+${questionText ? `Interview Question: "${questionText}"\n` : ""}
 
-    // ── AI call ─────────────────────────────────────────────────────────────
+Current ${sectionLabel} Section:
+"${currentText}"
+
+Instruction:
+${styleInstruction}
+
+Return ONLY the rewritten ${sectionLabel} text:
+`.trim();
+
+    // AI CALL
     const aiResult = await callAI({
       model,
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user",   content: userPrompt   },
+        { role: "user",   content: userPrompt },
       ],
-      maxTokens:   400,
+      maxTokens: 400,
       temperature: 0.65,
     });
 
-    const polished = aiResult.text.trim();
+    const polished = sanitizeAIOutput(aiResult.text);
 
-    log(FN, "info", "Section polished", {
-      userId: auth.userId, section, style, model,
+    // LOG
+    log(FN, "info", "STAR section polished", {
+      userId: auth.userId,
+      section,
+      style,
+      model,
+      tokens: aiResult.totalTokens,
     });
 
     return successResponse(
       { section, polished, original: currentText },
       {
-        model:          model,
-        tokensUsed:     aiResult.totalTokens,
+        model,
+        tokensUsed: aiResult.totalTokens,
         creditsCharged: 1,
-        latencyMs:      aiResult.latencyMs,
+        latencyMs: aiResult.latencyMs,
       }
     );
 
   } catch (err) {
     if (err instanceof Response) return err;
+
     log(FN, "error", "Unhandled error", err);
     return errorResponse("Failed to polish STAR section.", "INTERNAL_ERROR", 500);
   }
