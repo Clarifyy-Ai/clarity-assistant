@@ -333,6 +333,12 @@ export default function TestConfigure() {
           </CardContent>
         </Card>
       )}
+
+      {/* Step 2: Settings */}
+      {(isQuick || step >= 2) && (
+      <>
+      {/* Test name */}
+      <Card>
         <CardContent className="py-4 space-y-3">
           <SectionLabel>Test Name</SectionLabel>
           <input
