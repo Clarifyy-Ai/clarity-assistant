@@ -317,7 +317,7 @@ function RecentSessions() {
     if (!user?.id) { setLoading(false); return; }
     supabase
       .from("sessions")
-      .select("id, type, status, overall_score, target_company, created_at")
+      .select("id, type, status, overall_score, title, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(5)
@@ -375,7 +375,7 @@ function RecentSessions() {
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-foreground font-medium capitalize">
-                    {s.type ?? "Session"}{s.target_company ? ` — ${s.target_company}` : ""}
+                    {s.type ?? "Session"}{s.title ? ` — ${s.title}` : ""}
                   </p>
                   <p className="text-xs text-muted-foreground">
                     {format(new Date(s.created_at), "MMM d, h:mm a")}

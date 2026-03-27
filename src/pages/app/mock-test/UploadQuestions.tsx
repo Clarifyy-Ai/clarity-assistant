@@ -1,6 +1,6 @@
 // @ts-nocheck
 // src/pages/app/mock-test/UploadQuestions.tsx
-import { useState, useRef } from "react";
+import { useState, useRef, lazy, Suspense } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   Upload, X, Check, AlertCircle,
@@ -882,27 +882,40 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
 export default function UploadQuestions() {
   const [searchParams]   = useSearchParams();
   const navigate         = useNavigate();
-  const defaultTab       = searchParams.get("tab") === "manual" ? "manual" : "pdf";
+  const defaultTab       = searchParams.get("tab") === "manual" ? "manual" : "excel";
   const [questionCount, setQuestionCount] = useState(0);
+
+  // Dynamically import ExcelImportTab
+  const ExcelImportTab = lazy(() => import("./ExcelImportTab"));
 
   return (
     <div className="space-y-5">
       <PageHeader
         title="Import Questions"
-        description="Upload a PDF question paper or create questions manually. Questions are saved to your personal bank."
+        description="Upload questions via Excel, PDF, or create them manually."
       />
 
       <Tabs defaultValue={defaultTab}>
         <TabsList>
+          <TabsTrigger value="excel">
+            <Upload className="h-4 w-4 mr-2" />
+            Excel Import
+          </TabsTrigger>
           <TabsTrigger value="pdf">
             <Upload className="h-4 w-4 mr-2" />
-            Import PDF
+            PDF Import (Beta)
           </TabsTrigger>
           <TabsTrigger value="manual">
             <Plus className="h-4 w-4 mr-2" />
             Create Manually
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="excel" className="mt-5">
+          <Suspense fallback={<div className="h-40 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
+            <ExcelImportTab onImported={(c) => setQuestionCount((p) => p + c)} />
+          </Suspense>
+        </TabsContent>
 
         <TabsContent value="pdf" className="mt-5 space-y-4">
           <PDFImportTab onImported={(c) => setQuestionCount((p) => p + c)} />

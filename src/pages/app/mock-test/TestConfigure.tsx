@@ -33,7 +33,20 @@ interface TestConfig {
   marks_positive: number;
   marks_negative: number;
   randomize_order: boolean;
+  shuffle_options: boolean;
 }
+
+type DifficultyPreset = "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "ADAPTIVE";
+
+const DIFFICULTY_PRESETS: Record<DifficultyPreset, { dist: DifficultyDistribution; desc: string }> = {
+  BEGINNER:     { dist: { EASY: 70, MEDIUM: 20, HARD: 10 }, desc: "Build your fundamentals" },
+  INTERMEDIATE: { dist: { EASY: 20, MEDIUM: 60, HARD: 20 }, desc: "Test your preparation" },
+  ADVANCED:     { dist: { EASY: 10, MEDIUM: 30, HARD: 60 }, desc: "Push your limits" },
+  ADAPTIVE:     { dist: { EASY: 30, MEDIUM: 40, HARD: 30 }, desc: "Smart difficulty" },
+};
+
+const QUESTION_COUNT_PRESETS = [10, 20, 30, 50];
+const DURATION_PRESETS = [10, 20, 30, 60];
 
 const EXAM_SUBJECTS: Record<string, string[]> = {
   JEE_MAIN: ["Physics", "Chemistry", "Mathematics"],
@@ -99,6 +112,9 @@ export default function TestConfigure() {
   const yearMinFromURL = searchParams.get("year_min") ? Number(searchParams.get("year_min")) : null;
   const yearMaxFromURL = searchParams.get("year_max") ? Number(searchParams.get("year_max")) : null;
 
+  const [selectedPreset, setSelectedPreset] = useState<DifficultyPreset | null>(isQuick ? null : "INTERMEDIATE");
+  const [step, setStep] = useState(1);
+
   const [config, setConfig] = useState<TestConfig>({
     exam_type:              isQuick ? "CUSTOM" : examFromURL,
     test_name:              isQuick ? "Quick Drill" : `${examFromURL.replace(/_/g, " ")} Practice Test`,
@@ -110,12 +126,13 @@ export default function TestConfigure() {
       : null,
     difficulty_distribution: isQuick
       ? { EASY: 30, MEDIUM: 50, HARD: 20 }
-      : { EASY: 30, MEDIUM: 40, HARD: 30 },
+      : { EASY: 20, MEDIUM: 60, HARD: 20 },
     question_count:         isQuick ? 10 : 30,
     duration_minutes:       isQuick ? 10 : 60,
     marks_positive:         4,
     marks_negative:         1,
     randomize_order:        true,
+    shuffle_options:        true,
   });
 
   const [loading, setLoading] = useState(false);
@@ -251,6 +268,75 @@ export default function TestConfigure() {
         }
       />
 
+      {/* Step indicator */}
+      {!isQuick && (
+        <div className="flex items-center gap-2">
+          {[
+            { n: 1, label: "Level" },
+            { n: 2, label: "Settings" },
+            { n: 3, label: "Start" },
+          ].map(({ n, label }) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setStep(n)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                step === n
+                  ? "border-violet-500/50 bg-violet-500/15 text-violet-300"
+                  : step > n
+                    ? "border-green-500/30 bg-green-500/10 text-green-400"
+                    : "border-border text-muted-foreground"
+              }`}
+            >
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                step > n ? "bg-green-500/20 text-green-400" : step === n ? "bg-violet-500/20 text-violet-300" : "bg-muted text-muted-foreground"
+              }`}>{step > n ? "✓" : n}</span>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Step 1: Level Selection */}
+      {(isQuick || step === 1) && !isQuick && (
+        <Card>
+          <CardContent className="py-4 space-y-3">
+            <SectionLabel>Choose Difficulty Level</SectionLabel>
+            <div className="grid grid-cols-2 gap-3">
+              {(Object.entries(DIFFICULTY_PRESETS) as [DifficultyPreset, { dist: DifficultyDistribution; desc: string }][]).map(([key, { dist, desc }]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    setSelectedPreset(key);
+                    setConfig((c) => ({ ...c, difficulty_distribution: { ...dist } }));
+                  }}
+                  className={`text-left rounded-xl border p-3 transition-all ${
+                    selectedPreset === key
+                      ? "border-violet-500/50 bg-violet-500/10"
+                      : "border-border hover:border-violet-500/30"
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-foreground">{key}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+                  <div className="flex gap-1.5 mt-2">
+                    <span className="text-[10px] bg-green-500/10 text-green-400 px-1.5 py-0.5 rounded-full">{dist.EASY}% Easy</span>
+                    <span className="text-[10px] bg-amber-500/10 text-amber-400 px-1.5 py-0.5 rounded-full">{dist.MEDIUM}% Med</span>
+                    <span className="text-[10px] bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded-full">{dist.HARD}% Hard</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end pt-2">
+              <Button size="sm" onClick={() => setStep(2)}>Next →</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Step 2: Settings */}
+      {(isQuick || step >= 2) && (
+      <>
       {/* Test name */}
       <Card>
         <CardContent className="py-4 space-y-3">
@@ -540,7 +626,7 @@ export default function TestConfigure() {
 
       {/* Options */}
       <Card>
-        <CardContent className="py-4">
+        <CardContent className="py-4 space-y-3">
           <label className="flex items-center gap-3 cursor-pointer">
             <input
               type="checkbox"
@@ -550,14 +636,62 @@ export default function TestConfigure() {
             />
             <span className="text-sm text-foreground">Randomize question order</span>
           </label>
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={config.shuffle_options}
+              onChange={(e) => setConfig((c) => ({ ...c, shuffle_options: e.target.checked }))}
+              className="accent-violet-500 w-4 h-4"
+            />
+            <span className="text-sm text-foreground">Shuffle answer options (A/B/C/D)</span>
+          </label>
         </CardContent>
       </Card>
 
+      {/* Question count presets */}
+      <Card>
+        <CardContent className="py-4 space-y-3">
+          <SectionLabel>Quick Select — Questions</SectionLabel>
+          <div className="flex gap-2 flex-wrap">
+            {QUESTION_COUNT_PRESETS.map((n) => (
+              <button key={n} type="button" onClick={() => setConfig((c) => ({ ...c, question_count: n }))}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${config.question_count === n ? "border-violet-500/50 bg-violet-500/15 text-violet-300" : "border-border text-muted-foreground hover:border-violet-500/30"}`}
+              >{n} Qs</button>
+            ))}
+          </div>
+          <SectionLabel>Quick Select — Duration</SectionLabel>
+          <div className="flex gap-2 flex-wrap">
+            {DURATION_PRESETS.map((m) => (
+              <button key={m} type="button" onClick={() => setConfig((c) => ({ ...c, duration_minutes: m }))}
+                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${config.duration_minutes === m ? "border-violet-500/50 bg-violet-500/15 text-violet-300" : "border-border text-muted-foreground hover:border-violet-500/30"}`}
+              >{m} min</button>
+            ))}
+            <button type="button" onClick={() => setConfig((c) => ({ ...c, duration_minutes: 0 }))}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${config.duration_minutes === 0 ? "border-violet-500/50 bg-violet-500/15 text-violet-300" : "border-border text-muted-foreground hover:border-violet-500/30"}`}
+            >No limit</button>
+          </div>
+        </CardContent>
+      </Card>
+
+      </>
+      )}
+
+      {/* Step 3: Summary + Start */}
+      {(isQuick || step >= 2) && (
+      <>
       {/* Credit notice */}
       <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-4 py-3">
         <p className="text-xs text-muted-foreground">
           <span className="text-violet-300 font-semibold">2 credits</span> will be deducted when the
           test is created successfully. Free plan: up to 2 tests per month.
+        </p>
+      </div>
+
+      {/* Summary */}
+      <div className="rounded-xl border border-border bg-card p-4 text-sm text-foreground">
+        <p className="font-semibold mb-1">Test Summary</p>
+        <p className="text-muted-foreground text-xs">
+          {config.question_count} questions · {config.duration_minutes > 0 ? `${config.duration_minutes} minutes` : "No time limit"} · {selectedPreset ?? "Custom"} difficulty · {config.subjects.length > 0 ? config.subjects.join(" + ") : "All subjects"}
         </p>
       </div>
 
@@ -571,6 +705,8 @@ export default function TestConfigure() {
           Start Test
         </Button>
       </div>
+      </>
+      )}
     </div>
   );
 }
