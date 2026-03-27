@@ -1,102 +1,158 @@
+// resume-subscription/index.ts
+
+import Stripe from "https://esm.sh/stripe@14.21.0?target=deno&deno-std=0.132.0";
 import { handleCors, corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
-
-// ─────────────────────────────────────────────────────────────────
-// create-test
-// Calls the create_test_atomic DB function which runs the entire
-// quota-check + credit-deduction + test-insert in ONE transaction.
-// This prevents any race condition or partial-billing scenario.
-// ─────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
+  const stripeKey = Deno.env.get("STRIPE_SECRET_KEY");
+  if (!stripeKey) {
+    return new Response(JSON.stringify({ error: "Stripe is not configured." }), {
+      status: 503,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  const stripe = new Stripe(stripeKey, {
+    apiVersion: "2024-04-10",
+    httpClient: Stripe.createFetchHttpClient(),
+  });
+
+  const db = createServiceClient();
+
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
+    /* ------------------------------------------------------------------
+     * 1. AUTHENTICATE USER
+     * ------------------------------------------------------------------ */
+    const authHeader =
+      req.headers.get("authorization") ??
+      req.headers.get("Authorization");
+
+    if (!authHeader?.toLowerCase().startsWith("bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
-    const token = authHeader.replace("Bearer ", "");
-    const db = createServiceClient();
 
-    const { data: { user }, error: authErr } = await db.auth.getUser(token);
-    if (authErr || !user) {
+    const token = authHeader.replace(/^bearer\s+/i, "");
+    const {
+      data: { user },
+      error: authError,
+    } = await db.auth.getUser(token);
+
+    if (authError || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-    const userId = user.id;
-
-    const body = await req.json() as {
-      test_name?: string;
-      config?: { duration_minutes?: number; randomize_order?: boolean; [key: string]: unknown };
-      question_ids?: string[];
-    };
-    const { test_name, config, question_ids } = body;
-
-    if (!question_ids || question_ids.length === 0) {
-      return new Response(JSON.stringify({ error: "No questions provided" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    const timeLimitMinutes = config?.duration_minutes ?? 60;
+    /* ------------------------------------------------------------------
+     * 2. FETCH USER SUBSCRIPTION RECORD IN SUPABASE
+     * ------------------------------------------------------------------ */
+    const { data: subscriptionRow, error: subErr } = await db
+      .from("subscriptions")
+      .select("stripe_subscription_id, stripe_customer_id")
+      .eq("user_id", user.id)
+      .single();
 
-    // Honor randomize_order: true (default) = shuffle before storing;
-    // false = preserve the selection order returned by select-test-questions.
-    const randomizeOrder = config?.randomize_order !== false;
-    const orderedIds: string[] = randomizeOrder
-      ? [...question_ids].sort(() => Math.random() - 0.5)
-      : [...question_ids];
+    if (subErr || !subscriptionRow?.stripe_subscription_id) {
+      return new Response(
+        JSON.stringify({
+          error: "No active subscription found for this user.",
+        }),
+        {
+          status: 404,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
 
-    // ── Single atomic RPC call: quota check + deduct + insert ─────
-    const { data: rpcResult, error: rpcErr } = await db.rpc("create_test_atomic", {
-      p_user_id:      userId,
-      p_test_name:    test_name ?? "Practice Test",
-      p_config:       config ?? {},
-      p_question_ids: orderedIds,
-      p_time_limit:   timeLimitMinutes,
-      p_credit_cost:  2,
+    const stripeSubscriptionId = subscriptionRow.stripe_subscription_id;
+    const stripeCustomerId = subscriptionRow.stripe_customer_id;
+
+    /* ------------------------------------------------------------------
+     * 3. FETCH SUBSCRIPTION FROM STRIPE & VERIFY OWNERSHIP
+     * ------------------------------------------------------------------ */
+    let subscription;
+
+    try {
+      subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId);
+    } catch (_) {
+      return new Response(
+        JSON.stringify({ error: "Stripe subscription not found." }),
+        { status: 404, headers: { ...corsHeaders } }
+      );
+    }
+
+    if (!subscription || subscription.customer !== stripeCustomerId) {
+      return new Response(
+        JSON.stringify({
+          error: "Subscription does not belong to the authenticated user.",
+        }),
+        { status: 403, headers: { ...corsHeaders } }
+      );
+    }
+
+    /* ------------------------------------------------------------------
+     * 4. CHECK IF RESUME IS NECESSARY
+     * ------------------------------------------------------------------ */
+    // Avoid unnecessary mutation if subscription is already active
+    if (subscription.cancel_at_period_end === false) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          already_active: true,
+        }),
+        { status: 200, headers: { ...corsHeaders } }
+      );
+    }
+
+    if (subscription.status !== "active" && subscription.status !== "trialing") {
+      return new Response(
+        JSON.stringify({
+          error: `Subscription cannot be resumed in current state: ${subscription.status}`,
+        }),
+        { status: 400, headers: { ...corsHeaders } }
+      );
+    }
+
+    /* ------------------------------------------------------------------
+     * 5. RESUME SUBSCRIPTION IN STRIPE
+     * ------------------------------------------------------------------ */
+    await stripe.subscriptions.update(stripeSubscriptionId, {
+      cancel_at_period_end: false,
     });
 
-    if (rpcErr) {
-      console.error("[create-test] RPC error:", rpcErr);
-      return new Response(
-        JSON.stringify({ error: "Failed to create test", detail: rpcErr.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    /* ------------------------------------------------------------------
+     * 6. UPDATE DB SAFELY (idempotent)
+     * ------------------------------------------------------------------ */
+    await db
+      .from("subscriptions")
+      .update({
+        cancel_at: null,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("user_id", user.id);
 
-    const result = rpcResult as { error?: string; code?: string; test_id?: string };
-
-    if (result.error) {
-      const statusCode = result.code === "FREE_PLAN_LIMIT" || result.code === "INSUFFICIENT_CREDITS"
-        ? 402 : 500;
-      return new Response(
-        JSON.stringify({ error: result.error, code: result.code }),
-        { status: statusCode, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    if (!result.test_id) {
-      return new Response(
-        JSON.stringify({ error: "Test creation failed: no ID returned" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    return new Response(
-      JSON.stringify({ test_id: result.test_id }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ success: true }), {
+      status: 200,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (err) {
-    console.error("[create-test] error:", err);
+    console.error("[resume-subscription] Error:", err);
     return new Response(
-      JSON.stringify({ error: "Internal error", detail: String(err) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({
+        error: err instanceof Error ? err.message : "Unknown error",
+      }),
+      {
+        status: 500,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
     );
   }
 });
