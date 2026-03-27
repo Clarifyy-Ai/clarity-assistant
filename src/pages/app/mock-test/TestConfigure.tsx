@@ -268,8 +268,71 @@ export default function TestConfigure() {
         }
       />
 
-      {/* Test name */}
-      <Card>
+      {/* Step indicator */}
+      {!isQuick && (
+        <div className="flex items-center gap-2">
+          {[
+            { n: 1, label: "Level" },
+            { n: 2, label: "Settings" },
+            { n: 3, label: "Start" },
+          ].map(({ n, label }) => (
+            <button
+              key={n}
+              type="button"
+              onClick={() => setStep(n)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-medium border transition-all ${
+                step === n
+                  ? "border-violet-500/50 bg-violet-500/15 text-violet-300"
+                  : step > n
+                    ? "border-green-500/30 bg-green-500/10 text-green-400"
+                    : "border-border text-muted-foreground"
+              }`}
+            >
+              <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                step > n ? "bg-green-500/20 text-green-400" : step === n ? "bg-violet-500/20 text-violet-300" : "bg-muted text-muted-foreground"
+              }`}>{step > n ? "✓" : n}</span>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Step 1: Level Selection */}
+      {(isQuick || step === 1) && !isQuick && (
+        <Card>
+          <CardContent className="py-4 space-y-3">
+            <SectionLabel>Choose Difficulty Level</SectionLabel>
+            <div className="grid grid-cols-2 gap-3">
+              {(Object.entries(DIFFICULTY_PRESETS) as [DifficultyPreset, { dist: DifficultyDistribution; desc: string }][]).map(([key, { dist, desc }]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => {
+                    setSelectedPreset(key);
+                    setConfig((c) => ({ ...c, difficulty_distribution: { ...dist } }));
+                  }}
+                  className={`text-left rounded-xl border p-3 transition-all ${
+                    selectedPreset === key
+                      ? "border-violet-500/50 bg-violet-500/10"
+                      : "border-border hover:border-violet-500/30"
+                  }`}
+                >
+                  <p className="text-sm font-semibold text-foreground">{key}</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">{desc}</p>
+                  <div className="flex gap-1.5 mt-2">
+                    <span className="text-[10px] bg-green-500/10 text-green-400 px-1.5 py-0.5 rounded-full">{dist.EASY}% Easy</span>
+                    <span className="text-[10px] bg-amber-500/10 text-amber-400 px-1.5 py-0.5 rounded-full">{dist.MEDIUM}% Med</span>
+                    <span className="text-[10px] bg-red-500/10 text-red-400 px-1.5 py-0.5 rounded-full">{dist.HARD}% Hard</span>
+                  </div>
+                </button>
+              ))}
+            </div>
+            <div className="flex justify-end pt-2">
+              <Button size="sm" onClick={() => setStep(2)}>Next →</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
         <CardContent className="py-4 space-y-3">
           <SectionLabel>Test Name</SectionLabel>
           <input
