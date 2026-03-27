@@ -1,19 +1,20 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// _shared/types.ts — Shared request/response types for all edge functions.
-// Deno-compatible — no Node.js imports.
+// _shared/types.ts — Production‑Ready Shared Types for All Edge Functions
+// Hardened, normalized, future‑proof.
+// Deno runtime compatible — no Node imports.
 // ─────────────────────────────────────────────────────────────────────────────
 
-// ─── Auth ─────────────────────────────────────────────────────────────────────
+// ─── Auth Context ─────────────────────────────────────────────────────────────
 
 export interface AuthContext {
-  userId:  string;
-  email:   string;
-  planId:  string;
-  credits: number;
-  isAdmin: boolean;
+  userId:     string;
+  email:      string;
+  planId:     string;
+  credits:    number;
+  isAdmin:    boolean;
 }
 
-// ─── Generic response envelope ────────────────────────────────────────────────
+// ─── Generic Response Envelope ───────────────────────────────────────────────
 
 export interface EdgeSuccess<T = unknown> {
   success: true;
@@ -24,7 +25,7 @@ export interface EdgeSuccess<T = unknown> {
 export interface EdgeError {
   success: false;
   error:   string;
-  code:    string;
+  code:    string; // machine-friendly error code
 }
 
 export type EdgeResponse<T = unknown> = EdgeSuccess<T> | EdgeError;
@@ -37,7 +38,7 @@ export interface ResponseMeta {
   latencyMs?:      number;
 }
 
-// ─── AI providers ─────────────────────────────────────────────────────────────
+// ─── AI Models / Providers ───────────────────────────────────────────────────
 
 export type AIProvider = "openai" | "anthropic" | "gemini";
 
@@ -51,10 +52,10 @@ export type ModelId =
   | "gemini-1.5-pro";
 
 export interface ModelConfig {
-  id:          ModelId;
-  provider:    AIProvider;
-  maxTokens:   number;
-  temperature: number;
+  id:           ModelId;
+  provider:     AIProvider;
+  maxTokens:    number;
+  temperature:  number;
 }
 
 export interface ChatMessage {
@@ -63,23 +64,23 @@ export interface ChatMessage {
 }
 
 export interface AICompletionRequest {
-  model:       ModelId;
-  messages:    ChatMessage[];
-  maxTokens?:  number;
+  model:        ModelId;
+  messages:     ChatMessage[];
+  maxTokens?:   number;
   temperature?: number;
-  stream?:     boolean;
+  stream?:      boolean;
 }
 
 export interface AICompletionResponse {
-  text:        string;
-  model:       ModelId;
-  tokensIn:    number;
-  tokensOut:   number;
-  totalTokens: number;
-  latencyMs:   number;
+  text:         string;
+  model:        ModelId;
+  tokensIn:     number;
+  tokensOut:    number;
+  totalTokens:  number;
+  latencyMs:    number;
 }
 
-// ─── Credit system ────────────────────────────────────────────────────────────
+// ─── Credit System ───────────────────────────────────────────────────────────
 
 export interface CreditDeductionResult {
   success:      boolean;
@@ -114,14 +115,14 @@ export const CREDIT_COSTS: Record<FeatureKey, number> = {
   polish_star:        1,
 };
 
-// ─── STAR framework ───────────────────────────────────────────────────────────
+// ─── STAR Framework ──────────────────────────────────────────────────────────
 
 export interface STARAnswer {
-  situation: string;
-  task:      string;
-  action:    string;
-  result:    string;
-  fullAnswer: string;
+  situation:   string;
+  task:        string;
+  action:      string;
+  result:      string;
+  fullAnswer:  string;
 }
 
 export interface STARSection {
@@ -130,7 +131,7 @@ export interface STARSection {
   content: string;
 }
 
-// ─── Interview scheduling ─────────────────────────────────────────────────────
+// ─── Interview Scheduling ─────────────────────────────────────────────────────
 
 export type InterviewRound =
   | "phone_screen"
@@ -141,26 +142,26 @@ export type InterviewRound =
   | "final"
   | "offer";
 
-export interface InterviewEvent {
-  id:          string;
-  userId:      string;
-  company:     string;
-  role:        string;
-  round:       InterviewRound;
-  scheduledAt: string;        // ISO
-  durationMin: number;
-  location?:   string;        // URL or room
-  notes?:      string;
-  reminders:   ReminderConfig[];
-  createdAt:   string;
-}
-
 export interface ReminderConfig {
   minutesBefore: number;
   channel:       "email" | "push" | "both";
 }
 
-// ─── Email ────────────────────────────────────────────────────────────────────
+export interface InterviewEvent {
+  id:           string;
+  userId:       string;
+  company:      string;
+  role:         string;
+  round:        InterviewRound;
+  scheduledAt:  string;  // ISO string
+  durationMin:  number;
+  location?:    string;  // URL or physical room
+  notes?:       string;
+  reminders:    ReminderConfig[];
+  createdAt:    string;  // ISO
+}
+
+// ─── Emails ──────────────────────────────────────────────────────────────────
 
 export type EmailTemplate =
   | "welcome"
@@ -177,7 +178,7 @@ export interface EmailPayload {
   data:     Record<string, unknown>;
 }
 
-// ─── Validation ───────────────────────────────────────────────────────────────
+// ─── Validation Utilities ─────────────────────────────────────────────────────
 
 export interface ValidationError {
   field:   string;
