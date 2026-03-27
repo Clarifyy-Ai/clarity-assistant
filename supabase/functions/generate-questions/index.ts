@@ -1,102 +1,181 @@
+// generate-questions/index.ts — SECURE, FIXED VERSION
+
 import { handleCors, corsHeaders } from "../_shared/cors.ts";
+import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
 import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
 
-// ─────────────────────────────────────────────────────────────────
-// generate-questions — create interview questions for a mock session
-// Uses Gemini Flash (fast, cheap) to generate contextual questions.
-// Falls back gracefully if API key is missing.
-// ─────────────────────────────────────────────────────────────────
+const SYSTEM_PROMPT = `
+You are an expert interview coach and question designer.
+Generate realistic, challenging interview questions.
+Respond with valid JSON only.
+`;
 
-const SYSTEM_PROMPT = `You are an expert interview coach and question designer.
-Generate realistic, challenging interview questions that mirror real interview experiences.
-Always respond with valid JSON only.`;
+function sanitize(value: any, limit = 200): string {
+  return String(value ?? "")
+    .replace(/[^\w\s.,?!\-+()\/]/g, "")   // remove unsafe chars
+    .slice(0, limit);
+}
+
+const typeGuidance: Record<string, string> = {
+  behavioural:   "Behavioural (STAR format). Leadership, conflict, failures, successes.",
+  technical:     "Technical: algorithms, data structures, debugging, systems.",
+  system_design: "System design: scalable services, APIs, distributed systems.",
+  hr:            "HR: values, culture-fit, motivation, team dynamics.",
+  mixed:         "Mixed: 2 behavioural, 2 technical, 1 HR.",
+  product:       "Product strategy, prioritisation, metrics, user empathy.",
+  leadership:    "Leadership: people management, conflict resolution.",
+};
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
   try {
-    const {
-      interview_type   = "behavioural",
-      experience_level = "mid",
-      company          = null,
-      role             = null,
-      question_count   = 5,
-      resume_context   = null,
-      jd_context       = null,
-    } = await req.json();
+    const db = createServiceClient();
 
-    const companyCtx    = company    ? `Target company: ${company}.` : "";
-    const roleCtx       = role       ? `Target role: ${role}.` : "";
-    const resumeCtx     = resume_context ? `Candidate background: ${JSON.stringify(resume_context).slice(0, 600)}` : "";
-    const jdCtx         = jd_context     ? `Job description key points: ${JSON.stringify(jd_context).slice(0, 400)}` : "";
-    const levelCtx      = experience_level ? `Experience level: ${experience_level}.` : "";
+    /* -------------------------------------------
+       AUTHENTICATE USER
+    ------------------------------------------- */
+    const authHeader =
+      req.headers.get("authorization") ??
+      req.headers.get("Authorization");
 
-    const typeGuidance: Record<string, string> = {
-      behavioural:   "Behavioural questions using the STAR format (Tell me about a time…). Focus on real work experiences, leadership, conflict, failure, and success.",
-      technical:     "Technical questions covering algorithms, data structures, system architecture, debugging, or language-specific concepts appropriate for the role.",
-      system_design: "System design questions asking the candidate to architect scalable distributed systems, APIs, databases, or large-scale services.",
-      hr:            "HR and culture-fit questions about motivation, values, work style, salary expectations, career goals, and team dynamics.",
-      mixed:         "A variety of question types: 2 behavioural, 2 technical or system design, and 1 HR/culture question.",
-      product:       "Product management questions about product strategy, prioritisation, metrics, user empathy, and launch planning.",
-      leadership:    "Leadership questions focusing on people management, influence, team building, conflict resolution, and organisational impact.",
-    };
+    if (!authHeader?.toLowerCase().startsWith("bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: corsHeaders,
+      });
+    }
 
-    const guidance = typeGuidance[interview_type] ?? typeGuidance.behavioural;
-    const count    = Math.min(Math.max(1, question_count), 20);
+    const token = authHeader.replace(/^bearer\s+/i, "");
+    const { data: { user }, error: userErr } = await db.auth.getUser(token);
 
-    const prompt = `Generate exactly ${count} interview questions.
+    if (userErr || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: corsHeaders,
+      });
+    }
 
-${guidance}
-${levelCtx}
-${companyCtx}
-${roleCtx}
-${resumeCtx}
-${jdCtx}
+    /* -------------------------------------------
+       VALIDATE & SANITIZE BODY
+    ------------------------------------------- */
+    const body = await req.json().catch(() => null);
+
+    if (!body) {
+      return new Response(JSON.stringify({ error: "Invalid request body" }), {
+        status: 400,
+        headers: corsHeaders,
+      });
+    }
+
+    const interview_type_raw   = sanitize(body.interview_type, 40) || "behavioural";
+    const experience_level     = sanitize(body.experience_level, 40) || "mid";
+    const company              = sanitize(body.company, 200);
+    const role                 = sanitize(body.role, 200);
+    const resume_context_raw   = sanitize(JSON.stringify(body.resume_context ?? ""), 600);
+    const jd_context_raw       = sanitize(JSON.stringify(body.jd_context ?? ""), 400);
+
+    // Normalize valid interview types
+    const interview_type =
+      typeGuidance.hasOwnProperty(interview_type_raw)
+        ? interview_type_raw
+        : "behavioural";
+
+    let question_count = Number(body.question_count ?? 5);
+    if (Number.isNaN(question_count)) question_count = 5;
+    question_count = Math.min(Math.max(1, question_count), 20);
+
+    /* -------------------------------------------
+       CREDIT DEDUCTION (3 credits)
+    ------------------------------------------- */
+    const credit = await deductCredits(user.id, "generate_questions", 3);
+    if (!credit.success) {
+      return new Response(JSON.stringify({ error: "Insufficient credits" }), {
+        status: 402,
+        headers: corsHeaders,
+      });
+    }
+
+    /* -------------------------------------------
+       BUILD SAFE PROMPT
+    ------------------------------------------- */
+    const prompt = `
+Generate exactly ${question_count} interview questions.
+
+Guidance: ${typeGuidance[interview_type]}
+Experience: ${experience_level}
+${company ? `Company: ${company}` : ""}
+${role ? `Role: ${role}` : ""}
+${resume_context_raw ? `Resume: ${resume_context_raw}` : ""}
+${jd_context_raw ? `JD: ${jd_context_raw}` : ""}
 
 Rules:
-- Questions must feel authentic — like a real interviewer would ask them
-- Vary difficulty (easy, medium, hard) across the set
-- For behavioural, start with "Tell me about a time…" or "Describe a situation where…"
-- For technical, be specific — name algorithms, patterns, or languages when relevant
-- Make questions progressively more challenging
+- Authentic questions
+- Increase difficulty gradually
+- No markdown
+- JSON only
 
-Return ONLY valid JSON with this exact shape:
+JSON format:
 {
   "questions": [
     {
-      "question": "<the question text>",
+      "question": "",
       "type": "${interview_type}",
-      "difficulty": "<easy|medium|hard>",
-      "expected_duration_seconds": <60–300>,
-      "tags": ["<tag1>", "<tag2>"],
-      "order": <1-based index>
+      "difficulty": "easy|medium|hard",
+      "expected_duration_seconds": 120,
+      "tags": [],
+      "order": 1
     }
   ]
-}`;
+}
+`;
 
-    const raw  = await geminiGenerate(prompt, SYSTEM_PROMPT, 0.8, 2048);
-    const data = parseJSON(raw, { questions: [] });
+    /* -------------------------------------------
+       CALL GEMINI SAFELY
+    ------------------------------------------- */
+    const raw = await geminiGenerate(prompt, SYSTEM_PROMPT, 0.8, 2048);
+    const parsed = parseJSON(raw, { questions: [] });
 
-    // Ensure every question has an id and order
-    const questions = (data.questions as any[]).map((q, i) => ({
-      ...q,
-      id:    crypto.randomUUID(),
-      order: i + 1,
-      type:  q.type ?? interview_type,
-      expected_duration_seconds: q.expected_duration_seconds ?? 120,
-      tags:  q.tags ?? [interview_type],
-    }));
+    const list: any[] = Array.isArray(parsed.questions) ? parsed.questions : [];
 
+    /* -------------------------------------------
+       CLEAN & VALIDATE GENERATED QUESTIONS
+    ------------------------------------------- */
+    const cleaned = list.map((q, idx) => ({
+      id: crypto.randomUUID(),
+      question: sanitize(q.question, 600),
+      type: sanitize(q.type ?? interview_type, 40),
+      difficulty: sanitize(q.difficulty ?? "medium", 20),
+      expected_duration_seconds: Number(q.expected_duration_seconds ?? 120),
+      tags: Array.isArray(q.tags) ? q.tags.map((t: any) => sanitize(t, 40)) : [interview_type],
+      order: idx + 1,
+    })).filter((q) => q.question.length > 10);
+
+    if (cleaned.length === 0) {
+      return new Response(
+        JSON.stringify({ error: "AI returned no usable questions" }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    /* -------------------------------------------
+       RETURN QUESTIONS (client stores them)
+    ------------------------------------------- */
     return new Response(
-      JSON.stringify({ questions, count: questions.length, generated_by: "gemini" }),
+      JSON.stringify({
+        questions: cleaned,
+        count: cleaned.length,
+        generated_by: "gemini",
+      }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
+
   } catch (err) {
     console.error("[generate-questions] error:", err);
     return new Response(
-      JSON.stringify({ error: "Failed to generate questions", detail: String(err) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ error: "Internal error", detail: String(err) }),
+      { status: 500, headers: corsHeaders }
     );
   }
 });
