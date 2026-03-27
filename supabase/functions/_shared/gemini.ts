@@ -1,45 +1,52 @@
-// ─────────────────────────────────────────────────────────────────
-// Shared Gemini client helper
-// ─────────────────────────────────────────────────────────────────
+// supabase/functions/_shared/gemini.ts — PRODUCTION READY, HARDENED VERSION
 
-const GEMINI_API_KEY   = Deno.env.get("GEMINI_API_KEY") ?? "";
-const GEMINI_BASE      = "https://generativelanguage.googleapis.com/v1beta";
-const MODEL            = "gemini-1.5-flash";
-const GEMINI_TIMEOUT_MS = 50_000;
+/* -------------------------------------------------------------------------- */
+/*                               CONSTANTS                                     */
+/* -------------------------------------------------------------------------- */
 
-export interface GeminiMessage {
-  role:  "user" | "model";
-  parts: { text: string }[];
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
+const GEMINI_BASE    = "https://generativelanguage.googleapis.com/v1beta";
+const MODEL          = "gemini-1.5-flash";
+const TIMEOUT_MS     = 50_000;
+
+if (!GEMINI_API_KEY) {
+  console.warn("[gemini] Warning: GEMINI_API_KEY is not configured");
 }
 
-export async function geminiGenerate(
-  prompt:      string,
-  systemPrompt?: string,
-  temperature:   number = 0.7,
-  maxTokens:     number = 2048,
-): Promise<string> {
-  const body = {
-    contents: [{ role: "user", parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature,
-      maxOutputTokens: maxTokens,
-    },
-    ...(systemPrompt
-      ? { systemInstruction: { parts: [{ text: systemPrompt }] } }
-      : {}),
-  };
+/* -------------------------------------------------------------------------- */
+/*                                  TYPES                                      */
+/* -------------------------------------------------------------------------- */
 
+export interface GeminiPart {
+  text: string;
+}
+
+export interface GeminiMessage {
+  role: "user" | "model";
+  parts: GeminiPart[];
+}
+
+/* -------------------------------------------------------------------------- */
+/*                          INTERNAL FETCH WRAPPER                             */
+/* -------------------------------------------------------------------------- */
+
+async function geminiRequest(
+  payload: Record<string, unknown>
+): Promise<any> {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
+  const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
+
   let res: Response;
   try {
     res = await fetch(
       `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
       {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        signal:  controller.signal,
-        body:    JSON.stringify(body),
+        method: "POST",
+        signal: controller.signal,
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify(payload)
       }
     );
   } finally {
@@ -47,85 +54,138 @@ export async function geminiGenerate(
   }
 
   if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Gemini error: ${err}`);
+    const errText = await res.text().catch(() => "Unknown Gemini error");
+    throw new Error(`Gemini API Error (${res.status}): ${errText}`);
   }
 
-  const data = await res.json();
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  const data = await res.json().catch(() => null);
+  return data;
 }
 
-export async function geminiChat(
-  messages:    GeminiMessage[],
+function extractTextFromGemini(data: any): string {
+  return (
+    data?.candidates?.[0]?.content?.parts?.[0]?.text ??
+    data?.candidates?.[0]?.content?.parts?.[0]?.inlineData ??
+    ""
+  );
+}
+
+function sanitizePrompt(p: string, max = 10_000): string {
+  return String(p ?? "")
+    .replace(/[\u0000-\u0008]/g, "")
+    .replace(/[\u000E-\u001F]/g, "")
+    .slice(0, max);
+}
+
+/* -------------------------------------------------------------------------- */
+/*                         GENERATE MODE (single prompt)                       */
+/* -------------------------------------------------------------------------- */
+
+export async function geminiGenerate(
+  prompt: string,
   systemPrompt?: string,
-  temperature: number = 0.7,
+  temperature = 0.7,
+  maxTokens = 2048
 ): Promise<string> {
-  const body = {
-    contents: messages,
-    generationConfig: { temperature, maxOutputTokens: 1024 },
-    ...(systemPrompt
-      ? { systemInstruction: { parts: [{ text: systemPrompt }] } }
-      : {}),
+  const safePrompt = sanitizePrompt(prompt);
+  const safeSystem = systemPrompt ? sanitizePrompt(systemPrompt) : undefined;
+
+  const payload: Record<string, unknown> = {
+    contents: [
+      {
+        role: "user",
+        parts: [{ text: safePrompt }]
+      }
+    ],
+    generationConfig: {
+      temperature,
+      maxOutputTokens: maxTokens
+    }
   };
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), GEMINI_TIMEOUT_MS);
-  let res: Response;
-  try {
-    res = await fetch(
-      `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
-      {
-        method:  "POST",
-        headers: { "Content-Type": "application/json" },
-        signal:  controller.signal,
-        body:    JSON.stringify(body),
-      }
-    );
-  } finally {
-    clearTimeout(timer);
+  if (safeSystem) {
+    payload.systemInstruction = { parts: [{ text: safeSystem }] };
   }
 
-  if (!res.ok) throw new Error(`Gemini chat error: ${await res.text()}`);
-  const data = await res.json();
-  return data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  const data = await geminiRequest(payload);
+  return extractTextFromGemini(data);
 }
 
-// Parse JSON from Gemini output safely.
-// Handles: fenced code blocks (````json ... ```` or ```` ... ````),
-// multiple code blocks (picks the last one), and leading/trailing prose.
-export function parseJSON<T>(text: string, fallback: T): T {
+/* -------------------------------------------------------------------------- */
+/*                             CHAT MODE (multi-turn)                          */
+/* -------------------------------------------------------------------------- */
+
+export async function geminiChat(
+  messages: GeminiMessage[],
+  systemPrompt?: string,
+  temperature = 0.7,
+  maxTokens = 1024
+): Promise<string> {
+  const safeMessages = messages.map((m) => ({
+    role: m.role,
+    parts: m.parts.map((p) => ({
+      text: sanitizePrompt(p.text)
+    }))
+  }));
+
+  const payload: Record<string, unknown> = {
+    contents: safeMessages,
+    generationConfig: {
+      temperature,
+      maxOutputTokens: maxTokens
+    }
+  };
+
+  if (systemPrompt) {
+    payload.systemInstruction = {
+      parts: [{ text: sanitizePrompt(systemPrompt) }]
+    };
+  }
+
+  const data = await geminiRequest(payload);
+  return extractTextFromGemini(data);
+}
+
+/* -------------------------------------------------------------------------- */
+/*                       ROBUST JSON PARSER FOR GEMINI                         */
+/* -------------------------------------------------------------------------- */
+
+export function parseJSON<T>(raw: string, fallback: T): T {
+  if (!raw) return fallback;
+
+  const input = raw.trim();
+
+  // Extract from fenced code blocks
+  const fenceRegex = /```(?:json)?\s*([\s\S]*?)```/g;
+  let block: RegExpExecArray | null;
+  const blocks: string[] = [];
+
+  while ((block = fenceRegex.exec(input)) !== null) {
+    blocks.push(block[1].trim());
+  }
+
+  // Try fenced blocks (from last → first)
+  for (let i = blocks.length - 1; i >= 0; i--) {
+    try {
+      return JSON.parse(blocks[i]) as T;
+    } catch {}
+  }
+
+  // Strip leading prose
+  const start = Math.min(
+    input.indexOf("{") !== -1 ? input.indexOf("{") : Infinity,
+    input.indexOf("[") !== -1 ? input.indexOf("[") : Infinity
+  );
+
+  if (start !== Infinity) {
+    try {
+      return JSON.parse(input.slice(start)) as T;
+    } catch {}
+  }
+
+  // Attempt direct parsing
   try {
-    // 1. Try to extract from JSON fenced code blocks — all matches, take last
-    const codeBlockRegex = /```(?:json)?\s*([\s\S]*?)```/gs;
-    const codeBlocks: string[] = [];
-    let cbMatch: RegExpExecArray | null;
-    while ((cbMatch = codeBlockRegex.exec(text)) !== null) {
-      codeBlocks.push(cbMatch[1].trim());
-    }
-    // Attempt each block from last to first (prefer later/outermost blocks)
-    for (let i = codeBlocks.length - 1; i >= 0; i--) {
-      try {
-        return JSON.parse(codeBlocks[i]) as T;
-      } catch {
-        // try next
-      }
-    }
-
-    // 2. Strip leading prose — find first { or [ and try to parse from there
-    const firstBrace   = text.indexOf("{");
-    const firstBracket = text.indexOf("[");
-
-    if (firstBrace === -1 && firstBracket === -1) {
-      return JSON.parse(text) as T;
-    }
-
-    const startIdx =
-      firstBrace === -1   ? firstBracket :
-      firstBracket === -1 ? firstBrace   :
-      Math.min(firstBrace, firstBracket);
-
-    const trimmed = text.slice(startIdx);
-    return JSON.parse(trimmed) as T;
+    return JSON.parse(input) as T;
   } catch {
     return fallback;
   }
