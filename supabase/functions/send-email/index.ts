@@ -1,40 +1,73 @@
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
-import { createServiceClient } from "../_shared/supabase.ts";
-
-// ─────────────────────────────────────────────────────────────────
-// send-email — transactional emails via Resend
-// Types: interview_reminder, weekly_report, debrief_ready,
-//        welcome, low_credits, streak_reminder
-// ─────────────────────────────────────────────────────────────────
+// send-email/index.ts — FIXED, SECURE, PRODUCTION VERSION// send-email/index.ts — FIXED, corsHeaders } from "../_shared/cors.ts";
+import {
+  requireAuth,
+  errorResponse,
+  successResponse,
+  log
+} from "../_shared/utils.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
-const FROM_EMAIL     = "Clarify AI <hello@confideq.app>";
+const FROM_EMAIL = "Clarify AI <hello@confideq.app>";
 
-interface EmailPayload {
-  to:      string;
-  subject: string;
-  html:    string;
+/* -------------------------------------------------------------------------- */
+/*                              HELPERS                                       */
+/* -------------------------------------------------------------------------- */
+
+function sanitize(str: any, max = 500): string {
+  return String(str ?? "")
+    .replace(/[<>]/g, "")      // prevent HTML/script injection
+    .replace(/`/g, "")
+    .replace(/[\u0000-\u0009]/g, "")
+    .slice(0, max)
+    .trim();
 }
 
-async function sendEmail(payload: EmailPayload) {
+function isValidEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+async function sendEmailResend(to: string, subject: string, html: string): Promise<boolean> {
   const res = await fetch("https://api.resend.com/emails", {
-    method:  "POST",
+    method: "POST",
     headers: {
-      "Content-Type":  "application/json",
-      "Authorization": `Bearer ${RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${RESEND_API_KEY}`,
     },
     body: JSON.stringify({
-      from:    FROM_EMAIL,
-      to:      payload.to,
-      subject: payload.subject,
-      html:    payload.html,
+      from: FROM_EMAIL,
+      to,
+      subject,
+      html,
     }),
   });
+
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    console.error("[send-email] Resend error:", res.status, text);
+  }
+
   return res.ok;
 }
 
-function buildEmailHtml(type: string, data: any): { subject: string; html: string } {
-  const base = (content: string) => `
+/* -------------------------------------------------------------------------- */
+/*                           EMAIL TEMPLATES                                  */
+/* -------------------------------------------------------------------------- */
+
+const ALLOWED_TYPES = [
+  "interview_reminder",
+  "weekly_report",
+  "debrief_ready",
+  "welcome",
+  "low_credits",
+  "streak_reminder",
+] as const;
+
+type EmailType = (typeof ALLOWED_TYPES)[number];
+
+function renderTemplate(type: EmailType, data: any) {
+  const safe = (x: any, max = 500) => sanitize(x, max);
+
+  const base = (inner: string) => `
 <!DOCTYPE html>
 <html>
 <head>
@@ -47,149 +80,136 @@ function buildEmailHtml(type: string, data: any): { subject: string; html: strin
     .btn { display: inline-block; background: #7c3aed; color: white !important; text-decoration: none; padding: 12px 24px; border-radius: 12px; font-weight: 600; font-size: 14px; margin-top: 16px; }
     h1 { font-size: 24px; font-weight: 800; margin: 0 0 8px; }
     p { font-size: 14px; color: #9ca3af; line-height: 1.6; margin: 8px 0; }
-    .badge { display: inline-block; background: rgba(139,92,246,0.15); color: #a78bfa; padding: 4px 12px; border-radius: 20px; font-size: 12px; font-weight: 600; }
     .footer { font-size: 11px; color: #4b5563; margin-top: 32px; text-align: center; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <div class="logo">⚡ Clarify AI</div>
-    ${content}
-    <div class="footer">
-      © 2025 Payara Labs · <a href="https://confideq.app/unsubscribe" style="color:#4b5563;">Unsubscribe</a>
-    </div>
+<div class="container">
+  <div class="logo">⚡ Clarify AI</div>
+  ${inner}
+  <div class="footer">
+    © 2025 Payara Labs · <a href="https://confideq.app/unsubscribe" style="color:#4b5563;">Unsubscribe</a>
   </div>
+</div>
 </body>
 </html>`;
 
   switch (type) {
-
     case "interview_reminder":
       return {
-        subject: `🎯 Interview reminder: ${data.company} in ${data.time_until}`,
-        html:    base(`
-<div class="card">
-  <h1>Interview day is almost here!</h1>
-  <p>Your interview with <strong style="color:#e2e2e2">${data.company}</strong> for the
-  <strong style="color:#e2e2e2">${data.role}</strong> role starts in
-  <strong style="color:#8b5cf6">${data.time_until}</strong>.</p>
-  <p>📅 ${data.time} &nbsp;·&nbsp; 🖥️ ${data.platform ?? "TBD"}</p>
-  ${data.meeting_link ? `<p><a href="${data.meeting_link}" style="color:#8b5cf6;">Open meeting link →</a></p>` : ""}
-  <a href="https://confideq.app/app/interview-day" class="btn">Open Focus Mode →</a>
-</div>
-<div class="card">
-  <p style="font-size:13px; color:#6b7280;">Quick tips for ${data.company}:</p>
-  <ul style="color:#9ca3af; font-size:13px; padding-left:16px;">
-    <li>Research their latest product announcements</li>
-    <li>Prepare 3 STAR stories from your experience</li>
-    <li>Have questions ready for the interviewer</li>
-  </ul>
-</div>`),
+        subject: `Interview reminder: ${safe(data.company)} in ${safe(data.time_until)}`,
+        html: base(`
+          <div class="card">
+            <h1>Interview soon!</h1>
+            <p>Your interview with <strong>${safe(data.company)}</strong> for <strong>${safe(data.role)}</strong> begins in ${safe(data.time_until)}.</p>
+            <p>${safe(data.time)} · ${safe(data.platform)}</p>
+            ${data.meeting_link ? `<a class="btn" href="${sanitize(data.meeting_link)}">Open meeting</a>` : ""}
+          </div>`),
       };
 
     case "debrief_ready":
       return {
-        subject: `📊 Your interview debrief is ready (Score: ${data.score}/100)`,
-        html:    base(`
-<div class="card">
-  <div class="badge">Grade: ${data.grade}</div>
-  <h1 style="margin-top:12px;">Your debrief is ready!</h1>
-  <p>You scored <strong style="color:#8b5cf6">${data.score}/100</strong> on your
-  ${data.session_type} interview${data.company ? ` for ${data.company}` : ""}.</p>
-  <p>${data.summary ?? "Great session! Check your full debrief for detailed feedback."}</p>
-  <a href="https://confideq.app/app/debrief/${data.debrief_id}" class="btn">View full debrief →</a>
-</div>`),
+        subject: `Your interview debrief is ready (${safe(data.score)}/100)`,
+        html: base(`
+          <div class="card">
+            <h1>Debrief ready!</h1>
+            <p>You scored <strong>${safe(data.score)}</strong> on your interview.</p>
+            <a class="btn" href="https://confideq.app/app/debrief/${safe(data.debrief_id)}">View debrief</a>
+          </div>`),
       };
 
     case "weekly_report":
       return {
-        subject: `📈 Your weekly Clarify AI report — ${data.sessions_this_week} sessions`,
-        html:    base(`
-<div class="card">
-  <h1>This week's progress</h1>
-  <p>Great work staying consistent! Here's your summary for the week.</p>
-  <table style="width:100%; margin:16px 0; border-collapse:collapse;">
-    <tr>
-      <td style="padding:8px; color:#9ca3af; font-size:13px;">Sessions completed</td>
-      <td style="padding:8px; color:#e2e2e2; font-weight:700; text-align:right;">${data.sessions_this_week}</td>
-    </tr>
-    <tr>
-      <td style="padding:8px; color:#9ca3af; font-size:13px;">Average score</td>
-      <td style="padding:8px; color:#8b5cf6; font-weight:700; text-align:right;">${data.avg_score}/100</td>
-    </tr>
-    <tr>
-      <td style="padding:8px; color:#9ca3af; font-size:13px;">Current streak</td>
-      <td style="padding:8px; color:#f59e0b; font-weight:700; text-align:right;">${data.streak} days 🔥</td>
-    </tr>
-  </table>
-  <a href="https://confideq.app/app/analytics" class="btn">View full analytics →</a>
-</div>`),
-      };
-
-    case "low_credits":
-      return {
-        subject: `⚡ Running low on credits — ${data.remaining} left`,
-        html:    base(`
-<div class="card">
-  <h1>You're running low on credits</h1>
-  <p>You have <strong style="color:#f59e0b">${data.remaining} credits</strong> remaining.
-  Top up to keep your AI coaching uninterrupted.</p>
-  <a href="https://confideq.app/app/settings/credits" class="btn">Buy credits →</a>
-</div>`),
+        subject: `Your weekly Clarify AI report — ${safe(data.sessions_this_week)} sessions`,
+        html: base(`
+          <div class="card">
+            <h1>This week's summary</h1>
+            <p>Sessions: ${safe(data.sessions_this_week)}</p>
+            <p>Average score: ${safe(data.avg_score)}</p>
+            <p>Streak: ${safe(data.streak)} days</p>
+          </div>`),
       };
 
     case "welcome":
       return {
-        subject: "🎉 Welcome to Clarify AI — let's ace your next interview!",
-        html:    base(`
-<div class="card">
-  <h1>Welcome, ${data.name ?? "there"}! 👋</h1>
-  <p>You're all set to start practising. Here's how to get the most out of Clarify AI:</p>
-  <ol style="color:#9ca3af; font-size:14px; padding-left:16px; line-height:2;">
-    <li>Upload your resume in <strong style="color:#e2e2e2">Documents</strong></li>
-    <li>Run your first <strong style="color:#8b5cf6">mock session</strong></li>
-    <li>Review your <strong style="color:#e2e2e2">AI debrief</strong></li>
-    <li>Build STAR answers in <strong style="color:#e2e2e2">Prep Lab</strong></li>
-  </ol>
-  <a href="https://confideq.app/app/dashboard" class="btn">Start practising →</a>
-</div>`),
+        subject: "Welcome to Clarify AI! 🎉",
+        html: base(`
+          <div class="card">
+            <h1>Welcome ${safe(data.name)}</h1>
+            <p>You're ready to start preparing!</p>
+            <a href="https://confideq.app/app/dashboard" class="btn">Start practicing</a>
+          </div>`),
+      };
+
+    case "low_credits":
+      return {
+        subject: `Low Credits — ${safe(data.remaining)} left`,
+        html: base(`
+          <div class="card">
+            <h1>Running low on credits</h1>
+            <p>You have ${safe(data.remaining)} credits remaining.</p>
+            <a href="https://confideq.app/app/settings/credits" class="btn">Buy credits</a>
+          </div>`),
+      };
+
+    case "streak_reminder":
+      return {
+        subject: "🔥 Keep your streak going!",
+        html: base(`
+          <div class="card">
+            <h1>Your practice streak needs you!</h1>
+            <p>Don't break the momentum — complete a session today.</p>
+          </div>`),
       };
 
     default:
-      return {
-        subject: "Notification from Clarify AI",
-        html:    base(`<div class="card"><p>${JSON.stringify(data)}</p></div>`),
-      };
+      return { subject: "Clarify AI Notification", html: base("<div class='card'>Hello!</div>") };
   }
 }
+
+/* -------------------------------------------------------------------------- */
+/*                             MAIN HANDLER                                   */
+/* -------------------------------------------------------------------------- */
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
   try {
-    const { to, type, data } = await req.json();
+    /* ---------------- AUTH ---------------- */
+    const auth = await requireAuth(req);
+    const userId = auth.userId;
 
-    if (!to || !type) {
-      return new Response(
-        JSON.stringify({ error: "Missing to or type" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    const body = await req.json().catch(() => null);
+    if (!body) {
+      return errorResponse("Invalid JSON body", "INVALID", 400);
     }
 
-    const { subject, html } = buildEmailHtml(type, data ?? {});
-    const success = await sendEmail({ to, subject, html });
+    const { to, type, data } = body;
 
-    return new Response(
-      JSON.stringify({ success }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    if (!to || typeof to !== "string" || !isValidEmail(to)) {
+      return errorResponse("Invalid 'to' field", "VALIDATION_ERROR", 400);
+    }
 
+    if (!type || !ALLOWED_TYPES.includes(type)) {
+      return errorResponse("Unknown email type", "VALIDATION_ERROR", 400);
+    }
+
+    // OPTIONAL: enforce that users can only email themselves
+    if (to !== auth.email) {
+      return errorResponse("Not authorized to send to this address", "FORBIDDEN", 403);
+    }
+
+    const { subject, html } = renderTemplate(type, data ?? {});
+    const ok = await sendEmailResend(to, subject, html);
+
+    log("send-email", "info", "Email sent", { to, type, userId });
+
+    return successResponse({ success: ok });
   } catch (err) {
-    console.error("send-email error:", err);
-    return new Response(
-      JSON.stringify({ error: "Internal error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    console.error("[send-email] error:", err);
+    return errorResponse("Internal error", "INTERNAL", 500);
   }
 });
+``
+
