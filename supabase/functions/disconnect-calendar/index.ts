@@ -1,154 +1,166 @@
 import { handleCors, corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
-// ─────────────────────────────────────────────────────────────────────────────
-// disconnect-calendar — Manage Google Calendar integration server-side
-//
-// GET  → Check whether the user has a linked Google identity (connection status)
-//        Returns: { connected: boolean }
-//
-// POST → Revoke and unlink the Google Calendar integration
-//        Uses the service role to:
-//          1. Fetch the user's Google identity to get their refresh_token
-//          2. Call Google's token revocation endpoint to invalidate the token
-//          3. Unlink the Google identity from the user's Supabase account
-//        The user's Supabase session is preserved — they remain logged in.
-//        Returns: { success: boolean, revoke_attempted: boolean }
-// ─────────────────────────────────────────────────────────────────────────────
-
+// -----------------------------------------------------------
+// Helper: fetch Google identity + refresh token (uses SRK)
+// -----------------------------------------------------------
 async function getGoogleIdentity(
   supabaseUrl: string,
   serviceKey: string,
   userId: string
 ): Promise<{ id: string; refreshToken: string | null } | null> {
-  const userRes = await fetch(
-    `${supabaseUrl}/auth/v1/admin/users/${userId}`,
-    {
-      headers: {
-        "apikey": serviceKey,
-        "Authorization": `Bearer ${serviceKey}`,
-      },
-    }
-  );
+  const res = await fetch(`${supabaseUrl}/auth/v1/admin/users/${userId}`, {
+    headers: {
+      apikey: serviceKey,
+      Authorization: `Bearer ${serviceKey}`,
+    },
+  });
 
-  if (!userRes.ok) return null;
+  if (!res.ok) return null;
 
-  const userData = await userRes.json();
-  const googleIdentity = userData?.identities?.find(
-    (i: any) => i.provider === "google"
-  );
-
-  if (!googleIdentity) return null;
+  const userData = await res.json();
+  const identity = userData?.identities?.find((i: any) => i.provider === "google");
+  if (!identity) return null;
 
   const refreshToken =
-    googleIdentity?.identity_data?.refresh_token ??
-    googleIdentity?.refresh_token ??
+    identity?.identity_data?.refresh_token ??
+    identity?.refresh_token ??
     null;
 
-  return { id: googleIdentity.id, refreshToken };
+  return { id: identity.id, refreshToken };
 }
 
+// -----------------------------------------------------------
+// Main handler
+// -----------------------------------------------------------
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
-  const db = createServiceClient();
-
   try {
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader) {
+    const db = createServiceClient();
+
+    // ------------------------------
+    // AUTH (safe + normalized)
+    // ------------------------------
+    const authHeader =
+      req.headers.get("authorization") ??
+      req.headers.get("Authorization");
+
+    if (!authHeader?.toLowerCase().startsWith("bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: corsHeaders,
+      });
+    }
+
+    const token = authHeader.replace(/^bearer\s+/i, "");
+    const { data: { user }, error } = await db.auth.getUser(token);
+
+    if (error || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: corsHeaders,
+      });
+    }
+
+    // ------------------------------
+    // ENV validation
+    // ------------------------------
+    const supabaseUrl = Deno.env.get("SUPABASE_URL");
+    const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+
+    if (!supabaseUrl || !serviceKey) {
       return new Response(
-        JSON.stringify({ error: "Missing Authorization header" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Server configuration missing" }),
+        { status: 500, headers: corsHeaders }
       );
     }
 
-    const token = authHeader.replace("Bearer ", "");
-    const { data: { user }, error: authError } = await db.auth.getUser(token);
-    if (authError || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
-
-    const supabaseUrl = Deno.env.get("SUPABASE_URL") ?? "";
-    const serviceKey  = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
-
-    // ── GET: check connection status ──────────────────────────────────────────
+    // ------------------------------
+    // GET → Check connection status
+    // ------------------------------
     if (req.method === "GET") {
       const identity = await getGoogleIdentity(supabaseUrl, serviceKey, user.id);
       return new Response(
         JSON.stringify({ connected: identity !== null }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    // ── POST: disconnect ──────────────────────────────────────────────────────
+    // ------------------------------
+    // POST → Disconnect
+    // ------------------------------
     const identity = await getGoogleIdentity(supabaseUrl, serviceKey, user.id);
 
+    // Idempotent: if no identity, say success
     if (!identity) {
-      // Not connected — treat as success (idempotent)
       return new Response(
         JSON.stringify({ success: true, revoke_attempted: false }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: corsHeaders }
       );
     }
 
     let revokeAttempted = false;
 
-    // Attempt to revoke the refresh token at Google
+    // ------------------------------
+    // Google token revoke
+    // ------------------------------
     if (identity.refreshToken) {
       revokeAttempted = true;
+
       const revokeRes = await fetch(
-        `https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(identity.refreshToken)}`,
-        { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+        "https://oauth2.googleapis.com/revoke",
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/x-www-form-urlencoded" },
+          body: `token=${encodeURIComponent(identity.refreshToken)}`,
+        }
       );
+
       if (!revokeRes.ok) {
-        // Token may already be expired/invalid — log but continue with unlink
-        console.warn(
-          "[disconnect-calendar] Google revoke returned:",
-          revokeRes.status,
-          await revokeRes.text()
-        );
+        const body = await revokeRes.text();
+        console.warn("[disconnect-calendar] Token revoke failed:", revokeRes.status, body);
+        // continue with unlink
       }
     }
 
-    // Unlink the Google identity from the user using admin API
+    // ------------------------------
+    // Unlink identity from Supabase
+    // ------------------------------
     const unlinkRes = await fetch(
       `${supabaseUrl}/auth/v1/admin/users/${user.id}/identities/${identity.id}`,
       {
         method: "DELETE",
         headers: {
-          "apikey": serviceKey,
-          "Authorization": `Bearer ${serviceKey}`,
+          apikey: serviceKey,
+          Authorization: `Bearer ${serviceKey}`,
         },
       }
     );
 
     if (!unlinkRes.ok) {
       const body = await unlinkRes.text();
-      console.error("[disconnect-calendar] Identity unlink failed:", unlinkRes.status, body);
+      console.error("[disconnect-calendar] Unlink failed:", unlinkRes.status, body);
+
       return new Response(
         JSON.stringify({
           success: false,
-          error: "Failed to unlink Google identity. Please try again.",
+          error: "Unable to unlink Google account. Try again later.",
           revoke_attempted: revokeAttempted,
         }),
-        { status: 502, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { status: 502, headers: corsHeaders }
       );
     }
 
     return new Response(
       JSON.stringify({ success: true, revoke_attempted: revokeAttempted }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: corsHeaders }
     );
+
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("[disconnect-calendar] Error:", message);
+    console.error("[disconnect-calendar] Error:", err);
     return new Response(
-      JSON.stringify({ error: message }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ error: "Internal server error" }),
+      { status: 500, headers: corsHeaders }
     );
   }
 });
