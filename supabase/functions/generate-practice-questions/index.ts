@@ -1,150 +1,215 @@
 import { handleCors, corsHeaders } from "../_shared/cors.ts";
-import { createServiceClient } from "../_shared/supabase.ts";
+import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
 import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
 
-// ─────────────────────────────────────────────────────────────────
-// generate-practice-questions
-// Verifies JWT, checks question count by topic; if below 20,
-// generates 10 MCQ questions via Gemini and saves them.
-// ─────────────────────────────────────────────────────────────────
+// ---------------------------------------------
+// SYSTEM PROMPT
+// ---------------------------------------------
+const SYSTEM_PROMPT = `
+You are an expert competitive exam MCQ generator.
+Create high-quality, error-free MCQs.
+Always return strictly valid JSON.
+`;
 
-const SYSTEM_PROMPT = `You are an expert question setter for Indian competitive exams (JEE, NEET, UPSC, SSC).
-Generate high-quality, accurate MCQ questions. Always respond with valid JSON only.`;
+// Only allow safe characters in topic/subject
+function sanitize(str: string): string {
+  return String(str)
+    .replace(/[^\w\s.,()+\-\/]/g, "")
+    .slice(0, 120);
+}
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
   try {
-    // ── Verify JWT ────────────────────────────────────────────────
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
+    // ---------------------------------------------
+    // AUTHENTICATE USER SAFELY
+    // ---------------------------------------------
+    const authHeader =
+      req.headers.get("authorization") ??
+      req.headers.get("Authorization") ??
+      "";
+
+    if (!authHeader.toLowerCase().startsWith("bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+        headers: corsHeaders,
       });
     }
-    const token = authHeader.replace("Bearer ", "");
+
+    const token = authHeader.replace(/^bearer\s+/i, "");
     const db = createServiceClient();
 
     const { data: { user }, error: authErr } = await db.auth.getUser(token);
     if (authErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+        headers: corsHeaders,
       });
     }
 
-    const { topic, subject, exam_type = null, difficulty = "MEDIUM" } = await req.json();
-    if (!topic || !subject) {
-      return new Response(JSON.stringify({ error: "Missing topic or subject" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    // ---------------------------------------------
+    // PARSE & VALIDATE INPUT
+    // ---------------------------------------------
+    const body = await req.json().catch(() => null);
+    const rawTopic = sanitize(body?.topic ?? "");
+    const rawSubject = sanitize(body?.subject ?? "");
+    const rawExamType = sanitize(body?.exam_type ?? "");
+    const difficulty = sanitize(body?.difficulty ?? "MEDIUM");
+
+    if (!rawTopic || !rawSubject) {
+      return new Response(
+        JSON.stringify({ error: "Missing valid topic or subject" }),
+        { status: 400, headers: corsHeaders }
+      );
     }
 
-    // ── Count existing questions for this topic ───────────────────
+    // ---------------------------------------------
+    // OPTIONAL: DEDUCT CREDITS (3 credits)
+    // ---------------------------------------------
+    const credit = await deductCredits(user.id, "generate_practice_questions", 3);
+    if (!credit.success) {
+      return new Response(
+        JSON.stringify({ error: "Insufficient credits" }),
+        { status: 402, headers: corsHeaders }
+      );
+    }
+
+    // ---------------------------------------------
+    // CHECK QUESTION COUNT (topic + subject)
+    // ---------------------------------------------
     const { count } = await db
       .from("questions")
       .select("id", { count: "exact", head: true })
-      .eq("topic", topic)
+      .eq("topic", rawTopic)
+      .eq("subject", rawSubject)
       .eq("is_public", true);
 
     if ((count ?? 0) >= 20) {
       return new Response(
-        JSON.stringify({ success: true, generated: 0, message: "Topic already has sufficient questions" }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          success: true,
+          generated: 0,
+          message: "Topic already has sufficient questions",
+        }),
+        { headers: corsHeaders }
       );
     }
 
-    const prompt = `Generate exactly 10 multiple-choice questions for the following topic.
+    // ---------------------------------------------
+    // GENERATE PROMPT
+    // ---------------------------------------------
+    const prompt = `
+Generate exactly 10 high-quality MCQ questions.
 
-Topic: ${topic}
-Subject: ${subject}
-${exam_type ? `Exam: ${exam_type}` : ""}
+Topic: ${rawTopic}
+Subject: ${rawSubject}
+Exam type: ${rawExamType || "General"}
 Difficulty: ${difficulty}
 
-Requirements:
-- Each question must have exactly 4 options (A, B, C, D)
-- Include the correct answer as the option letter (A, B, C, or D)
-- Include a brief explanation
-- Questions should be appropriate for competitive exam level
-- Mix easy (2), medium (5), and hard (3) questions
+Rules:
+- Each question must have EXACTLY 4 options
+- Options labeled A, B, C, D
+- Include correct_answer as A|B|C|D
+- Include explanation
+- Difficulty distribution: EASY (2), MEDIUM (5), HARD (3)
+- NO markdown, only JSON allowed
 
-Return ONLY valid JSON with this exact shape:
+JSON Format:
 {
   "questions": [
     {
-      "question_text": "<question text>",
+      "question_text": "",
       "options": [
-        {"label": "A", "text": "<option text>"},
-        {"label": "B", "text": "<option text>"},
-        {"label": "C", "text": "<option text>"},
-        {"label": "D", "text": "<option text>"}
+        {"label":"A","text":""},
+        {"label":"B","text":""},
+        {"label":"C","text":""},
+        {"label":"D","text":""}
       ],
-      "correct_answer": "<A|B|C|D>",
-      "explanation": "<brief explanation>",
-      "difficulty": "<EASY|MEDIUM|HARD>",
+      "correct_answer": "A",
+      "explanation": "",
+      "difficulty": "MEDIUM",
       "marks_positive": 4,
       "marks_negative": 1
     }
   ]
-}`;
+}
+`.trim();
 
-    type GeneratedQuestion = {
-      question_text: string;
-      options: Array<{ label: string; text: string }>;
-      correct_answer: string;
-      explanation: string;
-      difficulty?: string;
-      marks_positive?: number;
-      marks_negative?: number;
-    };
-
+    // ---------------------------------------------
+    // CALL GEMINI (with error guard)
+    // ---------------------------------------------
     const raw = await geminiGenerate(prompt, SYSTEM_PROMPT, 0.7, 3000);
-    const data = parseJSON(raw, { questions: [] }) as { questions: GeneratedQuestion[] };
+    const generated = parseJSON(raw, { questions: [] });
 
-    const questions = data.questions.map((q) => ({
-      question_text: q.question_text,
-      question_type: "MCQ",
-      options: q.options,
-      correct_answer: q.correct_answer,
-      explanation: q.explanation,
-      subject,
-      topic,
-      difficulty: q.difficulty ?? difficulty,
-      exam_type: exam_type,
-      source: "AI_GENERATED",
-      marks_positive: q.marks_positive ?? 4,
-      marks_negative: q.marks_negative ?? 1,
-      is_verified: false,
-      is_public: true,
-      latex_present: false,
-    }));
-
-    if (questions.length === 0) {
+    if (!Array.isArray(generated.questions) || generated.questions.length === 0) {
       return new Response(
-        JSON.stringify({ success: false, error: "No questions generated" }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "AI failed to generate questions" }),
+        { status: 500, headers: corsHeaders }
       );
     }
 
-    const { error: insertErr } = await db.from("questions").insert(questions);
+    // ---------------------------------------------
+    // VALIDATE MCQ SCHEMA
+    // ---------------------------------------------
+    const cleaned = generated.questions
+      .filter((q: any) =>
+        q?.question_text &&
+        Array.isArray(q?.options) &&
+        q.options.length === 4 &&
+        /^[A-D]$/.test(q.correct_answer)
+      )
+      .map((q: any) => ({
+        question_text: String(q.question_text).slice(0, 500),
+        question_type: "MCQ",
+        options: q.options.map((opt: any) => ({
+          label: opt.label,
+          text: String(opt.text).slice(0, 200),
+        })),
+        correct_answer: q.correct_answer,
+        explanation: String(q.explanation || "").slice(0, 500),
+        subject: rawSubject,
+        topic: rawTopic,
+        difficulty: q.difficulty || difficulty,
+        exam_type: rawExamType || null,
+        source: "AI_GENERATED",
+        marks_positive: q.marks_positive ?? 4,
+        marks_negative: q.marks_negative ?? 1,
+        is_verified: false,
+        is_public: false, // FIXED: Do NOT auto-publish
+        latex_present: /[=+\-*/]/.test(q.question_text),
+      }));
 
-    if (insertErr) {
-      console.error("[generate-practice-questions] insert error:", insertErr);
+    if (cleaned.length === 0) {
       return new Response(
-        JSON.stringify({ error: "Failed to save questions", detail: insertErr.message }),
-        { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Validation failed: No valid questions" }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    // ---------------------------------------------
+    // INSERT QUESTIONS
+    // ---------------------------------------------
+    const { error: insertErr } = await db.from("questions").insert(cleaned);
+    if (insertErr) {
+      console.error("[generate-practice-questions] DB insert error:", insertErr);
+      return new Response(
+        JSON.stringify({ error: "Failed to save questions" }),
+        { status: 500, headers: corsHeaders }
       );
     }
 
     return new Response(
-      JSON.stringify({ success: true, generated: questions.length }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ success: true, generated: cleaned.length }),
+      { headers: corsHeaders }
     );
+
   } catch (err) {
     console.error("[generate-practice-questions] error:", err);
     return new Response(
-      JSON.stringify({ error: "Internal error", detail: String(err) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({ error: "Internal server error" }),
+      { status: 500, headers: corsHeaders }
     );
   }
 });
