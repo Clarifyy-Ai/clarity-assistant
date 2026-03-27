@@ -1,19 +1,33 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// generate-star-answer/index.ts — Generate a full STAR-format answer
-// for a behavioural interview question, optionally grounded in the
-// user's resume and target role context.
-// ─────────────────────────────────────────────────────────────────────────────
+// generate-star-answer/index.ts — FIXED & SECURE VERSION
 
-import { corsHeaders }  from "../_shared/cors.ts";
+import { corsHeaders } from "../_shared/cors.ts";
 import {
-  handleCors, parseBody, requireAuth,
-  successResponse, errorResponse,
-  deductCredits, callAI,
-  requireFields, trimToMaxTokens, log,
+  handleCors,
+  parseBody,
+  requireAuth,
+  successResponse,
+  errorResponse,
+  deductCredits,
+  callAI,
+  requireFields,
+  trimToMaxTokens,
+  log,
 } from "../_shared/utils.ts";
 import type { STARAnswer, ModelId } from "../_shared/types.ts";
 
-// ─── Handler ──────────────────────────────────────────────────────────────────
+// Sanitize text to protect prompt
+function sanitize(input: any, max = 2000): string {
+  return String(input ?? "")
+    .replace(/```/g, "")          // remove markdown fences
+    .replace(/[^\S\r\n]+/g, " ")  // compress whitespace
+    .replace(/[\u0000-\u0008]/g, "")
+    .replace(/[\u000B\u000C]/g, "")
+    .replace(/[\u000E-\u001F]/g, "")
+    .slice(0, max);
+}
+
+// Allowed model list
+const ALLOWED_MODELS: ModelId[] = ["gpt-4o", "gpt-4o-mini", "gpt-4o-reasoning"];
 
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
@@ -22,114 +36,174 @@ Deno.serve(async (req: Request) => {
   const FN = "generate-star-answer";
 
   try {
-    // ── Auth ────────────────────────────────────────────────────────────────
+    // -------------------------------
+    // AUTH
+    // -------------------------------
     const auth = await requireAuth(req);
+    const userId = auth.userId;
 
-    // ── Body ────────────────────────────────────────────────────────────────
+    // -------------------------------
+    // BODY
+    // -------------------------------
     const body = await parseBody<{
-      questionText:   string;
-      resumeText?:    string;
+      questionText: string;
+      resumeText?: string;
       jobDescription?: string;
-      company?:       string;
-      role?:          string;
-      model?:         ModelId;
+      company?: string;
+      role?: string;
+      model?: ModelId;
     }>(req);
 
-    const validation = requireFields(body as Record<string, unknown>, ["questionText"]);
+    const validation = requireFields(body as Record<string, unknown>, [
+      "questionText",
+    ]);
     if (!validation.valid) {
-      return errorResponse(validation.errors[0].message, "VALIDATION_ERROR", 400);
+      return errorResponse(
+        validation.errors[0].message,
+        "VALIDATION_ERROR",
+        400
+      );
     }
 
-    const {
-      questionText,
-      resumeText,
-      jobDescription,
-      company,
-      role,
-      model = "gpt-4o",
-    } = body;
+    // -------------------------------
+    // SANITIZE INPUT
+    // -------------------------------
+    const questionText = sanitize(body.questionText, 500);
+    const resumeText = sanitize(body.resumeText, 4000);
+    const jobDescription = sanitize(body.jobDescription, 2000);
+    const company = sanitize(body.company, 120);
+    const role = sanitize(body.role, 120);
 
-    // ── Credits ─────────────────────────────────────────────────────────────
-    const credit = await deductCredits(auth.userId, "generate_star");
+    let model: ModelId = body.model ?? "gpt-4o";
+    if (!ALLOWED_MODELS.includes(model)) model = "gpt-4o";
+
+    // -------------------------------
+    // DEDUCT CREDITS (Correct signature: userId, action, cost)
+    // -------------------------------
+    const credit = await deductCredits(userId, "generate_star", 2);
     if (!credit.success) {
-      return errorResponse(credit.error ?? "Insufficient credits.", "INSUFFICIENT_CREDITS", 402);
+      return errorResponse(
+        credit.error ?? "Insufficient credits.",
+        "INSUFFICIENT_CREDITS",
+        402
+      );
     }
 
-    // ── Prompt ──────────────────────────────────────────────────────────────
+    // -------------------------------
+    // BUILD PROMPT
+    // -------------------------------
     const contextParts: string[] = [];
 
-    if (resumeText)     contextParts.push(`Resume:\n${trimToMaxTokens(resumeText, 4000)}`);
-    if (jobDescription) contextParts.push(`Job Description:\n${trimToMaxTokens(jobDescription, 2000)}`);
-    if (company)        contextParts.push(`Target Company: ${company}`);
-    if (role)           contextParts.push(`Target Role: ${role}`);
+    if (resumeText) contextParts.push(`Resume:\n${resumeText}`);
+    if (jobDescription) contextParts.push(`Job Description:\n${jobDescription}`);
+    if (company) contextParts.push(`Target Company: ${company}`);
+    if (role) contextParts.push(`Target Role: ${role}`);
 
-    const context = contextParts.length > 0
-      ? `\n\n## Candidate Context\n${contextParts.join("\n\n")}`
-      : "";
+    const context =
+      contextParts.length > 0
+        ? `\n\n## Candidate Context\n${contextParts.join("\n\n")}`
+        : "";
 
-    const systemPrompt = `You are an expert interview coach specialising in the STAR method.
+    const systemPrompt = `
+You are an expert interview coach specialising in the STAR method.
 Generate compelling, specific, and authentic STAR-format answers.
-Use concrete metrics and outcomes wherever possible.
-Keep each section concise but impactful.
-Return ONLY a valid JSON object — no markdown fences, no extra text.${context}`;
+Use metrics wherever possible.
+Return ONLY a valid JSON object — no quotes outside JSON, no markdown fences.
+${context}
+`.trim();
 
-    const userPrompt = `Generate a complete STAR answer for this behavioural interview question:
+    const userPrompt = `
+Generate a complete STAR answer for this behavioural interview question:
 
 "${questionText}"
 
-Return this exact JSON structure:
+Return ONLY this JSON:
 {
-  "situation": "2–3 sentences setting the scene (context, team size, timeframe)",
-  "task": "1–2 sentences describing your specific responsibility or challenge",
-  "action": "3–5 sentences detailing the specific steps YOU took (use 'I', not 'we')",
-  "result": "2–3 sentences with measurable outcomes (%, $, time saved, promotions, etc.)",
-  "fullAnswer": "A smooth 3–4 paragraph narrative combining all four sections naturally"
-}`;
+  "situation": "",
+  "task": "",
+  "action": "",
+  "result": "",
+  "fullAnswer": ""
+}
+`.trim();
 
-    // ── AI call ─────────────────────────────────────────────────────────────
-    const aiResult = await callAI({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user",   content: userPrompt   },
-      ],
-      maxTokens:   1200,
-      temperature: 0.72,
-    });
+    // -------------------------------
+    // CALL AI (with retry)
+    // -------------------------------
+    const runAI = () =>
+      callAI({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content: userPrompt },
+        ],
+        maxTokens: 1200,
+        temperature: 0.72,
+      });
 
-    // ── Parse JSON ───────────────────────────────────────────────────────────
+    let aiResult = await runAI();
+    if (!aiResult?.text) aiResult = await runAI(); // retry once
+
+    if (!aiResult?.text) {
+      // Refund credits
+      await deductCredits(userId, "refund_generate_star", -2);
+      return errorResponse("AI service failed.", "AI_ERROR", 502);
+    }
+
+    // -------------------------------
+    // PARSE JSON SAFELY
+    // -------------------------------
     let star: STARAnswer;
     try {
       const cleaned = aiResult.text
-        .replace(/^```json\n?/, "")
-        .replace(/\n?```$/, "")
+        .replace(/```json/g, "")
+        .replace(/```/g, "")
         .trim();
-      star = JSON.parse(cleaned) as STARAnswer;
-    } catch {
-      // Fallback: return raw text as fullAnswer
+
+      const parsed = JSON.parse(cleaned);
       star = {
-        situation:  "",
-        task:       "",
-        action:     "",
-        result:     "",
-        fullAnswer: aiResult.text,
+        situation: parsed.situation ?? "",
+        task: parsed.task ?? "",
+        action: parsed.action ?? "",
+        result: parsed.result ?? "",
+        fullAnswer: parsed.fullAnswer ?? "",
+      };
+    } catch {
+      // fallback includes only fullAnswer
+      star = {
+        situation: "",
+        task: "",
+        action: "",
+        result: "",
+        fullAnswer: aiResult.text.trim(),
       };
     }
 
+    // -------------------------------
+    // LOGGING
+    // -------------------------------
     log(FN, "info", "STAR answer generated", {
-      userId: auth.userId, model, tokens: aiResult.totalTokens,
+      userId,
+      model,
+      tokens: aiResult.totalTokens,
     });
 
+    // -------------------------------
+    // SUCCESS
+    // -------------------------------
     return successResponse(star, {
-      model:          model,
-      tokensUsed:     aiResult.totalTokens,
+      model,
+      tokensUsed: aiResult.totalTokens,
       creditsCharged: 2,
-      latencyMs:      aiResult.latencyMs,
+      latencyMs: aiResult.latencyMs,
     });
-
   } catch (err) {
     if (err instanceof Response) return err;
     log(FN, "error", "Unhandled error", err);
-    return errorResponse("Failed to generate STAR answer.", "INTERNAL_ERROR", 500);
+    return errorResponse(
+      "Failed to generate STAR answer.",
+      "INTERNAL_ERROR",
+      500
+    );
   }
 });
