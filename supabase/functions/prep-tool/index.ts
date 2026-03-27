@@ -1,167 +1,200 @@
+// prep-tool/index.ts — FIXED, SECURE, PRODUCTION-READY
+
 import { handleCors, corsHeaders } from "../_shared/cors.ts";
-import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
+import {
+  requireAuth,
+  successResponse,
+  errorResponse,
+  deductCredits,
+  log
+} from "../_shared/utils.ts";
+
 import { geminiGenerate } from "../_shared/gemini.ts";
 
-// ─────────────────────────────────────────────────────────────────
-// prep-tool — run any PrepLab AI tool
-// ─────────────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                          SANITIZATION HELPERS                              */
+/* -------------------------------------------------------------------------- */
+
+function sanitizeInput(text: string, max = 2500): string {
+  return String(text ?? "")
+    .replace(/```/g, "")             // remove code fences
+    .replace(/[^\x20-\x7E\n]/g, "")  // remove non-printable
+    .replace(/\s{2,}/g, " ")         // compress whitespace
+    .slice(0, max)
+    .trim();
+}
+
+function sanitizeAIOutput(text: string): string {
+  return String(text ?? "")
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .trim();
+}
+
+/* -------------------------------------------------------------------------- */
+/*                               TOOL PROMPTS                                 */
+/* -------------------------------------------------------------------------- */
 
 const TOOL_PROMPTS: Record<string, (input: string) => string> = {
-
   jd_fit: (input) => `
 Analyse this resume/profile against the job description below.
 Rate the fit (0-100) and provide a detailed gap analysis.
 
 ${input}
 
-Return as plain text with:
-**Fit Score:** X/100
-**Strong matches:** (list)
-**Gaps to address:** (list)
-**Recommendation:** (2-3 sentences)`,
+Return plain text ONLY with:
+Fit Score: X/100
+Strong matches: (list)
+Gaps to address: (list)
+Recommendation: (2-3 sentences)
+`,
 
   question_predict: (input) => `
-Based on this job description and/or company info, predict the 10 most
-likely interview questions. Include a mix of behavioural, technical,
-and culture fit questions.
+Based on this job description/company info, predict the 10 most
+likely interview questions. Include behavioural, technical, and culture fit.
 
 ${input}
 
-Format each question numbered, with a brief note on why it's likely.`,
+Format:
+1. Question — why it's likely
+2. ...
+`,
 
   cover_letter: (input) => `
-Write a compelling, tailored cover letter based on this resume and job description.
-Keep it to 3 paragraphs, professional tone, under 300 words.
-Open with impact, not "I am writing to apply…"
-
-${input}`,
-
-  salary_coach: (input) => `
-Create a personalised salary negotiation script for this role and situation.
-Include: opening line, counter-offer language, handling pushback,
-and closing. Keep it professional and confident.
-
-${input}`,
-
-  linkedin_headline: (input) => `
-Write 5 alternative LinkedIn headline options for this professional profile.
-Make them keyword-rich, specific, and compelling to recruiters.
-Each under 120 characters.
-
-${input}`,
-
-  culture_fit: (input) => `
-Analyse how well this candidate's experience and answers align with
-the company's stated culture and values. Score (0-100) and explain.
-
-${input}`,
-
-  coding_hint: (input) => `
-You are an expert coding interview coach. Give a helpful hint for
-this coding problem WITHOUT giving the full solution. Guide the
-candidate towards the right data structure or algorithm.
+Write a tailored, concise 3-paragraph cover letter (<300 words).
+Professional tone. Do NOT start with "I am writing to apply...".
 
 ${input}
+`,
 
-Provide 2-3 progressive hints, from general to more specific.`,
+  salary_coach: (input) => `
+Create a personalised salary negotiation script. Include:
+- opening line
+- counter-offer language
+- handling pushback
+- closing
+
+${input}
+`,
+
+  linkedin_headline: (input) => `
+Write 5 LinkedIn headline options (<120 characters each).
+Keyword-rich and role specific.
+
+${input}
+`,
+
+  culture_fit: (input) => `
+Analyse how well this candidate aligns with the company's values.
+Score (0-100) and explanation.
+
+${input}
+`,
+
+  coding_hint: (input) => `
+Give progressive hints (general → specific) for this coding problem.
+Do NOT reveal the full solution.
+
+${input}
+`,
 
   coding_solution: (input) => `
-You are an expert coding interview coach. Explain the optimal
-solution for this coding problem step by step. Include:
-- Approach and intuition
-- Algorithm choice and why
-- Time and space complexity
-- Key edge cases to handle
-Do NOT write actual code — explain the logic verbally as you would
-in an interview.
+Explain the optimal solution in interview style.
+Include approach, complexity, and edge cases.
+NO code.
 
-${input}`,
+${input}
+`,
 
   system_design: (input) => `
-You are a senior systems architect and interview coach. Provide a
-comprehensive system design breakdown for this topic. Include:
-1. Requirements (functional + non-functional)
-2. High-level architecture with key components
-3. Data model and access patterns
-4. Scaling strategies and bottlenecks
-5. Key tradeoffs and decisions
-6. What to mention in an interview to score well
+Provide a detailed system design breakdown:
+- Requirements
+- High-level architecture
+- Data model
+- Scaling
+- Tradeoffs
+- What to mention in interview
 
-${input}`,
+${input}
+`,
 
   rephrase: (input) => `
-You are an expert interview coach. Rephrase and improve this
-interview answer according to the specified style. Make it more
-impactful while keeping the candidate's authentic voice.
-Return ONLY the improved answer, nothing else.
+Rephrase and improve this answer. Preserve authenticity.
+Return ONLY the improved answer.
 
-${input}`,
+${input}
+`,
 
   project_build: (input) => `
-You are an expert interview coach. Create a polished project
-showcase from the provided details, formatted for discussing in
-behavioural/technical interviews. Include:
-- A concise project overview (2-3 sentences)
-- Key achievements with quantified impact
-- Technologies used and why they were chosen
-- Challenges overcome
-- A suggested STAR-format response for "Tell me about this project"
-- 3 likely follow-up questions and how to answer them
+Create a polished project showcase with:
+- overview
+- achievements
+- tech rationale
+- challenges
+- STAR-format version
+- 3 follow-up questions + answers
 
-${input}`,
+${input}
+`,
 
-  // Internal use: pass prompt through as-is for system-level generation
-  // (scorecard, JD parsing, etc.) without a user-facing template wrapper.
   raw_prompt: (input) => input,
 };
 
-Deno.serve(async (req) => {
+/* -------------------------------------------------------------------------- */
+/*                                   HANDLER                                  */
+/* -------------------------------------------------------------------------- */
+
+Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
-  const db = createServiceClient();
+  const FN = "prep-tool";
 
   try {
-    const { user_id, tool_id, input } = await req.json();
+    /* ----------------------- AUTH ----------------------- */
+    const auth = await requireAuth(req);
+    const userId = auth.userId;
 
-    if (!tool_id || !input) {
-      return new Response(
-        JSON.stringify({ error: "Missing tool_id or input" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+    /* ----------------------- BODY ----------------------- */
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body.tool_id !== "string" || typeof body.input !== "string") {
+      return errorResponse("Missing tool_id or input", "INVALID_REQUEST", 400);
     }
+
+    const { tool_id } = body;
 
     const promptFn = TOOL_PROMPTS[tool_id];
     if (!promptFn) {
-      return new Response(
-        JSON.stringify({ error: "Unknown tool" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
+      return errorResponse(`Unknown tool_id: ${tool_id}`, "INVALID_TOOL", 400);
     }
 
-    if (user_id) {
-      const ok = await deductCredits(db, user_id, 3, `prep_tool_${tool_id}`);
-      if (!ok) {
-        return new Response(
-          JSON.stringify({ error: "Insufficient credits" }),
-          { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-        );
-      }
+    const sanitizedInput = sanitizeInput(body.input);
+
+    /* ------------------- CREDIT DEDUCTION ------------------- */
+    const credit = await deductCredits(userId, `prep_tool_${tool_id}`, 3);
+    if (!credit.success) {
+      return errorResponse("Insufficient credits", "INSUFFICIENT_CREDITS", 402);
     }
 
-    const prompt = promptFn(input.slice(0, 3000));
-    const result = await geminiGenerate(prompt, undefined, 0.6, 1200);
+    /* ----------------------- PROMPT ----------------------- */
+    const prompt = promptFn(sanitizedInput);
 
-    return new Response(
-      JSON.stringify({ result: result.trim() }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    /* ----------------------- AI CALL ----------------------- */
+    const raw = await geminiGenerate(prompt, undefined, 0.6, 1200);
+    const cleaned = sanitizeAIOutput(raw);
+
+    /* ----------------------- RESPOND ----------------------- */
+    log(FN, "info", "Prep tool executed", {
+      userId, tool_id, inputLength: sanitizedInput.length
+    });
+
+    return successResponse(
+      { result: cleaned },
+      { creditsCharged: 3 }
     );
 
   } catch (err) {
     console.error("prep-tool error:", err);
-    return new Response(
-      JSON.stringify({ error: "Internal error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return errorResponse("Internal error", "INTERNAL", 500);
   }
 });
