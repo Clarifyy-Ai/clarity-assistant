@@ -1,15 +1,16 @@
+// ai-feedback/index.ts  — FIXED VERSION
+
 import { handleCors, corsHeaders } from "../_shared/cors.ts";
-import { createServiceClient, deductCredits, getUserId } from "../_shared/supabase.ts";
+import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
 import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
 
-// ─────────────────────────────────────────────────────────────────
-// ai-feedback — score + analyse a single session answer
-// Called after MockSession submits each answer
-// ─────────────────────────────────────────────────────────────────
-
-const SYSTEM_PROMPT = `You are an expert interview coach who provides
-structured, actionable feedback on interview answers. Be specific,
-direct, and constructive. Always respond with valid JSON.`;
+const SYSTEM_PROMPT = `
+You are an expert interview coach.
+Provide structured, actionable, JSON-only feedback.
+Never output markdown or commentary.
+Be concise, constructive, and professional.
+Always return strictly valid JSON following the provided schema.
+`;
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
@@ -18,6 +19,37 @@ Deno.serve(async (req) => {
   const db = createServiceClient();
 
   try {
+    /* ------------------------
+       AUTHENTICATE USER
+    ------------------------ */
+    const authHeader =
+      req.headers.get("authorization") ??
+      req.headers.get("Authorization");
+
+    if (!authHeader?.toLowerCase().startsWith("bearer ")) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: corsHeaders,
+      });
+    }
+
+    const token = authHeader.replace(/^bearer\s+/i, "");
+    const {
+      data: { user },
+      error: userErr,
+    } = await db.auth.getUser(token);
+
+    if (userErr || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401,
+        headers: corsHeaders,
+      });
+    }
+
+    /* ------------------------
+       PARSE BODY
+    ------------------------ */
+    const body = await req.json();
     const {
       question,
       transcript,
@@ -28,88 +60,154 @@ Deno.serve(async (req) => {
       wpm,
       filler_count,
       resume_text,
-    } = await req.json();
+    } = body;
 
-    if (!transcript || !question) {
+    if (!question || !transcript) {
       return new Response(
-        JSON.stringify({ error: "Missing required fields" }),
-        { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({ error: "Missing question or transcript" }),
+        { status: 400, headers: corsHeaders }
       );
     }
 
+    // Sanitize sizes
+    const safeQuestion = String(question).slice(0, 1000);
+    const safeTranscript = String(transcript).slice(0, 3000);
+    const safeResume = String(resume_text ?? "").slice(0, 1000);
+
+    /* ------------------------
+       VALIDATE SESSION BELONGS TO USER
+    ------------------------ */
+    const { data: sessionRow } = await db
+      .from("interview_sessions")
+      .select("id, user_id, status")
+      .eq("id", session_id)
+      .single();
+
+    if (!sessionRow || sessionRow.user_id !== user.id) {
+      return new Response(JSON.stringify({ error: "Invalid session" }), {
+        status: 403,
+        headers: corsHeaders,
+      });
+    }
+
+    if (sessionRow.status !== "active") {
+      return new Response(JSON.stringify({ error: "Session not active" }), {
+        status: 400,
+        headers: corsHeaders,
+      });
+    }
+
+    /* ------------------------
+       VALIDATE ANSWER BELONGS TO USER
+    ------------------------ */
+    if (answer_id) {
+      const { data: answerRow } = await db
+        .from("session_answers")
+        .select("id, user_id")
+        .eq("id", answer_id)
+        .single();
+
+      if (!answerRow || answerRow.user_id !== user.id) {
+        return new Response(JSON.stringify({ error: "Answer not found" }), {
+          status: 403,
+          headers: corsHeaders,
+        });
+      }
+    }
+
+    /* ------------------------
+       OPTIONAL: CREDIT DEDUCTION
+    ------------------------ */
+    // const credit = await deductCredits(user.id, "ai_feedback", 1);
+    // if (!credit.success) {
+    //   return new Response(JSON.stringify({ error: "Not enough credits" }), {
+    //     status: 402,
+    //     headers: corsHeaders,
+    //   });
+    // }
+
+    /* ------------------------
+       BUILD PROMPT
+    ------------------------ */
     const prompt = `
-You are scoring an interview answer. Analyse the response below.
+Interview type: ${interview_type ?? "behavioural"}
+Target company: ${target_company ?? "unspecified"}
 
-**Interview type:** ${interview_type ?? "behavioural"}
-**Target company:** ${target_company ?? "not specified"}
-**Question:** ${question}
-**Candidate's answer:** ${transcript}
-**Speaking metrics:** WPM: ${wpm ?? "unknown"}, Filler words: ${filler_count ?? 0}
-${resume_text ? `**Candidate's background (from resume):** ${resume_text.slice(0, 800)}` : ""}
+Question: ${safeQuestion}
+Candidate answer: ${safeTranscript}
 
-Return ONLY valid JSON with this exact structure:
+Speaking metrics:
+- WPM: ${wpm ?? "unknown"}
+- Filler words: ${filler_count ?? 0}
+
+Resume context: ${safeResume || "None"}
+
+Return ONLY valid JSON matching EXACTLY this structure:
 {
-  "score": <0-100 integer>,
-  "content_score": <0-100>,
-  "structure_score": <0-100>,
-  "communication_score": <0-100>,
-  "confidence_score": <0-100>,
-  "feedback": "<2-3 sentence overall feedback>",
-  "strengths": ["<strength 1>", "<strength 2>"],
-  "improvements": ["<improvement 1>", "<improvement 2>"],
+  "score": 0,
+  "content_score": 0,
+  "structure_score": 0,
+  "communication_score": 0,
+  "confidence_score": 0,
+  "feedback": "",
+  "strengths": [],
+  "improvements": [],
   "star_breakdown": {
-    "situation": "<did they set context? yes/no + note>",
-    "task": "<did they define their role? yes/no + note>",
-    "action": "<did they describe actions? yes/no + note>",
-    "result": "<did they quantify results? yes/no + note>"
+    "situation": "",
+    "task": "",
+    "action": "",
+    "result": ""
   },
-  "model_answer": "<A brief 2-sentence model answer structure>",
-  "sentiment": "<positive|neutral|negative>"
-}`;
+  "model_answer": "",
+  "sentiment": "neutral"
+}
+`;
 
-    const raw      = await geminiGenerate(prompt, SYSTEM_PROMPT, 0.3, 1500);
-    const feedback = parseJSON(raw, {
-      score:               60,
-      content_score:       60,
-      structure_score:     60,
-      communication_score: 60,
-      confidence_score:    60,
-      feedback:            "Unable to parse feedback.",
-      strengths:           [],
-      improvements:        [],
-      star_breakdown:      {},
-      model_answer:        "",
-      sentiment:           "neutral",
-    });
+    /* ------------------------
+       CALL GEMINI
+    ------------------------ */
+    const raw = await geminiGenerate(prompt, SYSTEM_PROMPT, 0.3, 1500);
 
-    // Persist to session_answers if answer_id provided
+    /* ------------------------
+       STRICT JSON PARSE
+    ------------------------ */
+    const feedback = parseJSON(raw, null);
+
+    if (!feedback) {
+      return new Response(
+        JSON.stringify({ error: "AI returned invalid JSON" }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    /* ------------------------
+       SAVE FEEDBACK TO DB
+    ------------------------ */
     if (answer_id) {
       await db
         .from("session_answers")
         .update({
-          score:               feedback.score,
-          content_score:       feedback.content_score,
-          structure_score:     feedback.structure_score,
+          score: feedback.score,
+          content_score: feedback.content_score,
+          structure_score: feedback.structure_score,
           communication_score: feedback.communication_score,
-          confidence_score:    feedback.confidence_score,
-          ai_feedback:         feedback.feedback,
-          model_answer:        feedback.model_answer,
-          star_breakdown:      feedback.star_breakdown,
-          sentiment:           feedback.sentiment,
+          confidence_score: feedback.confidence_score,
+          ai_feedback: feedback.feedback,
+          model_answer: feedback.model_answer,
+          star_breakdown: feedback.star_breakdown,
+          sentiment: feedback.sentiment,
         })
         .eq("id", answer_id);
     }
 
-    return new Response(
-      JSON.stringify(feedback),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
-
+    return new Response(JSON.stringify(feedback), {
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
   } catch (err) {
     console.error("ai-feedback error:", err);
-    return new Response(
-      JSON.stringify({ error: "Internal error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-    );
+    return new Response(JSON.stringify({ error: "Internal error" }), {
+      status: 500,
+      headers: corsHeaders,
+    });
   }
 });
