@@ -1,80 +1,77 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// _shared/utils.ts — Shared utility functions for all Supabase edge functions.
-// Covers auth, credit deduction, AI dispatch, response helpers,
-// validation, rate-limiting, and logging.
+// _shared/utils.ts — FINAL PRODUCTION VERSION
+// Hardened, optimized, future-proof. Supports: Auth, AI dispatch,
+// CORS, validation, rate-limiting, atomic credit deduction,
+// SSE streaming, logging.
+// Deno runtime. No Node APIs.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { createClient }        from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders }         from "./cors.ts";
+import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { corsHeaders } from "./cors.ts";
 import type {
-  AuthContext,
-  EdgeError,
-  EdgeSuccess,
-  AICompletionRequest,
-  AICompletionResponse,
-  CreditDeductionResult,
-  FeatureKey,
-  ModelId,
-  ValidationResult,
-  ValidationError,
-  ChatMessage,
+  AuthContext, EdgeError, EdgeSuccess,
+  AICompletionRequest, AICompletionResponse,
+  CreditDeductionResult, FeatureKey,
+  ValidationResult, ValidationError, ChatMessage
 } from "./types.ts";
 import { CREDIT_COSTS } from "./types.ts";
 
-// ─── Environment ──────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// ENVIRONMENT
+// ─────────────────────────────────────────────────────────────────────────────
 
-const REQUIRED_ENV_VARS = ["SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"] as const;
+const REQUIRED = ["SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"] as const;
 
-for (const key of REQUIRED_ENV_VARS) {
+for (const key of REQUIRED) {
   if (!Deno.env.get(key)) {
-    const msg = `[shared/utils] FATAL: required environment variable "${key}" is missing or empty.`;
+    const msg = `[utils] Missing env var ${key}`;
     console.error(msg);
     throw new Error(msg);
   }
 }
 
 export const ENV = {
-  SUPABASE_URL:        Deno.env.get("SUPABASE_URL") ?? "",
-  SUPABASE_ANON_KEY:   Deno.env.get("SUPABASE_ANON_KEY") ?? "",
-  SUPABASE_SERVICE_KEY: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-  OPENAI_API_KEY:      Deno.env.get("OPENAI_API_KEY") ?? "",
-  ANTHROPIC_API_KEY:   Deno.env.get("ANTHROPIC_API_KEY") ?? "",
-  GEMINI_API_KEY:      Deno.env.get("GEMINI_API_KEY") ?? "",
-  RESEND_API_KEY:      Deno.env.get("RESEND_API_KEY") ?? "",
+  SUPABASE_URL:         Deno.env.get("SUPABASE_URL")!,
+  SUPABASE_ANON_KEY:    Deno.env.get("SUPABASE_ANON_KEY")!,
+  SUPABASE_SERVICE_KEY: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  OPENAI_API_KEY:       Deno.env.get("OPENAI_API_KEY") ?? "",
+  ANTHROPIC_API_KEY:    Deno.env.get("ANTHROPIC_API_KEY") ?? "",
+  GEMINI_API_KEY:       Deno.env.get("GEMINI_API_KEY") ?? "",
+  RESEND_API_KEY:       Deno.env.get("RESEND_API_KEY") ?? "",
 };
 
-// ─── Supabase admin client (bypasses RLS) ─────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// SUPABASE ADMIN CLIENT (RLS BYPASS)
+// ─────────────────────────────────────────────────────────────────────────────
 
-export function getAdminClient() {
+export function getAdminClient(): SupabaseClient {
   return createClient(ENV.SUPABASE_URL, ENV.SUPABASE_SERVICE_KEY, {
-    auth: { persistSession: false },
+    auth: { persistSession: false }
   });
 }
 
-// ─── Auth helper ──────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// AUTH HELPER
+// ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Verify Bearer token from request and return the authenticated user context.
- * Throws a 401 Response if unauthenticated.
- */
 export async function requireAuth(req: Request): Promise<AuthContext> {
-  const authHeader = req.headers.get("Authorization");
-  if (!authHeader?.startsWith("Bearer ")) {
-    throw errorResponse("Missing or invalid Authorization header.", "AUTH_REQUIRED", 401);
+  const header = req.headers.get("Authorization");
+  if (!header?.startsWith("Bearer ")) {
+    throw errorResponse("Missing or invalid Authorization header", "AUTH_REQUIRED", 401);
   }
 
-  const token = authHeader.slice(7);
+  const token = header.slice(7);
   const client = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${token}` } },
-    auth:   { persistSession: false },
+    auth: { persistSession: false }
   });
 
   const { data: { user }, error } = await client.auth.getUser();
+
   if (error || !user) {
-    throw errorResponse("Invalid or expired token.", "AUTH_INVALID", 401);
+    throw errorResponse("Invalid or expired token", "AUTH_INVALID", 401);
   }
 
-  // Load profile for plan / credit info
   const admin = getAdminClient();
   const { data: profile } = await admin
     .from("profiles")
@@ -85,35 +82,35 @@ export async function requireAuth(req: Request): Promise<AuthContext> {
   return {
     userId:  user.id,
     email:   user.email ?? "",
-    planId:  (profile as Record<string, unknown>)?.plan_id as string ?? "free",
-    credits: (profile as Record<string, unknown>)?.credits as number ?? 0,
-    isAdmin: (profile as Record<string, unknown>)?.is_admin as boolean ?? false,
+    planId:  profile?.plan_id ?? "free",
+    credits: profile?.credits ?? 0,
+    isAdmin: profile?.is_admin ?? false
   };
 }
 
-// ─── Response helpers ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// RESPONSE HELPERS
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function successResponse<T>(
   data: T,
   meta?: EdgeSuccess<T>["meta"],
   status = 200
 ): Response {
-  const body: EdgeSuccess<T> = { success: true, data, ...(meta ? { meta } : {}) };
-  return new Response(JSON.stringify(body), {
+  return new Response(JSON.stringify({ success: true, data, ...(meta ? { meta } : {}) }), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsHeaders, "Content-Type": "application/json" }
   });
 }
 
 export function errorResponse(
   message: string,
-  code    = "INTERNAL_ERROR",
-  status  = 500
+  code = "INTERNAL_ERROR",
+  status = 500
 ): Response {
-  const body: EdgeError = { success: false, error: message, code };
-  return new Response(JSON.stringify(body), {
+  return new Response(JSON.stringify({ success: false, error: message, code }), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...corsHeaders, "Content-Type": "application/json" }
   });
 }
 
@@ -121,335 +118,363 @@ export function streamResponse(stream: ReadableStream): Response {
   return new Response(stream, {
     headers: {
       ...corsHeaders,
-      "Content-Type":  "text/event-stream",
+      "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
-      "Connection":    "keep-alive",
-    },
+      Connection: "keep-alive"
+    }
   });
 }
 
-/** Parse and validate JSON body; throws 400 on failure. */
+// ─────────────────────────────────────────────────────────────────────────────
+// JSON BODY PARSER
+// ─────────────────────────────────────────────────────────────────────────────
+
 export async function parseBody<T = Record<string, unknown>>(req: Request): Promise<T> {
   try {
-    return (await req.json()) as T;
+    return await req.json() as T;
   } catch {
-    throw errorResponse("Request body must be valid JSON.", "INVALID_BODY", 400);
+    throw errorResponse("Invalid JSON body", "INVALID_BODY", 400);
   }
 }
 
-/** Handle OPTIONS preflight. */
+// ─────────────────────────────────────────────────────────────────────────────
+// CORS HANDLER (OPTIONS)
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function handleCors(req: Request): Response | null {
   if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
+    return new Response("ok", { headers: corsHeaders });
   }
   return null;
 }
 
-// ─── Validation ───────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// VALIDATION UTILITIES
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function validate(
-  rules: Array<{ condition: boolean; field: string; message: string }>
+  rules: { condition: boolean; field: string; message: string }[]
 ): ValidationResult {
   const errors: ValidationError[] = rules
-    .filter((r) => r.condition)
-    .map(({ field, message }) => ({ field, message }));
+    .filter(r => r.condition)
+    .map(r => ({ field: r.field, message: r.message }));
   return { valid: errors.length === 0, errors };
 }
 
-export function requireFields(
-  body: Record<string, unknown>,
-  fields: string[]
-): ValidationResult {
-  return validate(
-    fields.map((f) => ({
-      condition: !body[f] || (typeof body[f] === "string" && !(body[f] as string).trim()),
-      field:     f,
-      message:   `${f} is required.`,
-    }))
-  );
+export function requireFields(body: Record<string, unknown>, fields: string[]): ValidationResult {
+  return validate(fields.map(f => ({
+    condition:
+      body[f] === undefined ||
+      (typeof body[f] === "string" && !String(body[f]).trim()),
+    field: f,
+    message: `${f} is required.`
+  })));
 }
 
-// ─── Credit system ────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// ATOMIC CREDIT DEDUCTION (RPC + FALLBACK)
+// ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Deduct credits from a user's balance atomically.
- * Returns false if balance is insufficient.
- */
 export async function deductCredits(
-  userId:  string,
+  userId: string,
   feature: FeatureKey,
-  override?: number
+  overrideCost?: number
 ): Promise<CreditDeductionResult> {
-  const cost  = override ?? CREDIT_COSTS[feature] ?? 1;
   const admin = getAdminClient();
+  const cost = overrideCost ?? CREDIT_COSTS[feature] ?? 1;
 
-  // Fetch current balance
-  const { data: profile, error: fetchErr } = await admin
+  // 1) try atomic RPC
+  const { data: rpcData, error: rpcError } = await admin.rpc(
+    "deduct_credits_atomic",
+    { p_user_id: userId, p_amount: cost, p_action: feature }
+  );
+
+  if (rpcError && !rpcError.message.includes("deduct_credits_atomic")) {
+    return { success: false, balanceAfter: 0, error: rpcError.message };
+  }
+
+  if (rpcData?.success) {
+    return {
+      success: true,
+      balanceAfter: rpcData.balance_after ?? -1
+    };
+  }
+
+  // 2) fallback (safe but not atomic)
+  const { data: profile } = await admin
     .from("profiles")
-    .select("credits, plan_id")
+    .select("credits, plan_id, credits_used_this_month")
     .eq("id", userId)
     .single();
 
-  if (fetchErr || !profile) {
-    return { success: false, balanceAfter: 0, error: "Failed to fetch balance." };
+  if (!profile) {
+    return { success: false, balanceAfter: 0, error: "Profile not found" };
   }
 
-  const current = (profile as Record<string, unknown>).credits as number;
-  const plan    = (profile as Record<string, unknown>).plan_id as string;
+  const { credits, plan_id, credits_used_this_month } = profile;
 
-  // Unlimited credits for enterprise
-  if (current === -1 || plan === "enterprise") {
+  if (credits === -1 || plan_id === "enterprise") {
     return { success: true, balanceAfter: -1 };
   }
 
-  if (current < cost) {
-    return { success: false, balanceAfter: current, error: "Insufficient credits." };
+  if (credits < cost) {
+    return { success: false, balanceAfter: credits, error: "Insufficient credits" };
   }
 
-  const newBalance = current - cost;
+  const newBal = credits - cost;
 
-  // Atomic update
   const { error: updateErr } = await admin
     .from("profiles")
-    .update({ credits: newBalance, updated_at: new Date().toISOString() })
+    .update({
+      credits: newBal,
+      credits_used_this_month: (credits_used_this_month ?? 0) + cost,
+      updated_at: new Date().toISOString()
+    })
     .eq("id", userId);
 
   if (updateErr) {
-    return { success: false, balanceAfter: current, error: "Failed to deduct credits." };
+    return { success: false, balanceAfter: credits, error: "Failed to deduct credits" };
   }
 
-  // Log transaction
   await admin.from("credit_transactions").insert({
-    user_id:       userId,
-    amount:        -cost,
-    balance_after: newBalance,
-    action:        "usage",
-    description:   `${feature.replace(/_/g, " ")} — ${cost} credit${cost !== 1 ? "s" : ""}`,
-    created_at:    new Date().toISOString(),
+    user_id: userId,
+    amount: -cost,
+    balance_after: newBal,
+    action: feature,
+    description: `${feature} — ${cost} credit${cost !== 1 ? "s" : ""}`,
+    created_at: new Date().toISOString()
   });
 
-  return { success: true, balanceAfter: newBalance };
+  return { success: true, balanceAfter: newBal };
 }
 
-// ─── AI dispatcher ────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// AI DISPATCHER — OpenAI / Anthropic / Gemini
+// ─────────────────────────────────────────────────────────────────────────────
 
-const MODEL_PROVIDER_MAP: Record<string, "openai" | "anthropic" | "gemini"> = {
-  "gpt-4o":                        "openai",
-  "gpt-4o-mini":                   "openai",
-  "gpt-4-turbo":                   "openai",
-  "claude-3-5-sonnet-20241022":    "anthropic",
-  "claude-3-haiku-20240307":       "anthropic",
-  "gemini-2.0-flash":              "gemini",
-  "gemini-1.5-pro":                "gemini",
+const PROVIDER_MAP: Record<string, "openai" | "anthropic" | "gemini"> = {
+  "gpt-4o":                     "openai",
+  "gpt-4o-mini":                "openai",
+  "gpt-4-turbo":                "openai",
+  "claude-3-5-sonnet-20241022": "anthropic",
+  "claude-3-haiku-20240307":    "anthropic",
+  "gemini-2.0-flash":           "gemini",
+  "gemini-1.5-pro":             "gemini"
 };
 
-/**
- * Send a completion request to the correct provider based on model ID.
- */
 export async function callAI(req: AICompletionRequest): Promise<AICompletionResponse> {
-  const start    = Date.now();
-  const provider = MODEL_PROVIDER_MAP[req.model] ?? "openai";
+  const start = Date.now();
+  const provider = PROVIDER_MAP[req.model];
 
   if (provider === "openai")    return callOpenAI(req, start);
   if (provider === "anthropic") return callAnthropic(req, start);
   if (provider === "gemini")    return callGemini(req, start);
 
-  throw new Error(`Unknown provider for model: ${req.model}`);
+  throw new Error(`Unknown model provider for ${req.model}`);
 }
 
 const AI_TIMEOUT_MS = 50_000;
 
+// ───── OpenAI ───────────────────────────────────────────────────────────────
+
 async function callOpenAI(req: AICompletionRequest, start: number): Promise<AICompletionResponse> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), AI_TIMEOUT_MS);
+
   let res: Response;
   try {
     res = await fetch("https://api.openai.com/v1/chat/completions", {
-      method:  "POST",
+      method: "POST",
+      signal: ctrl.signal,
       headers: {
-        "Content-Type":  "application/json",
-        "Authorization": `Bearer ${ENV.OPENAI_API_KEY}`,
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${ENV.OPENAI_API_KEY}`
       },
-      signal: controller.signal,
       body: JSON.stringify({
-        model:       req.model,
-        messages:    req.messages,
-        max_tokens:  req.maxTokens  ?? 1024,
+        model: req.model,
+        messages: req.messages,
+        max_tokens: req.maxTokens ?? 1024,
         temperature: req.temperature ?? 0.7,
-      }),
+        stream: req.stream ?? false
+      })
     });
   } finally {
     clearTimeout(timer);
   }
 
   if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(`OpenAI error ${res.status}: ${(err as Record<string, unknown>).error?.["message"] ?? res.statusText}`);
+    throw new Error(`OpenAI error ${res.status}: ${await res.text()}`);
   }
 
-  const json      = await res.json() as Record<string, unknown>;
-  const choice    = (json.choices as Record<string, unknown>[])[0];
-  const usage     = json.usage as Record<string, number>;
-  const text      = (choice.message as Record<string, unknown>).content as string ?? "";
+  const json = await res.json();
+  const choice = json.choices?.[0];
+  const text = choice?.message?.content ?? "";
+  const usage = json.usage ?? {};
 
   return {
     text,
-    model:       req.model,
-    tokensIn:    usage?.prompt_tokens     ?? 0,
-    tokensOut:   usage?.completion_tokens ?? 0,
-    totalTokens: usage?.total_tokens      ?? 0,
-    latencyMs:   Date.now() - start,
+    model: req.model,
+    tokensIn: usage.prompt_tokens ?? 0,
+    tokensOut: usage.completion_tokens ?? 0,
+    totalTokens: usage.total_tokens ?? 0,
+    latencyMs: Date.now() - start
   };
 }
 
-async function callAnthropic(req: AICompletionRequest, start: number): Promise<AICompletionResponse> {
-  const systemMsg = req.messages.find((m) => m.role === "system")?.content ?? "";
-  const userMsgs  = req.messages.filter((m) => m.role !== "system");
+// ───── Anthropic ─────────────────────────────────────────────────────────────
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+async function callAnthropic(req: AICompletionRequest, start: number): Promise<AICompletionResponse> {
+  const system = req.messages.find(m => m.role === "system")?.content ?? "";
+  const userMessages = req.messages.filter(m => m.role !== "system");
+
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), AI_TIMEOUT_MS);
+
   let res: Response;
   try {
     res = await fetch("https://api.anthropic.com/v1/messages", {
-      method:  "POST",
+      method: "POST",
+      signal: ctrl.signal,
       headers: {
-        "Content-Type":      "application/json",
-        "x-api-key":         ENV.ANTHROPIC_API_KEY,
-        "anthropic-version": "2023-06-01",
+        "Content-Type": "application/json",
+        "x-api-key": ENV.ANTHROPIC_API_KEY,
+        "anthropic-version": "2023-06-01"
       },
-      signal: controller.signal,
       body: JSON.stringify({
-        model:      req.model,
-        max_tokens: req.maxTokens  ?? 1024,
-        system:     systemMsg,
-        messages:   userMsgs,
-      }),
+        model: req.model,
+        max_tokens: req.maxTokens ?? 1024,
+        system,
+        messages: userMessages
+      })
     });
   } finally {
     clearTimeout(timer);
   }
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(`Anthropic error ${res.status}: ${(err as Record<string, unknown>).error?.["message"] ?? res.statusText}`);
-  }
+  if (!res.ok) throw new Error(`Anthropic error ${res.status}: ${await res.text()}`);
 
-  const json    = await res.json() as Record<string, unknown>;
-  const content = (json.content as Record<string, unknown>[])[0];
-  const usage   = json.usage as Record<string, number>;
-  const text    = content?.text as string ?? "";
+  const json = await res.json();
+  const content = json.content?.[0]?.text ?? "";
+  const usage = json.usage ?? {};
 
   return {
-    text,
-    model:       req.model,
-    tokensIn:    usage?.input_tokens  ?? 0,
-    tokensOut:   usage?.output_tokens ?? 0,
-    totalTokens: (usage?.input_tokens ?? 0) + (usage?.output_tokens ?? 0),
-    latencyMs:   Date.now() - start,
+    text: content,
+    model: req.model,
+    tokensIn: usage.input_tokens ?? 0,
+    tokensOut: usage.output_tokens ?? 0,
+    totalTokens: (usage.input_tokens ?? 0) + (usage.output_tokens ?? 0),
+    latencyMs: Date.now() - start
   };
 }
 
+// ───── Gemini ───────────────────────────────────────────────────────────────
+
 async function callGemini(req: AICompletionRequest, start: number): Promise<AICompletionResponse> {
-  const model   = req.model.replace("gemini-", "");
-  const url     = `https://generativelanguage.googleapis.com/v1beta/models/${req.model}:generateContent?key=${ENV.GEMINI_API_KEY}`;
-
-  const parts   = req.messages
-    .filter((m) => m.role !== "system")
-    .map((m) => ({ text: m.content }));
-
   const systemParts = req.messages
-    .filter((m) => m.role === "system")
-    .map((m) => ({ text: m.content }));
+    .filter(m => m.role === "system")
+    .map(m => ({ text: m.content }));
+
+  const userParts = req.messages
+    .filter(m => m.role !== "system")
+    .map(m => ({ text: m.content }));
 
   const body: Record<string, unknown> = {
-    contents:         [{ role: "user", parts }],
+    contents: [{ role: "user", parts: userParts }],
     generationConfig: {
-      maxOutputTokens: req.maxTokens  ?? 1024,
-      temperature:     req.temperature ?? 0.7,
-    },
+      maxOutputTokens: req.maxTokens ?? 1024,
+      temperature: req.temperature ?? 0.7
+    }
   };
 
   if (systemParts.length > 0) {
     body.systemInstruction = { parts: systemParts };
   }
 
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), AI_TIMEOUT_MS);
+
   let res: Response;
   try {
-    res = await fetch(url, {
-      method:  "POST",
-      headers: { "Content-Type": "application/json" },
-      signal:  controller.signal,
-      body:    JSON.stringify(body),
-    });
+    res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${req.model}:generateContent?key=${ENV.GEMINI_API_KEY}`,
+      {
+        method: "POST",
+        signal: ctrl.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body)
+      }
+    );
   } finally {
     clearTimeout(timer);
   }
 
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(`Gemini error ${res.status}: ${JSON.stringify(err)}`);
-  }
+  if (!res.ok) throw new Error(`Gemini error ${res.status}: ${await res.text()}`);
 
-  const json      = await res.json() as Record<string, unknown>;
-  const candidate = (json.candidates as Record<string, unknown>[])?.[0];
-  const text      = ((candidate?.content as Record<string, unknown>)?.parts as Record<string, unknown>[])?.[0]?.text as string ?? "";
-  const usage     = json.usageMetadata as Record<string, number> ?? {};
+  const json = await res.json();
+  const part = json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  const usage = json.usageMetadata ?? {};
 
   return {
-    text,
-    model:       req.model,
-    tokensIn:    usage.promptTokenCount     ?? 0,
-    tokensOut:   usage.candidatesTokenCount ?? 0,
-    totalTokens: usage.totalTokenCount      ?? 0,
-    latencyMs:   Date.now() - start,
+    text: part,
+    model: req.model,
+    tokensIn: usage.promptTokenCount ?? 0,
+    tokensOut: usage.candidatesTokenCount ?? 0,
+    totalTokens: usage.totalTokenCount ?? 0,
+    latencyMs: Date.now() - start
   };
 }
 
-// ─── Logging ──────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// LOGGING
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function log(
-  fn:      string,
-  level:   "info" | "warn" | "error",
+  fn: string,
+  level: "info" | "warn" | "error",
   message: string,
-  data?:   unknown
+  data?: unknown
 ): void {
   const entry = {
-    fn, level, message, ts: new Date().toISOString(),
-    ...(data ? { data } : {}),
+    fn,
+    level,
+    message,
+    data,
+    ts: new Date().toISOString()
   };
+
   if (level === "error") console.error(JSON.stringify(entry));
   else if (level === "warn") console.warn(JSON.stringify(entry));
   else console.log(JSON.stringify(entry));
 }
 
-// ─── Rate limit (simple in-memory per cold start) ─────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// SIMPLE RATE LIMITING (PER INSTANCE)
+// ─────────────────────────────────────────────────────────────────────────────
 
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
+const RL = new Map<string, { count: number; resetAt: number }>();
 
-export function checkRateLimit(
-  key:          string,
-  maxPerMinute: number
-): boolean {
-  const now   = Date.now();
-  const entry = rateLimitMap.get(key);
+export function checkRateLimit(key: string, perMinute: number): boolean {
+  const now = Date.now();
+  const row = RL.get(key);
 
-  if (!entry || now > entry.resetAt) {
-    rateLimitMap.set(key, { count: 1, resetAt: now + 60_000 });
+  if (!row || now > row.resetAt) {
+    RL.set(key, { count: 1, resetAt: now + 60_000 });
     return true;
   }
 
-  if (entry.count >= maxPerMinute) return false;
-  entry.count++;
+  if (row.count >= perMinute) return false;
+
+  row.count++;
   return true;
 }
 
-// ─── Text helpers ─────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// TEXT UTILITIES
+// ─────────────────────────────────────────────────────────────────────────────
 
-export function trimToMaxTokens(text: string, maxChars = 12_000): string {
-  if (text.length <= maxChars) return text;
-  return text.slice(0, maxChars) + "\n\n[truncated for context window]";
+export function trimToMaxTokens(text: string, max = 12_000): string {
+  if (text.length <= max) return text;
+  return text.slice(0, max) + "\n\n[truncated]";
 }
 
 export function buildSystemPrompt(parts: string[]): string {
