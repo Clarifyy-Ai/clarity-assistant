@@ -1,141 +1,238 @@
+// analyze-test-performance/index.ts — FIXED VERSION
+
 import { handleCors, corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
 import { geminiGenerate } from "../_shared/gemini.ts";
 
-// ─────────────────────────────────────────────────────────────────
-// analyze-test-performance
-// Verifies JWT, then generates AI analysis for a completed test.
-// Costs 3 credits. Saves to test_analyses.ai_analysis_text.
-// ─────────────────────────────────────────────────────────────────
-
-const SYSTEM_PROMPT = `You are an expert exam coach specializing in competitive exams
-like JEE, NEET, UPSC, and SSC. Analyze the student's test performance and provide
-a structured, actionable report. Be specific, encouraging, and practical.`;
+const SYSTEM_PROMPT = `
+You are an expert exam coach for competitive exams like JEE, NEET, UPSC, SSC.
+Provide structured, actionable analysis. Never output markdown or anything
+outside the required format. Always return high‑quality, structured paragraphs.
+`;
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
   try {
-    // ── Verify JWT ────────────────────────────────────────────────
-    const authHeader = req.headers.get("Authorization");
-    if (!authHeader?.startsWith("Bearer ")) {
+    /* ----------------------------------
+       AUTHENTICATION (SAFEST VERSION)
+    ---------------------------------- */
+
+    const authHeader =
+      req.headers.get("authorization") ??
+      req.headers.get("Authorization") ??
+      "";
+
+    if (!authHeader.toLowerCase().startsWith("bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+        headers: corsHeaders,
       });
     }
-    const token = authHeader.replace("Bearer ", "");
+
+    const token = authHeader.replace(/^bearer\s+/i, "");
     const db = createServiceClient();
 
-    const { data: { user }, error: authErr } = await db.auth.getUser(token);
+    const {
+      data: { user },
+      error: authErr,
+    } = await db.auth.getUser(token);
+
     if (authErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 401,
+        headers: corsHeaders,
       });
     }
+
     const userId = user.id;
 
-    const { test_id } = await req.json();
+    /* ----------------------------------
+       VALIDATE BODY
+    ---------------------------------- */
+
+    const body = await req.json();
+    const { test_id } = body ?? {};
+
     if (!test_id) {
       return new Response(JSON.stringify({ error: "Missing test_id" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
+        status: 400,
+        headers: corsHeaders,
       });
     }
 
-    // ── Fetch analysis — ownership enforced ───────────────────────
+    /* ----------------------------------
+       OWNERSHIP CHECK: test_analyses
+    ---------------------------------- */
+
     const { data: analysis, error: aErr } = await db
       .from("test_analyses")
       .select("*")
       .eq("test_id", test_id)
-      .eq("user_id", userId)     // ownership check
+      .eq("user_id", userId)
       .single();
 
     if (aErr || !analysis) {
       return new Response(
-        JSON.stringify({ error: "Test analysis not found. Submit the test first." }),
-        { status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          error: "Test analysis not found. Ensure the test is submitted.",
+        }),
+        { status: 404, headers: corsHeaders }
       );
     }
 
-    // If already has AI analysis, return cached
+    /* ----------------------------------
+       RETURN CACHED ANALYSIS IF EXISTS
+    ---------------------------------- */
+
     if (analysis.ai_analysis_text) {
       return new Response(
-        JSON.stringify({ success: true, analysis: analysis.ai_analysis_text, cached: true }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        JSON.stringify({
+          success: true,
+          cached: true,
+          analysis: analysis.ai_analysis_text,
+        }),
+        { headers: corsHeaders }
       );
     }
 
-    // ── Deduct 3 credits ──────────────────────────────────────────
-    const credited = await deductCredits(db, userId, 3, "AI test analysis");
-    if (!credited) {
-      return new Response(
-        JSON.stringify({ error: "Insufficient credits. AI analysis costs 3 credits." }),
-        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-      );
-    }
+    /* ----------------------------------
+       FETCH TEST CONFIG & VALIDATE
+    ---------------------------------- */
 
-    // ── Fetch test config ─────────────────────────────────────────
-    const { data: test } = await db
+    const { data: test, error: tErr } = await db
       .from("mock_tests")
       .select("test_name, config, submitted_at")
       .eq("id", test_id)
       .eq("user_id", userId)
       .single();
 
-    const prompt = `Analyze this student's mock test performance and write a comprehensive 600-word coaching report.
+    if (tErr || !test) {
+      return new Response(JSON.stringify({ error: "Test not found" }), {
+        status: 404,
+        headers: corsHeaders,
+      });
+    }
 
-TEST: ${test?.test_name ?? "Mock Test"}
-Score: ${analysis.total_score} / ${analysis.max_score} (${analysis.accuracy}% accuracy)
+    if (!test.submitted_at) {
+      return new Response(
+        JSON.stringify({ error: "Test must be submitted before analysis." }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+
+    /* ----------------------------------
+       SANITIZE ANALYSIS OBJECT
+    ---------------------------------- */
+
+    const safe = (x: any, lim = 300) =>
+      typeof x === "string" ? x.slice(0, lim) : JSON.stringify(x).slice(0, lim);
+
+    const subjectBreakdown = JSON.stringify(
+      analysis.subject_breakdown ?? {},
+      null,
+      2
+    ).slice(0, 2000);
+
+    const weakTopics = (analysis.weak_topics ?? []).slice(0, 20);
+    const strongTopics = (analysis.strong_topics ?? []).slice(0, 20);
+
+    /* ----------------------------------
+       BUILD PROMPT SAFELY
+    ---------------------------------- */
+
+    const prompt = `
+Analyze the student's test performance. Write a structured,
+actionable 600-word coaching report.
+
+TEST: ${safe(test.test_name, 200)}
+Score: ${analysis.total_score} / ${analysis.max_score} (${analysis.accuracy}%)
 Attempt Rate: ${analysis.attempt_percentage}%
-Predicted Percentile: ~${analysis.predicted_percentile}th
+Predicted Percentile: ${analysis.predicted_percentile}
 
 SUBJECT BREAKDOWN:
-${JSON.stringify(analysis.subject_breakdown, null, 2)}
+${subjectBreakdown}
 
-WEAK TOPICS (accuracy < 50%): ${(analysis.weak_topics ?? []).join(", ") || "None identified"}
-STRONG TOPICS (accuracy > 80%): ${(analysis.strong_topics ?? []).join(", ") || "None identified"}
+WEAK TOPICS: ${weakTopics.join(", ") || "None"}
+STRONG TOPICS: ${strongTopics.join(", ") || "None"}
 
 TIME ANALYSIS:
-Average time per question: ${analysis.time_analysis?.avg_seconds ?? 0} seconds
-Time traps (unusually slow questions): ${(analysis.time_analysis?.time_traps ?? []).length}
+Average seconds/question: ${analysis.time_analysis?.avg_seconds ?? 0}
+Time Traps: ${(analysis.time_analysis?.time_traps ?? []).length}
 
-Write a structured report with EXACTLY these 5 sections using these exact headers:
+Write EXACTLY these 5 sections (no markdown headers):
 
-## Strengths
-(What the student did well — be specific about topics and subjects)
+Strengths:
+Weak Areas:
+Time Management:
+7-Day Study Plan:
+Exam Strategy:
 
-## Weak Areas
-(Specific topics needing improvement, with why they matter for the exam)
+Use topic and subject names exactly as provided.
+`.trim();
 
-## Time Management
-(Analysis of pacing, time traps, and recommended time per question)
+    /* ----------------------------------
+       CREDIT DEDUCTION (SAFE)
+    ---------------------------------- */
 
-## 7-Day Study Plan
-(Day-by-day specific actions to address weak areas before the next test)
+    const creditResult = await deductCredits(userId, "ai_test_analysis", 3);
+    if (!creditResult.success) {
+      return new Response(
+        JSON.stringify({
+          error: "Insufficient credits. AI analysis costs 3 credits.",
+        }),
+        { status: 402, headers: corsHeaders }
+      );
+    }
 
-## Exam Strategy
-(Tactical advice for the next attempt — question order, elimination strategies, marking scheme tips)
+    /* ----------------------------------
+       CALL GEMINI (WITH RETRY)
+    ---------------------------------- */
 
-Be specific, encouraging, and actionable. Use the actual topic and subject names from the data.`;
+    async function runAI() {
+      return geminiGenerate(prompt, SYSTEM_PROMPT, 0.7, 2048).catch(() => null);
+    }
 
-    const analysisText = await geminiGenerate(prompt, SYSTEM_PROMPT, 0.7, 2048);
+    let analysisText = await runAI();
+    if (!analysisText) analysisText = await runAI(); // retry once
 
-    // ── Save to test_analyses ─────────────────────────────────────
+    if (!analysisText) {
+      // refund credits if both attempts failed
+      await deductCredits(userId, "refund_ai_test_analysis", -3);
+      return new Response(JSON.stringify({ error: "AI model failure" }), {
+        status: 500,
+        headers: corsHeaders,
+      });
+    }
+
+    /* ----------------------------------
+       SAVE ANALYSIS
+    ---------------------------------- */
+
     await db
       .from("test_analyses")
       .update({ ai_analysis_text: analysisText })
       .eq("test_id", test_id)
       .eq("user_id", userId);
 
+    /* ----------------------------------
+       RETURN SUCCESS
+    ---------------------------------- */
+
     return new Response(
-      JSON.stringify({ success: true, analysis: analysisText, cached: false }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      JSON.stringify({
+        success: true,
+        cached: false,
+        analysis: analysisText,
+      }),
+      { headers: corsHeaders }
     );
   } catch (err) {
     console.error("[analyze-test-performance] error:", err);
     return new Response(
       JSON.stringify({ error: "Internal error", detail: String(err) }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: corsHeaders }
     );
   }
 });
