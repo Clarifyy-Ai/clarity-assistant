@@ -456,9 +456,7 @@ const routes = [
 // ★ FIX: createHashRouter for Electron (file://), createBrowserRouter for web
 const router = IS_ELECTRON
   ? createHashRouter(routes)
-  : createBrowserRouter(routes, {
-      future: { v7_startTransition: true } as any,
-    });
+  : createBrowserRouter(routes);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Root App
