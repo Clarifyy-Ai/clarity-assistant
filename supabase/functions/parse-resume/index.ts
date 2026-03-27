@@ -1,49 +1,64 @@
-// parse-resume/index.ts — HYBRID VERSION (Gemini → Claude → OCR)
+// parse-resume/index.ts — FIXED, SECURE, PRODUCTION-READY HYBRID VERSION
 
 import { handleCors, corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { parseJSON } from "../_shared/gemini.ts";
+import { requireAuth } from "../_shared/utils.ts";
 
 /* -------------------------------------------------------------------------- */
-/*                                 CONSTANTS                                  */
+/*                                CONSTANTS                                   */
 /* -------------------------------------------------------------------------- */
 
-const GEMINI_API_KEY   = Deno.env.get("GEMINI_API_KEY") ?? "";
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
-const OCR_API_KEY       = Deno.env.get("OCR_API_KEY") ?? "";
+const OCR_API_KEY = Deno.env.get("OCR_API_KEY") ?? "";
 
-const GEMINI_BASE      = "https://generativelanguage.googleapis.com/v1beta";
-const GEMINI_MODEL     = "gemini-2.0-flash";
-const CLAUDE_MODEL     = "claude-3-5-sonnet-20241022";
+const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
+const GEMINI_MODEL = "gemini-2.0-flash";
+const CLAUDE_MODEL = "claude-3-5-sonnet-20241022";
 
-const MAX_FILE_BYTES   = 10 * 1024 * 1024;
+const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 /* -------------------------------------------------------------------------- */
 /*                              UTILITY HELPERS                                */
 /* -------------------------------------------------------------------------- */
 
+// Sanitize any AI-generated text to reduce JSON parse failures.
+function sanitizeAI(resp: string): string {
+  return resp
+    .replace(/```json/gi, "")
+    .replace(/```/g, "")
+    .replace(/^[^\{\[]+/, "")
+    .trim();
+}
+
 function safeBase64(bytes: Uint8Array): string {
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++) binary += String.fromCharCode(bytes[i]);
-  return btoa(binary);
+  let bin = "";
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
 }
 
-function assertSchema(obj: any): boolean {
+// Enhanced schema validator
+function isValidResumeSchema(obj: any): boolean {
   if (!obj || typeof obj !== "object") return false;
-  if (!Array.isArray(obj.skills)) return false;
-  if (!Array.isArray(obj.experience)) return false;
-  if (!Array.isArray(obj.projects)) return false;
-  if (!Array.isArray(obj.education)) return false;
-  return true;
+
+  return (
+    "name" in obj &&
+    "summary" in obj &&
+    Array.isArray(obj.skills) &&
+    Array.isArray(obj.experience) &&
+    Array.isArray(obj.projects) &&
+    Array.isArray(obj.education)
+  );
 }
 
 /* -------------------------------------------------------------------------- */
-/*                           GEMINI CALL (PRIMARY)                             */
+/*                         GEMINI PRIMARY EXTRACTOR                            */
 /* -------------------------------------------------------------------------- */
 
-async function callGemini(parts: any[]) {
+async function callGemini(contents: any[]) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 50_000);
+  const timeout = setTimeout(() => controller.abort(), 45_000);
 
   try {
     const res = await fetch(
@@ -53,15 +68,26 @@ async function callGemini(parts: any[]) {
         headers: { "Content-Type": "application/json" },
         signal: controller.signal,
         body: JSON.stringify({
-          contents: [{ role: "user", parts }],
+          contents: [{ role: "user", parts: contents }],
+          systemInstruction: {
+            parts: [
+              {
+                text: `
+Extract structured resume JSON ONLY.
+NO markdown. NO commentary.
+Follow schema EXACTLY.
+`,
+              },
+            ],
+          },
           generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
         }),
       }
     );
 
     clearTimeout(timeout);
-
     if (!res.ok) return null;
+
     const json = await res.json();
     return json?.candidates?.[0]?.content?.parts?.[0]?.text ?? null;
   } catch {
@@ -71,12 +97,12 @@ async function callGemini(parts: any[]) {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                             CLAUDE CALL (FALLBACK)                           */
+/*                             CLAUDE FALLBACK                                 */
 /* -------------------------------------------------------------------------- */
 
 async function callClaude(pdfBase64: string) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 50_000);
+  const timeout = setTimeout(() => controller.abort(), 45_000);
 
   try {
     const res = await fetch("https://api.anthropic.com/v1/messages", {
@@ -90,10 +116,7 @@ async function callClaude(pdfBase64: string) {
       body: JSON.stringify({
         model: CLAUDE_MODEL,
         max_tokens: 4096,
-        system: `
-Extract structured resume JSON ONLY (no markdown).  
-Follow schema strictly.  
-`,
+        system: `Extract ONLY structured resume JSON matching the required schema.`,
         messages: [
           {
             role: "user",
@@ -106,7 +129,7 @@ Follow schema strictly.
                   data: pdfBase64,
                 },
               },
-              { type: "text", text: "Extract resume JSON only." },
+              { type: "text", text: "Return pure JSON ONLY." },
             ],
           },
         ],
@@ -117,8 +140,8 @@ Follow schema strictly.
     if (!res.ok) return null;
 
     const json = await res.json();
-    const blk = json?.content?.find((x: any) => x.type === "text");
-    return blk?.text ?? null;
+    const textBlock = json?.content?.find((x: any) => x.type === "text");
+    return sanitizeAI(textBlock?.text ?? "");
   } catch {
     clearTimeout(timeout);
     return null;
@@ -126,8 +149,15 @@ Follow schema strictly.
 }
 
 /* -------------------------------------------------------------------------- */
-/*                               OCR FALLBACK                                   */
+/*                                OCR FALLBACK                                 */
 /* -------------------------------------------------------------------------- */
+
+function cleanOCR(text: string): string {
+  return text
+    .replace(/[^\x20-\x7E\n]/g, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
 
 async function ocrExtract(pdfBase64: string): Promise<string | null> {
   if (!OCR_API_KEY) return null;
@@ -145,15 +175,16 @@ async function ocrExtract(pdfBase64: string): Promise<string | null> {
     });
 
     if (!res.ok) return null;
+
     const json = await res.json();
-    return json?.ParsedResults?.[0]?.ParsedText ?? null;
+    return cleanOCR(json?.ParsedResults?.[0]?.ParsedText ?? "");
   } catch {
     return null;
   }
 }
 
 /* -------------------------------------------------------------------------- */
-/*                                    SERVE                                    */
+/*                                MAIN HANDLER                                 */
 /* -------------------------------------------------------------------------- */
 
 Deno.serve(async (req) => {
@@ -163,62 +194,90 @@ Deno.serve(async (req) => {
   const db = createServiceClient();
 
   try {
-    /* ------------------------ Load body ------------------------ */
+    /* --------------------------------------------------------
+       AUTHENTICATE USER — FIXED (THIS WAS MISSING)
+    -------------------------------------------------------- */
+    const { userId } = await requireAuth(req);
+
+    /* --------------------------------------------------------
+       PARSE BODY
+    -------------------------------------------------------- */
     const { resume_id, version_id, file_url } = await req.json();
 
     if (!resume_id || !version_id || !file_url) {
       return new Response(
         JSON.stringify({ error: "Missing resume_id, version_id, file_url" }),
-        { status: 400, headers: { ...corsHeaders } }
+        { status: 400, headers: corsHeaders }
       );
     }
 
-    /* ------------------------ Ownership ------------------------ */
+    /* --------------------------------------------------------
+       VERIFY RESUME BELONGS TO USER — FIXED
+    -------------------------------------------------------- */
+    const { data: resumeRow } = await db
+      .from("resumes")
+      .select("id, user_id")
+      .eq("id", resume_id)
+      .single();
+
+    if (!resumeRow || resumeRow.user_id !== userId) {
+      return new Response(
+        JSON.stringify({ error: "Resume not found or not yours." }),
+        { status: 403, headers: corsHeaders }
+      );
+    }
+
+    /* --------------------------------------------------------
+       VERIFY VERSION BELONGS TO THE SAME RESUME
+    -------------------------------------------------------- */
     const { data: versionRow } = await db
       .from("resume_versions")
       .select("id, resume_id")
       .eq("id", version_id)
-      .eq("resume_id", resume_id)
       .single();
 
-    if (!versionRow) {
+    if (!versionRow || versionRow.resume_id !== resume_id) {
       return new Response(
-        JSON.stringify({ error: "Version not found or denied" }),
-        { status: 403, headers: { ...corsHeaders } }
+        JSON.stringify({ error: "Version not found or not part of resume." }),
+        { status: 403, headers: corsHeaders }
       );
     }
 
-    /* ------------------------ Secure fetch ------------------------ */
+    /* --------------------------------------------------------
+       PROTECT AGAINST SSRF — VALIDATE file_url
+    -------------------------------------------------------- */
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
     const allowedHost = new URL(supabaseUrl).hostname;
 
-    let parsed: URL;
+    let parsedUrl: URL;
     try {
-      parsed = new URL(file_url);
+      parsedUrl = new URL(file_url);
     } catch {
       return new Response(JSON.stringify({ error: "Invalid file_url" }), {
         status: 400,
-        headers: { ...corsHeaders },
+        headers: corsHeaders,
       });
     }
 
-    if (parsed.hostname !== allowedHost) {
+    if (parsedUrl.hostname !== allowedHost)
       return new Response(
-        JSON.stringify({ error: "file_url must be from this Supabase project only" }),
-        { status: 400, headers: { ...corsHeaders } }
+        JSON.stringify({ error: "file_url must belong to this project" }),
+        { status: 400, headers: corsHeaders }
       );
-    }
 
-    if (!parsed.pathname.startsWith("/storage/v1/object/public/resumes/")) {
+    if (!parsedUrl.pathname.includes(`/public/resumes/${userId}`))
       return new Response(
-        JSON.stringify({ error: "file_url must be inside the resumes bucket" }),
-        { status: 400, headers: { ...corsHeaders } }
+        JSON.stringify({
+          error: "file_url must be inside the user's resumes folder",
+        }),
+        { status: 400, headers: corsHeaders }
       );
-    }
 
-    /* ------------------------ Download file ------------------------ */
+    /* --------------------------------------------------------
+       DOWNLOAD FILE
+    -------------------------------------------------------- */
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 30000);
+    const timeout = setTimeout(() => controller.abort(), 25_000);
 
     let fileBytes: Uint8Array;
 
@@ -227,47 +286,51 @@ Deno.serve(async (req) => {
       clearTimeout(timeout);
 
       if (!res.ok) throw new Error("Fetch failed");
-
       const buf = await res.arrayBuffer();
+
       if (!buf.byteLength) throw new Error("Empty file");
       if (buf.byteLength > MAX_FILE_BYTES) throw new Error("Too large");
 
       fileBytes = new Uint8Array(buf);
-    } catch {
+    } catch (err) {
       clearTimeout(timeout);
-      return new Response(
-        JSON.stringify({ error: "Failed to fetch file" }),
-        { status: 502, headers: { ...corsHeaders } }
-      );
+      return new Response(JSON.stringify({ error: "Failed to fetch file" }), {
+        status: 502,
+        headers: corsHeaders,
+      });
     }
 
-    /* ------------------------ Set status ------------------------ */
-    await db.from("resume_versions").update({ parse_status: "processing" }).eq("id", version_id);
+    /* --------------------------------------------------------
+       UPDATE STATUS → processing
+    -------------------------------------------------------- */
+    await db
+      .from("resume_versions")
+      .update({ parse_status: "processing" })
+      .eq("id", version_id);
 
-    /* ------------------------ Build prompt ------------------------ */
     const base64 = safeBase64(fileBytes);
 
     const SCHEMA = `{
-  "name": string | null,
-  "summary": string | null,
-  "skills": string[],
-  "experience": [{"title": string, "company": string, "duration": string, "description": string}],
-  "projects": [{"name": string, "description": string, "tech_stack": string[]}],
-  "education": [{"degree": string, "institution": string, "year": string | null}],
-  "total_years_experience": number | null
+  "name": "",
+  "summary": "",
+  "skills": [],
+  "experience": [],
+  "projects": [],
+  "education": [],
+  "total_years_experience": null
 }`;
 
     const PROMPT = `
-Extract structured resume information.  
-Return ONLY JSON that matches this schema exactly:
+Extract structured resume information following this schema EXACTLY:
 
 ${SCHEMA}
 
-No markdown, no commentary.`.trim();
+Return ONLY valid JSON. No markdown, no extra text.
+`.trim();
 
-    /* ====================================================================== */
-    /*                     LAYER 1 — GEMINI (Primary)                         */
-    /* ====================================================================== */
+    /* ======================================================
+       LAYER 1: GEMINI (PRIMARY)
+    ====================================================== */
 
     const geminiRaw = await callGemini([
       { inline_data: { mime_type: "application/pdf", data: base64 } },
@@ -275,96 +338,113 @@ No markdown, no commentary.`.trim();
     ]);
 
     if (geminiRaw) {
-      const parsed = parseJSON(geminiRaw, null);
+      const parsed = parseJSON(sanitizeAI(geminiRaw), null);
 
-      if (parsed && assertSchema(parsed)) {
-        await db.from("resume_versions")
-          .update({ parsed_data: parsed, parse_status: "ready", parse_error: null })
+      if (parsed && isValidResumeSchema(parsed)) {
+        await db
+          .from("resume_versions")
+          .update({
+            parsed_data: parsed,
+            parse_status: "ready",
+            parse_error: null,
+          })
           .eq("id", version_id);
 
         return new Response(
           JSON.stringify({ success: true, source: "gemini", parsed }),
-          { headers: { ...corsHeaders } }
+          { headers: corsHeaders }
         );
       }
     }
 
-    /* ====================================================================== */
-    /*                     LAYER 2 — CLAUDE (Fallback)                        */
-    /* ====================================================================== */
+    /* ======================================================
+       LAYER 2: CLAUDE (Fallback)
+    ====================================================== */
 
     const claudeRaw = await callClaude(base64);
 
     if (claudeRaw) {
-      const parsed = parseJSON(claudeRaw, null);
-
-      if (parsed && assertSchema(parsed)) {
-        await db.from("resume_versions")
-          .update({ parsed_data: parsed, parse_status: "ready", parse_error: null })
+      const parsed = parseJSON(sanitizeAI(claudeRaw), null);
+      if (parsed && isValidResumeSchema(parsed)) {
+        await db
+          .from("resume_versions")
+          .update({
+            parsed_data: parsed,
+            parse_status: "ready",
+            parse_error: null,
+          })
           .eq("id", version_id);
 
         return new Response(
           JSON.stringify({ success: true, source: "claude", parsed }),
-          { headers: { ...corsHeaders } }
+          { headers: corsHeaders }
         );
       }
     }
 
-    /* ====================================================================== */
-    /*                     LAYER 3 — OCR (Final fallback)                     */
-    /* ====================================================================== */
+    /* ======================================================
+       LAYER 3: OCR + Gemini (Final fallback)
+    ====================================================== */
 
     const ocr = await ocrExtract(base64);
 
     if (ocr) {
       const prompt = `
-Extract resume information from this OCR text:
+Extract structured resume information from this OCR text:
 
 ${ocr}
 
-Return JSON matching this schema:
+Return JSON that matches EXACTLY this schema:
 
 ${SCHEMA}
-
-No explanation.`.trim();
+`.trim();
 
       const ocrRaw = await callGemini([{ text: prompt }]);
 
       if (ocrRaw) {
-        const parsed = parseJSON(ocrRaw, null);
+        const parsed = parseJSON(sanitizeAI(ocrRaw), null);
 
-        if (parsed && assertSchema(parsed)) {
-          await db.from("resume_versions")
-            .update({ parsed_data: parsed, parse_status: "ready", parse_error: null })
+        if (parsed && isValidResumeSchema(parsed)) {
+          await db
+            .from("resume_versions")
+            .update({
+              parsed_data: parsed,
+              parse_status: "ready",
+              parse_error: null,
+            })
             .eq("id", version_id);
 
           return new Response(
             JSON.stringify({ success: true, source: "ocr", parsed }),
-            { headers: { ...corsHeaders } }
+            { headers: corsHeaders }
           );
         }
       }
     }
 
-    /* ====================================================================== */
-    /*                           ALL METHODS FAILED                            */
-    /* ====================================================================== */
+    /* ======================================================
+       ALL METHODS FAILED
+    ====================================================== */
 
-    await db.from("resume_versions")
-      .update({ parse_status: "error", parse_error: "All extraction methods failed" })
+    await db
+      .from("resume_versions")
+      .update({
+        parse_status: "error",
+        parse_error: "All extraction methods failed",
+      })
       .eq("id", version_id);
 
     return new Response(
-      JSON.stringify({ error: "Resume parsing failed (Gemini → Claude → OCR all failed)" }),
-      { status: 500, headers: { ...corsHeaders } }
+      JSON.stringify({
+        error: "Resume parsing failed after all extraction attempts.",
+      }),
+      { status: 500, headers: corsHeaders }
     );
-
   } catch (err) {
-    console.error("parse-resume hybrid error:", err);
+    console.error("parse-resume error:", err);
     return new Response(
       JSON.stringify({ error: "Internal error", details: String(err) }),
-      { status: 500, headers: { ...corsHeaders } }
+      { status: 500, headers: corsHeaders }
     );
   }
 });
-``
