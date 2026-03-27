@@ -10,60 +10,10 @@ import {
 } from "../_shared/utils.ts";
 
 const CREDIT_COST = 5;
-const MAX_BASE64 = 15 * 1024 * 1024; // ~11MB base64 (~8.2MB pdf)
 
-// ---------------- TYPES --------------------
+// ---------------- UTILITIES ----------------
 
-interface ParsedQuestion {
-  question_text: string;
-  question_type: "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER" | "NUMERICAL" | "CODING";
-  options: { label: string; text: string }[] | null;
-  correct_answer: string;
-  explanation: string;
-  subject: string;
-  topic: string;
-  difficulty: "EASY" | "MEDIUM" | "HARD";
-  marks_positive: number;
-  marks_negative: number;
-  source_year: number | null;
-  exam_type: string | null;
-  latex_present: boolean;
-}
-
-const EXTRACTION_SYSTEM_PROMPT = `
-You are a question paper parser. Extract all questions and answers from the provided PDF document.
-
-Return ONLY a JSON array.
-
-Each object must contain EXACTLY:
-
-{
-  "question_text": string,
-  "question_type": "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER" | "NUMERICAL" | "CODING",
-  "options": [{"label":"A","text":""}, ...] | null,
-  "correct_answer": string,
-  "explanation": string,
-  "subject": string,
-  "topic": string,
-  "difficulty": "EASY" | "MEDIUM" | "HARD",
-  "marks_positive": number,
-  "marks_negative": number,
-  "source_year": number | null,
-  "exam_type": string | null,
-  "latex_present": boolean
-}
-
-Rules:
-- MCQ must have exactly 4 options A–D.
-- correct_answer must be A/B/C/D for MCQ.
-- explanation must always explain the answer.
-- If unclear or incomplete → skip.
-- No text outside JSON. No markdown. No code fences.
-`;
-
-// ---------------- HELPERS --------------------
-
-function toBase64(buf: ArrayBuffer) {
+function bufferToBase64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
   let bin = "";
   for (let i = 0; i < bytes.length; i += 8192) {
@@ -78,14 +28,14 @@ async function extractPdfBase64(req: Request): Promise<string | null> {
   if (ct.includes("multipart/form-data")) {
     const form = await req.formData();
     const file = form.get("pdf");
-    if (file instanceof File) return toBase64(await file.arrayBuffer());
+    if (file instanceof File) return bufferToBase64(await file.arrayBuffer());
     return null;
   }
 
   if (ct.includes("application/json") || ct === "") {
     try {
       const body = await req.json();
-      return typeof body?.pdf_base64 === "string" ? body.pdf_base64 : null;
+      return body?.pdf_base64 ?? null;
     } catch {
       return null;
     }
@@ -94,212 +44,293 @@ async function extractPdfBase64(req: Request): Promise<string | null> {
   return null;
 }
 
-// --- ATOMIC REFUND ---
-async function refundCredits(userId: string, amount: number, reason: string) {
+// ---------------- SUPABASE LOGGING (DEBUG ONLY) ---------------
+
+async function debugLogToDB(enabled: boolean, data: any) {
+  if (!enabled) return;
   try {
     const admin = getAdminClient();
-    const { error } = await admin.rpc("add_credits", {
-      p_user_id: userId,
-      p_amount: amount,
-      p_action: "refund",
-      p_description: `PDF parse refund: ${reason}`,
+    await admin.from("parser_logs").insert({
+      created_at: new Date().toISOString(),
+      payload: data,
     });
-    if (error) console.error("Refund RPC failed:", error);
-  } catch (err) {
-    console.error("Refund exception:", err);
+  } catch (_) {}
+}
+
+// ---------------- OCR CLEANUP ----------------
+
+function cleanOCRText(t: string): string {
+  return t
+    .replace(/[^\x20-\x7E\n]/g, "")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+// ---------------- OCR FALLBACK (OCR.Space) ----------------
+
+async function ocrExtract(pdfBase64: string): Promise<string | null> {
+  const key = Deno.env.get("OCR_API_KEY");
+  if (!key) return null;
+
+  try {
+    const res = await fetch("https://api.ocr.space/parse/image", {
+      method: "POST",
+      headers: { apikey: key },
+      body: new URLSearchParams({
+        base64Image: `data:application/pdf;base64,${pdfBase64}`,
+        language: "eng",
+        scale: "true",
+        OCREngine: "2",
+      }),
+    });
+
+    if (!res.ok) return null;
+
+    const json = await res.json();
+    return cleanOCRText(json?.ParsedResults?.[0]?.ParsedText ?? "");
+  } catch {
+    return null;
   }
 }
 
-// ------------------ MAIN ---------------------
+// ---------------- SUBJECT DETECTION ----------------
+
+function detectSubject(text: string): string {
+  const t = text.toLowerCase();
+
+  const subjects = [
+    { k: "physics", w: ["velocity", "force", "energy", "momentum"] },
+    { k: "chemistry", w: ["reaction", "compound", "molecule"] },
+    { k: "mathematics", w: ["integration", "derivative", "matrix"] },
+    { k: "biology", w: ["cell", "organism", "photosynthesis"] },
+    { k: "history", w: ["empire", "war", "king"] },
+    { k: "geography", w: ["river", "mountain", "climate"] },
+    { k: "economics", w: ["inflation", "gdp", "supply"] },
+    { k: "reasoning", w: ["pattern", "series", "logical"] },
+    { k: "english", w: ["grammar", "synonym", "antonym"] },
+  ];
+
+  for (const s of subjects) {
+    if (s.w.some(w => t.includes(w))) return s.k;
+  }
+
+  return "general";
+}
+
+// ---------------- TOPIC DETECTION ----------------
+
+function detectTopic(subject: string, text: string): string {
+  const t = text.toLowerCase();
+  const map: Record<string, any[]> = {
+    physics: [
+      { topic: "mechanics", words: ["force", "motion", "newton"] },
+      { topic: "electricity", words: ["voltage", "current", "charge"] },
+    ],
+    mathematics: [
+      { topic: "calculus", words: ["derivative", "integral"] },
+      { topic: "algebra", words: ["equation", "polynomial"] },
+    ],
+  };
+
+  const list = map[subject] || [];
+  for (const x of list) {
+    if (x.words.some((w) => t.includes(w))) return x.topic;
+  }
+  return "general";
+}
+
+// ---------------- DIFFICULTY ----------------
+
+function classifyDifficulty(text: string): "EASY" | "MEDIUM" | "HARD" {
+  const t = text.toLowerCase();
+  if (["define", "what is"].some(w => t.includes(w))) return "EASY";
+  if (["derive", "calculate", "prove"].some(w => t.includes(w))) return "HARD";
+  return "MEDIUM";
+}
+
+// ---------------- SMART MCQ ANSWER DETECTION ----------------
+
+function detectMCQAnswer(block: string): string {
+  const direct = block.match(/answer[:\s]+([A-D])/i);
+  if (direct) return direct[1].toUpperCase();
+
+  const number = block.match(/answer[:\s]+([1-4])/i);
+  if (number) return "ABCD"[parseInt(number[1]) - 1];
+
+  const option = block.match(/option\s*\(?([A-D])\)?/i);
+  if (option) return option[1].toUpperCase();
+
+  return "";
+}
+
+// ---------------- MANUAL PARSER ----------------
+
+function manualParse(text: string) {
+  const questions = [];
+  const blocks = text.split(/(?=\b\d+\.)/g);
+
+  for (const blk of blocks) {
+    const qMatch = blk.match(/^\d+\.\s*(.+?)(?=(A\.|$))/s);
+    if (!qMatch) continue;
+
+    const questionText = qMatch[1].trim();
+
+    const optRegex = /A\.\s*(.*?)\s*B\.\s*(.*?)\s*C\.\s*(.*?)\s*D\.\s*(.*?)(Answer|$)/s;
+    const optMatch = blk.match(optRegex);
+
+    let options = null;
+    if (optMatch) {
+      options = [
+        { label: "A", text: optMatch[1].trim() },
+        { label: "B", text: optMatch[2].trim() },
+        { label: "C", text: optMatch[3].trim() },
+        { label: "D", text: optMatch[4].trim() },
+      ];
+    }
+
+    const correct = detectMCQAnswer(blk);
+
+    const subject = detectSubject(questionText);
+    const topic = detectTopic(subject, questionText);
+
+    questions.push({
+      question_text: questionText,
+      question_type: options ? "MCQ" : "SHORT_ANSWER",
+      options,
+      correct_answer: correct,
+      explanation: "",
+      subject,
+      topic,
+      difficulty: classifyDifficulty(questionText),
+      marks_positive: 1,
+      marks_negative: 0,
+      source_year: null,
+      exam_type: null,
+      latex_present: /[=+\-*\/]/.test(questionText),
+    });
+  }
+
+  return questions;
+}
+
+// ---------------- AI FALLBACK ----------------
+
+const EXTRACTION_SYSTEM_PROMPT = `
+Extract all questions. Return ONLY a JSON array.
+No markdown. No comments. No explanation.
+`;
+
+async function callClaude(pdfBase64: string, apiKey: string) {
+  try {
+    const res = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-api-key": apiKey,
+        "anthropic-version": "2023-06-01",
+      },
+      body: JSON.stringify({
+        model: "claude-3-5-sonnet-20241022",
+        system: EXTRACTION_SYSTEM_PROMPT,
+        max_tokens: 8000,
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "document",
+                source: {
+                  type: "base64",
+                  media_type: "application/pdf",
+                  data: pdfBase64,
+                },
+              },
+              { type: "text", text: "Extract questions." },
+            ],
+          },
+        ],
+      }),
+    });
+
+    if (!res.ok) return null;
+
+    const json = await res.json();
+    const block = json?.content?.find((x: any) => x.type === "text");
+    return JSON.parse(block?.text ?? "[]");
+  } catch {
+    return null;
+  }
+}
+
+// ---------------- MAIN HANDLER ----------------
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS")
-    return new Response("ok", { headers: corsHeaders });
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  const debug = new URL(req.url).searchParams.get("debug") === "true";
 
   try {
     const auth = await requireAuth(req);
     const { userId, credits } = auth;
 
     const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!apiKey)
-      return errorResponse("AI service not configured.", "AI_NOT_CONFIGURED", 503);
+    if (!apiKey) return errorResponse("Claude API missing.", "AI_MISSING", 500);
 
-    const pdfB64 = await extractPdfBase64(req);
-    if (!pdfB64 || pdfB64.length < 100)
-      return errorResponse(
-        "No valid PDF received. Provide multipart/form-data 'pdf' or JSON 'pdf_base64'.",
-        "INVALID_PDF",
-        400
-      );
+    const pdfBase64 = await extractPdfBase64(req);
+    if (!pdfBase64) return errorResponse("No PDF uploaded.", "NO_PDF", 400);
 
-    if (pdfB64.length > MAX_BASE64)
-      return errorResponse("PDF too large. Max size ~10MB.", "FILE_TOO_LARGE", 413);
+    // 1) MANUAL TEXT PARSE (light extraction)
+    const text = cleanOCRText(atob(pdfBase64));
+    const manual = manualParse(text);
 
+    if (manual.length > 0) {
+      await debugLogToDB(debug, { mode: "manual", manual });
+      return successResponse({ questions: manual, mode: "manual" });
+    }
+
+    // 2) OCR FALLBACK
+    const ocrText = await ocrExtract(pdfBase64);
+    if (ocrText) {
+      const ocrRes = manualParse(ocrText);
+      if (ocrRes.length > 0) {
+        await debugLogToDB(debug, { mode: "ocr", ocrRes });
+        return successResponse({ questions: ocrRes, mode: "ocr" });
+      }
+    }
+
+    // 3) AI FALLBACK
     if (credits !== -1 && credits < CREDIT_COST)
-      return errorResponse(
-        `Insufficient credits. This requires ${CREDIT_COST} credits.`,
-        "INSUFFICIENT_CREDITS",
-        403
-      );
+      return errorResponse("Not enough credits.", "NO_CREDITS", 403);
 
-    // --- Deduct credits ---
     let charged = false;
     if (credits !== -1) {
-      const r = await deductCredits(userId, "parse_question_pdf", CREDIT_COST);
-      if (!r.success)
-        return errorResponse("Credit deduction failed.", "CREDIT_ERROR", 500);
+      const d = await deductCredits(userId, "parse_question_pdf", CREDIT_COST);
+      if (!d.success) return errorResponse("Credit error.", "CREDIT_FAIL", 500);
       charged = true;
     }
 
-    // --- Claude request ---
-    const ctrl = new AbortController();
-    const timeout = setTimeout(() => ctrl.abort(), 30_000);
+    const aiParsed = await callClaude(pdfBase64, apiKey);
 
-    let aiRes: Response;
-    try {
-      aiRes = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        signal: ctrl.signal,
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": apiKey,
-          "anthropic-version": "2023-06-01",
-        },
-        body: JSON.stringify({
-          model: "claude-3-5-sonnet-20241022",
-          max_tokens: 8192,
-          system: EXTRACTION_SYSTEM_PROMPT,
-          messages: [
-            {
-              role: "user",
-              content: [
-                {
-                  type: "document",
-                  source: {
-                    type: "base64",
-                    media_type: "application/pdf",
-                    data: pdfB64,
-                  },
-                },
-                { type: "text", text: "Extract all questions into JSON array." },
-              ],
-            },
-          ],
-        }),
+    if (aiParsed && aiParsed.length > 0) {
+      await debugLogToDB(debug, { mode: "ai", aiParsed });
+      return successResponse({ questions: aiParsed, mode: "ai" });
+    }
+
+    if (charged) {
+      const admin = getAdminClient();
+      await admin.rpc("add_credits", {
+        p_user_id: userId,
+        p_amount: CREDIT_COST,
+        p_action: "refund",
+        p_description: "AI fallback failed",
       });
-    } catch (err) {
-      clearTimeout(timeout);
-      if (charged) await refundCredits(userId, CREDIT_COST, "timeout");
-      return errorResponse("AI request failed (timeout/network).", "AI_TIMEOUT", 504);
     }
 
-    clearTimeout(timeout);
-
-    if (!aiRes.ok) {
-      if (charged) await refundCredits(userId, CREDIT_COST, "ai_error");
-      const errBody = await aiRes.json().catch(() => ({}));
-      return errorResponse(
-        `AI error: ${errBody?.error?.message ?? "Unknown AI error"}`,
-        "AI_ERROR",
-        502
-      );
-    }
-
-    const aiJson = await aiRes.json();
-    const content = Array.isArray(aiJson.content) ? aiJson.content : [];
-    const firstText = content.find((x: any) => x.type === "text");
-    const rawText = firstText?.text ?? "";
-
-    // --- Clean JSON ---
-    const cleaned = rawText
-      .replace(/```json|```/g, "")
-      .replace(/^[^\[{]*/g, "") // strip leading junk
-      .replace(/[^\]}]*$/g, "") // strip trailing junk
-      .trim();
-
-    let parsed: any;
-    try {
-      parsed = JSON.parse(cleaned);
-    } catch (err) {
-      if (charged) await refundCredits(userId, CREDIT_COST, "json_parse");
-      return errorResponse("Failed to parse AI JSON.", "PARSE_ERROR", 502);
-    }
-
-    const items: ParsedQuestion[] = Array.isArray(parsed)
-      ? parsed
-      : parsed?.questions ?? [];
-
-    if (!items.length) {
-      if (charged) await refundCredits(userId, CREDIT_COST, "zero_questions");
-      return errorResponse(
-        "No valid questions detected in the PDF.",
-        "NO_QUESTIONS",
-        422
-      );
-    }
-
-    // --- Normalize Output ---
-    const out: ParsedQuestion[] = items.map((q) => {
-      const qText = String(q.question_text ?? "").trim();
-      const subject = String(q.subject ?? "").trim();
-      const topic = String(q.topic ?? "").trim();
-      const qType =
-        ["MCQ", "TRUE_FALSE", "SHORT_ANSWER", "NUMERICAL", "CODING"].includes(
-          q.question_type
-        ) ? q.question_type : "MCQ";
-
-      // MCQ options fixing
-      let opts = null;
-      if (qType === "MCQ") {
-        const rawOpts = Array.isArray(q.options) ? q.options : [];
-        const normalized = rawOpts.map((o: any) => ({
-          label: String(o.label ?? "").trim().toUpperCase(),
-          text: String(o.text ?? "").trim(),
-        }));
-
-        const labels = ["A", "B", "C", "D"];
-        opts = labels.map((L) => {
-          const found = normalized.find((x) => x.label === L);
-          return found ?? { label: L, text: "" };
-        });
-      }
-
-      const correct = String(q.correct_answer ?? "")
-        .replace(/[^A-D]/gi, "")
-        .toUpperCase();
-
-      return {
-        question_text: qText,
-        question_type: qType,
-        options: opts,
-        correct_answer: qType === "MCQ" ? correct : String(q.correct_answer ?? ""),
-        explanation: String(q.explanation ?? "").trim(),
-        subject,
-        topic,
-        difficulty: ["EASY", "MEDIUM", "HARD"].includes(q.difficulty)
-          ? q.difficulty
-          : "MEDIUM",
-        marks_positive: Number(q.marks_positive ?? 4),
-        marks_negative: Number(q.marks_negative ?? 1),
-        source_year: typeof q.source_year === "number" ? q.source_year : null,
-        exam_type: q.exam_type ? String(q.exam_type) : null,
-        latex_present: Boolean(q.latex_present),
-      };
-    });
-
-    // Summary
-    const subjectCounts: Record<string, number> = {};
-    for (const q of out)
-      subjectCounts[q.subject] = (subjectCounts[q.subject] ?? 0) + 1;
-
-    const summary = `${out.length} questions parsed — ` +
-      Object.entries(subjectCounts)
-        .map(([s, c]) => `${c} ${s}`)
-        .join(", ");
-
-    return successResponse({ questions: out, count: out.length, summary });
+    return successResponse({ questions: [], mode: "fallback" });
   } catch (err) {
-    console.error("Unhandled:", err);
-    return errorResponse("Internal error.", "INTERNAL_ERROR", 500);
+    console.error(err);
+    return errorResponse("Internal error.", "INTERNAL", 500);
   }
 });
