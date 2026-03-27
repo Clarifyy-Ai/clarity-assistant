@@ -33,7 +33,20 @@ interface TestConfig {
   marks_positive: number;
   marks_negative: number;
   randomize_order: boolean;
+  shuffle_options: boolean;
 }
+
+type DifficultyPreset = "BEGINNER" | "INTERMEDIATE" | "ADVANCED" | "ADAPTIVE";
+
+const DIFFICULTY_PRESETS: Record<DifficultyPreset, { dist: DifficultyDistribution; desc: string }> = {
+  BEGINNER:     { dist: { EASY: 70, MEDIUM: 20, HARD: 10 }, desc: "Build your fundamentals" },
+  INTERMEDIATE: { dist: { EASY: 20, MEDIUM: 60, HARD: 20 }, desc: "Test your preparation" },
+  ADVANCED:     { dist: { EASY: 10, MEDIUM: 30, HARD: 60 }, desc: "Push your limits" },
+  ADAPTIVE:     { dist: { EASY: 30, MEDIUM: 40, HARD: 30 }, desc: "Smart difficulty" },
+};
+
+const QUESTION_COUNT_PRESETS = [10, 20, 30, 50];
+const DURATION_PRESETS = [10, 20, 30, 60];
 
 const EXAM_SUBJECTS: Record<string, string[]> = {
   JEE_MAIN: ["Physics", "Chemistry", "Mathematics"],
@@ -99,6 +112,9 @@ export default function TestConfigure() {
   const yearMinFromURL = searchParams.get("year_min") ? Number(searchParams.get("year_min")) : null;
   const yearMaxFromURL = searchParams.get("year_max") ? Number(searchParams.get("year_max")) : null;
 
+  const [selectedPreset, setSelectedPreset] = useState<DifficultyPreset | null>(isQuick ? null : "INTERMEDIATE");
+  const [step, setStep] = useState(1);
+
   const [config, setConfig] = useState<TestConfig>({
     exam_type:              isQuick ? "CUSTOM" : examFromURL,
     test_name:              isQuick ? "Quick Drill" : `${examFromURL.replace(/_/g, " ")} Practice Test`,
@@ -110,12 +126,13 @@ export default function TestConfigure() {
       : null,
     difficulty_distribution: isQuick
       ? { EASY: 30, MEDIUM: 50, HARD: 20 }
-      : { EASY: 30, MEDIUM: 40, HARD: 30 },
+      : { EASY: 20, MEDIUM: 60, HARD: 20 },
     question_count:         isQuick ? 10 : 30,
     duration_minutes:       isQuick ? 10 : 60,
     marks_positive:         4,
     marks_negative:         1,
     randomize_order:        true,
+    shuffle_options:        true,
   });
 
   const [loading, setLoading] = useState(false);
