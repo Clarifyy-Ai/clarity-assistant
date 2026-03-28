@@ -1,4 +1,6 @@
-// send-email/index.ts — FIXED, SECURE, PRODUCTION VERSION// send-email/index.ts — FIXED, corsHeaders } from "../_shared/cors.ts";
+// send-email/index.ts — FIXED, SECURE, PRODUCTION VERSION
+
+import { handleCors, corsHeaders } from "../_shared/cors.ts";
 import {
   requireAuth,
   errorResponse,
@@ -15,7 +17,7 @@ const FROM_EMAIL = "Clarify AI <hello@confideq.app>";
 
 function sanitize(str: any, max = 500): string {
   return String(str ?? "")
-    .replace(/[<>]/g, "")      // prevent HTML/script injection
+    .replace(/[<>]/g, "")
     .replace(/`/g, "")
     .replace(/[\u0000-\u0009]/g, "")
     .slice(0, max)
@@ -33,12 +35,7 @@ async function sendEmailResend(to: string, subject: string, html: string): Promi
       "Content-Type": "application/json",
       Authorization: `Bearer ${RESEND_API_KEY}`,
     },
-    body: JSON.stringify({
-      from: FROM_EMAIL,
-      to,
-      subject,
-      html,
-    }),
+    body: JSON.stringify({ from: FROM_EMAIL, to, subject, html }),
   });
 
   if (!res.ok) {
@@ -106,7 +103,6 @@ function renderTemplate(type: EmailType, data: any) {
             ${data.meeting_link ? `<a class="btn" href="${sanitize(data.meeting_link)}">Open meeting</a>` : ""}
           </div>`),
       };
-
     case "debrief_ready":
       return {
         subject: `Your interview debrief is ready (${safe(data.score)}/100)`,
@@ -117,7 +113,6 @@ function renderTemplate(type: EmailType, data: any) {
             <a class="btn" href="https://confideq.app/app/debrief/${safe(data.debrief_id)}">View debrief</a>
           </div>`),
       };
-
     case "weekly_report":
       return {
         subject: `Your weekly Clarify AI report — ${safe(data.sessions_this_week)} sessions`,
@@ -129,7 +124,6 @@ function renderTemplate(type: EmailType, data: any) {
             <p>Streak: ${safe(data.streak)} days</p>
           </div>`),
       };
-
     case "welcome":
       return {
         subject: "Welcome to Clarify AI! 🎉",
@@ -140,7 +134,6 @@ function renderTemplate(type: EmailType, data: any) {
             <a href="https://confideq.app/app/dashboard" class="btn">Start practicing</a>
           </div>`),
       };
-
     case "low_credits":
       return {
         subject: `Low Credits — ${safe(data.remaining)} left`,
@@ -151,7 +144,6 @@ function renderTemplate(type: EmailType, data: any) {
             <a href="https://confideq.app/app/settings/credits" class="btn">Buy credits</a>
           </div>`),
       };
-
     case "streak_reminder":
       return {
         subject: "🔥 Keep your streak going!",
@@ -161,7 +153,6 @@ function renderTemplate(type: EmailType, data: any) {
             <p>Don't break the momentum — complete a session today.</p>
           </div>`),
       };
-
     default:
       return { subject: "Clarify AI Notification", html: base("<div class='card'>Hello!</div>") };
   }
@@ -176,7 +167,6 @@ Deno.serve(async (req) => {
   if (cors) return cors;
 
   try {
-    /* ---------------- AUTH ---------------- */
     const auth = await requireAuth(req);
     const userId = auth.userId;
 
@@ -195,7 +185,6 @@ Deno.serve(async (req) => {
       return errorResponse("Unknown email type", "VALIDATION_ERROR", 400);
     }
 
-    // OPTIONAL: enforce that users can only email themselves
     if (to !== auth.email) {
       return errorResponse("Not authorized to send to this address", "FORBIDDEN", 403);
     }
@@ -208,8 +197,7 @@ Deno.serve(async (req) => {
     return successResponse({ success: ok });
   } catch (err) {
     console.error("[send-email] error:", err);
+    if (err instanceof Response) return err;
     return errorResponse("Internal error", "INTERNAL", 500);
   }
 });
-``
-

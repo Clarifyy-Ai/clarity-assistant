@@ -78,7 +78,7 @@ Deno.serve(async (req) => {
        VALIDATE SESSION BELONGS TO USER
     ------------------------ */
     const { data: sessionRow } = await db
-      .from("interview_sessions")
+      .from("sessions")
       .select("id, user_id, status")
       .eq("id", session_id)
       .single();
