@@ -1,4 +1,7 @@
-// select-test-questions/index.ts — FIXED, SECURE, PRODUCTION VERSION// select-test-questions/index.ts — FIXED, SECURE, } from "../_shared/supabase.ts";
+// select-test-questions/index.ts — FIXED, SECURE, PRODUCTION VERSION
+
+import { handleCors, corsHeaders } from "../_shared/cors.ts";
+import { createServiceClient } from "../_shared/supabase.ts";
 import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
 
 /* -------------------------------------------------------------------------- */
