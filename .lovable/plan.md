@@ -1,169 +1,132 @@
 
 
-# Mock Test Engine Overhaul — Implementation Plan
+# Clarify AI — Full Application Audit Report
 
-This plan addresses all 6 prompts from the QA report: Excel import, level selection, test layout rebuild, session loading fix, question collection pipeline, and auto-test creation.
+## Edge Function Status
 
----
+### 🔴 CRITICALLY BROKEN (4 functions — wrong file content)
 
-## Scope & Priority
+| Function | Actual Content | Impact |
+|---|---|---|
+| `create-test/index.ts` | Contains `resume-subscription` code | Mock Test creation completely broken |
+| `stripe-webhook/index.ts` | Contains `send-email` code | All Stripe payment webhooks broken — subscriptions, credit purchases won't process |
+| `generate-hint/index.ts` | Contains `generate-debrief` code | Live interview hints broken |
+| `send-email/index.ts` | Line 1 corrupted (double comment + broken import of `cors.ts`) | Email sending will crash on deploy |
 
-The work is organized into 3 tiers based on impact and dependency:
+### 🟠 CORRUPTED BUT PARTIALLY FUNCTIONAL (2 functions)
 
-**Tier 1 — Fix broken features (Prompts 1, 3, 4)**
-- Session history loading error
-- Excel import system for questions  
-- Test session layout rebuild
-
-**Tier 2 — New UX features (Prompts 2, 6)**
-- Level selection + smart shuffle before test start
-- Auto-test catalog from collected papers
-
-**Tier 3 — Admin pipeline (Prompt 5)**
-- Question collection pipeline (admin seeding, AI gap-fill)
-
----
-
-## Prompt 4: Fix Session Loading Error
-
-**Root cause**: Dashboard's `RecentSessions` queries `target_company` column which does not exist on the `sessions` table. The column is `title`. SessionHistory page query looks correct (uses `title`), but Dashboard query uses a non-existent column causing the error toast.
-
-**Fix**:
-- `src/pages/app/Dashboard.tsx` line 320: change `target_company` to `title` in the select query
-- Line 378: change `s.target_company` to `s.title` in the display
-
----
-
-## Prompt 1: Excel Import System
-
-**Approach**: Add an "Excel Import" tab to `UploadQuestions.tsx` as the primary import method. Use the `xlsx` (SheetJS) library for client-side parsing — no edge function needed.
-
-**Files**:
-
-1. **Install `xlsx` package** via `package.json`
-
-2. **Generate downloadable template** (`/tmp/generate_template.py` script):
-   - Sheet 1: "Questions" with 16 column headers + 3 sample rows
-   - Sheet 2: "Instructions" with field-by-field guidance
-   - Output to `public/ClarifyAI_Question_Template.xlsx`
-
-3. **New component `ExcelImportTab`** inside `UploadQuestions.tsx`:
-   - Download Template button
-   - Drag-and-drop zone for `.xlsx`/`.xls` (5MB limit)
-   - Client-side parsing with `xlsx` library: read Sheet 1 from row 2, validate mandatory fields (`Question_Text`, `Correct_Answer`)
-   - Preview table showing parsed questions with inline edit
-   - Error log for skipped rows
-   - "Save to Question Bank" button — bulk insert to Supabase `questions` table
-   - Map Excel columns to DB: `Question_Number` → row order, `Question_Text` → `question_text`, `Option_A-D` → `options` JSONB array, `Correct_Answer` → `correct_answer`, etc.
-
-4. **Update tab default**: Make "Excel Import" the first/default tab, "PDF Import" second with "(Beta)" label
-
----
-
-## Prompt 3: Test Session Layout Rebuild
-
-**Current state**: `TestSession.tsx` (819 lines) already has a functional 3-panel layout with question navigator, timer, LaTeX rendering, and 5-state question tracking. It works but needs polish.
-
-**Changes to `TestSession.tsx`**:
-
-1. **Left Panel (220px)**: Already has question grid — add subject tab filtering, section-wise answered counts, and color legend
-2. **Center Panel**: Already has question text + options as clickable cards — improve sizing to 18px font, add "Clear Response" / "Mark for Review & Next" / "Save & Next" button row
-3. **Right Panel (280px)**: Already has timer + submit — add live score display, answered/unanswered/marked/not-visited counts, pause button
-4. **Confirmation Modal**: Already exists (`showSubmitModal` state) — enhance with unanswered count warning
-5. **Auto-submit**: Already implemented (timer hits 0 → `handleSubmit(true)`)
-6. **Mobile layout**: Hide left panel behind floating "Questions" drawer button, collapse right panel to top bar (timer + score only), full-width center panel
-
----
-
-## Prompt 2: Level Selection + Smart Question Shuffling
-
-**Current state**: `TestConfigure.tsx` already has difficulty distribution sliders, subject/topic selection, question count, and duration. The `select-test-questions` edge function already does adaptive selection based on user performance history.
-
-**Changes**:
-
-1. **Add difficulty level presets** to `TestConfigure.tsx`:
-   - 4 preset cards: BEGINNER (70/20/10), INTERMEDIATE (20/60/20), ADVANCED (10/30/60), ADAPTIVE
-   - Clicking a preset auto-sets the difficulty distribution sliders
-   - ADAPTIVE mode: edge function already handles this via `user_topic_performance` table
-
-2. **Add option shuffle toggle** to config and pass to `create-test`:
-   - New `shuffle_options: boolean` field in config
-   - In `TestSession.tsx`, when loading questions and `shuffle_options` is true, randomize the order of `options` array for each MCQ and remap `correct_answer` accordingly
-
-3. **Add step indicator**: Show 3 steps — Choose Level → Settings → Confirm & Start
-   - Step 3 shows summary: "30 questions | 45 minutes | Intermediate | Physics + Chemistry"
-
-4. **Question count presets**: Add quick-select buttons (10/20/30/50/Full Paper) alongside the slider
-
-5. **Time limit presets**: Add quick-select buttons (10/20/30/60/No limit)
-
----
-
-## Prompt 6: Auto-Test Catalog (Exam Papers)
-
-**Current state**: `ExamPapers.tsx` exists (235 lines) and queries an `exam_papers` table. This table may not exist yet.
-
-**Changes**:
-
-1. **Database migration**: Create `exam_papers` table if not exists:
-   - `id`, `exam_type`, `exam_name`, `year`, `session`, `shift`, `total_questions`, `total_marks`, `duration_minutes`, `difficulty_level`, `question_ids` (uuid[]), `is_official` (bool), `avg_score` (numeric), `attempt_count` (int), `created_at`
-   - RLS: SELECT for all authenticated users, INSERT/UPDATE for admins
-
-2. **Rebuild `ExamPapers.tsx`** as a browsable catalog:
-   - Filter bar: Exam Type, Year, Subject, Difficulty, Duration
-   - Test cards: exam name + year + shift, question count, marks, time, subject breakdown chips, average score, difficulty meter
-   - Two buttons per card: "Practice Mode" (no timer) and "Exam Mode" (official settings)
-   - "Attempted" badge for completed papers
-
-3. **One-click launch**: 
-   - Exam Mode: auto-apply official exam settings (JEE Main: 90q/180min/+4-1, NEET: 180q/200min, etc.)
-   - Skip configure page, go straight to test session
-
-4. **Practice Mode**:
-   - No timer, show answer + explanation after each question
-   - Self-assessment buttons: "I knew this" / "I guessed" / "I didn't know"
-
-5. **Progress tracker per exam type**: Papers attempted count, average score, best performance, most improved topic
-
----
-
-## Prompt 5: Question Collection Pipeline (Admin)
-
-**Changes**:
-
-1. **Admin "Seed Questions" page** (`/app/admin/seed-questions`):
-   - Upload official exam PDFs → parse via existing `parse-question-pdf` edge function
-   - Bulk Excel import using the same `ExcelImportTab` component
-   - Tag questions with `source: "OFFICIAL_PYP"`, `is_verified: true`, `source_paper`
-
-2. **AI Gap-Fill**: 
-   - Query `questions` table grouped by topic + exam_type
-   - For topics with < 15 questions, auto-generate via `select-test-questions`'s existing `generateThinTopicQuestions` function
-   - Tag as `source: "AI_GENERATED"`, `is_verified: false`
-
-3. **Question Bank Status Dashboard** (admin view):
-   - Table: exam type, total questions, years covered, subjects, verified vs AI ratio, last updated
-   - "Add More" button per exam type
-
----
-
-## Database Changes
-
-1. **Create `exam_papers` table** (for Prompt 6)
-2. **No changes needed** for sessions, questions, mock_tests — schemas already correct
-
-## File Changes Summary
-
-| File | Change |
+| Function | Issue |
 |---|---|
-| `src/pages/app/Dashboard.tsx` | Fix `target_company` → `title` |
-| `src/pages/app/mock-test/UploadQuestions.tsx` | Add Excel import tab with SheetJS parsing |
-| `src/pages/app/mock-test/TestSession.tsx` | Polish 3-panel layout, mobile responsive, option shuffle |
-| `src/pages/app/mock-test/TestConfigure.tsx` | Add level presets, step indicator, shuffle toggle |
-| `src/pages/app/mock-test/ExamPapers.tsx` | Rebuild as browsable catalog with practice/exam modes |
-| `src/pages/app/admin/AdminSeedQuestions.tsx` | New admin page for question seeding |
-| `src/App.tsx` | Add route for admin seed page |
-| `public/ClarifyAI_Question_Template.xlsx` | Generated template file |
-| `supabase/migrations/` | Create `exam_papers` table |
-| `package.json` | Add `xlsx` dependency |
+| `select-test-questions/index.ts` | Line 1 is corrupted — two comments merged with a broken import statement. Missing `import { createServiceClient }` and `handleCors`. Will crash on deploy. |
+| `send-email/index.ts` | Line 1 has duplicate/broken comment-import merge. May crash depending on Deno parser behavior. |
+
+### ✅ WORKING EDGE FUNCTIONS (25 functions)
+
+`ai-coach-chat`, `ai-feedback`, `analytics-dashboard`, `analyze-test-performance`, `cancel-subscription`, `company-research`, `create-checkout`, `deepgram-token`, `delete-account`, `disconnect-calendar`, `export-user-data`, `gap-analysis`, `generate-debrief`, `generate-practice-questions`, `generate-questions`, `generate-star-answer`, `parse-question-pdf`, `parse-resume`, `polish-star-section`, `prep-tool`, `resume-subscription`, `schedule-interview`, `submit-test`, `sync-calendar`, `validate-api-key`
+
+---
+
+## CORS Issue (Affects ALL edge functions)
+
+`_shared/cors.ts` line 5 sets `PROD_ORIGIN` to `https://confideq.app`. Your actual domains are `clarify.ai.sltfinanceindia.com` and `clarify-aii.lovable.app`. Since `ENV` is not `"dev"`, CORS will **block all frontend requests in production**. Fix: change to `"*"` or add both domains.
+
+---
+
+## Frontend Feature Audit
+
+### ✅ FUNCTIONAL (19 features)
+1. Auth — Login, signup, logout, password reset
+2. Dashboard — Stats cards, recent sessions, credit balance
+3. Session History — Loads sessions correctly (fixed in prior iteration)
+4. Profile Settings — Edit name, bio, avatar
+5. Appearance Settings — Theme toggle
+6. Notification Settings — Toggle email notifications
+7. BYOK Settings — Save API key hints
+8. Privacy/Terms pages — Render correctly
+9. Cookie Consent banner — Shows and persists
+10. Pricing page — Unified pricing displayed
+11. Blog / Help Center — Content renders
+12. Keyboard Shortcuts page — Renders
+13. 404 page — Styled correctly
+14. Mock Test Hub — Navigation works
+15. Excel Import — Template download + upload parsing (new)
+16. Test Configure — Level presets + settings (new)
+17. Exam Papers catalog — Renders (new)
+18. Admin Seed Questions — Renders for admins (new)
+19. Document Vault — Upload/list resumes and JDs
+
+### 🟡 PARTIALLY FUNCTIONAL (11 features — depend on edge functions or missing API keys)
+1. **Live Co-Pilot** — UI works, but Deepgram transcription requires `DEEPGRAM_API_KEY` secret
+2. **AI Coach Chat** — Requires `GEMINI_API_KEY` secret + queries `interview_sessions` table (not `sessions`)
+3. **AI Feedback** — Requires `GEMINI_API_KEY` + queries `interview_sessions` table
+4. **STAR Builder** — Requires `OPENAI_API_KEY` secret
+5. **Company Research** — Requires `GEMINI_API_KEY` secret
+6. **Prep Lab tools** — Requires `GEMINI_API_KEY` secret
+7. **Resume Parsing** — Requires `GEMINI_API_KEY` + `ANTHROPIC_API_KEY`
+8. **Billing/Checkout** — Requires `STRIPE_SECRET_KEY` + Stripe price IDs + `PUBLIC_URL` env var
+9. **Calendar Sync** — Requires Google OAuth refresh token infrastructure
+10. **Mock Test Session** — Test-taking UI works, but `create-test` edge function is broken (contains wrong code)
+11. **Email notifications** — `send-email` function has corrupted imports
+
+### 🔴 NON-FUNCTIONAL (8 features — broken code or missing infrastructure)
+1. **Create Mock Test** — `create-test/index.ts` contains `resume-subscription` code
+2. **Stripe Webhooks** — `stripe-webhook/index.ts` contains `send-email` code — payments won't process
+3. **Generate Hints** — `generate-hint/index.ts` contains debrief code
+4. **Select Test Questions** — Corrupted imports on line 1
+5. **Analytics Dashboard (admin)** — Works but data depends on sessions existing
+6. **Practice Rooms** — Real-time room functionality requires WebSocket infrastructure not yet implemented
+7. **Referral System** — UI exists but referral tracking/credit awarding is stub-only
+8. **Gamification badges** — Achievement system tables exist but no trigger/logic to award them
+
+---
+
+## Implementation Plan
+
+### Tier 1 — Fix Critical Edge Functions (6 files)
+
+1. **Fix `_shared/cors.ts`**: Change `PROD_ORIGIN` to `"*"` (or a comma-separated allowlist) so frontend requests work
+
+2. **Rewrite `create-test/index.ts`**: Currently contains resume-subscription code. Must be rewritten as a proper test creation function that:
+   - Authenticates user
+   - Accepts test config (exam_type, subjects, difficulty distribution, question count, duration)
+   - Calls `select-test-questions` or queries `questions` table directly
+   - Creates a `mock_tests` row and returns test ID
+
+3. **Rewrite `stripe-webhook/index.ts`**: Currently contains send-email code. Must be rewritten to:
+   - Verify Stripe webhook signature
+   - Handle events: `checkout.session.completed`, `invoice.paid`, `customer.subscription.deleted`
+   - Update `subscriptions` and `profiles` tables accordingly
+
+4. **Rewrite `generate-hint/index.ts`**: Currently contains debrief code. Must be a lightweight hint generator:
+   - Accept question + transcript context
+   - Return 3 bullet-point hints (not full answer)
+   - Use Gemini Flash for speed
+
+5. **Fix `select-test-questions/index.ts` line 1**: Repair the corrupted import line to properly import `handleCors`, `corsHeaders`, `createServiceClient`
+
+6. **Fix `send-email/index.ts` line 1**: Repair the corrupted double-comment import line
+
+### Tier 2 — Fix Table References
+
+Several edge functions query `interview_sessions` (e.g., `ai-coach-chat`, `ai-feedback`) but the actual table is `sessions`. These need to be updated.
+
+### Tier 3 — Deploy All Functions
+
+After fixes, deploy all 31 edge functions.
+
+---
+
+## Summary Counts
+
+| Category | Count |
+|---|---|
+| Total edge functions | 31 |
+| Critically broken (wrong content) | 4 |
+| Corrupted imports | 2 |
+| Working but need API keys | 25 |
+| Frontend features functional | 19 |
+| Frontend features partially functional | 11 |
+| Frontend features non-functional | 8 |
+| **Total non-functional features** | **8** |
+| **Total features needing API keys to work** | **11** |
 
