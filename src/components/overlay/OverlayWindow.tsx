@@ -25,7 +25,7 @@ import { OverlayAnswerTimer } from "./OverlayAnswerTimer";
 import { OverlayAudioBadge } from "./OverlayAudioBadge";
 import { OverlayQuestionPreview } from "./OverlayQuestionPreview";
 import { cn } from "@/lib/utils";
-import { Loader2, Maximize2 } from "lucide-react";
+import { Loader2, Maximize2, Sparkles, BarChart3 } from "lucide-react";
 import type { LiveSessionConfig } from "@/types/session.types";
 import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 import { useDocumentPiP } from "@/lib/overlay/useDocumentPiP";
@@ -119,7 +119,11 @@ export function OverlayWindow({
         <div
           ref={resizeContainerRef}
           className={cn(
-            "overlay-panel no-select flex flex-col gap-0 transition-opacity duration-150 relative overflow-hidden",
+            "overlay-panel no-select flex flex-col gap-0 relative overflow-hidden",
+            "rounded-2xl border border-white/[0.08]",
+            "bg-[#0a0a14]/92 backdrop-blur-2xl",
+            "shadow-[0_8px_64px_rgba(0,0,0,0.7),0_0_0_1px_rgba(255,255,255,0.04),inset_0_1px_0_rgba(255,255,255,0.06)]",
+            "transition-opacity duration-150",
             is_stealth_mode && "overlay-stealth-glass",
             is_proctor_safe && "overlay-proctor-safe",
           )}
@@ -131,62 +135,73 @@ export function OverlayWindow({
           role="dialog"
           aria-label="Clarify AI Overlay"
         >
+          {/* Top gradient accent line */}
+          <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent pointer-events-none" />
 
-          {/* ── HEADER — ParakeetAI style ─────────────────────────────── */}
+          {/* ── HEADER ─────────────────────────────────────────────── */}
           <div
             data-drag-handle
-            className="flex cursor-grab items-center gap-2 px-3 py-2 border-b border-white/8 bg-[#0d0d1a]/70 active:cursor-grabbing shrink-0"
+            className={cn(
+              "flex cursor-grab items-center gap-2 px-3 py-2 shrink-0 active:cursor-grabbing",
+              "border-b border-white/[0.07]",
+              "bg-gradient-to-r from-[#0d0d1e]/80 via-[#0e0e1c]/60 to-[#0d0d1e]/80",
+            )}
             title="Drag to move"
           >
             {/* Logo + name */}
-            <span className="text-[13px] font-bold tracking-wide text-white/90 shrink-0 select-none">
-              🎙 Clarify AI
-            </span>
+            <div className="flex items-center gap-2 shrink-0">
+              <div className="w-5 h-5 rounded-md bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+                <Sparkles className="w-3 h-3 text-white" />
+              </div>
+              <span className="text-[12px] font-bold tracking-wide text-white/90 select-none">
+                Clarify AI
+              </span>
+            </div>
 
-            {/* Live status dot */}
+            {/* Live recording indicator */}
             {isRecording && (
-              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0" title="Recording" />
+              <div className="flex items-center gap-1 shrink-0">
+                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_6px_rgba(239,68,68,0.8)]" title="Recording" />
+                <span className="text-[10px] font-mono text-red-400/70">LIVE</span>
+              </div>
             )}
 
             <OverlayNetworkBadge color={network_color} />
 
-            {/* Mode badges — compact */}
+            {/* Mode badges */}
             {is_stealth_mode && (
-              <span className="font-mono text-[9px] font-bold text-violet-300 bg-violet-500/15 px-1.5 py-0.5 rounded shrink-0">
+              <span className="font-mono text-[9px] font-bold text-violet-300 bg-violet-500/15 border border-violet-500/20 px-1.5 py-0.5 rounded shrink-0">
                 STEALTH
               </span>
             )}
             {is_proctor_safe && (
-              <span className="font-mono text-[9px] font-bold text-emerald-300 bg-emerald-500/15 px-1.5 py-0.5 rounded shrink-0">
+              <span className="font-mono text-[9px] font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/20 px-1.5 py-0.5 rounded shrink-0">
                 SAFE
               </span>
             )}
             {is_peek_active && (
-              <span className="font-mono text-[9px] font-bold text-sky-300 bg-sky-500/15 px-1.5 py-0.5 rounded shrink-0 animate-pulse">
+              <span className="font-mono text-[9px] font-bold text-sky-300 bg-sky-500/15 border border-sky-500/20 px-1.5 py-0.5 rounded shrink-0 animate-pulse">
                 PEEK
               </span>
             )}
             {isSessionActive && !is_minimal_mode && <OverlayAudioBadge />}
             {isSessionActive && !is_minimal_mode && <OverlayAnswerTimer />}
 
-            {/* Spacer */}
             <div className="flex-1" />
 
-            {/* Expand from minimal */}
             {is_minimal_mode && (
               <button
                 onClick={(e) => { e.stopPropagation(); useOverlayStore.getState().setMinimalMode(false); }}
-                className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-white/8 text-amber-400/70 hover:text-amber-300 transition-colors"
+                className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-white/10 text-amber-400/70 hover:text-amber-300 transition-all"
                 title="Exit minimal mode"
               >
                 <Maximize2 className="w-3 h-3" />
               </button>
             )}
 
-            {/* Close */}
             <button
               onClick={(e) => { e.stopPropagation(); useOverlayStore.getState().hideOverlay(); }}
-              className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-white/8 text-white/25 hover:text-white transition-colors"
+              className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-white/10 text-white/25 hover:text-white/80 transition-all"
               title="Hide overlay (Ctrl+Shift+H)"
             >
               <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
@@ -195,42 +210,47 @@ export function OverlayWindow({
             </button>
           </div>
 
-          {/* ── Screen capture warning ────────────────────────────────── */}
+          {/* ── Screen capture warning ──────────────────────────────── */}
           <ScreenCaptureBanner isProctorSafe={is_proctor_safe} />
 
-          {/* ── Session complete ──────────────────────────────────────── */}
+          {/* ── Session complete ────────────────────────────────────── */}
           {!isSessionActive && lastSessionId && (
-            <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6 py-8 text-center">
-              <div className="w-12 h-12 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
-                <svg className="w-5 h-5 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
+            <div className="flex-1 flex flex-col items-center justify-center gap-5 px-6 py-8 text-center">
+              <div className="relative">
+                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/20 flex items-center justify-center shadow-lg shadow-emerald-500/10">
+                  <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div className="absolute -inset-1 rounded-2xl bg-emerald-500/10 blur-md" />
               </div>
               <div>
-                <p className="text-[14px] font-semibold text-white/90">Session Complete</p>
-                <p className="text-[12px] text-white/40 mt-1">What next?</p>
+                <p className="text-[15px] font-semibold text-white/90">Session Complete</p>
+                <p className="text-[12px] text-white/35 mt-1">Great work — review your performance</p>
               </div>
               <div className="flex flex-col gap-2 w-full max-w-[220px]">
                 {lastSessionId && (
                   <Link
                     to={`/app/debrief/${lastSessionId}`}
-                    className="flex items-center justify-center gap-2 px-4 py-2 bg-brand-500/20 hover:bg-brand-500/30 text-brand-300 text-[12px] font-medium rounded-xl border border-brand-500/20 transition-all"
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600/30 to-violet-600/20 hover:from-indigo-600/40 hover:to-violet-600/30 text-indigo-300 text-[12px] font-semibold rounded-xl border border-indigo-500/25 transition-all shadow-md"
                   >
+                    <Sparkles className="w-3.5 h-3.5" />
                     Generate Debrief
                   </Link>
                 )}
                 {lastSessionId && (
                   <Link
                     to={`/app/scorecard/${lastSessionId}`}
-                    className="flex items-center justify-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-white/50 hover:text-white text-[12px] font-medium rounded-xl border border-white/8 transition-all"
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white/50 hover:text-white text-[12px] font-medium rounded-xl border border-white/8 transition-all"
                   >
+                    <BarChart3 className="w-3.5 h-3.5" />
                     View Scorecard
                   </Link>
                 )}
                 {onSetupNewSession && (
                   <button
                     onClick={onSetupNewSession}
-                    className="flex items-center justify-center gap-2 px-4 py-2 bg-white/5 hover:bg-white/10 text-white/40 hover:text-white text-[12px] font-medium rounded-xl border border-white/8 transition-all"
+                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white/3 hover:bg-white/8 text-white/35 hover:text-white text-[12px] font-medium rounded-xl border border-white/6 transition-all"
                   >
                     New Session
                   </button>
@@ -260,18 +280,21 @@ export function OverlayWindow({
               )}
 
               {is_panic_visible && panic_content && (
-                <div className="animate-fade-in border-b border-amber-500/20 bg-amber-500/8 px-4 py-3 shrink-0">
-                  <p className="mb-2 text-xs font-semibold text-amber-300">Take a breath</p>
-                  <ol className="space-y-1.5 text-xs text-white/75">
-                    <li>1. {panic_content.step_1}</li>
-                    <li>2. {panic_content.step_2}</li>
-                    <li>3. {panic_content.step_3}</li>
+                <div className="animate-fade-in border-b border-amber-500/15 bg-gradient-to-b from-amber-500/10 to-amber-500/5 px-4 py-3 shrink-0">
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <span className="text-[13px]">🫁</span>
+                    <p className="text-xs font-bold text-amber-300">Take a breath — you've got this</p>
+                  </div>
+                  <ol className="space-y-1.5 text-xs text-white/70 leading-relaxed">
+                    <li className="flex gap-2"><span className="text-amber-400 font-bold">1.</span>{panic_content.step_1}</li>
+                    <li className="flex gap-2"><span className="text-amber-400 font-bold">2.</span>{panic_content.step_2}</li>
+                    <li className="flex gap-2"><span className="text-amber-400 font-bold">3.</span>{panic_content.step_3}</li>
                   </ol>
                   <button
                     onClick={() => useOverlayStore.getState().hidePanic()}
-                    className="mt-2 text-[11px] text-brand-300 hover:text-brand-200"
+                    className="mt-2.5 text-[11px] font-semibold text-amber-300 hover:text-amber-200 transition-colors border border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 px-3 py-1 rounded-lg"
                   >
-                    I'm ready — continue
+                    I'm ready — continue →
                   </button>
                 </div>
               )}
@@ -279,14 +302,15 @@ export function OverlayWindow({
               {!is_panic_visible && (
                 <>
                   {stream_error && (
-                    <div className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 border-b border-red-500/20 shrink-0">
+                    <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border-b border-red-500/15 shrink-0">
+                      <div className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0 animate-pulse" />
                       <span className="text-[11px] text-red-400 truncate flex-1">
                         {stream_error.message}
                         {stream_error.suggestion && ` — ${stream_error.suggestion}`}
                       </span>
                       <button
                         onClick={() => useAudioStore.getState().setStreamError(null)}
-                        className="text-red-400/60 hover:text-red-400 text-[11px] shrink-0"
+                        className="text-red-400/50 hover:text-red-400 text-[11px] shrink-0 transition-colors"
                       >
                         dismiss
                       </button>
@@ -336,19 +360,19 @@ export function OverlayWindow({
 
           {isSessionActive && <OverlaySessionStats />}
 
-          {/* ── Footer — minimal hotkey hint ─────────────────────────── */}
+          {/* ── Footer hint ─────────────────────────────────────────── */}
           {isSessionActive && !is_minimal_mode && (
-            <div className="flex items-center justify-between border-t border-white/5 px-3 py-1 shrink-0">
-              <span className="font-mono text-[10px] text-white/20 truncate">
+            <div className="flex items-center justify-between border-t border-white/[0.04] px-3 py-1 shrink-0">
+              <span className="font-mono text-[10px] text-white/15 truncate select-none">
                 ⌃⇧H · Esc · ⌃⇧P
               </span>
-              <span className="text-[10px] text-white/25 capitalize shrink-0">
+              <span className="text-[10px] text-white/20 capitalize shrink-0">
                 {hint_style.replace("_", " ")}
               </span>
             </div>
           )}
 
-          {/* ── Resize handles ───────────────────────────────────────── */}
+          {/* ── Resize handles ────────────────────────────────────────── */}
           <div
             className={cn(is_stealth_mode && "opacity-50 hover:opacity-80 transition-opacity")}
             style={{ pointerEvents: "auto" }}
@@ -380,7 +404,8 @@ function FloatingAIButton({
       className={cn(
         "w-full flex items-center justify-center gap-2 font-semibold rounded-xl transition-all",
         "bg-gradient-to-r from-indigo-600 to-violet-600 hover:from-indigo-500 hover:to-violet-500",
-        "text-white shadow-lg disabled:opacity-70 disabled:cursor-not-allowed",
+        "text-white shadow-lg shadow-indigo-500/25 disabled:opacity-70 disabled:cursor-not-allowed",
+        "border border-white/10 hover:border-white/20",
         isGenerating && "overlay-fab-glow",
         compact ? "py-1.5 text-[11px]" : "py-2.5 text-[13px]"
       )}
@@ -393,7 +418,7 @@ function FloatingAIButton({
         </>
       ) : (
         <>
-          <span className={compact ? "text-[12px]" : "text-[15px]"}>✦</span>
+          <Sparkles className={compact ? "w-3 h-3" : "w-4 h-4"} />
           <span>Get AI Answer</span>
         </>
       )}
@@ -418,19 +443,19 @@ function ScreenCaptureBanner({ isProctorSafe }: { isProctorSafe: boolean }) {
   if (!isProctorSafe || dismissed || !detected) return null;
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/12 border-b border-amber-500/20 shrink-0">
-      <span className="text-amber-400 text-[11px] font-semibold flex-1">
+    <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border-b border-amber-500/15 shrink-0">
+      <span className="text-[11px] flex-1 text-amber-400">
         ⚠ {detected === "recording" ? "Screen recording" : "Screen sharing"} detected
       </span>
       <button
         onClick={toggleAppStealthMode}
-        className="text-[10px] font-semibold text-amber-300 bg-amber-500/20 hover:bg-amber-500/30 px-2 py-0.5 rounded transition-colors shrink-0"
+        className="text-[10px] font-bold text-amber-300 bg-amber-500/20 hover:bg-amber-500/30 px-2 py-0.5 rounded-md transition-colors shrink-0"
       >
         Enable Stealth
       </button>
       <button
         onClick={() => setDismissed(true)}
-        className="text-amber-400/50 hover:text-amber-400 text-[10px] shrink-0"
+        className="text-amber-400/40 hover:text-amber-400 text-[10px] shrink-0 transition-colors"
       >
         ✕
       </button>
