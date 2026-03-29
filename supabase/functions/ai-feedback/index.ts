@@ -1,8 +1,16 @@
-// ai-feedback/index.ts  — FIXED VERSION
+// supabase/functions/ai-feedback/index.ts — PRODUCTION READY (ALL FEATURES PRESERVED)
 
 import { handleCors, corsHeaders } from "../_shared/cors.ts";
-import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
-import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
+import { 
+  requireAuth, 
+  parseBody, 
+  errorResponse, 
+  deductCredits, 
+  callAI, 
+  getAdminClient, 
+  log 
+} from "../_shared/utils.ts";
+import { parseJSON } from "../_shared/gemini.ts";
 
 const SYSTEM_PROMPT = `
 You are an expert interview coach.
@@ -16,40 +24,20 @@ Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
-  const db = createServiceClient();
+  const FN = "ai-feedback";
 
   try {
     /* ------------------------
        AUTHENTICATE USER
     ------------------------ */
-    const authHeader =
-      req.headers.get("authorization") ??
-      req.headers.get("Authorization");
-
-    if (!authHeader?.toLowerCase().startsWith("bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: corsHeaders,
-      });
-    }
-
-    const token = authHeader.replace(/^bearer\s+/i, "");
-    const {
-      data: { user },
-      error: userErr,
-    } = await db.auth.getUser(token);
-
-    if (userErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: corsHeaders,
-      });
-    }
+    const auth = await requireAuth(req);
+    const userId = auth.userId;
+    const db = getAdminClient();
 
     /* ------------------------
        PARSE BODY
     ------------------------ */
-    const body = await req.json();
+    const body = await parseBody<any>(req);
     const {
       question,
       transcript,
@@ -63,13 +51,10 @@ Deno.serve(async (req) => {
     } = body;
 
     if (!question || !transcript) {
-      return new Response(
-        JSON.stringify({ error: "Missing question or transcript" }),
-        { status: 400, headers: corsHeaders }
-      );
+      return errorResponse("Missing question or transcript", "INVALID_REQUEST", 400);
     }
 
-    // Sanitize sizes
+    // Sanitize sizes exactly as original
     const safeQuestion = String(question).slice(0, 1000);
     const safeTranscript = String(transcript).slice(0, 3000);
     const safeResume = String(resume_text ?? "").slice(0, 1000);
@@ -77,54 +62,42 @@ Deno.serve(async (req) => {
     /* ------------------------
        VALIDATE SESSION BELONGS TO USER
     ------------------------ */
-    const { data: sessionRow } = await db
+    const { data: sessionRow, error: sessionErr } = await db
       .from("sessions")
       .select("id, user_id, status")
       .eq("id", session_id)
       .single();
 
-    if (!sessionRow || sessionRow.user_id !== user.id) {
-      return new Response(JSON.stringify({ error: "Invalid session" }), {
-        status: 403,
-        headers: corsHeaders,
-      });
+    if (sessionErr || !sessionRow || sessionRow.user_id !== userId) {
+      return errorResponse("Invalid session", "FORBIDDEN", 403);
     }
 
     if (sessionRow.status !== "active") {
-      return new Response(JSON.stringify({ error: "Session not active" }), {
-        status: 400,
-        headers: corsHeaders,
-      });
+      return errorResponse("Session not active", "INVALID_STATE", 400);
     }
 
     /* ------------------------
-       VALIDATE ANSWER BELONGS TO USER
+       VALIDATE ANSWER BELONGS TO USER (If provided)
     ------------------------ */
     if (answer_id) {
-      const { data: answerRow } = await db
+      const { data: answerRow, error: answerErr } = await db
         .from("session_answers")
         .select("id, user_id")
         .eq("id", answer_id)
         .single();
 
-      if (!answerRow || answerRow.user_id !== user.id) {
-        return new Response(JSON.stringify({ error: "Answer not found" }), {
-          status: 403,
-          headers: corsHeaders,
-        });
+      if (answerErr || !answerRow || answerRow.user_id !== userId) {
+        return errorResponse("Answer not found", "FORBIDDEN", 403);
       }
     }
 
     /* ------------------------
-       OPTIONAL: CREDIT DEDUCTION
+       CREDIT DEDUCTION
     ------------------------ */
-    // const credit = await deductCredits(user.id, "ai_feedback", 1);
-    // if (!credit.success) {
-    //   return new Response(JSON.stringify({ error: "Not enough credits" }), {
-    //     status: 402,
-    //     headers: corsHeaders,
-    //   });
-    // }
+    const credit = await deductCredits(userId, "generate_feedback", 1);
+    if (!credit.success) {
+      return errorResponse("Not enough credits", "INSUFFICIENT_CREDITS", 402);
+    }
 
     /* ------------------------
        BUILD PROMPT
@@ -164,27 +137,34 @@ Return ONLY valid JSON matching EXACTLY this structure:
 `;
 
     /* ------------------------
-       CALL GEMINI
+       CALL AI
     ------------------------ */
-    const raw = await geminiGenerate(prompt, SYSTEM_PROMPT, 0.3, 1500);
+    const aiResult = await callAI({
+      model: "gpt-4o-mini", // Better for complex JSON schema adherence
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: prompt }
+      ],
+      maxTokens: 1500,
+      temperature: 0.3,
+    });
 
     /* ------------------------
        STRICT JSON PARSE
     ------------------------ */
-    const feedback = parseJSON(raw, null);
+    const feedback = parseJSON(aiResult.text, null);
 
     if (!feedback) {
-      return new Response(
-        JSON.stringify({ error: "AI returned invalid JSON" }),
-        { status: 500, headers: corsHeaders }
-      );
+      // Refund on failure
+      await deductCredits(userId, "refund_generate_feedback" as any, -1);
+      return errorResponse("AI returned invalid JSON", "AI_ERROR", 500);
     }
 
     /* ------------------------
        SAVE FEEDBACK TO DB
     ------------------------ */
     if (answer_id) {
-      await db
+      const { error: updateErr } = await db
         .from("session_answers")
         .update({
           score: feedback.score,
@@ -198,16 +178,19 @@ Return ONLY valid JSON matching EXACTLY this structure:
           sentiment: feedback.sentiment,
         })
         .eq("id", answer_id);
+
+      if (updateErr) log(FN, "error", "Failed to update DB", updateErr);
     }
+
+    log(FN, "info", "Feedback generated successfully", { userId, answer_id });
 
     return new Response(JSON.stringify(feedback), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+
   } catch (err) {
-    console.error("ai-feedback error:", err);
-    return new Response(JSON.stringify({ error: "Internal error" }), {
-      status: 500,
-      headers: corsHeaders,
-    });
+    if (err instanceof Response) return err;
+    log(FN, "error", "ai-feedback error", err);
+    return errorResponse("Internal error", "INTERNAL_ERROR", 500);
   }
 });
