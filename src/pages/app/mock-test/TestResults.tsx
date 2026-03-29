@@ -6,6 +6,7 @@ import {
   Trophy, Target, Clock, ChevronRight, CheckCircle,
   XCircle, Minus, Brain, TrendingUp, ChevronDown,
   ChevronUp, ArrowLeft, Loader2, Zap, AlertTriangle,
+  Sparkles, BookOpen
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
@@ -68,6 +69,7 @@ interface MockTest {
   test_name: string;
   question_ids: string[];
   status: string;
+  config?: any;
 }
 
 interface Question {
@@ -242,6 +244,7 @@ export default function TestResults(): React.ReactElement {
     (analysis.time_analysis?.time_traps ?? []).map((t) => t.question_id)
   );
   const rankTier = getRankTier(analysis.predicted_percentile ?? 0);
+  const isPractice = test.config?.practice_mode === true;
 
   const filteredQuestions = questions.filter((q) => {
     const r = responses[q.id];
@@ -252,9 +255,9 @@ export default function TestResults(): React.ReactElement {
   });
 
   return (
-    <div className="space-y-6 max-w-4xl">
+    <div className="space-y-6 max-w-4xl pb-16">
       <PageHeader
-        title="Test Results"
+        title={isPractice ? "Practice Session Results" : "Test Results"}
         description={test.test_name}
         actions={
           <Button variant="outline" size="sm" onClick={() => navigate("/app/mock-test")}>
@@ -487,6 +490,45 @@ export default function TestResults(): React.ReactElement {
           )}
         </CardContent>
       </Card>
+
+      {/* PROMPT 6: SIMILAR TEST GENERATOR */}
+      <div className="mt-8 mb-6 space-y-4">
+        <h3 className="text-lg font-black flex items-center gap-2 text-foreground">
+          <Sparkles className="w-5 h-5 text-amber-500" />
+          Based on your performance, try these next:
+        </h3>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+           {/* Strategy 1: Weak Topics Focus */}
+           <Card className="hover:border-primary/50 transition-colors cursor-pointer bg-gradient-to-br from-background to-red-500/5" onClick={() => navigate(`/app/mock-test/configure?topics=${(analysis.weak_topics || []).slice(0, 3).join(",")}`)}>
+             <CardContent className="p-5 flex flex-col h-full items-start">
+               <div className="p-2 bg-red-500/10 rounded-lg text-red-500 mb-3"><Target className="w-5 h-5" /></div>
+               <h4 className="font-bold text-base mb-1">Target Weaknesses</h4>
+               <p className="text-xs text-muted-foreground mb-4">Focus strictly on your lowest accuracy topics: {analysis.weak_topics?.slice(0, 2).join(", ") || "Mixed"}</p>
+               <Button size="sm" variant="outline" className="mt-auto w-full">Start Practice</Button>
+             </CardContent>
+           </Card>
+
+           {/* Strategy 2: Same Level, Different Paper */}
+           <Card className="hover:border-primary/50 transition-colors cursor-pointer bg-gradient-to-br from-background to-blue-500/5" onClick={() => navigate(`/app/mock-test/papers`)}>
+             <CardContent className="p-5 flex flex-col h-full items-start">
+               <div className="p-2 bg-blue-500/10 rounded-lg text-blue-500 mb-3"><BookOpen className="w-5 h-5" /></div>
+               <h4 className="font-bold text-base mb-1">Similar Exam Paper</h4>
+               <p className="text-xs text-muted-foreground mb-4">Attempt another official paper from the same exam type to benchmark consistency.</p>
+               <Button size="sm" variant="outline" className="mt-auto w-full">Browse Papers</Button>
+             </CardContent>
+           </Card>
+
+           {/* Strategy 3: Hard Mode */}
+           <Card className="hover:border-primary/50 transition-colors cursor-pointer bg-gradient-to-br from-background to-purple-500/5" onClick={() => navigate(`/app/mock-test/configure?difficulty=HARD`)}>
+             <CardContent className="p-5 flex flex-col h-full items-start">
+               <div className="p-2 bg-purple-500/10 rounded-lg text-purple-500 mb-3"><Trophy className="w-5 h-5" /></div>
+               <h4 className="font-bold text-base mb-1">Challenge Mode</h4>
+               <p className="text-xs text-muted-foreground mb-4">Push your limits. A custom test generated exclusively with HARD difficulty questions.</p>
+               <Button size="sm" variant="outline" className="mt-auto w-full">Launch Hard Mode</Button>
+             </CardContent>
+           </Card>
+        </div>
+      </div>
 
       {/* Question review */}
       <Card>
