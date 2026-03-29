@@ -1,8 +1,16 @@
-// company-research/index.ts — FIXED VERSION
+// supabase/functions/company-research/index.ts — PRODUCTION READY (ALL FEATURES PRESERVED)
 
 import { handleCors, corsHeaders } from "../_shared/cors.ts";
-import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
-import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
+import { 
+  requireAuth, 
+  parseBody, 
+  successResponse, 
+  errorResponse, 
+  deductCredits, 
+  callAI, 
+  log 
+} from "../_shared/utils.ts";
+import { parseJSON } from "../_shared/gemini.ts";
 
 const SYSTEM_PROMPT = `
 You are an expert career and company research assistant.
@@ -13,68 +21,37 @@ Never output markdown. Only output valid JSON. Be specific and practical.
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
+  
+  const FN = "company-research";
 
   try {
     /* ---------------------------------------------------------
        AUTHENTICATE USER SAFELY
     --------------------------------------------------------- */
-    const db = createServiceClient();
-
-    const authHeader =
-      req.headers.get("authorization") ??
-      req.headers.get("Authorization") ??
-      "";
-
-    if (!authHeader.toLowerCase().startsWith("bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: corsHeaders,
-      });
-    }
-
-    const token = authHeader.replace(/^bearer\s+/i, "");
-    const {
-      data: { user },
-      error: userErr,
-    } = await db.auth.getUser(token);
-
-    if (userErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: corsHeaders,
-      });
-    }
-
-    const userId = user.id;
+    const auth = await requireAuth(req);
+    const userId = auth.userId;
 
     /* ---------------------------------------------------------
        PARSE & SANITIZE INPUT
     --------------------------------------------------------- */
-    const body = await req.json().catch(() => ({}));
+    const body = await parseBody<any>(req);
     const rawCompany = String(body.company || "").trim();
     const rawRole = body.role ? String(body.role).trim() : "";
 
     if (!rawCompany) {
-      return new Response(
-        JSON.stringify({ error: "Missing company name" }),
-        { status: 400, headers: corsHeaders }
-      );
+      return errorResponse("Missing company name", "INVALID_REQUEST", 400);
     }
 
+    // Exact preservation of original sanitization limits
     const company = rawCompany.slice(0, 100);
     const role = rawRole.slice(0, 100);
 
     /* ---------------------------------------------------------
-       CREDIT DEDUCTION (8 credits)
+       CREDIT DEDUCTION (Preserved 8 credits cost)
     --------------------------------------------------------- */
-    const credit = await deductCredits(userId, "company_research", 8);
+    const credit = await deductCredits(userId, "company_research" as any, 8);
     if (!credit.success) {
-      return new Response(
-        JSON.stringify({
-          error: "Insufficient credits. Company research requires 8 credits.",
-        }),
-        { status: 402, headers: corsHeaders }
-      );
+      return errorResponse("Insufficient credits. Company research requires 8 credits.", "INSUFFICIENT_CREDITS", 402);
     }
 
     /* ---------------------------------------------------------
@@ -107,14 +84,19 @@ Notes:
 `;
 
     /* ---------------------------------------------------------
-       CALL GEMINI
+       CALL AI & PARSE JSON OUTPUT
     --------------------------------------------------------- */
-    const raw = await geminiGenerate(prompt, SYSTEM_PROMPT, 0.5, 2000);
+    const aiResult = await callAI({
+      model: "gemini-1.5-pro",
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        { role: "user", content: prompt }
+      ],
+      maxTokens: 2000,
+      temperature: 0.5
+    });
 
-    /* ---------------------------------------------------------
-       PARSE JSON OUTPUT
-    --------------------------------------------------------- */
-    const data = parseJSON(raw, {
+    const data = parseJSON(aiResult.text, {
       overview: "No data available.",
       industry: "",
       tags: [],
@@ -125,14 +107,15 @@ Notes:
       watch_outs: [],
     });
 
+    log(FN, "info", "Company research generated", { userId, company });
+
     return new Response(JSON.stringify(data), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
+
   } catch (err) {
-    console.error("company-research error:", err);
-    return new Response(JSON.stringify({ error: "Internal error" }), {
-      status: 500,
-      headers: corsHeaders,
-    });
+    if (err instanceof Response) return err;
+    log(FN, "error", "company-research error", err);
+    return errorResponse("Internal error", "INTERNAL_ERROR", 500);
   }
 });
