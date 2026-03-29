@@ -1,17 +1,13 @@
 // @ts-nocheck
-import { useState, useRef, useCallback } from "react";
-import { Upload, Download, Check, AlertCircle, Loader2, X, FileSpreadsheet } from "lucide-react";
+import { useState, useRef } from "react";
+import { Upload, Download, Check, AlertCircle, Loader2, X, FileSpreadsheet, Pencil } from "lucide-react";
 import * as XLSX from "xlsx";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
-import { Input } from "@/components/ui/Input";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
-} from "@/components/ui/select";
 
 interface ParsedRow {
   _idx: number;
@@ -71,7 +67,7 @@ export default function ExcelImportTab({ onImported }: { onImported: (count: num
         const invalid: ParsedRow[] = [];
 
         json.forEach((row, idx) => {
-          const parsed: ParsedRow = {
+          const parsedRow: ParsedRow = {
             _idx: idx + 2,
             question_text: String(row["Question_Text"] ?? row["question_text"] ?? "").trim(),
             option_a: String(row["Option_A"] ?? row["option_a"] ?? "").trim(),
@@ -89,15 +85,15 @@ export default function ExcelImportTab({ onImported }: { onImported: (count: num
             source_year: Number(row["Source_Year"] ?? row["source_year"]) || null,
             question_type: String(row["Question_Type"] ?? row["question_type"] ?? "MCQ").trim().toUpperCase(),
           };
-          if (!VALID_DIFFICULTIES.includes(parsed.difficulty)) parsed.difficulty = "MEDIUM";
-          if (!VALID_TYPES.includes(parsed.question_type)) parsed.question_type = "MCQ";
+          if (!VALID_DIFFICULTIES.includes(parsedRow.difficulty)) parsedRow.difficulty = "MEDIUM";
+          if (!VALID_TYPES.includes(parsedRow.question_type)) parsedRow.question_type = "MCQ";
 
-          const err = validateRow(parsed);
+          const err = validateRow(parsedRow);
           if (err) {
-            parsed._error = err;
-            invalid.push(parsed);
+            parsedRow._error = err;
+            invalid.push(parsedRow);
           } else {
-            valid.push(parsed);
+            valid.push(parsedRow);
           }
         });
 
@@ -120,8 +116,18 @@ export default function ExcelImportTab({ onImported }: { onImported: (count: num
     if (file) processFile(file);
   }
 
-  function updateField(idx: number, key: keyof ParsedRow, value: unknown) {
-    setParsed((prev) => prev?.map((r) => r._idx === idx ? { ...r, [key]: value } : r) ?? null);
+  function updateField(idx: number, key: keyof ParsedRow, value: string) {
+    setParsed((prev) => {
+      if (!prev) return null;
+      const updated = prev.map((r) => r._idx === idx ? { ...r, [key]: value } : r);
+      // Re-validate the updated row
+      const targetRow = updated.find(r => r._idx === idx);
+      if (targetRow) {
+          const err = validateRow(targetRow);
+          if (err) toast.error(`Row ${idx} error: ${err}`);
+      }
+      return updated;
+    });
   }
 
   function removeRow(idx: number) {
@@ -132,6 +138,12 @@ export default function ExcelImportTab({ onImported }: { onImported: (count: num
     if (!parsed?.length || !user?.id) return;
     setSaving(true);
     try {
+      // Validate all rows before saving
+      for (const r of parsed) {
+          const err = validateRow(r);
+          if (err) throw new Error(`Row ${r._idx}: ${err}`);
+      }
+
       const rows = parsed.map((r) => ({
         question_text: r.question_text,
         question_type: r.question_type,
@@ -168,9 +180,9 @@ export default function ExcelImportTab({ onImported }: { onImported: (count: num
       onImported(rows.length);
       setParsed(null);
       setErrors([]);
-    } catch (err) {
+    } catch (err: any) {
       console.error("[ExcelImport] save error:", err);
-      toast.error("Failed to save questions. Please try again.");
+      toast.error(err.message || "Failed to save questions. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -182,7 +194,7 @@ export default function ExcelImportTab({ onImported }: { onImported: (count: num
       <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
         <div>
           <p className="text-sm font-medium text-foreground">Download Template</p>
-          <p className="text-xs text-muted-foreground">Pre-formatted Excel file with 3 sample questions</p>
+          <p className="text-xs text-muted-foreground">Pre-formatted Excel file with headers</p>
         </div>
         <a href="/ClarifyAI_Question_Template.xlsx" download>
           <Button variant="outline" size="sm">
@@ -211,7 +223,7 @@ export default function ExcelImportTab({ onImported }: { onImported: (count: num
         </div>
       )}
 
-      {/* Preview table */}
+      {/* Preview table with Inline Editing */}
       {parsed && parsed.length > 0 && (
         <Card>
           <CardContent className="p-4 space-y-3">
@@ -231,37 +243,72 @@ export default function ExcelImportTab({ onImported }: { onImported: (count: num
               </div>
             </div>
 
-            <div className="max-h-[400px] overflow-auto rounded-lg border border-border">
-              <table className="w-full text-xs">
-                <thead className="bg-muted/50 sticky top-0">
+            <div className="max-h-[500px] overflow-auto rounded-lg border border-border">
+              <table className="w-full text-xs text-left whitespace-nowrap">
+                <thead className="bg-muted/80 sticky top-0 z-10 shadow-sm">
                   <tr>
-                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">#</th>
-                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Question</th>
-                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Subject</th>
-                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Topic</th>
-                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Diff</th>
-                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground">Ans</th>
-                    <th className="px-2 py-1.5 text-left font-medium text-muted-foreground w-8"></th>
+                    <th className="px-3 py-2 font-medium text-muted-foreground border-b border-border">#</th>
+                    <th className="px-3 py-2 font-medium text-muted-foreground border-b border-border min-w-[250px]">Question <Pencil className="inline w-3 h-3 ml-1" /></th>
+                    <th className="px-3 py-2 font-medium text-muted-foreground border-b border-border">Subject <Pencil className="inline w-3 h-3 ml-1" /></th>
+                    <th className="px-3 py-2 font-medium text-muted-foreground border-b border-border">Topic <Pencil className="inline w-3 h-3 ml-1" /></th>
+                    <th className="px-3 py-2 font-medium text-muted-foreground border-b border-border">Diff <Pencil className="inline w-3 h-3 ml-1" /></th>
+                    <th className="px-3 py-2 font-medium text-muted-foreground border-b border-border">Ans <Pencil className="inline w-3 h-3 ml-1" /></th>
+                    <th className="px-3 py-2 font-medium text-muted-foreground border-b border-border text-center">Action</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-border">
                   {parsed.map((r, i) => (
-                    <tr key={r._idx} className="border-t border-border hover:bg-muted/20">
-                      <td className="px-2 py-1.5 text-muted-foreground">{i + 1}</td>
-                      <td className="px-2 py-1.5 text-foreground max-w-[300px] truncate">{r.question_text.slice(0, 60)}{r.question_text.length > 60 ? "…" : ""}</td>
-                      <td className="px-2 py-1.5 text-muted-foreground">{r.subject}</td>
-                      <td className="px-2 py-1.5 text-muted-foreground">{r.topic}</td>
-                      <td className="px-2 py-1.5">
-                        <span className={cn("text-[10px] font-semibold px-1.5 py-0.5 rounded-full",
-                          r.difficulty === "HARD" ? "bg-red-500/10 text-red-400" :
-                          r.difficulty === "EASY" ? "bg-green-500/10 text-green-400" :
-                          "bg-amber-500/10 text-amber-400"
-                        )}>{r.difficulty}</span>
+                    <tr key={r._idx} className="hover:bg-muted/30 transition-colors group">
+                      <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
+                      <td className="px-3 py-1">
+                        <input 
+                           type="text" 
+                           value={r.question_text} 
+                           onChange={(e) => updateField(r._idx, 'question_text', e.target.value)}
+                           className="w-full bg-transparent border border-transparent hover:border-border focus:border-primary focus:bg-background px-2 py-1 rounded text-foreground outline-none transition-all"
+                        />
                       </td>
-                      <td className="px-2 py-1.5 font-mono font-bold text-foreground">{r.correct_answer}</td>
-                      <td className="px-2 py-1.5">
-                        <button type="button" onClick={() => removeRow(r._idx)} className="text-muted-foreground hover:text-destructive">
-                          <X className="h-3 w-3" />
+                      <td className="px-3 py-1">
+                         <input 
+                           type="text" 
+                           value={r.subject} 
+                           onChange={(e) => updateField(r._idx, 'subject', e.target.value)}
+                           className="w-24 bg-transparent border border-transparent hover:border-border focus:border-primary focus:bg-background px-2 py-1 rounded text-foreground outline-none transition-all"
+                        />
+                      </td>
+                      <td className="px-3 py-1">
+                         <input 
+                           type="text" 
+                           value={r.topic} 
+                           onChange={(e) => updateField(r._idx, 'topic', e.target.value)}
+                           className="w-28 bg-transparent border border-transparent hover:border-border focus:border-primary focus:bg-background px-2 py-1 rounded text-foreground outline-none transition-all"
+                        />
+                      </td>
+                      <td className="px-3 py-1">
+                         <select 
+                           value={r.difficulty}
+                           onChange={(e) => updateField(r._idx, 'difficulty', e.target.value)}
+                           className={cn("bg-transparent border border-transparent hover:border-border focus:border-primary focus:bg-background px-1 py-1 rounded outline-none font-semibold text-[10px]",
+                              r.difficulty === "HARD" ? "text-red-500" : r.difficulty === "EASY" ? "text-green-500" : "text-amber-500"
+                           )}
+                         >
+                            <option value="EASY">EASY</option>
+                            <option value="MEDIUM">MEDIUM</option>
+                            <option value="HARD">HARD</option>
+                         </select>
+                      </td>
+                      <td className="px-3 py-1">
+                         <input 
+                           type="text" 
+                           value={r.correct_answer} 
+                           onChange={(e) => updateField(r._idx, 'correct_answer', e.target.value.toUpperCase())}
+                           className="w-12 bg-transparent border border-transparent hover:border-border focus:border-primary focus:bg-background px-2 py-1 rounded font-mono font-bold text-foreground outline-none transition-all text-center"
+                           maxLength={1}
+                        />
+                      </td>
+                      <td className="px-3 py-2 text-center">
+                        <button type="button" onClick={() => removeRow(r._idx)} className="text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity">
+                          <X className="h-4 w-4 mx-auto" />
                         </button>
                       </td>
                     </tr>
@@ -273,30 +320,24 @@ export default function ExcelImportTab({ onImported }: { onImported: (count: num
         </Card>
       )}
 
-      {/* Errors */}
+      {/* Errors List */}
       {errors.length > 0 && (
-        <Card className="border-amber-500/30">
+        <Card className="border-amber-500/30 bg-amber-500/5">
           <CardContent className="p-4 space-y-2">
-            <p className="text-sm font-semibold text-amber-400 flex items-center gap-1.5">
+            <p className="text-sm font-semibold text-amber-500 flex items-center gap-1.5">
               <AlertCircle className="h-4 w-4" />
-              {errors.length} rows skipped
+              {errors.length} rows skipped (Please fix in Excel and re-upload)
             </p>
             <div className="max-h-[150px] overflow-auto text-xs space-y-1">
               {errors.map((e) => (
                 <p key={e._idx} className="text-muted-foreground">
-                  <span className="font-mono text-amber-400">Row {e._idx}:</span> {e._error}
+                  <span className="font-mono text-amber-500 font-medium">Row {e._idx}:</span> {e._error}
                 </p>
               ))}
             </div>
           </CardContent>
         </Card>
       )}
-
-      {/* Info */}
-      <div className="flex items-start gap-2 rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
-        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
-        <span>Excel import is <strong>free</strong> — no credits needed. Questions are parsed entirely in your browser.</span>
-      </div>
     </div>
   );
 }
