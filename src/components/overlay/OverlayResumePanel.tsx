@@ -1,3 +1,4 @@
+// src/components/overlay/OverlayResumePanel.tsx
 import { useState } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useDocumentStore } from "@/store/documentStore";
@@ -24,27 +25,33 @@ export function OverlayResumePanel() {
 
   return (
     <div className="space-y-3 p-3 text-xs">
+
       {/* Document Selector */}
       <div>
         <button
           onClick={() => setShowDocs((p) => !p)}
-          className="w-full flex items-center justify-between p-2.5 bg-white/5 hover:bg-white/8 border border-white/10 rounded-lg text-[11px] text-muted-foreground/60 transition-colors"
+          className={cn(
+            "w-full flex items-center justify-between p-2.5 rounded-xl border text-[11px] transition-all",
+            showDocs
+              ? "bg-white/8 border-white/12 text-white/60"
+              : "bg-white/[0.04] hover:bg-white/[0.07] border-white/[0.08] text-white/40 hover:text-white/60"
+          )}
         >
-          <span className="font-semibold uppercase tracking-wider">Context Documents</span>
-          <ChevronDown className={cn("w-3 h-3 transition-transform", showDocs && "rotate-180")} />
+          <span className="font-bold uppercase tracking-widest">Context Documents</span>
+          <ChevronDown className={cn("w-3 h-3 transition-transform duration-200", showDocs && "rotate-180")} />
         </button>
 
         {showDocs && (
-          <div className="mt-2 space-y-2 p-2.5 bg-white/3 border border-white/5 rounded-lg">
+          <div className="mt-2 space-y-2 p-2.5 bg-white/[0.03] border border-white/[0.06] rounded-xl">
             {/* Resume selector */}
             <div>
-              <p className="text-[11px] text-muted-foreground/40 uppercase tracking-wider mb-1 flex items-center gap-1">
+              <p className="text-[10px] text-white/25 uppercase tracking-widest mb-1.5 flex items-center gap-1 font-bold">
                 <FileText className="w-2.5 h-2.5" /> Resume
               </p>
               <select
                 value={activeResumeId ?? ""}
                 onChange={(e) => setActiveResumeId(e.target.value || null)}
-                className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-2 py-1.5 text-[11px] focus:outline-none focus:border-brand-400/30"
+                className="w-full bg-white/[0.05] border border-white/[0.08] text-white/80 rounded-lg px-2 py-1.5 text-[12px] focus:outline-none focus:border-indigo-500/30 transition-colors"
               >
                 <option value="">None</option>
                 {resumes.map((r) => (
@@ -55,34 +62,36 @@ export function OverlayResumePanel() {
 
             {/* JD selector */}
             <div>
-              <p className="text-[11px] text-muted-foreground/40 uppercase tracking-wider mb-1 flex items-center gap-1">
+              <p className="text-[10px] text-white/25 uppercase tracking-widest mb-1.5 flex items-center gap-1 font-bold">
                 <Briefcase className="w-2.5 h-2.5" /> Job Description
               </p>
               <select
                 value={activeJdId ?? ""}
                 onChange={(e) => setActiveJDId(e.target.value || null)}
-                className="w-full bg-white/5 border border-white/10 text-white rounded-lg px-2 py-1.5 text-[11px] focus:outline-none focus:border-brand-400/30"
+                className="w-full bg-white/[0.05] border border-white/[0.08] text-white/80 rounded-lg px-2 py-1.5 text-[12px] focus:outline-none focus:border-indigo-500/30 transition-colors"
               >
                 <option value="">None</option>
                 {jds.map((j) => (
-                  <option key={j.id} value={j.id}>{j.role_title}{j.company_name ? ` — ${j.company_name}` : ""}</option>
+                  <option key={j.id} value={j.id}>
+                    {j.role_title}{j.company_name ? ` — ${j.company_name}` : ""}
+                  </option>
                 ))}
               </select>
             </div>
 
-            {/* Active context indicator */}
+            {/* Active context chips */}
             {(activeResume || activeJd) && (
-              <div className="flex flex-wrap gap-1 pt-1 border-t border-white/5">
+              <div className="flex flex-wrap gap-1 pt-1.5 border-t border-white/[0.06]">
                 {activeResume && (
-                  <span className="px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-300 text-[11px] flex items-center gap-0.5">
+                  <span className="px-2 py-0.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-300 text-[11px] flex items-center gap-1">
                     <FileText className="w-2 h-2" />
-                    {activeResume.title}
+                    {activeResume.title.slice(0, 16)}
                   </span>
                 )}
                 {activeJd && (
-                  <span className="px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 text-[11px] flex items-center gap-0.5">
+                  <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-[11px] flex items-center gap-1">
                     <Briefcase className="w-2 h-2" />
-                    {activeJd.role_title}{activeJd.company_name ? ` — ${activeJd.company_name}` : ""}
+                    {activeJd.role_title.slice(0, 16)}
                   </span>
                 )}
               </div>
@@ -92,51 +101,43 @@ export function OverlayResumePanel() {
       </div>
 
       {/* Simple Language toggle */}
-      <div className="flex items-center justify-between px-2.5 py-2 bg-white/3 border border-white/5 rounded-lg">
+      <div className="flex items-center justify-between px-3 py-2 bg-white/[0.03] border border-white/[0.06] rounded-xl">
         <div>
-          <p className="text-[11px] font-medium text-muted-foreground/70">Simple Language</p>
-          <p className="text-[11px] text-muted-foreground/40 mt-0.5">Plain, jargon-free answers</p>
+          <p className="text-[12px] font-semibold text-white/60">Simple Language</p>
+          <p className="text-[11px] text-white/30 mt-0.5">Plain, jargon-free answers</p>
         </div>
         <button
           onClick={() => setSimpleLanguage(!simpleLanguage)}
           className={cn(
-            "relative inline-flex h-5 w-9 items-center rounded-full transition-colors",
-            simpleLanguage ? "bg-emerald-500" : "bg-white/10"
+            "relative inline-flex h-5 w-9 items-center rounded-full transition-colors border",
+            simpleLanguage
+              ? "bg-emerald-500 border-emerald-400/30 shadow-sm shadow-emerald-500/30"
+              : "bg-white/10 border-white/10"
           )}
         >
           <span className={cn(
             "inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform",
-            simpleLanguage ? "translate-x-5" : "translate-x-0.5"
+            simpleLanguage ? "translate-x-[18px]" : "translate-x-0.5"
           )} />
         </button>
       </div>
 
       {!points && !activeResume && !activeJd ? (
-        <div className="p-4 text-center">
-          <p className="text-xs text-muted-foreground/40 italic">
-            No context documents loaded.
-          </p>
-          <p className="mt-1 text-[11px] text-muted-foreground/30">
-            Select a resume or job description above.
-          </p>
+        <div className="p-5 text-center rounded-xl border border-white/[0.05] bg-white/[0.02]">
+          <p className="text-[12px] text-white/25 italic">No context documents loaded.</p>
+          <p className="mt-1 text-[11px] text-white/18">Select a resume or job description above.</p>
         </div>
       ) : (
         <>
           {ctx && (
-            <div className="flex items-center gap-3 rounded-lg bg-brand-500/10 px-3 py-2">
-              <span className="text-[11px] text-brand-300/80">
-                {ctx.skills_count} skills
-              </span>
-              <span className="text-[11px] text-muted-foreground/30">·</span>
-              <span className="text-[11px] text-brand-300/80">
-                {ctx.experience_count} roles
-              </span>
+            <div className="flex items-center gap-2 rounded-xl bg-indigo-500/8 border border-indigo-500/12 px-3 py-2">
+              <Chip value={`${ctx.skills_count} skills`} />
+              <span className="text-white/15">·</span>
+              <Chip value={`${ctx.experience_count} roles`} />
               {ctx.total_years && (
                 <>
-                  <span className="text-[11px] text-muted-foreground/30">·</span>
-                  <span className="text-[11px] text-brand-300/80">
-                    {ctx.total_years}+ yrs
-                  </span>
+                  <span className="text-white/15">·</span>
+                  <Chip value={`${ctx.total_years}+ yrs`} />
                 </>
               )}
             </div>
@@ -145,7 +146,7 @@ export function OverlayResumePanel() {
           {points && (
             <>
               <Section icon={FileText} title="Introduction">
-                <p className="text-overlay-text leading-relaxed">{points.intro}</p>
+                <p className="text-[12px] text-white/70 leading-relaxed">{points.intro}</p>
               </Section>
 
               {points.skills_summary && (
@@ -154,7 +155,7 @@ export function OverlayResumePanel() {
                     {points.skills_summary.split(", ").map((skill, i) => (
                       <span
                         key={i}
-                        className="rounded-md border border-brand-500/20 bg-brand-500/10 px-1.5 py-0.5 text-[11px] text-brand-300"
+                        className="rounded-lg border border-indigo-500/20 bg-indigo-500/10 px-2 py-0.5 text-[11px] text-indigo-300"
                       >
                         {skill}
                       </span>
@@ -167,8 +168,8 @@ export function OverlayResumePanel() {
                 <Section icon={Briefcase} title="Experience">
                   <ul className="space-y-1">
                     {points.experience_points.map((pt, i) => (
-                      <li key={i} className="flex gap-1.5 text-overlay-text">
-                        <span className="shrink-0 text-brand-400">•</span>
+                      <li key={i} className="flex gap-1.5 text-[12px] text-white/65">
+                        <span className="shrink-0 text-indigo-400">•</span>
                         <span>{pt}</span>
                       </li>
                     ))}
@@ -180,8 +181,8 @@ export function OverlayResumePanel() {
                 <Section icon={Code2} title="Projects">
                   <ul className="space-y-1">
                     {points.project_highlights.map((pt, i) => (
-                      <li key={i} className="flex gap-1.5 text-overlay-text">
-                        <span className="shrink-0 text-brand-400">•</span>
+                      <li key={i} className="flex gap-1.5 text-[12px] text-white/65">
+                        <span className="shrink-0 text-indigo-400">•</span>
                         <span>{pt}</span>
                       </li>
                     ))}
@@ -191,7 +192,7 @@ export function OverlayResumePanel() {
 
               {points.education_line && (
                 <Section icon={GraduationCap} title="Education">
-                  <p className="text-overlay-text">{points.education_line}</p>
+                  <p className="text-[12px] text-white/65">{points.education_line}</p>
                 </Section>
               )}
 
@@ -199,7 +200,7 @@ export function OverlayResumePanel() {
                 <Section icon={Lightbulb} title="Quick Tips">
                   <ul className="space-y-1">
                     {points.interview_tips.map((tip, i) => (
-                      <li key={i} className="flex gap-1.5 text-overlay-text">
+                      <li key={i} className="flex gap-1.5 text-[12px] text-white/65">
                         <span className="shrink-0 text-amber-400">💡</span>
                         <span>{tip}</span>
                       </li>
@@ -215,6 +216,10 @@ export function OverlayResumePanel() {
   );
 }
 
+function Chip({ value }: { value: string }) {
+  return <span className="text-[11px] font-semibold text-indigo-300/70">{value}</span>;
+}
+
 function Section({
   icon: Icon,
   title,
@@ -225,10 +230,10 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <div>
-      <div className="mb-1 flex items-center gap-1.5">
-        <Icon className="h-3 w-3 text-brand-400/70" />
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-brand-300/70">
+    <div className="space-y-1.5">
+      <div className="flex items-center gap-1.5">
+        <Icon className="h-2.5 w-2.5 text-indigo-400/60" />
+        <span className="text-[10px] font-bold uppercase tracking-widest text-indigo-300/55">
           {title}
         </span>
       </div>
