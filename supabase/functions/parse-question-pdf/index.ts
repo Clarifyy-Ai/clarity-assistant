@@ -318,7 +318,7 @@ Deno.serve(async (req) => {
     }
 
     /* -----------------------------------------
-       AI FALLBACK — CLAUDE
+       AI FALLBACK — Lovable AI Gateway
     ----------------------------------------- */
     if (credits !== -1 && credits < CREDIT_COST)
       return errorResponse("Not enough credits.", "NO_CREDITS", 403);
@@ -330,7 +330,9 @@ Deno.serve(async (req) => {
       charged = true;
     }
 
-    const aiParsed = await callClaude(pdfBase64, apiKey);
+    // Use OCR text or raw decoded text for AI parsing
+    const textForAI = ocrText || rawText;
+    const aiParsed = await callAI(textForAI);
 
     if (aiParsed && aiParsed.length > 0) {
       return successResponse({ questions: aiParsed, mode: "ai" });
