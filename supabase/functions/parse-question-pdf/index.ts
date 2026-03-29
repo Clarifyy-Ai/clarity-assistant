@@ -242,40 +242,69 @@ function manualParse(text: string) {
 const EXTRACTION_SYSTEM_PROMPT = `You are a question extraction engine. Given PDF text content, extract all questions into a JSON array. Each object must have: question_text, question_type ("MCQ" or "SHORT_ANSWER"), options (array of {label, text} or null), correct_answer (A/B/C/D or text), explanation, subject, topic, difficulty ("EASY"/"MEDIUM"/"HARD"), marks_positive (number), marks_negative (number). Return ONLY a valid JSON array, no markdown.`;
 
 async function callAI(pdfText: string) {
-  const apiKey = Deno.env.get("LOVABLE_API_KEY");
-  if (!apiKey) return null;
+  // Try Gemini API directly first (user's own key), then Lovable gateway
+  const geminiKey = Deno.env.get("GEMINI_API_KEY");
+  const lovableKey = Deno.env.get("LOVABLE_API_KEY");
 
-  try {
-    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
-        messages: [
-          { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
-          { role: "user", content: `Extract all questions from this text into JSON:\n\n${pdfText.slice(0, 30000)}` },
-        ],
-      }),
-    });
+  const prompt = `Extract all questions from this text into JSON:\n\n${pdfText.slice(0, 30000)}`;
 
-    if (!res.ok) return null;
-
-    const json = await res.json();
-    const text = json?.choices?.[0]?.message?.content ?? "";
-    const cleaned = text.replace(/```json/gi, "").replace(/```/g, "").trim();
-
+  // --- Attempt 1: Direct Gemini ---
+  if (geminiKey) {
     try {
-      const parsed = JSON.parse(cleaned);
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return null;
-    }
-  } catch {
-    return null;
+      const res = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: EXTRACTION_SYSTEM_PROMPT }] },
+            contents: [{ role: "user", parts: [{ text: prompt }] }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 8192 },
+          }),
+        }
+      );
+      if (res.ok) {
+        const data = await res.json();
+        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+        const cleaned = text.replace(/```json/gi, "").replace(/```/g, "").trim();
+        try {
+          const parsed = JSON.parse(cleaned);
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        } catch { /* fall through */ }
+      }
+    } catch { /* fall through to gateway */ }
   }
+
+  // --- Attempt 2: Lovable AI Gateway ---
+  if (lovableKey) {
+    try {
+      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Authorization": `Bearer ${lovableKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          model: "google/gemini-2.5-flash",
+          messages: [
+            { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
+            { role: "user", content: prompt },
+          ],
+        }),
+      });
+      if (res.ok) {
+        const json = await res.json();
+        const text = json?.choices?.[0]?.message?.content ?? "";
+        const cleaned = text.replace(/```json/gi, "").replace(/```/g, "").trim();
+        try {
+          const parsed = JSON.parse(cleaned);
+          if (Array.isArray(parsed)) return parsed;
+        } catch { /* ignore */ }
+      }
+    } catch { /* ignore */ }
+  }
+
+  return null;
 }
 
 /* ======================================================
