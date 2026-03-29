@@ -20,13 +20,25 @@ export interface HotkeyDefinition {
   showInHelp:  boolean;
 }
 
+// ─── Corner anchor map for dock positions ─────────────────────────
+
+const DOCK_POSITIONS: Array<{
+  key: string;
+  anchor: import("./windowManager").WindowAnchor;
+}> = [
+  { key: "1", anchor: "top-left"     },
+  { key: "2", anchor: "top-right"    },
+  { key: "3", anchor: "bottom-left"  },
+  { key: "4", anchor: "bottom-right" },
+];
+
 // ─────────────────────────────────────────────────────────────────
 // Hotkey definitions
 // ─────────────────────────────────────────────────────────────────
 
 export function buildHotkeyDefinitions(): HotkeyDefinition[] {
   return [
-    // ── Overlay visibility ─────────────────────────────────
+    // ── Overlay visibility ─────────────────────────────────────
     {
       id:          "toggle_overlay",
       label:       "Toggle Overlay",
@@ -48,7 +60,7 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
       showInHelp:  true,
     },
 
-    // ── Hint style cycling ─────────────────────────────────
+    // ── Hint style cycling ─────────────────────────────────────
     {
       id:          "cycle_hint_style",
       label:       "Cycle Hint Style",
@@ -60,7 +72,7 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
       showInHelp:  true,
     },
 
-    // ── Coding screenshot ──────────────────────────────────
+    // ── Coding screenshot ──────────────────────────────────────
     {
       id:          "capture_coding_problem",
       label:       "Capture Coding Problem",
@@ -74,7 +86,7 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
       showInHelp:  true,
     },
 
-    // ── Panic ──────────────────────────────────────────────
+    // ── Panic ──────────────────────────────────────────────────
     {
       id:          "trigger_panic",
       label:       "Panic Button",
@@ -89,7 +101,74 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
       showInHelp:  true,
     },
 
-    // ── Session control ────────────────────────────────────
+    // ── Mute / Unmute ──────────────────────────────────────────
+    // FIX: was referenced in OverlayHotkeyHelp but missing from definitions
+    {
+      id:          "toggle_mute",
+      label:       "Mute / Unmute",
+      description: "Toggle microphone during a live session",
+      keys:        ["ctrl", "shift", "m"],
+      category:    "session",
+      action:      () => {
+        const session = useSessionStore.getState();
+        // Guard: only attempt if the method exists (session type may vary)
+        if (typeof (session as any).toggleMic === "function") {
+          (session as any).toggleMic();
+        } else {
+          console.warn("[HotkeyManager] toggleMic not available on sessionStore");
+        }
+      },
+      isEnabled:   () => useSessionStore.getState().status === "active",
+      showInHelp:  true,
+    },
+
+    // ── Hotkey help panel ──────────────────────────────────────
+    // FIX: was referenced in OverlayHotkeyHelp but missing from definitions
+    {
+      id:          "show_hotkey_help",
+      label:       "Hotkey Help",
+      description: "Show this keyboard shortcut reference",
+      keys:        ["ctrl", "shift", "/"],
+      category:    "overlay",
+      action:      () => {
+        const store = useOverlayStore.getState();
+        // Toggle: if already visible, dismiss; otherwise show
+        if (typeof store.setHotkeyHelpVisible === "function") {
+          store.setHotkeyHelpVisible(!store.is_hotkey_help_visible);
+        }
+      },
+      isEnabled:   () => true,
+      showInHelp:  true,
+    },
+
+    // ── Dock positions 1–4 ─────────────────────────────────────
+    // FIX: was referenced in OverlayHotkeyHelp ("Quick dock positions") but
+    //      no definitions existed. Four separate entries so matchesHotkey
+    //      (exact-key-count matcher) can distinguish each numeric key.
+    ...DOCK_POSITIONS.map(({ key, anchor }) => ({
+      id:          `dock_position_${key}`,
+      label:       `Dock Position ${key}`,
+      description: `Snap overlay to ${anchor.replace("-", " ")} corner`,
+      keys:        ["ctrl", "shift", key],
+      category:    "overlay" as const,
+      action:      () => {
+        const store = useOverlayStore.getState();
+        // Prefer overlayStore's snapTo if available, else fall through to
+        // the global WindowManager singleton.
+        if (typeof (store as any).snapTo === "function") {
+          (store as any).snapTo(anchor);
+        } else {
+          try {
+            const { getGlobalWindowManager } = require("./windowManager");
+            getGlobalWindowManager().centerIn(anchor);
+          } catch {}
+        }
+      },
+      isEnabled:   () => useOverlayStore.getState().is_visible,
+      showInHelp:  false, // grouped under a single "1–4" entry in the help UI
+    })),
+
+    // ── Session control ────────────────────────────────────────
     {
       id:          "end_session",
       label:       "End Session",
@@ -98,20 +177,22 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
       category:    "session",
       action:      () => useSessionStore.getState().setStatus("completed"),
       isEnabled:   () => useSessionStore.getState().status === "active",
-      showInHelp:  false, // Hidden — prevent accidental triggers
+      showInHelp:  false, // Hidden — prevent accidental trigger
     },
 
-    // ── Clear hint ─────────────────────────────────────────
+    // ── Clear hint / close ────────────────────────────────────
     {
       id:          "clear_hint",
       label:       "Clear Hint",
-      description: "Clear current hint from overlay",
+      description: "Clear current hint or dismiss the overlay panel",
       keys:        ["escape"],
       category:    "hint",
       action:      () => {
         const store = useOverlayStore.getState();
         if (store.is_panic_visible) {
           store.hidePanic();
+        } else if (store.is_hotkey_help_visible) {
+          store.setHotkeyHelpVisible(false);
         } else {
           store.clearHint();
         }
@@ -139,7 +220,7 @@ export class HotkeyManager {
   // ── Register all hotkeys ──────────────────────────────────────
   register(): void {
     if (this.isActive) return;
-    // Capture phase: useful for iframes and early interception
+    // Capture phase: fires before any element's own keydown handler
     document.addEventListener("keydown", this.boundHandler, { capture: true });
     this.isActive = true;
   }
@@ -152,17 +233,16 @@ export class HotkeyManager {
 
   // ── Key event handler ─────────────────────────────────────────
   private handleKeyDown(e: KeyboardEvent): void {
-    // Never intercept while typing (except Escape, which should always work)
+    // Never intercept while typing in an input (Escape is always allowed through)
     const target = e.target as HTMLElement | null;
-    const tag = (target?.tagName || "").toUpperCase();
+    const tag = (target?.tagName ?? "").toUpperCase();
     const isEditable =
-      tag === "INPUT" ||
+      tag === "INPUT"    ||
       tag === "TEXTAREA" ||
       (target?.isContentEditable ?? false);
 
     if (isEditable && e.key !== "Escape") return;
 
-    // Build a normalized set of pressed keys
     const pressed = buildPressedSet(e);
 
     for (const hotkey of this.definitions) {
@@ -173,8 +253,6 @@ export class HotkeyManager {
         try {
           hotkey.action();
         } catch (err) {
-          // Avoid breaking the global handler on action errors
-          // eslint-disable-next-line no-console
           console.error(`[HotkeyManager:${hotkey.id}] action failed`, err);
         }
         return;
@@ -182,7 +260,7 @@ export class HotkeyManager {
     }
   }
 
-  // ── Get help definitions ──────────────────────────────────────
+  // ── Help items (for the hotkey help panel) ────────────────────
   getHelpItems(): Array<{ label: string; keys: string; description: string }> {
     return this.definitions
       .filter((d) => d.showInHelp)
@@ -192,6 +270,19 @@ export class HotkeyManager {
         description: d.description,
       }));
   }
+
+  // ── Add / remove definitions at runtime ───────────────────────
+  addDefinition(def: HotkeyDefinition): void {
+    // Replace if same id already exists
+    this.definitions = [
+      ...this.definitions.filter((d) => d.id !== def.id),
+      def,
+    ];
+  }
+
+  removeDefinition(id: string): void {
+    this.definitions = this.definitions.filter((d) => d.id !== id);
+  }
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -199,37 +290,34 @@ export class HotkeyManager {
 // ─────────────────────────────────────────────────────────────────
 
 /**
- * Normalizes platform: treats Cmd (macOS) as "ctrl" so definitions like
- * ["ctrl","shift","h"] work on both Win/Linux (Ctrl+Shift+H) and macOS (⌘+Shift+H).
+ * Normalises platform keys: treats Cmd (macOS) as "ctrl" so definitions
+ * like ["ctrl","shift","h"] work on Win/Linux (Ctrl+Shift+H) and macOS (⌘+Shift+H).
  */
 function buildPressedSet(e: KeyboardEvent): Set<string> {
   const set = new Set<string>();
   if (e.ctrlKey || e.metaKey) set.add("ctrl");
   if (e.shiftKey) set.add("shift");
   if (e.altKey)   set.add("alt");
-
-  // Normalize the primary key (letter/function/etc.)
-  // Note: e.key already respects layout (e.g. 'h'), and we keep lower-case.
-  set.add((e.key || "").toLowerCase());
+  // Keep the primary key lowercase for case-insensitive matching
+  set.add((e.key ?? "").toLowerCase());
   return set;
 }
 
 /**
- * Exact-match helper:
- * - Requires the same number of keys as the definition
- * - Requires every defined key be present
- * This prevents "extra" modifiers from triggering the shortcut.
+ * Exact-match: requires the same key count AND every defined key present.
+ * Prevents "extra" modifiers from accidentally firing a shortcut.
  */
 function matchesHotkey(pressed: Set<string>, required: string[]): boolean {
   if (pressed.size !== required.length) return false;
   return required.every((k) => pressed.has(k.toLowerCase()));
 }
 
+/** Format a keys array into a human-readable shortcut label. */
 export function formatHotkeyLabel(keys: string[]): string {
   return keys
     .map((k) => {
       switch (k.toLowerCase()) {
-        case "ctrl":   return "⌃";  // (⌘ on mac also maps to ctrl here)
+        case "ctrl":   return "⌃";
         case "shift":  return "⇧";
         case "alt":    return "⌥";
         case "escape": return "Esc";
@@ -240,7 +328,7 @@ export function formatHotkeyLabel(keys: string[]): string {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Singleton instance — used across the app
+// Singleton — used across the app
 // ─────────────────────────────────────────────────────────────────
 
 export const hotkeyManager = new HotkeyManager();

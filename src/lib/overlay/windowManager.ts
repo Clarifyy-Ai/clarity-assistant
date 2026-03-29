@@ -5,21 +5,23 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { OverlayError, ErrorCode } from "@/lib/errors";
+import type { CSSProperties } from "react";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const STORAGE_KEY           = "clarify:overlay:window";
-const SNAP_THRESHOLD_PX     = 20;
-const MIN_WIDTH             = 280;
-const MIN_HEIGHT            = 180;
-const MAX_WIDTH_RATIO       = 0.6;   // max 60% of viewport
-const MAX_HEIGHT_RATIO      = 0.85;
-const DEFAULT_OPACITY       = 0.92;
-const EDGE_MARGIN_PX        = 8;     // gap from viewport edges when snapped
+const STORAGE_KEY        = "clarify:overlay:window";
+const SNAP_THRESHOLD_PX  = 20;
+const MIN_WIDTH          = 280;
+const MIN_HEIGHT         = 180;
+const MAX_WIDTH_RATIO    = 0.6;   // max 60% of viewport width
+const MAX_HEIGHT_RATIO   = 0.85;  // max 85% of viewport height
+const DEFAULT_OPACITY    = 0.92;
+const EDGE_MARGIN_PX     = 8;     // gap from viewport edges when snapped
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type SnapEdge = "none" | "left" | "right" | "top" | "bottom"
+export type SnapEdge =
+  | "none" | "left" | "right" | "top" | "bottom"
   | "top-left" | "top-right" | "bottom-left" | "bottom-right";
 
 export type WindowAnchor =
@@ -35,23 +37,25 @@ export interface WindowBounds {
 }
 
 export interface WindowState {
-  bounds:       WindowBounds;
-  visible:      boolean;
-  opacity:      number;
-  snapEdge:     SnapEdge;
-  minimized:    boolean;
-  anchor:       WindowAnchor;
-  pinned:       boolean;     // stays on top even when focus lost
-  locked:       boolean;     // position locked — can't be dragged
+  bounds:    WindowBounds;
+  visible:   boolean;
+  opacity:   number;
+  snapEdge:  SnapEdge;
+  minimized: boolean;
+  anchor:    WindowAnchor;
+  /** Stays on top even when focus is lost */
+  pinned:    boolean;
+  /** Position is locked — overlay cannot be dragged */
+  locked:    boolean;
 }
 
 export interface WindowManagerConfig {
-  initialBounds?:   Partial<WindowBounds>;
-  initialAnchor?:   WindowAnchor;
-  persistPosition?: boolean;
-  onStateChange?:   (state: WindowState) => void;
+  initialBounds?:      Partial<WindowBounds>;
+  initialAnchor?:      WindowAnchor;
+  persistPosition?:    boolean;
+  onStateChange?:      (state: WindowState) => void;
   onVisibilityChange?: (visible: boolean) => void;
-  onBoundsChange?:  (bounds: WindowBounds) => void;
+  onBoundsChange?:     (bounds: WindowBounds) => void;
 }
 
 export interface ViewportInfo {
@@ -78,19 +82,19 @@ function boundsFromAnchor(
   anchor: WindowAnchor,
   width: number,
   height: number,
-  vp: ViewportInfo
+  vp: ViewportInfo,
 ): { x: number; y: number } {
   const m = EDGE_MARGIN_PX;
 
   const positions: Record<WindowAnchor, { x: number; y: number }> = {
-    "top-left":       { x: m,                              y: m },
-    "top-center":     { x: (vp.width - width) / 2,         y: m },
-    "top-right":      { x: vp.width - width - m,            y: m },
-    "middle-left":    { x: m,                              y: (vp.height - height) / 2 },
-    "middle-right":   { x: vp.width - width - m,            y: (vp.height - height) / 2 },
-    "bottom-left":    { x: m,                              y: vp.height - height - m },
-    "bottom-center":  { x: (vp.width - width) / 2,         y: vp.height - height - m },
-    "bottom-right":   { x: vp.width - width - m,            y: vp.height - height - m },
+    "top-left":      { x: m,                        y: m },
+    "top-center":    { x: (vp.width - width) / 2,   y: m },
+    "top-right":     { x: vp.width - width - m,      y: m },
+    "middle-left":   { x: m,                        y: (vp.height - height) / 2 },
+    "middle-right":  { x: vp.width - width - m,      y: (vp.height - height) / 2 },
+    "bottom-left":   { x: m,                        y: vp.height - height - m },
+    "bottom-center": { x: (vp.width - width) / 2,   y: vp.height - height - m },
+    "bottom-right":  { x: vp.width - width - m,      y: vp.height - height - m },
   };
 
   return positions[anchor];
@@ -154,12 +158,14 @@ function applySnap(bounds: WindowBounds, edge: SnapEdge, vp: ViewportInfo): Wind
 // ─── WindowManager Class ──────────────────────────────────────────────────────
 
 export class WindowManager {
-  private state: WindowState;
+  private state:  WindowState;
   private config: Required<WindowManagerConfig>;
-  private resizeObserver: ResizeObserver | null = null;
-  private isDragging  = false;
-  private isResizing  = false;
-  private dragOffset  = { x: 0, y: 0 };
+
+  // FIX: store the resize handler reference so it can be removed in destroy()
+  private resizeHandler: (() => void) | null = null;
+
+  private isDragging = false;
+  private dragOffset = { x: 0, y: 0 };
 
   constructor(config: WindowManagerConfig = {}) {
     this.config = {
@@ -176,8 +182,8 @@ export class WindowManager {
   }
 
   // ── Initial State ─────────────────────────────────────────────────────────
+
   private buildInitialState(): WindowState {
-    // Try persisted state first
     if (this.config.persistPosition) {
       const persisted = this.loadPersistedState();
       if (persisted) return persisted;
@@ -195,7 +201,7 @@ export class WindowManager {
         width,
         height,
       },
-      vp
+      vp,
     );
 
     return {
@@ -210,13 +216,14 @@ export class WindowManager {
     };
   }
 
-  // ── State Persistence ─────────────────────────────────────────────────────
+  // ── Persistence ───────────────────────────────────────────────────────────
+
   private loadPersistedState(): WindowState | null {
     try {
       const raw = localStorage.getItem(STORAGE_KEY);
       if (!raw) return null;
       const parsed = JSON.parse(raw) as WindowState;
-      // Re-clamp to current viewport in case screen size changed
+      // Re-clamp to current viewport in case screen size changed since last session
       parsed.bounds = clampBounds(parsed.bounds, getViewport());
       return parsed;
     } catch {
@@ -232,6 +239,7 @@ export class WindowManager {
   }
 
   // ── State Updater ─────────────────────────────────────────────────────────
+
   private setState(partial: Partial<WindowState>): void {
     this.state = { ...this.state, ...partial };
     this.persistState();
@@ -267,11 +275,8 @@ export class WindowManager {
   moveTo(x: number, y: number): void {
     if (this.state.locked) return;
 
-    const vp = getViewport();
-    const bounds = clampBounds(
-      { ...this.state.bounds, x, y },
-      vp
-    );
+    const vp       = getViewport();
+    const bounds   = clampBounds({ ...this.state.bounds, x, y }, vp);
     const snapEdge = detectSnapEdge(bounds, vp);
     const snapped  = applySnap(bounds, snapEdge, vp);
 
@@ -295,12 +300,7 @@ export class WindowManager {
 
   centerIn(anchor: WindowAnchor): void {
     const vp  = getViewport();
-    const pos = boundsFromAnchor(
-      anchor,
-      this.state.bounds.width,
-      this.state.bounds.height,
-      vp
-    );
+    const pos = boundsFromAnchor(anchor, this.state.bounds.width, this.state.bounds.height, vp);
     this.moveTo(pos.x, pos.y);
     this.setState({ anchor });
   }
@@ -313,12 +313,12 @@ export class WindowManager {
 
   // ── Lock / Pin ────────────────────────────────────────────────────────────
 
-  lock(): void   { this.setState({ locked: true }); }
+  lock():   void { this.setState({ locked: true });  }
   unlock(): void { this.setState({ locked: false }); }
-  pin(): void    { this.setState({ pinned: true }); }
-  unpin(): void  { this.setState({ pinned: false }); }
+  pin():    void { this.setState({ pinned: true });  }
+  unpin():  void { this.setState({ pinned: false }); }
 
-  // ── Drag Handlers (attach to overlay element) ────────────────────────────
+  // ── Drag Handlers (coordinate with overlay element's pointer events) ──────
 
   onDragStart(clientX: number, clientY: number): void {
     if (this.state.locked) return;
@@ -333,17 +333,22 @@ export class WindowManager {
     if (!this.isDragging) return;
     this.moveTo(
       clientX - this.dragOffset.x,
-      clientY - this.dragOffset.y
+      clientY - this.dragOffset.y,
     );
   }
 
   onDragEnd(): void {
+    if (!this.isDragging) return;
     this.isDragging = false;
+    // FIX: reset dragOffset so stale values can't leak into a future drag
+    this.dragOffset = { x: 0, y: 0 };
   }
 
   // ── Viewport Resize Handling ──────────────────────────────────────────────
+
   private attachViewportListener(): void {
-    const handler = () => {
+    // FIX: store handler reference so destroy() can remove it (was a memory leak)
+    this.resizeHandler = () => {
       const vp      = getViewport();
       const clamped = clampBounds(this.state.bounds, vp);
       const snap    = detectSnapEdge(clamped, vp);
@@ -351,20 +356,22 @@ export class WindowManager {
       this.setState({ bounds: snapped, snapEdge: snap });
     };
 
-    window.addEventListener("resize", handler, { passive: true });
+    window.addEventListener("resize", this.resizeHandler, { passive: true });
   }
 
   // ── Getters ───────────────────────────────────────────────────────────────
 
   getState():  Readonly<WindowState>  { return { ...this.state }; }
   getBounds(): Readonly<WindowBounds> { return { ...this.state.bounds }; }
-  isVisible(): boolean                { return this.state.visible; }
-  isPinned():  boolean                { return this.state.pinned; }
-  isLocked():  boolean                { return this.state.locked; }
+  isVisible(): boolean { return this.state.visible; }
+  isPinned():  boolean { return this.state.pinned;  }
+  isLocked():  boolean { return this.state.locked;  }
 
-  // ── CSS Style Object (apply directly to overlay element) ─────────────────
+  // ── CSS Style Object ──────────────────────────────────────────────────────
+  // FIX: return type was React.CSSProperties without a React import.
+  //      Import CSSProperties from "react" (type-only) instead.
 
-  getCSSStyles(): React.CSSProperties {
+  getCSSStyles(): CSSProperties {
     const { bounds, visible, opacity, minimized } = this.state;
     return {
       position:   "fixed",
@@ -389,8 +396,14 @@ export class WindowManager {
     this.config.onStateChange(this.state);
   }
 
+  // ── Destroy ───────────────────────────────────────────────────────────────
+  // FIX: actually remove the resize listener (was never cleaned up before)
+
   destroy(): void {
-    this.resizeObserver?.disconnect();
+    if (this.resizeHandler) {
+      window.removeEventListener("resize", this.resizeHandler);
+      this.resizeHandler = null;
+    }
   }
 }
 
@@ -401,6 +414,7 @@ export function createWindowManager(config?: WindowManagerConfig): WindowManager
 }
 
 // ─── Singleton for app-wide overlay window ────────────────────────────────────
+
 let _globalWindowManager: WindowManager | null = null;
 
 export function getGlobalWindowManager(): WindowManager {

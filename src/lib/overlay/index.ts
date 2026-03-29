@@ -30,9 +30,11 @@ export type {
 
 // ─── Screen Capture Evasion ───────────────────────────────────────────────────
 export {
+  STEALTH_ATTR,               // constant — prevents hardcoding "stealthActive" everywhere
   applyStealthToElement,
   removeStealthFromElement,
   isStealthActive,
+  toggleStealthOnElement,     // new helper: apply+remove in one call
 } from "./screenCaptureEvasion";
 
 // ─── Stealth Mouse ────────────────────────────────────────────────────────────
@@ -45,7 +47,11 @@ export {
   getDefaultPosition,
 } from "./stealthMouse";
 
-export type { DragState, SnapEdge as StealthSnapEdge, SnapConfig } from "./stealthMouse";
+export type {
+  DragState,
+  SnapEdge as StealthSnapEdge,
+  SnapConfig,
+} from "./stealthMouse";
 
 // ─── Window Manager ───────────────────────────────────────────────────────────
 export {
@@ -63,7 +69,7 @@ export type {
   ViewportInfo,
 } from "./windowManager";
 
-// ─── Z-Index Manager ─────────────────────────────────────────────────────────
+// ─── Z-Index Manager ──────────────────────────────────────────────────────────
 export {
   ZIndexManager,
   getZIndexManager,
