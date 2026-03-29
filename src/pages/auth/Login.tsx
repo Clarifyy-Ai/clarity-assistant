@@ -1,7 +1,8 @@
 // @ts-nocheck
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { supabase } from "@/lib/supabase/client";
+import { useAuthStore } from "@/store/authStore";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Eye, EyeOff, AlertCircle, Sparkles, TrendingUp, Users } from "lucide-react";
@@ -17,6 +18,14 @@ export default function Login() {
   const navigate   = useNavigate();
   const location   = useLocation();
   const from       = (location.state as any)?.from?.pathname ?? "/app";
+
+  // Redirect if already authenticated
+  const authStatus = useAuthStore((s) => s.status);
+  useEffect(() => {
+    if (authStatus === "authenticated") {
+      navigate(from, { replace: true });
+    }
+  }, [authStatus, from, navigate]);
 
   const [email,     setEmail]     = useState("");
   const [password,  setPassword]  = useState("");

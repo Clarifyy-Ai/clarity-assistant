@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
-import { useAuthStore } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
 
 // ─────────────────────────────────────────────────────────────────
 // useCredits

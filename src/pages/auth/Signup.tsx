@@ -1,7 +1,8 @@
 // @ts-nocheck
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/lib/supabase/client";
+import { useAuthStore } from "@/store/authStore";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { Eye, EyeOff, AlertCircle, CheckCircle, Sparkles, Shield, Zap } from "lucide-react";
@@ -33,6 +34,14 @@ export default function Signup() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const refCode = searchParams.get("ref") ?? null;
+
+  // Redirect if already authenticated
+  const authStatus = useAuthStore((s) => s.status);
+  useEffect(() => {
+    if (authStatus === "authenticated") {
+      navigate("/app/dashboard", { replace: true });
+    }
+  }, [authStatus, navigate]);
 
   const [name,      setName]      = useState("");
   const [email,     setEmail]     = useState("");
