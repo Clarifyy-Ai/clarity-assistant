@@ -20,65 +20,53 @@ export function OverlayQuestionBar({ question }: OverlayQuestionBarProps) {
   const current = hint_history_index + 1;
 
   return (
-    <div className="flex items-start gap-2 px-3 py-2.5 border-b border-white/8 bg-white/3 animate-fade-in shrink-0">
+    <div className="flex items-start gap-2 px-3 py-2 border-b border-white/[0.06] bg-gradient-to-r from-indigo-500/[0.05] to-transparent animate-fade-in shrink-0">
 
-      {/* ── Question text ────────────────────────────────────────── */}
+      {/* Question text */}
       <div className="flex-1 min-w-0">
-        <p className="text-[12px] text-white/90 leading-snug">
-          <span className="mr-1.5">💬</span>
-          <span className="text-white/45 font-semibold mr-1">Question:</span>
-          <span className="text-white/85">{question}</span>
-        </p>
+        <div className="flex items-start gap-1.5">
+          <span className="text-[11px] font-bold text-indigo-400/60 uppercase tracking-widest shrink-0 mt-0.5">Q</span>
+          <p className="text-[12px] text-white/75 leading-snug flex-1 min-w-0 break-words">
+            {question}
+          </p>
+        </div>
       </div>
 
-      {/* ── Right controls ───────────────────────────────────────── */}
+      {/* Controls */}
       <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
-
-        {/* History navigation */}
         {total > 1 && (
           <div className="flex items-center gap-0.5 mr-1">
-            <NavArrow
-              direction="prev"
-              disabled={!hasPrev}
-              onClick={() => navigateHintHistory("prev")}
-            />
-            <span className="text-[10px] font-mono text-white/25 px-0.5">
+            <NavArrow direction="prev" disabled={!hasPrev} onClick={() => navigateHintHistory("prev")} />
+            <span className="text-[10px] font-mono text-white/20 px-0.5 tabular-nums">
               {current}/{total}
             </span>
-            <NavArrow
-              direction="next"
-              disabled={!hasNext}
-              onClick={() => navigateHintHistory("next")}
-            />
+            <NavArrow direction="next" disabled={!hasNext} onClick={() => navigateHintHistory("next")} />
           </div>
         )}
 
-        {/* Clear question */}
         <button
           onClick={() => {
             setCurrentQuestion("");
             clearHint();
           }}
           title="Clear question"
-          className="w-6 h-6 flex items-center justify-center rounded-md text-white/25 hover:text-red-400 hover:bg-red-500/10 transition-all"
+          className="w-6 h-6 flex items-center justify-center rounded-md text-white/20 hover:text-red-400 hover:bg-red-500/10 transition-all"
         >
-          <Trash2 className="w-3 h-3" />
+          <Trash2 className="w-2.5 h-2.5" />
         </button>
 
-        {/* Dismiss bar */}
         <button
           onClick={() => clearHint()}
           title="Dismiss"
-          className="w-6 h-6 flex items-center justify-center rounded-md text-white/25 hover:text-white/70 hover:bg-white/8 transition-all"
+          className="w-6 h-6 flex items-center justify-center rounded-md text-white/20 hover:text-white/60 hover:bg-white/8 transition-all"
         >
-          <X className="w-3 h-3" />
+          <X className="w-2.5 h-2.5" />
         </button>
       </div>
     </div>
   );
 }
 
-// ── Nav arrow sub-component ─────────────────────────────────────────────────
 function NavArrow({
   direction,
   disabled,
@@ -94,10 +82,10 @@ function NavArrow({
       disabled={disabled}
       title={direction === "prev" ? "Previous question" : "Next question"}
       className={cn(
-        "w-5 h-5 flex items-center justify-center rounded transition-all text-[11px]",
+        "w-5 h-5 flex items-center justify-center rounded-md transition-all text-[11px]",
         disabled
-          ? "text-white/15 cursor-not-allowed"
-          : "text-white/50 hover:text-white hover:bg-white/8"
+          ? "text-white/10 cursor-not-allowed"
+          : "text-white/40 hover:text-white hover:bg-white/8"
       )}
     >
       {direction === "prev" ? "←" : "→"}
