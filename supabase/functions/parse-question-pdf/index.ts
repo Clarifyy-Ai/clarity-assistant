@@ -290,10 +290,6 @@ Deno.serve(async (req) => {
     const { userId, credits } = await requireAuth(req);
     const debug = new URL(req.url).searchParams.get("debug") === "true";
 
-    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!apiKey)
-      return errorResponse("Claude API missing.", "AI_MISSING", 500);
-
     const pdfBase64 = await extractPdfBase64(req);
     if (!pdfBase64) return errorResponse("No PDF uploaded.", "NO_PDF", 400);
 
