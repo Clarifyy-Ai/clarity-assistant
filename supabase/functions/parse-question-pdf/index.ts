@@ -237,36 +237,26 @@ function manualParse(text: string) {
 }
 
 /* ======================================================
-   CLAUDE FALLBACK (with sanitization)
+   AI FALLBACK — Lovable AI Gateway (replaces Claude)
 ====================================================== */
-async function callClaude(pdfBase64: string, apiKey: string) {
+const EXTRACTION_SYSTEM_PROMPT = `You are a question extraction engine. Given PDF text content, extract all questions into a JSON array. Each object must have: question_text, question_type ("MCQ" or "SHORT_ANSWER"), options (array of {label, text} or null), correct_answer (A/B/C/D or text), explanation, subject, topic, difficulty ("EASY"/"MEDIUM"/"HARD"), marks_positive (number), marks_negative (number). Return ONLY a valid JSON array, no markdown.`;
+
+async function callAI(pdfText: string) {
+  const apiKey = Deno.env.get("LOVABLE_API_KEY");
+  if (!apiKey) return null;
+
   try {
-    const res = await fetch("https://api.anthropic.com/v1/messages", {
+    const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
       method: "POST",
       headers: {
-        "content-type": "application/json",
-        "x-api-key": apiKey,
-        "anthropic-version": "2023-06-01",
+        "Authorization": `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "claude-3-5-sonnet-20241022",
-        system: EXTRACTION_SYSTEM_PROMPT,
-        max_tokens: 8000,
+        model: "google/gemini-2.5-flash",
         messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "document",
-                source: {
-                  type: "base64",
-                  media_type: "application/pdf",
-                  data: pdfBase64,
-                },
-              },
-              { type: "text", text: "Extract questions into pure JSON only." },
-            ],
-          },
+          { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
+          { role: "user", content: `Extract all questions from this text into JSON:\n\n${pdfText.slice(0, 30000)}` },
         ],
       }),
     });
@@ -274,14 +264,8 @@ async function callClaude(pdfBase64: string, apiKey: string) {
     if (!res.ok) return null;
 
     const json = await res.json();
-    const textBlock = json?.content?.find((x: any) => x.type === "text");
-
-    if (!textBlock?.text) return null;
-
-    const cleaned = textBlock.text
-      .replace(/```json/gi, "")
-      .replace(/```/g, "")
-      .trim();
+    const text = json?.choices?.[0]?.message?.content ?? "";
+    const cleaned = text.replace(/```json/gi, "").replace(/```/g, "").trim();
 
     try {
       const parsed = JSON.parse(cleaned);
@@ -305,10 +289,6 @@ Deno.serve(async (req) => {
   try {
     const { userId, credits } = await requireAuth(req);
     const debug = new URL(req.url).searchParams.get("debug") === "true";
-
-    const apiKey = Deno.env.get("ANTHROPIC_API_KEY");
-    if (!apiKey)
-      return errorResponse("Claude API missing.", "AI_MISSING", 500);
 
     const pdfBase64 = await extractPdfBase64(req);
     if (!pdfBase64) return errorResponse("No PDF uploaded.", "NO_PDF", 400);
@@ -338,7 +318,7 @@ Deno.serve(async (req) => {
     }
 
     /* -----------------------------------------
-       AI FALLBACK — CLAUDE
+       AI FALLBACK — Lovable AI Gateway
     ----------------------------------------- */
     if (credits !== -1 && credits < CREDIT_COST)
       return errorResponse("Not enough credits.", "NO_CREDITS", 403);
@@ -350,7 +330,9 @@ Deno.serve(async (req) => {
       charged = true;
     }
 
-    const aiParsed = await callClaude(pdfBase64, apiKey);
+    // Use OCR text or raw decoded text for AI parsing
+    const textForAI = ocrText || rawText;
+    const aiParsed = await callAI(textForAI);
 
     if (aiParsed && aiParsed.length > 0) {
       return successResponse({ questions: aiParsed, mode: "ai" });
