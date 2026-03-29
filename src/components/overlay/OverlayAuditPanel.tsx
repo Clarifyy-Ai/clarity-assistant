@@ -1,3 +1,4 @@
+// src/components/overlay/OverlayAuditPanel.tsx
 import { useAudioStore } from "@/store/audioStore";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
@@ -29,82 +30,65 @@ export function OverlayAuditPanel() {
     deepgramStatus === "error"        ? "Error" : "Disconnected";
 
   const sttColor =
-    deepgramStatus === "connected" ? "text-green-400" :
+    deepgramStatus === "connected" ? "text-emerald-400" :
     deepgramStatus === "connecting" || deepgramStatus === "reconnecting" ? "text-amber-400" :
     "text-red-400";
 
   const netColor =
     network.mode === "offline" ? "text-red-400" :
-    network.overlayColor === "green" ? "text-green-400" :
+    network.overlayColor === "green" ? "text-emerald-400" :
     network.overlayColor === "yellow" ? "text-amber-400" : "text-red-400";
 
   return (
-    <div className="space-y-2 p-3">
+    <div className="space-y-1.5 p-3">
       {streamError && (
-        <div className="rounded-lg bg-destructive/10 px-2.5 py-2 mb-1">
+        <div className="rounded-xl bg-red-500/8 border border-red-500/15 px-3 py-2.5 mb-2">
           <div className="flex items-center gap-1.5 mb-1">
             <AlertTriangle className="w-3 h-3 text-red-400 shrink-0" />
-            <span className="text-xs font-semibold text-red-400">{streamError.code?.replace(/_/g, " ")}</span>
+            <span className="text-[11px] font-bold text-red-400">{streamError.code?.replace(/_/g, " ")}</span>
           </div>
-          <p className="text-xs text-red-300/80 leading-relaxed">{streamError.message}</p>
+          <p className="text-[12px] text-red-300/70 leading-snug">{streamError.message}</p>
           {streamError.suggestion && (
-            <p className="text-xs text-muted-foreground/60 mt-1">{streamError.suggestion}</p>
+            <p className="text-[11px] text-white/30 mt-1">{streamError.suggestion}</p>
           )}
         </div>
       )}
 
-      <AuditRow
-        icon={Clock}
-        label="Session Duration"
-        value={timeStr}
-        valueClass="text-white font-mono"
-      />
-      <AuditRow
-        icon={network.mode === "offline" ? WifiOff : Wifi}
-        label="Network"
-        value={network.qualityLabel}
-        valueClass={netColor}
-      />
-      <AuditRow
-        icon={Zap}
-        label="Speech-to-Text"
-        value={sttLabel}
-        valueClass={sttColor}
-      />
-      <AuditRow
-        icon={Mic}
-        label="Microphone"
-        value={!isCapturing ? "Not capturing" : isMuted ? "Muted" : "Active"}
-        valueClass={!isCapturing ? "text-gray-500" : isMuted ? "text-amber-400" : "text-green-400"}
-      />
-      <AuditRow
-        icon={Volume2}
-        label="System Audio"
-        value={hasSystemAudio ? "Active" : "Off"}
-        valueClass={hasSystemAudio ? "text-emerald-400" : "text-gray-500"}
-      />
-      <AuditRow
-        icon={Brain}
-        label="AI Model"
-        value={activeModel}
-        valueClass="text-white"
-      />
-      <AuditRow
-        icon={CreditCard}
-        label="Credits Used"
-        value={String(credits)}
-        valueClass="text-white"
-      />
-      <AuditRow
-        icon={FileText}
-        label="Resume"
-        value={resumeCtx ? `${resumeCtx.skills_count} skills · ${resumeCtx.experience_count} roles` : "Not loaded"}
-        valueClass={resumeCtx ? "text-green-400" : "text-gray-500"}
-      />
+      <div className="space-y-1">
+        <AuditRow icon={Clock}   label="Session"       value={timeStr}    valueClass="text-white font-mono tabular-nums" />
+        <AuditRow
+          icon={network.mode === "offline" ? WifiOff : Wifi}
+          label="Network"
+          value={network.qualityLabel}
+          valueClass={netColor}
+        />
+        <AuditRow icon={Zap}     label="Speech-to-Text" value={sttLabel}  valueClass={sttColor} />
+        <AuditRow
+          icon={Mic}
+          label="Microphone"
+          value={!isCapturing ? "Not capturing" : isMuted ? "Muted" : "Active"}
+          valueClass={!isCapturing ? "text-white/30" : isMuted ? "text-amber-400" : "text-emerald-400"}
+        />
+        <AuditRow
+          icon={Volume2}
+          label="System Audio"
+          value={hasSystemAudio ? "Active" : "Off"}
+          valueClass={hasSystemAudio ? "text-emerald-400" : "text-white/30"}
+        />
+        <AuditRow icon={Brain}    label="AI Model"     value={activeModel} valueClass="text-white" />
+        <AuditRow icon={CreditCard} label="Credits Used" value={String(credits)} valueClass="text-white" />
+        <AuditRow
+          icon={FileText}
+          label="Resume"
+          value={resumeCtx ? `${resumeCtx.skills_count} skills · ${resumeCtx.experience_count} roles` : "Not loaded"}
+          valueClass={resumeCtx ? "text-emerald-400" : "text-white/25"}
+        />
+      </div>
+
       {resumeCtx?.top_skills && resumeCtx.top_skills.length > 0 && (
-        <div className="mt-1 pl-[18px]">
-          <p className="text-[11px] text-muted-foreground/40 truncate">
-            {resumeCtx.top_skills.slice(0, 5).join(", ")}
+        <div className="mt-1 pl-5 pt-1 border-t border-white/[0.05]">
+          <p className="text-[11px] text-white/25 truncate leading-relaxed">
+            {resumeCtx.top_skills.slice(0, 5).join(" · ")}
           </p>
         </div>
       )}
@@ -124,12 +108,12 @@ function AuditRow({
   valueClass: string;
 }) {
   return (
-    <div className="flex items-center justify-between">
+    <div className="flex items-center justify-between py-0.5">
       <div className="flex items-center gap-1.5">
-        <Icon className="w-3 h-3 text-muted-foreground/50" />
-        <span className="text-xs text-muted-foreground/60">{label}</span>
+        <Icon className="w-3 h-3 text-white/20 shrink-0" />
+        <span className="text-[12px] text-white/40">{label}</span>
       </div>
-      <span className={cn("text-xs font-medium", valueClass)}>{value}</span>
+      <span className={cn("text-[12px] font-medium", valueClass)}>{value}</span>
     </div>
   );
 }
