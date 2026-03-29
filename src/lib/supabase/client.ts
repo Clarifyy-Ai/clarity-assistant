@@ -43,12 +43,17 @@ export async function uploadFile(
   file: File,
   onProgress?: (percent: number) => void
 ): Promise<{ url: string; path: string } | null> {
+  // Get the user's current JWT for storage RLS
+  const { data: { session } } = await supabase.auth.getSession();
+  const token = session?.access_token ?? SUPABASE_ANON_KEY;
+
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     const url = `${SUPABASE_URL}/storage/v1/object/${bucketName}/${path}`;
 
     xhr.open("POST", url);
-    xhr.setRequestHeader("Authorization", `Bearer ${SUPABASE_ANON_KEY}`);
+    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
+    xhr.setRequestHeader("apikey", SUPABASE_ANON_KEY);
     xhr.setRequestHeader("x-upsert", "true");
 
     xhr.upload.onprogress = (e) => {
@@ -62,7 +67,7 @@ export async function uploadFile(
         const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${path}`;
         resolve({ url: publicUrl, path });
       } else {
-        reject(new Error(`Upload failed: ${xhr.statusText}`));
+        reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
       }
     };
 
