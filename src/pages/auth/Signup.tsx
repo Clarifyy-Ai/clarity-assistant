@@ -35,6 +35,14 @@ export default function Signup() {
   const [searchParams] = useSearchParams();
   const refCode = searchParams.get("ref") ?? null;
 
+  // Redirect if already authenticated
+  const authStatus = useAuthStore((s) => s.status);
+  useEffect(() => {
+    if (authStatus === "authenticated") {
+      navigate("/app/dashboard", { replace: true });
+    }
+  }, [authStatus, navigate]);
+
   const [name,      setName]      = useState("");
   const [email,     setEmail]     = useState("");
   const [password,  setPassword]  = useState("");
