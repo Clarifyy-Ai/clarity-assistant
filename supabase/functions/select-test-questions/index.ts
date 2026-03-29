@@ -1,11 +1,10 @@
-// select-test-questions/index.ts — FIXED, SECURE, PRODUCTION VERSION
-
+// select-test-questions/index.ts — PROMPT 2: SMART SHUFFLE & AI GAP-FILL
 import { handleCors, corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
 
 /* -------------------------------------------------------------------------- */
-/*                              SANITIZATION                                  */
+/* SANITIZATION                                  */
 /* -------------------------------------------------------------------------- */
 
 function sanitizeText(text: any, max = 100): string {
@@ -24,70 +23,113 @@ function sanitizeList(list: any[], max = 20): string[] {
     .slice(0, max);
 }
 
+function shuffle<T>(array: T[]): T[] {
+  const arr = [...array];
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+
 /* -------------------------------------------------------------------------- */
-/*                         SAFE AI THIN TOPIC GENERATOR                       */
+/* AI GAP-FILL GENERATOR (PROMPT 2)                   */
 /* -------------------------------------------------------------------------- */
 
-async function generateThinTopicQuestionsSafe(
+async function generateGapQuestions(
   db: ReturnType<typeof createServiceClient>,
-  topic: string,
-  subject: string,
+  gapCount: number,
+  subjects: string[],
+  topics: string[],
   examType: string | null
-): Promise<void> {
+): Promise<string[]> {
   try {
-    const topicSan = sanitizeText(topic);
-    const subjectSan = sanitizeText(subject);
-    const examSan = examType ? sanitizeText(examType) : null;
+    const subj = subjects.length > 0 ? subjects[0] : "General Subject";
+    const topicStr = topics.length > 0 ? topics.slice(0, 3).join(", ") : "Mixed Topics";
+    const examStr = examType && examType !== "CUSTOM" ? examType : "General Exam";
 
     const prompt = `
-Generate exactly 10 valid MCQ questions.
+Generate exactly ${gapCount} high-quality Multiple Choice Questions (MCQs).
+Subject: ${subj}
+Topics: ${topicStr}
+Exam Level: ${examStr}
 
-Topic: ${topicSan}
-Subject: ${subjectSan}
-${examSan ? `Exam: ${examSan}` : ""}
-
-Return ONLY JSON: { "questions": [...] }
+Requirements:
+1. Provide exactly ${gapCount} questions to fill a missing gap in a mock test.
+2. Maintain a mix of EASY, MEDIUM, and HARD difficulties.
+3. 4 options per question.
+4. Correct answer must be exactly "A", "B", "C", or "D".
+5. Provide a clear, educational explanation.
+6. Return ONLY valid JSON in this exact structure:
+{
+  "questions": [
+    {
+      "question_text": "...",
+      "options": [
+        { "label": "A", "text": "..." },
+        { "label": "B", "text": "..." },
+        { "label": "C", "text": "..." },
+        { "label": "D", "text": "..." }
+      ],
+      "correct_answer": "A",
+      "explanation": "...",
+      "difficulty": "MEDIUM",
+      "topic": "..."
+    }
+  ]
+}
 `.trim();
 
-    const raw = await geminiGenerate(prompt, undefined, 0.6, 3000);
+    // Fast generation using Gemini
+    const raw = await geminiGenerate(prompt, undefined, 0.7, 4000);
     const data = parseJSON(raw, { questions: [] });
-
     const qs = Array.isArray(data.questions) ? data.questions : [];
 
     const cleaned = qs
-      .filter((q) => typeof q?.question_text === "string")
-      .map((q) => ({
-        question_text: String(q.question_text).slice(0, 400),
-        question_type: "MCQ",
-        options: Array.isArray(q.options) ? q.options.slice(0, 4) : [],
-        correct_answer: ["A", "B", "C", "D"].includes(q.correct_answer)
-          ? q.correct_answer
-          : null,
-        explanation: q.explanation ? String(q.explanation).slice(0, 400) : "",
-        subject: subjectSan,
-        topic: topicSan,
-        difficulty: ["EASY", "MEDIUM", "HARD"].includes(q.difficulty)
-          ? q.difficulty
-          : "MEDIUM",
-        exam_type: examSan,
-        source: "AI_GENERATED",
-        is_verified: false,
-        is_public: false, // Important: do NOT auto-public
-        marks_positive: 4,
-        marks_negative: 1,
-        latex_present: /[=+\-*/]/.test(q.question_text),
-      }));
+      .filter((q) => typeof q?.question_text === "string" && q.question_text.length > 10)
+      .map((q) => {
+        const diff = ["EASY", "MEDIUM", "HARD"].includes(String(q.difficulty).toUpperCase()) 
+          ? String(q.difficulty).toUpperCase() 
+          : "MEDIUM";
+        
+        return {
+          question_text: String(q.question_text).slice(0, 1000),
+          question_type: "MCQ",
+          options: Array.isArray(q.options) ? q.options.slice(0, 4) : [],
+          correct_answer: ["A", "B", "C", "D"].includes(q.correct_answer) ? q.correct_answer : "A",
+          explanation: q.explanation ? String(q.explanation).slice(0, 1000) : "",
+          subject: subj,
+          topic: q.topic ? String(q.topic).slice(0, 100) : "General",
+          difficulty: diff,
+          exam_type: examType === "CUSTOM" ? null : examType,
+          source: "AI_GENERATED", // Marks with AI badge as requested
+          is_verified: false,
+          is_public: false, // Save to question bank for future use but keep private
+          marks_positive: diff === "HARD" ? 4 : 4,
+          marks_negative: 1,
+          latex_present: /[=+\-*/^]/.test(String(q.question_text)),
+        };
+      });
 
-    if (cleaned.length > 0) {
-      await db.from("questions").insert(cleaned);
+    if (cleaned.length === 0) return [];
+
+    // Save newly generated questions to question bank
+    const { data: inserted, error } = await db.from("questions").insert(cleaned).select("id");
+    
+    if (error) {
+      console.warn("[select-test-questions] AI Gap fill insert failed:", error);
+      return [];
     }
+
+    return (inserted || []).map((row) => row.id);
   } catch (err) {
-    console.warn("[select-test-questions] safe thin-topic gen failed:", err);
+    console.warn("[select-test-questions] AI Gap fill failed:", err);
+    return [];
   }
 }
 
 /* -------------------------------------------------------------------------- */
-/*                                  MAIN                                      */
+/* MAIN FLOW                                 */
 /* -------------------------------------------------------------------------- */
 
 Deno.serve(async (req) => {
@@ -96,42 +138,25 @@ Deno.serve(async (req) => {
 
   try {
     /* ------------------------ AUTH ------------------------ */
-    const authHeader =
-      req.headers.get("authorization") ?? req.headers.get("Authorization");
-
+    const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
     if (!authHeader?.toLowerCase().startsWith("bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "Missing Authorization header" }),
-        { status: 401, headers: corsHeaders }
-      );
+      return new Response(JSON.stringify({ error: "Missing Authorization header" }), { status: 401, headers: corsHeaders });
     }
 
     const token = authHeader.replace(/^bearer\s+/i, "");
     const db = createServiceClient();
 
-    const {
-      data: { user },
-      error: authErr,
-    } = await db.auth.getUser(token);
-
+    const { data: { user }, error: authErr } = await db.auth.getUser(token);
     if (authErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: corsHeaders,
-      });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
     }
-
     const userId = user.id;
 
     /* ------------------------ PARSE INPUT ------------------------ */
     const body = await req.json().catch(() => null);
     const config = body?.config;
 
-    if (!config)
-      return new Response(JSON.stringify({ error: "Missing config" }), {
-        status: 400,
-        headers: corsHeaders,
-      });
+    if (!config) return new Response(JSON.stringify({ error: "Missing config" }), { status: 400, headers: corsHeaders });
 
     const exam_type = sanitizeText(config.exam_type ?? "");
     const subjects = sanitizeList(config.subjects ?? []);
@@ -139,256 +164,133 @@ Deno.serve(async (req) => {
     const source_types = sanitizeList(config.source_types ?? ["OFFICIAL_PYP"]);
 
     let question_count = Number(config.question_count ?? 30);
-    if (!Number.isFinite(question_count) || question_count < 1)
-      question_count = 30;
-    if (question_count > 50) question_count = 50;
+    if (!Number.isFinite(question_count) || question_count < 1) question_count = 30;
+    if (question_count > 100) question_count = 100;
 
-    /* ------------------------ VALIDATE DIFFICULTY ------------------------ */
-    const dd = config.difficulty_distribution ?? {
-      EASY: 30,
-      MEDIUM: 40,
-      HARD: 30,
-    };
-
-    const easyPct = dd.EASY ?? 30;
-    const hardPct = dd.HARD ?? 30;
+    /* ------------------------ LEVEL DISTRIBUTIONS ------------------------ */
+    // Provided by Level Selection Screen
+    const dd = config.difficulty_distribution ?? { EASY: 20, MEDIUM: 60, HARD: 20 };
+    const easyPct = dd.EASY ?? 20;
+    const hardPct = dd.HARD ?? 20;
     const medPct = 100 - easyPct - hardPct;
 
-    if (easyPct < 0 || hardPct < 0 || medPct < 0)
-      return new Response(
-        JSON.stringify({ error: "Invalid difficulty distribution" }),
-        { status: 400, headers: corsHeaders }
-      );
-
-    /* ------------------------ FREE PLAN LIMIT ------------------------ */
-    const { data: profile } = await db
-      .from("profiles")
-      .select("plan_id, credits")
-      .eq("id", userId)
-      .single();
-
+    /* ------------------------ FREE PLAN LIMIT CHECK ------------------------ */
+    const { data: profile } = await db.from("profiles").select("plan_id, credits").eq("id", userId).single();
     if ((profile?.plan_id ?? "free") === "free") {
       const startOfMonth = new Date();
-      startOfMonth.setDate(1);
-      startOfMonth.setHours(0, 0, 0, 0);
+      startOfMonth.setDate(1); startOfMonth.setHours(0, 0, 0, 0);
 
-      const { count } = await db
-        .from("mock_tests")
-        .select("id", { count: "exact", head: true })
-        .eq("user_id", userId)
-        .gte("created_at", startOfMonth.toISOString());
+      const { count } = await db.from("mock_tests").select("id", { count: "exact", head: true })
+        .eq("user_id", userId).gte("created_at", startOfMonth.toISOString());
 
-      if ((count ?? 0) >= 2)
-        return new Response(
-          JSON.stringify({
-            error: "Free plan limit reached (2 tests/month)",
-            code: "FREE_PLAN_LIMIT",
-          }),
-          { status: 402, headers: corsHeaders }
-        );
+      if ((count ?? 0) >= 2) {
+        return new Response(JSON.stringify({ error: "Free plan limit reached (2 tests/month)" }), { status: 402, headers: corsHeaders });
+      }
     }
 
-    if ((profile?.credits ?? 0) < 2) {
-      return new Response(
-        JSON.stringify({
-          error: "Insufficient credits",
-          code: "INSUFFICIENT_CREDITS",
-        }),
-        { status: 402, headers: corsHeaders }
-      );
-    }
-
-    /* ------------------------ FETCH TOPIC PERFORMANCE ------------------------ */
-    const { data: perfData } = await db
-      .from("user_topic_performance")
-      .select("topic, accuracy, total_attempted")
-      .eq("user_id", userId);
-
+    /* ------------------------ SMART PERFORMANCE CHECK ------------------------ */
+    // Identify topics where accuracy < 60%
+    const { data: perfData } = await db.from("user_topic_performance").select("topic, accuracy").eq("user_id", userId);
     const topicAcc: Record<string, number> = {};
-    const attempted = new Set<string>();
-
     for (const p of perfData ?? []) {
       topicAcc[p.topic] = p.accuracy ?? 0;
-      if ((p.total_attempted ?? 0) > 0) attempted.add(p.topic);
     }
 
-    /* ------------------------ RECENT TEST QUESTIONS ------------------------ */
-    const { data: lastTests } = await db
-      .from("mock_tests")
-      .select("question_ids")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(3);
+    /* ------------------------ PREVIOUS TESTS CHECK ------------------------ */
+    // Ensure no question appeared in last 3 tests
+    const { data: lastTests } = await db.from("mock_tests").select("question_ids")
+      .eq("user_id", userId).order("created_at", { ascending: false }).limit(3);
 
     const recentQ = new Set<string>();
     for (const t of lastTests ?? []) {
       for (const id of t.question_ids ?? []) recentQ.add(id as string);
     }
 
-    /* ------------------------ BUILD SAFE DB QUERY ------------------------ */
+    /* ------------------------ FETCH QUESTION BANK ------------------------ */
+    let query = db.from("questions").select("id, topic, subject, difficulty, source, is_public, uploaded_by").limit(2000);
 
-    let query = db.from("questions")
-      .select("id, topic, subject, difficulty, source, is_public, uploaded_by")
-      .limit(2000);
+    if (exam_type && exam_type !== "CUSTOM") query = query.eq("exam_type", exam_type);
+    if (subjects.length > 0) query = query.in("subject", subjects);
+    if (topics.length > 0) query = query.in("topic", topics);
 
-    if (exam_type && exam_type !== "CUSTOM")
-      query = query.eq("exam_type", exam_type);
-
-    if (subjects.length > 0)
-      query = query.in("subject", subjects);
-
-    if (topics.length > 0)
-      query = query.in("topic", topics);
-
-    // USER_UPLOAD safe filter
     const includeUserUploads = source_types.includes("USER_UPLOAD");
-
     if (includeUserUploads) {
-      query = query.or(
-        `and(source.eq.USER_UPLOAD,uploaded_by.eq.${userId}),and(is_public.eq.true)`
-      );
+      query = query.or(`and(source.eq.USER_UPLOAD,uploaded_by.eq.${userId}),and(is_public.eq.true)`);
     } else {
       query = query.eq("is_public", true);
     }
 
     const { data: questionData, error: qErr } = await query;
+    if (qErr) return new Response(JSON.stringify({ error: "Failed to fetch questions" }), { status: 500, headers: corsHeaders });
 
-    if (qErr) {
-      return new Response(
-        JSON.stringify({ error: "Failed to fetch questions" }),
-        { status: 500, headers: corsHeaders }
-      );
-    }
+    const questions = questionData ?? [];
 
-    let questions = questionData ?? [];
-
-    /* ------------------------ THIN TOPIC GENERATION ------------------------ */
-    const topicCounts: Record<string, number> = {};
-    for (const q of questions)
-      topicCounts[q.topic] = (topicCounts[q.topic] ?? 0) + 1;
-
-    const topicsInScope =
-      topics.length > 0
-        ? topics
-        : [...new Set(questions.map((q) => q.topic))];
-
-    const thinTopics = topicsInScope.filter(
-      (t) => (topicCounts[t] ?? 0) < 20
-    );
-
-    // generate new questions (safe)
-    for (const thin of thinTopics.slice(0, 5)) {
-      const subj = questions.find((q) => q.topic === thin)?.subject ??
-        subjects[0] ??
-        "General";
-
-      await generateThinTopicQuestionsSafe(
-        db,
-        thin,
-        subj,
-        exam_type || null
-      );
-    }
-
-    // refresh query to include newly generated questions
-    const { data: refreshed } = await query;
-    questions = refreshed ?? questions;
-
-    /* ------------------------ GROUP BY DIFFICULTY ------------------------ */
-
-    const neverAttempted: string[] = [];
-
-    const buckets = {
-      EASY: { weak: [], med: [], strong: [] },
-      MEDIUM: { weak: [], med: [], strong: [] },
-      HARD: { weak: [], med: [], strong: [] },
+    /* ------------------------ SMART BUCKETING ALGORITHM ------------------------ */
+    const pools: Record<string, { priority: string[]; normal: string[] }> = {
+      EASY: { priority: [], normal: [] },
+      MEDIUM: { priority: [], normal: [] },
+      HARD: { priority: [], normal: [] },
     };
 
     for (const q of questions) {
+      // 1. Check last 3 tests
       if (recentQ.has(q.id)) continue;
 
-      const acc = topicAcc[q.topic] ?? null;
+      const diff = ["EASY", "MEDIUM", "HARD"].includes(q.difficulty) ? q.difficulty : "MEDIUM";
+      const acc = topicAcc[q.topic];
 
-      if (acc === null) {
-        neverAttempted.push(q.id);
-        continue;
+      // 2. Check performance history (prioritize < 60% or unattempted)
+      if (acc === undefined || acc < 60) {
+        pools[diff].priority.push(q.id);
+      } else {
+        pools[diff].normal.push(q.id);
       }
-
-      const category =
-        acc < 50 ? "weak" :
-        acc <= 80 ? "med" :
-        "strong";
-
-      const diff = ["EASY", "MEDIUM", "HARD"].includes(q.difficulty)
-        ? q.difficulty
-        : "MEDIUM";
-
-      buckets[diff][category].push(q.id);
     }
-
-    const shuffle = (arr) =>
-      [...arr].sort(() => Math.random() - 0.5);
-
-    /* ------------------------ SELECTION ------------------------ */
 
     const countEasy = Math.round(question_count * easyPct / 100);
     const countHard = Math.round(question_count * hardPct / 100);
-    const countMed = question_count - countEasy - countHard;
+    const countMed  = question_count - countEasy - countHard;
 
-    function pick(b, target) {
-      if (target <= 0) return [];
+    const pickQuestions = (pool: { priority: string[]; normal: string[] }, targetCount: number) => {
+      if (targetCount <= 0) return [];
+      // Pull from priority (weak topics) first, then fill with normal
+      const combined = [...shuffle(pool.priority), ...shuffle(pool.normal)];
+      return combined.slice(0, targetCount);
+    };
 
-      const pool = [
-        ...shuffle(neverAttempted.slice(0, 3)),
-        ...shuffle(b.weak),
-        ...shuffle(b.med),
-        ...shuffle(b.strong),
-      ];
-
-      return pool.slice(0, target);
-    }
-
-    let final = [
-      ...pick(buckets.EASY, countEasy),
-      ...pick(buckets.MEDIUM, countMed),
-      ...pick(buckets.HARD, countHard),
+    const selectedIds = [
+      ...pickQuestions(pools.EASY, countEasy),
+      ...pickQuestions(pools.MEDIUM, countMed),
+      ...pickQuestions(pools.HARD, countHard),
     ];
 
-    // backfill if needed
-    if (final.length < question_count) {
-      const used = new Set(final);
-      const remaining = shuffle(
-        questions
-          .map((q) => q.id)
-          .filter((id) => !used.has(id) && !recentQ.has(id))
-      );
-      final.push(...remaining.slice(0, question_count - final.length));
+    /* ------------------------ AI GAP-FILL ------------------------ */
+    let finalIds = [...selectedIds];
+    const gap = question_count - finalIds.length;
+    let generatedCount = 0;
+
+    if (gap > 0) {
+      console.log(`[select-test-questions] Need ${question_count}, found ${finalIds.length}. Generating ${gap} more via AI.`);
+      const aiIds = await generateGapQuestions(db, gap, subjects, topics, exam_type);
+      finalIds.push(...aiIds);
+      generatedCount = aiIds.length;
     }
 
-    final = shuffle(final).slice(0, question_count);
+    /* ------------------------ FINAL SHUFFLE ------------------------ */
+    // Shuffle final question order randomly before returning
+    finalIds = shuffle(finalIds).slice(0, question_count);
 
     return new Response(
       JSON.stringify({
-        question_ids: final,
-        count: final.length,
-        warning:
-          final.length < question_count
-            ? "Not enough questions available; returned fewer than requested"
-            : undefined,
+        question_ids: finalIds,
+        count: finalIds.length,
+        ai_generated_count: generatedCount,
+        warning: finalIds.length < question_count ? "Not enough questions even after AI generation." : undefined,
       }),
       { headers: corsHeaders }
     );
   } catch (err) {
     console.error("[select-test-questions] error:", err);
-    return new Response(
-      JSON.stringify({
-        error: "Internal error",
-        detail: String(err),
-      }),
-      { status: 500, headers: corsHeaders }
-    );
+    return new Response(JSON.stringify({ error: "Internal error", detail: String(err) }), { status: 500, headers: corsHeaders });
   }
 });
-
-
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
