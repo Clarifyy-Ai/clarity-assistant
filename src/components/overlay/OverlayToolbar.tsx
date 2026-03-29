@@ -10,7 +10,7 @@ import {
   Mic, MicOff, Volume2, VolumeX, Zap, RefreshCw,
   Eye, EyeOff, Square, AlertCircle, Type, ChevronDown,
   Minimize2, Star, FileText, Pin, Camera, Monitor,
-  MoreHorizontal, Plus, ChevronUp, Settings2,
+  MoreHorizontal, Plus, ChevronUp, Settings2, Sparkles, MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatHotkeyLabel } from "@/lib/overlay/hotkeys";
@@ -27,7 +27,7 @@ const MODEL_OPTIONS: { id: PreferredAIModel; label: string; note?: string }[] = 
 
 const HINT_STYLE_LABELS: Record<string, string> = {
   full_answer:   "Full",
-  short_hints:   "Short",
+  short_hints:   "Hints",
   keywords_only: "Keys",
 };
 
@@ -98,61 +98,62 @@ export function OverlayToolbar({
   }, []);
 
   return (
-    <div className="flex items-center gap-1.5 px-2 py-1.5 border-b border-white/8 bg-[#0f0f1a]/60 shrink-0 overflow-x-auto scrollbar-hide">
+    <div className="flex items-center gap-1.5 px-2.5 py-2 border-b border-white/[0.07] bg-[#0c0c1a]/50 shrink-0">
 
-      {/* ── LEFT: Mic ─────────────────────────────────────────────── */}
-      <IconButton
-        icon={isMuted ? MicOff : Mic}
-        label={isMuted ? "Unmute mic" : "Mute mic"}
-        active={isCapturing && !isMuted}
-        activeColor="text-red-400 bg-red-500/15"
+      {/* ── LEFT: Mic button ─────────────────────────────────────── */}
+      <MicButton
+        isMuted={isMuted}
+        isCapturing={isCapturing}
         onClick={onToggleMic}
       />
 
-      {/* ── CENTER: Labeled action buttons (ParakeetAI style) ─────── */}
-      <div className="flex items-center gap-1 flex-1 justify-center">
+      {/* ── CENTER: Primary actions ───────────────────────────────── */}
+      <div className="flex items-center gap-1.5 flex-1 justify-center">
 
-        {/* AI Help */}
-        <LabelButton
-          icon={Zap}
+        {/* AI Help — primary CTA */}
+        <PrimaryButton
+          icon={Sparkles}
           label="AI Help"
-          active={isGenerating}
-          activeClass="text-amber-300 bg-amber-500/20 border-amber-500/30"
-          inactiveClass="text-white/80 bg-white/8 border-white/10 hover:bg-white/12 hover:text-white"
+          isActive={isGenerating}
           onClick={onGenerate}
           disabled={isGenerating}
-          pulse={isGenerating}
+          className={isGenerating
+            ? "bg-gradient-to-r from-indigo-600/40 to-violet-600/30 border-indigo-500/40 text-indigo-200"
+            : "bg-gradient-to-r from-indigo-600/25 to-violet-600/15 border-indigo-500/30 text-indigo-300 hover:from-indigo-600/35 hover:to-violet-600/25 hover:text-indigo-200"
+          }
         />
 
         {/* Analyze Screen */}
-        <LabelButton
+        <PrimaryButton
           icon={Monitor}
-          label="Analyze Screen"
-          active={isScreenshotLoading}
-          activeClass="text-blue-300 bg-blue-500/20 border-blue-500/30"
-          inactiveClass="text-white/80 bg-white/8 border-white/10 hover:bg-white/12 hover:text-white"
+          label="Screen"
+          isActive={isScreenshotLoading}
           onClick={() => captureAndAnalyseCodingProblem()}
           disabled={isScreenshotLoading}
-          pulse={isScreenshotLoading}
+          className={isScreenshotLoading
+            ? "bg-sky-500/20 border-sky-500/40 text-sky-300"
+            : "bg-white/6 border-white/10 text-white/60 hover:bg-white/10 hover:text-white/90"
+          }
         />
 
         {/* Chat */}
-        <LabelButton
-          icon={undefined}
+        <PrimaryButton
+          icon={MessageSquare}
           label="Chat"
-          active={activeTab === "chat"}
-          activeClass="text-brand-300 bg-brand-500/20 border-brand-500/30"
-          inactiveClass="text-white/80 bg-white/8 border-white/10 hover:bg-white/12 hover:text-white"
+          isActive={activeTab === "chat"}
           onClick={() => useOverlayStore.getState().setActiveTab("chat")}
+          className={activeTab === "chat"
+            ? "bg-brand-500/20 border-brand-500/30 text-brand-300"
+            : "bg-white/6 border-white/10 text-white/60 hover:bg-white/10 hover:text-white/90"
+          }
         />
-
       </div>
 
-      {/* ── RIGHT: Timer + more menu + collapse + end ─────────────── */}
+      {/* ── RIGHT: Timer + actions ────────────────────────────────── */}
       <div className="flex items-center gap-1 shrink-0">
 
         {/* Session timer */}
-        <div className="px-2 py-1 rounded-lg bg-white/5 border border-white/8 text-[11px] font-mono text-white/70 shrink-0">
+        <div className="shrink-0">
           <OverlayActivityTimer />
         </div>
 
@@ -161,13 +162,18 @@ export function OverlayToolbar({
           <button
             onClick={() => setShowMoreMenu((p) => !p)}
             title="More options"
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-white/50 hover:text-white hover:bg-white/8 transition-all"
+            className={cn(
+              "w-7 h-7 flex items-center justify-center rounded-lg transition-all",
+              showMoreMenu
+                ? "bg-white/12 text-white"
+                : "text-white/40 hover:text-white/80 hover:bg-white/8"
+            )}
           >
             <MoreHorizontal className="w-3.5 h-3.5" />
           </button>
 
           {showMoreMenu && (
-            <div className="absolute top-full right-0 mt-1 w-56 bg-[#13131f] border border-white/10 rounded-xl shadow-2xl z-50 py-1.5 overflow-hidden">
+            <div className="absolute top-full right-0 mt-2 w-60 bg-[#0f0f1e] border border-white/[0.1] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.04)] z-50 py-2 overflow-hidden animate-fade-in">
 
               {/* System Audio */}
               {onToggleSystemAudio && (
@@ -179,7 +185,6 @@ export function OverlayToolbar({
                 />
               )}
 
-              {/* Stealth */}
               <MenuRow
                 icon={isStealth ? EyeOff : Eye}
                 label={isStealth ? "Exit stealth" : "Enter stealth"}
@@ -188,7 +193,6 @@ export function OverlayToolbar({
                 onClick={() => { toggleAppStealthMode(); setShowMoreMenu(false); }}
               />
 
-              {/* Auto-generate */}
               <MenuRow
                 icon={RefreshCw}
                 label={autoGenerate ? "Auto-generate ON" : "Auto-generate OFF"}
@@ -197,7 +201,6 @@ export function OverlayToolbar({
                 onClick={() => useOverlayStore.getState().setAutoGenerate(!autoGenerate)}
               />
 
-              {/* Simple language */}
               <MenuRow
                 icon={Type}
                 label={simpleLanguage ? "Simple language ON" : "Simple language"}
@@ -206,12 +209,12 @@ export function OverlayToolbar({
                 onClick={() => useOverlayStore.getState().setSimpleLanguage(!simpleLanguage)}
               />
 
-              <div className="my-1 border-t border-white/5" />
+              <div className="my-2 border-t border-white/[0.06] mx-2" />
 
-              {/* Hint style */}
-              <div className="px-3 py-1.5">
-                <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">Hint Style</p>
-                <div className="flex gap-1">
+              {/* Hint Style */}
+              <div className="px-3 py-2">
+                <p className="text-[10px] text-white/25 uppercase tracking-widest mb-2 font-semibold">Hint Style</p>
+                <div className="flex gap-1 bg-white/5 p-1 rounded-xl">
                   {(["full_answer", "short_hints", "keywords_only"] as const).map((style) => (
                     <button
                       key={style}
@@ -219,8 +222,8 @@ export function OverlayToolbar({
                       className={cn(
                         "flex-1 py-1 rounded-lg text-[11px] font-semibold transition-all",
                         hintStyle === style
-                          ? "bg-brand-500/20 text-brand-300 border border-brand-500/30"
-                          : "bg-white/5 text-white/40 hover:text-white/70 hover:bg-white/8 border border-transparent"
+                          ? "bg-indigo-600/40 text-indigo-200 shadow-sm"
+                          : "text-white/35 hover:text-white/60"
                       )}
                     >
                       {HINT_STYLE_LABELS[style]}
@@ -229,31 +232,35 @@ export function OverlayToolbar({
                 </div>
               </div>
 
-              <div className="my-1 border-t border-white/5" />
+              <div className="my-2 border-t border-white/[0.06] mx-2" />
 
               {/* Model picker */}
               <div className="px-3 py-1.5">
-                <p className="text-[10px] text-white/30 uppercase tracking-wider mb-1.5">AI Model</p>
-                {MODEL_OPTIONS.map((m) => (
-                  <button
-                    key={m.id}
-                    onClick={() => { useOverlayStore.getState().setActiveModel(m.id); setShowMoreMenu(false); }}
-                    className={cn(
-                      "w-full text-left px-2 py-1.5 rounded-lg text-[11px] transition-all flex items-center justify-between",
-                      activeModel === m.id
-                        ? "text-brand-300 bg-brand-500/10 font-semibold"
-                        : "text-white/50 hover:text-white hover:bg-white/5"
-                    )}
-                  >
-                    <span>{m.label}</span>
-                    {m.note && <span className="text-[10px] text-white/25">({m.note})</span>}
-                  </button>
-                ))}
+                <p className="text-[10px] text-white/25 uppercase tracking-widest mb-2 font-semibold">AI Model</p>
+                <div className="space-y-0.5">
+                  {MODEL_OPTIONS.map((m) => (
+                    <button
+                      key={m.id}
+                      onClick={() => { useOverlayStore.getState().setActiveModel(m.id); setShowMoreMenu(false); }}
+                      className={cn(
+                        "w-full text-left px-2.5 py-1.5 rounded-lg text-[12px] transition-all flex items-center justify-between",
+                        activeModel === m.id
+                          ? "text-indigo-300 bg-indigo-500/15 font-semibold"
+                          : "text-white/45 hover:text-white hover:bg-white/5"
+                      )}
+                    >
+                      <span>{m.label}</span>
+                      <div className="flex items-center gap-1.5">
+                        {m.note && <span className="text-[10px] text-white/20">({m.note})</span>}
+                        {activeModel === m.id && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />}
+                      </div>
+                    </button>
+                  ))}
+                </div>
               </div>
 
-              <div className="my-1 border-t border-white/5" />
+              <div className="my-2 border-t border-white/[0.06] mx-2" />
 
-              {/* Resume quick-peek */}
               <MenuRow
                 icon={FileText}
                 label={resumePoints ? "Resume snapshot" : "No resume loaded"}
@@ -262,7 +269,6 @@ export function OverlayToolbar({
                 onClick={() => { setShowResumeQuickPeek((p) => !p); setShowMoreMenu(false); }}
               />
 
-              {/* Pinned hints */}
               <MenuRow
                 icon={Star}
                 label={pinnedHints.length > 0 ? `Pinned hints (${pinnedHints.length})` : "No pinned hints"}
@@ -271,7 +277,6 @@ export function OverlayToolbar({
                 onClick={() => { setShowPinnedMenu((p) => !p); setShowMoreMenu(false); }}
               />
 
-              {/* Keyboard shortcuts */}
               <MenuRow
                 icon={Settings2}
                 label="Keyboard shortcuts"
@@ -279,18 +284,15 @@ export function OverlayToolbar({
                 onClick={() => { setShowHotkeyRef((p) => !p); setShowMoreMenu(false); }}
               />
 
-              <div className="my-1 border-t border-white/5" />
+              <div className="my-2 border-t border-white/[0.06] mx-2" />
 
-              {/* Panic */}
               <MenuRow
                 icon={AlertCircle}
-                label="Panic"
+                label="Panic mode"
                 active={false}
-                activeColor="text-red-400"
                 danger
                 onClick={() => { useOverlayStore.getState().showPanic(PANIC_RESPONSE); setShowMoreMenu(false); }}
               />
-
             </div>
           )}
         </div>
@@ -302,8 +304,8 @@ export function OverlayToolbar({
           className={cn(
             "w-7 h-7 flex items-center justify-center rounded-lg transition-all",
             isMinimal
-              ? "text-amber-400 bg-amber-500/15"
-              : "text-white/40 hover:text-white hover:bg-white/8"
+              ? "text-amber-400 bg-amber-500/15 border border-amber-500/20"
+              : "text-white/35 hover:text-white/70 hover:bg-white/8"
           )}
         >
           {isMinimal ? <Plus className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
@@ -313,39 +315,39 @@ export function OverlayToolbar({
         <button
           onClick={onEndSession}
           title="End session"
-          className="flex items-center gap-1 px-2 py-1 h-7 bg-red-600/20 hover:bg-red-600/35 border border-red-500/25 text-red-400 text-[11px] font-semibold rounded-lg transition-all shrink-0"
+          className="flex items-center gap-1 px-2 py-1 h-7 bg-red-600/15 hover:bg-red-600/30 border border-red-500/20 hover:border-red-500/35 text-red-400 hover:text-red-300 text-[11px] font-bold rounded-lg transition-all shrink-0"
         >
-          <Square className="w-3 h-3" />
+          <Square className="w-2.5 h-2.5 fill-current" />
           <span>End</span>
         </button>
       </div>
 
-      {/* ── Floating popover: Resume snapshot ─────────────────────── */}
+      {/* ── Floating: Resume snapshot ─────────────────────────────── */}
       {showResumeQuickPeek && (
         <div
           ref={resumeQuickPeekRef}
-          className="absolute top-12 right-2 w-64 bg-[#13131f] border border-white/10 rounded-xl shadow-2xl z-50 p-3 space-y-2"
+          className="absolute top-12 right-2 w-64 bg-[#0f0f1e] border border-white/[0.1] rounded-2xl shadow-2xl z-50 p-3.5 space-y-2.5 animate-fade-in"
         >
-          <p className="text-[11px] font-semibold text-brand-300/60 uppercase tracking-wider">Resume Snapshot</p>
+          <p className="text-[11px] font-bold text-brand-300/60 uppercase tracking-widest">Resume Snapshot</p>
           {!resumePoints ? (
-            <p className="text-[11px] text-white/30 italic">No resume loaded for this session.</p>
+            <p className="text-[12px] text-white/30 italic">No resume loaded for this session.</p>
           ) : (
             <>
-              <p className="text-[11px] text-white/80 leading-snug">
+              <p className="text-[12px] text-white/75 leading-snug">
                 {resumePoints.intro.length > 120 ? resumePoints.intro.slice(0, 119) + "…" : resumePoints.intro}
               </p>
               {resumePoints.skills_summary && (
                 <div className="flex flex-wrap gap-1">
-                  {resumePoints.skills_summary.split(", ").slice(0, 3).map((skill, i) => (
-                    <span key={i} className="rounded-md border border-brand-500/20 bg-brand-500/10 px-1.5 py-0.5 text-[11px] text-brand-300">
+                  {resumePoints.skills_summary.split(", ").slice(0, 4).map((skill, i) => (
+                    <span key={i} className="rounded-lg border border-brand-500/20 bg-brand-500/10 px-1.5 py-0.5 text-[11px] text-brand-300">
                       {skill}
                     </span>
                   ))}
                 </div>
               )}
               {resumePoints.experience_points.slice(0, 2).map((pt, i) => (
-                <div key={i} className="flex gap-1.5 text-[11px] text-white/60">
-                  <span className="shrink-0 text-brand-400">•</span>
+                <div key={i} className="flex gap-2 text-[12px] text-white/55">
+                  <span className="shrink-0 text-brand-400 mt-0.5">•</span>
                   <span>{pt}</span>
                 </div>
               ))}
@@ -354,34 +356,34 @@ export function OverlayToolbar({
         </div>
       )}
 
-      {/* ── Floating popover: Pinned Hints ────────────────────────── */}
+      {/* ── Floating: Pinned Hints ────────────────────────────────── */}
       {showPinnedMenu && (
         <div
           ref={pinnedMenuRef}
-          className="absolute top-12 right-2 w-64 bg-[#13131f] border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden"
+          className="absolute top-12 right-2 w-64 bg-[#0f0f1e] border border-white/[0.1] rounded-2xl shadow-2xl z-50 overflow-hidden animate-fade-in"
         >
-          <div className="flex items-center justify-between px-3 py-2 border-b border-white/5">
-            <p className="text-[11px] font-semibold text-white/40 uppercase tracking-wider">Pinned Hints</p>
+          <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/[0.06]">
+            <p className="text-[11px] font-bold text-white/40 uppercase tracking-widest">Pinned Hints</p>
             {pinnedHints.length > 0 && (
               <button
                 onClick={() => useOverlayStore.getState().clearPinnedHints()}
-                className="text-[11px] text-white/30 hover:text-red-400 transition-colors"
+                className="text-[11px] text-white/25 hover:text-red-400 transition-colors"
               >
                 clear all
               </button>
             )}
           </div>
           {pinnedHints.length === 0 ? (
-            <div className="px-3 py-4 text-[11px] text-white/30 italic text-center">
+            <div className="px-3 py-5 text-[12px] text-white/25 italic text-center">
               Pin hints using the Pin button in the answer panel
             </div>
           ) : (
             <div className="max-h-56 overflow-y-auto py-1">
               {pinnedHints.slice(-6).reverse().map((pin) => (
-                <div key={pin.id} className="px-3 py-2 hover:bg-white/5 transition-colors">
-                  <p className="text-[10px] text-white/30 truncate mb-0.5">{pin.question || "No question"}</p>
-                  <p className="text-[11px] text-white/70 line-clamp-2">{pin.hint}</p>
-                  <div className="flex items-center gap-2 mt-1.5">
+                <div key={pin.id} className="px-3 py-2.5 hover:bg-white/5 transition-colors border-b border-white/[0.04] last:border-0">
+                  <p className="text-[10px] text-white/25 truncate mb-1">{pin.question || "No question"}</p>
+                  <p className="text-[12px] text-white/65 line-clamp-2 leading-snug">{pin.hint}</p>
+                  <div className="flex items-center gap-3 mt-2">
                     <button
                       onClick={() => {
                         useOverlayStore.getState().setHintState("ready");
@@ -389,7 +391,7 @@ export function OverlayToolbar({
                         useOverlayStore.getState().setActiveTab("answer");
                         setShowPinnedMenu(false);
                       }}
-                      className="text-[11px] text-brand-300/60 hover:text-brand-300 transition-colors"
+                      className="text-[11px] text-brand-300/60 hover:text-brand-300 transition-colors font-medium"
                     >
                       Jump to →
                     </button>
@@ -397,7 +399,7 @@ export function OverlayToolbar({
                       onClick={() => useOverlayStore.getState().togglePinHint(pin.hint, pin.question)}
                       className="text-[11px] text-white/20 hover:text-red-400 transition-colors"
                     >
-                      <Pin className="w-2.5 h-2.5" />
+                      <Pin className="w-3 h-3" />
                     </button>
                   </div>
                 </div>
@@ -407,18 +409,18 @@ export function OverlayToolbar({
         </div>
       )}
 
-      {/* ── Floating popover: Keyboard shortcuts ──────────────────── */}
+      {/* ── Floating: Keyboard Shortcuts ─────────────────────────── */}
       {showHotkeyRef && (
         <div
           ref={hotkeyRefRef}
-          className="absolute top-12 right-2 w-52 bg-[#13131f] border border-white/10 rounded-xl shadow-2xl z-50 p-3"
+          className="absolute top-12 right-2 w-56 bg-[#0f0f1e] border border-white/[0.1] rounded-2xl shadow-2xl z-50 p-3.5 animate-fade-in"
         >
-          <p className="text-[11px] font-semibold text-white/40 uppercase tracking-wider mb-2">Shortcuts</p>
-          <div className="space-y-1.5">
+          <p className="text-[11px] font-bold text-white/35 uppercase tracking-widest mb-3">Shortcuts</p>
+          <div className="space-y-2">
             {HOTKEY_REFERENCE.map((hk) => (
-              <div key={hk.label} className="flex items-center justify-between">
-                <span className="text-[11px] text-white/50">{hk.label}</span>
-                <kbd className="px-1.5 py-0.5 bg-white/10 rounded text-[11px] text-white/60 font-mono">
+              <div key={hk.label} className="flex items-center justify-between gap-2">
+                <span className="text-[11px] text-white/45">{hk.label}</span>
+                <kbd className="px-1.5 py-0.5 bg-white/8 border border-white/10 rounded-md text-[10px] text-white/55 font-mono shrink-0">
                   {formatHotkeyLabel(hk.keys)}
                 </kbd>
               </div>
@@ -432,25 +434,51 @@ export function OverlayToolbar({
 
 // ── Sub-components ──────────────────────────────────────────────────────────
 
-/** Labeled pill button — matches ParakeetAI's "AI Help", "Analyze Screen", "Chat" */
-function LabelButton({
+function MicButton({
+  isMuted,
+  isCapturing,
+  onClick,
+}: {
+  isMuted: boolean;
+  isCapturing: boolean;
+  onClick?: () => void;
+}) {
+  const isActive = isCapturing && !isMuted;
+  return (
+    <button
+      onClick={onClick}
+      title={isMuted ? "Unmute mic" : "Mute mic"}
+      className={cn(
+        "w-8 h-8 flex items-center justify-center rounded-xl border transition-all shrink-0 relative",
+        isActive
+          ? "bg-red-500/15 border-red-500/25 text-red-400"
+          : isMuted
+          ? "bg-white/5 border-white/10 text-white/35"
+          : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white/80"
+      )}
+    >
+      {isMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+      {isActive && (
+        <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500 border border-[#0a0a14] animate-pulse" />
+      )}
+    </button>
+  );
+}
+
+function PrimaryButton({
   icon: Icon,
   label,
-  active,
-  activeClass,
-  inactiveClass,
+  isActive,
   onClick,
   disabled,
-  pulse,
+  className,
 }: {
-  icon?: LucideIcon;
+  icon: LucideIcon;
   label: string;
-  active: boolean;
-  activeClass: string;
-  inactiveClass: string;
+  isActive: boolean;
   onClick?: () => void;
   disabled?: boolean;
-  pulse?: boolean;
+  className?: string;
 }) {
   return (
     <button
@@ -458,53 +486,17 @@ function LabelButton({
       disabled={disabled}
       title={label}
       className={cn(
-        "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold border transition-all shrink-0 h-8",
-        active ? activeClass : inactiveClass,
+        "flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[12px] font-semibold border transition-all shrink-0 h-8",
+        className,
         disabled && "opacity-60 cursor-not-allowed",
-        pulse && "animate-pulse",
       )}
     >
-      {Icon && <Icon className="w-3.5 h-3.5" />}
+      <Icon className="w-3.5 h-3.5 shrink-0" />
       <span>{label}</span>
     </button>
   );
 }
 
-/** Icon-only button for mic etc. */
-function IconButton({
-  icon: Icon,
-  label,
-  active,
-  activeColor,
-  onClick,
-  disabled,
-}: {
-  icon: LucideIcon;
-  label: string;
-  active: boolean;
-  activeColor?: string;
-  onClick?: () => void;
-  disabled?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      title={label}
-      className={cn(
-        "w-8 h-8 flex items-center justify-center rounded-lg border transition-all shrink-0",
-        active
-          ? cn(activeColor ?? "text-green-400 bg-green-500/15", "border-white/10")
-          : "text-white/40 bg-white/5 border-white/8 hover:text-white hover:bg-white/10",
-        disabled && "opacity-40 cursor-not-allowed",
-      )}
-    >
-      <Icon className="w-3.5 h-3.5" />
-    </button>
-  );
-}
-
-/** Row item inside the "⋯ More" dropdown */
 function MenuRow({
   icon: Icon,
   label,
@@ -526,16 +518,16 @@ function MenuRow({
       className={cn(
         "w-full flex items-center gap-2.5 px-3 py-2 text-[12px] transition-all",
         danger
-          ? "text-red-400/70 hover:text-red-400 hover:bg-red-500/10"
+          ? "text-red-400/60 hover:text-red-400 hover:bg-red-500/10"
           : active
-          ? cn(activeColor, "bg-white/5 font-semibold hover:bg-white/8")
-          : "text-white/50 hover:text-white hover:bg-white/5"
+          ? cn(activeColor, "bg-white/[0.04] font-semibold hover:bg-white/[0.07]")
+          : "text-white/45 hover:text-white/80 hover:bg-white/[0.04]"
       )}
     >
       <Icon className="w-3.5 h-3.5 shrink-0" />
-      <span>{label}</span>
+      <span className="flex-1 text-left">{label}</span>
       {active && !danger && (
-        <span className="ml-auto w-1.5 h-1.5 rounded-full bg-current opacity-70" />
+        <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60" />
       )}
     </button>
   );
