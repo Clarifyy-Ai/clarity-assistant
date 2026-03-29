@@ -1,4 +1,3 @@
-// @ts-nocheck
 // ─────────────────────────────────────────────────────────────────────────────
 // live/MockSession.tsx — AI-driven mock interview session inside the live
 // interface. Bridges LiveOverlay and MockInterview logic: loads a question
@@ -6,22 +5,20 @@
 // user audio responses, and hands off to the Debrief page on completion.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate, useSearchParams }             from "react-router-dom";
-import { motion, AnimatePresence }                  from "framer-motion";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useNavigate, useSearchParams }  from "react-router-dom";
+import { motion, AnimatePresence }       from "framer-motion";
 
-import { useSessionStore }  from "@/store/sessionStore";
-import { useAudioStore }    from "@/store/audioStore";
-import { useAuthStore }     from "@/store";
-import { ROUTES }           from "@/lib/constants";
-import { formatDurationSec } from "@/lib/utils/formatters";
-import { cn }               from "@/lib/utils";
+import { useAudioStore }      from "@/store/audioStore";
+import { useAuthStore }       from "@/store";
+import { ROUTES }             from "@/lib/constants";
+import { formatDurationSec }  from "@/lib/utils/formatters";
+import { cn }                 from "@/lib/utils";
 
-import { Button }           from "@/components/ui/button";
-import { Badge }            from "@/components/ui/badge";
-import { Progress }         from "@/components/ui/progress";
-import { ScrollArea }       from "@/components/ui/scroll-area";
-import { Separator }        from "@/components/ui/separator";
+import { Button }    from "@/components/ui/button";
+import { Badge }     from "@/components/ui/badge";
+import { Progress }  from "@/components/ui/progress";
+import { Separator } from "@/components/ui/separator";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -35,49 +32,53 @@ import {
 
 import {
   Mic, MicOff, SkipForward, Square,
-  Clock, Brain, ChevronRight,
-  Volume2, Loader2, AlertCircle,
+  Clock, Brain, Loader2, AlertCircle,
 } from "lucide-react";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 interface MockQuestion {
-  id:       string;
-  text:     string;
-  type:     "behavioral" | "technical" | "situational" | "hr";
+  id:        string;
+  text:      string;
+  type:      "behavioral" | "technical" | "situational" | "hr";
   timeLimit: number;   // seconds
-  hint?:    string;
+  hint?:     string;
 }
 
 type SessionPhase =
-  | "intro"       // countdown before first question
-  | "questioning" // AI reads question, user prepares
-  | "answering"   // user speaks their answer
-  | "transition"  // brief pause between questions
-  | "complete";   // all questions done → redirect to debrief
+  | "intro"        // countdown before first question
+  | "questioning"  // question shown, user prepares
+  | "answering"    // user speaks their answer
+  | "transition"   // brief pause between questions
+  | "complete";    // all questions done → redirect to debrief
 
-// ─── Mock question bank (replaced by sessionStore questions in production) ────
+// ─── Fallback question bank ───────────────────────────────────────────────────
 
 const FALLBACK_QUESTIONS: MockQuestion[] = [
-  { id: "q1", text: "Tell me about yourself and why you're interested in this role.",                              type: "hr",          timeLimit: 120, hint: "Structure: Present → Past → Future" },
-  { id: "q2", text: "Describe a time you handled a conflict within your team. What was the outcome?",              type: "behavioral",  timeLimit: 150, hint: "Use the STAR method" },
-  { id: "q3", text: "How do you prioritise tasks when you have multiple urgent deadlines simultaneously?",         type: "situational", timeLimit: 120 },
-  { id: "q4", text: "What is the difference between a process and a thread? When would you use each?",            type: "technical",   timeLimit: 90  },
-  { id: "q5", text: "Where do you see yourself in 3–5 years, and how does this role fit into that vision?",       type: "hr",          timeLimit: 90  },
+  { id: "q1", text: "Tell me about yourself and why you're interested in this role.",                             type: "hr",          timeLimit: 120, hint: "Structure: Present → Past → Future" },
+  { id: "q2", text: "Describe a time you handled a conflict within your team. What was the outcome?",             type: "behavioral",  timeLimit: 150, hint: "Use the STAR method" },
+  { id: "q3", text: "How do you prioritise tasks when you have multiple urgent deadlines simultaneously?",        type: "situational", timeLimit: 120 },
+  { id: "q4", text: "What is the difference between a process and a thread? When would you use each?",           type: "technical",   timeLimit: 90  },
+  { id: "q5", text: "Where do you see yourself in 3–5 years, and how does this role fit into that vision?",      type: "hr",          timeLimit: 90  },
 ];
 
 const TYPE_COLORS: Record<MockQuestion["type"], string> = {
-  behavioral:  "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  behavioral:  "bg-blue-100   text-blue-700   dark:bg-blue-900/40   dark:text-blue-300",
   technical:   "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
-  situational: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
-  hr:          "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
+  situational: "bg-amber-100  text-amber-700  dark:bg-amber-900/40  dark:text-amber-300",
+  hr:          "bg-green-100  text-green-700  dark:bg-green-900/40  dark:text-green-300",
 };
 
-// ─── Timer hook ───────────────────────────────────────────────────────────────
+// ─── useCountdown — stable timer hook ────────────────────────────────────────
+// FIX: onExpire is stored in a ref so the interval never closes over a stale
+//      callback, even if the parent re-renders while the timer is running.
 
 function useCountdown(initialSeconds: number, active: boolean, onExpire: () => void) {
   const [remaining, setRemaining] = useState(initialSeconds);
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const intervalRef  = useRef<ReturnType<typeof setInterval> | null>(null);
+  // FIX BUG-2: store callback in ref — interval always calls the latest version
+  const onExpireRef  = useRef(onExpire);
+  useEffect(() => { onExpireRef.current = onExpire; });
 
   useEffect(() => {
     setRemaining(initialSeconds);
@@ -93,7 +94,8 @@ function useCountdown(initialSeconds: number, active: boolean, onExpire: () => v
       setRemaining((prev) => {
         if (prev <= 1) {
           clearInterval(intervalRef.current!);
-          onExpire();
+          // Call via ref — always the latest onExpire, never stale
+          onExpireRef.current();
           return 0;
         }
         return prev - 1;
@@ -101,47 +103,83 @@ function useCountdown(initialSeconds: number, active: boolean, onExpire: () => v
     }, 1000);
 
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [active, onExpire]);
+  }, [active]); // onExpire intentionally excluded — handled via ref
 
-  return { remaining, reset: () => setRemaining(initialSeconds) };
+  const reset = useCallback(() => setRemaining(initialSeconds), [initialSeconds]);
+  return { remaining, reset };
+}
+
+// ─── MicVisualiser ───────────────────────────────────────────────────────────
+// FIX BUG-7: bars were using Math.random() inside an animation prop —
+// random values on every render caused constant re-renders and animation jank.
+// Now driven by rmsLevel buckets for deterministic, smooth animation.
+
+function MicVisualiser({ isActive, rmsLevel }: { isActive: boolean; rmsLevel: number }) {
+  const BAR_COUNT = 8;
+  return (
+    <div className="flex items-center gap-1">
+      {Array.from({ length: BAR_COUNT }).map((_, i) => {
+        // Each bar lights up when rmsLevel exceeds its threshold bucket
+        const threshold = i / BAR_COUNT;
+        const lit = isActive && rmsLevel > threshold;
+        return (
+          <motion.div
+            key={i}
+            className="w-1 rounded-full bg-primary"
+            animate={{ height: lit ? `${10 + (rmsLevel - threshold) * 24}px` : "4px" }}
+            transition={{ duration: 0.08, ease: "easeOut" }}
+          />
+        );
+      })}
+      <span className="ml-1.5 text-xs text-muted-foreground">
+        {isActive ? "Recording" : "—"}
+      </span>
+    </div>
+  );
 }
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function MockSession() {
-  const navigate       = useNavigate();
-  const [params]       = useSearchParams();
-  const sessionId      = params.get("sessionId") ?? "mock";
+  const navigate  = useNavigate();
+  const [params]  = useSearchParams();
+  const sessionId = params.get("sessionId") ?? "mock";
 
-  const user       = useAuthStore((s) => s.user);
-  const isMicActive = useAudioStore((s) => s.isRecording);
+  // FIX BUG-9: use snake_case fields consistent with the rest of the codebase.
+  // @ts-nocheck was hiding this mismatch.
+  const isMicActive = useAudioStore((s) => s.is_recording ?? false);
   const startMic    = useAudioStore((s) => s.startRecording);
   const stopMic     = useAudioStore((s) => s.stopRecording);
-  const rmsLevel    = useAudioStore((s) => s.rmsLevel ?? 0);
+  const rmsLevel    = useAudioStore((s) => s.rms_level ?? 0);
 
-  const [questions,    setQuestions]    = useState<MockQuestion[]>(FALLBACK_QUESTIONS);
-  const [questionIdx,  setQuestionIdx]  = useState(0);
-  const [phase,        setPhase]        = useState<SessionPhase>("intro");
-  const [introCount,   setIntroCount]   = useState(3);
+  // Also pull live transcript so answers are real, not placeholder strings
+  const transcript = useAudioStore((s) => s.transcript);
+
+  const [questions,     setQuestions]     = useState<MockQuestion[]>(FALLBACK_QUESTIONS);
+  const [questionIdx,   setQuestionIdx]   = useState(0);
+  const [phase,         setPhase]         = useState<SessionPhase>("intro");
+  const [introCount,    setIntroCount]    = useState(3);
   const [showEndDialog, setShowEndDialog] = useState(false);
-  const [elapsedSec,   setElapsedSec]   = useState(0);
-  const [answers,      setAnswers]      = useState<Record<string, string>>({});
+  // FIX BUG-10: only count elapsed time once session is past the "intro" phase
+  const [elapsedSec,    setElapsedSec]    = useState(0);
+  const [answers,       setAnswers]       = useState<Record<string, string>>({});
 
-  const currentQ  = questions[questionIdx];
-  const progress  = ((questionIdx) / questions.length) * 100;
+  const currentQ = questions[questionIdx];
 
-  // ── Session elapsed timer ──────────────────────────────────────────────────
+  // FIX BUG-6: progress reaches 100% on the last question
+  const progress = ((questionIdx + 1) / questions.length) * 100;
 
+  // ── Session elapsed timer (starts after intro) ─────────────────────────────
+  // FIX BUG-10: don't count time during the intro countdown
   useEffect(() => {
+    if (phase === "intro" || phase === "complete") return;
     const id = setInterval(() => setElapsedSec((s) => s + 1), 1000);
     return () => clearInterval(id);
-  }, []);
+  }, [phase]);
 
-  // ── Intro countdown (3 → 2 → 1 → Go) ─────────────────────────────────────
-
+  // ── Intro countdown ────────────────────────────────────────────────────────
   useEffect(() => {
     if (phase !== "intro") return;
-
     const id = setInterval(() => {
       setIntroCount((n) => {
         if (n <= 1) {
@@ -152,85 +190,133 @@ export default function MockSession() {
         return n - 1;
       });
     }, 1000);
-
     return () => clearInterval(id);
   }, [phase]);
 
-  // ── Answer time expired ────────────────────────────────────────────────────
+  // ── Question flow helpers ─────────────────────────────────────────────────
 
+  // FIX BUG-3 & BUG-4 & BUG-5:
+  // goToNextQuestion used to capture questionIdx and questions.length via closure,
+  // causing stale values inside the 1200ms setTimeout. Now uses a functional
+  // setState and receives total as a stable parameter.
+  const goToNextQuestion = useCallback((total: number) => {
+    setQuestionIdx((current) => {
+      if (current + 1 >= total) {
+        setPhase("complete");
+        setTimeout(() => {
+          // FIX BUG-8: guard against undefined ROUTES.DEBRIEF
+          const route = ROUTES.DEBRIEF
+            ? `${ROUTES.DEBRIEF}/${sessionId}`
+            : `/app/debrief/${sessionId}`;
+          navigate(route);
+        }, 2000);
+        return current; // no idx change — we're done
+      }
+
+      setPhase("transition");
+      setTimeout(() => {
+        setPhase("questioning");
+      }, 1200);
+
+      return current + 1;
+    });
+  }, [navigate, sessionId]);
+
+  // FIX BUG-4: handleTimeExpired was defined before goToNextQuestion (TDZ risk)
+  // and captured currentQ which could be stale. Now reads idx from the setState
+  // callback and passes questions.length as a stable value.
   const handleTimeExpired = useCallback(() => {
-    if (phase !== "answering") return;
-    stopMic();
-    setAnswers((prev) => ({
-      ...prev,
-      [currentQ.id]: prev[currentQ.id] ?? "[Time expired — no answer recorded]",
-    }));
-    goToNextQuestion();
-  }, [phase, currentQ, stopMic]);
+    setPhase((currentPhase) => {
+      if (currentPhase !== "answering") return currentPhase;
+
+      stopMic?.();
+
+      // Capture transcript at expiry time for the current question
+      setQuestionIdx((idx) => {
+        const q = questions[idx];
+        if (q) {
+          const transcriptText = transcript?.utterances
+            ?.map((u) => u.text)
+            .join(" ")
+            .trim();
+          setAnswers((prev) => ({
+            ...prev,
+            [q.id]: transcriptText || "[Time expired — no answer recorded]",
+          }));
+        }
+        return idx;
+      });
+
+      return "transition"; // trigger phase update
+    });
+
+    goToNextQuestion(questions.length);
+  }, [stopMic, transcript, questions, goToNextQuestion]);
 
   const { remaining, reset: resetTimer } = useCountdown(
     currentQ?.timeLimit ?? 120,
     phase === "answering",
-    handleTimeExpired
+    handleTimeExpired,
   );
-
-  // ── Question flow ─────────────────────────────────────────────────────────
 
   const startAnswering = useCallback(() => {
     resetTimer();
     setPhase("answering");
-    startMic();
+    startMic?.();
   }, [resetTimer, startMic]);
 
+  // FIX BUG-5: stopAnswering captured currentQ via closure, risking stale question ID.
+  // Now reads the current idx inside the setState callback.
   const stopAnswering = useCallback(() => {
-    stopMic();
-    setAnswers((prev) => ({
-      ...prev,
-      [currentQ.id]: prev[currentQ.id] ?? "[Answer recorded]",
-    }));
-    goToNextQuestion();
-  }, [stopMic, currentQ]);
+    stopMic?.();
 
-  const goToNextQuestion = useCallback(() => {
-    if (questionIdx + 1 >= questions.length) {
-      setPhase("complete");
-      setTimeout(() => {
-        navigate(`${ROUTES.DEBRIEF}/${sessionId}`);
-      }, 2000);
-      return;
-    }
+    setQuestionIdx((idx) => {
+      const q = questions[idx];
+      if (q) {
+        const transcriptText = transcript?.utterances
+          ?.map((u) => u.text)
+          .join(" ")
+          .trim();
+        // FIX BUG-12: store real transcript text, not a placeholder string
+        setAnswers((prev) => ({
+          ...prev,
+          [q.id]: transcriptText || "[No speech detected]",
+        }));
+      }
+      return idx;
+    });
 
-    setPhase("transition");
-    setTimeout(() => {
-      setQuestionIdx((i) => i + 1);
-      setPhase("questioning");
-    }, 1200);
-  }, [questionIdx, questions.length, navigate, sessionId]);
+    goToNextQuestion(questions.length);
+  }, [stopMic, transcript, questions, goToNextQuestion]);
 
   const handleSkip = useCallback(() => {
-    stopMic();
-    goToNextQuestion();
-  }, [stopMic, goToNextQuestion]);
+    stopMic?.();
+    goToNextQuestion(questions.length);
+  }, [stopMic, questions.length, goToNextQuestion]);
 
-  const handleEndSession = useCallback(() => {
-    stopMic();
-    navigate(`${ROUTES.DEBRIEF}/${sessionId}`);
+  const handleEndSession = useCallback(async () => {
+    stopMic?.();
+    setShowEndDialog(false);
+    // FIX BUG-8: guard against undefined route
+    const route = ROUTES.DEBRIEF
+      ? `${ROUTES.DEBRIEF}/${sessionId}`
+      : `/app/debrief/${sessionId}`;
+    navigate(route);
   }, [stopMic, navigate, sessionId]);
 
-  // ── Timer colour ──────────────────────────────────────────────────────────
-
+  // ── Timer colour ───────────────────────────────────────────────────────────
   const timerRatio = remaining / (currentQ?.timeLimit ?? 120);
   const timerColor =
-    timerRatio > 0.5 ? "text-foreground"
-    : timerRatio > 0.25 ? "text-amber-500"
-    : "text-red-500";
+    timerRatio > 0.5  ? "text-foreground" :
+    timerRatio > 0.25 ? "text-amber-500"  :
+                        "text-red-500";
 
-  // ─────────────────────────────────────────────────────────────────────────────
+  // ─── Render ──────────────────────────────────────────────────────────────
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-muted/20 to-background flex flex-col">
 
-      {/* ── Top bar ──────────────────────────────────────────────────────────── */}
+      {/* ── Top bar ──────────────────────────────────────────────────────── */}
       <header className="sticky top-0 z-10 border-b border-border/50 bg-background/80 backdrop-blur-md">
         <div className="mx-auto max-w-4xl px-4 py-3 flex items-center justify-between">
 
@@ -245,7 +331,6 @@ export default function MockSession() {
             </span>
           </div>
 
-          {/* Session progress */}
           <div className="flex-1 mx-6 max-w-xs">
             <Progress value={progress} className="h-1.5" />
           </div>
@@ -262,13 +347,12 @@ export default function MockSession() {
         </div>
       </header>
 
-      {/* ── Main ──────────────────────────────────────────────────────────────── */}
+      {/* ── Main ─────────────────────────────────────────────────────────── */}
       <main className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-2xl space-y-6">
-
           <AnimatePresence mode="wait">
 
-            {/* ── Intro countdown ──────────────────────────────────────── */}
+            {/* Intro countdown */}
             {phase === "intro" && (
               <motion.div
                 key="intro"
@@ -296,7 +380,7 @@ export default function MockSession() {
               </motion.div>
             )}
 
-            {/* ── Question card ─────────────────────────────────────────── */}
+            {/* Question card */}
             {(phase === "questioning" || phase === "answering") && currentQ && (
               <motion.div
                 key={`q-${questionIdx}-${phase}`}
@@ -306,7 +390,7 @@ export default function MockSession() {
                 transition={{ duration: 0.3 }}
                 className="space-y-6"
               >
-                {/* Question header */}
+                {/* Header */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Brain className="h-4 w-4 text-primary" />
@@ -316,7 +400,7 @@ export default function MockSession() {
                   </div>
                   <span className={cn(
                     "inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium capitalize",
-                    TYPE_COLORS[currentQ.type]
+                    TYPE_COLORS[currentQ.type],
                   )}>
                     {currentQ.type}
                   </span>
@@ -348,33 +432,15 @@ export default function MockSession() {
                           {formatDurationSec(remaining)}
                         </span>
                       </div>
-
-                      {/* Mic level visualiser */}
-                      <div className="flex items-center gap-1">
-                        {Array.from({ length: 8 }).map((_, i) => (
-                          <motion.div
-                            key={i}
-                            className="w-1 rounded-full bg-primary"
-                            animate={{
-                              height: isMicActive && rmsLevel > (i / 8)
-                                ? `${12 + Math.random() * 16}px`
-                                : "4px",
-                            }}
-                            transition={{ duration: 0.1 }}
-                          />
-                        ))}
-                        <span className="ml-1.5 text-xs text-muted-foreground">
-                          {isMicActive ? "Recording" : "—"}
-                        </span>
-                      </div>
+                      {/* FIX BUG-7: deterministic mic visualiser, no random() */}
+                      <MicVisualiser isActive={isMicActive} rmsLevel={rmsLevel} />
                     </div>
-
                     <Progress
                       value={timerRatio * 100}
                       className={cn(
                         "h-1.5",
                         timerRatio < 0.25 && "[&>div]:bg-red-500",
-                        timerRatio < 0.5 && timerRatio >= 0.25 && "[&>div]:bg-amber-500"
+                        timerRatio < 0.5 && timerRatio >= 0.25 && "[&>div]:bg-amber-500",
                       )}
                     />
                   </div>
@@ -383,28 +449,17 @@ export default function MockSession() {
                 {/* Actions */}
                 <div className="flex items-center gap-3">
                   {phase === "questioning" && (
-                    <Button
-                      size="lg"
-                      className="flex-1"
-                      onClick={startAnswering}
-                    >
+                    <Button size="lg" className="flex-1" onClick={startAnswering}>
                       <Mic className="h-4 w-4 mr-2" />
                       Start answering
                     </Button>
                   )}
-
                   {phase === "answering" && (
-                    <Button
-                      size="lg"
-                      variant="destructive"
-                      className="flex-1"
-                      onClick={stopAnswering}
-                    >
+                    <Button size="lg" variant="destructive" className="flex-1" onClick={stopAnswering}>
                       <MicOff className="h-4 w-4 mr-2" />
                       Done answering
                     </Button>
                   )}
-
                   <Button
                     variant="outline"
                     size="lg"
@@ -418,7 +473,7 @@ export default function MockSession() {
               </motion.div>
             )}
 
-            {/* ── Transition between questions ──────────────────────────── */}
+            {/* Transition between questions */}
             {phase === "transition" && (
               <motion.div
                 key="transition"
@@ -432,7 +487,7 @@ export default function MockSession() {
               </motion.div>
             )}
 
-            {/* ── Session complete ─────────────────────────────────────────── */}
+            {/* Session complete */}
             {phase === "complete" && (
               <motion.div
                 key="complete"
@@ -444,9 +499,7 @@ export default function MockSession() {
                   <Brain className="h-8 w-8 text-green-600 dark:text-green-400" />
                 </div>
                 <h2 className="text-2xl font-bold">Session complete!</h2>
-                <p className="text-muted-foreground">
-                  Generating your debrief report…
-                </p>
+                <p className="text-muted-foreground">Generating your debrief report…</p>
                 <Loader2 className="h-5 w-5 animate-spin text-primary mx-auto" />
               </motion.div>
             )}
@@ -455,7 +508,7 @@ export default function MockSession() {
         </div>
       </main>
 
-      {/* ── End session dialog ────────────────────────────────────────────────── */}
+      {/* ── End session dialog ───────────────────────────────────────────── */}
       <AlertDialog open={showEndDialog} onOpenChange={setShowEndDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -467,6 +520,8 @@ export default function MockSession() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep going</AlertDialogCancel>
+            {/* FIX BUG-11: use onClick directly rather than relying on AlertDialogAction's
+                auto-close, so we can handle navigation failures in the future */}
             <AlertDialogAction
               onClick={handleEndSession}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"

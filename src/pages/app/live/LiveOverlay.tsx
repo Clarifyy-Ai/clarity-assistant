@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useLiveCopilot } from "@/hooks/useLiveCopilot";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
@@ -13,34 +13,50 @@ import { ClipboardCheck, AlertTriangle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import type { LiveSessionConfig } from "@/types/session.types";
 
+// FIX BUG-5: removed `useNavigate` — it was imported but never called.
+
 const DEFAULT_CONFIG: LiveSessionConfig = {
-  company: null,
-  role: null,
-  hint_style: "short_hints",
-  model: "gemini-flash",
-  smart_routing: false,
-  stealth_mode: true,
-  resume_id: null,
-  jd_id: null,
-  interview_type: "behavioral",
-  instructions: "",
+  company:             null,
+  role:                null,
+  hint_style:          "short_hints",
+  model:               "gemini-flash",
+  smart_routing:       false,
+  stealth_mode:        true,
+  resume_id:           null,
+  jd_id:               null,
+  interview_type:      "behavioral",
+  instructions:        "",
   enable_system_audio: false,
 };
 
 export default function LiveOverlay() {
-  const navigate = useNavigate();
   const sessionStatus = useSessionStore((s) => s.status);
-  const [phase, setPhase] = useState<"setup" | "active" | "restarting">("setup");
-  const [config, setConfig] = useState<LiveSessionConfig>(DEFAULT_CONFIG);
-  const [lastSessionId, setLastSessionId] = useState<string | null>(null);
-  const hasStartedRef = useRef(false);
-  const didEndRef = useRef(false);
 
-  const copilot = useLiveCopilot({ config });
-  const isActive = sessionStatus === "active";
-  const endSessionRef = useRef(copilot.endLiveSession);
-  endSessionRef.current = copilot.endLiveSession;
+  const [phase,         setPhase]         = useState<"setup" | "active" | "restarting">("setup");
+  const [config,        setConfig]        = useState<LiveSessionConfig>(DEFAULT_CONFIG);
+  const [lastSessionId, setLastSessionId] = useState<string | null>(null);
+
+  const hasStartedRef = useRef(false);
+  const didEndRef     = useRef(false);
+
+  const copilot   = useLiveCopilot({ config });
+  const isActive  = sessionStatus === "active";
+
+  // Stable ref to endLiveSession so the cleanup effect always calls the latest version
+  const endSessionRef     = useRef(copilot.endLiveSession);
+  endSessionRef.current   = copilot.endLiveSession;
+
+  // FIX BUG-4: streamError may be Error | { message: string } | string depending
+  // on the hook implementation. Normalise to a string for safe rendering.
   const streamError = copilot.streamError;
+  const streamErrorMessage: string | null = streamError
+    ? (typeof streamError === "string"
+        ? streamError
+        : (streamError as { message?: string }).message
+          ?? "Microphone stream error. Please check your audio settings.")
+    : null;
+
+  // ── Setup ────────────────────────────────────────────────────────────────
 
   const handleSetup = useCallback((sessionConfig: LiveSessionConfig) => {
     useSessionStore.getState().resetSession();
@@ -49,27 +65,35 @@ export default function LiveOverlay() {
     useOverlayStore.getState().setHintStyle(sessionConfig.hint_style);
     useOverlayStore.getState().setProctorSafe(sessionConfig.stealth_mode);
     hasStartedRef.current = false;
-    didEndRef.current = false;
+    didEndRef.current     = false;
     setLastSessionId(null);
     setConfig(sessionConfig);
+    // Brief "restarting" phase so the active effect re-fires reliably
     setPhase("restarting");
     requestAnimationFrame(() => setPhase("active"));
   }, []);
 
+  // ── Start session when phase becomes active ──────────────────────────────
+  // FIX BUG-2: copilot.startLiveSession may change reference on every render.
+  // hasStartedRef guards double-firing, but we also disable the exhaustive-deps
+  // lint rule intentionally — copilot.startLiveSession is pulled via getState()
+  // inside the hook and is always the latest reference.
   useEffect(() => {
-    if (phase === "active" && !hasStartedRef.current) {
-      hasStartedRef.current = true;
-      useOverlayStore.getState().showOverlay();
-      copilot.startLiveSession().catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : "Failed to start live session";
-        toast.error(message);
-      });
-    }
-  }, [phase, copilot.startLiveSession]);
+    if (phase !== "active" || hasStartedRef.current) return;
+    hasStartedRef.current = true;
+    useOverlayStore.getState().showOverlay();
+    copilot.startLiveSession().catch((err: unknown) => {
+      const message = err instanceof Error ? err.message : "Failed to start live session";
+      toast.error(message);
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [phase]);
 
+  // ── Cleanup on unmount ───────────────────────────────────────────────────
   useEffect(() => {
     return () => {
       if (hasStartedRef.current && !didEndRef.current) {
+        // FIX BUG-3: call via ref so we always invoke the latest endLiveSession
         endSessionRef.current();
       }
       useOverlayStore.getState().hideOverlay();
@@ -77,14 +101,19 @@ export default function LiveOverlay() {
     };
   }, []);
 
+  // ── Stop session ─────────────────────────────────────────────────────────
   const handleStop = useCallback(async () => {
     didEndRef.current = true;
+    // Snapshot session_id BEFORE ending — endLiveSession may clear store state
     const sessionId = useSessionStore.getState().session_id;
     await copilot.endLiveSession();
     setLastSessionId(sessionId);
-    useOverlayStore.getState().showOverlay();
+    // FIX BUG-1: do NOT call showOverlay() here. The session is over — showing
+    // the overlay again is confusing and contradicts the "Session Ended" UI.
+    // The overlay should remain in its last state (hidden or visible).
   }, [copilot.endLiveSession]);
 
+  // ── Generate hint ─────────────────────────────────────────────────────────
   const handleGenerate = useCallback(() => {
     const question = useOverlayStore.getState().current_question;
     if (question) copilot.requestLiveHint(question);
@@ -94,6 +123,7 @@ export default function LiveOverlay() {
     copilot.submitManualQuestion(question);
   }, [copilot.submitManualQuestion]);
 
+  // ── Setup screen ─────────────────────────────────────────────────────────
   if (phase === "setup") {
     return (
       <PreSessionSetupWizard
@@ -103,6 +133,7 @@ export default function LiveOverlay() {
     );
   }
 
+  // ── Active / ended screen ────────────────────────────────────────────────
   return (
     <>
       <ScreenCaptureBlocker isActive={isActive} />
@@ -121,19 +152,24 @@ export default function LiveOverlay() {
         onSetupNewSession={() => setPhase("setup")}
         lastSessionId={lastSessionId}
       />
-      {streamError && (
+
+      {/* Stream error banner */}
+      {streamErrorMessage && (
         <div className="mx-auto max-w-md mb-4 flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>{streamError.message ?? "Microphone stream error. Please check your audio settings."}</span>
+          <span>{streamErrorMessage}</span>
         </div>
       )}
+
+      {/* Centre content */}
       <div className="flex items-center justify-center h-[60vh]">
         <div className="text-center space-y-3">
           {isActive ? (
             <>
               <p className="text-lg font-semibold text-foreground">Overlay Mode Active</p>
               <p className="text-sm text-muted-foreground max-w-sm">
-                The overlay is floating on your screen. Use <kbd className="hotkey-badge">Ctrl+Shift+H</kbd> to toggle visibility.
+                The overlay is floating on your screen.{" "}
+                Use <kbd className="hotkey-badge">Ctrl+Shift+H</kbd> to toggle visibility.
               </p>
               <p className="text-xs text-muted-foreground/60">
                 Press <kbd className="hotkey-badge">Ctrl+Shift+P</kbd> for panic mode
