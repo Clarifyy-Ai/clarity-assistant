@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
+import { fetchEdge } from "@/lib/network/fetchEdge";
 import { useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
@@ -172,14 +172,7 @@ export function useGamification() {
     // Persist to DB via Edge Function
     try {
       
-      await fetch(`${EDGE_BASE}/award-xp`, {
-        method: "POST",
-        headers: {
-          "Content-Type":  "application/json",
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ event_type: eventType, xp: amount, metadata }),
-      });
+      await fetchEdge("award-xp", { event_type: eventType, xp: amount, metadata });
     } catch { /* non-fatal */ }
 
     // Check for level-up badge
@@ -204,14 +197,7 @@ export function useGamification() {
     // Persist badge + bonus XP
     try {
       
-      await fetch(`${EDGE_BASE}/unlock-badge`, {
-        method: "POST",
-        headers: {
-          "Content-Type":  "application/json",
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ badge_id: badgeId }),
-      });
+      await fetchEdge("unlock-badge", { badge_id: badgeId });
     } catch { /* non-fatal */ }
 
     // Award bonus XP from badge definition

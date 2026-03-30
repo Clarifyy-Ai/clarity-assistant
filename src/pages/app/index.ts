@@ -55,13 +55,9 @@ export {
 
 export { MockInterview, MockSession, MockWarmup } from "./mock";
 
-// ─── Practice ─────────────────────────────────────────────────────────────────
+// Practice rooms are served from ./rooms — no separate practice/ directory.
 
-export {
-  PracticeRooms,
-  NewRoom,
-  RoomSession,
-} from "./practice";
+
 
 // ─── Prep ─────────────────────────────────────────────────────────────────────
 

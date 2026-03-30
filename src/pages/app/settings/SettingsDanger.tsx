@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
+import { fetchEdge } from "@/lib/network/fetchEdge";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
@@ -35,14 +35,7 @@ export default function SettingsDanger() {
     setExporting(true);
     try {
       
-      const res = await fetch(`${EDGE_BASE}/export-user-data`, {
-        method:  "POST",
-        headers: {
-          "Content-Type":  "application/json",
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ user_id: user?.id }),
-      });
+      const res = await fetchEdge("export-user-data", { user_id: user?.id });
 
       if (!res.ok) throw new Error(`Export failed: ${res.statusText}`);
 
@@ -93,14 +86,7 @@ export default function SettingsDanger() {
     setDeleting(true);
     try {
       
-      const res = await fetch(`${EDGE_BASE}/delete-account`, {
-        method:  "POST",
-        headers: {
-          "Content-Type":  "application/json",
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ user_id: user.id }),
-      });
+      const res = await fetchEdge("delete-account", { user_id: user.id });
 
       if (!res.ok) throw new Error(`Account deletion failed: ${res.statusText}`);
 

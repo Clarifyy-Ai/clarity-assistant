@@ -20,7 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";
 import { refreshCredits } from "@/lib/billing/creditsManager";
-import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
+import { fetchEdge } from "@/lib/network/fetchEdge";
 
 // ─────────────────────────────────────────────────────────────────
 // PrepLab — STAR builder, question bank, AI tools
@@ -607,14 +607,7 @@ function AIToolModal({
 
     try {
 
-      const res = await fetch(`${EDGE_BASE}/prep-tool`, {
-        method:  "POST",
-        headers: {
-          "Content-Type":  "application/json",
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ tool_id: toolId, input }),
-      });
+      const res = await fetchEdge("prep-tool", { tool_id: toolId, input });
 
       if (!res.ok) throw new Error(`AI tool returned ${res.status}`);
 
@@ -690,14 +683,7 @@ function CompanyPrep() {
     setLoading(true);
 
 
-    const res = await fetch(`${EDGE_BASE}/company-research`, {
-      method:  "POST",
-      headers: {
-        "Content-Type":  "application/json",
-        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({ company, role }),
-    });
+    const res = await fetchEdge("company-research", { company, role });
 
     const data = await res.json();
     setBrief(data);

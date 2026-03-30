@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
+import { fetchEdge } from "@/lib/network/fetchEdge";
 import { useState } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { useAuthStore } from "@/store/userStore";
@@ -62,17 +62,7 @@ export default function ProjectBuilder() {
       
       const techList = techStack.length > 0 ? techStack.join(", ") : "not specified";
       const input = `Project: ${projectName}\nRole: ${role}\nTech Stack: ${techList}\n\nWhat I did:\n${description}${impact ? `\n\nImpact & Metrics:\n${impact}` : ""}`;
-      const res = await fetch(`${EDGE_BASE}/prep-tool`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          tool_id: "project_build",
-          input,
-        }),
-      });
+      const res = await fetchEdge("prep-tool", { tool_id: "project_build", input });
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();

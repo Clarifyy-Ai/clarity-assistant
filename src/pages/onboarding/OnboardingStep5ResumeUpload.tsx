@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
+import { fetchEdge } from "@/lib/network/fetchEdge";
 import { useState, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase/client";
@@ -88,14 +88,7 @@ export default function OnboardingStep5ResumeUpload() {
     // 4. Trigger AI parse via Edge Function
     setParsing(true);
     
-    const res = await fetch(`${EDGE_BASE}/parse-resume`, {
-      method:  "POST",
-      headers: {
-        "Content-Type":  "application/json",
-        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-      },
-      body: JSON.stringify({ resume_id: resumeRecord.id, file_url: urlData.publicUrl }),
-    });
+    const res = await fetchEdge("parse-resume", { resume_id: resumeRecord.id, file_url: urlData.publicUrl });
 
     setParsing(false);
 

@@ -95,12 +95,11 @@ export async function deductCredits(
   const cost      = getCreditCost(model);
 
   try {
+    const { getAuthHeaders } = await import("@/lib/network/fetchEdge");
+    const headers = await getAuthHeaders();
     const response = await fetch(`${EDGE_BASE}/deduct-credits`, {
       method: "POST",
-      headers: {
-        "Content-Type":  "application/json",
-        "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-      },
+      headers,
       body: JSON.stringify({
         model,
         session_id: sessionId,
