@@ -1,46 +1,58 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// src/lib/env.ts — Centralized environment variable access with startup validation.
-// Import typed constants from here instead of using import.meta.env directly.
-// ─────────────────────────────────────────────────────────────────────────────
+// src/lib/env.ts
+type RawEnv = Record<string, string | undefined>;
 
-function requireEnv(key: string): string {
-  const val = import.meta.env[key] as string | undefined;
-  if (!val) {
-    const msg = `[env] FATAL: Missing required environment variable: ${key}. The app cannot function without it.`;
-    console.error(msg);
-    throw new Error(msg);
+const rawEnv = import.meta.env as RawEnv;
+
+function firstDefined(keys: string[], fallback?: string): string {
+  for (const key of keys) {
+    const value = rawEnv[key];
+    if (typeof value === "string" && value.trim().length > 0) {
+      return value.trim();
+    }
   }
-  return val;
+
+  if (fallback !== undefined) return fallback;
+
+  const msg = `[env] Missing required environment variable. Expected one of: ${keys.join(", ")}`;
+  console.error(msg);
+  throw new Error(msg);
 }
 
-function optionalEnv(key: string, defaultValue = ""): string {
-  return (import.meta.env[key] as string | undefined) ?? defaultValue;
+function optional(keys: string[], fallback = ""): string {
+  return firstDefined(keys, fallback);
 }
 
 export const ENV = {
-  SUPABASE_URL:      requireEnv("VITE_SUPABASE_URL"),
-  SUPABASE_ANON_KEY: requireEnv("VITE_SUPABASE_ANON_KEY"),
-  SENTRY_DSN:        optionalEnv("VITE_SENTRY_DSN"),
-  DEEPGRAM_API_KEY:  optionalEnv("VITE_DEEPGRAM_API_KEY"),
-  STRIPE_PUBLIC_KEY: optionalEnv("VITE_STRIPE_PUBLIC_KEY"),
-  APP_ENV:           optionalEnv("VITE_APP_ENV", "development"),
-  APP_URL:           optionalEnv("VITE_APP_URL"),
-  API_URL:           optionalEnv("VITE_API_URL", "/api"),
-  POSTHOG_KEY:       optionalEnv("VITE_POSTHOG_KEY"),
-  POSTHOG_HOST:      optionalEnv("VITE_POSTHOG_HOST", "https://app.posthog.com"),
-  STRIPE_PRICE_STARTER_MONTHLY: optionalEnv("VITE_STRIPE_PRICE_STARTER_MONTHLY"),
-  STRIPE_PRICE_STARTER_YEARLY:  optionalEnv("VITE_STRIPE_PRICE_STARTER_YEARLY"),
-  STRIPE_PRICE_PRO_MONTHLY:     optionalEnv("VITE_STRIPE_PRICE_PRO_MONTHLY"),
-  STRIPE_PRICE_PRO_YEARLY:      optionalEnv("VITE_STRIPE_PRICE_PRO_YEARLY"),
-  STRIPE_PRICE_ELITE_MONTHLY:   optionalEnv("VITE_STRIPE_PRICE_ELITE_MONTHLY"),
-  STRIPE_PRICE_ELITE_YEARLY:    optionalEnv("VITE_STRIPE_PRICE_ELITE_YEARLY"),
-  STRIPE_PRICE_CREDITS_10:      optionalEnv("VITE_STRIPE_PRICE_CREDITS_10"),
-  STRIPE_PRICE_CREDITS_50:      optionalEnv("VITE_STRIPE_PRICE_CREDITS_50"),
-  STRIPE_PRICE_CREDITS_150:     optionalEnv("VITE_STRIPE_PRICE_CREDITS_150"),
-  STRIPE_PRICE_CREDITS_500:     optionalEnv("VITE_STRIPE_PRICE_CREDITS_500"),
+  SUPABASE_URL: firstDefined(["VITE_SUPABASE_URL"]),
+  SUPABASE_ANON_KEY: firstDefined([
+    "VITE_SUPABASE_ANON_KEY",
+    "VITE_SUPABASE_PUBLISHABLE_KEY",
+  ]),
+  SUPABASE_PUBLISHABLE_KEY: firstDefined([
+    "VITE_SUPABASE_PUBLISHABLE_KEY",
+    "VITE_SUPABASE_ANON_KEY",
+  ]),
+  SENTRY_DSN: optional(["VITE_SENTRY_DSN"]),
+  DEEPGRAM_API_KEY: optional(["VITE_DEEPGRAM_API_KEY"]),
+  STRIPE_PUBLIC_KEY: optional(["VITE_STRIPE_PUBLIC_KEY"]),
+  APP_ENV: optional(["VITE_APP_ENV"], "development"),
+  APP_URL: optional(["VITE_APP_URL"]),
+  API_URL: optional(["VITE_API_URL"], "/api"),
+  POSTHOG_KEY: optional(["VITE_POSTHOG_KEY"]),
+  POSTHOG_HOST: optional(["VITE_POSTHOG_HOST"], "https://app.posthog.com"),
+  STRIPE_PRICE_STARTER_MONTHLY: optional(["VITE_STRIPE_PRICE_STARTER_MONTHLY"]),
+  STRIPE_PRICE_STARTER_YEARLY: optional(["VITE_STRIPE_PRICE_STARTER_YEARLY"]),
+  STRIPE_PRICE_PRO_MONTHLY: optional(["VITE_STRIPE_PRICE_PRO_MONTHLY"]),
+  STRIPE_PRICE_PRO_YEARLY: optional(["VITE_STRIPE_PRICE_PRO_YEARLY"]),
+  STRIPE_PRICE_ELITE_MONTHLY: optional(["VITE_STRIPE_PRICE_ELITE_MONTHLY"]),
+  STRIPE_PRICE_ELITE_YEARLY: optional(["VITE_STRIPE_PRICE_ELITE_YEARLY"]),
+  STRIPE_PRICE_CREDITS_10: optional(["VITE_STRIPE_PRICE_CREDITS_10"]),
+  STRIPE_PRICE_CREDITS_50: optional(["VITE_STRIPE_PRICE_CREDITS_50"]),
+  STRIPE_PRICE_CREDITS_150: optional(["VITE_STRIPE_PRICE_CREDITS_150"]),
+  STRIPE_PRICE_CREDITS_500: optional(["VITE_STRIPE_PRICE_CREDITS_500"]),
 } as const;
 
-export const SUPABASE_URL      = ENV.SUPABASE_URL;
+export const SUPABASE_URL = ENV.SUPABASE_URL;
 export const SUPABASE_ANON_KEY = ENV.SUPABASE_ANON_KEY;
-
-export const EDGE_BASE = `${ENV.SUPABASE_URL}/functions/v1`;
+export const SUPABASE_PUBLISHABLE_KEY = ENV.SUPABASE_PUBLISHABLE_KEY;
+export const EDGE_BASE = `${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1`;
