@@ -109,7 +109,6 @@ export default function CodingHints() {
       
       const input = `Problem: ${activeProblem.title}\n\n${activeProblem.description}\n\nExamples:\n${activeProblem.examples}\n\nTags: ${activeProblem.tags.join(", ")}`;
       const res = await fetchEdge("prep-tool", { tool_id: "coding_hint", input });
-      });
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
@@ -139,7 +138,6 @@ export default function CodingHints() {
       
       const input = `Problem: ${activeProblem.title}\n\n${activeProblem.description}\n\nExamples:\n${activeProblem.examples}\n\nTags: ${activeProblem.tags.join(", ")}`;
       const res = await fetchEdge("prep-tool", { tool_id: "coding_solution", input });
-      });
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
