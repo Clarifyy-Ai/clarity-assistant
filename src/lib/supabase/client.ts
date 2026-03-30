@@ -1,29 +1,20 @@
-// @ts-nocheck
-// ─────────────────────────────────────────────────────────────────────────────
 // src/lib/supabase/client.ts
-// Utility functions only — imports the singleton from integrations.
-// NEVER calls createClient() here.
-// ─────────────────────────────────────────────────────────────────────────────
-
 import {
   supabase,
   SUPABASE_URL,
   SUPABASE_ANON_KEY,
 } from "@/integrations/supabase/client";
 
-// Re-export the singleton and URL so existing imports from this path still work
 export { supabase, SUPABASE_URL, SUPABASE_ANON_KEY };
 
-// ── Storage bucket names ──────────────────────────────────────────────────────
 export const STORAGE_BUCKETS = {
-  RESUMES:          "resumes",
-  AVATARS:          "avatars",
-  SCORECARDS:       "scorecards",
-  JD_FILES:         "jd-files",
-  ROOM_RECORDINGS:  "room-recordings",
+  RESUMES: "resumes",
+  AVATARS: "avatars",
+  SCORECARDS: "scorecards",
+  JD_FILES: "jd-files",
+  ROOM_RECORDINGS: "room-recordings",
 } as const;
 
-// ── Signed URL ────────────────────────────────────────────────────────────────
 export async function getSignedUrl(
   bucketName: string,
   path: string,
@@ -32,54 +23,41 @@ export async function getSignedUrl(
   const { data, error } = await supabase.storage
     .from(bucketName)
     .createSignedUrl(path, expiresInSeconds);
-  if (error || !data) return null;
+
+  if (error || !data?.signedUrl) return null;
   return data.signedUrl;
 }
 
-// ── XHR upload with progress ──────────────────────────────────────────────────
 export async function uploadFile(
   bucketName: string,
   path: string,
   file: File,
   onProgress?: (percent: number) => void
-): Promise<{ url: string; path: string } | null> {
-  // Get the user's current JWT for storage RLS
-  const { data: { session } } = await supabase.auth.getSession();
-  const token = session?.access_token ?? SUPABASE_ANON_KEY;
+): Promise<{ url: string | null; path: string } | null> {
+  try {
+    onProgress?.(10);
 
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    const url = `${SUPABASE_URL}/storage/v1/object/${bucketName}/${path}`;
+    const { error } = await supabase.storage.from(bucketName).upload(path, file, {
+      upsert: true,
+      contentType: file.type || "application/octet-stream",
+    });
 
-    xhr.open("POST", url);
-    xhr.setRequestHeader("Authorization", `Bearer ${token}`);
-    xhr.setRequestHeader("apikey", SUPABASE_ANON_KEY);
-    xhr.setRequestHeader("x-upsert", "true");
+    if (error) throw error;
 
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable && onProgress) {
-        onProgress(Math.round((e.loaded / e.total) * 100));
-      }
-    };
+    onProgress?.(90);
 
-    xhr.onload = () => {
-      if (xhr.status >= 200 && xhr.status < 300) {
-        const publicUrl = `${SUPABASE_URL}/storage/v1/object/public/${bucketName}/${path}`;
-        resolve({ url: publicUrl, path });
-      } else {
-        reject(new Error(`Upload failed: ${xhr.status} ${xhr.statusText}`));
-      }
-    };
+    const { data: publicData } = supabase.storage.from(bucketName).getPublicUrl(path);
+    const url = publicData?.publicUrl ?? null;
 
-    xhr.onerror = () => reject(new Error("Upload network error"));
+    onProgress?.(100);
 
-    const formData = new FormData();
-    formData.append("", file);
-    xhr.send(formData);
-  });
+    return { url, path };
+  } catch (error) {
+    console.error("[uploadFile] Upload failed:", error);
+    return null;
+  }
 }
 
-// ── Delete file ───────────────────────────────────────────────────────────────
 export async function deleteFile(
   bucketName: string,
   path: string
@@ -88,13 +66,12 @@ export async function deleteFile(
   return !error;
 }
 
-// ── Realtime table subscription ───────────────────────────────────────────────
 export function subscribeToTable<T>(
-  tableName:  string,
-  filter:     string,
-  onInsert?:  (row: T) => void,
-  onUpdate?:  (row: T) => void,
-  onDelete?:  (row: T) => void
+  tableName: string,
+  filter: string,
+  onInsert?: (row: T) => void,
+  onUpdate?: (row: T) => void,
+  onDelete?: (row: T) => void
 ) {
   return supabase
     .channel(`${tableName}:${filter}`)
@@ -116,7 +93,6 @@ export function subscribeToTable<T>(
     .subscribe();
 }
 
-// ── Generic fetch / upsert helpers ────────────────────────────────────────────
 export async function fetchById<T>(
   tableName: string,
   id: string
@@ -126,6 +102,7 @@ export async function fetchById<T>(
     .select("*")
     .eq("id", id)
     .single();
+
   if (error || !data) return null;
   return data as T;
 }
@@ -139,6 +116,7 @@ export async function upsertRow<T>(
     .upsert(row as never)
     .select()
     .single();
+
   if (error || !data) return null;
   return data as T;
 }
