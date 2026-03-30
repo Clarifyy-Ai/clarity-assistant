@@ -1,7 +1,36 @@
-// create-test/index.ts — Creates a mock test from config
-
+// supabase/functions/create-test/index.ts
 import { handleCors, corsHeaders } from "../_shared/cors.ts";
-import { createServiceClient } from "../_shared/supabase.ts";
+import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
+
+const CREATE_TEST_CREDIT_COST = 2;
+
+function jsonResponse(payload: unknown, status = 200) {
+  return new Response(JSON.stringify(payload), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function sanitizeString(value: unknown, maxLength = 200, fallback = ""): string {
+  const result = String(value ?? fallback).trim();
+  return result.slice(0, maxLength);
+}
+
+function clampNumber(value: unknown, min: number, max: number, fallback: number) {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return fallback;
+  return Math.min(Math.max(num, min), max);
+}
+
+function normalizeQuestionIds(input: unknown, limit = 200): string[] {
+  if (!Array.isArray(input)) return [];
+  const ids = input
+    .map((x) => String(x).trim())
+    .filter(Boolean)
+    .slice(0, limit);
+
+  return [...new Set(ids)];
+}
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
@@ -10,164 +39,132 @@ Deno.serve(async (req) => {
   const db = createServiceClient();
 
   try {
-    /* ── AUTH ── */
-    const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
+    const authHeader =
+      req.headers.get("authorization") ?? req.headers.get("Authorization");
+
     if (!authHeader?.toLowerCase().startsWith("bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
     const token = authHeader.replace(/^bearer\s+/i, "");
-    const { data: { user }, error: authErr } = await db.auth.getUser(token);
-    if (authErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
-    /* ── PARSE BODY ── */
-    const body = await req.json().catch(() => null);
-    if (!body) {
-      return new Response(JSON.stringify({ error: "Invalid JSON body" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
-    }
-
     const {
-      test_name = "Mock Test",
-      exam_type = "CUSTOM",
-      subjects = [],
-      difficulty_level = "INTERMEDIATE",
-      question_count = 30,
-      time_limit_minutes = 60,
-      shuffle_questions = true,
-      shuffle_options = true,
-      difficulty_distribution = { easy: 20, medium: 60, hard: 20 },
-      question_ids = [],
-    } = body;
+      data: { user },
+      error: authErr,
+    } = await db.auth.getUser(token);
 
-    const safeTestName = String(test_name).slice(0, 200);
-    const safeCount = Math.min(Math.max(Number(question_count) || 30, 1), 200);
-    const safeTime = Math.min(Math.max(Number(time_limit_minutes) || 60, 0), 360);
-
-    /* ── SELECT QUESTIONS ── */
-    let selectedIds: string[] = [];
-
-    if (Array.isArray(question_ids) && question_ids.length > 0) {
-      // Use provided question IDs directly
-      selectedIds = question_ids.map(String).slice(0, safeCount);
-    } else {
-      // Query questions from the bank
-      let query = db.from("questions").select("id, difficulty, subject");
-
-      if (Array.isArray(subjects) && subjects.length > 0) {
-        query = query.in("subject", subjects);
-      }
-      if (exam_type && exam_type !== "CUSTOM") {
-        query = query.eq("exam_type", exam_type);
-      }
-
-      const { data: allQuestions, error: qErr } = await query.limit(1000);
-
-      if (qErr) {
-        return new Response(JSON.stringify({ error: "Failed to fetch questions" }), {
-          status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      if (!allQuestions || allQuestions.length === 0) {
-        return new Response(JSON.stringify({ error: "No questions found matching criteria" }), {
-          status: 404, headers: { ...corsHeaders, "Content-Type": "application/json" },
-        });
-      }
-
-      // Split by difficulty
-      const easy = allQuestions.filter((q: any) => q.difficulty === "EASY");
-      const medium = allQuestions.filter((q: any) => q.difficulty === "MEDIUM");
-      const hard = allQuestions.filter((q: any) => q.difficulty === "HARD");
-
-      const dist = difficulty_distribution || { easy: 20, medium: 60, hard: 20 };
-      const total = (dist.easy || 0) + (dist.medium || 0) + (dist.hard || 0);
-      const easyPct = total > 0 ? (dist.easy || 0) / total : 0.33;
-      const medPct = total > 0 ? (dist.medium || 0) / total : 0.34;
-      const hardPct = total > 0 ? (dist.hard || 0) / total : 0.33;
-
-      const easyCount = Math.round(safeCount * easyPct);
-      const hardCount = Math.round(safeCount * hardPct);
-      const medCount = safeCount - easyCount - hardCount;
-
-      const pick = (arr: any[], n: number) => {
-        const shuffled = [...arr].sort(() => Math.random() - 0.5);
-        return shuffled.slice(0, n);
-      };
-
-      const picked = [
-        ...pick(easy, easyCount),
-        ...pick(medium, medCount),
-        ...pick(hard, hardCount),
-      ];
-
-      // If not enough from difficulty pools, fill from remaining
-      if (picked.length < safeCount) {
-        const pickedSet = new Set(picked.map((q: any) => q.id));
-        const remaining = allQuestions.filter((q: any) => !pickedSet.has(q.id));
-        const fill = pick(remaining, safeCount - picked.length);
-        picked.push(...fill);
-      }
-
-      // Shuffle final order
-      if (shuffle_questions) {
-        picked.sort(() => Math.random() - 0.5);
-      }
-
-      selectedIds = picked.map((q: any) => q.id);
+    if (authErr || !user) {
+      return jsonResponse({ error: "Unauthorized" }, 401);
     }
 
-    if (selectedIds.length === 0) {
-      return new Response(JSON.stringify({ error: "Could not select any questions" }), {
-        status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+    const body = await req.json().catch(() => null);
+    if (!body || typeof body !== "object") {
+      return jsonResponse({ error: "Invalid JSON body" }, 400);
     }
 
-    /* ── CREATE TEST ── */
-    const config = {
-      exam_type,
+    const config = typeof body.config === "object" && body.config ? body.config : {};
+
+    const testName = sanitizeString(
+      body.test_name ?? config.test_name ?? "Mock Test",
+      200,
+      "Mock Test"
+    );
+
+    const questionIds = normalizeQuestionIds(
+      body.question_ids ?? config.question_ids ?? [],
+      200
+    );
+
+    if (questionIds.length === 0) {
+      return jsonResponse({ error: "No question IDs provided" }, 400);
+    }
+
+    const examType = sanitizeString(config.exam_type ?? body.exam_type ?? "CUSTOM", 50, "CUSTOM");
+    const subjects = Array.isArray(config.subjects)
+      ? config.subjects.map((s: unknown) => sanitizeString(s, 100)).filter(Boolean)
+      : [];
+
+    const difficultyDistribution =
+      typeof config.difficulty_distribution === "object" && config.difficulty_distribution
+        ? config.difficulty_distribution
+        : { EASY: 20, MEDIUM: 60, HARD: 20 };
+
+    const timeLimitMinutes = clampNumber(
+      config.duration_minutes ?? body.time_limit_minutes ?? 60,
+      0,
+      360,
+      60
+    );
+
+    const shuffleQuestions =
+      typeof config.randomize_order === "boolean"
+        ? config.randomize_order
+        : typeof body.shuffle_questions === "boolean"
+        ? body.shuffle_questions
+        : true;
+
+    const shuffleOptions =
+      typeof config.shuffle_options === "boolean"
+        ? config.shuffle_options
+        : typeof body.shuffle_options === "boolean"
+        ? body.shuffle_options
+        : true;
+
+    const marksPositive = clampNumber(config.marks_positive ?? 4, 0, 100, 4);
+    const marksNegative = clampNumber(config.marks_negative ?? 1, 0, 100, 1);
+
+    const creditResult = await deductCredits(
+      user.id,
+      "create_mock_test",
+      CREATE_TEST_CREDIT_COST
+    );
+
+    if (!creditResult?.success) {
+      return jsonResponse(
+        { error: "Insufficient credits to create test" },
+        402
+      );
+    }
+
+    const finalConfig = {
+      ...(typeof config === "object" ? config : {}),
+      exam_type: examType,
       subjects,
-      difficulty_level,
-      shuffle_questions,
-      shuffle_options,
-      difficulty_distribution,
+      difficulty_distribution: difficultyDistribution,
+      shuffle_questions: shuffleQuestions,
+      shuffle_options: shuffleOptions,
+      marks_positive: marksPositive,
+      marks_negative: marksNegative,
+      duration_minutes: timeLimitMinutes,
     };
 
     const { data: test, error: insertErr } = await db
       .from("mock_tests")
       .insert({
         user_id: user.id,
-        test_name: safeTestName,
-        question_ids: selectedIds,
-        time_limit_minutes: safeTime || null,
-        config,
-        status: "created",
+        test_name: testName,
+        question_ids: questionIds,
+        time_limit_minutes: timeLimitMinutes || null,
+        config: finalConfig,
+        status: "IN_PROGRESS",
       })
       .select()
       .single();
 
-    if (insertErr) {
+    if (insertErr || !test) {
       console.error("[create-test] Insert error:", insertErr);
-      return new Response(JSON.stringify({ error: "Failed to create test" }), {
-        status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return jsonResponse({ error: "Failed to create test" }, 500);
     }
 
-    return new Response(JSON.stringify({ test, question_count: selectedIds.length }), {
-      status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" },
+    return jsonResponse({
+      test_id: test.id,
+      test,
+      question_count: questionIds.length,
     });
   } catch (err) {
     console.error("[create-test] Error:", err);
-    return new Response(
-      JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+    return jsonResponse(
+      { error: err instanceof Error ? err.message : "Unknown error" },
+      500
     );
   }
 });
