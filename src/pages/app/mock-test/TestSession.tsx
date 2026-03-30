@@ -1,4 +1,102 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
+import {
+  AlertCircle,
+  BookmarkPlus,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Flag,
+  Menu,
+  Send,
+  X,
+} from "lucide-react";
+import { BlockMath, InlineMath } from "react-katex";
+import "katex/dist/katex.min.css";
+import { toast } from "sonner";
+
+import { supabase } from "@/lib/supabase/client";
+import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/env";
+import { useAuthStore } from "@/store/userStore";
+import { Button } from "@/components/ui/Button";
+import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
+import { cn } from "@/lib/utils";
+
+interface QuestionOption {
+  label: string;
+  text: string;
+}
+
+interface Question {
+  id: string;
+  question_text: string;
+  question_type: "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER" | "NUMERICAL" | "CODING";
+  options: QuestionOption[] | null;
+  correct_answer: string;
+  subject: string;
+  topic: string;
+  difficulty: "EASY" | "MEDIUM" | "HARD";
+  marks_positive: number;
+  marks_negative: number;
+  image_url?: string | null;
+  latex_present?: boolean | null;
+}
+
+type QuestionState =
+  | "unattempted"
+  | "visited"
+  | "answered"
+  | "marked"
+  | "answered-marked";
+
+interface ResponseState {
+  answer: string;
+  state: QuestionState;
+}
+
+interface MockTest {
+  id: string;
+  test_name: string;
+  config: Record<string, unknown> | null;
+  question_ids: string[];
+  status: "DRAFT" | "IN_PROGRESS" | "COMPLETED";
+  time_limit_minutes: number | null;
+  started_at?: string | null;
+}
+
+interface TestResponseRow {
+  question_id: string;
+  user_answer: string | null;
+  is_attempted: boolean | null;
+  is_marked_review: boolean | null;
+  time_spent_seconds: number | null;
+}
+
+interface MathSegment {
+  start: number;
+  end: number;
+  latex: string;
+  isBlock: boolean;
+}
+
+const STATE_COLORS: Record<QuestionState, string> = {
+  unattempted: "bg-card text-foreground border-border hover:bg-muted",
+  visited:
+    "bg-yellow-500/10 text-yellow-600 border-yellow-500/40 dark:text-yellow-400",
+  answered:
+    "bg-green-500/10 text-green-600 border-green-500/40 dark:text-green-400",
+  marked:
+    "bg-purple-500/10 text-purple-600 border-purple-500/40 dark:text-purple-400",
+  "answered-marked":
+    "bg-red-500/10 text-red-600 border-red-500/40 dark:text-red-400",
+};
+
+function formatTime(seconds: number): string {
+  const safe = Math.max(0, seconds);
+  const mins = Math.floor(safe / 60);
+  const secs = safe % 60;
+  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
 }
 
 function computeRemainingSeconds(test: MockTest): number {
@@ -844,11 +942,7 @@ export default function TestSession() {
               <div className="rounded-xl border border-border bg-card p-5 text-[17px] font-medium leading-relaxed text-foreground shadow-sm md:text-lg">
                 <MathText text={currentQuestion.question_text} />
                 {currentQuestion.image_url && (
-                  <img
-                    src={currentQuestion.image_url}
-                    alt="Question diagram"
-                    className="mt-4 max-w-full rounded-lg border object-contain md:max-w-[80%]"
-                  />
+                  {currentQuestion.image_url}
                 )}
               </div>
 
@@ -1122,100 +1216,3 @@ export default function TestSession() {
     </div>
   );
 }
-import { useNavigate, useParams } from "react-router-dom";
-import {
-  AlertCircle,
-  BookmarkPlus,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Flag,
-  Menu,
-  Send,
-  X,
-} from "lucide-react";
-import { BlockMath, InlineMath } from "react-katex";
-import "katex/dist/katex.min.css";
-import { toast } from "sonner";
-
-import { supabase } from "@/lib/supabase/client";
-import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/env";
-import { useAuthStore } from "@/store/userStore";
-import { Button } from "@/components/ui/Button";
-import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { cn } from "@/lib/utils";
-
-interface QuestionOption {
-  label: string;
-  text: string;
-}
-
-interface Question {
-  id: string;
-  question_text: string;
-  question_type: "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER" | "NUMERICAL" | "CODING";
-  options: QuestionOption[] | null;
-  correct_answer: string;
-  subject: string;
-  topic: string;
-  difficulty: "EASY" | "MEDIUM" | "HARD";
-  marks_positive: number;
-  marks_negative: number;
-  image_url?: string | null;
-  latex_present?: boolean | null;
-}
-
-type QuestionState =
-  | "unattempted"
-  | "visited"
-  | "answered"
-  | "marked"
-  | "answered-marked";
-
-interface ResponseState {
-  answer: string;
-  state: QuestionState;
-}
-
-interface MockTest {
-  id: string;
-  test_name: string;
-  config: Record<string, unknown> | null;
-  question_ids: string[];
-  status: "DRAFT" | "IN_PROGRESS" | "COMPLETED";
-  time_limit_minutes: number | null;
-  started_at?: string | null;
-}
-
-interface TestResponseRow {
-  question_id: string;
-  user_answer: string | null;
-  is_attempted: boolean | null;
-  is_marked_review: boolean | null;
-  time_spent_seconds: number | null;
-}
-
-interface MathSegment {
-  start: number;
-  end: number;
-  latex: string;
-  isBlock: boolean;
-}
-
-const STATE_COLORS: Record<QuestionState, string> = {
-  unattempted: "bg-card text-foreground border-border hover:bg-muted",
-  visited:
-    "bg-yellow-500/10 text-yellow-600 border-yellow-500/40 dark:text-yellow-400",
-  answered:
-    "bg-green-500/10 text-green-600 border-green-500/40 dark:text-green-400",
-  marked:
-    "bg-purple-500/10 text-purple-600 border-purple-500/40 dark:text-purple-400",
-  "answered-marked":
-    "bg-red-500/10 text-red-600 border-red-500/40 dark:text-red-400",
-};
-
-function formatTime(seconds: number): string {
-  const safe = Math.max(0, seconds);
-  const mins = Math.floor(safe / 60);
-  const secs = safe % 60;
