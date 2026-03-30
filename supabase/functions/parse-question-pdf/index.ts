@@ -1,5 +1,4 @@
-// parse-question-pdf/index.ts — FULLY FIXED VERSION
-
+// supabase/functions/parse-question-pdf/index.ts
 import { corsHeaders } from "../_shared/cors.ts";
 import {
   requireAuth,
@@ -11,44 +10,59 @@ import {
 
 const CREDIT_COST = 5;
 
-/* ======================================================
-   SAFE UTIL: Detect if pdfBase64 looks like actual PDF
-====================================================== */
-function isLikelyPDF(base64: string): boolean {
-  try {
-    const bin = atob(base64.slice(0, 50));
-    return bin.startsWith("%PDF");
-  } catch {
-    return false;
-  }
+interface ParsedQuestion {
+  question_text: string;
+  question_type: "MCQ" | "TRUE_FALSE" | "SHORT_ANSWER" | "NUMERICAL" | "CODING";
+  options: Array<{ label: string; text: string }> | null;
+  correct_answer: string;
+  explanation: string;
+  subject: string;
+  topic: string;
+  difficulty: "EASY" | "MEDIUM" | "HARD";
+  marks_positive: number;
+  marks_negative: number;
+  source_year: number | null;
+  exam_type: string | null;
+  latex_present: boolean;
 }
 
-/* ======================================================
-   SAFE BASE64 ENCODER
-====================================================== */
+function cleanText(input: string): string {
+  return input
+    .replace(/\r/g, "")
+    .replace(/[^\x20-\x7E\n\t]/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ ]{2,}/g, " ")
+    .trim();
+}
+
 function bufferToBase64(buf: ArrayBuffer): string {
   const bytes = new Uint8Array(buf);
   let binary = "";
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
   }
   return btoa(binary);
 }
 
-async function extractPdfBase64(req: Request): Promise<string | null> {
-  const ct = req.headers.get("content-type") ?? "";
+async function extractPdf(req: Request): Promise<{ base64: string; fileName?: string } | null> {
+  const contentType = req.headers.get("content-type") ?? "";
 
-  if (ct.includes("multipart/form-data")) {
+  if (contentType.includes("multipart/form-data")) {
     const form = await req.formData();
     const file = form.get("pdf");
     if (!(file instanceof File)) return null;
-    return bufferToBase64(await file.arrayBuffer());
+
+    const base64 = bufferToBase64(await file.arrayBuffer());
+    return { base64, fileName: file.name };
   }
 
-  if (ct.includes("application/json") || ct === "") {
+  if (contentType.includes("application/json") || contentType === "") {
     try {
-      const b = await req.json();
-      return typeof b?.pdf_base64 === "string" ? b.pdf_base64 : null;
+      const body = await req.json();
+      if (typeof body?.pdf_base64 === "string" && body.pdf_base64.trim()) {
+        return { base64: body.pdf_base64.trim(), fileName: body.file_name };
+      }
     } catch {
       return null;
     }
@@ -57,31 +71,130 @@ async function extractPdfBase64(req: Request): Promise<string | null> {
   return null;
 }
 
-/* ======================================================
-   CLEAN OCR TEXT
-====================================================== */
-function cleanOCRText(t: string): string {
-  return t
-    .replace(/[^\x20-\x7E\n]/g, "")
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
-    .replace(/\s{2,}/g, " ")
-    .trim();
+function parseJSONArray(raw: string): ParsedQuestion[] | null {
+  try {
+    const cleaned = raw
+      .replace(/```json/gi, "")
+      .replace(/```/g, "")
+      .trim();
+
+    const parsed = JSON.parse(cleaned);
+    const list = Array.isArray(parsed) ? parsed : Array.isArray(parsed?.questions) ? parsed.questions : null;
+    if (!list || list.length === 0) return null;
+
+    return list
+      .filter((q: any) => typeof q?.question_text === "string" && q.question_text.trim().length > 5)
+      .map((q: any) => ({
+        question_text: String(q.question_text).trim().slice(0, 2000),
+        question_type: ["MCQ", "TRUE_FALSE", "SHORT_ANSWER", "NUMERICAL", "CODING"].includes(String(q.question_type))
+          ? String(q.question_type)
+          : Array.isArray(q.options) && q.options.length >= 2
+          ? "MCQ"
+          : "SHORT_ANSWER",
+        options:
+          Array.isArray(q.options) && q.options.length > 0
+            ? q.options.slice(0, 4).map((opt: any, idx: number) => ({
+                label: String(opt?.label ?? ["A", "B", "C", "D"][idx]).slice(0, 1),
+                text: String(opt?.text ?? "").trim().slice(0, 500),
+              }))
+            : null,
+        correct_answer: String(q.correct_answer ?? "").trim().slice(0, 200),
+        explanation: String(q.explanation ?? "").trim().slice(0, 2000),
+        subject: String(q.subject ?? "General").trim().slice(0, 100),
+        topic: String(q.topic ?? "General").trim().slice(0, 100),
+        difficulty: ["EASY", "MEDIUM", "HARD"].includes(String(q.difficulty))
+          ? String(q.difficulty)
+          : "MEDIUM",
+        marks_positive: Number(q.marks_positive ?? 4) || 4,
+        marks_negative: Number(q.marks_negative ?? 1) || 1,
+        source_year: Number.isFinite(Number(q.source_year)) ? Number(q.source_year) : null,
+        exam_type: q.exam_type ? String(q.exam_type).trim().slice(0, 50) : null,
+        latex_present:
+          /\$|\\\(|\\\[/.test(String(q.question_text ?? "")) ||
+          /\$|\\\(|\\\[/.test(String(q.explanation ?? "")),
+      }))
+      .filter((q) => q.question_text.length > 5);
+  } catch {
+    return null;
+  }
 }
 
-/* ======================================================
-   OCR.Space fallback
-====================================================== */
-async function ocrExtract(pdfBase64: string): Promise<string | null> {
-  const key = Deno.env.get("OCR_API_KEY");
-  if (!key) return null;
+async function geminiExtractFromPdf(base64: string): Promise<ParsedQuestion[] | null> {
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!apiKey) return null;
+
+  const prompt = `
+Extract all exam questions from this PDF and return only valid JSON.
+Output format:
+{
+  "questions": [
+    {
+      "question_text": "...",
+      "question_type": "MCQ",
+      "options": [{"label":"A","text":"..."},{"label":"B","text":"..."},{"label":"C","text":"..."},{"label":"D","text":"..."}],
+      "correct_answer": "A",
+      "explanation": "",
+      "subject": "Physics",
+      "topic": "Mechanics",
+      "difficulty": "MEDIUM",
+      "marks_positive": 4,
+      "marks_negative": 1,
+      "source_year": null,
+      "exam_type": null
+    }
+  ]
+}`.trim();
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [
+            {
+              role: "user",
+              parts: [
+                { text: prompt },
+                {
+                  inlineData: {
+                    mimeType: "application/pdf",
+                    data: base64,
+                  },
+                },
+              ],
+            },
+          ],
+          generationConfig: {
+            temperature: 0.2,
+            maxOutputTokens: 8192,
+          },
+        }),
+      }
+    );
+
+    if (!res.ok) return null;
+
+    const json = await res.json();
+    const text = json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    return parseJSONArray(text);
+  } catch (err) {
+    console.warn("[parse-question-pdf] geminiExtractFromPdf failed:", err);
+    return null;
+  }
+}
+
+async function ocrExtract(base64: string): Promise<string | null> {
+  const apiKey = Deno.env.get("OCR_API_KEY");
+  if (!apiKey) return null;
 
   try {
     const res = await fetch("https://api.ocr.space/parse/image", {
       method: "POST",
-      headers: { apikey: key },
+      headers: { apikey: apiKey },
       body: new URLSearchParams({
-        base64Image: `data:application/pdf;base64,${pdfBase64}`,
+        base64Image: `data:application/pdf;base64,${base64}`,
         language: "eng",
         scale: "true",
         OCREngine: "2",
@@ -89,287 +202,185 @@ async function ocrExtract(pdfBase64: string): Promise<string | null> {
     });
 
     if (!res.ok) return null;
-
     const json = await res.json();
-    return cleanOCRText(json?.ParsedResults?.[0]?.ParsedText ?? "");
-  } catch {
+    const text = json?.ParsedResults?.map((x: any) => x?.ParsedText ?? "").join("\n\n") ?? "";
+    return cleanText(text);
+  } catch (err) {
+    console.warn("[parse-question-pdf] OCR failed:", err);
     return null;
   }
 }
 
-/* ======================================================
-   SUBJECT DETECTION
-====================================================== */
-function detectSubject(text: string): string {
-  const t = text.toLowerCase();
-  const subjects = [
-    { key: "physics", words: ["velocity", "force", "energy", "momentum"] },
-    { key: "chemistry", words: ["reaction", "compound", "molecule"] },
-    { key: "mathematics", words: ["integration", "derivative", "matrix"] },
-    { key: "biology", words: ["cell", "organism", "photosynthesis"] },
-    { key: "history", words: ["empire", "war", "king"] },
-    { key: "geography", words: ["river", "mountain", "climate"] },
-    { key: "economics", words: ["inflation", "gdp", "supply"] },
-    { key: "reasoning", words: ["pattern", "series", "logical"] },
-    { key: "english", words: ["grammar", "synonym", "antonym"] },
-  ];
+async function geminiExtractFromText(text: string): Promise<ParsedQuestion[] | null> {
+  const apiKey = Deno.env.get("GEMINI_API_KEY");
+  if (!apiKey || !text.trim()) return null;
 
-  for (const s of subjects) {
-    if (s.words.some(w => t.includes(w))) return s.key;
-  }
-  return "general";
-}
-
-/* ======================================================
-   TOPIC DETECTION
-====================================================== */
-function detectTopic(subject: string, text: string): string {
-  const t = text.toLowerCase();
-  const map: Record<string, any[]> = {
-    physics: [
-      { topic: "mechanics", words: ["force", "motion", "newton"] },
-      { topic: "electricity", words: ["voltage", "current", "charge"] },
-    ],
-    mathematics: [
-      { topic: "calculus", words: ["derivative", "integral"] },
-      { topic: "algebra", words: ["equation", "polynomial"] },
-    ],
-  };
-
-  const arr = map[subject] || [];
-  for (const x of arr) {
-    if (x.words.some(w => t.includes(w))) return x.topic;
-  }
-  return "general";
-}
-
-/* ======================================================
-   DIFFICULTY DETECTOR
-====================================================== */
-function classifyDifficulty(text: string): "EASY" | "MEDIUM" | "HARD" {
-  const t = text.toLowerCase();
-  if (t.includes("define") || t.includes("what is")) return "EASY";
-  if (t.includes("derive") || t.includes("prove") || t.includes("calculate"))
-    return "HARD";
-  return "MEDIUM";
-}
-
-/* ======================================================
-   IMPROVED ANSWER DETECTOR
-====================================================== */
-function detectMCQAnswer(block: string) {
-  const patterns = [
-    /answer[:\s]+([A-D])/i,
-    /option\s*\(?([A-D])\)?/i,
-    /correct[:\s]+([A-D])/i,
-    /key[:\s]+([A-D])/i,
-    /ans[:\s]+([A-D])/i,
-    /answer[:\s]+([1-4])/i,
-  ];
-
-  for (const p of patterns) {
-    const m = block.match(p);
-    if (m) {
-      const ans = m[1].toUpperCase();
-      if ("ABCD".includes(ans)) return ans;
-      if (/[1-4]/.test(ans)) return "ABCD"[parseInt(ans) - 1];
+  const prompt = `
+Extract all exam questions from the following OCR text and return only valid JSON.
+Output format:
+{
+  "questions": [
+    {
+      "question_text": "...",
+      "question_type": "MCQ",
+      "options": [{"label":"A","text":"..."},{"label":"B","text":"..."},{"label":"C","text":"..."},{"label":"D","text":"..."}],
+      "correct_answer": "A",
+      "explanation": "",
+      "subject": "General",
+      "topic": "General",
+      "difficulty": "MEDIUM",
+      "marks_positive": 4,
+      "marks_negative": 1,
+      "source_year": null,
+      "exam_type": null
     }
-  }
-  return "";
+  ]
 }
 
-/* ======================================================
-   MANUAL QUESTION PARSER — FIXED VERSION
-====================================================== */
-function manualParse(text: string) {
-  const questions: any[] = [];
-
-  // Split on new question start markers: "1.", "1 )", "Q1."
-  const blocks = text.split(/(?=^(\s*\d+[\.\)]|Q\d+[\.\)]))/gm);
-
-  for (const blk of blocks) {
-    const trimmed = blk.trim();
-    if (!trimmed) continue;
-
-    // Extract question
-    const qMatch = trimmed.match(/^\d+[\.\)]\s*(.+?)(?=(A[\.\)]|\(A\)|Option A|$))/is);
-    if (!qMatch) continue;
-
-    const questionText = qMatch[1].trim();
-
-    // Extract options (multi-line aware)
-    const optRegex =
-      /A[\.\)]\s*([\s\S]*?)B[\.\)]\s*([\s\S]*?)C[\.\)]\s*([\s\S]*?)D[\.\)]\s*([\s\S]*?)(Answer|$)/i;
-
-    let options = null;
-    const optMatch = trimmed.match(optRegex);
-    if (optMatch) {
-      options = [
-        { label: "A", text: optMatch[1].trim() },
-        { label: "B", text: optMatch[2].trim() },
-        { label: "C", text: optMatch[3].trim() },
-        { label: "D", text: optMatch[4].trim() },
-      ];
-    }
-
-    const correct = detectMCQAnswer(trimmed);
-    const subject = detectSubject(questionText);
-    const topic = detectTopic(subject, questionText);
-
-    questions.push({
-      question_text: questionText,
-      question_type: options ? "MCQ" : "SHORT_ANSWER",
-      options,
-      correct_answer: correct,
-      explanation: "",
-      subject,
-      topic,
-      difficulty: classifyDifficulty(questionText),
-      marks_positive: 1,
-      marks_negative: 0,
-      source_year: null,
-      exam_type: null,
-      latex_present: /[=+\-*\/]/.test(questionText),
-    });
-  }
-
-  return questions;
-}
-
-/* ======================================================
-   AI FALLBACK — Lovable AI Gateway (replaces Claude)
-====================================================== */
-const EXTRACTION_SYSTEM_PROMPT = `You are a question extraction engine. Given PDF text content, extract all questions into a JSON array. Each object must have: question_text, question_type ("MCQ" or "SHORT_ANSWER"), options (array of {label, text} or null), correct_answer (A/B/C/D or text), explanation, subject, topic, difficulty ("EASY"/"MEDIUM"/"HARD"), marks_positive (number), marks_negative (number). Return ONLY a valid JSON array, no markdown.`;
-
-async function callAI(pdfText: string) {
-  // Try Gemini API directly first (user's own key), then Lovable gateway
-  const geminiKey = Deno.env.get("GEMINI_API_KEY");
-  const lovableKey = Deno.env.get("LOVABLE_API_KEY");
-
-  const prompt = `Extract all questions from this text into JSON:\n\n${pdfText.slice(0, 30000)}`;
-
-  // --- Attempt 1: Direct Gemini ---
-  if (geminiKey) {
-    try {
-      const res = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${geminiKey}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            systemInstruction: { parts: [{ text: EXTRACTION_SYSTEM_PROMPT }] },
-            contents: [{ role: "user", parts: [{ text: prompt }] }],
-            generationConfig: { temperature: 0.3, maxOutputTokens: 8192 },
-          }),
-        }
-      );
-      if (res.ok) {
-        const data = await res.json();
-        const text = data?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-        const cleaned = text.replace(/```json/gi, "").replace(/```/g, "").trim();
-        try {
-          const parsed = JSON.parse(cleaned);
-          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
-        } catch { /* fall through */ }
-      }
-    } catch { /* fall through to gateway */ }
-  }
-
-  // --- Attempt 2: Lovable AI Gateway ---
-  if (lovableKey) {
-    try {
-      const res = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${lovableKey}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          model: "google/gemini-2.5-flash",
-          messages: [
-            { role: "system", content: EXTRACTION_SYSTEM_PROMPT },
-            { role: "user", content: prompt },
-          ],
-        }),
-      });
-      if (res.ok) {
-        const json = await res.json();
-        const text = json?.choices?.[0]?.message?.content ?? "";
-        const cleaned = text.replace(/```json/gi, "").replace(/```/g, "").trim();
-        try {
-          const parsed = JSON.parse(cleaned);
-          if (Array.isArray(parsed)) return parsed;
-        } catch { /* ignore */ }
-      }
-    } catch { /* ignore */ }
-  }
-
-  return null;
-}
-
-/* ======================================================
-   MAIN HANDLER
-====================================================== */
-
-Deno.serve(async (req) => {
-  if (req.method === "OPTIONS")
-    return new Response("ok", { headers: corsHeaders });
+OCR Text:
+${text.slice(0, 30000)}
+`.trim();
 
   try {
-    const { userId, credits } = await requireAuth(req);
-    const debug = new URL(req.url).searchParams.get("debug") === "true";
-
-    const pdfBase64 = await extractPdfBase64(req);
-    if (!pdfBase64) return errorResponse("No PDF uploaded.", "NO_PDF", 400);
-
-    if (!isLikelyPDF(pdfBase64))
-      return errorResponse("Invalid PDF file.", "BAD_PDF", 400);
-
-    /* -----------------------------------------
-       MANUAL PARSE — TEXT EXTRACTION ATTEMPT
-    ----------------------------------------- */
-    const rawText = cleanOCRText(atob(pdfBase64)); // placeholder extraction
-    const manual = manualParse(rawText);
-
-    if (manual.length > 0) {
-      return successResponse({ questions: manual, mode: "manual" });
-    }
-
-    /* -----------------------------------------
-       OCR FALLBACK — IMAGE-BASED PDF
-    ----------------------------------------- */
-    const ocrText = await ocrExtract(pdfBase64);
-    if (ocrText) {
-      const ocrRes = manualParse(ocrText);
-      if (ocrRes.length > 0) {
-        return successResponse({ questions: ocrRes, mode: "ocr" });
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 8192 },
+        }),
       }
+    );
+
+    if (!res.ok) return null;
+
+    const json = await res.json();
+    const raw = json?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    return parseJSONArray(raw);
+  } catch (err) {
+    console.warn("[parse-question-pdf] geminiExtractFromText failed:", err);
+    return null;
+  }
+}
+
+function manualParse(text: string): ParsedQuestion[] {
+  if (!text.trim()) return [];
+
+  const blocks = text
+    .split(/(?:^|\n)\s*(?:Q\.?\s*)?\d+\s*[\.\)]\s+/g)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 10);
+
+  const result: ParsedQuestion[] = [];
+
+  for (const block of blocks) {
+    const optionMatches = [...block.matchAll(/(?:^|\n)\s*([A-D])[\.\)]\s+(.+?)(?=(?:\n\s*[A-D][\.\)]\s+)|$)/gis)];
+    const questionText = block.split(/\n\s*[A-D][\.\)]\s+/i)[0]?.trim() ?? "";
+
+    if (!questionText) continue;
+
+    if (optionMatches.length >= 2) {
+      result.push({
+        question_text: questionText.slice(0, 2000),
+        question_type: "MCQ",
+        options: optionMatches.slice(0, 4).map((m) => ({
+          label: String(m[1]).toUpperCase(),
+          text: cleanText(String(m[2] ?? "")).slice(0, 500),
+        })),
+        correct_answer: "",
+        explanation: "",
+        subject: "General",
+        topic: "General",
+        difficulty: "MEDIUM",
+        marks_positive: 4,
+        marks_negative: 1,
+        source_year: null,
+        exam_type: null,
+        latex_present: /\$|\\\(|\\\[/.test(questionText),
+      });
+    } else {
+      result.push({
+        question_text: questionText.slice(0, 2000),
+        question_type: "SHORT_ANSWER",
+        options: null,
+        correct_answer: "",
+        explanation: "",
+        subject: "General",
+        topic: "General",
+        difficulty: "MEDIUM",
+        marks_positive: 4,
+        marks_negative: 1,
+        source_year: null,
+        exam_type: null,
+        latex_present: /\$|\\\(|\\\[/.test(questionText),
+      });
+    }
+  }
+
+  return result;
+}
+
+Deno.serve(async (req) => {
+  if (req.method === "OPTIONS") {
+    return new Response("ok", { headers: corsHeaders });
+  }
+
+  let charged = false;
+  let userId = "";
+
+  try {
+    const auth = await requireAuth(req);
+    userId = auth.userId;
+
+    const pdf = await extractPdf(req);
+    if (!pdf?.base64) {
+      return errorResponse("No PDF uploaded.", "NO_PDF", 400);
     }
 
-    /* -----------------------------------------
-       AI FALLBACK — Lovable AI Gateway
-    ----------------------------------------- */
-    if (credits !== -1 && credits < CREDIT_COST)
+    if (auth.credits !== -1 && auth.credits < CREDIT_COST) {
       return errorResponse("Not enough credits.", "NO_CREDITS", 403);
+    }
 
-    let charged = false;
-    if (credits !== -1) {
-      const d = await deductCredits(userId, "parse_question_pdf", CREDIT_COST);
-      if (!d.success) return errorResponse("Credit error.", "CREDIT_FAIL", 500);
+    const deduct = await deductCredits(userId, "parse_question_pdf", CREDIT_COST);
+    if (auth.credits !== -1) {
+      if (!deduct.success) {
+        return errorResponse("Unable to deduct credits.", "CREDIT_FAIL", 500);
+      }
       charged = true;
     }
 
-    // Use OCR text or raw decoded text for AI parsing
-    const textForAI = ocrText || rawText;
-    const aiParsed = await callAI(textForAI);
-
-    if (aiParsed && aiParsed.length > 0) {
-      return successResponse({ questions: aiParsed, mode: "ai" });
+    const aiPdfQuestions = await geminiExtractFromPdf(pdf.base64);
+    if (aiPdfQuestions && aiPdfQuestions.length > 0) {
+      return successResponse({
+        questions: aiPdfQuestions,
+        summary: `${aiPdfQuestions.length} questions parsed from PDF.`,
+        mode: "ai",
+      });
     }
 
-    /* -----------------------------------------
-       REFUND IF AI FAILED
-    ----------------------------------------- */
+    const ocrText = await ocrExtract(pdf.base64);
+    if (ocrText) {
+      const aiTextQuestions = await geminiExtractFromText(ocrText);
+      if (aiTextQuestions && aiTextQuestions.length > 0) {
+        return successResponse({
+          questions: aiTextQuestions,
+          summary: `${aiTextQuestions.length} questions extracted from OCR text.`,
+          mode: "ocr",
+        });
+      }
+
+      const manual = manualParse(ocrText);
+      if (manual.length > 0) {
+        return successResponse({
+          questions: manual,
+          summary: `${manual.length} questions extracted with fallback parser.`,
+          mode: "manual",
+        });
+      }
+    }
+
     if (charged) {
       try {
         const admin = getAdminClient();
@@ -377,16 +388,39 @@ Deno.serve(async (req) => {
           p_user_id: userId,
           p_amount: CREDIT_COST,
           p_action: "refund",
-          p_description: "AI fallback failed",
+          p_description: "PDF parse failed - refund",
         });
-      } catch (err) {
-        console.error("Refund error:", err);
+      } catch (refundErr) {
+        console.error("[parse-question-pdf] Refund failed:", refundErr);
       }
     }
 
-    return successResponse({ questions: [], mode: "fallback" });
+    return errorResponse(
+      "No questions could be extracted from this PDF. Try a clearer PDF or an OCR-friendly scan.",
+      "NO_QUESTIONS_FOUND",
+      422
+    );
   } catch (err) {
     console.error("[parse-question-pdf] Unhandled error:", err);
-    return errorResponse("Internal error.", "INTERNAL_ERROR", 500);
+
+    if (charged && userId) {
+      try {
+        const admin = getAdminClient();
+        await admin.rpc("add_credits", {
+          p_user_id: userId,
+          p_amount: CREDIT_COST,
+          p_action: "refund",
+          p_description: "PDF parse error - refund",
+        });
+      } catch (refundErr) {
+        console.error("[parse-question-pdf] Refund failed:", refundErr);
+      }
+    }
+
+    return errorResponse(
+      err instanceof Error ? err.message : "Internal error.",
+      "INTERNAL_ERROR",
+      500
+    );
   }
 });
