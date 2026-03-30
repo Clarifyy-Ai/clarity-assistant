@@ -1,17 +1,26 @@
-// @ts-nocheck
 // src/pages/app/mock-test/UploadQuestions.tsx
-import { useState, useRef, lazy, Suspense } from "react";
-import { useSearchParams, useNavigate } from "react-router-dom";
+import { useMemo, useRef, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
-  Upload, X, Check, AlertCircle,
-  Plus, Eye, EyeOff, Loader2,
-  BookOpen, Save,
+  AlertCircle,
+  BookOpen,
+  Check,
+  Eye,
+  EyeOff,
+  Loader2,
+  Plus,
+  Save,
+  Upload,
+  X,
 } from "lucide-react";
-import { toast } from "sonner";
 import { InlineMath, BlockMath } from "react-katex";
 import "katex/dist/katex.min.css";
+import { toast } from "sonner";
+
 import { supabase } from "@/lib/supabase/client";
+import { SUPABASE_URL } from "@/lib/env";
 import { useAuthStore } from "@/store/userStore";
+
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/label";
@@ -20,18 +29,21 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/Tabs";
 import { PageHeader } from "@/components/layout/PageHeader";
 import {
-  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from "@/components/ui/select";
 import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
 } from "@/components/ui/dialog";
 
-// ★ FIX: use env var directly — avoids relying on named export
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────────────────────
+import ExcelImportTab from "./ExcelImportTab";
 
 interface ParsedQuestion {
   question_text: string;
@@ -52,61 +64,76 @@ interface ParsedQuestion {
 interface ReviewItem extends ParsedQuestion {
   _id: string;
   _removed: boolean;
-  _editing: boolean;
 }
 
-const DIFFICULTY_COLOR: Record<string, string> = {
-  EASY:   "bg-green-500/10 text-green-600",
-  MEDIUM: "bg-amber-500/10 text-amber-600",
-  HARD:   "bg-red-500/10  text-red-600",
-};
-
 const EXAM_TYPES = [
-  "JEE_MAIN", "JEE_ADVANCED", "NEET", "UPSC", "SSC_CGL",
-  "SSC_CHSL", "IBPS_PO", "SBI_PO", "RRB_NTPC", "NDA", "CDS", "CUSTOM",
+  "JEE_MAIN",
+  "JEE_ADVANCED",
+  "NEET",
+  "UPSC",
+  "SSC_CGL",
+  "SSC_CHSL",
+  "IBPS_PO",
+  "SBI_PO",
+  "RRB_NTPC",
+  "NDA",
+  "CDS",
+  "CUSTOM",
 ];
 
 const SUBJECTS = [
-  "Physics", "Chemistry", "Mathematics", "Biology",
-  "History", "Geography", "Economics", "General Knowledge",
-  "Reasoning", "English", "Computer Science", "Other",
+  "Physics",
+  "Chemistry",
+  "Mathematics",
+  "Biology",
+  "History",
+  "Geography",
+  "Economics",
+  "General Knowledge",
+  "Reasoning",
+  "English",
+  "Computer Science",
+  "Other",
 ];
-
-// ─────────────────────────────────────────────────────────────────────────────
-// LaTeXPreview
-// ─────────────────────────────────────────────────────────────────────────────
 
 function LaTeXPreview({ text }: { text: string }) {
   if (!text?.trim()) {
-    return <p className="text-muted-foreground text-sm italic">Preview will appear here…</p>;
+    return <p className="text-sm italic text-muted-foreground">Preview will appear here…</p>;
   }
 
-  // ★ FIX: correct regex literals — \$ not \\$
-  const blockRegex  = /\$\$([\s\S]+?)\$\$/g;
+  const blockRegex = /\$\$([\s\S]+?)\$\$/g;
   const inlineRegex = /\$((?:[^$\\]|\\.)+?)\$/g;
 
   let match: RegExpExecArray | null;
   const segments: Array<{
-    start: number; end: number; type: "block" | "inline"; math: string;
+    start: number;
+    end: number;
+    type: "block" | "inline";
+    math: string;
   }> = [];
 
   blockRegex.lastIndex = 0;
   while ((match = blockRegex.exec(text)) !== null) {
     segments.push({
       start: match.index,
-      end:   match.index + match[0].length,
-      type:  "block",
-      math:  match[1],
+      end: match.index + match[0].length,
+      type: "block",
+      math: match[1],
     });
   }
 
   inlineRegex.lastIndex = 0;
   while ((match = inlineRegex.exec(text)) !== null) {
     const start = match.index;
-    const end   = start + match[0].length;
+    const end = start + match[0].length;
     const overlaps = segments.some((s) => start < s.end && end > s.start);
     if (!overlaps) {
-      segments.push({ start, end, type: "inline", math: match[1] });
+      segments.push({
+        start,
+        end,
+        type: "inline",
+        math: match[1],
+      });
     }
   }
 
@@ -114,6 +141,7 @@ function LaTeXPreview({ text }: { text: string }) {
 
   let cursor = 0;
   const tokens: Array<{ type: "text" | "inline" | "block"; content: string }> = [];
+
   for (const seg of segments) {
     if (seg.start > cursor) {
       tokens.push({ type: "text", content: text.slice(cursor, seg.start) });
@@ -121,24 +149,26 @@ function LaTeXPreview({ text }: { text: string }) {
     tokens.push({ type: seg.type, content: seg.math });
     cursor = seg.end;
   }
+
   if (cursor < text.length) {
     tokens.push({ type: "text", content: text.slice(cursor) });
   }
 
   return (
-    <div className="text-sm text-foreground leading-relaxed">
+    <div className="leading-relaxed text-sm text-foreground">
       {tokens.map((token, i) => {
         if (token.type === "block") {
           return (
-            <div key={i} className="my-2 text-center overflow-x-auto">
+            <div key={i} className="my-2 overflow-x-auto text-center">
               <BlockMath math={token.content} errorColor="#e74c3c" />
             </div>
           );
         }
+
         if (token.type === "inline") {
           return <InlineMath key={i} math={token.content} errorColor="#e74c3c" />;
         }
-        // ★ FIX: split on actual newline "\n" not literal "\\n"
+
         return (
           <span key={i}>
             {token.content.split("\n").map((line, j, arr) => (
@@ -154,13 +184,9 @@ function LaTeXPreview({ text }: { text: string }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ManualCreator
-// ─────────────────────────────────────────────────────────────────────────────
-
 const EMPTY_FORM: ParsedQuestion = {
-  question_text:  "",
-  question_type:  "MCQ",
+  question_text: "",
+  question_type: "MCQ",
   options: [
     { label: "A", text: "" },
     { label: "B", text: "" },
@@ -168,78 +194,96 @@ const EMPTY_FORM: ParsedQuestion = {
     { label: "D", text: "" },
   ],
   correct_answer: "A",
-  explanation:    "",
-  subject:        "Physics",
-  topic:          "",
-  difficulty:     "MEDIUM",
+  explanation: "",
+  subject: "Physics",
+  topic: "",
+  difficulty: "MEDIUM",
   marks_positive: 4,
   marks_negative: 1,
-  source_year:    null,
-  exam_type:      null,
-  latex_present:  false,
+  source_year: null,
+  exam_type: null,
+  latex_present: false,
 };
 
 function ManualCreator({ onSaved }: { onSaved: () => void }) {
   const user = useAuthStore((s) => s.user);
-  const [form, setForm]       = useState<ParsedQuestion>({
+  const [form, setForm] = useState<ParsedQuestion>({
     ...EMPTY_FORM,
     options: [...(EMPTY_FORM.options ?? [])],
   });
   const [preview, setPreview] = useState(false);
-  const [saving,  setSaving]  = useState(false);
+  const [saving, setSaving] = useState(false);
 
   function setField<K extends keyof ParsedQuestion>(key: K, value: ParsedQuestion[K]) {
-    setForm((prev) => ({ ...prev, [key]: value }));
+    setForm((prev) => ({ ...prev, value }));
   }
 
-  function setOption(idx: number, text: string) {
+  function setOption(index: number, text: string) {
     setForm((prev) => {
-      const opts = [...(prev.options ?? [])];
-      opts[idx] = { ...opts[idx], text };
-      return { ...prev, options: opts };
+      const options = [...(prev.options ?? [])];
+      options[index] = { ...options[index], text };
+      return { ...prev, options };
     });
   }
 
   async function handleSave() {
-    if (!form.question_text.trim()) { toast.error("Question text is required."); return; }
-    if (!form.topic.trim())         { toast.error("Topic is required."); return; }
-    if (form.question_type === "MCQ") {
-      if (!form.options?.every((o) => o.text.trim())) {
-        toast.error("All 4 MCQ options are required.");
-        return;
-      }
+    if (!user?.id) {
+      toast.error("Please log in first.");
+      return;
     }
 
-    // ★ FIX: auto-detect latex_present from content
-    const latexPresent = /\$/.test(form.question_text) || /\$/.test(form.explanation);
+    if (!form.question_text.trim()) {
+      toast.error("Question text is required.");
+      return;
+    }
+
+    if (!form.topic.trim()) {
+      toast.error("Topic is required.");
+      return;
+    }
+
+    if (form.question_type === "MCQ" && !form.options?.every((o) => o.text.trim())) {
+      toast.error("All 4 MCQ options are required.");
+      return;
+    }
+
+    const latexPresent =
+      /\$|\\\(|\\\[/.test(form.question_text) ||
+      /\$|\\\(|\\\[/.test(form.explanation);
 
     setSaving(true);
+
     try {
       const { error } = await supabase.from("questions").insert({
-        question_text:  form.question_text.trim(),
-        question_type:  form.question_type,
-        options:        form.question_type === "MCQ" ? form.options : null,
+        question_text: form.question_text.trim(),
+        question_type: form.question_type,
+        options: form.question_type === "MCQ" ? form.options : null,
         correct_answer: form.correct_answer,
-        explanation:    form.explanation,
-        subject:        form.subject,
-        topic:          form.topic.trim(),
-        difficulty:     form.difficulty,
+        explanation: form.explanation,
+        subject: form.subject,
+        topic: form.topic.trim(),
+        difficulty: form.difficulty,
         marks_positive: form.marks_positive,
         marks_negative: form.marks_negative,
-        source_year:    form.source_year,
-        exam_type:      form.exam_type,
-        latex_present:  latexPresent,   // ★ FIX: auto-detected
-        uploaded_by:    user!.id,
-        source:         "USER_UPLOAD",
-        is_public:      false,
-        is_verified:    false,
+        source_year: form.source_year,
+        exam_type: form.exam_type,
+        latex_present: latexPresent,
+        uploaded_by: user.id,
+        source: "USER_UPLOAD",
+        is_public: false,
+        is_verified: false,
       });
+
       if (error) throw error;
+
       toast.success("Question saved to your bank.");
-      setForm({ ...EMPTY_FORM, options: [...(EMPTY_FORM.options ?? [])] });
+      setForm({
+        ...EMPTY_FORM,
+        options: [...(EMPTY_FORM.options ?? [])],
+      });
       onSaved();
-    } catch (err) {
-      console.error("[ManualCreator] save error:", err);
+    } catch (error) {
+      console.error("[ManualCreator] save error:", error);
       toast.error("Failed to save question.");
     } finally {
       setSaving(false);
@@ -248,17 +292,16 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
 
   return (
     <div className="space-y-5">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-        {/* Question text */}
-        <div className="md:col-span-2 space-y-2">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+        <div className="space-y-2 md:col-span-2">
           <div className="flex items-center justify-between">
             <Label>Question Text</Label>
-            <Button variant="ghost" size="sm" onClick={() => setPreview(!preview)}>
-              {preview ? <EyeOff className="h-4 w-4 mr-1" /> : <Eye className="h-4 w-4 mr-1" />}
+            <Button variant="ghost" size="sm" onClick={() => setPreview((p) => !p)}>
+              {preview ? <EyeOff className="mr-1 h-4 w-4" /> : <Eye className="mr-1 h-4 w-4" />}
               {preview ? "Edit" : "Preview"}
             </Button>
           </div>
+
           {preview ? (
             <div className="min-h-[100px] rounded-lg border bg-muted/10 p-3">
               <LaTeXPreview text={form.question_text} />
@@ -271,25 +314,25 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
               onChange={(e) => setField("question_text", e.target.value)}
             />
           )}
-          {/* ★ FIX: single backslash in hint */}
+
           <p className="text-xs text-muted-foreground">
-            {"LaTeX: use $x^2$ for inline, $$\\frac{a}{b}$$ for block"}
+            LaTeX: use $x^2$ for inline, $$\frac{"{a}"}{"{b}"}$$ for block
           </p>
         </div>
 
-        {/* Question type */}
         <div className="space-y-2">
           <Label>Question Type</Label>
           <Select
             value={form.question_type}
-            onValueChange={(v) => {
-              setField("question_type", v as ParsedQuestion["question_type"]);
-              // Reset correct_answer to sane default when type changes
-              if (v === "TRUE_FALSE") setField("correct_answer", "True");
-              else if (v === "MCQ")   setField("correct_answer", "A");
+            onValueChange={(value) => {
+              setField("question_type", value as ParsedQuestion["question_type"]);
+              if (value === "TRUE_FALSE") setField("correct_answer", "True");
+              else if (value === "MCQ") setField("correct_answer", "A");
             }}
           >
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="MCQ">MCQ (4 options)</SelectItem>
               <SelectItem value="TRUE_FALSE">True / False</SelectItem>
@@ -300,14 +343,17 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
           </Select>
         </div>
 
-        {/* Difficulty */}
         <div className="space-y-2">
           <Label>Difficulty</Label>
           <Select
             value={form.difficulty}
-            onValueChange={(v) => setField("difficulty", v as ParsedQuestion["difficulty"])}
+            onValueChange={(value) =>
+              setField("difficulty", value as ParsedQuestion["difficulty"])
+            }
           >
-            <SelectTrigger><SelectValue /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="EASY">Easy</SelectItem>
               <SelectItem value="MEDIUM">Medium</SelectItem>
@@ -316,12 +362,11 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
           </Select>
         </div>
 
-        {/* MCQ options */}
         {form.question_type === "MCQ" && (
-          <div className="md:col-span-2 space-y-2">
+          <div className="space-y-2 md:col-span-2">
             <Label>Answer Options</Label>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {(form.options ?? []).map((opt, i) => (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+              {(form.options ?? []).map((opt, index) => (
                 <div key={opt.label} className="flex items-center gap-2">
                   <button
                     type="button"
@@ -337,53 +382,56 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
                   <Input
                     placeholder={`Option ${opt.label}`}
                     value={opt.text}
-                    onChange={(e) => setOption(i, e.target.value)}
+                    onChange={(e) => setOption(index, e.target.value)}
                     className="text-sm"
                   />
                 </div>
               ))}
             </div>
-            <p className="text-xs text-muted-foreground">Click the letter to mark the correct answer.</p>
+            <p className="text-xs text-muted-foreground">
+              Click the letter to mark the correct answer.
+            </p>
           </div>
         )}
 
-        {/* TRUE_FALSE correct answer picker */}
         {form.question_type === "TRUE_FALSE" && (
-          <div className="md:col-span-2 space-y-2">
+          <div className="space-y-2 md:col-span-2">
             <Label>Correct Answer</Label>
             <div className="flex gap-3">
-              {["True", "False"].map((val) => (
+              {["True", "False"].map((value) => (
                 <button
-                  key={val}
+                  key={value}
                   type="button"
-                  onClick={() => setField("correct_answer", val)}
-                  className={`px-4 py-1.5 rounded-lg border text-sm font-medium transition-colors ${
-                    form.correct_answer === val
+                  onClick={() => setField("correct_answer", value)}
+                  className={`rounded-lg border px-4 py-1.5 text-sm font-medium transition-colors ${
+                    form.correct_answer === value
                       ? "border-green-500 bg-green-500/10 text-green-600"
                       : "border-border text-muted-foreground hover:border-green-400"
                   }`}
                 >
-                  {val}
+                  {value}
                 </button>
               ))}
             </div>
           </div>
         )}
 
-        {/* Correct answer for NUMERICAL / SHORT_ANSWER / CODING */}
         {form.question_type !== "MCQ" && form.question_type !== "TRUE_FALSE" && (
-          <div className="md:col-span-2 space-y-2">
+          <div className="space-y-2 md:col-span-2">
             <Label>Correct Answer</Label>
             <Input
-              placeholder={form.question_type === "NUMERICAL" ? "e.g. 42.5" : "Enter the correct answer"}
+              placeholder={
+                form.question_type === "NUMERICAL"
+                  ? "e.g. 42.5"
+                  : "Enter the correct answer"
+              }
               value={form.correct_answer}
               onChange={(e) => setField("correct_answer", e.target.value)}
             />
           </div>
         )}
 
-        {/* Explanation */}
-        <div className="md:col-span-2 space-y-2">
+        <div className="space-y-2 md:col-span-2">
           <Label>Explanation</Label>
           <Textarea
             placeholder="Why is this answer correct? (helps during revision)"
@@ -393,18 +441,22 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
           />
         </div>
 
-        {/* Subject */}
         <div className="space-y-2">
           <Label>Subject</Label>
-          <Select value={form.subject} onValueChange={(v) => setField("subject", v)}>
-            <SelectTrigger><SelectValue /></SelectTrigger>
+          <Select value={form.subject} onValueChange={(value) => setField("subject", value)}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
             <SelectContent>
-              {SUBJECTS.map((s) => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+              {SUBJECTS.map((subject) => (
+                <SelectItem key={subject} value={subject}>
+                  {subject}
+                </SelectItem>
+              ))}
             </SelectContent>
           </Select>
         </div>
 
-        {/* Topic */}
         <div className="space-y-2">
           <Label>Topic / Subtopic</Label>
           <Input
@@ -414,24 +466,26 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
           />
         </div>
 
-        {/* Exam type */}
         <div className="space-y-2">
           <Label>Exam Type (optional)</Label>
           <Select
             value={form.exam_type ?? "none"}
-            onValueChange={(v) => setField("exam_type", v === "none" ? null : v)}
+            onValueChange={(value) => setField("exam_type", value === "none" ? null : value)}
           >
-            <SelectTrigger><SelectValue placeholder="Select exam" /></SelectTrigger>
+            <SelectTrigger>
+              <SelectValue placeholder="Select exam" />
+            </SelectTrigger>
             <SelectContent>
               <SelectItem value="none">None / General</SelectItem>
-              {EXAM_TYPES.map((e) => (
-                <SelectItem key={e} value={e}>{e.replace(/_/g, " ")}</SelectItem>
+              {EXAM_TYPES.map((examType) => (
+                <SelectItem key={examType} value={examType}>
+                  {examType.replace(/_/g, " ")}
+                </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </div>
 
-        {/* Marks */}
         <div className="space-y-2">
           <Label>Marks (positive / negative)</Label>
           <div className="flex gap-2">
@@ -456,18 +510,16 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
       </div>
 
       <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto">
-        {saving
-          ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-          : <Save className="h-4 w-4 mr-2" />}
+        {saving ? (
+          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+        ) : (
+          <Save className="mr-2 h-4 w-4" />
+        )}
         Save Question
       </Button>
     </div>
   );
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ReviewModal
-// ─────────────────────────────────────────────────────────────────────────────
 
 function ReviewModal({
   items,
@@ -483,35 +535,41 @@ function ReviewModal({
   const [local, setLocal] = useState<ReviewItem[]>(items);
 
   function remove(id: string) {
-    setLocal((prev) => prev.map((q) => q._id === id ? { ...q, _removed: true } : q));
+    setLocal((prev) =>
+      prev.map((question) =>
+        question._id === id ? { ...question, _removed: true } : question
+      )
+    );
   }
 
   function updateField(id: string, key: keyof ParsedQuestion, value: unknown) {
-    setLocal((prev) => prev.map((q) => q._id === id ? { ...q, [key]: value } : q));
+    setLocal((prev) =>
+      prev.map((question) =>
+        question._id === id ? { ...question, value } : question
+      )
+    );
   }
 
-  const visible = local.filter((q) => !q._removed);
+  const visible = local.filter((question) => !question._removed);
 
   return (
     <Dialog open onOpenChange={onClose}>
-      <DialogContent className="max-w-3xl max-h-[80vh] overflow-y-auto">
+      <DialogContent className="max-h-[80vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
-          <DialogTitle>
-            Review Parsed Questions — {visible.length} ready to save
-          </DialogTitle>
+          <DialogTitle>Review Parsed Questions — {visible.length} ready to save</DialogTitle>
         </DialogHeader>
 
         <div className="space-y-3">
-          {visible.map((q, idx) => (
-            <Card key={q._id} className="border">
-              <CardContent className="p-4 space-y-3">
+          {visible.map((question, idx) => (
+            <Card key={question._id} className="border">
+              <CardContent className="space-y-3 p-4">
                 <div className="flex items-center justify-between gap-2">
-                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     Question {idx + 1}
                   </p>
                   <button
                     type="button"
-                    onClick={() => remove(q._id)}
+                    onClick={() => remove(question._id)}
                     className="shrink-0 text-muted-foreground hover:text-destructive"
                     title="Remove"
                   >
@@ -520,23 +578,29 @@ function ReviewModal({
                 </div>
 
                 <div className="space-y-1">
-                  <p className="text-xs text-muted-foreground font-medium">Question Text</p>
+                  <p className="text-xs font-medium text-muted-foreground">Question Text</p>
                   <Textarea
-                    className="text-xs min-h-[60px] font-mono"
-                    value={q.question_text}
-                    onChange={(e) => updateField(q._id, "question_text", e.target.value)}
+                    className="min-h-[60px] text-xs font-mono"
+                    value={question.question_text}
+                    onChange={(e) =>
+                      updateField(question._id, "question_text", e.target.value)
+                    }
                     placeholder="Question text (LaTeX supported)"
                   />
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground font-medium">Type</p>
+                    <p className="text-xs font-medium text-muted-foreground">Type</p>
                     <Select
-                      value={q.question_type}
-                      onValueChange={(v) => updateField(q._id, "question_type", v)}
+                      value={question.question_type}
+                      onValueChange={(value) =>
+                        updateField(question._id, "question_type", value)
+                      }
                     >
-                      <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-7 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="MCQ">MCQ</SelectItem>
                         <SelectItem value="TRUE_FALSE">True/False</SelectItem>
@@ -548,12 +612,16 @@ function ReviewModal({
                   </div>
 
                   <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground font-medium">Difficulty</p>
+                    <p className="text-xs font-medium text-muted-foreground">Difficulty</p>
                     <Select
-                      value={q.difficulty}
-                      onValueChange={(v) => updateField(q._id, "difficulty", v)}
+                      value={question.difficulty}
+                      onValueChange={(value) =>
+                        updateField(question._id, "difficulty", value)
+                      }
                     >
-                      <SelectTrigger className="h-7 text-xs"><SelectValue /></SelectTrigger>
+                      <SelectTrigger className="h-7 text-xs">
+                        <SelectValue />
+                      </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="EASY">Easy</SelectItem>
                         <SelectItem value="MEDIUM">Medium</SelectItem>
@@ -563,42 +631,47 @@ function ReviewModal({
                   </div>
 
                   <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground font-medium">Subject</p>
+                    <p className="text-xs font-medium text-muted-foreground">Subject</p>
                     <Input
                       className="h-7 text-xs"
-                      value={q.subject}
-                      onChange={(e) => updateField(q._id, "subject", e.target.value)}
+                      value={question.subject}
+                      onChange={(e) =>
+                        updateField(question._id, "subject", e.target.value)
+                      }
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground font-medium">Topic</p>
+                    <p className="text-xs font-medium text-muted-foreground">Topic</p>
                     <Input
                       className="h-7 text-xs"
-                      value={q.topic}
-                      onChange={(e) => updateField(q._id, "topic", e.target.value)}
+                      value={question.topic}
+                      onChange={(e) => updateField(question._id, "topic", e.target.value)}
                     />
                   </div>
                 </div>
 
-                {q.question_type === "MCQ" && Array.isArray(q.options) && (
+                {question.question_type === "MCQ" && Array.isArray(question.options) && (
                   <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground font-medium">Options</p>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                      {q.options.map((opt, oi) => (
-                        <div key={opt.label} className="flex items-center gap-1.5">
-                          <span className="text-xs font-semibold w-4 shrink-0 text-muted-foreground">
-                            {opt.label}.
+                    <p className="text-xs font-medium text-muted-foreground">Options</p>
+                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                      {question.options.map((option, optionIndex) => (
+                        <div key={option.label} className="flex items-center gap-1.5">
+                          <span className="w-4 shrink-0 text-xs font-semibold text-muted-foreground">
+                            {option.label}.
                           </span>
                           <Input
                             className="h-7 text-xs"
-                            value={opt.text}
+                            value={option.text}
                             onChange={(e) => {
-                              const opts = [...(q.options ?? [])];
-                              opts[oi] = { ...opts[oi], text: e.target.value };
-                              updateField(q._id, "options", opts);
+                              const options = [...(question.options ?? [])];
+                              options[optionIndex] = {
+                                ...options[optionIndex],
+                                text: e.target.value,
+                              };
+                              updateField(question._id, "options", options);
                             }}
-                            placeholder={`Option ${opt.label}`}
+                            placeholder={`Option ${option.label}`}
                           />
                         </div>
                       ))}
@@ -608,28 +681,33 @@ function ReviewModal({
 
                 <div className="grid grid-cols-2 gap-2">
                   <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground font-medium">Correct Answer</p>
+                    <p className="text-xs font-medium text-muted-foreground">Correct Answer</p>
                     <Input
                       className="h-7 text-xs"
-                      value={q.correct_answer}
-                      onChange={(e) => updateField(q._id, "correct_answer", e.target.value)}
-                      placeholder={q.question_type === "MCQ" ? "A / B / C / D" : "Answer text"}
+                      value={question.correct_answer}
+                      onChange={(e) =>
+                        updateField(question._id, "correct_answer", e.target.value)
+                      }
                     />
                   </div>
 
                   <div className="space-y-1">
-                    <p className="text-xs text-muted-foreground font-medium">Exam Type</p>
+                    <p className="text-xs font-medium text-muted-foreground">Exam Type</p>
                     <Select
-                      value={q.exam_type ?? "none"}
-                      onValueChange={(v) => updateField(q._id, "exam_type", v === "none" ? null : v)}
+                      value={question.exam_type ?? "none"}
+                      onValueChange={(value) =>
+                        updateField(question._id, "exam_type", value === "none" ? null : value)
+                      }
                     >
                       <SelectTrigger className="h-7 text-xs">
                         <SelectValue placeholder="(none)" />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="none">None</SelectItem>
-                        {EXAM_TYPES.map((et) => (
-                          <SelectItem key={et} value={et}>{et}</SelectItem>
+                        {EXAM_TYPES.map((examType) => (
+                          <SelectItem key={examType} value={examType}>
+                            {examType}
+                          </SelectItem>
                         ))}
                       </SelectContent>
                     </Select>
@@ -640,19 +718,20 @@ function ReviewModal({
           ))}
 
           {visible.length === 0 && (
-            <p className="text-center text-muted-foreground py-6">All questions removed.</p>
+            <p className="py-6 text-center text-muted-foreground">All questions removed.</p>
           )}
         </div>
 
         <DialogFooter className="mt-4">
-          <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button
-            onClick={() => onSaveAll(local)}
-            disabled={saving || visible.length === 0}
-          >
-            {saving
-              ? <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              : <Check className="h-4 w-4 mr-2" />}
+          <Button variant="outline" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button onClick={() => onSaveAll(local)} disabled={saving || visible.length === 0}>
+            {saving ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Check className="mr-2 h-4 w-4" />
+            )}
             Save {visible.length} Question{visible.length !== 1 ? "s" : ""}
           </Button>
         </DialogFooter>
@@ -661,38 +740,40 @@ function ReviewModal({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// PDFImportTab
-// ─────────────────────────────────────────────────────────────────────────────
-
 function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
-  const user    = useAuthStore((s) => s.user);
+  const user = useAuthStore((s) => s.user);
   const fileRef = useRef<HTMLInputElement>(null);
 
-  const [dragging,     setDragging]     = useState(false);
-  const [parsing,      setParsing]      = useState(false);
-  const [parseError,   setParseError]   = useState<string | null>(null);
-  const [reviewItems,  setReviewItems]  = useState<ReviewItem[] | null>(null);
-  const [saving,       setSaving]       = useState(false);
-  const [summary,      setSummary]      = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [parsing, setParsing] = useState(false);
+  const [parseError, setParseError] = useState<string | null>(null);
+  const [reviewItems, setReviewItems] = useState<ReviewItem[] | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [summary, setSummary] = useState<string | null>(null);
 
-  function handleDrop(e: React.DragEvent<HTMLDivElement>) {
-    e.preventDefault();
+  function handleDrop(event: React.DragEvent<HTMLDivElement>) {
+    event.preventDefault();
     setDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file) processFile(file);
+    const file = event.dataTransfer.files[0];
+    if (file) void processFile(file);
   }
 
-  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
-    const file = e.target.files?.[0];
-    if (file) processFile(file);
+  function handleFileChange(event: React.ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0];
+    if (file) void processFile(file);
   }
 
   async function processFile(file: File) {
+    if (!user?.id) {
+      toast.error("Please log in first.");
+      return;
+    }
+
     if (file.type !== "application/pdf") {
       toast.error("Only PDF files are supported.");
       return;
     }
+
     if (file.size > 10 * 1024 * 1024) {
       toast.error("PDF must be under 10 MB.");
       return;
@@ -706,96 +787,99 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
       const formData = new FormData();
       formData.append("pdf", file);
 
-      const { data: { session } } = await supabase.auth.getSession();
-      const token = session?.access_token ?? "";
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData?.session?.access_token;
 
-      const response = await fetch(
-        `${SUPABASE_URL}/functions/v1/parse-question-pdf`,
-        {
-          method:  "POST",
-          headers: { Authorization: `Bearer ${token}` },
-          body:    formData,
-        }
-      );
+      if (!token) throw new Error("Not authenticated.");
+
+      const response = await fetch(`${SUPABASE_URL}/functions/v1/parse-question-pdf`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+
+      const responseJson = await response.json().catch(() => ({}));
 
       if (!response.ok) {
-        const errJson = await response.json().catch(() => ({}));
-        throw new Error(
-          (errJson as Record<string, unknown>)?.error as string ?? "Parse failed"
-        );
+        const message =
+          responseJson?.error || responseJson?.message || "Parse failed";
+        throw new Error(message);
       }
 
-      const responseJson = await response.json();
-
-      // ★ FIX: handle both { success, data } and flat { questions, summary }
       if (responseJson?.success === false || responseJson?.error) {
         throw new Error(responseJson?.error ?? "Parse failed");
       }
-      const payload = responseJson?.data ?? responseJson;
-      const { questions, summary: parseSummary } = payload;
 
-      if (!Array.isArray(questions) || questions.length === 0) {
+      const payload = responseJson?.data ?? responseJson;
+      const questions = Array.isArray(payload?.questions) ? payload.questions : [];
+      const parseSummary = payload?.summary;
+
+      if (questions.length === 0) {
         throw new Error("No questions found in this PDF.");
       }
 
-      const items: ReviewItem[] = (questions as ParsedQuestion[]).map((q, i) => ({
-        ...q,
-        _id:      `q_${i}_${Date.now()}`,
+      const items: ReviewItem[] = (questions as ParsedQuestion[]).map((question, index) => ({
+        ...question,
+        _id: `q_${Date.now()}_${index}`,
         _removed: false,
-        _editing: false,
       }));
 
       setReviewItems(items);
       setSummary(parseSummary ?? `${items.length} questions parsed.`);
-
-    } catch (err) {
-      console.error("[PDFImportTab] parse error:", err);
-      const msg = err instanceof Error ? err.message : "Failed to parse PDF.";
-      setParseError(msg);
-      toast.error(msg);
+    } catch (error) {
+      console.error("[PDFImportTab] parse error:", error);
+      const message = error instanceof Error ? error.message : "Failed to parse PDF.";
+      setParseError(message);
+      toast.error(message);
     } finally {
       setParsing(false);
-      // ★ FIX: reset file input so same file can be re-uploaded
       if (fileRef.current) fileRef.current.value = "";
     }
   }
 
   async function handleSaveAll(items: ReviewItem[]) {
+    if (!user?.id) {
+      toast.error("Please log in first.");
+      return;
+    }
+
     const toSave = items.filter((q) => !q._removed);
-    if (!toSave.length) return;
+    if (toSave.length === 0) return;
 
     setSaving(true);
+
     try {
-      const rows = toSave.map((q) => ({
-        question_text:  q.question_text,
-        question_type:  q.question_type,
-        options:        q.question_type === "MCQ" ? q.options : null,
-        correct_answer: q.correct_answer,
-        explanation:    q.explanation,
-        subject:        q.subject,
-        topic:          q.topic,
-        difficulty:     q.difficulty,
-        marks_positive: q.marks_positive,
-        marks_negative: q.marks_negative,
-        source_year:    q.source_year,
-        exam_type:      q.exam_type,
-        latex_present:  q.latex_present,
-        uploaded_by:    user!.id,
-        source:         "USER_UPLOAD",
-        is_public:      false,
-        is_verified:    false,
+      const rows = toSave.map((question) => ({
+        question_text: question.question_text,
+        question_type: question.question_type,
+        options: question.question_type === "MCQ" ? question.options : null,
+        correct_answer: question.correct_answer,
+        explanation: question.explanation,
+        subject: question.subject,
+        topic: question.topic,
+        difficulty: question.difficulty,
+        marks_positive: question.marks_positive,
+        marks_negative: question.marks_negative,
+        source_year: question.source_year,
+        exam_type: question.exam_type,
+        latex_present: question.latex_present,
+        uploaded_by: user.id,
+        source: "USER_UPLOAD",
+        is_public: false,
+        is_verified: false,
       }));
 
       const { error } = await supabase.from("questions").insert(rows);
       if (error) throw error;
 
-      const msg = summary ?? `${toSave.length} questions saved.`;
-      toast.success(msg);
+      toast.success(summary ?? `${toSave.length} questions saved.`);
       setReviewItems(null);
       setSummary(null);
       onImported(toSave.length);
-    } catch (err) {
-      console.error("[PDFImportTab] save error:", err);
+    } catch (error) {
+      console.error("[PDFImportTab] save error:", error);
       toast.error("Failed to save questions. Please try again.");
     } finally {
       setSaving(false);
@@ -805,12 +889,15 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
   return (
     <>
       <div
-        className={`relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 transition-colors cursor-pointer ${
+        className={`relative flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 transition-colors ${
           dragging
             ? "border-violet-500 bg-violet-500/10"
             : "border-border hover:border-violet-500/50 hover:bg-muted/10"
         }`}
-        onDragOver={(e) => { e.preventDefault(); setDragging(true); }}
+        onDragOver={(e) => {
+          e.preventDefault();
+          setDragging(true);
+        }}
         onDragLeave={() => setDragging(false)}
         onDrop={handleDrop}
         onClick={() => fileRef.current?.click()}
@@ -825,17 +912,19 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
 
         {parsing ? (
           <div className="flex flex-col items-center gap-3">
-            <Loader2 className="h-10 w-10 text-violet-500 animate-spin" />
+            <Loader2 className="h-10 w-10 animate-spin text-violet-500" />
             <p className="font-medium text-foreground">Parsing PDF with AI…</p>
             <p className="text-sm text-muted-foreground">This may take 15–30 seconds.</p>
           </div>
         ) : (
           <>
-            <Upload className="h-10 w-10 text-muted-foreground mb-3" />
+            <Upload className="mb-3 h-10 w-10 text-muted-foreground" />
             <p className="font-medium text-foreground">Drop your PDF here</p>
-            <p className="text-sm text-muted-foreground mt-1">or click to browse · Max 10 MB</p>
-            <p className="text-xs text-muted-foreground mt-3">
-              Supports JEE, NEET, UPSC, SSC, IBPS question papers and more
+            <p className="mt-1 text-sm text-muted-foreground">
+              or click to browse · Max 10 MB
+            </p>
+            <p className="mt-3 text-xs text-muted-foreground">
+              Supports JEE, NEET, UPSC, SSC, IBPS papers and more
             </p>
           </>
         )}
@@ -856,10 +945,10 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
       )}
 
       <div className="flex items-start gap-2 rounded-lg bg-muted/40 p-3 text-xs text-muted-foreground">
-        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5" />
+        <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
         <span>
-          Each PDF import costs <strong>5 credits</strong>.
-          The AI will extract all questions and answers automatically.
+          Each PDF import costs <strong>5 credits</strong>. The AI will extract
+          questions automatically and let you review before saving.
         </span>
       </div>
 
@@ -875,18 +964,15 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Main Page
-// ─────────────────────────────────────────────────────────────────────────────
-
 export default function UploadQuestions() {
-  const [searchParams]   = useSearchParams();
-  const navigate         = useNavigate();
-  const defaultTab       = searchParams.get("tab") === "manual" ? "manual" : "excel";
-  const [questionCount, setQuestionCount] = useState(0);
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
+  const defaultTab = useMemo(
+    () => (searchParams.get("tab") === "manual" ? "manual" : "excel"),
+    [searchParams]
+  );
 
-  // Dynamically import ExcelImportTab
-  const ExcelImportTab = lazy(() => import("./ExcelImportTab"));
+  const [questionCount, setQuestionCount] = useState(0);
 
   return (
     <div className="space-y-5">
@@ -898,27 +984,25 @@ export default function UploadQuestions() {
       <Tabs defaultValue={defaultTab}>
         <TabsList>
           <TabsTrigger value="excel">
-            <Upload className="h-4 w-4 mr-2" />
+            <Upload className="mr-2 h-4 w-4" />
             Excel Import
           </TabsTrigger>
           <TabsTrigger value="pdf">
-            <Upload className="h-4 w-4 mr-2" />
+            <Upload className="mr-2 h-4 w-4" />
             PDF Import (Beta)
           </TabsTrigger>
           <TabsTrigger value="manual">
-            <Plus className="h-4 w-4 mr-2" />
+            <Plus className="mr-2 h-4 w-4" />
             Create Manually
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="excel" className="mt-5">
-          <Suspense fallback={<div className="h-40 flex items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>}>
-            <ExcelImportTab onImported={(c) => setQuestionCount((p) => p + c)} />
-          </Suspense>
+          <ExcelImportTab onImported={(count) => setQuestionCount((prev) => prev + count)} />
         </TabsContent>
 
         <TabsContent value="pdf" className="mt-5 space-y-4">
-          <PDFImportTab onImported={(c) => setQuestionCount((p) => p + c)} />
+          <PDFImportTab onImported={(count) => setQuestionCount((prev) => prev + count)} />
         </TabsContent>
 
         <TabsContent value="manual" className="mt-5">
@@ -927,7 +1011,7 @@ export default function UploadQuestions() {
               <CardTitle className="text-base">Create a Question</CardTitle>
             </CardHeader>
             <CardContent>
-              <ManualCreator onSaved={() => setQuestionCount((p) => p + 1)} />
+              <ManualCreator onSaved={() => setQuestionCount((prev) => prev + 1)} />
             </CardContent>
           </Card>
         </TabsContent>
@@ -946,7 +1030,7 @@ export default function UploadQuestions() {
             variant="outline"
             onClick={() => navigate("/app/mock-test/my-questions")}
           >
-            <BookOpen className="h-4 w-4 mr-2" />
+            <BookOpen className="mr-2 h-4 w-4" />
             View My Bank
           </Button>
         </div>
