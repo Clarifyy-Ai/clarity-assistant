@@ -1,20 +1,10 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // pages/index.ts — Root barrel export for every page in the application.
-// Combines top-level pages with all sub-folder re-exports so the router
-// can import anything from "@/pages" with a single import statement.
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ─── Top-level pages ──────────────────────────────────────────────────────────
 
-export { default as Index }               from "./Index";
 export { default as NotFound }            from "./NotFound";
-export { default as Dashboard }           from "./Dashboard";
-export { default as Analytics }           from "./Analytics";
-export { default as DocumentVault }       from "./DocumentVault";
-export { default as InterviewScheduler }  from "./InterviewScheduler";
-export { default as LiveCopilot }         from "./LiveCopilot";
-export { default as MockSession }         from "./MockSession";
-export { default as PrepLab }             from "./PrepLab";
 export { default as Scorecard }           from "./Scorecard";
 
 // ─── Auth ─────────────────────────────────────────────────────────────────────
