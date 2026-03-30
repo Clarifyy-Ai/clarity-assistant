@@ -1,4 +1,5 @@
-import { EDGE_BASE, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/env";
+import { EDGE_BASE, SUPABASE_URL } from "@/lib/env";
+import { getAuthHeaders } from "@/lib/network/fetchEdge";
 import type {
   DeepgramConfig,
   TranscriptUtterance,
@@ -286,12 +287,10 @@ export class DeepgramStreamClient {
 
 async function fetchDeepgramToken(): Promise<string> {
   
+  const headers = await getAuthHeaders();
   const response = await fetch(`${EDGE_BASE}/deepgram-token`, {
     method: "POST",
-    headers: {
-      "Content-Type":  "application/json",
-      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-    },
+    headers,
   });
 
   if (!response.ok) {
