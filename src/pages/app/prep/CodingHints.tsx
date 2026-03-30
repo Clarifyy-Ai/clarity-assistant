@@ -1,4 +1,4 @@
-import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
+import { fetchEdge } from "@/lib/network/fetchEdge";
 import { useState, useMemo } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -108,16 +108,7 @@ export default function CodingHints() {
     try {
       
       const input = `Problem: ${activeProblem.title}\n\n${activeProblem.description}\n\nExamples:\n${activeProblem.examples}\n\nTags: ${activeProblem.tags.join(", ")}`;
-      const res = await fetch(`${EDGE_BASE}/prep-tool`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          tool_id: "coding_hint",
-          input,
-        }),
+      const res = await fetchEdge("prep-tool", { tool_id: "coding_hint", input });
       });
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -147,16 +138,7 @@ export default function CodingHints() {
     try {
       
       const input = `Problem: ${activeProblem.title}\n\n${activeProblem.description}\n\nExamples:\n${activeProblem.examples}\n\nTags: ${activeProblem.tags.join(", ")}`;
-      const res = await fetch(`${EDGE_BASE}/prep-tool`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          tool_id: "coding_solution",
-          input,
-        }),
+      const res = await fetchEdge("prep-tool", { tool_id: "coding_solution", input });
       });
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);

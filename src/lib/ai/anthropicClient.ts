@@ -52,14 +52,14 @@ export async function streamClaudeHint(opts: ClaudeStreamOptions): Promise<void>
   try {
     const response = await retry(
       () =>
-        fetch(`${EDGE_BASE}/generate-hint`, {
-          method: "POST",
-          headers: {
-            "Content-Type":  "application/json",
-            "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-          },
-          body,
-          signal,
+        import("@/lib/network/fetchEdge").then(async ({ getAuthHeaders }) => {
+          const authHeaders = await getAuthHeaders();
+          return fetch(`${EDGE_BASE}/generate-hint`, {
+            method: "POST",
+            headers: authHeaders,
+            body,
+            signal,
+          });
         }),
       2,
       400
@@ -95,12 +95,11 @@ export async function callClaude(payload: {
     ? `${payload.system}\n\n${userMessage}`
     : userMessage;
 
+  const { getAuthHeaders } = await import("@/lib/network/fetchEdge");
+  const authHeaders = await getAuthHeaders();
   const response = await fetch(`${EDGE_BASE}/prep-tool`, {
     method: "POST",
-    headers: {
-      "Content-Type":  "application/json",
-      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-    },
+    headers: authHeaders,
     body: JSON.stringify({ tool_id: "raw_prompt", input: combinedPrompt }),
   });
 

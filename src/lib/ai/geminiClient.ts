@@ -53,14 +53,13 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
   });
 
   try {
+    const { getAuthHeaders } = await import("@/lib/network/fetchEdge");
+    const authHeaders = await getAuthHeaders();
     const response = await retry(
       () =>
         fetch(`${EDGE_BASE}/generate-hint`, {
           method: "POST",
-          headers: {
-            "Content-Type":  "application/json",
-            "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-          },
+          headers: authHeaders,
           body,
           signal,
         }),
@@ -98,12 +97,11 @@ export async function callGemini(payload: {
   temperature?: number;
   session_id?: string;
 }): Promise<string> {
+  const { getAuthHeaders } = await import("@/lib/network/fetchEdge");
+  const authHeaders = await getAuthHeaders();
   const response = await fetch(`${EDGE_BASE}/prep-tool`, {
     method: "POST",
-    headers: {
-      "Content-Type":  "application/json",
-      "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-    },
+    headers: authHeaders,
     body: JSON.stringify({
       tool_id: "raw_prompt",
       input:   payload.prompt,

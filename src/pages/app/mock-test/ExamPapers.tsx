@@ -266,7 +266,7 @@ export default function ExamPapers() {
               <SelectItem value="All">Any Duration</SelectItem>
               <SelectItem value="Under 30 min">Under 30 min</SelectItem>
               <SelectItem value="30-60 min">30-60 min</SelectItem>
-              <SelectItem value="Full Paper">Full Paper (>60m)</SelectItem>
+              <SelectItem value="Full Paper">Full Paper (&gt;60m)</SelectItem>
             </SelectContent>
           </Select>
         </div>

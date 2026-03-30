@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
+import { fetchEdge } from "@/lib/network/fetchEdge";
 import { useEffect, useState } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
@@ -62,14 +62,7 @@ export default function CompanyProfile() {
     // Generate via Edge Function
     
     try {
-      const res = await fetch(`${EDGE_BASE}/company-research`, {
-        method:  "POST",
-        headers: {
-          "Content-Type":  "application/json",
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({ company: companyName }),
-      });
+      const res = await fetchEdge("company-research", { company: companyName });
 
       if (!res.ok) throw new Error("Failed to generate brief");
 

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
+import { fetchEdge } from "@/lib/network/fetchEdge";
 import { useState } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { useAuthStore } from "@/store/userStore";
@@ -56,17 +56,7 @@ export default function Rephraser() {
       
       const styleLabel = REPHRASE_STYLES.find((s) => s.id === style)?.label ?? style;
       const input = `Style: ${styleLabel}\n\nOriginal answer:\n${original}`;
-      const res = await fetch(`${EDGE_BASE}/prep-tool`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          tool_id: "rephrase",
-          input,
-        }),
-      });
+      const res = await fetchEdge("prep-tool", { tool_id: "rephrase", input });
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();

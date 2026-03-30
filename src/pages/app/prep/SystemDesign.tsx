@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
+import { fetchEdge } from "@/lib/network/fetchEdge";
 import { useState } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { useAuthStore } from "@/store/userStore";
@@ -78,17 +78,7 @@ export default function SystemDesign() {
     try {
       
       const input = `Topic: ${activeTopic.title}\n\nPrompt: ${activeTopic.prompt}\n\nKey areas: ${activeTopic.keyAreas.join(", ")}${notes ? `\n\nCandidate notes:\n${notes}` : ""}`;
-      const res = await fetch(`${EDGE_BASE}/prep-tool`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${SUPABASE_ANON_KEY}`,
-        },
-        body: JSON.stringify({
-          tool_id: "system_design",
-          input,
-        }),
-      });
+      const res = await fetchEdge("prep-tool", { tool_id: "system_design", input });
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
