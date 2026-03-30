@@ -1,17 +1,8 @@
-// ─────────────────────────────────────────────────────────────────────────────
 // src/integrations/supabase/client.ts
-// SINGLE SOURCE OF TRUTH — createClient() called EXACTLY ONCE here.
-// ─────────────────────────────────────────────────────────────────────────────
 import { createClient } from "@supabase/supabase-js";
 import type { Database } from "./types";
+import { SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
 
-// ── Read env vars — names must match exactly what's in .env ──────────────────
-// .env defines: VITE_SUPABASE_URL and VITE_SUPABASE_PUBLISHABLE_KEY
-const SUPABASE_URL      = import.meta.env.VITE_SUPABASE_URL            as string | undefined;
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string | undefined;
-
-// ── Placeholder detection — only matches obvious placeholder strings ───────────
-// Do NOT add real project refs here — that was the original crash bug
 const URL_PLACEHOLDERS = [
   "your-project-id",
   "your-project-ref",
@@ -23,6 +14,7 @@ const KEY_PLACEHOLDERS = [
   "your-anon-key",
   "your_anon_key",
   "your-publishable-key",
+  "your_publishable_key",
 ];
 
 const urlIsMissing =
@@ -30,49 +22,57 @@ const urlIsMissing =
   URL_PLACEHOLDERS.some((p) => SUPABASE_URL.toLowerCase().includes(p));
 
 const keyIsMissing =
-  !SUPABASE_ANON_KEY ||
-  KEY_PLACEHOLDERS.some((p) => SUPABASE_ANON_KEY.toLowerCase().includes(p));
+  !SUPABASE_PUBLISHABLE_KEY ||
+  KEY_PLACEHOLDERS.some((p) =>
+    SUPABASE_PUBLISHABLE_KEY.toLowerCase().includes(p)
+  );
 
 if (urlIsMissing) {
   throw new Error(
-    "[Clarify] VITE_SUPABASE_URL is missing or is a placeholder. " +
-      "Set it in Project Settings → Environment Variables."
+    "[ClarifyAI] VITE_SUPABASE_URL is missing or still a placeholder. Set it in your environment variables."
   );
 }
 
 if (keyIsMissing) {
   throw new Error(
-    "[Clarify] VITE_SUPABASE_PUBLISHABLE_KEY is missing or is a placeholder. " +
-      "Set it in Project Settings → Environment Variables."
+    "[ClarifyAI] Supabase publishable/anon key is missing or still a placeholder. Set VITE_SUPABASE_PUBLISHABLE_KEY or VITE_SUPABASE_ANON_KEY."
   );
 }
 
-// ── Singleton — one instance for the entire app lifetime ─────────────────────
-export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_ANON_KEY, {
-  auth: {
-    storageKey:         "confideq-auth",
-    persistSession:     true,
-    autoRefreshToken:   true,
-    detectSessionInUrl: true,
-    storage:            typeof window !== "undefined" ? window.localStorage : undefined,
-    flowType:           "pkce",
-  },
-  realtime: {
-    params: { eventsPerSecond: 10 },
-  },
-  global: {
-    headers: {
-      "x-app-name":    "clarify-ai",
-      "x-app-version": "1.0.0",
+export const supabase = createClient<Database>(
+  SUPABASE_URL,
+  SUPABASE_PUBLISHABLE_KEY,
+  {
+    auth: {
+      storageKey: "clarifyai-auth",
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storage: typeof window !== "undefined" ? window.localStorage : undefined,
+      flowType: "pkce",
     },
-  },
-  db: { schema: "public" },
-});
+    realtime: {
+      params: { eventsPerSecond: 10 },
+    },
+    global: {
+      headers: {
+        "x-app-name": "clarify-ai",
+        "x-app-version": "1.0.0",
+      },
+    },
+    db: { schema: "public" },
+  }
+);
 
-export const auth            = supabase.auth;
-export const table           = <T extends keyof Database["public"]["Tables"]>(name: T) =>
-  supabase.from(name);
-export const bucket          = (name: string) => supabase.storage.from(name);
+export const auth = supabase.auth;
+
+export const table = <
+  T extends keyof Database["public"]["Tables"]
+>(
+  name: T
+) => supabase.from(name);
+
+export const bucket = (name: string) => supabase.storage.from(name);
 export const realtimeChannel = (name: string) => supabase.channel(name);
 
 export async function checkSupabaseConnection(): Promise<boolean> {
@@ -84,6 +84,6 @@ export async function checkSupabaseConnection(): Promise<boolean> {
   }
 }
 
-// Export under both names for compatibility
-export { SUPABASE_URL, SUPABASE_ANON_KEY };
-export { SUPABASE_ANON_KEY as SUPABASE_PUBLISHABLE_KEY };
+export { SUPABASE_URL };
+export const SUPABASE_ANON_KEY = SUPABASE_PUBLISHABLE_KEY;
+export { SUPABASE_PUBLISHABLE_KEY };
