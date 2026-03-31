@@ -63,20 +63,14 @@ export default function OnboardingStep5ResumeUpload() {
       return;
     }
 
-    // 2. Get public URL
-    const { data: urlData } = supabase.storage
-      .from("resumes")
-      .getPublicUrl(path);
-
-    // 3. Create resume record in DB
+    // 2. Create resume record in DB (matches actual resumes table schema)
     const { data: resumeRecord, error: dbError } = await supabase
       .from("resumes")
       .insert({
-        user_id:   user.id,
-        file_name: file.name,
-        file_url:  urlData.publicUrl,
-        file_size: file.size,
-        is_active: true,
+        user_id:    user.id,
+        name:       file.name,
+        file_path:  path,
+        is_primary: true,
       })
       .select()
       .single();
@@ -85,10 +79,30 @@ export default function OnboardingStep5ResumeUpload() {
 
     if (dbError) { setError(dbError.message); return; }
 
+    // 3. Create a resume_version record for parse tracking
+    const { data: versionRecord, error: versionError } = await supabase
+      .from("resume_versions")
+      .insert({
+        resume_id:    resumeRecord.id,
+        parse_status: "pending",
+      })
+      .select()
+      .single();
+
+    if (versionError) {
+      setError("Resume saved but version tracking failed.");
+      setDone(true);
+      return;
+    }
+
     // 4. Trigger AI parse via Edge Function
     setParsing(true);
     
-    const res = await fetchEdge("parse-resume", { resume_id: resumeRecord.id, file_url: urlData.publicUrl });
+    const res = await fetchEdge("parse-resume", {
+      resume_id:  resumeRecord.id,
+      version_id: versionRecord.id,
+      file_path:  path,
+    });
 
     setParsing(false);
 
