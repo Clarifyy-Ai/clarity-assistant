@@ -98,7 +98,7 @@ export async function fetchById<T>(
   id: string
 ): Promise<T | null> {
   const { data, error } = await supabase
-    .from(tableName)
+    .from(tableName as any)
     .select("*")
     .eq("id", id)
     .single();

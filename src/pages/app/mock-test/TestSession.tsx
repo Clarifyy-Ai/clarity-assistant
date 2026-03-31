@@ -813,7 +813,7 @@ export default function TestSession() {
 
           <Button
             variant="outline"
-            size="icon"
+            size="sm"
             className="h-8 w-8"
             onClick={() => setShowSubmitModal(true)}
           >
