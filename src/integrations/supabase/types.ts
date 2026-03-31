@@ -1653,6 +1653,41 @@ export type Database = {
           },
         ]
       }
+      resume_versions: {
+        Row: {
+          created_at: string
+          id: string
+          parse_error: string | null
+          parse_status: string
+          parsed_data: Json | null
+          resume_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          parse_error?: string | null
+          parse_status?: string
+          parsed_data?: Json | null
+          resume_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          parse_error?: string | null
+          parse_status?: string
+          parsed_data?: Json | null
+          resume_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "resume_versions_resume_id_fkey"
+            columns: ["resume_id"]
+            isOneToOne: false
+            referencedRelation: "resumes"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       resumes: {
         Row: {
           content: string | null

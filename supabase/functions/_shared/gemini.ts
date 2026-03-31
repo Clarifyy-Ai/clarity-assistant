@@ -6,7 +6,7 @@
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const GEMINI_BASE    = "https://generativelanguage.googleapis.com/v1beta";
-const MODEL          = "gemini-1.5-flash";
+const MODEL          = "gemini-2.0-flash";
 const TIMEOUT_MS     = 50_000;
 
 if (!GEMINI_API_KEY) {
