@@ -29,5 +29,5 @@ export type {
   HttpMethod,
   RequestConfig,
   ApiResponse,
-  ApiError,
+  ApiErrorShape as ApiError,
 } from "./apiClient";

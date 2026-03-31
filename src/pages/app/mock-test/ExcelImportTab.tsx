@@ -261,7 +261,7 @@ export default function ExcelImportTab({
             Pre-formatted Excel file with headers
           </p>
         </div>
-        /ClarifyAI_Question_Template.xlsx
+        <a href="/ClarifyAI_Question_Template.xlsx" download>
           <Button variant="outline" size="sm">
             <Download className="mr-1.5 h-4 w-4" />
             Template

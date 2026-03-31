@@ -777,7 +777,7 @@ export default function TestSession() {
         <div className="flex items-center gap-3">
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="h-8 w-8">
+              <Button variant="outline" size="sm" className="h-8 w-8 p-0">
                 <Menu className="h-4 w-4" />
               </Button>
             </SheetTrigger>
@@ -813,7 +813,7 @@ export default function TestSession() {
 
           <Button
             variant="outline"
-            size="icon"
+            size="sm"
             className="h-8 w-8"
             onClick={() => setShowSubmitModal(true)}
           >
@@ -942,7 +942,7 @@ export default function TestSession() {
               <div className="rounded-xl border border-border bg-card p-5 text-[17px] font-medium leading-relaxed text-foreground shadow-sm md:text-lg">
                 <MathText text={currentQuestion.question_text} />
                 {currentQuestion.image_url && (
-                  {currentQuestion.image_url}
+                  <img src={currentQuestion.image_url} alt="Question" className="mt-3 max-w-full rounded-lg" />
                 )}
               </div>
 

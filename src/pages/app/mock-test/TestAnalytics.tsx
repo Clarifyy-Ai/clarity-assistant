@@ -123,7 +123,7 @@ export default function TestAnalytics() {
       if (topicRes.error) throw topicRes.error;
 
       setTests((testsRes.data ?? []) as MockTestSummary[]);
-      setAnalyses((analysesRes.data ?? []) as TestAnalysisSummary[]);
+      setAnalyses((analysesRes.data ?? []) as unknown as TestAnalysisSummary[]);
       setTopicPerformance((topicRes.data ?? []) as TopicPerformance[]);
     } catch (error) {
       console.error("[TestAnalytics] load failed:", error);
