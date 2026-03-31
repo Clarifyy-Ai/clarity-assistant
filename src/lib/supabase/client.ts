@@ -112,7 +112,7 @@ export async function upsertRow<T>(
   row: Partial<T>
 ): Promise<T | null> {
   const { data, error } = await supabase
-    .from(tableName)
+    .from(tableName as any)
     .upsert(row as never)
     .select()
     .single();
