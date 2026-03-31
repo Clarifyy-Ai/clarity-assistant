@@ -123,7 +123,7 @@ export default function OnboardingStep5ResumeUpload() {
 
     const { data } = await supabase
       .from("profiles")
-      .update({ onboarding_complete: true, onboarding_step: 5 })
+      .update({ onboarding_completed: true, onboarding_step: 5 })
       .eq("id", user.id)
       .select()
       .single();
