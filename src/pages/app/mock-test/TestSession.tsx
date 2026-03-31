@@ -777,7 +777,7 @@ export default function TestSession() {
         <div className="flex items-center gap-3">
           <Sheet>
             <SheetTrigger asChild>
-              <Button variant="outline" size="icon" className="h-8 w-8">
+              <Button variant="outline" size="sm" className="h-8 w-8 p-0">
                 <Menu className="h-4 w-4" />
               </Button>
             </SheetTrigger>
