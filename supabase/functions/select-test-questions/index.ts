@@ -141,7 +141,7 @@ Deno.serve(async (req) => {
     /* ------------------------ AUTH ------------------------ */
     const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization");
     if (!authHeader?.toLowerCase().startsWith("bearer ")) {
-      return new Response(JSON.stringify({ error: "Missing Authorization header" }), { status: 401, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "Missing Authorization header" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
 
     const token = authHeader.replace(/^bearer\s+/i, "");
@@ -149,7 +149,7 @@ Deno.serve(async (req) => {
 
     const { data: { user }, error: authErr } = await db.auth.getUser(token);
     if (authErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const userId = user.id;
 
@@ -157,7 +157,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => null);
     const config = body?.config;
 
-    if (!config) return new Response(JSON.stringify({ error: "Missing config" }), { status: 400, headers: corsHeaders });
+    if (!config) return new Response(JSON.stringify({ error: "Missing config" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const exam_type = mapExamType(sanitizeText(config.exam_type ?? ""));
     const subjects = sanitizeList(config.subjects ?? []);
@@ -185,7 +185,7 @@ Deno.serve(async (req) => {
         .eq("user_id", userId).gte("created_at", startOfMonth.toISOString());
 
       if ((count ?? 0) >= 2) {
-        return new Response(JSON.stringify({ error: "Free plan limit reached (2 tests/month)" }), { status: 402, headers: corsHeaders });
+        return new Response(JSON.stringify({ error: "Free plan limit reached (2 tests/month)" }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
     }
 
@@ -222,7 +222,7 @@ Deno.serve(async (req) => {
     }
 
     const { data: questionData, error: qErr } = await query;
-    if (qErr) return new Response(JSON.stringify({ error: "Failed to fetch questions" }), { status: 500, headers: corsHeaders });
+    if (qErr) return new Response(JSON.stringify({ error: "Failed to fetch questions" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const questions = questionData ?? [];
 
@@ -288,10 +288,10 @@ Deno.serve(async (req) => {
         ai_generated_count: generatedCount,
         warning: finalIds.length < question_count ? "Not enough questions even after AI generation." : undefined,
       }),
-      { headers: corsHeaders }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
     console.error("[select-test-questions] error:", err);
-    return new Response(JSON.stringify({ error: "Internal error", detail: String(err) }), { status: 500, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: "Internal error", detail: String(err) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });

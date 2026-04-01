@@ -67,9 +67,9 @@ const EXAM_SUBJECTS: Record<string, string[]> = {
   JEE_MAIN: ["Physics", "Chemistry", "Mathematics"],
   JEE_ADV: ["Physics", "Chemistry", "Mathematics"],
   NEET: ["Biology", "Physics", "Chemistry"],
-  UPSC: ["General Studies", "Current Affairs", "Essay"],
-  SSC_CGL: ["Reasoning", "Quantitative Aptitude", "English", "General Knowledge"],
-  IBPS_PO: ["Reasoning", "Quantitative Aptitude", "English", "Computer Awareness", "Banking"],
+  UPSC: ["Current Affairs", "GS Paper 1 & 2"],
+  SSC_CGL: ["Reasoning", "Quant", "English", "GK"],
+  IBPS_PO: ["Reasoning", "Quant", "English", "Banking"],
   CUSTOM: [],
 };
 
@@ -248,7 +248,7 @@ export default function TestConfigure() {
       ...prev,
       difficulty_distribution: {
         ...prev.difficulty_distribution,
-        value,
+        [key]: value,
       },
     }));
   }
