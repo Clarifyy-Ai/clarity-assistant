@@ -2,6 +2,7 @@
 import { handleCors, corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
+import { mapExamType } from "../_shared/examTypeMap.ts";
 
 /* -------------------------------------------------------------------------- */
 /* SANITIZATION                                  */
