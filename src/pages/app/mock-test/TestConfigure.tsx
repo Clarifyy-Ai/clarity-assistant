@@ -248,7 +248,7 @@ export default function TestConfigure() {
       ...prev,
       difficulty_distribution: {
         ...prev.difficulty_distribution,
-        value,
+        [key]: value,
       },
     }));
   }

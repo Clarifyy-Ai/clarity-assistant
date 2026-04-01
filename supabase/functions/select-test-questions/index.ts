@@ -292,6 +292,6 @@ Deno.serve(async (req) => {
     );
   } catch (err) {
     console.error("[select-test-questions] error:", err);
-    return new Response(JSON.stringify({ error: "Internal error", detail: String(err) }), { status: 500, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: "Internal error", detail: String(err) }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
   }
 });
