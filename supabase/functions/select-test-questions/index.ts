@@ -157,7 +157,7 @@ Deno.serve(async (req) => {
     const body = await req.json().catch(() => null);
     const config = body?.config;
 
-    if (!config) return new Response(JSON.stringify({ error: "Missing config" }), { status: 400, headers: corsHeaders });
+    if (!config) return new Response(JSON.stringify({ error: "Missing config" }), { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const exam_type = mapExamType(sanitizeText(config.exam_type ?? ""));
     const subjects = sanitizeList(config.subjects ?? []);
