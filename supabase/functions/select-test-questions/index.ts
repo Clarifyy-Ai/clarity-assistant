@@ -2,6 +2,7 @@
 import { handleCors, corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
+import { mapExamType } from "../_shared/examTypeMap.ts";
 
 /* -------------------------------------------------------------------------- */
 /* SANITIZATION                                  */
@@ -158,7 +159,7 @@ Deno.serve(async (req) => {
 
     if (!config) return new Response(JSON.stringify({ error: "Missing config" }), { status: 400, headers: corsHeaders });
 
-    const exam_type = sanitizeText(config.exam_type ?? "");
+    const exam_type = mapExamType(sanitizeText(config.exam_type ?? ""));
     const subjects = sanitizeList(config.subjects ?? []);
     const topics = sanitizeList(config.topics ?? []);
     const source_types = sanitizeList(config.source_types ?? ["OFFICIAL_PYP"]);
