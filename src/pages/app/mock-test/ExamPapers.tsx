@@ -34,6 +34,12 @@ const EXAM_LABELS: Record<string, string> = {
   UPSC: "UPSC CSE", SSC_CGL: "SSC CGL", IBPS_PO: "IBPS PO", CUSTOM: "Custom",
 };
 
+// Maps frontend uppercase IDs to DB values for querying
+const EXAM_DB_MAP: Record<string, string> = {
+  JEE_MAIN: "JEE Main", JEE_ADV: "JEE Advanced", NEET: "NEET UG",
+  UPSC: "UPSC CSE", SSC_CGL: "SSC CGL", IBPS_PO: "IBPS PO",
+};
+
 const OFFICIAL_SETTINGS: Record<string, { questions: number; duration: number; positive: number; negative: number }> = {
   JEE_MAIN: { questions: 90, duration: 180, positive: 4, negative: 1 },
   JEE_ADV: { questions: 54, duration: 180, positive: 4, negative: 1 },
