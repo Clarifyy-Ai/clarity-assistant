@@ -288,7 +288,7 @@ Deno.serve(async (req) => {
         ai_generated_count: generatedCount,
         warning: finalIds.length < question_count ? "Not enough questions even after AI generation." : undefined,
       }),
-      { headers: corsHeaders }
+      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   } catch (err) {
     console.error("[select-test-questions] error:", err);
