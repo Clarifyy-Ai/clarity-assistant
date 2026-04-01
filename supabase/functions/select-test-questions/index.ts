@@ -222,7 +222,7 @@ Deno.serve(async (req) => {
     }
 
     const { data: questionData, error: qErr } = await query;
-    if (qErr) return new Response(JSON.stringify({ error: "Failed to fetch questions" }), { status: 500, headers: corsHeaders });
+    if (qErr) return new Response(JSON.stringify({ error: "Failed to fetch questions" }), { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } });
 
     const questions = questionData ?? [];
 
