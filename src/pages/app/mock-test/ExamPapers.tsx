@@ -76,11 +76,12 @@ export default function ExamPapers() {
   async function loadData() {
     setLoading(true);
     try {
+      const dbExamType = EXAM_DB_MAP[(examType ?? "").toUpperCase()] ?? (examType ?? "").toUpperCase();
       const [papersRes, testsRes] = await Promise.all([
         supabase
           .from("exam_papers")
           .select("*")
-          .eq("exam_type", (examType ?? "").toUpperCase())
+          .eq("exam_type", dbExamType)
           .order("year", { ascending: false }),
         user?.id ? supabase
           .from("mock_tests")
