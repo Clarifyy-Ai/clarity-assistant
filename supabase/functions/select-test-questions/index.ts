@@ -185,7 +185,7 @@ Deno.serve(async (req) => {
         .eq("user_id", userId).gte("created_at", startOfMonth.toISOString());
 
       if ((count ?? 0) >= 2) {
-        return new Response(JSON.stringify({ error: "Free plan limit reached (2 tests/month)" }), { status: 402, headers: corsHeaders });
+        return new Response(JSON.stringify({ error: "Free plan limit reached (2 tests/month)" }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
     }
 
