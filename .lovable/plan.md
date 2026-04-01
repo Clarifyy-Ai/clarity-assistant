@@ -1,61 +1,47 @@
 
 
-# Fix Plan: Edge Functions, Resume Parsing, and Database Mismatches
+# Fix Plan: Mock Test Questions Not Showing + Edge Function Errors
 
-## Root Causes Identified
+## Root Causes
 
-1. **All edge functions were NOT deployed** — this caused the "Failed to send a request to the Edge Function" error. I've already deployed all 22 edge functions during investigation.
+1. **exam_type mismatch** — The frontend uses uppercase IDs like `JEE_MAIN`, `NEET`, `SSC_CGL`, but the database has human-readable values: `JEE Main`, `NEET UG`, `SSC CGL`, `UPSC CSE`, `IBPS PO`. The `select-test-questions` edge function queries `.eq("exam_type", "JEE_MAIN")` which returns zero results.
 
-2. **`resume_versions` table does not exist** — the `parse-resume` edge function references it, but only `resumes` and `documents` tables exist in the database.
+2. **exam_papers table is empty** — No rows exist in `exam_papers`, so ExamPapers page always shows nothing.
 
-3. **Onboarding resume upload uses wrong table schema** — `OnboardingStep5ResumeUpload.tsx` inserts into `resumes` table with columns that don't match (`file_name`, `file_url`, `file_size`, `is_active` don't exist on `resumes`; actual columns are `name`, `file_path`, `url`, `content`, `is_primary`).
+3. **CORS missing `x-app-name`** — The Supabase client sends `x-app-name: clarify-ai` as a global header, but `_shared/cors.ts` doesn't include it in `Access-Control-Allow-Headers`, causing CORS preflight failures on every `supabase.functions.invoke()` call.
 
-4. **`resumes` storage bucket is private** — the `parse-resume` edge function tries to fetch the file via public URL, but the bucket is not public, so the download fails.
-
-5. **`onboarding_complete` column doesn't exist** — it's actually `onboarding_completed`, so completing onboarding silently fails.
-
-6. **`ResumeDetail.tsx` reads from `documents` table** — separate from the `resumes` table used in onboarding. Two different resume systems exist.
-
-7. **Gemini model mismatch** — `_shared/gemini.ts` uses `gemini-1.5-flash`, but `parse-resume` uses `gemini-2.0-flash`. Free tier supports `gemini-2.0-flash` so we should standardize on that.
+4. **`ping` edge function doesn't exist** — The network monitor probes `/functions/v1/ping` every 10 seconds, generating constant 404/CORS errors in the console.
 
 ## Plan
 
-### Step 1: Create `resume_versions` table
-Create the missing table that `parse-resume` edge function depends on, with columns: `id`, `resume_id` (FK to resumes), `parsed_data` (jsonb), `parse_status` (text), `parse_error` (text), `created_at`.
+### Step 1: Fix CORS headers
+Add `x-app-name` and `x-app-version` to the allowed headers in `supabase/functions/_shared/cors.ts`. This fixes ALL edge function CORS errors in one shot.
 
-### Step 2: Fix `resumes` table column usage in frontend
-Update `OnboardingStep5ResumeUpload.tsx` to use actual `resumes` table columns:
-- `file_name` → `name`
-- `file_url` → `url`  
-- `file_size` → remove (column doesn't exist)
-- `is_active` → `is_primary`
+### Step 2: Create `ping` edge function
+A minimal function that returns `{ ok: true }` to stop the network monitor's constant 404 errors.
 
-### Step 3: Fix `parse-resume` edge function
-Update to handle the actual `resumes` table schema. The edge function currently:
-- Validates against `resumes.user_id` (correct)
-- Uses `resume_versions` for status tracking → will work after Step 1
-- Downloads file via public URL → fix to use Supabase Storage service role download instead, since bucket is private
+### Step 3: Add exam_type mapping
+Create a mapping in both the frontend and the `select-test-questions` edge function that converts frontend IDs to database values:
+- `JEE_MAIN` → `JEE Main`
+- `NEET` → `NEET UG`
+- `SSC_CGL` → `SSC CGL`
+- `UPSC` → `UPSC CSE`
+- `IBPS_PO` → `IBPS PO`
 
-### Step 4: Fix `onboarding_complete` → `onboarding_completed`
-In `OnboardingStep5ResumeUpload.tsx`, change the profile update to use the correct column name.
+Files to update:
+- `supabase/functions/select-test-questions/index.ts` — map `config.exam_type` before querying
+- `src/pages/app/mock-test/ExamPapers.tsx` — map `examType` param before querying `exam_papers` and `questions`
+- `src/pages/app/mock-test/TestConfigure.tsx` — map exam_type in config before sending to edge function
 
-### Step 5: Update `_shared/gemini.ts` model
-Change from `gemini-1.5-flash` to `gemini-2.0-flash` to match the free tier and be consistent with `parse-resume`.
+### Step 4: Seed exam_papers table
+Insert rows for the exam types that have questions (JEE Main, NEET UG, SSC CGL, UPSC CSE, IBPS PO) so the ExamPapers page has data to display. Use a database migration.
 
-### Step 6: Redeploy affected edge functions
-Deploy `parse-resume`, `select-test-questions`, and any functions using `_shared/gemini.ts`.
-
-### Step 7: Add OCR_API_KEY secret
-The user says they added it but it's not in project secrets. Will prompt to add it.
+### Step 5: Redeploy edge functions
+Deploy `ping`, `select-test-questions`, and all functions using `_shared/cors.ts`.
 
 ## What This Fixes
-- Mock test "Start Test" button → works (functions deployed)
-- Resume upload + AI parsing → works (schema aligned, private bucket handled)
-- Onboarding completion → works (correct column name)
-- AI features using Gemini → works (correct model for free tier)
-
-## Technical Details
-- Database migration: 1 new table (`resume_versions`)
-- Files modified: `OnboardingStep5ResumeUpload.tsx`, `supabase/functions/parse-resume/index.ts`, `supabase/functions/_shared/gemini.ts`
-- Edge functions redeployed: all 22 already done, will redeploy changed ones after edits
+- Mock test "Start Test" → questions are found and loaded
+- ExamPapers page → shows available papers
+- All edge function CORS errors → eliminated
+- Console spam from network monitor → stopped
 
