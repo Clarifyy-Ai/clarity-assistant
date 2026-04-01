@@ -149,7 +149,7 @@ Deno.serve(async (req) => {
 
     const { data: { user }, error: authErr } = await db.auth.getUser(token);
     if (authErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: { ...corsHeaders, "Content-Type": "application/json" } });
     }
     const userId = user.id;
 
