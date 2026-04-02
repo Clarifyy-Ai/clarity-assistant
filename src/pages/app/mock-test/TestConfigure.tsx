@@ -70,6 +70,8 @@ const EXAM_SUBJECTS: Record<string, string[]> = {
   UPSC: ["Current Affairs", "GS Paper 1 & 2"],
   SSC_CGL: ["Reasoning", "Quant", "English", "GK"],
   IBPS_PO: ["Reasoning", "Quant", "English", "Banking"],
+  HPCL_ENGINEER: ["Civil Engineering", "English", "Quantitative Aptitude", "Reasoning"],
+  PSU: ["Domain Knowledge", "English Language", "Intellectual Potential Test", "Quantitative Aptitude"],
   CUSTOM: [],
 };
 
