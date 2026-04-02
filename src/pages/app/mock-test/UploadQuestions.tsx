@@ -204,6 +204,7 @@ const EMPTY_FORM: ParsedQuestion = {
   source_year: null,
   exam_type: null,
   latex_present: false,
+  image_url: "",
 };
 
 function ManualCreator({ onSaved }: { onSaved: () => void }) {
