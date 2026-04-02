@@ -59,6 +59,7 @@ interface ParsedQuestion {
   source_year: number | null;
   exam_type: string | null;
   latex_present: boolean;
+  image_url: string;
 }
 
 interface ReviewItem extends ParsedQuestion {
@@ -203,6 +204,7 @@ const EMPTY_FORM: ParsedQuestion = {
   source_year: null,
   exam_type: null,
   latex_present: false,
+  image_url: "",
 };
 
 function ManualCreator({ onSaved }: { onSaved: () => void }) {
@@ -267,6 +269,8 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
         marks_negative: form.marks_negative,
         source_year: form.source_year,
         exam_type: form.exam_type,
+        image_url: form.image_url?.trim() || null,
+        has_image: Boolean(form.image_url?.trim()),
         latex_present: latexPresent,
         uploaded_by: user.id,
         source: "USER_UPLOAD",
@@ -506,6 +510,27 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
               className="text-sm"
             />
           </div>
+        </div>
+
+        <div className="space-y-2 md:col-span-2">
+          <Label>Question Image URL (optional)</Label>
+          <Input
+            placeholder="https://example.com/image.png"
+            value={form.image_url}
+            onChange={(e) => setField("image_url", e.target.value)}
+            className="text-sm"
+          />
+          {form.image_url?.trim() && (
+            <img
+              src={form.image_url}
+              alt="Question image preview"
+              className="mt-2 max-h-40 rounded-lg border border-border object-contain"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+          )}
+          <p className="text-xs text-muted-foreground">
+            Paste a direct image URL if this question includes a diagram or figure.
+          </p>
         </div>
       </div>
 

@@ -34,6 +34,7 @@ interface ParsedRow {
   exam_type: string;
   source_year: number | null;
   question_type: string;
+  image_url: string;
 }
 
 const VALID_ANSWERS = ["A", "B", "C", "D"];
@@ -84,6 +85,7 @@ function normalizeRow(raw: Record<string, unknown>, idx: number): ParsedRow {
     question_type: String(raw["Question_Type"] ?? raw["question_type"] ?? "MCQ")
       .trim()
       .toUpperCase(),
+    image_url: String(raw["Image_URL"] ?? raw["image_url"] ?? raw["Image_Url"] ?? "").trim(),
   };
 
   if (!VALID_DIFFICULTIES.includes(row.difficulty)) row.difficulty = "MEDIUM";
@@ -221,6 +223,8 @@ export default function ExcelImportTab({
         marks_negative: row.marks_negative,
         exam_type: row.exam_type === "CUSTOM" ? null : row.exam_type,
         source_year: row.source_year,
+        image_url: row.image_url || null,
+        has_image: Boolean(row.image_url),
         latex_present:
           /\$|\\\(|\\\[/.test(row.question_text) ||
           /\$|\\\(|\\\[/.test(row.explanation),
