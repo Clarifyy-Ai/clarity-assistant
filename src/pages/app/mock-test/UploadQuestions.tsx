@@ -511,6 +511,27 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
             />
           </div>
         </div>
+
+        <div className="space-y-2 md:col-span-2">
+          <Label>Question Image URL (optional)</Label>
+          <Input
+            placeholder="https://example.com/image.png"
+            value={form.image_url}
+            onChange={(e) => setField("image_url", e.target.value)}
+            className="text-sm"
+          />
+          {form.image_url?.trim() && (
+            <img
+              src={form.image_url}
+              alt="Question image preview"
+              className="mt-2 max-h-40 rounded-lg border border-border object-contain"
+              onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
+            />
+          )}
+          <p className="text-xs text-muted-foreground">
+            Paste a direct image URL if this question includes a diagram or figure.
+          </p>
+        </div>
       </div>
 
       <Button onClick={handleSave} disabled={saving} className="w-full sm:w-auto">
