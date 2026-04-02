@@ -120,12 +120,12 @@ async function deductCreditsFallback(
     return { success: false, error: updateErr.message };
   }
 
-  // Log transaction
+  // Log transaction — action column is credit_action enum, so use 'usage'
   const { error: logErr } = await db.from("credit_transactions").insert({
     user_id: userId,
     amount: -amount,
     balance_after: newBalance,
-    action,
+    action: "usage",
     description: action,
   });
 
