@@ -85,6 +85,7 @@ function normalizeRow(raw: Record<string, unknown>, idx: number): ParsedRow {
     question_type: String(raw["Question_Type"] ?? raw["question_type"] ?? "MCQ")
       .trim()
       .toUpperCase(),
+    image_url: String(raw["Image_URL"] ?? raw["image_url"] ?? raw["Image_Url"] ?? "").trim(),
   };
 
   if (!VALID_DIFFICULTIES.includes(row.difficulty)) row.difficulty = "MEDIUM";
