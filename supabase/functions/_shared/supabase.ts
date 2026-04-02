@@ -51,32 +51,30 @@ export async function deductCredits(
 
   const db = createServiceClient();
 
-  /* ---------------------------------------------------------------------- */
-  /* 1. ATOMIC DECREMENT USING RPC                                          */
-  /* ---------------------------------------------------------------------- */
-
-  const { data: rpcData, error: rpcError } = await db.rpc(
-    "deduct_credits_atomic",
-    {
+  /* Use the existing deduct_credits(uuid, int, uuid, text) RPC */
+  try {
+    const { data, error: rpcError } = await db.rpc("deduct_credits", {
       p_user_id: userId,
       p_amount: amount,
-      p_action: action
+      p_session_id: null,
+      p_description: action,
+    });
+
+    if (rpcError) {
+      console.error("[credits] RPC error:", rpcError.message);
+      // Check if it's an insufficient credits error from the function
+      if (rpcError.message.includes("Insufficient credits")) {
+        return { success: false, error: "Insufficient credits" };
+      }
+      return { success: false, error: rpcError.message };
     }
-  );
 
-  if (rpcError) {
-    // If function missing, fallback (safe but slower)
-    if (rpcError.message.includes("function deduct_credits_atomic")) {
-      return await deductCreditsFallback(db, userId, action, amount);
-    }
-    return { success: false, error: rpcError.message };
+    // data is the new balance (integer)
+    return { success: true };
+  } catch (err) {
+    console.error("[credits] Unexpected error:", err);
+    return { success: false, error: String(err) };
   }
-
-  if (!rpcData || rpcData?.success !== true) {
-    return { success: false, error: "Insufficient credits" };
-  }
-
-  return { success: true };
 }
 
 /* -------------------------------------------------------------------------- */
