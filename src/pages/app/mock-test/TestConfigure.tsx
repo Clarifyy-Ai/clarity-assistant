@@ -150,6 +150,22 @@ const EXAM_TOPICS: Record<string, string[]> = {
     "Banking Awareness",
     "Reading Comprehension",
   ],
+  HPCL_ENGINEER: [
+    "Structural Engineering",
+    "Soil Mechanics",
+    "Fluid Mechanics",
+    "Grammar",
+    "Comprehension",
+    "Quantitative Aptitude",
+    "Logical Reasoning",
+  ],
+  PSU: [
+    "Domain Knowledge",
+    "English Grammar",
+    "Comprehension",
+    "Analytical Reasoning",
+    "Quantitative Aptitude",
+  ],
 };
 
 const SOURCE_OPTIONS = [

@@ -6,6 +6,8 @@ const EXAM_TYPE_MAP: Record<string, string> = {
   UPSC: "UPSC CSE",
   SSC_CGL: "SSC CGL",
   IBPS_PO: "IBPS PO",
+  HPCL_ENGINEER: "HPCL Engineer",
+  PSU: "PSU",
 };
 
 /** Convert a frontend exam ID to the DB value. Falls through if already correct or unknown. */

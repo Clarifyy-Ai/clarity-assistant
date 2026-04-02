@@ -73,8 +73,10 @@ export default function CompanyProfile() {
       await supabase.from("company_research").upsert({
         user_id:       user?.id,
         company_name:  companyName,
-        brief_data:    data,
-        overview:      data.overview,
+        raw_data:      data,
+        overview:      data.overview ?? null,
+        culture:       data.culture ?? null,
+        prep_tips:     data.tips?.join("; ") ?? null,
       });
 
     } catch (err) {
