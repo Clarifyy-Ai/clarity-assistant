@@ -223,6 +223,8 @@ export default function ExcelImportTab({
         marks_negative: row.marks_negative,
         exam_type: row.exam_type === "CUSTOM" ? null : row.exam_type,
         source_year: row.source_year,
+        image_url: row.image_url || null,
+        has_image: Boolean(row.image_url),
         latex_present:
           /\$|\\\(|\\\[/.test(row.question_text) ||
           /\$|\\\(|\\\[/.test(row.explanation),

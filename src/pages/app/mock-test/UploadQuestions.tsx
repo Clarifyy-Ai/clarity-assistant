@@ -59,6 +59,7 @@ interface ParsedQuestion {
   source_year: number | null;
   exam_type: string | null;
   latex_present: boolean;
+  image_url: string;
 }
 
 interface ReviewItem extends ParsedQuestion {
