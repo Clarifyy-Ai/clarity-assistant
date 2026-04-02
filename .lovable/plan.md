@@ -1,47 +1,71 @@
 
 
-# Fix Plan: Mock Test Questions Not Showing + Edge Function Errors
+# Fix Plan: Mock Test, Company Research, and Core Issues
 
-## Root Causes
+## Root Causes Identified
 
-1. **exam_type mismatch** — The frontend uses uppercase IDs like `JEE_MAIN`, `NEET`, `SSC_CGL`, but the database has human-readable values: `JEE Main`, `NEET UG`, `SSC CGL`, `UPSC CSE`, `IBPS PO`. The `select-test-questions` edge function queries `.eq("exam_type", "JEE_MAIN")` which returns zero results.
+### 1. CRITICAL: Difficulty case mismatch (Mock Test returns 0 questions)
+The database stores difficulty as `Easy`, `Medium`, `Hard` (title case), but the `select-test-questions` edge function checks for `EASY`, `MEDIUM`, `HARD` (uppercase) on line 240. Result: **every question falls into the default "MEDIUM" bucket**, breaking difficulty distribution, and if the pool is small, questions are missed entirely.
 
-2. **exam_papers table is empty** — No rows exist in `exam_papers`, so ExamPapers page always shows nothing.
+### 2. Subject name mismatches
+Frontend `EXAM_SUBJECTS` for SSC_CGL and IBPS_PO already match the DB (`Quant`, `GK`, `Reasoning`, etc.) — this was fixed previously. UPSC subjects also match. **No change needed here.**
 
-3. **CORS missing `x-app-name`** — The Supabase client sends `x-app-name: clarify-ai` as a global header, but `_shared/cors.ts` doesn't include it in `Access-Control-Allow-Headers`, causing CORS preflight failures on every `supabase.functions.invoke()` call.
+### 3. Missing exam types in frontend
+DB has `HPCL Engineer` (170 questions) and `PSU` (142 questions) but the frontend `EXAM_TYPES` and `EXAM_SUBJECTS` lists don't include them. Users who uploaded these questions can't create tests for them.
 
-4. **`ping` edge function doesn't exist** — The network monitor probes `/functions/v1/ping` every 10 seconds, generating constant 404/CORS errors in the console.
+### 4. CompanyResearch uses `useState` instead of `useEffect`
+`CompanyResearch.tsx` line 38: `useState(() => { ... })` is used to fetch saved briefs. This runs the side effect as a state initializer (synchronously, once), which is incorrect for async operations and won't re-run when `user` changes.
+
+### 5. CompanyProfile references non-existent column `brief_data`
+`CompanyProfile.tsx` line 55 reads `cached.brief_data` and line 73 upserts `brief_data`, but the `company_research` table has no `brief_data` column. It has `raw_data` (jsonb). This causes the cache check to always miss and the upsert to fail silently.
+
+### 6. `examTypeMap.ts` missing HPCL/PSU entries
+The shared mapping doesn't know about `HPCL_ENGINEER` or `PSU` exam types.
+
+---
 
 ## Plan
 
-### Step 1: Fix CORS headers
-Add `x-app-name` and `x-app-version` to the allowed headers in `supabase/functions/_shared/cors.ts`. This fixes ALL edge function CORS errors in one shot.
+### Step 1: Fix difficulty case mismatch in edge function
+In `supabase/functions/select-test-questions/index.ts`, normalize the difficulty comparison to be case-insensitive:
+- Line 240: Change `["EASY", "MEDIUM", "HARD"].includes(q.difficulty)` to `["EASY", "MEDIUM", "HARD"].includes(String(q.difficulty).toUpperCase())`
+- Use `.toUpperCase()` on `q.difficulty` before bucketing
 
-### Step 2: Create `ping` edge function
-A minimal function that returns `{ ok: true }` to stop the network monitor's constant 404 errors.
+This single fix will make all 1500+ questions findable by difficulty distribution.
 
-### Step 3: Add exam_type mapping
-Create a mapping in both the frontend and the `select-test-questions` edge function that converts frontend IDs to database values:
-- `JEE_MAIN` → `JEE Main`
-- `NEET` → `NEET UG`
-- `SSC_CGL` → `SSC CGL`
-- `UPSC` → `UPSC CSE`
-- `IBPS_PO` → `IBPS PO`
+### Step 2: Add HPCL Engineer and PSU to frontend exam types
+Update `MockTestHub.tsx` `EXAM_TYPES` array and `TestConfigure.tsx` `EXAM_SUBJECTS` / `EXAM_TOPICS` to include:
+- `HPCL_ENGINEER` → subjects: Civil Engineering, English, Quantitative Aptitude, Reasoning
+- `PSU` → subjects: Domain Knowledge, English Language, Intellectual Potential Test, Quantitative Aptitude
 
-Files to update:
-- `supabase/functions/select-test-questions/index.ts` — map `config.exam_type` before querying
-- `src/pages/app/mock-test/ExamPapers.tsx` — map `examType` param before querying `exam_papers` and `questions`
-- `src/pages/app/mock-test/TestConfigure.tsx` — map exam_type in config before sending to edge function
+Also add these to `examTypeMap.ts`:
+- `HPCL_ENGINEER` → `HPCL Engineer`
+- `PSU` → `PSU`
 
-### Step 4: Seed exam_papers table
-Insert rows for the exam types that have questions (JEE Main, NEET UG, SSC CGL, UPSC CSE, IBPS PO) so the ExamPapers page has data to display. Use a database migration.
+### Step 3: Fix CompanyResearch.tsx — useState → useEffect
+Change line 38 from `useState(() => { ... })` to `useEffect(() => { ... }, [user?.id])` so saved briefs load correctly.
 
-### Step 5: Redeploy edge functions
-Deploy `ping`, `select-test-questions`, and all functions using `_shared/cors.ts`.
+### Step 4: Fix CompanyProfile.tsx — brief_data → raw_data
+- Line 55: `cached.brief_data` → `cached.raw_data`
+- Line 73-78: Change upsert to use `raw_data` instead of `brief_data`, and map `overview`, `culture`, `prep_tips` to their proper columns
+
+### Step 5: Redeploy select-test-questions edge function
+Deploy updated edge function with the difficulty fix.
+
+---
 
 ## What This Fixes
-- Mock test "Start Test" → questions are found and loaded
-- ExamPapers page → shows available papers
-- All edge function CORS errors → eliminated
-- Console spam from network monitor → stopped
+- **Mock test "no questions found"** → 1500+ questions now correctly bucketed by difficulty
+- **HPCL/PSU exams** → visible in test hub, configurable
+- **Company Research page** → saved briefs load properly
+- **Company Profile** → cache works, upsert succeeds
+- **All edge function CORS** → already fixed in prior session
+
+## Files Modified
+- `supabase/functions/select-test-questions/index.ts` (difficulty normalization)
+- `supabase/functions/_shared/examTypeMap.ts` (add HPCL_ENGINEER, PSU)
+- `src/pages/app/mock-test/MockTestHub.tsx` (add exam type cards)
+- `src/pages/app/mock-test/TestConfigure.tsx` (add subjects/topics for new exams)
+- `src/pages/app/company-research/CompanyResearch.tsx` (useState → useEffect)
+- `src/pages/app/company-research/CompanyProfile.tsx` (brief_data → raw_data)
 
