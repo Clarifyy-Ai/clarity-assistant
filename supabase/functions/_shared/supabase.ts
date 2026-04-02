@@ -51,87 +51,29 @@ export async function deductCredits(
 
   const db = createServiceClient();
 
-  /* ---------------------------------------------------------------------- */
-  /* 1. ATOMIC DECREMENT USING RPC                                          */
-  /* ---------------------------------------------------------------------- */
-
-  const { data: rpcData, error: rpcError } = await db.rpc(
-    "deduct_credits_atomic",
-    {
+  /* Use the existing deduct_credits(uuid, int, uuid, text) RPC */
+  try {
+    const { data, error: rpcError } = await db.rpc("deduct_credits", {
       p_user_id: userId,
       p_amount: amount,
-      p_action: action
+      p_session_id: null,
+      p_description: action,
+    });
+
+    if (rpcError) {
+      console.error("[credits] RPC error:", rpcError.message);
+      // Check if it's an insufficient credits error from the function
+      if (rpcError.message.includes("Insufficient credits")) {
+        return { success: false, error: "Insufficient credits" };
+      }
+      return { success: false, error: rpcError.message };
     }
-  );
 
-  if (rpcError) {
-    // If function missing, fallback (safe but slower)
-    if (rpcError.message.includes("function deduct_credits_atomic")) {
-      return await deductCreditsFallback(db, userId, action, amount);
-    }
-    return { success: false, error: rpcError.message };
+    // data is the new balance (integer)
+    return { success: true };
+  } catch (err) {
+    console.error("[credits] Unexpected error:", err);
+    return { success: false, error: String(err) };
   }
-
-  if (!rpcData || rpcData?.success !== true) {
-    return { success: false, error: "Insufficient credits" };
-  }
-
-  return { success: true };
 }
 
-/* -------------------------------------------------------------------------- */
-/*                        SAFE FALLBACK (IF RPC NOT INSTALLED)                */
-/* -------------------------------------------------------------------------- */
-
-async function deductCreditsFallback(
-  db: SupabaseClient,
-  userId: string,
-  action: string,
-  amount: number
-): Promise<{ success: boolean; error?: string }> {
-  // Fetch current balance (not atomic!)
-  const { data: profile, error: profileErr } = await db
-    .from("profiles")
-    .select("credits, credits_used_this_month")
-    .eq("id", userId)
-    .single();
-
-  if (profileErr || !profile) {
-    return { success: false, error: "Profile not found" };
-  }
-
-  const current = profile.credits ?? 0;
-  if (current < amount) {
-    return { success: false, error: "Insufficient credits" };
-  }
-
-  const newBalance = current - amount;
-
-  // Update profile
-  const { error: updateErr } = await db
-    .from("profiles")
-    .update({
-      credits: newBalance,
-      credits_used_this_month: (profile.credits_used_this_month ?? 0) + amount
-    })
-    .eq("id", userId);
-
-  if (updateErr) {
-    return { success: false, error: updateErr.message };
-  }
-
-  // Log transaction — action column is credit_action enum, so use 'usage'
-  const { error: logErr } = await db.from("credit_transactions").insert({
-    user_id: userId,
-    amount: -amount,
-    balance_after: newBalance,
-    action: "usage",
-    description: action,
-  });
-
-  if (logErr) {
-    console.error("[credits] log insert failed:", logErr);
-  }
-
-  return { success: true };
-}
