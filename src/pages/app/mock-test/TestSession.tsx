@@ -949,7 +949,10 @@ export default function TestSession() {
               {currentQuestion.question_type === "MCQ" ||
               currentQuestion.question_type === "TRUE_FALSE" ? (
                 <div className="grid grid-cols-1 gap-3 pt-2">
-                  {(currentQuestion.options ?? []).map((option) => (
+                {(Array.isArray(currentQuestion.options)
+                  ? currentQuestion.options
+                  : Object.entries(currentQuestion.options ?? {}).map(([key, val]) => ({ label: key, text: String(val) }))
+                ).map((option) => (
                     <button
                       key={option.label}
                       type="button"
