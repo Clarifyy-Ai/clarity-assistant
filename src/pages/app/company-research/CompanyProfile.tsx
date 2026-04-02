@@ -52,8 +52,8 @@ export default function CompanyProfile() {
         .limit(1)
         .single();
 
-      if (cached?.brief_data) {
-        setBrief(cached.brief_data);
+      if (cached?.raw_data) {
+        setBrief(cached.raw_data);
         setLoading(false);
         return;
       }
