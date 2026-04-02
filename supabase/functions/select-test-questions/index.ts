@@ -237,7 +237,8 @@ Deno.serve(async (req) => {
       // 1. Check last 3 tests
       if (recentQ.has(q.id)) continue;
 
-      const diff = ["EASY", "MEDIUM", "HARD"].includes(q.difficulty) ? q.difficulty : "MEDIUM";
+      const rawDiff = String(q.difficulty ?? "").toUpperCase();
+      const diff = ["EASY", "MEDIUM", "HARD"].includes(rawDiff) ? rawDiff : "MEDIUM";
       const acc = topicAcc[q.topic];
 
       // 2. Check performance history (prioritize < 60% or unattempted)

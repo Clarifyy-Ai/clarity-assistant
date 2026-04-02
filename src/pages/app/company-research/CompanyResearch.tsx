@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
@@ -35,7 +35,7 @@ export default function CompanyResearch() {
   const [loadingSaved, setLoadingSaved] = useState(true);
 
   // Fetch previously generated briefs
-  useState(() => {
+  useEffect(() => {
     if (!user) return;
     supabase
       .from("company_research")
@@ -47,7 +47,7 @@ export default function CompanyResearch() {
         setSaved(data ?? []);
         setLoadingSaved(false);
       });
-  });
+  }, [user?.id]);
 
   async function handleSearch(company?: string) {
     const q = (company ?? query).trim();
