@@ -35,7 +35,7 @@ export default function CompanyResearch() {
   const [loadingSaved, setLoadingSaved] = useState(true);
 
   // Fetch previously generated briefs
-  useState(() => {
+  useEffect(() => {
     if (!user) return;
     supabase
       .from("company_research")
@@ -47,7 +47,7 @@ export default function CompanyResearch() {
         setSaved(data ?? []);
         setLoadingSaved(false);
       });
-  });
+  }, [user?.id]);
 
   async function handleSearch(company?: string) {
     const q = (company ?? query).trim();
