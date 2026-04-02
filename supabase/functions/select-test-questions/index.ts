@@ -176,6 +176,7 @@ Deno.serve(async (req) => {
     const medPct = 100 - easyPct - hardPct;
 
     /* ------------------------ FREE PLAN LIMIT CHECK ------------------------ */
+    const FREE_TEST_LIMIT = 10;
     const { data: profile } = await db.from("profiles").select("plan_id, credits").eq("id", userId).single();
     if ((profile?.plan_id ?? "free") === "free") {
       const startOfMonth = new Date();
@@ -184,8 +185,8 @@ Deno.serve(async (req) => {
       const { count } = await db.from("mock_tests").select("id", { count: "exact", head: true })
         .eq("user_id", userId).gte("created_at", startOfMonth.toISOString());
 
-      if ((count ?? 0) >= 2) {
-        return new Response(JSON.stringify({ error: "Free plan limit reached (2 tests/month)" }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
+      if ((count ?? 0) >= FREE_TEST_LIMIT) {
+        return new Response(JSON.stringify({ error: `Free plan limit reached (${FREE_TEST_LIMIT} tests/month)` }), { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } });
       }
     }
 
