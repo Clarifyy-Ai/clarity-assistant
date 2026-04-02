@@ -269,6 +269,8 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
         marks_negative: form.marks_negative,
         source_year: form.source_year,
         exam_type: form.exam_type,
+        image_url: form.image_url?.trim() || null,
+        has_image: Boolean(form.image_url?.trim()),
         latex_present: latexPresent,
         uploaded_by: user.id,
         source: "USER_UPLOAD",
