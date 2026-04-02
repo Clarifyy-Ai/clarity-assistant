@@ -34,6 +34,7 @@ interface ParsedRow {
   exam_type: string;
   source_year: number | null;
   question_type: string;
+  image_url: string;
 }
 
 const VALID_ANSWERS = ["A", "B", "C", "D"];
