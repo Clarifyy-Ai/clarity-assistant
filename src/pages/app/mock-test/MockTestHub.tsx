@@ -243,11 +243,18 @@ export default function MockTestHub(): React.ReactElement {
 
   return (
     <div className="space-y-6">
-      <PageHeader
-        title="Mock Test Engine"
-        description="Practice with previous year papers and AI-generated questions for JEE, NEET, UPSC, SSC, and more."
-        actions={
-          <div className="flex gap-2">
+      {/* ── Header ─────────────────────────────────────────── */}
+      <div className="space-y-3">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <h1 className="text-xl font-bold text-foreground sm:text-2xl md:text-3xl">
+              Mock Test Engine
+            </h1>
+            <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
+              Practice with previous year papers and AI-generated questions for JEE, NEET, UPSC, SSC, and more.
+            </p>
+          </div>
+          <div className="flex gap-2 shrink-0">
             <Link
               to="/app/mock-test/my-questions"
               className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-all hover:bg-secondary/60"
@@ -260,8 +267,8 @@ export default function MockTestHub(): React.ReactElement {
               Quick Drill
             </Button>
           </div>
-        }
-      />
+        </div>
+      </div>
 
       {/* ── Stats bar: 4 stats including streak ───────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
