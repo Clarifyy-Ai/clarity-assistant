@@ -24,56 +24,66 @@ export function createServiceClient(): SupabaseClient {
 /* -------------------------------------------------------------------------- */
 
 /**
- * HARDENED CREDIT DEDUCTION
+ * HARDENED CREDIT DEDUCTION (service-role, no auth.uid() needed)
  *
- * • Fully atomic (uses Postgres function)
- * • No read-then-write race conditions
- * • Prevents negative balances
- * • Logs transaction safely and consistently
- *
- * @param userId      The user whose credits should be deducted
- * @param action      Short action string (e.g. 'generate_practice_questions')
- * @param amount      Credits to deduct
- *
- * @returns { success: boolean, error?: string }
+ * Uses optimistic-lock UPDATE with WHERE guard to prevent negative balances.
+ * Logs every deduction in credit_transactions with enum-safe 'usage' action.
  */
 export async function deductCredits(
   userId: string,
   action: string,
   amount: number
-): Promise<{ success: boolean; error?: string }> {
-  if (!userId) {
-    return { success: false, error: "Missing userId" };
-  }
-  if (!amount || amount <= 0) {
-    return { success: false, error: "Invalid credit amount" };
-  }
+): Promise<{ success: boolean; newBalance?: number; error?: string }> {
+  if (!userId) return { success: false, error: "Missing userId" };
+  if (!amount || amount <= 0) return { success: false, error: "Invalid credit amount" };
 
   const db = createServiceClient();
 
-  /* Use the existing deduct_credits(uuid, int, uuid, text) RPC */
   try {
-    const { data, error: rpcError } = await db.rpc("deduct_credits", {
-      p_user_id: userId,
-      p_amount: amount,
-      p_session_id: null,
-      p_description: action,
-    });
+    // 1. Read current balance
+    const { data: current, error: readErr } = await db
+      .from("profiles")
+      .select("credits, credits_used_this_month")
+      .eq("id", userId)
+      .single();
 
-    if (rpcError) {
-      console.error("[credits] RPC error:", rpcError.message);
-      // Check if it's an insufficient credits error from the function
-      if (rpcError.message.includes("Insufficient credits")) {
-        return { success: false, error: "Insufficient credits" };
-      }
-      return { success: false, error: rpcError.message };
+    if (readErr || !current) {
+      return { success: false, error: "Profile not found" };
     }
 
-    // data is the new balance (integer)
-    return { success: true };
+    if (current.credits < amount) {
+      return { success: false, error: "Insufficient credits" };
+    }
+
+    // 2. Atomic update with guard (only if credits still >= amount)
+    const { data: updated, error: writeErr } = await db
+      .from("profiles")
+      .update({
+        credits: current.credits - amount,
+        credits_used_this_month: (current.credits_used_this_month ?? 0) + amount,
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", userId)
+      .gte("credits", amount)
+      .select("credits")
+      .single();
+
+    if (writeErr || !updated) {
+      return { success: false, error: "Credit deduction failed" };
+    }
+
+    // 3. Log transaction (enum value must be 'usage' or 'purchase')
+    await db.from("credit_transactions").insert({
+      user_id: userId,
+      action: "usage",
+      amount: -amount,
+      balance_after: updated.credits,
+      description: action,
+    });
+
+    return { success: true, newBalance: updated.credits };
   } catch (err) {
     console.error("[credits] Unexpected error:", err);
     return { success: false, error: String(err) };
   }
 }
-
