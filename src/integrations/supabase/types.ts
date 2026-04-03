@@ -2719,6 +2719,27 @@ export type Database = {
         }
         Relationships: []
       }
+      user_roles: {
+        Row: {
+          created_at: string
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_topic_performance: {
         Row: {
           accuracy: number | null
@@ -2824,20 +2845,17 @@ export type Database = {
         }
         Returns: number
       }
-      deduct_credits:
-        | {
-            Args: { p_action: string; p_cost: number; p_session_id?: string }
-            Returns: Json
-          }
-        | {
-            Args: {
-              p_amount: number
-              p_description?: string
-              p_session_id?: string
-              p_user_id: string
-            }
-            Returns: number
-          }
+      deduct_credits: {
+        Args: { p_action: string; p_cost: number; p_session_id?: string }
+        Returns: Json
+      }
+      has_role: {
+        Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
       is_admin: { Args: never; Returns: boolean }
       mark_notifications_read: {
         Args: { p_user_id: string }
@@ -2873,6 +2891,7 @@ export type Database = {
         | "coding"
         | "situational"
         | "other"
+      app_role: "admin" | "moderator" | "user"
       credit_action:
         | "purchase"
         | "usage"
@@ -3051,6 +3070,7 @@ export const Constants = {
         "situational",
         "other",
       ],
+      app_role: ["admin", "moderator", "user"],
       credit_action: [
         "purchase",
         "usage",
