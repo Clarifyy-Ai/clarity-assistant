@@ -26,51 +26,28 @@ export function createServiceClient(): SupabaseClient {
 /**
  * HARDENED CREDIT DEDUCTION (service-role, no auth.uid() needed)
  *
- * • Atomic read-check-update via single UPDATE with WHERE guard
- * • Prevents negative balances
- * • Logs transaction in credit_transactions
- *
- * @param userId      The user whose credits should be deducted
- * @param action      Short action string (e.g. 'generate_practice_questions')
- * @param amount      Credits to deduct
- *
- * @returns { success: boolean, newBalance?: number, error?: string }
+ * Uses optimistic-lock UPDATE with WHERE guard to prevent negative balances.
+ * Logs every deduction in credit_transactions with enum-safe 'usage' action.
  */
 export async function deductCredits(
   userId: string,
   action: string,
   amount: number
 ): Promise<{ success: boolean; newBalance?: number; error?: string }> {
-  if (!userId) {
-    return { success: false, error: "Missing userId" };
-  }
-  if (!amount || amount <= 0) {
-    return { success: false, error: "Invalid credit amount" };
-  }
+  if (!userId) return { success: false, error: "Missing userId" };
+  if (!amount || amount <= 0) return { success: false, error: "Invalid credit amount" };
 
   const db = createServiceClient();
 
   try {
-    // Atomic deduction: only succeeds if balance >= amount
-    const { data: profile, error: updateErr } = await db
-      .from("profiles")
-      .update({
-        credits: undefined, // placeholder — we use raw SQL below
-      })
-      .eq("id", userId)
-      .select("credits")
-      .single();
-
-    // Instead, do a two-step atomic approach:
     // 1. Read current balance
     const { data: current, error: readErr } = await db
       .from("profiles")
-      .select("credits")
+      .select("credits, credits_used_this_month")
       .eq("id", userId)
       .single();
 
     if (readErr || !current) {
-      console.error("[credits] Read error:", readErr?.message);
       return { success: false, error: "Profile not found" };
     }
 
@@ -78,29 +55,24 @@ export async function deductCredits(
       return { success: false, error: "Insufficient credits" };
     }
 
-    const newBalance = current.credits - amount;
-
-    // 2. Update with optimistic lock (ensure credits haven't changed)
+    // 2. Atomic update with guard (only if credits still >= amount)
     const { data: updated, error: writeErr } = await db
       .from("profiles")
       .update({
-        credits: newBalance,
-        credits_used_this_month: current.credits_used_this_month
-          ? current.credits_used_this_month + amount
-          : amount,
+        credits: current.credits - amount,
+        credits_used_this_month: (current.credits_used_this_month ?? 0) + amount,
         updated_at: new Date().toISOString(),
       })
       .eq("id", userId)
-      .gte("credits", amount) // guard: only if still enough
+      .gte("credits", amount)
       .select("credits")
       .single();
 
     if (writeErr || !updated) {
-      console.error("[credits] Write error:", writeErr?.message);
-      return { success: false, error: "Credit deduction failed (race condition or insufficient)" };
+      return { success: false, error: "Credit deduction failed" };
     }
 
-    // 3. Log the transaction (use valid enum value 'usage')
+    // 3. Log transaction (enum value must be 'usage' or 'purchase')
     await db.from("credit_transactions").insert({
       user_id: userId,
       action: "usage",
