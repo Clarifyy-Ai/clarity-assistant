@@ -279,7 +279,7 @@ export default function Landing() {
               AI by your side
             </span>
           </h1>
-          <p className="mt-5 text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+          <p className="mt-5 text-sm md:text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed">
             Real-time coaching during live interviews. Mock sessions with deep analytics.
             A full prep lab — and a stealth overlay your interviewer will never see.
           </p>
