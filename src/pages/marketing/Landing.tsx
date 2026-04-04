@@ -286,7 +286,7 @@ export default function Landing() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-8">
             <Link
               to="/signup"
-              className="inline-flex items-center gap-2 text-sm font-semibold px-7 py-3.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity shadow-lg shadow-primary/25"
+              className="inline-flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity shadow-lg shadow-primary/25"
             >
               Get started free
               <ArrowRight className="w-4 h-4" />
