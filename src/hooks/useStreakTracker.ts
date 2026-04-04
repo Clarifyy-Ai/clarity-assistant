@@ -16,13 +16,13 @@ export function useStreakTracker() {
   async function checkAndHydrate(): Promise<void> {
     const { data } = await supabase
       .from("profiles")
-      .select("streak_current, streak_longest, streak_last_activity_date, xp")
+      .select("streak_days, longest_streak, last_active_date, xp")
       .eq("id", user!.id)
       .single();
 
     if (!data) return;
 
-    gamification.setStreak(data.streak_current ?? 0, data.streak_longest ?? 0, data.streak_last_activity_date ?? null);
+    gamification.setStreak(data.streak_days ?? 0, data.longest_streak ?? 0, data.last_active_date ?? null);
     gamification.setXP(data.xp ?? 0);
   }
 

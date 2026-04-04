@@ -122,7 +122,7 @@ export function useGamification() {
     const [profileRes, badgesRes, challengeRes] = await Promise.all([
       supabase
         .from("profiles")
-        .select("xp, streak_current, streak_longest, streak_last_activity_date")
+        .select("xp, streak_days, longest_streak, last_active_date")
         .eq("id", user.id)
         .single(),
       supabase
@@ -134,16 +134,16 @@ export function useGamification() {
         .select("*")
         .eq("user_id", user.id)
         .gte("week_end", new Date().toISOString())
-        .single(),
+        .maybeSingle(),
     ]);
 
     if (profileRes.data) {
       const p = profileRes.data;
       store.setXP(p.xp ?? 0);
       store.setStreak(
-        p.streak_current ?? 0,
-        p.streak_longest ?? 0,
-        p.streak_last_activity_date ?? null
+        p.streak_days ?? 0,
+        p.longest_streak ?? 0,
+        p.last_active_date ?? null
       );
     }
 
