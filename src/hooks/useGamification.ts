@@ -141,9 +141,9 @@ export function useGamification() {
       const p = profileRes.data;
       store.setXP(p.xp ?? 0);
       store.setStreak(
-        p.streak_current ?? 0,
-        p.streak_longest ?? 0,
-        p.streak_last_activity_date ?? null
+        p.streak_days ?? 0,
+        p.longest_streak ?? 0,
+        p.last_active_date ?? null
       );
     }
 
