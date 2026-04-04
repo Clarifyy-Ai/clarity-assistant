@@ -413,7 +413,7 @@ export default function Landing() {
               className="rounded-2xl border border-border bg-card p-5 text-center"
             >
               <stat.icon className="w-5 h-5 text-primary mx-auto mb-2" />
-              <p className="text-2xl sm:text-3xl font-extrabold text-foreground">{stat.value}</p>
+              <p className="text-xl sm:text-2xl font-extrabold text-foreground">{stat.value}</p>
               <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
             </motion.div>
           ))}
