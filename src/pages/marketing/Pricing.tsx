@@ -29,7 +29,7 @@ export default function Pricing() {
 
   return (
     <MarketingLayout>
-      <section className="pt-24 sm:pt-36 pb-16 sm:pb-20 px-4 sm:px-6">
+      <section className="pt-20 sm:pt-28 pb-14 px-4 sm:px-6">
         <div className="max-w-3xl mx-auto text-center">
           <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
             <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight">
