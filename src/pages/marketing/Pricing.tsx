@@ -93,7 +93,7 @@ export default function Pricing() {
                   <Zap className="w-5 h-5 text-white" />
                 </div>
 
-                <h3 className="text-lg font-bold">{plan.name}</h3>
+                <h3 className="text-base font-bold">{plan.name}</h3>
                 <p className="text-xs text-muted-foreground mt-1">{plan.tagline}</p>
 
                 <div className="mt-5">
