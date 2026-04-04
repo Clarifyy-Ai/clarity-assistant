@@ -293,7 +293,7 @@ export default function Landing() {
             </Link>
             <Link
               to="/pricing"
-              className="inline-flex items-center gap-2 text-sm font-medium px-7 py-3.5 rounded-xl border border-border text-foreground hover:bg-secondary/60 transition-all"
+              className="inline-flex items-center gap-2 text-sm font-medium px-5 py-2.5 rounded-xl border border-border text-foreground hover:bg-secondary/60 transition-all"
             >
               <Play className="w-3.5 h-3.5" />
               See pricing
