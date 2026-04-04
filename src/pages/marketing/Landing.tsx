@@ -273,7 +273,7 @@ export default function Landing() {
             Powered by GPT-4o, Claude 3.5, and Gemini 1.5
           </div>
 
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.08]">
+          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight leading-[1.08]">
             Ace every interview with{" "}
             <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-blue-400 bg-clip-text text-transparent">
               AI by your side
