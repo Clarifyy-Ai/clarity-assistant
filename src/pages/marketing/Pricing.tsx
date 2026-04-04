@@ -29,13 +29,13 @@ export default function Pricing() {
 
   return (
     <MarketingLayout>
-      <section className="pt-24 sm:pt-36 pb-16 sm:pb-20 px-4 sm:px-6">
+      <section className="pt-20 sm:pt-28 pb-14 px-4 sm:px-6">
         <div className="max-w-3xl mx-auto text-center">
           <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-            <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight">
+            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
               Simple, transparent pricing
             </h1>
-            <p className="mt-4 text-base sm:text-lg text-muted-foreground max-w-lg mx-auto">
+            <p className="mt-4 text-sm md:text-base text-muted-foreground max-w-lg mx-auto">
               Start free. Upgrade when you're ready. Cancel anytime.
             </p>
           </motion.div>
@@ -93,7 +93,7 @@ export default function Pricing() {
                   <Zap className="w-5 h-5 text-white" />
                 </div>
 
-                <h3 className="text-lg font-bold">{plan.name}</h3>
+                <h3 className="text-base font-bold">{plan.name}</h3>
                 <p className="text-xs text-muted-foreground mt-1">{plan.tagline}</p>
 
                 <div className="mt-5">
@@ -118,7 +118,7 @@ export default function Pricing() {
 
                 <div className="mt-6 pt-5 border-t border-border space-y-2.5 flex-1">
                   {plan.features.map((f) => (
-                    <div key={f.key} className="flex items-start gap-2 text-sm">
+                    <div key={f.key} className="flex items-start gap-2 text-xs">
                       {f.included ? (
                         <Check className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
                       ) : (

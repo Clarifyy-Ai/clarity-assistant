@@ -261,7 +261,7 @@ export default function Landing() {
   return (
     <MarketingLayout>
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
-      <section className="pt-24 sm:pt-36 pb-16 sm:pb-24 px-4 sm:px-6 text-center">
+      <section className="pt-20 sm:pt-28 pb-14 px-4 sm:px-6 text-center">
         <motion.div
           className="max-w-3xl mx-auto"
           initial={{ opacity: 0, y: 28 }}
@@ -273,27 +273,27 @@ export default function Landing() {
             Powered by GPT-4o, Claude 3.5, and Gemini 1.5
           </div>
 
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-extrabold tracking-tight leading-[1.08]">
+          <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight leading-[1.08]">
             Ace every interview with{" "}
             <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-blue-400 bg-clip-text text-transparent">
               AI by your side
             </span>
           </h1>
-          <p className="mt-5 text-base sm:text-lg text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+          <p className="mt-5 text-sm md:text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed">
             Real-time coaching during live interviews. Mock sessions with deep analytics.
             A full prep lab — and a stealth overlay your interviewer will never see.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-8">
             <Link
               to="/signup"
-              className="inline-flex items-center gap-2 text-sm font-semibold px-7 py-3.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity shadow-lg shadow-primary/25"
+              className="inline-flex items-center gap-2 text-sm font-semibold px-5 py-2.5 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity shadow-lg shadow-primary/25"
             >
               Get started free
               <ArrowRight className="w-4 h-4" />
             </Link>
             <Link
               to="/pricing"
-              className="inline-flex items-center gap-2 text-sm font-medium px-7 py-3.5 rounded-xl border border-border text-foreground hover:bg-secondary/60 transition-all"
+              className="inline-flex items-center gap-2 text-sm font-medium px-5 py-2.5 rounded-xl border border-border text-foreground hover:bg-secondary/60 transition-all"
             >
               <Play className="w-3.5 h-3.5" />
               See pricing
@@ -413,7 +413,7 @@ export default function Landing() {
               className="rounded-2xl border border-border bg-card p-5 text-center"
             >
               <stat.icon className="w-5 h-5 text-primary mx-auto mb-2" />
-              <p className="text-2xl sm:text-3xl font-extrabold text-foreground">{stat.value}</p>
+              <p className="text-xl sm:text-2xl font-extrabold text-foreground">{stat.value}</p>
               <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
             </motion.div>
           ))}
@@ -422,9 +422,9 @@ export default function Landing() {
 
       {/* ── How It Works ────────────────────────────────────────────────────── */}
       <section className="pb-16 sm:pb-24 px-4 sm:px-6 bg-secondary/20">
-        <div className="max-w-5xl mx-auto py-16 sm:py-20">
+        <div className="max-w-5xl mx-auto py-14">
           <motion.div className="text-center mb-12" {...fadeUp()}>
-            <h2 className="text-2xl sm:text-3xl font-bold">How it works</h2>
+            <h2 className="text-2xl md:text-3xl font-bold">How it works</h2>
             <p className="mt-3 text-sm text-muted-foreground max-w-md mx-auto">
               From first upload to your next offer — three simple steps.
             </p>
@@ -500,10 +500,10 @@ export default function Landing() {
       </section>
 
       {/* ── Comparison Table ────────────────────────────────────────────────── */}
-      <section className="pb-16 sm:pb-24 px-4 sm:px-6 bg-secondary/20">
-        <div className="max-w-4xl mx-auto py-16 sm:py-20">
+      <section className="pb-14 px-4 sm:px-6 bg-secondary/20">
+        <div className="max-w-4xl mx-auto py-14">
           <motion.div className="text-center mb-10" {...fadeUp()}>
-            <h2 className="text-2xl sm:text-3xl font-bold">How we compare</h2>
+            <h2 className="text-2xl md:text-3xl font-bold">How we compare</h2>
             <p className="mt-3 text-sm text-muted-foreground max-w-md mx-auto">
               Clarify AI is the only platform built for real-time interview assistance, not just prep.
             </p>
@@ -619,10 +619,10 @@ export default function Landing() {
       </section>
 
       {/* ── Pricing Teaser ──────────────────────────────────────────────────── */}
-      <section className="pb-16 sm:pb-24 px-4 sm:px-6 bg-secondary/20">
-        <div className="max-w-4xl mx-auto py-16 sm:py-20">
+      <section className="pb-14 px-4 sm:px-6 bg-secondary/20">
+        <div className="max-w-4xl mx-auto py-14">
           <motion.div className="text-center mb-10" {...fadeUp()}>
-            <h2 className="text-2xl sm:text-3xl font-bold">Simple, transparent pricing</h2>
+            <h2 className="text-2xl md:text-3xl font-bold">Simple, transparent pricing</h2>
             <p className="mt-3 text-sm text-muted-foreground max-w-md mx-auto">
               Start free. Upgrade when you're ready. No credit card required.
             </p>
@@ -749,10 +749,10 @@ export default function Landing() {
       </section>
 
       {/* ── CTA ─────────────────────────────────────────────────────────────── */}
-      <section className="pb-24 sm:pb-32 px-4 sm:px-6">
+      <section className="pb-16 sm:pb-20 px-4 sm:px-6">
         <motion.div
           {...fadeUp()}
-          className="max-w-2xl mx-auto text-center rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-violet-500/5 to-blue-500/10 p-10 sm:p-14"
+          className="max-w-2xl mx-auto text-center rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-violet-500/5 to-blue-500/10 p-8 sm:p-10"
         >
           <TrendingUp className="w-8 h-8 text-primary mx-auto mb-4" />
           <h2 className="text-2xl sm:text-3xl font-extrabold mb-3">
@@ -764,7 +764,7 @@ export default function Landing() {
           </p>
           <Link
             to="/signup"
-            className="inline-flex items-center gap-2 text-base font-semibold px-10 py-4 rounded-2xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity shadow-xl shadow-primary/30"
+            className="inline-flex items-center gap-2 text-sm font-semibold px-6 py-3 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity shadow-xl shadow-primary/30"
           >
             Get started free <ArrowRight className="w-4 h-4" />
           </Link>

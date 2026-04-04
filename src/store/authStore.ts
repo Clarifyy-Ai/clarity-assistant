@@ -300,23 +300,23 @@ export const useAuthStore = create<AuthStore>()(
             const userId = get().user?.id;
             if (!userId) return;
 
-            const { data, error } = await supabase
-              .from("profiles")
-              .select("*")
-              .eq("id", userId)
-              .single();
+            const [profileRes, roleRes] = await Promise.all([
+              supabase.from("profiles").select("*").eq("id", userId).single(),
+              supabase.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin").maybeSingle(),
+            ]);
 
-            if (error || !data) {
-              console.error("[authStore] Failed to load profile:", error?.message);
+            if (profileRes.error || !profileRes.data) {
+              console.error("[authStore] Failed to load profile:", profileRes.error?.message);
               return;
             }
 
-            const row = data as Record<string, unknown>;
+            const row = profileRes.data as Record<string, unknown>;
+            const hasAdminRole = !!roleRes.data;
 
             _set((s) => {
-              s.profile         = data as unknown as ProfileRow;
+              s.profile         = profileRes.data as unknown as ProfileRow;
               s.isProfileLoaded = true;
-              s.isAdmin         = (row.is_admin             as boolean) ?? false;
+              s.isAdmin         = hasAdminRole;
               s.isOnboarded     = (row.onboarding_completed as boolean) ?? false;
               s.planId          = (row.plan_id              as string)  ?? "free";
               s.credits         = (row.credits              as number)  ?? 0;

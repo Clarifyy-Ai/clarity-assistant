@@ -4,7 +4,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Link, useNavigate } from "react-router-dom";
-import { useAuthStore } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
 import { supabase } from "@/lib/supabase/client";
 import { useUIStore } from "@/store/uiStore";
 import { useDocumentStore } from "@/store/documentStore";
