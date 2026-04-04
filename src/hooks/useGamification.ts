@@ -122,7 +122,7 @@ export function useGamification() {
     const [profileRes, badgesRes, challengeRes] = await Promise.all([
       supabase
         .from("profiles")
-        .select("xp, streak_current, streak_longest, streak_last_activity_date")
+        .select("xp, streak_days, longest_streak, last_active_date")
         .eq("id", user.id)
         .single(),
       supabase
