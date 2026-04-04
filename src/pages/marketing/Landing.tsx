@@ -749,10 +749,10 @@ export default function Landing() {
       </section>
 
       {/* ── CTA ─────────────────────────────────────────────────────────────── */}
-      <section className="pb-24 sm:pb-32 px-4 sm:px-6">
+      <section className="pb-16 sm:pb-20 px-4 sm:px-6">
         <motion.div
           {...fadeUp()}
-          className="max-w-2xl mx-auto text-center rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-violet-500/5 to-blue-500/10 p-10 sm:p-14"
+          className="max-w-2xl mx-auto text-center rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-violet-500/5 to-blue-500/10 p-8 sm:p-10"
         >
           <TrendingUp className="w-8 h-8 text-primary mx-auto mb-4" />
           <h2 className="text-2xl sm:text-3xl font-extrabold mb-3">
