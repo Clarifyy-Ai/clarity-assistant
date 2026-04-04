@@ -500,10 +500,10 @@ export default function Landing() {
       </section>
 
       {/* ── Comparison Table ────────────────────────────────────────────────── */}
-      <section className="pb-16 sm:pb-24 px-4 sm:px-6 bg-secondary/20">
-        <div className="max-w-4xl mx-auto py-16 sm:py-20">
+      <section className="pb-14 px-4 sm:px-6 bg-secondary/20">
+        <div className="max-w-4xl mx-auto py-14">
           <motion.div className="text-center mb-10" {...fadeUp()}>
-            <h2 className="text-2xl sm:text-3xl font-bold">How we compare</h2>
+            <h2 className="text-2xl md:text-3xl font-bold">How we compare</h2>
             <p className="mt-3 text-sm text-muted-foreground max-w-md mx-auto">
               Clarify AI is the only platform built for real-time interview assistance, not just prep.
             </p>
