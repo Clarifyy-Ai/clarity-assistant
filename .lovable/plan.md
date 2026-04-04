@@ -1,127 +1,129 @@
 
-
-# Production Audit Report — Clarify AI
+# Production Audit Report — Clarify AI (v2)
 
 ---
 
-## 🔴 Critical Issues (Production-Breaking)
+## 🔴 Critical Issues
 
-### SEC-1: Privilege Escalation — `user_achievements` table
-The `ua_insert` RLS policy uses `WITH CHECK (true)` for the `{public}` role. **Any unauthenticated user** can insert achievements for any user_id, granting XP/credit rewards to arbitrary accounts.
-- **Fix**: Change policy to `WITH CHECK (auth.uid() = user_id)`, restrict to `{authenticated}`.
+### SEC-1: Admin Check Still Uses `profiles.is_admin` (Client-Side)
+**AdminLayout.tsx line 23** checks `p?.is_admin` from the profile object. While the `user_roles` table was created and the DB `is_admin()` function was updated, the **client-side admin check still reads from profiles**. The `profiles_own_update` RLS policy allows users to update their own profile, meaning a user could theoretically set `is_admin = true` via the Supabase client (the `protect_admin_column` trigger mitigates this, but the client code should use `user_roles` for defense-in-depth).
+- **Fix**: Query `user_roles` table in `authStore.loadProfile()` and set `isAdmin` based on that, not `profile.is_admin`.
 
-### SEC-2: Unrestricted Cost Log Injection — `model_cost_logs`
-The `model_cost_insert` policy uses `WITH CHECK (true)`. Any caller can insert fake billing records for any user, corrupting credit accounting.
-- **Fix**: Change to `WITH CHECK (auth.uid() = user_id)`, restrict to `{authenticated}`.
+### SEC-2: Realtime Channel Authorization Missing
+No RLS policies on `realtime.messages`. Any authenticated user can subscribe to other users' session transcripts, AI interactions, and notifications.
+- **Fix**: Add RLS policies on `realtime.messages` scoped by topic and `auth.uid()`.
 
-### SEC-3: Room Chat Data Leak — `room_chat`
-The `room_chat_all` policy uses `USING (true)` for all commands. Any authenticated user can read every room's chat messages, including private rooms.
-- **Fix**: Replace `USING` with `EXISTS (SELECT 1 FROM room_participants rp WHERE rp.room_id = room_chat.room_id AND rp.user_id = auth.uid())`.
+### SEC-3: Leaked Password Protection Disabled
+Supabase Auth's leaked password protection is off. Users can register with known-compromised passwords.
+- **Fix**: Enable in Supabase Dashboard → Auth → Security. (Manual action required.)
 
-### SEC-4: Room Questions Open Write — `room_questions`
-`room_questions_all` uses both `USING (true)` and `WITH CHECK (true)`. Any authenticated user can insert/update/delete questions in any room.
-- **Fix**: Scope to room participants or room hosts.
+### APP-1: 98 Files with `@ts-nocheck`
+98 files suppress all TypeScript checking. Runtime crashes (like the `options.map` error) are direct consequences. Critical files affected: `authStore.ts`, `Dashboard.tsx`, `TestSession.tsx`, `AdminLayout.tsx`.
+- **Fix**: Prioritize removing `@ts-nocheck` from auth-critical and data-rendering files. Fix underlying type mismatches with Supabase generated types.
 
-### SEC-5: Admin Check Uses `is_admin` Column on Profiles Table
-The `AdminLayout` component checks `p?.is_admin` from the profile, and the `is_admin()` database function reads from `profiles.is_admin`. Per security best practices, **roles should be in a separate table** to prevent privilege escalation via profile self-update. Currently a user could potentially set `is_admin = true` on their own profile since `profiles_own_update` allows `UPDATE` where `auth.uid() = id`.
-- **Fix**: Create a separate `user_roles` table; remove `is_admin` from profiles; update RLS and the `is_admin()` function.
-
-### SEC-6: Leaked Password Protection Disabled
-Supabase's leaked password protection feature is turned off. Users can register with known-compromised passwords.
-- **Fix**: Enable in Supabase Dashboard → Auth → Security.
-
-### APP-1: 100 `@ts-nocheck` Files
-317 occurrences across 100 files suppress all TypeScript checking. This masks runtime errors (like the `options.map` crash already encountered) and makes the codebase fragile.
-- **Impact**: Any type mismatch becomes a runtime crash in production.
-- **Fix**: Incrementally remove `@ts-nocheck`, fix type errors per file.
+### APP-2: Dashboard Imports from Wrong Store
+`Dashboard.tsx` line 7: `import { useAuthStore } from "@/store/userStore"` — imports auth from `userStore` instead of `authStore`. While `userStore` re-exports `authStore`, this creates confusion and potential state desync if the re-export ever breaks.
+- **Fix**: Change to `import { useAuthStore } from "@/store/authStore"`.
 
 ---
 
 ## 🟠 High Priority Issues
 
-### SEC-7: 9 Database Functions Missing `search_path`
-Functions like `update_topic_performance`, `update_user_streak`, `handle_new_user`, `mark_notifications_read`, etc. do not set `search_path`. A malicious schema injection could alter function behavior.
-- **Fix**: Add `SET search_path = public` to each function definition.
-
-### SEC-8: Realtime Channel Leakage
-No RLS on `realtime.messages`. Any authenticated user can subscribe to channels scoped to other users' sessions (sessions, transcripts, AI interactions, debriefs).
-- **Fix**: Add RLS policies on `realtime.messages` scoped by `auth.uid()`.
-
-### SEC-9: Extension in Public Schema
-A database extension (likely `pg_trgm`) is installed in the `public` schema rather than a dedicated `extensions` schema, creating a larger attack surface.
+### SEC-4: Extension in Public Schema
+`pg_trgm` is installed in the `public` schema. Creates a larger attack surface.
 - **Fix**: Move to `extensions` schema via migration.
 
-### DB-1: Missing Indexes on `questions` Table
-The `questions` table (1,562 rows, growing) only has indexes on `pkey`, `subject`, and `uploaded_by`. The `select-test-questions` edge function filters by `exam_type`, `difficulty`, and `topic` — none of which are indexed.
-- **Fix**: Add composite index `(exam_type, difficulty, subject, topic)`.
+### SEC-5: Referral Email PII Exposure
+The `referrals` table exposes `referred_email` to referrers via the `referrals_select` policy.
+- **Fix**: Restrict SELECT to exclude `referred_email` column, or mask it after conversion.
 
-### DB-2: No Indexes on Several Tables
-Tables like `job_descriptions`, `scheduled_interviews`, `company_research`, `feedback`, `saved_answers`, `scorecards` have no custom indexes beyond pkey. As data grows, queries on `user_id` will degrade.
-- **Fix**: Add `user_id` indexes on all user-scoped tables.
+### PERF-1: FCP at 4.1 seconds
+First Contentful Paint is 4.1s — poor by Core Web Vitals standards (good < 1.8s). Main contributors:
+- `lucide-react.js` (161KB, 913ms) — loads the entire icon library
+- `@sentry_react.js` (186KB) — loaded on landing page
+- `chunk-RPCDYKBN.js` (141KB, 595ms) — React DOM chunk
+- **Fix**: Tree-shake Lucide icons (use `import { Icon } from "lucide-react"` per-icon imports — already done but the bundle still includes the full library). Consider dynamic import for Sentry. Add `<link rel="preload">` for critical assets.
 
-### FUNC-1: Duplicate `deduct_credits` RPC Overloads
-Two `deduct_credits` functions exist with different signatures: `(p_user_id, p_amount, p_session_id, p_description)` and `(p_action, p_cost, p_session_id)`. The edge function code has been changed multiple times. This creates confusion and potential call-wrong-overload bugs.
-- **Fix**: Consolidate to one canonical function; drop the other.
+### PERF-2: Logo Image is 87KB PNG
+The logo (`clarify-logo.png`) is 87KB. For a small logo, this is excessive.
+- **Fix**: Convert to WebP or SVG. Target < 10KB.
 
-### FUNC-2: Credit Transaction `action` Column Enum Mismatch
-The `credit_transactions.action` column uses a `credit_action` enum (values: `usage`, `purchase`). Edge functions previously tried inserting strings like `"create_mock_test"`, causing 402 errors. While patched, any new edge function making the same mistake will silently fail.
-- **Fix**: Document the enum constraint; add validation in shared utils.
+### FUNC-1: `deduct_credits` RPC Still Has Two Overloads
+The DB still has two `deduct_credits` function signatures. Edge functions now use the shared `_shared/supabase.ts` atomic approach, but the RPC overloads remain and could confuse future developers.
+- **Fix**: Drop the unused overload via migration.
 
 ---
 
-## 🟡 Medium Issues
+## 🟡 Medium Issues — Typography & UI
 
-### UX-1: Mobile Layout Alignment (360px viewport)
-Per the user's screenshot, content cards and headers overlap on small mobile screens. The `MockTestHub` was recently patched but other pages (Dashboard, Analytics, Settings) likely have similar issues on narrow viewports.
-- **Fix**: Audit all page headers and card grids for `flex-wrap`, `min-w-0`, and responsive font sizes.
+### TYP-1: Landing Page Hero Oversized
+Current: `text-4xl sm:text-5xl lg:text-6xl` (line 276)
+Target: `text-3xl md:text-4xl` per compact scale.
+Hero body: Current `text-base sm:text-lg` → Target `text-sm md:text-base`.
+CTA buttons: Current `px-7 py-3.5` is oversized → Target `px-5 py-2.5` (size="default").
 
-### UX-2: Question Images Not Rendering
-The `questions` table has `image_url` and `has_image` columns, but the `TestSession` component only recently added image support via URL-regex detection in option text. Questions with `image_url` set at the question level may still not display images unless the component explicitly renders `currentQuestion.image_url`.
-- **Fix**: Add `{currentQuestion.image_url && <img src={currentQuestion.image_url} />}` in TestSession.
+### TYP-2: Landing Stats Numbers Oversized
+Current: `text-2xl sm:text-3xl` (line 417) → Target `text-xl sm:text-2xl`.
 
-### UX-3: Build Sync Failures
-Repeated "sandbox head mismatch" errors indicate platform sync issues. While not a code bug, it disrupts deployments.
-- **Fix**: Trivial file edit to force re-sync (already done).
+### TYP-3: Pricing Page Hero Oversized
+Current: `text-3xl sm:text-4xl lg:text-5xl` (Pricing.tsx line 35) → Target `text-3xl md:text-4xl`.
+Body: `text-base sm:text-lg` → Target `text-sm md:text-base`.
 
-### PERF-1: No Pagination on Question Lists
-`MyQuestions.tsx` and `ExamPapers.tsx` likely fetch all questions at once. With 1,562+ questions, this will become slow.
-- **Fix**: Implement server-side pagination with `.range()`.
+### TYP-4: Pricing Plan Names
+Current: `text-lg font-bold` → Target `text-base font-bold`.
+Price display: `text-3xl font-extrabold` is acceptable.
 
-### PERF-2: QueryClient staleTime is 2 Minutes
-For relatively static data like questions and exam papers, 2 minutes is too aggressive. This causes unnecessary refetches.
-- **Fix**: Set staleTime to 5-10 minutes for static data queries.
+### TYP-5: Landing CTA Section Oversized
+CTA button (line 767): `text-base font-semibold px-10 py-4 rounded-2xl` is bloated → Target `text-sm font-semibold px-6 py-3 rounded-xl`.
+CTA section padding: `p-10 sm:p-14` → Target `p-8 sm:p-10`.
 
-### CODE-1: Console Warning Suppression
-Line 289-293 of `App.tsx` patches `console.warn` to suppress React Router warnings. This can mask real warnings during development.
+### TYP-6: Section Padding Inconsistency
+Landing uses `pb-16 sm:pb-24`, `py-16 sm:py-20`, `pb-24 sm:pb-32` — inconsistent. Standardize to `py-14` per compact scale.
 
-### CODE-2: Electron Detection at Module Level
-`const IS_ELECTRON = !!(window as any).electronAPI?.isElectron` runs at import time, which could cause issues during SSR or testing.
+### TYP-7: Dashboard StatCard Value
+Current: `text-xl sm:text-2xl font-black` (line 300) — acceptable but `font-black` is heavier than needed. Consider `font-bold`.
+
+### UX-1: Cookie Consent Covers Content on Mobile
+Screenshot shows the cookie banner obscuring the product mockup on mobile 375px. The banner should be dismissible and not overlap critical content.
+
+### UX-2: No Loading/Empty State for Some Pages
+Several pages like `CompanyResearch`, `AnswerBank` use `@ts-nocheck` and may lack proper skeleton/empty states. Audit needed per page.
+
+### UX-3: Mobile Nav Missing "Log in" on Small Screens
+The marketing layout's "Log in" link is `hidden sm:inline-block` (line 90-91), so it's hidden on mobile. The hamburger menu does include it, but only when open.
 
 ---
 
 ## 🟢 Minor Issues
 
-### MINOR-1: `resume_versions_service` Policy Too Permissive
-Uses `USING (true)` and `WITH CHECK (true)` for `service_role`. This is acceptable for service_role but should be documented.
+### MINOR-1: Console Warning Suppression
+`App.tsx` lines 289-293 patch `console.warn` to suppress React Router warnings. This masks legitimate warnings.
 
-### MINOR-2: No Foreign Keys Defined
-None of the tables have foreign key constraints defined (per schema dump). While this avoids cascade complexity, it means no referential integrity enforcement at the database level.
+### MINOR-2: `App.css` Contains Unused Vite Boilerplate
+`src/App.css` still has the default Vite template CSS (logo animations, card styles). Not imported anywhere meaningful but should be cleaned up.
 
-### MINOR-3: `referral_code` Generation
-Uses `encode(gen_random_bytes(5), 'hex')` — 10 hex characters. Collision probability is low but not zero with scale. Consider UUIDs or checking uniqueness.
+### MINOR-3: Social Links Point to Non-Existent Pages
+Footer links to `https://twitter.com/clarifyai` and `https://github.com/clarifyai` — likely don't exist. Should be verified or removed.
+
+### MINOR-4: Copyright Shows "Payara Labs"
+Footer shows `© 2026 Payara Labs` — verify this is the correct entity name.
 
 ---
 
-## 📈 Performance Metrics (Estimated)
+## 📈 Performance Metrics
 
-| Metric | Status | Notes |
+| Metric | Value | Rating |
 |---|---|---|
-| Questions table (1,562 rows) | OK for now | Missing indexes on filter columns will degrade at 10K+ |
-| Largest table: `questions` | 1,562 rows | Moderate |
-| Test responses | 163 rows | Fine |
-| Code-split lazy loading | Implemented | All pages are lazy-loaded |
-| QueryClient caching | 2min stale | Could be longer for static data |
-| Bundle size | Not measured | 100+ lazy chunks is reasonable |
+| TTFB | 499ms | Needs improvement |
+| DOM Interactive | 967ms | OK |
+| DOM Content Loaded | 2829ms | Poor |
+| FCP | 4104ms | Poor (target < 1800ms) |
+| CLS | 0.0002 | Good |
+| JS Heap | 17.6MB | OK |
+| DOM Nodes | 3378 | OK (landing page) |
+| Total JS | 1274KB | High — tree-shaking needed |
+| Logo image | 87KB PNG | Convert to WebP/SVG |
+| Largest script | lucide-react 161KB | Tree-shake icons |
 
 ---
 
@@ -129,14 +131,12 @@ Uses `encode(gen_random_bytes(5), 'hex')` — 10 hex characters. Collision proba
 
 | Risk | Severity | Status |
 |---|---|---|
-| Achievement privilege escalation | CRITICAL | Unfixed |
-| Cost log injection | CRITICAL | Unfixed |
-| Room chat data leak | CRITICAL | Unfixed |
-| Admin role on profiles table | HIGH | Unfixed |
+| Client-side admin check via profiles.is_admin | HIGH | Partially mitigated by trigger |
+| Realtime channel leak | CRITICAL | Unfixed |
 | Leaked password protection | HIGH | Disabled |
-| Function search_path | MEDIUM | 9 functions |
-| Realtime channel leak | MEDIUM | Unfixed |
-| 100 files with @ts-nocheck | HIGH | Type safety disabled |
+| Extension in public schema | MEDIUM | Unfixed |
+| Referral email PII exposure | MEDIUM | Unfixed |
+| 98 files with @ts-nocheck | HIGH | Type safety disabled |
 
 ---
 
@@ -144,39 +144,63 @@ Uses `encode(gen_random_bytes(5), 'hex')` — 10 hex characters. Collision proba
 
 | Device | Status | Issues |
 |---|---|---|
-| Mobile 360px | Issues | Header overflow, card alignment (partially fixed in MockTestHub) |
-| Mobile 390-414px | Likely OK | Needs verification |
-| Tablet 768-834px | Unknown | Not tested |
-| Desktop 1280px+ | OK | Primary development target |
+| Mobile 375px | Mostly OK | Cookie banner overlaps content; hero text wraps well |
+| Mobile 360px | Needs verification | MockTestHub was patched but other pages untested |
+| Tablet 768px | Untested | Likely OK given responsive breakpoints |
+| Desktop 1067px+ | Good | Primary development target |
 
 ---
 
 ## 🧭 UX/Navigation Issues
 
-1. **Free plan limit**: Recently raised from 2 to 10 tests/month but the error message is confusing — no UI indication of remaining quota before the error hits.
-2. **No question count preview**: Users configure a test but don't know how many questions match their filters until submission fails.
-3. **Admin Layout imports from `userStore`** (line 2) while `ProtectedRoute` imports from `authStore` — potential state desync if stores diverge.
+1. No visible credit quota indicator before hitting the limit on mock test creation
+2. Admin layout has its own sidebar that doesn't integrate with the main AppSidebar — jarring transition
+3. Onboarding step routes (/onboarding/step-1 through step-5) all redirect to /onboarding — confusing if bookmarked
 
 ---
 
 ## 🛠 Recommended Fixes (Priority Order)
 
-1. **[CRITICAL]** Fix 4 overly-permissive RLS policies (user_achievements, model_cost_logs, room_chat, room_questions)
-2. **[CRITICAL]** Move admin role to a separate `user_roles` table
-3. **[CRITICAL]** Enable leaked password protection in Supabase Auth settings
-4. **[HIGH]** Set `search_path = public` on all 9 unprotected functions
-5. **[HIGH]** Add composite index on `questions(exam_type, difficulty, subject, topic)`
-6. **[HIGH]** Consolidate duplicate `deduct_credits` RPC overloads
-7. **[HIGH]** Begin removing `@ts-nocheck` from critical files (authStore, TestSession, Dashboard)
-8. **[MEDIUM]** Add question image rendering for `currentQuestion.image_url`
-9. **[MEDIUM]** Add pagination for question lists
-10. **[MEDIUM]** Audit all pages for mobile 360px alignment
+1. **[CRITICAL]** Update `authStore.loadProfile()` to check `user_roles` table for admin status instead of `profiles.is_admin`
+2. **[CRITICAL]** Enable leaked password protection (manual: Supabase Dashboard)
+3. **[HIGH]** Optimize logo to WebP/SVG (< 10KB)
+4. **[HIGH]** Fix Landing hero typography: `text-3xl md:text-4xl`, body `text-sm md:text-base`
+5. **[HIGH]** Fix Landing CTA sizing: `px-6 py-3` instead of `px-10 py-4`
+6. **[HIGH]** Fix Pricing hero: `text-3xl md:text-4xl`
+7. **[HIGH]** Standardize section padding to `py-14` across Landing page
+8. **[MEDIUM]** Fix Dashboard import from `@/store/authStore` instead of `@/store/userStore`
+9. **[MEDIUM]** Clean up `App.css` boilerplate
+10. **[MEDIUM]** Remove `@ts-nocheck` from top 10 critical files
+11. **[LOW]** Verify social links exist or remove them
+12. **[LOW]** Verify copyright entity name
 
 ---
 
 ## 🚀 Final Verdict
 
-**Production Readiness Score: 4/10**
+**Production Readiness Score: 5/10** (up from 4/10 after RLS fixes)
 
-**Rationale**: The application has a comprehensive feature set and solid architecture (lazy loading, Zustand stores, edge functions, RLS). However, it has **5 critical security vulnerabilities** that could be exploited in production: privilege escalation via achievements, cost log injection, room chat data leaks, and admin role stored on a self-updatable profile table. The widespread use of `@ts-nocheck` (100 files) means any type mismatch becomes a runtime crash. The mock test flow works after recent patches but still has edge cases (image rendering, credit enum mismatches). The app needs a security hardening pass before going to production.
+**Rationale**: The RLS hardening migration improved the security posture significantly. However, the client-side admin check still uses `profiles.is_admin`, leaked password protection is disabled, and Realtime channels remain unprotected. The 4.1s FCP is poor. Typography is inconsistent — the landing page uses oversized headings (`text-6xl`) that don't match a compact, mobile-first design system. The 98 `@ts-nocheck` files remain a significant risk for runtime crashes. The app needs typography normalization, performance optimization (logo, icon tree-shaking), and the remaining security items addressed before production launch.
 
+---
+
+## Implementation Plan
+
+### Phase 1: Security (this session)
+1. Update `authStore.loadProfile()` to query `user_roles` for admin status
+2. Update `AdminLayout.tsx` to use `authStore.isAdmin` instead of `profile.is_admin`
+3. Fix Dashboard import path
+
+### Phase 2: Typography Normalization (this session)
+4. Landing.tsx: Hero `text-3xl md:text-4xl`, body `text-sm md:text-base`, CTA `px-6 py-3`, section padding `py-14`
+5. Pricing.tsx: Hero `text-3xl md:text-4xl`, body `text-sm md:text-base`
+6. Standardize all section headings to `text-2xl md:text-3xl`
+
+### Phase 3: Performance (this session)
+7. Note logo optimization recommendation (requires asset replacement)
+8. Clean up App.css boilerplate
+
+### Phase 4: Deferred
+- Remove `@ts-nocheck` systematically (multi-session effort)
+- Realtime RLS (requires schema design for channel topics)
+- Extension schema migration (requires careful planning)
