@@ -422,9 +422,9 @@ export default function Landing() {
 
       {/* ── How It Works ────────────────────────────────────────────────────── */}
       <section className="pb-16 sm:pb-24 px-4 sm:px-6 bg-secondary/20">
-        <div className="max-w-5xl mx-auto py-16 sm:py-20">
+        <div className="max-w-5xl mx-auto py-14">
           <motion.div className="text-center mb-12" {...fadeUp()}>
-            <h2 className="text-2xl sm:text-3xl font-bold">How it works</h2>
+            <h2 className="text-2xl md:text-3xl font-bold">How it works</h2>
             <p className="mt-3 text-sm text-muted-foreground max-w-md mx-auto">
               From first upload to your next offer — three simple steps.
             </p>
