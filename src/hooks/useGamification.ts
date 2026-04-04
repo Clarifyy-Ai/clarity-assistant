@@ -134,7 +134,7 @@ export function useGamification() {
         .select("*")
         .eq("user_id", user.id)
         .gte("week_end", new Date().toISOString())
-        .single(),
+        .maybeSingle(),
     ]);
 
     if (profileRes.data) {
