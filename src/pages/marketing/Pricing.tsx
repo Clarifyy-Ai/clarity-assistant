@@ -35,7 +35,7 @@ export default function Pricing() {
             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
               Simple, transparent pricing
             </h1>
-            <p className="mt-4 text-base sm:text-lg text-muted-foreground max-w-lg mx-auto">
+            <p className="mt-4 text-sm md:text-base text-muted-foreground max-w-lg mx-auto">
               Start free. Upgrade when you're ready. Cancel anytime.
             </p>
           </motion.div>
