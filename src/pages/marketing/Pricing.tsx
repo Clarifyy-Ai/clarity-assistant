@@ -118,7 +118,7 @@ export default function Pricing() {
 
                 <div className="mt-6 pt-5 border-t border-border space-y-2.5 flex-1">
                   {plan.features.map((f) => (
-                    <div key={f.key} className="flex items-start gap-2 text-sm">
+                    <div key={f.key} className="flex items-start gap-2 text-xs">
                       {f.included ? (
                         <Check className="w-4 h-4 text-primary mt-0.5 flex-shrink-0" />
                       ) : (

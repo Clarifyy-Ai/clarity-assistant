@@ -1,11 +1,10 @@
 import { NavLink, Outlet, Navigate } from "react-router-dom";
-import { useAuthStore } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
 import {
   LayoutDashboard, Users, BarChart2,
   Flag, Shield, ChevronRight, DollarSign, Cpu,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { ProfileRow } from "@/types";
 
 const ADMIN_NAV: { to: string; icon: React.ElementType; label: string }[] = [
   { to: "/app/admin",              icon: LayoutDashboard, label: "Dashboard"     },
@@ -17,10 +16,9 @@ const ADMIN_NAV: { to: string; icon: React.ElementType; label: string }[] = [
 ];
 
 export default function AdminLayout() {
-  const { profile } = useAuthStore();
-  const p = profile as ProfileRow | null;
+  const { isAdmin } = useAuthStore();
 
-  if (!p?.is_admin) {
+  if (!isAdmin) {
     return <Navigate to="/app/dashboard" replace />;
   }
 

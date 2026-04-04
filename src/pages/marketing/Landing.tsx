@@ -764,7 +764,7 @@ export default function Landing() {
           </p>
           <Link
             to="/signup"
-            className="inline-flex items-center gap-2 text-base font-semibold px-10 py-4 rounded-2xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity shadow-xl shadow-primary/30"
+            className="inline-flex items-center gap-2 text-sm font-semibold px-6 py-3 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity shadow-xl shadow-primary/30"
           >
             Get started free <ArrowRight className="w-4 h-4" />
           </Link>
