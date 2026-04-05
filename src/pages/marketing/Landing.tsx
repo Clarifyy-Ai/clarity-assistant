@@ -404,7 +404,7 @@ export default function Landing() {
       </section>
 
       {/* ── Stats ───────────────────────────────────────────────────────────── */}
-      <section className="pb-16 sm:pb-20 px-4 sm:px-6">
+      <section className="pb-14 px-4 sm:px-6">
         <div className="max-w-4xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-4">
           {STATS.map((stat, i) => (
             <motion.div
