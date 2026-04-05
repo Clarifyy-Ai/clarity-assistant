@@ -113,7 +113,7 @@ export default function Help() {
         </div>
       </section>
 
-      <section className="pb-24 px-6">
+      <section className="pb-14 px-4 sm:px-6">
         <div className="max-w-3xl mx-auto space-y-10">
           {filtered.map((category) => (
             <motion.div
