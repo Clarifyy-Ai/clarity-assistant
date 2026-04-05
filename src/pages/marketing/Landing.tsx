@@ -675,7 +675,7 @@ export default function Landing() {
                     Most Popular
                   </span>
                 )}
-                <h3 className="text-lg font-bold">{plan.name}</h3>
+                <h3 className="text-base font-bold">{plan.name}</h3>
                 <p className="text-xs text-muted-foreground mt-1">{plan.tagline}</p>
                 <div className="mt-5 mb-5">
                   <span className="text-3xl font-extrabold">{plan.price}</span>
