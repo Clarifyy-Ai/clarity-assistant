@@ -1,124 +1,129 @@
 
-# Production Audit Report & Implementation Plan — Clarify AI (v2)
+# Production Audit Report — Clarify AI (v3)
 
-## Summary
+Previous audits fixed: admin RBAC via `user_roles`, Landing/Pricing typography, Dashboard import, `App.css` cleanup, RLS hardening, credit deduction, streak/gamification queries.
 
-Full end-to-end audit completed. Production readiness: **5/10**. Four categories of fixes identified: security, typography normalization, performance, and code cleanup.
+This audit focuses on **remaining issues** not yet addressed.
 
 ---
 
 ## 🔴 Critical Issues
 
-### SEC-1: Admin Check Uses `profiles.is_admin` (Client-Side)
-`AdminLayout.tsx` line 23 checks `p?.is_admin` from profile. `authStore.loadProfile()` line 319 sets `isAdmin` from `profiles.is_admin`. Despite the `user_roles` table and `protect_admin_column` trigger, the client code should query `user_roles` directly.
+### SEC-1: Privilege Escalation via `user_roles` INSERT (STILL OPEN)
+The security scan confirms: no INSERT-deny policy exists on `user_roles`. Any authenticated user can `INSERT INTO user_roles (user_id, role) VALUES (auth.uid(), 'admin')` and become admin.
 
-**Fix in `src/store/authStore.ts` (loadProfile method, ~line 299-323):**
-Replace the single profiles query with parallel queries for profile + user_roles:
-```typescript
-loadProfile: async () => {
-  const userId = get().user?.id;
-  if (!userId) return;
+**Fix**: Migration to add a restrictive INSERT policy:
+```sql
+CREATE POLICY "user_roles_no_self_insert"
+ON public.user_roles FOR INSERT TO authenticated
+WITH CHECK (public.has_role(auth.uid(), 'admin'));
+```
+Also add UPDATE/DELETE restriction:
+```sql
+CREATE POLICY "user_roles_no_self_modify"
+ON public.user_roles FOR UPDATE TO authenticated
+USING (public.has_role(auth.uid(), 'admin'));
 
-  const [profileRes, roleRes] = await Promise.all([
-    supabase.from("profiles").select("*").eq("id", userId).single(),
-    supabase.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin").maybeSingle(),
-  ]);
-
-  if (profileRes.error || !profileRes.data) {
-    console.error("[authStore] Failed to load profile:", profileRes.error?.message);
-    return;
-  }
-
-  const row = profileRes.data as Record<string, unknown>;
-  const hasAdminRole = !!roleRes.data;
-
-  _set((s) => {
-    s.profile         = profileRes.data as unknown as ProfileRow;
-    s.isProfileLoaded = true;
-    s.isAdmin         = hasAdminRole;
-    s.isOnboarded     = (row.onboarding_completed as boolean) ?? false;
-    s.planId          = (row.plan_id as string) ?? "free";
-    s.credits         = (row.credits as number) ?? 0;
-  });
-},
+CREATE POLICY "user_roles_no_self_delete"
+ON public.user_roles FOR DELETE TO authenticated
+USING (public.has_role(auth.uid(), 'admin'));
 ```
 
-**Fix in `src/pages/app/admin/AdminLayout.tsx`:**
-- Change import from `@/store/userStore` to `@/store/authStore`
-- Replace `const { profile } = useAuthStore(); const p = profile as ProfileRow | null; if (!p?.is_admin)` with `const { isAdmin } = useAuthStore(); if (!isAdmin)`
-- Remove unused `ProfileRow` import
+### SEC-2: Profiles RLS Policies Apply to `{public}` Role
+`profiles_own_select` and `profiles_own_insert` apply to the `{public}` role instead of `{authenticated}`. While `auth.uid()` returns NULL for unauthenticated users, best practice is to scope to `authenticated`.
 
-### APP-1: Dashboard Imports from Wrong Store
-**Fix `src/pages/app/Dashboard.tsx` line 7:** Change `import { useAuthStore } from "@/store/userStore"` to `import { useAuthStore } from "@/store/authStore"`
+**Fix**: Migration to drop and recreate these policies targeting `TO authenticated`.
+
+### SEC-3: Feature Flags Publicly Readable
+`flags_read` policy has `USING: true` on `{public}`. Exposes internal rollout config and user UUIDs.
+
+**Fix**: Change policy to `TO authenticated`.
 
 ---
 
-## 🟠 High Priority — Typography Normalization
+## 🟠 High Priority — Typography Violations
 
-### Landing Page (`src/pages/marketing/Landing.tsx`)
-
+### Blog Page (`src/pages/marketing/Blog.tsx`)
 | Element | Current | Target |
 |---------|---------|--------|
-| Hero h1 (line 276) | `text-4xl sm:text-5xl lg:text-6xl` | `text-3xl md:text-4xl` |
-| Hero body (line 282) | `text-base sm:text-lg` | `text-sm md:text-base` |
-| Hero CTA button (line 289) | `px-7 py-3.5` | `px-5 py-2.5` |
-| Secondary CTA (line 296) | `px-7 py-3.5` | `px-5 py-2.5` |
-| Hero section padding (line 264) | `pt-24 sm:pt-36 pb-16 sm:pb-24` | `pt-20 sm:pt-28 pb-14` |
-| Stats numbers (line 417) | `text-2xl sm:text-3xl` | `text-xl sm:text-2xl` |
-| Section headings (lines 427, 459, 505, 557, 603, 625, 721) | `text-2xl sm:text-3xl` | `text-2xl md:text-3xl` (OK — keep) |
-| How-it-works section (line 425) | `py-16 sm:py-20` | `py-14` |
-| Feature card title (line 484) | `text-base font-bold` | OK — keep |
-| Feature card desc (line 485) | `text-sm` | OK — keep |
-| Comparison section (line 504) | `py-16 sm:py-20` | `py-14` |
-| Pricing teaser section (line 623) | `py-16 sm:py-20` | `py-14` |
-| CTA section (line 752) | `pb-24 sm:pb-32` | `pb-16 sm:pb-20` |
-| CTA container (line 755) | `p-10 sm:p-14` | `p-8 sm:p-10` |
-| CTA button (line 767) | `text-base px-10 py-4 rounded-2xl` | `text-sm px-6 py-3 rounded-xl` |
-| CTA heading (line 758) | `text-2xl sm:text-3xl` | OK — keep |
+| Hero section padding (line 92) | `pt-36 pb-16 px-6` | `pt-20 sm:pt-28 pb-14 px-4 sm:px-6` |
+| Hero h1 (line 95) | `text-4xl sm:text-5xl` | `text-3xl md:text-4xl` |
+| Hero body (line 96) | `text-lg` | `text-sm md:text-base` |
+| Blog cards section (line 101) | `pb-24 px-6` | `pb-14 px-4 sm:px-6` |
+| Blog card title (line 122) | `text-lg font-bold` | `text-base font-bold` |
 
-### Pricing Page (`src/pages/marketing/Pricing.tsx`)
-
+### Help Page (`src/pages/marketing/Help.tsx`)
 | Element | Current | Target |
 |---------|---------|--------|
-| Hero h1 (line 35) | `text-3xl sm:text-4xl lg:text-5xl` | `text-3xl md:text-4xl` |
-| Hero body (line 38) | `text-base sm:text-lg` | `text-sm md:text-base` |
-| Hero section padding (line 32) | `pt-24 sm:pt-36` | `pt-20 sm:pt-28` |
-| Plan name (line 96) | `text-lg font-bold` | `text-base font-bold` |
-| Feature list text (line 121) | `text-sm` | `text-xs` |
+| Hero section padding (line 95) | `pt-36 pb-16 px-6` | `pt-20 sm:pt-28 pb-14 px-4 sm:px-6` |
+| Hero icon (line 98) | `w-10 h-10` | `w-8 h-8` |
+| Hero h1 (line 99) | `text-4xl sm:text-5xl` | `text-3xl md:text-4xl` |
+| Hero body (line 100) | `text-lg` | `text-sm md:text-base` |
+| FAQ section (line 116) | `pb-24 px-6` | `pb-14 px-4 sm:px-6` |
+| Contact section (line 165) | `pb-24 px-6` | `pb-14 px-4 sm:px-6` |
+
+### Terms Page (`src/pages/marketing/Terms.tsx`)
+| Element | Current | Target |
+|---------|---------|--------|
+| Article padding (line 12) | `pt-28 sm:pt-36 pb-16 sm:pb-24` | `pt-20 sm:pt-28 pb-14` |
+
+### Privacy Page (likely same pattern as Terms)
+Check and apply same padding fix.
+
+### Landing Page — Pricing Teaser Plan Name (line 678)
+| Element | Current | Target |
+|---------|---------|--------|
+| Plan name (line 678) | `text-lg font-bold` | `text-base font-bold` |
+
+### Landing Page — Remaining Section Spacing
+| Element | Current | Target |
+|---------|---------|--------|
+| Stats section (line 407) | `pb-16 sm:pb-20` | `pb-14` |
+| How-it-works section (line 424) | `pb-16 sm:pb-24` | `pb-14 sm:pb-16` |
+| Features section (line 456) | `pb-16 sm:pb-24` | `pb-14 sm:pb-16` |
+| Testimonials section (line 554) | `pb-16 sm:pb-24` | `pb-14 sm:pb-16` |
+| Proof section (line 601) | `pb-16 sm:pb-20` | `pb-14` |
+| FAQ section (line 718) | `pb-16 sm:pb-24` | `pb-14 sm:pb-16` |
 
 ---
 
 ## 🟡 Medium Issues
 
-### Performance
-- **FCP: 4.1s** — Poor. `lucide-react.js` is 161KB/913ms. Logo is 87KB PNG.
-- Recommendation: Convert logo to WebP/SVG (< 10KB). Investigate Lucide tree-shaking.
+### Leaked Password Protection Still Disabled
+**Manual action**: Supabase Dashboard → Auth → Security → Enable leaked password protection.
 
-### Code Cleanup
-- **`src/App.css`**: Contains unused Vite boilerplate (logo-spin animation, `.read-the-docs`, etc.). Replace with single comment line.
-- **Console warning suppression** (`App.tsx` lines 289-293): Patches `console.warn` — masks real warnings.
+### Extension in Public Schema
+`pg_trgm` in public schema. Low risk, flagged by linter. Moving requires careful planning.
+
+### Calendar Tokens in Plaintext
+`calendar_integrations` stores `access_token` and `refresh_token` readable via client SELECT. Ideally, restrict SELECT to service_role and use edge functions for calendar operations. Deferred — requires architecture change.
+
+### Realtime Messages Missing RLS
+Any authenticated user can subscribe to any Realtime channel. Requires `realtime.messages` RLS policies. Deferred — complex implementation.
 
 ---
 
 ## 🟢 Minor Issues
-- Footer social links may point to non-existent pages (twitter.com/clarifyai, github.com/clarifyai)
-- Copyright shows "Payara Labs" — verify correct entity
-- 98 files still have `@ts-nocheck` (deferred — multi-session effort)
 
----
-
-## 🔐 Security — Manual Action Required
-- **Enable Leaked Password Protection**: Supabase Dashboard → Auth → Security
+- `console.warn` suppression in `App.tsx` lines 289-293 masks real warnings
+- 98 files still use `@ts-nocheck` — systematic cleanup needed over multiple sessions
+- Footer references "Payara Labs" — verify correct entity name
+- Social links may point to non-existent profiles
 
 ---
 
 ## Implementation Order
 
-1. Fix `authStore.loadProfile()` to query `user_roles` for admin status
-2. Fix `AdminLayout.tsx` import and admin check
-3. Fix `Dashboard.tsx` import path
-4. Apply Landing.tsx typography normalization (hero, CTAs, section padding)
-5. Apply Pricing.tsx typography normalization
-6. Clean up `App.css`
+1. **Migration**: Fix `user_roles` INSERT/UPDATE/DELETE policies (SEC-1)
+2. **Migration**: Fix `profiles` RLS to `TO authenticated` (SEC-2)  
+3. **Migration**: Fix `feature_flags` RLS to `TO authenticated` (SEC-3)
+4. **Code**: Normalize Blog.tsx typography
+5. **Code**: Normalize Help.tsx typography
+6. **Code**: Normalize Terms.tsx and Privacy.tsx padding
+7. **Code**: Fix Landing.tsx pricing teaser plan name + remaining section spacing
 
-All changes are code-only (no migrations needed). The `user_roles` table and RLS policies already exist from the previous migration.
+---
+
+## 🚀 Production Readiness: 6/10
+
+Up from 5/10. Auth RBAC, credit deduction, and primary page typography are fixed. The `user_roles` privilege escalation (SEC-1) remains the most critical blocker — any authenticated user can self-promote to admin. Once SEC-1–3 are patched and typography is normalized across all marketing pages, score rises to 7.5/10.
