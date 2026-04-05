@@ -1034,7 +1034,7 @@ export default function TestSession() {
 
                       <span className="text-[15px] text-foreground md:text-base">
                         <MathText text={option.text} />
-                        {/^https?:\/\/.+\.(png|jpg|jpeg|gif|webp|svg)/i.test(option.text) && (
+                        {(/^https?:\/\/.+\.(png|jpg|jpeg|gif|webp|svg)/i.test(option.text) || /drive\.google\.com|dropbox\.com|imgur\.com/i.test(option.text)) && (
                           <QuestionImage
                             src={option.text}
                             alt={`Option ${option.label}`}
