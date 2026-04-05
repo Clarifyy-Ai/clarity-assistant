@@ -943,7 +943,7 @@ export default function TestSession() {
               <div className="rounded-xl border border-border bg-card p-5 text-[17px] font-medium leading-relaxed text-foreground shadow-sm md:text-lg">
                 <MathText text={currentQuestion.question_text} />
                 {currentQuestion.image_url && (
-                  <img src={currentQuestion.image_url} alt="Question" className="mt-3 max-w-full rounded-lg" />
+                  <QuestionImage src={currentQuestion.image_url} alt="Question" className="mt-3 max-w-full rounded-lg" />
                 )}
               </div>
 
