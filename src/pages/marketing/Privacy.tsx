@@ -9,7 +9,7 @@ export default function Privacy() {
 
   return (
     <MarketingLayout>
-      <article className="pt-28 sm:pt-36 pb-16 sm:pb-24 px-4 sm:px-6 max-w-3xl mx-auto prose prose-sm dark:prose-invert prose-headings:font-bold prose-headings:text-foreground prose-p:text-muted-foreground prose-li:text-muted-foreground prose-strong:text-foreground">
+      <article className="pt-20 sm:pt-28 pb-14 px-4 sm:px-6 max-w-3xl mx-auto prose prose-sm dark:prose-invert prose-headings:font-bold prose-headings:text-foreground prose-p:text-muted-foreground prose-li:text-muted-foreground prose-strong:text-foreground">
         <h1>Privacy Policy</h1>
         <p className="text-xs text-muted-foreground">Last updated: March 25, 2026</p>
 

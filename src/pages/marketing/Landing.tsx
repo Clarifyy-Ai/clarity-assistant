@@ -404,7 +404,7 @@ export default function Landing() {
       </section>
 
       {/* ── Stats ───────────────────────────────────────────────────────────── */}
-      <section className="pb-16 sm:pb-20 px-4 sm:px-6">
+      <section className="pb-14 px-4 sm:px-6">
         <div className="max-w-4xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-4">
           {STATS.map((stat, i) => (
             <motion.div
@@ -421,7 +421,7 @@ export default function Landing() {
       </section>
 
       {/* ── How It Works ────────────────────────────────────────────────────── */}
-      <section className="pb-16 sm:pb-24 px-4 sm:px-6 bg-secondary/20">
+      <section className="pb-14 sm:pb-16 px-4 sm:px-6 bg-secondary/20">
         <div className="max-w-5xl mx-auto py-14">
           <motion.div className="text-center mb-12" {...fadeUp()}>
             <h2 className="text-2xl md:text-3xl font-bold">How it works</h2>
@@ -453,7 +453,7 @@ export default function Landing() {
       </section>
 
       {/* ── Feature Pillars ─────────────────────────────────────────────────── */}
-      <section id="features" className="pb-16 sm:pb-24 px-4 sm:px-6">
+      <section id="features" className="pb-14 sm:pb-16 px-4 sm:px-6">
         <div className="max-w-6xl mx-auto">
           <motion.div className="text-center mb-10" {...fadeUp()}>
             <h2 className="text-2xl sm:text-3xl font-bold">
@@ -551,7 +551,7 @@ export default function Landing() {
       </section>
 
       {/* ── Testimonials ────────────────────────────────────────────────────── */}
-      <section className="pb-16 sm:pb-24 px-4 sm:px-6">
+      <section className="pb-14 sm:pb-16 px-4 sm:px-6">
         <div className="max-w-5xl mx-auto">
           <motion.div className="text-center mb-10" {...fadeUp()}>
             <h2 className="text-2xl sm:text-3xl font-bold">Candidates who got the offer</h2>
@@ -598,7 +598,7 @@ export default function Landing() {
       </section>
 
       {/* ── Proof points ────────────────────────────────────────────────────── */}
-      <section className="pb-16 sm:pb-20 px-4 sm:px-6">
+      <section className="pb-14 px-4 sm:px-6">
         <div className="max-w-2xl mx-auto text-center">
           <motion.h2 className="text-2xl sm:text-3xl font-bold mb-8" {...fadeUp()}>
             Built for serious candidates
@@ -675,7 +675,7 @@ export default function Landing() {
                     Most Popular
                   </span>
                 )}
-                <h3 className="text-lg font-bold">{plan.name}</h3>
+                <h3 className="text-base font-bold">{plan.name}</h3>
                 <p className="text-xs text-muted-foreground mt-1">{plan.tagline}</p>
                 <div className="mt-5 mb-5">
                   <span className="text-3xl font-extrabold">{plan.price}</span>
@@ -715,7 +715,7 @@ export default function Landing() {
       </section>
 
       {/* ── FAQ ─────────────────────────────────────────────────────────────── */}
-      <section className="pb-16 sm:pb-24 px-4 sm:px-6">
+      <section className="pb-14 sm:pb-16 px-4 sm:px-6">
         <div className="max-w-2xl mx-auto">
           <motion.div className="text-center mb-10" {...fadeUp()}>
             <h2 className="text-2xl sm:text-3xl font-bold">Frequently asked questions</h2>
