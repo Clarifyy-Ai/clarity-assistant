@@ -162,7 +162,7 @@ export default function Help() {
         </div>
       </section>
 
-      <section className="pb-24 px-6">
+      <section className="pb-14 px-4 sm:px-6">
         <div className="max-w-xl mx-auto text-center rounded-2xl border border-border bg-card p-8">
           <Mail className="w-8 h-8 text-primary mx-auto mb-3" />
           <h3 className="text-lg font-bold">Still need help?</h3>

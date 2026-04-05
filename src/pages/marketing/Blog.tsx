@@ -119,7 +119,7 @@ export default function Blog() {
                   <span className="text-[11px] text-muted-foreground/70">{post.readTime}</span>
                 </div>
 
-                <h2 className="text-lg font-bold mb-2 group-hover:text-primary transition-colors">{post.title}</h2>
+                <h2 className="text-base font-bold mb-2 group-hover:text-primary transition-colors">{post.title}</h2>
                 <p className="text-sm text-muted-foreground leading-relaxed flex-1">{post.excerpt}</p>
 
                 <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
