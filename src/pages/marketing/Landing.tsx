@@ -453,7 +453,7 @@ export default function Landing() {
       </section>
 
       {/* ── Feature Pillars ─────────────────────────────────────────────────── */}
-      <section id="features" className="pb-16 sm:pb-24 px-4 sm:px-6">
+      <section id="features" className="pb-14 sm:pb-16 px-4 sm:px-6">
         <div className="max-w-6xl mx-auto">
           <motion.div className="text-center mb-10" {...fadeUp()}>
             <h2 className="text-2xl sm:text-3xl font-bold">
