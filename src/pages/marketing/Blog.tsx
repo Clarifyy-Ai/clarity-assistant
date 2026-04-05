@@ -89,11 +89,11 @@ function formatDate(dateStr: string) {
 export default function Blog() {
   return (
     <MarketingLayout>
-      <section className="pt-36 pb-16 px-6">
+      <section className="pt-20 sm:pt-28 pb-14 px-4 sm:px-6">
         <div className="max-w-3xl mx-auto text-center">
           <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
-            <h1 className="text-4xl sm:text-5xl font-extrabold tracking-tight">Blog</h1>
-            <p className="mt-4 text-lg text-muted-foreground">Insights, guides, and tips to help you ace every interview</p>
+            <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">Blog</h1>
+            <p className="mt-4 text-sm md:text-base text-muted-foreground">Insights, guides, and tips to help you ace every interview</p>
           </motion.div>
         </div>
       </section>
