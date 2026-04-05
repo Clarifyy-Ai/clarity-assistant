@@ -598,7 +598,7 @@ export default function Landing() {
       </section>
 
       {/* ── Proof points ────────────────────────────────────────────────────── */}
-      <section className="pb-16 sm:pb-20 px-4 sm:px-6">
+      <section className="pb-14 px-4 sm:px-6">
         <div className="max-w-2xl mx-auto text-center">
           <motion.h2 className="text-2xl sm:text-3xl font-bold mb-8" {...fadeUp()}>
             Built for serious candidates
