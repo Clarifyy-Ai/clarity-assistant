@@ -175,6 +175,62 @@ function MathText({ text }: { text: string }) {
   return <>{parts}</>;
 }
 
+function transformImageUrl(url: string): string {
+  if (!url) return url;
+  // Google Drive: convert share/view links to direct image embed
+  const driveMatch = url.match(/drive\.google\.com\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)/);
+  if (driveMatch) {
+    return `https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w800`;
+  }
+  // Google Drive direct export link
+  const driveExport = url.match(/drive\.google\.com\/uc\?.*id=([a-zA-Z0-9_-]+)/);
+  if (driveExport) {
+    return `https://drive.google.com/thumbnail?id=${driveExport[1]}&sz=w800`;
+  }
+  // Dropbox: replace dl=0 with raw=1
+  if (url.includes("dropbox.com") && !url.includes("raw=1")) {
+    return url.replace(/dl=0/, "raw=1").replace(/\?$/, "?raw=1");
+  }
+  return url;
+}
+
+function QuestionImage({ src, alt, className }: { src: string; alt: string; className?: string }) {
+  const [imgSrc, setImgSrc] = useState(transformImageUrl(src));
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    setImgSrc(transformImageUrl(src));
+    setFailed(false);
+  }, [src]);
+
+  if (failed) {
+    return (
+      <div className={cn("flex items-center gap-2 rounded-lg border border-border bg-muted/30 p-3 text-sm text-muted-foreground", className)}>
+        <AlertCircle className="h-4 w-4 shrink-0" />
+        <span>Image could not be loaded</span>
+        <a href={src} target="_blank" rel="noopener noreferrer" className="ml-auto text-xs text-primary underline">Open link</a>
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={imgSrc}
+      alt={alt}
+      className={className}
+      loading="lazy"
+      onError={() => {
+        // If transformed URL fails, try original
+        if (imgSrc !== src) {
+          setImgSrc(src);
+        } else {
+          setFailed(true);
+        }
+      }}
+    />
+  );
+}
+
 function estimateLiveScore(
   questions: Question[],
   responses: Record<string, ResponseState>
@@ -943,7 +999,7 @@ export default function TestSession() {
               <div className="rounded-xl border border-border bg-card p-5 text-[17px] font-medium leading-relaxed text-foreground shadow-sm md:text-lg">
                 <MathText text={currentQuestion.question_text} />
                 {currentQuestion.image_url && (
-                  <img src={currentQuestion.image_url} alt="Question" className="mt-3 max-w-full rounded-lg" />
+                  <QuestionImage src={currentQuestion.image_url} alt="Question" className="mt-3 max-w-full rounded-lg" />
                 )}
               </div>
 
@@ -978,12 +1034,11 @@ export default function TestSession() {
 
                       <span className="text-[15px] text-foreground md:text-base">
                         <MathText text={option.text} />
-                        {/^https?:\/\/.+\.(png|jpg|jpeg|gif|webp|svg)/i.test(option.text) && (
-                          <img
+                        {(/^https?:\/\/.+\.(png|jpg|jpeg|gif|webp|svg)/i.test(option.text) || /drive\.google\.com|dropbox\.com|imgur\.com/i.test(option.text)) && (
+                          <QuestionImage
                             src={option.text}
                             alt={`Option ${option.label}`}
                             className="mt-2 max-h-32 rounded-lg object-contain"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                           />
                         )}
                       </span>

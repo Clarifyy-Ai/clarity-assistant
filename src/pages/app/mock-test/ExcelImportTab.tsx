@@ -177,7 +177,7 @@ export default function ExcelImportTab({
     setParsed((prev) => {
       if (!prev) return null;
       return prev.map((row) =>
-        row._idx === idx ? { ...row, value } : row
+        row._idx === idx ? { ...row, [key]: value } : row
       );
     });
   }
