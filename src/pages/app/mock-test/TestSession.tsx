@@ -1035,11 +1035,10 @@ export default function TestSession() {
                       <span className="text-[15px] text-foreground md:text-base">
                         <MathText text={option.text} />
                         {/^https?:\/\/.+\.(png|jpg|jpeg|gif|webp|svg)/i.test(option.text) && (
-                          <img
+                          <QuestionImage
                             src={option.text}
                             alt={`Option ${option.label}`}
                             className="mt-2 max-h-32 rounded-lg object-contain"
-                            onError={(e) => { (e.target as HTMLImageElement).style.display = "none"; }}
                           />
                         )}
                       </span>
