@@ -98,7 +98,7 @@ export default function Blog() {
         </div>
       </section>
 
-      <section className="pb-24 px-6">
+      <section className="pb-14 px-4 sm:px-6">
         <div className="max-w-4xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-5">
           {BLOG_POSTS.map((post, i) => (
             <motion.div
