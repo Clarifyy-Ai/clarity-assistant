@@ -57,7 +57,7 @@ const NAV_SECTIONS: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "Growth",
     items: [
-      { to: "/app/sessions", icon: Star, stealthIcon: FileSpreadsheet, label: "Sessions" },
+      { to: "/app/sessions", icon: Star, stealthIcon: FileSpreadsheet, label: "Call Sessions" },
       { to: "/app/analytics", icon: BarChart2, stealthIcon: BarChart3, label: "Analytics" },
       { to: "/app/documents", icon: FileText, stealthIcon: FileText, label: "Documents" },
       { to: "/app/answers", icon: BookOpen, stealthIcon: FolderOpen, label: "Answer Bank" },

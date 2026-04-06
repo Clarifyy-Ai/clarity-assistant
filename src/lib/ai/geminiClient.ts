@@ -73,7 +73,7 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
     }
 
     const data = await response.json();
-    const hint: string = data.hint ?? "";
+    const hint: string = data.hints ?? data.hint ?? "";
 
     // Deliver the full hint as a single chunk then done — no SSE stream
     if (hint) onChunk(hint);

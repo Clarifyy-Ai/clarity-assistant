@@ -92,7 +92,7 @@ export function OverlayWindow({
 
   useStealthMouse(panelRef, is_stealth_mode);
 
-  const pipDoc      = useDocumentPiP(is_visible);
+  const pipDoc      = useDocumentPiP(false);
   const targetDoc   = pipDoc ?? (typeof document !== "undefined" ? document : null);
   const overlayRoot = targetDoc?.getElementById("overlay-root") ?? targetDoc?.body ?? null;
 
