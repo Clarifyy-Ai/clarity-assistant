@@ -1,27 +1,29 @@
 
-# Production Audit Report — Clarify AI (v4)
+# Production Audit Report — Clarify AI (v5)
 
-## ✅ Completed (v3 → v4)
+## ✅ Completed (v4 → v5)
 
-- **SEC-1**: `user_roles` INSERT/UPDATE/DELETE restricted to admins only (migration applied)
-- **SEC-2**: `profiles` RLS policies scoped to `TO authenticated`
-- **SEC-3**: `feature_flags` read policy scoped to `TO authenticated`
-- **Typography**: Blog, Help, Terms, Privacy pages normalized to HireFlow compact scale
-- **Landing.tsx**: Remaining section spacing + pricing teaser plan name fixed
+- **BUG-1**: Fixed `setField` in `UploadQuestions.tsx` ManualCreator — was `{ ...prev, value }`, now `{ ...prev, [key]: value }`
+- **BUG-2**: Fixed `create-test` edge function — status changed from `IN_PROGRESS` to `DRAFT` so TestSession can properly initialize timer
+- **BUG-3**: Fixed `submit-test` error handling — added `if (err instanceof Response) return err` to prevent double-wrapping auth errors
+- **VERIFIED**: `exam_papers` table exists in database
+- **VERIFIED**: Excel template download works
+- **VERIFIED**: ExcelImportTab inline editing works
+
+## ✅ Previously Completed (v1–v4)
+
+- SEC-1/2/3: RLS hardening (user_roles, profiles, feature_flags)
+- Typography normalization across marketing pages
+- Landing.tsx spacing and plan name fixes
+- Dashboard import fix, App.css cleanup
+- Credit deduction, streak/gamification queries
 
 ## 🟡 Medium Issues (Deferred)
 
-- **Leaked Password Protection**: Manual action in Supabase Dashboard → Auth → Security
-- **Calendar tokens in plaintext**: Requires architecture change
-- **Realtime messages missing RLS**: Complex implementation
-- `console.warn` suppression in `App.tsx` masks real warnings
-
-## 🟢 Minor Issues (Deferred)
-
+- Leaked Password Protection: Manual action in Supabase Dashboard
+- Calendar tokens in plaintext: Requires architecture change
+- Realtime messages missing RLS
 - 98 files with `@ts-nocheck`
-- Footer entity name "Payara Labs" — verify
-- Social links may be dead
+- Pre-existing lint warnings (hardcoded colors in UploadQuestions.tsx)
 
 ## 🚀 Production Readiness: 7.5/10
-
-Up from 6/10. All critical security issues (SEC-1/2/3) patched. Typography normalized across all marketing pages.
