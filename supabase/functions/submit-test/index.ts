@@ -774,6 +774,7 @@ Deno.serve(async (req: Request) => {
       analysis: finalAnalysis,
     });
   } catch (err) {
+    if (err instanceof Response) return err;
     log(FN, "error", "Unhandled error", err);
     return errorResponse("Internal error", "INTERNAL", 500);
   }
