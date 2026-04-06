@@ -145,7 +145,7 @@ Deno.serve(async (req) => {
         question_ids: questionIds,
         time_limit_minutes: timeLimitMinutes || null,
         config: finalConfig,
-        status: "IN_PROGRESS",
+        status: "DRAFT",
       })
       .select()
       .single();

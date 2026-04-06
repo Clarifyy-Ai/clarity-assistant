@@ -217,7 +217,7 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
   const [saving, setSaving] = useState(false);
 
   function setField<K extends keyof ParsedQuestion>(key: K, value: ParsedQuestion[K]) {
-    setForm((prev) => ({ ...prev, value }));
+    setForm((prev) => ({ ...prev, [key]: value }));
   }
 
   function setOption(index: number, text: string) {
