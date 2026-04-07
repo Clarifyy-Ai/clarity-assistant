@@ -592,6 +592,36 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
           {/* ── Step 6: Connect ───────────────────────────────── */}
           {step === 6 && (
             <div className="space-y-5">
+              {/* Supported platforms */}
+              <div>
+                <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-3">Works with all platforms</p>
+                <div className="grid grid-cols-3 gap-2">
+                  {[
+                    { name: "Zoom",       icon: "🎥" },
+                    { name: "Google Meet", icon: "📹" },
+                    { name: "MS Teams",    icon: "👥" },
+                    { name: "HackerRank",  icon: "💻" },
+                    { name: "CodeSignal",  icon: "⚡" },
+                    { name: "LeetCode",    icon: "🧩" },
+                  ].map((p) => (
+                    <div key={p.name} className="flex items-center gap-2 p-2.5 bg-white/3 border border-white/10 rounded-xl">
+                      <span className="text-lg">{p.icon}</span>
+                      <span className="text-xs text-gray-300 font-medium">{p.name}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* How to connect */}
+              <div className="bg-blue-500/5 border border-blue-500/15 rounded-xl p-3 space-y-2">
+                <p className="text-xs font-semibold text-blue-400">How it works</p>
+                <ol className="text-[11px] text-gray-400 space-y-1.5 list-decimal list-inside">
+                  <li>Open your interview platform (Zoom, Meet, etc.) in a <strong className="text-gray-300">browser tab</strong></li>
+                  <li>Click "Start" below — Clarify AI will listen automatically</li>
+                  <li>For <strong className="text-gray-300">system audio</strong> capture, enable "Share tab audio" when screen-sharing</li>
+                </ol>
+              </div>
+
               {/* Summary */}
               <div className="space-y-2">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-gray-500 mb-3">Session Summary</p>
