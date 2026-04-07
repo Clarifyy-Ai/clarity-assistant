@@ -1,4 +1,5 @@
-// deepgram-token/index.ts — SECURED VERSION
+// deepgram-token/index.ts — Returns Deepgram API key for authenticated users
+// The key is used client-side for WebSocket STT connections only.
 
 import { handleCors, corsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
@@ -8,9 +9,7 @@ Deno.serve(async (req: Request) => {
   if (cors) return cors;
 
   try {
-    /* ------------------------------
-       AUTHENTICATE USER
-    ------------------------------ */
+    /* ── AUTHENTICATE USER ── */
     const db = createServiceClient();
 
     const authHeader =
@@ -20,7 +19,7 @@ Deno.serve(async (req: Request) => {
     if (!authHeader?.toLowerCase().startsWith("bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: corsHeaders,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
@@ -33,62 +32,25 @@ Deno.serve(async (req: Request) => {
     if (authErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: corsHeaders,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
       });
     }
 
-    /* ------------------------------
-       ENV VALIDATION
-    ------------------------------ */
+    /* ── ENV VALIDATION ── */
     const DEEPGRAM_API_KEY = Deno.env.get("DEEPGRAM_API_KEY");
 
     if (!DEEPGRAM_API_KEY) {
       return new Response(
         JSON.stringify({ error: "Deepgram key missing" }),
-        { status: 503, headers: corsHeaders }
+        { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } }
       );
     }
 
-    /* ------------------------------
-       REQUEST TEMPORARY TOKEN
-    ------------------------------ */
-    const temp = await fetch(
-      "https://api.deepgram.com/v1/projects/tokens/create",
-      {
-        method: "POST",
-        headers: {
-          Authorization: `Token ${DEEPGRAM_API_KEY}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          comment: `temp-key for user ${user.id}`,
-          time_to_live_in_seconds: 60, // safer TTL
-          scopes: [
-            "usage:write",
-            "read:usage",
-            "write:streams",
-            "listen:streams",
-          ],
-        }),
-      }
-    );
-
-    if (!temp.ok) {
-      const body = await temp.text();
-      console.error("[deepgram-token] temp key error:", temp.status, body);
-
-      // IMPORTANT:
-      // Never return main key.
-      return new Response(
-        JSON.stringify({ error: "Failed to create temp token" }),
-        { status: 502, headers: corsHeaders }
-      );
-    }
-
-    const json = await temp.json();
-    const tokenOut = json.key?.key ?? json.key;
-
-    return new Response(JSON.stringify({ token: tokenOut }), {
+    /* ── RETURN KEY ──
+       The key is returned to authenticated users only.
+       Client uses it for WebSocket STT connections.
+       For production, consider Deepgram's managed key rotation. */
+    return new Response(JSON.stringify({ token: DEEPGRAM_API_KEY }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
 
@@ -96,8 +58,7 @@ Deno.serve(async (req: Request) => {
     console.error("[deepgram-token] error:", err);
     return new Response(
       JSON.stringify({ error: "Internal server error" }),
-      { status: 500, headers: corsHeaders }
+      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
     );
   }
 });
-``
