@@ -81,6 +81,7 @@ const SystemDesign     = lazy(() => import("@/pages/app/prep/SystemDesign"));
 
 // Sessions
 const SessionHistory   = lazy(() => import("@/pages/app/sessions/SessionHistory"));
+const CallSessions     = lazy(() => import("@/pages/app/sessions/CallSessions"));
 const SessionDetail    = lazy(() => import("@/pages/app/sessions/SessionDetail"));
 
 // Documents
@@ -380,8 +381,9 @@ const routes = [
           { path: "prep/coding-hints",     element: <Page component={CodingHints} /> },
           { path: "prep/system-design",    element: <Page component={SystemDesign} /> },
 
-          { path: "sessions",    element: <Page component={SessionHistory} /> },
-          { path: "sessions/:id",element: <Page component={SessionDetail} /> },
+          { path: "sessions",        element: <Page component={CallSessions} /> },
+          { path: "sessions/history", element: <Page component={SessionHistory} /> },
+          { path: "sessions/:id",     element: <Page component={SessionDetail} /> },
 
           { path: "documents",            element: <Page component={Documents} /> },
           { path: "documents/resume/:id", element: <Page component={ResumeDetail} /> },
