@@ -321,38 +321,37 @@ export function OverlayWindow({
                     <OverlayQuickStart onStart={onStartSession} />
                   )}
 
-                  {isSessionActive && (
-                    <>
-                      {current_question && <OverlayQuestionBar question={current_question} />}
-                      <OverlayQuestionPreview />
-                      <OverlayTabBar />
-                      <div className={cn(
-                        "min-h-0",
-                        active_tab === "chat" ? "flex-1 flex flex-col" : "overflow-y-auto flex-1"
-                      )}>
-                        {active_tab === "answer" && (
-                          <OverlayHintPanel
-                            text={displayText}
-                            hintStyle={hint_style}
-                            hintState={hint_state}
-                            errorMessage={error_message}
-                            screenshotHint={screenshot_hint}
-                            isScreenshotLoading={is_screenshot_loading}
-                          />
-                        )}
-                        {active_tab === "chat" && onManualQuestion && (
-                          <OverlayChatPanel onSubmit={onManualQuestion} />
-                        )}
-                        {active_tab === "transcript" && (
-                          <div className="p-3">
-                            <LiveTranscriptStream />
-                          </div>
-                        )}
-                        {active_tab === "resume"     && <OverlayResumePanel />}
-                        {active_tab === "audit"      && <OverlayAuditPanel />}
-                      </div>
-                    </>
-                  )}
+                  {/* Tab bar + panels — always visible during session, and chat/status available outside session */}
+                  <>
+                    {isSessionActive && current_question && <OverlayQuestionBar question={current_question} />}
+                    {isSessionActive && <OverlayQuestionPreview />}
+                    <OverlayTabBar />
+                    <div className={cn(
+                      "min-h-0",
+                      active_tab === "chat" ? "flex-1 flex flex-col" : "overflow-y-auto flex-1"
+                    )}>
+                      {active_tab === "answer" && (
+                        <OverlayHintPanel
+                          text={displayText}
+                          hintStyle={hint_style}
+                          hintState={hint_state}
+                          errorMessage={error_message}
+                          screenshotHint={screenshot_hint}
+                          isScreenshotLoading={is_screenshot_loading}
+                        />
+                      )}
+                      {active_tab === "chat" && onManualQuestion && (
+                        <OverlayChatPanel onSubmit={onManualQuestion} />
+                      )}
+                      {active_tab === "transcript" && (
+                        <div className="p-3">
+                          <LiveTranscriptStream />
+                        </div>
+                      )}
+                      {active_tab === "resume"     && <OverlayResumePanel />}
+                      {active_tab === "audit"      && <OverlayAuditPanel />}
+                    </div>
+                  </>
                 </>
               )}
             </>
