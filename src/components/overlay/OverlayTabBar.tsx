@@ -6,8 +6,9 @@ import { cn } from "@/lib/utils";
 
 const TABS = [
   { id: "answer"     as const, label: "Answer",     emoji: "✦" },
-  { id: "resume"     as const, label: "Context",    emoji: "📄" },
+  { id: "chat"       as const, label: "Chat",       emoji: "💬" },
   { id: "transcript" as const, label: "Transcript", emoji: "🎙" },
+  { id: "resume"     as const, label: "Context",    emoji: "📄" },
   { id: "audit"      as const, label: "Status",     emoji: "📊" },
 ] as const;
 
