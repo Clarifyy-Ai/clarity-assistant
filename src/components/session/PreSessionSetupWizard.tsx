@@ -573,6 +573,28 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 <Toggle checked={saveTranscript} onChange={setSaveTranscript} />
               </div>
 
+              {/* Duration setting */}
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">Session Duration (minutes)</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[15, 30, 45, 60].map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setDurationMinutes(d)}
+                      className={cn(
+                        "py-2 rounded-xl border text-sm font-medium transition-all",
+                        durationMinutes === d
+                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                          : "bg-white/3 border-white/10 text-gray-400 hover:border-white/20"
+                      )}
+                    >
+                      {d} min
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-gray-500 mt-1.5">You'll get warnings at 5 min, 2 min, and 30 sec before time is up.</p>
+              </div>
+
               <div className="flex gap-2.5 p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl">
                 <AlertTriangle className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
                 <div className="text-[11px] text-amber-300/80 leading-relaxed space-y-1.5">
