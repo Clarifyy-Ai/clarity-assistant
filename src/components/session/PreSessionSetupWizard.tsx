@@ -105,8 +105,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   // Step 5 — Save Transcript
   const [saveTranscript,   setSaveTranscript]   = useState(true);
 
+  // Step 5b — Duration
+  const [durationMinutes, setDurationMinutes] = useState(60);
+
   // Step 6 — Connect
-  const [enableSystemAudio, setEnableSystemAudio] = useState(false);
+  const [enableSystemAudio, setEnableSystemAudio] = useState(true);
   const [stealthMode,        setStealthMode]       = useState(true);
   const [micPermission,      setMicPermission]     = useState<"unknown" | "granted" | "denied" | "checking">("unknown");
 
