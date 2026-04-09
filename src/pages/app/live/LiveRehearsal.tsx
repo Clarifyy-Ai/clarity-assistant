@@ -37,7 +37,8 @@ const DEFAULT_CONFIG: LiveSessionConfig = {
   jd_id: null,
   interview_type: "behavioral",
   instructions: "",
-  enable_system_audio: false,
+  enable_system_audio: true,
+  duration_minutes: 60,
 };
 
 export default function LiveRehearsal() {

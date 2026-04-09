@@ -61,6 +61,7 @@ export interface LiveSessionConfig {
   session_call_type?: "interview" | "regular_call";
   context_document_ids?: string[];
   language?: string;
+  duration_minutes?: number;
 }
 
 // ── Question ──────────────────────────────────────────────────────
