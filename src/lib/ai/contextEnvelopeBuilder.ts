@@ -105,6 +105,14 @@ export function buildCoachingContext(
 
     additional_context: additionalContext.length > 0 ? additionalContext : undefined,
 
+    // Grab the latest transcript for live hint context
+    last_transcript: (() => {
+      try {
+        const audioState = (await import("@/store/audioStore")).useAudioStore.getState();
+        return audioState.transcript?.full_transcript?.slice(-800) ?? null;
+      } catch { return null; }
+    })(),
+
     ...sessionOverrides,
   };
 
