@@ -132,6 +132,9 @@ export interface CoachingContext {
 
   // Extra document snippets (from context_document_ids)
   additional_context?: string[];
+
+  // Live transcript context for hint generation
+  last_transcript?: string | null;
 }
 
 export interface ResumeProject {
