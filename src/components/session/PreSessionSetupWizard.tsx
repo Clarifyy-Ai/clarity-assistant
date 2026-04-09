@@ -105,8 +105,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   // Step 5 — Save Transcript
   const [saveTranscript,   setSaveTranscript]   = useState(true);
 
+  // Step 5b — Duration
+  const [durationMinutes, setDurationMinutes] = useState(60);
+
   // Step 6 — Connect
-  const [enableSystemAudio, setEnableSystemAudio] = useState(false);
+  const [enableSystemAudio, setEnableSystemAudio] = useState(true);
   const [stealthMode,        setStealthMode]       = useState(true);
   const [micPermission,      setMicPermission]     = useState<"unknown" | "granted" | "denied" | "checking">("unknown");
 
@@ -164,6 +167,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       session_call_type:    sessionCallType,
       context_document_ids: contextDocIds,
       language,
+      duration_minutes:     durationMinutes > 0 ? durationMinutes : undefined,
     };
 
     // Sync document selections into documentStore so AI context is correct
@@ -567,6 +571,28 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   <p className="text-[11px] text-gray-500 mt-0.5">Store the session transcript for later review</p>
                 </div>
                 <Toggle checked={saveTranscript} onChange={setSaveTranscript} />
+              </div>
+
+              {/* Duration setting */}
+              <div>
+                <label className="block text-xs font-medium text-gray-400 mb-1.5">Session Duration (minutes)</label>
+                <div className="grid grid-cols-4 gap-2">
+                  {[15, 30, 45, 60].map((d) => (
+                    <button
+                      key={d}
+                      onClick={() => setDurationMinutes(d)}
+                      className={cn(
+                        "py-2 rounded-xl border text-sm font-medium transition-all",
+                        durationMinutes === d
+                          ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                          : "bg-white/3 border-white/10 text-gray-400 hover:border-white/20"
+                      )}
+                    >
+                      {d} min
+                    </button>
+                  ))}
+                </div>
+                <p className="text-[10px] text-gray-500 mt-1.5">You'll get warnings at 5 min, 2 min, and 30 sec before time is up.</p>
               </div>
 
               <div className="flex gap-2.5 p-4 bg-amber-500/5 border border-amber-500/20 rounded-xl">

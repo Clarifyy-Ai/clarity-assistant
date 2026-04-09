@@ -46,8 +46,8 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
     question,
     interview_type:    context.session_type ?? "behavioural",
     target_company:    context.target_company ?? null,
-    transcript:        null,
-    resume_text:       context.resume_experience_summary ?? null,
+    transcript:        context.last_transcript ?? null,
+    resume_context:    context.resume_experience_summary ?? null,
     simple_language:   simpleLanguage ?? false,
     screenshot_base64: screenshotBase64 ?? null,
   });

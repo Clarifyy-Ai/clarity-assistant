@@ -8,6 +8,15 @@ const EXAM_TYPE_MAP: Record<string, string> = {
   IBPS_PO: "IBPS PO",
   HPCL_ENGINEER: "HPCL Engineer",
   PSU: "PSU",
+  // Aliases for DB variations
+  "SSC Exams (CGL/CHSL)": "SSC CGL",
+  "Banking (IBPS/SBI/RBI)": "IBPS PO",
+  "NEET-UG": "NEET UG",
+  "JEE Main": "JEE Main",
+  "JEE Advanced": "JEE Advanced",
+  "UPSC CSE": "UPSC CSE",
+  "APPSC": "APPSC",
+  "TSPSC": "TSPSC",
 };
 
 /** Convert a frontend exam ID to the DB value. Falls through if already correct or unknown. */

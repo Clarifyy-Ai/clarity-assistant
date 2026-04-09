@@ -7,6 +7,7 @@ import { useCoachStore } from "@/store/coachStore";
 import { useSessionStore } from "@/store/sessionStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { useAuthStore } from "@/store/userStore";
+import { useAudioStore } from "@/store/audioStore";
 
 // ─────────────────────────────────────────────────────────────────
 // Context Envelope Builder
@@ -104,6 +105,14 @@ export function buildCoachingContext(
     total_questions: sessionConfig.question_count ?? 5,
 
     additional_context: additionalContext.length > 0 ? additionalContext : undefined,
+
+    // Grab the latest transcript for live hint context
+    last_transcript: (() => {
+      try {
+        const audioState = useAudioStore.getState();
+        return audioState.transcript?.full_transcript?.slice(-800) ?? null;
+      } catch { return null; }
+    })(),
 
     ...sessionOverrides,
   };
