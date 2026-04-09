@@ -167,6 +167,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       session_call_type:    sessionCallType,
       context_document_ids: contextDocIds,
       language,
+      duration_minutes:     durationMinutes > 0 ? durationMinutes : undefined,
     };
 
     // Sync document selections into documentStore so AI context is correct
