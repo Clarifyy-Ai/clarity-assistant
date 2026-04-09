@@ -1,72 +1,69 @@
 
 
-# Fix Clarify AI — Overlay, AI Answers, Audio & New Features
+# Fix Plan: Overlay Answers, Dual Audio, Session Timer, Mock Test Questions
 
-## Root Cause Analysis
+## Issues Identified
 
-### BUG-1: AI answers never appear (CRITICAL)
-**File**: `src/lib/ai/geminiClient.ts` line 76
-**Issue**: `data.hint` reads a non-existent property. The `generate-hint` edge function returns `{ hints: "..." }` (plural), but the client reads `data.hint` (singular). Result: hint is always `""`, so nothing appears in the overlay.
-**Fix**: Change `data.hint` to `data.hints`.
+### 1. AI Answers Not Generating
+**Root cause**: The `geminiClient.ts` sends `resume_text` in the request body but the `generate-hint` edge function reads `resume_context`. The field name mismatch means context is lost. Additionally, the `generate-hint` function returns hints as plain text but the overlay's `commitStreamedHint()` expects the hint to arrive via `appendStreamChunk` — since `streamGeminiHint` delivers the entire hint as one chunk and then calls `onDone`, the overlay state transitions (`generating` → `streaming` → `idle`) happen too fast. The overlay's `OverlayHintPanel` may not render the content if `hint_state` transitions through states without the `current_hint` being properly set via `commitStreamedHint`.
 
-### BUG-2: No DEEPGRAM_API_KEY secret configured (CRITICAL)
-**Issue**: The `deepgram-token` edge function checks `Deno.env.get("DEEPGRAM_API_KEY")` and returns 503 if missing. The project secrets list shows no `DEEPGRAM_API_KEY`. Without this, the Deepgram WebSocket cannot connect, so there is no transcription, no question detection, and no auto-generated hints.
-**Fix**: User must add their Deepgram API key as a secret. The code itself is correct.
+**Fix**: 
+- Align field names in `geminiClient.ts` body to match what `generate-hint` expects (`resume_context` instead of `resume_text`)
+- Ensure `streamGeminiHint` sets `hint_state` to `"streaming"` before delivering the chunk, so the overlay renders it
+- Add transcript context to the hint request so answers are based on what was said
 
-### BUG-3: Overlay renders in PiP by default, breaking layout
-**File**: `src/components/overlay/OverlayWindow.tsx` line 95
-**Issue**: `useDocumentPiP(is_visible)` attempts to open a Document Picture-in-Picture window whenever the overlay is visible. If the browser blocks the PiP request (common in non-Chrome or when not triggered by user gesture), `pipDoc` is null and the overlay falls back to `document.body`, but styles may not transfer correctly. Additionally, PiP windows cannot be styled or debugged easily.
-**Fix**: Disable PiP by default. Use inline rendering in the main document via `createPortal` to `overlay-root`. Keep PiP as an opt-in toggle.
+### 2. System Audio Not Working (Both Streams from Mic Only)
+**Root cause**: `useAudioSession.start()` only attempts system audio if `opts.enableSystemAudio` is `true`, but `DEFAULT_CONFIG` in `LiveRehearsal.tsx` sets `enable_system_audio: false`. Users must manually toggle system audio after session start. The toggle works via `window.confirm()` dialog which is clunky.
 
-## Implementation Plan
+**Fix**:
+- In `PreSessionSetupWizard` step 6 (Connect), add a clear toggle for "Capture interviewer audio (system audio)" that sets `enable_system_audio: true` in the config
+- When system audio is enabled in config, auto-prompt the tab share dialog on session start
+- Show clear status in overlay header: "MIC ONLY" vs "DUAL AUDIO"
 
-### Step 1: Fix AI hint property name mismatch (BUG-1)
-- `src/lib/ai/geminiClient.ts` line 76: `data.hint` → `data.hints`
+### 3. Session Timer Never Ends (No Time Warning)
+**Root cause**: `LiveSessionController` ticks `elapsed_seconds` indefinitely. There is no `duration_limit` in the session config and no logic to warn or auto-stop when a configured duration is reached. The `LiveSessionConfig` type has no `duration_minutes` field.
 
-### Step 2: Disable PiP by default, fix overlay rendering (BUG-3)
-- `src/components/overlay/OverlayWindow.tsx`: Change `useDocumentPiP(is_visible)` to `useDocumentPiP(false)` so the overlay always renders inline in the main page portal.
-- This immediately fixes the "overlay doesn't appear" and "layout is broken" issues.
+**Fix**:
+- Add `duration_minutes` to `LiveSessionConfig` type
+- Add time-remaining warning in `LiveSessionController`: at 5 min, 2 min, and 30 sec before the configured limit
+- Show visual warning in the overlay header when time is running low
+- Auto-end session when time expires (with confirmation toast)
 
-### Step 3: Add DEEPGRAM_API_KEY secret requirement (BUG-2)
-- Use the `add_secret` tool to prompt the user to add their Deepgram API key.
-- Add a visible warning in the overlay when Deepgram connection fails, with a message about configuring the API key.
+### 4. Mock Test Showing Empty Questions
+**Root cause**: The `exam_papers` table has entries for years 2016-2026, but questions only exist for years 2018-2022. When a user clicks "Start Exam" on a 2023, 2024, 2025, or 2026 paper, the `select-test-questions` function finds zero matching questions. Additionally, exam type names don't match between `exam_papers` and `questions` tables (e.g., `SSC CGL` vs `SSC Exams (CGL/CHSL)`, `IBPS PO` vs `Banking (IBPS/SBI/RBI)`).
 
-### Step 4: Improve the Connect step in PreSessionSetupWizard
-Reference: ParakeetAI's "Connect" dialog (image-3, image-5)
-- Add platform icons (Zoom, Google Meet, Teams, HackerRank, CodeSignal) to step 6.
-- Add "Share tab audio" instruction callout.
-- Add "Browser vs Desktop" info section.
-- Keep the existing mic permission check flow.
+**Fix**:
+- Update `examTypeMap.ts` to handle all DB exam type variations
+- Add `source_year` filtering in `select-test-questions` when `year_range` is provided
+- Use the AI gateway skill to generate 500+ additional questions covering years 2023-2025 for JEE, NEET, UPSC, SSC, Banking exams and seed them via migration
+- Remove exam paper entries for years where no questions can exist (2026, future years)
 
-### Step 5: Build inline session layout (ParakeetAI-style)
-Reference: ParakeetAI's in-browser session view (image-3)
-- Restructure `LiveRehearsal.tsx` to show a 2-panel layout:
-  - **Left panel**: Transcript stream with Connect/Clear buttons, auto-scroll toggle
-  - **Right panel**: AI Answer stream with "AI Answer" CTA button
-- Add a top bar with: brand logo, session timer, language selector, settings gear, Exit button
-- The floating overlay remains available via hotkey but is no longer the primary UI.
+### 5. Overlay Sometimes Not Appearing
+**Root cause**: The `overlayRoot` fallback chain in `OverlayWindow.tsx` looks for `#overlay-root` in the document. If `index.html` doesn't have `<div id="overlay-root"></div>`, the portal target falls back to `document.body` which can cause z-index conflicts. Also, if `is_visible` is not set to true during session start, the overlay won't render.
 
-### Step 6: Build Session List page
-Reference: ParakeetAI's "Call Sessions" (image-2, image-5)
-- Create `src/pages/app/sessions/SessionList.tsx` with a table layout:
-  - Columns: Title, Description, Mode, Ends In, AI Usage, Created At, Actions
-  - Row actions: View details, Edit, Delete
-  - "Start Free Session" and "Start Session" buttons in top bar
-  - Pagination support
-- Query `sessions` table from Supabase.
-- Add route `/app/sessions` pointing to this page.
+**Fix**:
+- Verify `index.html` has `<div id="overlay-root"></div>` 
+- Ensure `showOverlay()` is called reliably in `startLiveSession`
+- Add a fallback: if overlay root is missing, create it dynamically
 
-### Step 7: Update sidebar navigation
-- Rename "Sessions" / "Session History" to "Call Sessions" (matching ParakeetAI terminology).
-- Add icons matching the reference.
+## Implementation Steps
 
-## Technical Notes
-- No database migrations needed — `sessions` table already exists.
-- No new edge functions needed — existing `generate-hint` and `deepgram-token` are sufficient once bugs are fixed.
-- The DEEPGRAM_API_KEY is the only blocker for live transcription. Without it, the overlay will show AI answers via manual chat only.
+1. **Fix AI hint generation pipeline** — align field names, add transcript context, fix state transitions
+2. **Fix system audio config flow** — add toggle in setup wizard, pass config correctly
+3. **Add session timer warnings** — duration_minutes support, visual warnings, auto-end
+4. **Fix exam type mapping** — align DB values between exam_papers and questions
+5. **Seed 500+ questions** — use AI gateway to generate questions for missing years, insert via migration
+6. **Fix overlay reliability** — ensure overlay-root exists, fallback creation
 
-## Estimated Changes
-- ~8 files modified
-- ~2 new files created
-- 0 migrations
+## Files Modified
+- `src/lib/ai/geminiClient.ts` — fix field names, add transcript
+- `src/pages/app/live/LiveRehearsal.tsx` — fix default config
+- `src/components/session/PreSessionSetupWizard.tsx` — add system audio toggle + duration
+- `src/components/live/LiveSessionController.tsx` — add timer warnings
+- `src/types/session.types.ts` — add duration_minutes
+- `supabase/functions/_shared/examTypeMap.ts` — add missing mappings
+- `supabase/functions/select-test-questions/index.ts` — add source_year filter
+- `supabase/functions/generate-hint/index.ts` — align field names
+- `index.html` — ensure overlay-root div
+- New migration — seed 500+ questions
 
