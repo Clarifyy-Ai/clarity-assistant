@@ -283,6 +283,10 @@ Deno.serve(async (req) => {
     // Shuffle final question order randomly before returning
     finalIds = shuffle(finalIds).slice(0, question_count);
 
+    if (finalIds.length === 0) {
+      console.warn(`[select-test-questions] WARNING: 0 questions found for exam_type="${exam_type}", subjects=${JSON.stringify(subjects)}, topics=${JSON.stringify(topics)}`);
+    }
+
     return new Response(
       JSON.stringify({
         question_ids: finalIds,

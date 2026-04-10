@@ -12,6 +12,8 @@ import { retry } from "@/lib/utils";
 
 export type GeminiModel = "gemini-1.5-flash" | "gemini-1.5-pro";
 
+export type AnswerMode = "hint" | "full_answer";
+
 export interface GeminiStreamOptions {
   question: string;
   context: CoachingContext;
