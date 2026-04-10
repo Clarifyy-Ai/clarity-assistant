@@ -1,7 +1,6 @@
 // src/components/overlay/OverlayWindow.tsx
 import { createPortal } from "react-dom";
-import { useRef, useCallback, useState, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { useRef, useCallback, useState, useEffect, useMemo } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";
 import { useAudioStore } from "@/store/audioStore";
@@ -25,21 +24,58 @@ import { OverlayAnswerTimer } from "./OverlayAnswerTimer";
 import { OverlayAudioBadge } from "./OverlayAudioBadge";
 import { OverlayQuestionPreview } from "./OverlayQuestionPreview";
 import { cn } from "@/lib/utils";
-import { Loader2, Maximize2, Sparkles, BarChart3 } from "lucide-react";
+import { Loader2, Sparkles } from "lucide-react";
 import type { LiveSessionConfig } from "@/types/session.types";
 import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 import { useDocumentPiP } from "@/lib/overlay/useDocumentPiP";
 
-interface OverlayWindowProps {
-  onToggleMic?: () => void;
-  onToggleSystemAudio?: () => void;
-  onGenerate?: () => void;
-  onEndSession?: () => void;
-  onManualQuestion?: (question: string) => void;
-  onStartSession?: (config: LiveSessionConfig) => void;
-  onSetupNewSession?: () => void;
-  lastSessionId?: string | null;
+// ─────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────
+
+const OVERLAY_ROOT_ID = "overlay-root";
+
+/**
+ * Returns the existing #overlay-root element, or creates and appends one
+ * to <body> if it's missing (e.g. hot-reload wiped the DOM node).
+ * NEVER falls back to document.body — portalling into body causes z-index
+ * collisions and breaks event delegation for the rest of the app.
+ */
+function ensureOverlayRoot(doc: Document): HTMLElement {
+  let el = doc.getElementById(OVERLAY_ROOT_ID);
+  if (!el) {
+    console.warn(
+      `[OverlayWindow] #${OVERLAY_ROOT_ID} not found in DOM — creating it dynamically. ` +
+      "Add <div id=\"overlay-root\"></div> to your index.html to avoid this.",
+    );
+    el = doc.createElement("div");
+    el.id = OVERLAY_ROOT_ID;
+    // Sit on its own compositor layer, above everything else
+    el.style.cssText =
+      "position:fixed;inset:0;pointer-events:none;z-index:2147483647;isolation:isolate;";
+    doc.body.appendChild(el);
+  }
+  return el;
 }
+
+// ─────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────
+
+interface OverlayWindowProps {
+  onToggleMic?:        () => void;
+  onToggleSystemAudio?: () => void;
+  onGenerate?:         () => void;
+  onEndSession?:       () => void;
+  onManualQuestion?:   (question: string) => void;
+  onStartSession?:     (config: LiveSessionConfig) => void;
+  onSetupNewSession?:  () => void;
+  lastSessionId?:      string | null;
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Component
+// ─────────────────────────────────────────────────────────────────
 
 export function OverlayWindow({
   onToggleMic,
@@ -51,9 +87,20 @@ export function OverlayWindow({
   onSetupNewSession,
   lastSessionId,
 }: OverlayWindowProps) {
-  const panelRef            = useRef<HTMLDivElement>(null);
-  const resizeContainerRef  = useRef<HTMLDivElement>(null);
+  const panelRef           = useRef<HTMLDivElement>(null);
+  const resizeContainerRef = useRef<HTMLDivElement>(null);
 
+  // ── Hydration guard ─────────────────────────────────────────────
+  // Delay portal rendering by one tick so the overlay Zustand store
+  // finishes rehydrating from localStorage before we read is_visible.
+  // Without this, the overlay flashes in a broken half-open state on
+  // first render when the persisted state hasn't been applied yet.
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => {
+    setIsMounted(true);
+  }, []);
+
+  // ── Store subscriptions ─────────────────────────────────────────
   const is_visible          = useOverlayStore((s) => s.is_visible);
   const is_stealth_mode     = useOverlayStore((s) => s.is_stealth_mode);
   const is_proctor_safe     = useOverlayStore((s) => s.is_proctor_safe);
@@ -76,32 +123,43 @@ export function OverlayWindow({
   const is_peek_active      = useOverlayStore((s) => s.is_peek_active);
   const is_minimal_mode     = useOverlayStore((s) => s.is_minimal_mode);
 
-  const sessionStatus    = useSessionStore((s) => s.status);
-  const isSessionActive  = sessionStatus === "active";
+  const sessionStatus   = useSessionStore((s) => s.status);
+  const isSessionActive = sessionStatus === "active";
 
-  const deepgramStatus   = useAudioStore((s) => s.deepgram_status);
-  const stream_error     = useAudioStore((s) => s.streams?.error ?? null);
-  const isRecording      = deepgramStatus === "connected";
-  const isGenerating     = hint_state === "generating" || hint_state === "streaming";
+  const deepgramStatus  = useAudioStore((s) => s.deepgram_status);
+  const stream_error    = useAudioStore((s) => s.streams?.error ?? null);
+  const isRecording     = deepgramStatus === "connected";
+  const isGenerating    = hint_state === "generating" || hint_state === "streaming";
 
   const handlePositionChange = useCallback(
     (pos: import("@/store/overlayStore").OverlayPosition) =>
       useOverlayStore.getState().setPosition(pos),
-    []
+    [],
   );
 
   useStealthMouse(panelRef, is_stealth_mode);
 
-  const pipDoc      = useDocumentPiP(false);
-  const targetDoc   = pipDoc ?? (typeof document !== "undefined" ? document : null);
-  const overlayRoot = targetDoc?.getElementById("overlay-root") ?? targetDoc?.body ?? null;
+  // ── PiP document support ────────────────────────────────────────
+  const pipDoc    = useDocumentPiP(false);
+  const targetDoc = pipDoc ?? (typeof document !== "undefined" ? document : null);
 
   useEffect(() => {
     useOverlayStore.getState().setPipActive(!!pipDoc);
     return () => useOverlayStore.getState().setPipActive(false);
   }, [pipDoc]);
 
-  if (!overlayRoot || (!is_visible && !is_peek_active)) return null;
+  // ── Resolve portal mount node ───────────────────────────────────
+  // Memoised so we only call ensureOverlayRoot when targetDoc changes,
+  // not on every render. Returns null during SSR.
+  const overlayRoot = useMemo<HTMLElement | null>(() => {
+    if (!targetDoc) return null;
+    return ensureOverlayRoot(targetDoc);
+  }, [targetDoc]);
+
+  // ── Guard: don't render until mounted + visible + portal ready ──
+  if (!isMounted || !overlayRoot || (!is_visible && !is_peek_active)) {
+    return null;
+  }
 
   const displayText      = hint_state === "streaming" ? streaming_buffer : current_hint;
   const effectiveOpacity = stealth_opacity / 100;
@@ -124,12 +182,12 @@ export function OverlayWindow({
             "bg-[#0a0a14]/92 backdrop-blur-2xl",
             "shadow-[0_8px_64px_rgba(0,0,0,0.7),0_0_0_1px_rgba(255,255,255,0.04),inset_0_1px_0_rgba(255,255,255,0.06)]",
             "transition-opacity duration-150",
-            is_stealth_mode && "overlay-stealth-glass",
-            is_proctor_safe && "overlay-proctor-safe",
+            is_stealth_mode  && "overlay-stealth-glass",
+            is_proctor_safe  && "overlay-proctor-safe",
           )}
           style={{
-            width: overlay_width,
-            height: is_minimal_mode ? "auto" : overlay_height,
+            width:   overlay_width,
+            height:  is_minimal_mode ? "auto" : overlay_height,
             opacity: effectiveOpacity,
           }}
           role="dialog"
@@ -161,7 +219,10 @@ export function OverlayWindow({
             {/* Live recording indicator */}
             {isRecording && (
               <div className="flex items-center gap-1 shrink-0">
-                <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_6px_rgba(239,68,68,0.8)]" title="Recording" />
+                <span
+                  className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_6px_rgba(239,68,68,0.8)]"
+                  title="Recording"
+                />
                 <span className="text-[10px] font-mono text-red-400/70">LIVE</span>
               </div>
             )}
@@ -179,108 +240,32 @@ export function OverlayWindow({
                 SAFE
               </span>
             )}
-            {is_peek_active && (
-              <span className="font-mono text-[9px] font-bold text-sky-300 bg-sky-500/15 border border-sky-500/20 px-1.5 py-0.5 rounded shrink-0 animate-pulse">
-                PEEK
-              </span>
-            )}
-            {isSessionActive && !is_minimal_mode && <OverlayAudioBadge />}
-            {isSessionActive && !is_minimal_mode && <OverlayAnswerTimer />}
 
             <div className="flex-1" />
 
-            {is_minimal_mode && (
-              <button
-                onClick={(e) => { e.stopPropagation(); useOverlayStore.getState().setMinimalMode(false); }}
-                className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-white/10 text-amber-400/70 hover:text-amber-300 transition-all"
-                title="Exit minimal mode"
-              >
-                <Maximize2 className="w-3 h-3" />
-              </button>
-            )}
+            <OverlayAudioBadge />
+            <OverlayAnswerTimer />
 
-            <button
-              onClick={(e) => { e.stopPropagation(); useOverlayStore.getState().hideOverlay(); }}
-              className="w-6 h-6 flex items-center justify-center rounded-md hover:bg-white/10 text-white/25 hover:text-white/80 transition-all"
-              title="Hide overlay (Ctrl+Shift+H)"
-            >
-              <svg className="w-3 h-3" fill="none" stroke="currentColor" strokeWidth="2.5" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+            <OverlayToolbar
+              onToggleMic={onToggleMic}
+              onToggleSystemAudio={onToggleSystemAudio}
+              onEndSession={onEndSession}
+              onSetupNewSession={onSetupNewSession}
+            />
           </div>
 
-          {/* ── Screen capture warning ──────────────────────────────── */}
-          <ScreenCaptureBanner isProctorSafe={is_proctor_safe} />
-
-          {/* ── Session complete ────────────────────────────────────── */}
-          {!isSessionActive && lastSessionId && (
-            <div className="flex-1 flex flex-col items-center justify-center gap-5 px-6 py-8 text-center">
-              <div className="relative">
-                <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-emerald-500/20 to-teal-500/10 border border-emerald-500/20 flex items-center justify-center shadow-lg shadow-emerald-500/10">
-                  <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                </div>
-                <div className="absolute -inset-1 rounded-2xl bg-emerald-500/10 blur-md" />
-              </div>
-              <div>
-                <p className="text-[15px] font-semibold text-white/90">Session Complete</p>
-                <p className="text-[12px] text-white/35 mt-1">Great work — review your performance</p>
-              </div>
-              <div className="flex flex-col gap-2 w-full max-w-[220px]">
-                {lastSessionId && (
-                  <Link
-                    to={`/app/debrief/${lastSessionId}`}
-                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-gradient-to-r from-indigo-600/30 to-violet-600/20 hover:from-indigo-600/40 hover:to-violet-600/30 text-indigo-300 text-[12px] font-semibold rounded-xl border border-indigo-500/25 transition-all shadow-md"
-                  >
-                    <Sparkles className="w-3.5 h-3.5" />
-                    Generate Debrief
-                  </Link>
-                )}
-                {lastSessionId && (
-                  <Link
-                    to={`/app/scorecard/${lastSessionId}`}
-                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white/5 hover:bg-white/10 text-white/50 hover:text-white text-[12px] font-medium rounded-xl border border-white/8 transition-all"
-                  >
-                    <BarChart3 className="w-3.5 h-3.5" />
-                    View Scorecard
-                  </Link>
-                )}
-                {onSetupNewSession && (
-                  <button
-                    onClick={onSetupNewSession}
-                    className="flex items-center justify-center gap-2 px-4 py-2.5 bg-white/3 hover:bg-white/8 text-white/35 hover:text-white text-[12px] font-medium rounded-xl border border-white/6 transition-all"
-                  >
-                    New Session
-                  </button>
-                )}
-              </div>
+          {/* ── BODY ───────────────────────────────────────────────── */}
+          {is_peek_active && !is_visible ? (
+            // Peek mode: only show the question bar + minimal controls
+            <div className="px-3 py-2 text-[11px] text-white/50 select-none">
+              Peek active — press hotkey to open
             </div>
-          )}
-
-          {/* ── Minimal mode ─────────────────────────────────────────── */}
-          {is_minimal_mode && isSessionActive && (
-            <div className="flex items-center gap-2 px-3 py-2 shrink-0">
-              <div className="flex-1" />
-              <FloatingAIButton onGenerate={onGenerate} isGenerating={isGenerating} compact />
-            </div>
-          )}
-
-          {/* ── Full content ─────────────────────────────────────────── */}
-          {!is_minimal_mode && (
+          ) : (
             <>
-              {!is_panic_visible && isSessionActive && (
-                <OverlayToolbar
-                  onToggleMic={onToggleMic}
-                  onToggleSystemAudio={onToggleSystemAudio}
-                  onGenerate={onGenerate}
-                  onEndSession={onEndSession}
-                />
-              )}
+              <ScreenCaptureBanner isProctorSafe={is_proctor_safe} />
 
               {is_panic_visible && panic_content && (
-                <div className="animate-fade-in border-b border-amber-500/15 bg-gradient-to-b from-amber-500/10 to-amber-500/5 px-4 py-3 shrink-0">
+                <div className="p-3 bg-amber-500/10 border-b border-amber-500/15 shrink-0">
                   <div className="flex items-center gap-2 mb-2.5">
                     <span className="text-[13px]">🫁</span>
                     <p className="text-xs font-bold text-amber-300">Take a breath — you've got this</p>
@@ -321,15 +306,20 @@ export function OverlayWindow({
                     <OverlayQuickStart onStart={onStartSession} />
                   )}
 
-                  {/* Tab bar + panels — always visible during session, and chat/status available outside session */}
                   <>
-                    {isSessionActive && current_question && <OverlayQuestionBar question={current_question} />}
+                    {isSessionActive && current_question && (
+                      <OverlayQuestionBar question={current_question} />
+                    )}
                     {isSessionActive && <OverlayQuestionPreview />}
                     <OverlayTabBar />
-                    <div className={cn(
-                      "min-h-0",
-                      active_tab === "chat" ? "flex-1 flex flex-col" : "overflow-y-auto flex-1"
-                    )}>
+                    <div
+                      className={cn(
+                        "min-h-0",
+                        active_tab === "chat"
+                          ? "flex-1 flex flex-col"
+                          : "overflow-y-auto flex-1",
+                      )}
+                    >
                       {active_tab === "answer" && (
                         <OverlayHintPanel
                           text={displayText}
@@ -348,8 +338,8 @@ export function OverlayWindow({
                           <LiveTranscriptStream />
                         </div>
                       )}
-                      {active_tab === "resume"     && <OverlayResumePanel />}
-                      {active_tab === "audit"      && <OverlayAuditPanel />}
+                      {active_tab === "resume" && <OverlayResumePanel />}
+                      {active_tab === "audit"  && <OverlayAuditPanel />}
                     </div>
                   </>
                 </>
@@ -371,9 +361,11 @@ export function OverlayWindow({
             </div>
           )}
 
-          {/* ── Resize handles ────────────────────────────────────────── */}
+          {/* ── Resize handles ─────────────────────────────────────── */}
           <div
-            className={cn(is_stealth_mode && "opacity-50 hover:opacity-80 transition-opacity")}
+            className={cn(
+              is_stealth_mode && "opacity-50 hover:opacity-80 transition-opacity",
+            )}
             style={{ pointerEvents: "auto" }}
           >
             <OverlayResizeHandles containerRef={resizeContainerRef} />
@@ -383,18 +375,22 @@ export function OverlayWindow({
         </div>
       </OverlayPositionManager>
     </StealthMouseGuard>,
-    overlayRoot
+    overlayRoot,
   );
 }
+
+// ─────────────────────────────────────────────────────────────────
+// Sub-components
+// ─────────────────────────────────────────────────────────────────
 
 function FloatingAIButton({
   onGenerate,
   isGenerating,
   compact = false,
 }: {
-  onGenerate?: () => void;
+  onGenerate?:  () => void;
   isGenerating: boolean;
-  compact?: boolean;
+  compact?:     boolean;
 }) {
   return (
     <button
@@ -406,7 +402,7 @@ function FloatingAIButton({
         "text-white shadow-lg shadow-indigo-500/25 disabled:opacity-70 disabled:cursor-not-allowed",
         "border border-white/10 hover:border-white/20",
         isGenerating && "overlay-fab-glow",
-        compact ? "py-1.5 text-[11px]" : "py-2.5 text-[13px]"
+        compact ? "py-1.5 text-[11px]" : "py-2.5 text-[13px]",
       )}
       title="Get AI Answer (Ctrl+Shift+G)"
     >
