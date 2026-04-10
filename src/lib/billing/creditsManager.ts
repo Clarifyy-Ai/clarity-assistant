@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { EDGE_BASE, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/env";
+import { EDGE_BASE } from "@/lib/env";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { useUIStore } from "@/store/uiStore";
@@ -11,27 +10,30 @@ import { getCreditCost } from "@/lib/ai/modelRouter";
 // ─────────────────────────────────────────────────────────────────
 
 export interface CreditCheckResult {
-  canProceed:        boolean;
-  creditsRequired:   number;
-  creditsAvailable:  number;
-  isLow:             boolean;
-  isBYOKActive:      boolean;
-  reason:            string | null;
+  canProceed:       boolean;
+  creditsRequired:  number;
+  creditsAvailable: number;
+  isLow:            boolean;
+  isBYOKActive:     boolean;
+  reason:           string | null;
 }
 
 export interface CreditDeductionResult {
-  success:           boolean;
-  creditsDeducted:   number;
-  creditsRemaining:  number;
-  error:             string | null;
+  success:          boolean;
+  creditsDeducted:  number;
+  creditsRemaining: number;
+  error:            string | null;
 }
 
 const LOW_CREDIT_THRESHOLD = 5;
 
-// ── Check if user can afford a model call ───────────────────────
+// ── Check if user can afford a model call ─────────────────────────
+// Guard: deduction is blocked if the user's subscription is not active
+// (i.e. Stripe checkout hasn't completed) AND they have no free credits.
 
 export function checkCredits(model: PreferredAIModel): CreditCheckResult {
   const { profile } = useAuthStore.getState();
+
   if (!profile) {
     return {
       canProceed:       false,
@@ -43,6 +45,7 @@ export function checkCredits(model: PreferredAIModel): CreditCheckResult {
     };
   }
 
+  // BYOK users bypass credit checks entirely
   const isBYOKActive = !!(
     profile.byok_gemini ||
     profile.byok_openai ||
@@ -57,6 +60,22 @@ export function checkCredits(model: PreferredAIModel): CreditCheckResult {
       isLow:            false,
       isBYOKActive:     true,
       reason:           null,
+    };
+  }
+
+  // Guard: if user is on a paid plan but subscription_status is not active,
+  // their Stripe checkout has not completed — block credit use until it does.
+  const isPaidPlan = profile.plan && profile.plan !== "free";
+  const subStatus  = profile.subscription_status as string | undefined;
+
+  if (isPaidPlan && subStatus && !["active", "trialing"].includes(subStatus)) {
+    return {
+      canProceed:       false,
+      creditsRequired:  getCreditCost(model),
+      creditsAvailable: profile.credits,
+      isLow:            profile.credits < LOW_CREDIT_THRESHOLD,
+      isBYOKActive:     false,
+      reason:           `Subscription is ${subStatus}. Complete checkout to use credits.`,
     };
   }
 
@@ -85,22 +104,36 @@ export function checkCredits(model: PreferredAIModel): CreditCheckResult {
   };
 }
 
-// ── Deduct credits ──────────────────────────────────────────────
+// ── Deduct credits ────────────────────────────────────────────────
+// Always re-checks canProceed immediately before calling the edge function
+// so stale in-memory state never bypasses the guard.
 
 export async function deductCredits(
   model: PreferredAIModel,
-  sessionId: string
+  sessionId: string,
 ): Promise<CreditDeductionResult> {
-  
-  const cost      = getCreditCost(model);
+
+  // Re-validate with fresh in-memory state before any network call
+  const check = checkCredits(model);
+  if (!check.canProceed) {
+    return {
+      success:          false,
+      creditsDeducted:  0,
+      creditsRemaining: check.creditsAvailable,
+      error:            check.reason ?? "Credit check failed",
+    };
+  }
+
+  const cost = getCreditCost(model);
 
   try {
     const { getAuthHeaders } = await import("@/lib/network/fetchEdge");
     const headers = await getAuthHeaders();
+
     const response = await fetch(`${EDGE_BASE}/deduct-credits`, {
-      method: "POST",
+      method:  "POST",
       headers,
-      body: JSON.stringify({
+      body:    JSON.stringify({
         model,
         session_id: sessionId,
         credits:    cost,
@@ -108,11 +141,20 @@ export async function deductCredits(
     });
 
     if (!response.ok) {
+      // 402 = insufficient credits (race condition — another tab spent them)
+      if (response.status === 402) {
+        await refreshCredits(); // sync local state
+        throw new Error("Insufficient credits. Your balance has been refreshed.");
+      }
       throw new Error(`Credit deduction failed: ${response.status}`);
     }
 
-    const data = await response.json();
+    const data = (await response.json()) as {
+      credits_remaining: number;
+      credits_deducted:  number;
+    };
 
+    // Sync local profile state
     useAuthStore.getState().updateProfile({
       credits: data.credits_remaining,
     });
@@ -123,7 +165,7 @@ export async function deductCredits(
 
     return {
       success:          true,
-      creditsDeducted:  cost,
+      creditsDeducted:  data.credits_deducted ?? cost,
       creditsRemaining: data.credits_remaining,
       error:            null,
     };
@@ -138,7 +180,7 @@ export async function deductCredits(
   }
 }
 
-// ── Credit top-up ───────────────────────────────────────────────
+// ── Credit top-up ─────────────────────────────────────────────────
 
 export function openUpgradeFlow(trigger = "out_of_credits"): void {
   useUIStore.getState().openUpgradeModal(trigger);
@@ -152,7 +194,7 @@ export function showLowCreditWarning(creditsRemaining: number): void {
   }
 }
 
-// ── Refetch credits from DB ─────────────────────────────────────
+// ── Refetch credits from DB ───────────────────────────────────────
 
 export async function refreshCredits(): Promise<number | null> {
   const { user } = useAuthStore.getState();
@@ -160,29 +202,34 @@ export async function refreshCredits(): Promise<number | null> {
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("credits, plan")
+    .select("credits, plan, subscription_status")
     .eq("id", user.id)
     .single();
 
   if (error || !data) return null;
 
   useAuthStore.getState().updateProfile({
-    credits: data.credits,
-    plan:    data.plan,
+    credits:             data.credits,
+    plan:                data.plan,
+    subscription_status: data.subscription_status,
   });
 
   return data.credits;
 }
 
-// ── Credit usage history ────────────────────────────────────────
+// ── Credit usage history ──────────────────────────────────────────
 
-export async function fetchCreditHistory(limit = 50): Promise<Array<{
+export interface CreditTransaction {
   id:         string;
   model:      string;
   credits:    number;
   session_id: string | null;
   created_at: string;
-}>> {
+}
+
+export async function fetchCreditHistory(
+  limit = 50,
+): Promise<CreditTransaction[]> {
   const { user } = useAuthStore.getState();
   if (!user) return [];
 
@@ -194,14 +241,14 @@ export async function fetchCreditHistory(limit = 50): Promise<Array<{
     .limit(limit);
 
   if (error || !data) return [];
-  return data;
+  return data as CreditTransaction[];
 }
 
-// ── BYOK check ──────────────────────────────────────────────────
+// ── BYOK check ────────────────────────────────────────────────────
 
 export function isBYOKConfigured(
-  model: PreferredAIModel,
-  profile: ReturnType<typeof useAuthStore.getState>["profile"]
+  model:   PreferredAIModel,
+  profile: ReturnType<typeof useAuthStore.getState>["profile"],
 ): boolean {
   if (!profile) return false;
 
