@@ -1,4 +1,10 @@
-import { EDGE_BASE, SUPABASE_URL } from "@/lib/env";
+// src/lib/audio/deepgramStream.ts
+// Manages Deepgram WebSocket lifecycle, reconnection, and transcript parsing.
+// Tokens are re-fetched before every connection attempt (including reconnects)
+// so an expired 60s scoped token never causes a silent auth failure.
+
+import { EDGE_BASE } from "@/lib/env";
+// REMOVED: SUPABASE_URL — was imported but never used
 import { getAuthHeaders } from "@/lib/network/fetchEdge";
 import type {
   DeepgramConfig,
@@ -9,41 +15,56 @@ import type {
 import { useAudioStore } from "@/store/audioStore";
 import { generateId } from "@/lib/utils";
 
-// ─────────────────────────────────────────────────────────────────
-// Deepgram WebSocket Streaming STT
-// Manages WebSocket lifecycle, reconnection, and transcript parsing.
-// ─────────────────────────────────────────────────────────────────
+/* ─── CONSTANTS ─────────────────────────────────────────────────────────── */
 
-const DEEPGRAM_STT_URL = "wss://api.deepgram.com/v1/listen";
-const MAX_RECONNECT_ATTEMPTS = 5;
+const DEEPGRAM_WSS_URL        = "wss://api.deepgram.com/v1/listen";
+const MAX_RECONNECT_ATTEMPTS  = 5;
 const RECONNECT_BASE_DELAY_MS = 1000;
+// Refresh the token this many seconds before it expires to avoid
+// reconnect attempts failing with an expired token.
+const TOKEN_REFRESH_BUFFER_S  = 10;
+
+/* ─── TYPES ─────────────────────────────────────────────────────────────── */
 
 export interface DeepgramStreamOptions {
-  stream: MediaStream;
-  config?: Partial<DeepgramConfig>;
-  onUtterance: (utterance: TranscriptUtterance) => void;
-  onInterim: (text: string) => void;
-  onError: (error: Error) => void;
-  onStatusChange: (status: DeepgramConnectionStatus) => void;
+  stream:          MediaStream;
+  config?:         Partial<DeepgramConfig>;
+  onUtterance:     (utterance: TranscriptUtterance) => void;
+  onInterim:       (text: string) => void;
+  onError:         (error: Error) => void;
+  onStatusChange:  (status: DeepgramConnectionStatus) => void;
 }
 
+interface TokenResponse {
+  token:      string;
+  expires_in: number;  // seconds
+  key_id:     string | null;
+  type:       "scoped" | "raw";
+}
+
+/* ─── DEEPGRAM STREAM CLIENT ────────────────────────────────────────────── */
+
 export class DeepgramStreamClient {
-  private ws: WebSocket | null = null;
-  private mediaRecorder: MediaRecorder | null = null;
-  private reconnectAttempts = 0;
-  private isDestroyed = false;
-  private apiToken: string | null = null;
-  private stream: MediaStream;
-  private config: DeepgramConfig;
+  private ws:                WebSocket | null = null;
+  private mediaRecorder:     MediaRecorder | null = null;
+  private reconnectAttempts: number = 0;
+  private isDestroyed:       boolean = false;
+  private pingInterval:      ReturnType<typeof setInterval> | null = null;
+
+  // Token state — stored so reconnects can check freshness before re-fetching
+  private currentToken:     string | null = null;
+  private tokenExpiresAt:   number = 0;  // Unix ms timestamp
+
+  private stream:    MediaStream;
+  private config:    DeepgramConfig;
   private callbacks: Omit<DeepgramStreamOptions, "stream" | "config">;
-  private pingInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(opts: DeepgramStreamOptions) {
-    this.stream = opts.stream;
+    this.stream    = opts.stream;
     this.callbacks = {
-      onUtterance:   opts.onUtterance,
-      onInterim:     opts.onInterim,
-      onError:       opts.onError,
+      onUtterance:    opts.onUtterance,
+      onInterim:      opts.onInterim,
+      onError:        opts.onError,
       onStatusChange: opts.onStatusChange,
     };
     this.config = {
@@ -60,7 +81,7 @@ export class DeepgramStreamClient {
     };
   }
 
-  // ── Connect ───────────────────────────────────────────────────
+  /* ── PUBLIC: CONNECT ─────────────────────────────────────────────────── */
 
   async connect(): Promise<void> {
     if (this.isDestroyed) return;
@@ -68,43 +89,69 @@ export class DeepgramStreamClient {
     this.callbacks.onStatusChange("connecting");
 
     try {
-      // Fetch short-lived token from Edge Function
-      this.apiToken = await fetchDeepgramToken();
+      await this.ensureFreshToken();
     } catch (err) {
-      this.callbacks.onError(new Error("Failed to obtain Deepgram token"));
+      this.callbacks.onError(
+        new Error("Failed to obtain Deepgram token. Check DEEPGRAM_PROJECT_ID secret."),
+      );
       this.callbacks.onStatusChange("error");
       return;
     }
 
     const url = this.buildWebSocketURL();
 
-    this.ws = new WebSocket(url, ["token", this.apiToken]);
+    // Deepgram supports token auth via WebSocket subprotocol for browser clients
+    // (browsers cannot set Authorization headers on WebSocket connections).
+    this.ws            = new WebSocket(url, ["token", this.currentToken!]);
     this.ws.binaryType = "arraybuffer";
 
-    this.ws.onopen  = () => this.handleOpen();
-    this.ws.onclose = (e) => this.handleClose(e);
-    this.ws.onerror = (e) => this.handleError(e);
+    this.ws.onopen    = ()  => this.handleOpen();
+    this.ws.onclose   = (e) => this.handleClose(e);
+    this.ws.onerror   = (e) => this.handleError(e);
     this.ws.onmessage = (e) => this.handleMessage(e);
   }
 
-  // ── Disconnect ────────────────────────────────────────────────
+  /* ── PUBLIC: DISCONNECT ──────────────────────────────────────────────── */
 
   disconnect(): void {
     this.isDestroyed = true;
     this.stopMediaRecorder();
     this.stopPing();
+
     if (this.ws) {
-      // Send CloseStream message before closing
       if (this.ws.readyState === WebSocket.OPEN) {
+        // Graceful close — tells Deepgram to flush remaining transcript
         this.ws.send(JSON.stringify({ type: "CloseStream" }));
       }
       this.ws.close(1000, "User disconnected");
       this.ws = null;
     }
+
     this.callbacks.onStatusChange("disconnected");
   }
 
-  // ── Open handler ──────────────────────────────────────────────
+  /* ── TOKEN MANAGEMENT ────────────────────────────────────────────────── */
+
+  /**
+   * Ensures we have a non-expired token before connecting.
+   * For 60s TTL tokens: always re-fetch since the token is likely stale
+   * by the time a reconnect is attempted.
+   * For longer TTL tokens: only re-fetch if within TOKEN_REFRESH_BUFFER_S of expiry.
+   */
+  private async ensureFreshToken(): Promise<void> {
+    const nowMs            = Date.now();
+    const bufferMs         = TOKEN_REFRESH_BUFFER_S * 1000;
+    const isExpiredOrClose = !this.currentToken || (nowMs + bufferMs) >= this.tokenExpiresAt;
+
+    if (isExpiredOrClose) {
+      const tokenData = await fetchDeepgramToken();
+      this.currentToken   = tokenData.token;
+      // expires_in is in seconds from now
+      this.tokenExpiresAt = nowMs + tokenData.expires_in * 1000;
+    }
+  }
+
+  /* ── PRIVATE: EVENT HANDLERS ─────────────────────────────────────────── */
 
   private handleOpen(): void {
     this.reconnectAttempts = 0;
@@ -113,60 +160,67 @@ export class DeepgramStreamClient {
     this.startPing();
   }
 
-  // ── Close handler ─────────────────────────────────────────────
-
   private handleClose(event: CloseEvent): void {
     this.stopMediaRecorder();
     this.stopPing();
 
     if (this.isDestroyed) return;
 
-    // Unexpected close — attempt reconnection
+    // Unexpected close — attempt exponential backoff reconnect
     if (event.code !== 1000 && this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
       this.reconnectAttempts++;
       const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, this.reconnectAttempts - 1);
       this.callbacks.onStatusChange("reconnecting");
       setTimeout(() => {
-        if (!this.isDestroyed) this.connect();
+        if (!this.isDestroyed) {
+          // connect() calls ensureFreshToken() which re-fetches if the
+          // 60s token has expired during the backoff delay
+          void this.connect();
+        }
       }, delay);
     } else {
       this.callbacks.onStatusChange("disconnected");
     }
   }
 
-  // ── Error handler ─────────────────────────────────────────────
-
   private handleError(_event: Event): void {
-    this.callbacks.onError(new Error("Deepgram WebSocket error"));
+    this.callbacks.onError(new Error("Deepgram WebSocket connection error"));
     this.callbacks.onStatusChange("error");
   }
 
-  // ── Message handler ───────────────────────────────────────────
-
   private handleMessage(event: MessageEvent): void {
     try {
-      const data = JSON.parse(event.data as string);
+      const data = JSON.parse(event.data as string) as Record<string, unknown>;
 
-      // Interim results
+      // Interim result — update live transcript display
       if (data.type === "Results" && !data.is_final) {
-        const interim = data.channel?.alternatives?.[0]?.transcript ?? "";
-        if (interim) this.callbacks.onInterim(interim);
+        const channel     = data.channel as { alternatives?: Array<{ transcript?: string }> };
+        const interimText = channel?.alternatives?.[0]?.transcript ?? "";
+        if (interimText) this.callbacks.onInterim(interimText);
         return;
       }
 
-      // Final utterance
+      // Final result — build utterance and deliver
       if (data.type === "Results" && data.is_final) {
-        const alt = data.channel?.alternatives?.[0];
-        if (!alt || !alt.transcript) return;
+        const channel = data.channel as {
+          alternatives?: Array<{
+            transcript?: string;
+            confidence?: number;
+            words?: Array<{
+              word:             string;
+              start:            number;
+              end:              number;
+              confidence:       number;
+              speaker?:         number;
+              punctuated_word?: string;
+            }>;
+          }>;
+        };
 
-        const words: TranscriptWord[] = (alt.words ?? []).map((w: {
-          word: string;
-          start: number;
-          end: number;
-          confidence: number;
-          speaker?: number;
-          punctuated_word?: string;
-        }) => ({
+        const alt = channel?.alternatives?.[0];
+        if (!alt?.transcript) return;
+
+        const words: TranscriptWord[] = (alt.words ?? []).map((w) => ({
           word:            w.word,
           start:           w.start,
           end:             w.end,
@@ -175,61 +229,58 @@ export class DeepgramStreamClient {
           punctuated_word: w.punctuated_word,
         }));
 
-        // Determine speaker from diarization
+        // Speaker diarization: index 0 = first detected voice (usually interviewer)
         const speakerIndex = words[0]?.speaker ?? 0;
-        const speaker = speakerIndex === 0 ? "interviewer" : "candidate";
+        const speaker      = speakerIndex === 0 ? "interviewer" : "candidate";
+        const text         = alt.transcript.trim();
 
         const utterance: TranscriptUtterance = {
-          id:                       generateId(),
+          id:                      generateId(),
           speaker,
-          text:                     alt.transcript,
+          text,
           words,
-          start_ms:                 Math.round((data.start ?? 0) * 1000),
-          end_ms:                   Math.round(((data.start ?? 0) + (data.duration ?? 0)) * 1000),
-          is_final:                 true,
-          is_interviewer_question:  speaker === "interviewer" && alt.transcript.trim().endsWith("?"),
-          confidence:               alt.confidence ?? 0,
+          start_ms:                Math.round(((data.start as number) ?? 0) * 1000),
+          end_ms:                  Math.round((
+            ((data.start as number) ?? 0) + ((data.duration as number) ?? 0)
+          ) * 1000),
+          is_final:                true,
+          is_interviewer_question: speaker === "interviewer" && text.endsWith("?"),
+          confidence:              alt.confidence ?? 0,
         };
 
         this.callbacks.onUtterance(utterance);
         return;
       }
 
-      // Utterance end (VAD event)
+      // VAD: utterance boundary — clear interim display
       if (data.type === "UtteranceEnd") {
-        // Signal boundary for question detection
         useAudioStore.getState().updateInterimText("");
         return;
       }
-
     } catch {
-      // Ignore malformed messages
+      // Malformed JSON from Deepgram — skip silently
     }
   }
 
-  // ── MediaRecorder ─────────────────────────────────────────────
+  /* ── PRIVATE: MEDIA RECORDER ─────────────────────────────────────────── */
 
   private startMediaRecorder(): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
 
-    // Choose supported MIME type
     const mimeType = getSupportedMimeType();
 
     this.mediaRecorder = new MediaRecorder(this.stream, {
       mimeType,
-      audioBitsPerSecond: 128000,
+      audioBitsPerSecond: 128_000,
     });
 
     this.mediaRecorder.ondataavailable = (e) => {
-      if (
-        e.data.size > 0 &&
-        this.ws?.readyState === WebSocket.OPEN
-      ) {
+      if (e.data.size > 0 && this.ws?.readyState === WebSocket.OPEN) {
         this.ws.send(e.data);
       }
     };
 
-    this.mediaRecorder.start(250); // 250ms chunks
+    this.mediaRecorder.start(250); // 250ms chunks for low-latency transcription
   }
 
   private stopMediaRecorder(): void {
@@ -239,7 +290,7 @@ export class DeepgramStreamClient {
     }
   }
 
-  // ── Keepalive ping ────────────────────────────────────────────
+  /* ── PRIVATE: KEEPALIVE PING ─────────────────────────────────────────── */
 
   private startPing(): void {
     this.pingInterval = setInterval(() => {
@@ -256,7 +307,7 @@ export class DeepgramStreamClient {
     }
   }
 
-  // ── URL builder ───────────────────────────────────────────────
+  /* ── PRIVATE: URL BUILDER ────────────────────────────────────────────── */
 
   private buildWebSocketURL(): string {
     const params = new URLSearchParams({
@@ -271,49 +322,59 @@ export class DeepgramStreamClient {
       filler_words:     String(this.config.filler_words),
       encoding:         "opus",
     });
-    return `${DEEPGRAM_STT_URL}?${params.toString()}`;
+    return `${DEEPGRAM_WSS_URL}?${params.toString()}`;
   }
 
-  // ── Status ────────────────────────────────────────────────────
+  /* ── PUBLIC GETTERS ──────────────────────────────────────────────────── */
 
   get isConnected(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
   }
+
+  /** Seconds until the current token expires. Negative = already expired. */
+  get tokenSecondsRemaining(): number {
+    return Math.round((this.tokenExpiresAt - Date.now()) / 1000);
+  }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Fetch Deepgram temporary token from Edge Function
-// ─────────────────────────────────────────────────────────────────
+/* ─── TOKEN FETCH ───────────────────────────────────────────────────────── */
 
-async function fetchDeepgramToken(): Promise<string> {
-  
+async function fetchDeepgramToken(): Promise<TokenResponse> {
   const headers = await getAuthHeaders();
+
   const response = await fetch(`${EDGE_BASE}/deepgram-token`, {
     method: "POST",
     headers,
   });
 
   if (!response.ok) {
-    throw new Error(`Token fetch failed: ${response.status}`);
+    const body = await response.json().catch(() => ({ error: `HTTP ${response.status}` })) as {
+      error?: string;
+      code?:  string;
+    };
+    throw new Error(body.error ?? `Token fetch failed: ${response.status}`);
   }
 
-  const data = await response.json();
-  return data.token;
+  const data = await response.json() as TokenResponse;
+
+  if (!data.token) {
+    throw new Error("Deepgram token response missing token field");
+  }
+
+  return data;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────
+/* ─── HELPERS ───────────────────────────────────────────────────────────── */
 
 function getSupportedMimeType(): string {
-  const types = [
+  const candidates = [
     "audio/webm;codecs=opus",
     "audio/webm",
     "audio/ogg;codecs=opus",
     "audio/ogg",
   ];
-  for (const type of types) {
+  for (const type of candidates) {
     if (MediaRecorder.isTypeSupported(type)) return type;
   }
-  return "audio/webm";
+  return "audio/webm"; // last resort — may not work in all browsers
 }
