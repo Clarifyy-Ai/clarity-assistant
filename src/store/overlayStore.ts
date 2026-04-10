@@ -371,6 +371,7 @@ export const useOverlayStore = create<OverlayStore>()(
         }),
 
       setActiveModel: (active_model) => set({ active_model }),
+      setAnswerMode: (answer_mode) => set({ answer_mode }),
 
       // ── Hint History Navigation ─────────────────────────────
       navigateHintHistory: (direction) =>
