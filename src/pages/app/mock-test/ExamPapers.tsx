@@ -562,6 +562,69 @@ export default function ExamPapers() {
                     </div>
                   )}
 
-                  {/* Coming soon message */}
+                                    {/* Coming soon message */}
                   {isComingSoon && (
-                    <p className="text-xs text-muted-foreground mb-4
+                    <p className="text-xs text-muted-foreground mb-4 italic">
+                      Questions for {paper.year} will be available soon. You can still
+                      create a custom AI-generated test for this exam.
+                    </p>
+                  )}
+
+                  {/* Action Buttons */}
+                  <div className="flex gap-2 mt-auto pt-2 border-t border-border">
+                    {isComingSoon ? (
+                      // Coming soon — only offer AI custom test
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        className="flex-1 text-xs"
+                        onClick={() =>
+                          navigate(
+                            `/app/mock-test/configure?exam=${paper.exam_type}&year_min=${paper.year}&year_max=${paper.year}`,
+                          )
+                        }
+                      >
+                        <ChevronRight className="h-3.5 w-3.5 mr-1.5" />
+                        Custom AI Test
+                      </Button>
+                    ) : (
+                      <>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="flex-1 text-xs"
+                          onClick={() => launchDirectTest(paper, true)}
+                          disabled={launchingId !== null}
+                        >
+                          {isLaunching ? (
+                            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                          ) : (
+                            <BookOpen className="h-3.5 w-3.5 mr-1.5" />
+                          )}
+                          Practice Mode
+                        </Button>
+                        <Button
+                          size="sm"
+                          className="flex-1 text-xs shadow-md"
+                          onClick={() => launchDirectTest(paper, false)}
+                          disabled={launchingId !== null}
+                        >
+                          {isLaunching ? (
+                            <Loader2 className="h-3.5 w-3.5 mr-1.5 animate-spin" />
+                          ) : (
+                            <Play className="h-3.5 w-3.5 mr-1.5" />
+                          )}
+                          Exam Mode
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
