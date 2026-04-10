@@ -180,6 +180,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
       simpleLanguage: useOverlayStore.getState().simple_language,
       callType:       useOverlayStore.getState().session_call_type,
       language:       useOverlayStore.getState().session_language,
+      answerMode:     useOverlayStore.getState().answer_mode,
       onChunk:  (chunk) => useOverlayStore.getState().appendStreamChunk(chunk),
       onDone:   async (_fullText) => {
         useOverlayStore.getState().commitStreamedHint();

@@ -56,6 +56,7 @@ interface OverlayStore {
   // Settings (per-session overrides)
   hint_style: HintStyle;
   active_model: PreferredAIModel;
+  answer_mode: "hint" | "full_answer";
 
   // Position & size (persisted)
   position: OverlayPosition;
@@ -137,6 +138,7 @@ interface OverlayStore {
   setHintStyle: (style: HintStyle) => void;
   cycleHintStyle: () => void;
   setActiveModel: (model: PreferredAIModel) => void;
+  setAnswerMode: (mode: "hint" | "full_answer") => void;
 
   // Actions — hint history navigation
   navigateHintHistory: (direction: "prev" | "next") => void;
@@ -232,6 +234,7 @@ export const useOverlayStore = create<OverlayStore>()(
 
       hint_style: "short_hints",
       active_model: "gemini-flash",
+      answer_mode: "hint" as const,
 
       position: DEFAULT_POSITION,
       overlay_width: DEFAULT_WIDTH,
@@ -368,6 +371,7 @@ export const useOverlayStore = create<OverlayStore>()(
         }),
 
       setActiveModel: (active_model) => set({ active_model }),
+      setAnswerMode: (answer_mode) => set({ answer_mode }),
 
       // ── Hint History Navigation ─────────────────────────────
       navigateHintHistory: (direction) =>

@@ -23,6 +23,7 @@ import {
   ChevronDown, Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Zap } from "lucide-react";
 import { toast } from "sonner";
 import type { LiveSessionConfig } from "@/types/session.types";
 
@@ -49,6 +50,7 @@ export default function LiveRehearsal() {
   const is_stealth_mode = useOverlayStore((s) => s.is_stealth_mode);
   const is_visible = useOverlayStore((s) => s.is_visible);
   const current_question = useOverlayStore((s) => s.current_question);
+  const answer_mode = useOverlayStore((s) => s.answer_mode);
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
   const isMuted = useAudioStore((s) => s.is_muted);
   const streamError = useAudioStore((s) => s.streams?.error ?? null);
@@ -302,19 +304,37 @@ export default function LiveRehearsal() {
                 {is_stealth_mode ? "AI Response" : "AI Answer"}
               </h2>
             </div>
-            <button
-              onClick={handleGenerate}
-              disabled={!current_question}
-              className={cn(
-                "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
-                current_question
-                  ? "bg-violet-500/10 border border-violet-500/20 text-violet-400 hover:bg-violet-500/20"
-                  : "bg-white/5 border border-white/10 text-gray-600 cursor-not-allowed"
-              )}
-            >
-              <MessageSquare className="w-3 h-3" />
-              Generate
-            </button>
+            <div className="flex items-center gap-2">
+              {/* Hint / Full Answer toggle */}
+              <button
+                onClick={() => {
+                  const next = answer_mode === "hint" ? "full_answer" : "hint";
+                  useOverlayStore.getState().setAnswerMode(next);
+                }}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium border transition-all",
+                  answer_mode === "full_answer"
+                    ? "bg-amber-500/10 border-amber-500/20 text-amber-400"
+                    : "bg-white/5 border-white/10 text-gray-400"
+                )}
+              >
+                <Zap className="w-3 h-3" />
+                {answer_mode === "full_answer" ? "Full Answer" : "Hints"}
+              </button>
+              <button
+                onClick={handleGenerate}
+                disabled={!current_question}
+                className={cn(
+                  "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-all",
+                  current_question
+                    ? "bg-violet-500/10 border border-violet-500/20 text-violet-400 hover:bg-violet-500/20"
+                    : "bg-white/5 border border-white/10 text-gray-600 cursor-not-allowed"
+                )}
+              >
+                <MessageSquare className="w-3 h-3" />
+                Generate
+              </button>
+            </div>
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4">

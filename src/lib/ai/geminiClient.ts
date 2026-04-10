@@ -12,6 +12,8 @@ import { retry } from "@/lib/utils";
 
 export type GeminiModel = "gemini-1.5-flash" | "gemini-1.5-pro";
 
+export type AnswerMode = "hint" | "full_answer";
+
 export interface GeminiStreamOptions {
   question: string;
   context: CoachingContext;
@@ -80,6 +82,83 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
     onDone(hint);
   } catch (err) {
     if ((err as Error).name === "AbortError") return; // cancelled intentionally
+    onError(err instanceof Error ? err : new Error(String(err)));
+  }
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Stream a full STAR-format answer via the generate-answer edge function (SSE)
+// ─────────────────────────────────────────────────────────────────
+
+export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void> {
+  const {
+    question, context,
+    simpleLanguage,
+    onChunk, onDone, onError, signal,
+  } = opts;
+
+  const body = JSON.stringify({
+    question,
+    interview_type: context.session_type ?? "behavioural",
+    target_company: context.target_company ?? null,
+    transcript: context.last_transcript ?? null,
+    resume_context: context.resume_experience_summary ?? null,
+    simple_language: simpleLanguage ?? false,
+  });
+
+  try {
+    const { getAuthHeaders } = await import("@/lib/network/fetchEdge");
+    const authHeaders = await getAuthHeaders();
+    const response = await fetch(`${EDGE_BASE}/generate-answer`, {
+      method: "POST",
+      headers: authHeaders,
+      body,
+      signal,
+    });
+
+    if (!response.ok) {
+      const errText = await response.text();
+      throw new Error(`Full answer failed: ${response.status} — ${errText}`);
+    }
+
+    // SSE stream
+    const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error("No response body");
+    }
+
+    const decoder = new TextDecoder();
+    let fullText = "";
+    let buffer = "";
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const data = line.slice(6).trim();
+        if (data === "[DONE]") {
+          onDone(fullText);
+          return;
+        }
+        try {
+          const parsed = JSON.parse(data);
+          const chunk = parsed.text ?? "";
+          if (chunk) {
+            fullText += chunk;
+            onChunk(chunk);
+          }
+        } catch { /* skip malformed */ }
+      }
+    }
+    onDone(fullText);
+  } catch (err) {
+    if ((err as Error).name === "AbortError") return;
     onError(err instanceof Error ? err : new Error(String(err)));
   }
 }
