@@ -6,6 +6,7 @@ import { useNetworkStore } from "@/store/networkStore";
 import { useAuthStore } from "@/store/userStore";
 import { streamGeminiHint, streamFullAnswer } from "./geminiClient";
 import type { AnswerMode } from "./geminiClient";
+import { streamOpenAIHint } from "./openaiClient";
 import { streamClaudeHint } from "./anthropicClient";
 import { getOfflineTemplate } from "./offlineTemplates";
 import { formatTalkingPointsAsHint } from "./resumeFallback";
