@@ -4,8 +4,8 @@ import type { CoachingContext } from "@/types/ai.types";
 import type { InterviewType } from "@/types/session.types";
 import { useNetworkStore } from "@/store/networkStore";
 import { useAuthStore } from "@/store/userStore";
-import { streamGeminiHint } from "./geminiClient";
-import { streamOpenAIHint } from "./openaiClient";
+import { streamGeminiHint, streamFullAnswer } from "./geminiClient";
+import type { AnswerMode } from "./geminiClient";
 import { streamClaudeHint } from "./anthropicClient";
 import { getOfflineTemplate } from "./offlineTemplates";
 import { formatTalkingPointsAsHint } from "./resumeFallback";
@@ -33,6 +33,7 @@ export interface RouteHintOptions {
   simpleLanguage?: boolean;
   callType?: "interview" | "regular_call";
   language?: string;
+  answerMode?: AnswerMode;
   onChunk: (chunk: string) => void;
   onDone: (fullText: string) => void;
   onError: (error: Error) => void;
@@ -54,6 +55,22 @@ function getResumeFallbackOrTemplate(
 }
 
 export async function routeHint(opts: RouteHintOptions): Promise<void> {
+  // If full_answer mode, bypass model selection and go directly to generate-answer
+  if (opts.answerMode === "full_answer") {
+    try {
+      const overlayStore = useOverlayStore.getState();
+      overlayStore.setHintState("streaming");
+      await streamFullAnswer({
+        ...opts,
+        model: "gemini-1.5-flash",
+      });
+    } catch (err) {
+      console.error("[ModelRouter] Full answer failed:", err);
+      opts.onError(err instanceof Error ? err : new Error(String(err)));
+    }
+    return;
+  }
+
   const networkStore = useNetworkStore.getState();
   const overlayStore = useOverlayStore.getState();
 
