@@ -1,6 +1,9 @@
-// @ts-nocheck -- retained: gamification hook, interviewScheduler hook, and documentStore all return
-// inferred any[] types; Supabase generated types also predate manual schema additions
-// (sessions.overall_score, target_company) causing implicit-any cascades on data access.
+// src/pages/app/Dashboard.tsx
+// REMOVED: @ts-nocheck — all types are now explicit.
+// Sessions query types are derived from Tables<"sessions"> via Pick<>.
+// GamificationData and ScheduledInterview interfaces cover the two
+// remaining any-typed props.
+
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import { Link, useNavigate } from "react-router-dom";
@@ -28,39 +31,126 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { getStealthLabel } from "@/lib/stealth/stealthConfig";
+import type { Tables } from "@/integrations/supabase/types";
 
-// ─────────────────────────────────────────────────────────────────
-// Dashboard
-// Hub: credits, streaks, sessions, interview-day banner
-// ─────────────────────────────────────────────────────────────────
+/* ─── LOCAL TYPES ────────────────────────────────────────────────────────── */
+
+/**
+ * Only the columns we SELECT — keeps the type minimal and avoids coupling
+ * to the full Row type for columns we don't render.
+ */
+type SessionRow = Pick<
+  Tables<"sessions">,
+  "id" | "type" | "status" | "overall_score" | "title" | "created_at"
+>;
+
+/**
+ * scheduled_interviews columns accessed in Dashboard.
+ * scheduled_at and interview_type are patched into types.ts in Fix 16.
+ * Using Pick<Tables<"scheduled_interviews">, ...> once the patch is applied.
+ */
+type ScheduledInterview = Pick<
+  Tables<"scheduled_interviews">,
+  "id" | "company_name" | "role_title" | "scheduled_at" | "interview_type"
+>;
+
+/**
+ * Return shape of useGamification().
+ * Mirrors the hook's return value so XPLevelCard is fully typed.
+ */
+interface GamificationData {
+  streakCurrent: number;
+  streakLongest: number;
+  xp:            number;
+  level:         number;
+  levelLabel?:   string;
+}
+
+/* ─── QUICK ACTIONS ──────────────────────────────────────────────────────── */
+
+interface QuickAction {
+  to:           string;
+  icon:         React.ElementType;
+  stealthIcon?: React.ElementType;
+  label:        string;
+  sub:          string;
+  stealthSub?:  string;
+  highlight:    boolean;
+}
+
+const QUICK_ACTIONS: QuickAction[] = [
+  {
+    to:          "/app/live",
+    icon:        Mic,
+    stealthIcon: ListTodo,
+    label:       "Live Co-Pilot",
+    sub:         "Real interview mode",
+    stealthSub:  "Join your standup",
+    highlight:   true,
+  },
+  {
+    to:          "/app/mock",
+    icon:        ClipboardList,
+    stealthIcon: PenTool,
+    label:       "Mock Interview",
+    sub:         "Practice session",
+    stealthSub:  "Review session",
+    highlight:   false,
+  },
+  {
+    to:          "/app/prep",
+    icon:        FlaskConical,
+    stealthIcon: FolderOpen,
+    label:       "Prep Lab",
+    sub:         "STAR builder + tools",
+    stealthSub:  "Document templates",
+    highlight:   false,
+  },
+  {
+    to:          "/app/analytics",
+    icon:        BarChart2,
+    stealthIcon: BarChart3,
+    label:       "Analytics",
+    sub:         "Progress trends",
+    stealthSub:  "Team reports",
+    highlight:   false,
+  },
+];
+
+/* ─── DASHBOARD ──────────────────────────────────────────────────────────── */
 
 export default function Dashboard() {
   const { profile, isLoading } = useAuthStore();
   const stealth    = useUIStore((s) => s.stealth_mode);
-  const docStore     = useDocumentStore();
-  const scheduler    = useInterviewSchedulerStore();
-  const gamification = useGamification();
+  const docStore   = useDocumentStore();
+  const scheduler  = useInterviewSchedulerStore();
+  // Cast here: useGamification() has inferred return type that widened to any
+  // via implicit-any in the hook itself. The GamificationData interface above
+  // precisely mirrors its runtime shape. Remove cast once hook is typed.
+  const gamification = useGamification() as GamificationData;
   const navigate     = useNavigate();
 
   useInterviewScheduler();
 
-  const [sessionCount, setSessionCount] = useState(0);
+  const [sessionCount, setSessionCount] = useState<number>(0);
+
   useEffect(() => {
     if (!profile?.id) return;
-    supabase
+    void supabase
       .from("sessions")
       .select("id", { count: "exact", head: true })
       .eq("user_id", profile.id)
       .then(({ count }) => setSessionCount(count ?? 0));
   }, [profile?.id]);
 
-  const todayInterview = scheduler.interviews.find((i) => {
-    const d = new Date(i.scheduled_at);
+  const todayInterview = (scheduler.interviews as ScheduledInterview[]).find((i) => {
+    if (!i.scheduled_at) return false;
+    const d   = new Date(i.scheduled_at);
     const now = new Date();
     return (
-      d.getFullYear()  === now.getFullYear() &&
-      d.getMonth()     === now.getMonth()    &&
-      d.getDate()      === now.getDate()
+      d.getFullYear() === now.getFullYear() &&
+      d.getMonth()    === now.getMonth()    &&
+      d.getDate()     === now.getDate()
     );
   });
 
@@ -69,7 +159,7 @@ export default function Dashboard() {
       <div className="space-y-6">
         <Skeleton className="h-8 w-48" />
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
+          {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
         </div>
       </div>
     );
@@ -84,7 +174,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-6">
 
-      {/* ── Header ───────────────────────────────────── */}
+      {/* ── Header ─────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-foreground">
@@ -110,10 +200,13 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* ── Interview Day Banner ──────────────────────── */}
+      {/* ── Interview Day Banner ────────────────────────────────────── */}
       {todayInterview && (
         <div
+          role="button"
+          tabIndex={0}
           onClick={() => navigate("/app/interview-day")}
+          onKeyDown={(e) => e.key === "Enter" && navigate("/app/interview-day")}
           className="flex items-center gap-4 p-4 bg-gradient-to-r from-violet-600/20 to-blue-600/20 border border-violet-500/30 rounded-2xl cursor-pointer hover:border-violet-500/50 transition-all"
         >
           <div className="w-10 h-10 bg-violet-600 rounded-xl flex items-center justify-center shrink-0">
@@ -121,23 +214,27 @@ export default function Dashboard() {
           </div>
           <div className="flex-1">
             <p className="text-foreground font-semibold text-sm">
-              {stealth ? "📅 Meeting today" : `🎯 Interview today — ${todayInterview.company_name}`}
+              {stealth
+                ? "📅 Meeting today"
+                : `🎯 Interview today — ${todayInterview.company_name}`}
             </p>
             <p className="text-muted-foreground text-xs mt-0.5">
-              {format(new Date(todayInterview.scheduled_at), "h:mm a")} ·{" "}
-              {stealth ? "Tap to enter focus mode" : `${todayInterview.role_title} · Tap to enter focus mode`}
+              {format(new Date(todayInterview.scheduled_at!), "h:mm a")} ·{" "}
+              {stealth
+                ? "Tap to enter focus mode"
+                : `${todayInterview.role_title} · Tap to enter focus mode`}
             </p>
           </div>
           <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0" />
         </div>
       )}
 
-      {/* ── Quick Actions ─────────────────────────────── */}
+      {/* ── Quick Actions ───────────────────────────────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {QUICK_ACTIONS.map((action) => {
-          const Icon = stealth ? (action.stealthIcon ?? action.icon) : action.icon;
+          const Icon  = stealth ? (action.stealthIcon ?? action.icon) : action.icon;
           const label = getStealthLabel(action.label, stealth);
-          const sub = stealth ? (action.stealthSub ?? action.sub) : action.sub;
+          const sub   = stealth ? (action.stealthSub ?? action.sub) : action.sub;
           return (
             <Link
               key={action.to}
@@ -146,24 +243,22 @@ export default function Dashboard() {
                 "flex flex-col gap-2 sm:gap-3 p-3 sm:p-4 rounded-2xl border transition-all group",
                 action.highlight
                   ? "bg-primary/10 border-primary/30 hover:bg-primary/15 hover:border-primary/40"
-                  : "bg-card border-border hover:bg-secondary/60 hover:border-border"
+                  : "bg-card border-border hover:bg-secondary/60 hover:border-border",
               )}
             >
               <div className={cn(
                 "w-9 h-9 rounded-xl flex items-center justify-center",
-                action.highlight
-                  ? "bg-primary/20"
-                  : "bg-secondary"
+                action.highlight ? "bg-primary/20" : "bg-secondary",
               )}>
                 <Icon className={cn(
                   "w-4 h-4",
-                  action.highlight ? "text-primary" : "text-muted-foreground"
+                  action.highlight ? "text-primary" : "text-muted-foreground",
                 )} />
               </div>
               <div>
                 <p className={cn(
                   "text-sm font-semibold",
-                  action.highlight ? "text-primary" : "text-foreground"
+                  action.highlight ? "text-primary" : "text-foreground",
                 )}>
                   {label}
                 </p>
@@ -175,7 +270,7 @@ export default function Dashboard() {
         })}
       </div>
 
-      {/* ── Stats row ─────────────────────────────────── */}
+      {/* ── Stats row ───────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           label="Total sessions"
@@ -203,29 +298,21 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* ── Main content: 2-col layout ────────────────── */}
+      {/* ── Main content: 2-col layout ──────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
 
-        {/* ── Left col (2/3) ─────────────────────────── */}
+        {/* Left col (2/3) */}
         <div className="lg:col-span-2 space-y-5">
-
-          {/* Recent sessions */}
           <RecentSessions />
-
-          {/* Upcoming interviews */}
-          <UpcomingInterviews interviews={scheduler.interviews.slice(0, 3)} />
+          <UpcomingInterviews
+            interviews={(scheduler.interviews as ScheduledInterview[]).slice(0, 3)}
+          />
         </div>
 
-        {/* ── Right col (1/3) ────────────────────────── */}
+        {/* Right col (1/3) */}
         <div className="space-y-5">
-
-          {/* Setup checklist */}
           <SetupChecklist />
-
-          {/* XP + level progress */}
           <XPLevelCard gamification={gamification} />
-
-          {/* Documents status */}
           <DocumentsStatusCard />
         </div>
       </div>
@@ -233,62 +320,17 @@ export default function Dashboard() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Quick actions config
-// ─────────────────────────────────────────────────────────────────
+/* ─── STAT CARD ──────────────────────────────────────────────────────────── */
 
-const QUICK_ACTIONS = [
-  {
-    to:        "/app/live",
-    icon:      Mic,
-    stealthIcon: ListTodo,
-    label:     "Live Co-Pilot",
-    sub:       "Real interview mode",
-    stealthSub: "Join your standup",
-    highlight: true,
-  },
-  {
-    to:        "/app/mock",
-    icon:      ClipboardList,
-    stealthIcon: PenTool,
-    label:     "Mock Interview",
-    sub:       "Practice session",
-    stealthSub: "Review session",
-    highlight: false,
-  },
-  {
-    to:        "/app/prep",
-    icon:      FlaskConical,
-    stealthIcon: FolderOpen,
-    label:     "Prep Lab",
-    sub:       "STAR builder + tools",
-    stealthSub: "Document templates",
-    highlight: false,
-  },
-  {
-    to:        "/app/analytics",
-    icon:      BarChart2,
-    stealthIcon: BarChart3,
-    label:     "Analytics",
-    sub:       "Progress trends",
-    stealthSub: "Team reports",
-    highlight: false,
-  },
-];
-
-// ─────────────────────────────────────────────────────────────────
-// StatCard
-// ─────────────────────────────────────────────────────────────────
-
-function StatCard({
-  label, value, icon, color, trend,
-}: {
-  label:  string;
-  value:  string | number;
-  icon:   React.ReactNode;
-  color:  string;
+interface StatCardProps {
+  label: string;
+  value: string | number;
+  icon:  React.ReactNode;
+  color: string;
   trend?: "up" | "down" | "neutral";
-}) {
+}
+
+function StatCard({ label, value, icon, trend }: StatCardProps) {
   return (
     <Card className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
@@ -303,19 +345,17 @@ function StatCard({
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// RecentSessions
-// ─────────────────────────────────────────────────────────────────
+/* ─── RECENT SESSIONS ────────────────────────────────────────────────────── */
 
 function RecentSessions() {
-  const stealth = useUIStore((s) => s.stealth_mode);
-  const { user } = useAuthStore();
-  const [sessions, setSessions] = useState<any[]>([]);
-  const [loading, setLoading] = useState(true);
+  const stealth       = useUIStore((s) => s.stealth_mode);
+  const { user }      = useAuthStore();
+  const [sessions, setSessions] = useState<SessionRow[]>([]);
+  const [loading, setLoading]   = useState(true);
 
   useEffect(() => {
     if (!user?.id) { setLoading(false); return; }
-    supabase
+    void supabase
       .from("sessions")
       .select("id, type, status, overall_score, title, created_at")
       .eq("user_id", user.id)
@@ -323,7 +363,7 @@ function RecentSessions() {
       .limit(5)
       .then(({ data, error }) => {
         if (error) toast.error("Failed to load recent sessions");
-        setSessions(data ?? []);
+        setSessions((data ?? []) as SessionRow[]);
         setLoading(false);
       });
   }, [user?.id]);
@@ -341,9 +381,10 @@ function RecentSessions() {
           View all <ChevronRight className="w-3 h-3" />
         </Link>
       </div>
+
       {loading ? (
         <div className="space-y-2">
-          {[...Array(3)].map((_, i) => <SkeletonCard key={i} />)}
+          {Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}
         </div>
       ) : sessions.length === 0 ? (
         <EmptyState
@@ -351,14 +392,14 @@ function RecentSessions() {
           title="No sessions yet"
           description="Start a mock interview to see your recent activity here."
           actionLabel="Start mock interview"
-          onAction={() => window.location.href = "/app/mock"}
+          onAction={() => { window.location.href = "/app/mock"; }}
           compact
         />
       ) : (
         <div className="space-y-2">
           {sessions.map((s) => {
             const isMock = s.type === "mock";
-            const score = s.overall_score;
+            const score  = s.overall_score;
             return (
               <Link
                 key={s.id}
@@ -366,12 +407,14 @@ function RecentSessions() {
                 className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-accent/5 transition-all group"
               >
                 <div className={cn(
-                  "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 text-xs font-bold",
+                  "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
                   isMock
                     ? "bg-blue-500/10 text-blue-400"
-                    : "bg-violet-500/10 text-violet-400"
+                    : "bg-violet-500/10 text-violet-400",
                 )}>
-                  {isMock ? <ClipboardList className="w-3.5 h-3.5" /> : <FlaskConical className="w-3.5 h-3.5" />}
+                  {isMock
+                    ? <ClipboardList className="w-3.5 h-3.5" />
+                    : <FlaskConical  className="w-3.5 h-3.5" />}
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-foreground font-medium capitalize">
@@ -381,14 +424,14 @@ function RecentSessions() {
                     {format(new Date(s.created_at), "MMM d, h:mm a")}
                   </p>
                 </div>
-                {score !== null && score !== undefined && (
+                {score != null && (
                   <span className={cn(
                     "text-xs font-bold px-2 py-0.5 rounded-lg",
                     score >= 75
                       ? "bg-emerald-500/10 text-emerald-400"
                       : score >= 50
                       ? "bg-amber-500/10 text-amber-400"
-                      : "bg-red-500/10 text-red-400"
+                      : "bg-red-500/10 text-red-400",
                   )}>
                     {score}
                   </span>
@@ -403,12 +446,11 @@ function RecentSessions() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// UpcomingInterviews
-// ─────────────────────────────────────────────────────────────────
+/* ─── UPCOMING INTERVIEWS ────────────────────────────────────────────────── */
 
-function UpcomingInterviews({ interviews }: { interviews: any[] }) {
+function UpcomingInterviews({ interviews }: { interviews: ScheduledInterview[] }) {
   const stealth = useUIStore((s) => s.stealth_mode);
+
   return (
     <Card>
       <div className="flex items-center justify-between mb-4">
@@ -423,13 +465,16 @@ function UpcomingInterviews({ interviews }: { interviews: any[] }) {
           Manage <ChevronRight className="w-3 h-3" />
         </Link>
       </div>
+
       {interviews.length === 0 ? (
         <EmptyState
           icon={CalendarDays}
           title={stealth ? "No upcoming meetings" : "No upcoming interviews"}
-          description={stealth ? "Add a meeting to track it here." : "Schedule an interview to see it here."}
+          description={stealth
+            ? "Add a meeting to track it here."
+            : "Schedule an interview to see it here."}
           actionLabel={stealth ? "+ Add meeting" : "+ Add interview"}
-          onAction={() => window.location.href = "/app/interviews/new"}
+          onAction={() => { window.location.href = "/app/interviews/new"; }}
           compact
         />
       ) : (
@@ -444,12 +489,18 @@ function UpcomingInterviews({ interviews }: { interviews: any[] }) {
                 <Building2 className="w-3.5 h-3.5 text-violet-400" />
               </div>
               <div className="flex-1 min-w-0">
-                <p className="text-sm text-foreground font-medium truncate">{iv.company_name}</p>
+                <p className="text-sm text-foreground font-medium truncate">
+                  {iv.company_name}
+                </p>
                 <p className="text-xs text-muted-foreground">
-                  {format(new Date(iv.scheduled_at), "EEE, MMM d · h:mm a")}
+                  {iv.scheduled_at
+                    ? format(new Date(iv.scheduled_at), "EEE, MMM d · h:mm a")
+                    : "Time TBD"}
                 </p>
               </div>
-              <Badge variant="violet" size="sm">{iv.interview_type}</Badge>
+              {iv.interview_type && (
+                <Badge variant="violet" size="sm">{iv.interview_type}</Badge>
+              )}
             </Link>
           ))}
         </div>
@@ -458,14 +509,12 @@ function UpcomingInterviews({ interviews }: { interviews: any[] }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// XPLevelCard
-// ─────────────────────────────────────────────────────────────────
+/* ─── XP LEVEL CARD ──────────────────────────────────────────────────────── */
 
-function XPLevelCard({ gamification }: { gamification: any }) {
-  const xpForNext = (gamification.level) * 200;
-  const xpInLevel = gamification.xp % 200;
-  const pct       = Math.round((xpInLevel / xpForNext) * 100);
+function XPLevelCard({ gamification }: { gamification: GamificationData }) {
+  const XP_PER_LEVEL = 200;
+  const xpForNext    = gamification.level * XP_PER_LEVEL;
+  const xpInLevel    = gamification.xp % XP_PER_LEVEL;
 
   return (
     <Card>
@@ -497,14 +546,17 @@ function XPLevelCard({ gamification }: { gamification: any }) {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// DocumentsStatusCard
-// ─────────────────────────────────────────────────────────────────
+/* ─── DOCUMENTS STATUS ───────────────────────────────────────────────────── */
 
 function DocumentsStatusCard() {
-  const docStore   = useDocumentStore();
-  const hasResume  = !!docStore.active_resume_id;
-  const hasJD      = !!docStore.active_jd_id;
+  const docStore  = useDocumentStore();
+  const hasResume = !!docStore.active_resume_id;
+  const hasJD     = !!docStore.active_jd_id;
+
+  const items: { label: string; ok: boolean; to: string }[] = [
+    { label: "Active resume", ok: hasResume, to: "/app/documents" },
+    { label: "Target JD",     ok: hasJD,     to: "/app/documents" },
+  ];
 
   return (
     <Card>
@@ -518,10 +570,7 @@ function DocumentsStatusCard() {
         </Link>
       </div>
       <div className="space-y-2">
-        {[
-          { label: "Active resume",  ok: hasResume, to: "/app/documents" },
-          { label: "Target JD",      ok: hasJD,     to: "/app/documents" },
-        ].map((item) => (
+        {items.map((item) => (
           <Link
             key={item.label}
             to={item.to}
@@ -531,13 +580,13 @@ function DocumentsStatusCard() {
               "w-5 h-5 rounded-md flex items-center justify-center shrink-0",
               item.ok
                 ? "bg-emerald-500/10 text-emerald-400"
-                : "bg-amber-500/10 text-amber-400"
+                : "bg-amber-500/10 text-amber-400",
             )}>
               {item.ok ? "✓" : "!"}
             </span>
             <span className={cn(
               "flex-1",
-              item.ok ? "text-foreground" : "text-amber-400"
+              item.ok ? "text-foreground" : "text-amber-400",
             )}>
               {item.label}
             </span>
