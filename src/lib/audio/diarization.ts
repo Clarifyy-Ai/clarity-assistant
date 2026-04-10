@@ -1,3 +1,27 @@
+// src/lib/audio/diarization.ts
+//
+// Speaker Diarization — processes utterances that have already been
+// diarized by Deepgram (diarize=true query param in the WebSocket URL).
+//
+// Architecture note — why heuristics were REMOVED:
+//   deepgramStream.ts converts Deepgram's numeric speaker index (0, 1...)
+//   to "interviewer" | "candidate" before calling onUtterance(). By the time
+//   an utterance reaches this module, utterance.speaker is already a string.
+//   The previous INTERVIEWER_SIGNALS / CANDIDATE_ACK_PHRASES heuristics
+//   checked utterance.speaker === "interviewer" on the first two lines and
+//   returned early — meaning the heuristics NEVER executed. They are removed.
+//
+// Deepgram speaker convention used across this codebase:
+//   speaker index 0 → "interviewer" (first voice Deepgram detects)
+//   speaker index 1 → "candidate"
+//   speaker index 2+ → additional participants (mapped to "candidate" for now)
+//
+// Filler word detection:
+//   Deepgram marks filler words (um, uh, like, you know...) with
+//   type:"filler" on each word when filler_words=true is set.
+//   deepgramStream.ts counts these and adds filler_word_count and
+//   filler_words_used to the utterance. This module provides analytics.
+
 import type {
   TranscriptUtterance,
   DiarizationSegment,
@@ -5,95 +29,143 @@ import type {
 } from "@/types/audio.types";
 import { useAudioStore } from "@/store/audioStore";
 
-// ─────────────────────────────────────────────────────────────────
-// Speaker Diarization Engine
-// Two-channel approach:
-//   Channel 0 (Deepgram speaker 0) → Interviewer
-//   Channel 1 (Deepgram speaker 1) → Candidate
-//
-// Heuristics to improve accuracy:
-//   - Questions ending with "?" → interviewer
-//   - Short acknowledgements ("okay", "sure", "got it") → candidate
-//   - Silence boundary detection to confirm speaker switch
-// ─────────────────────────────────────────────────────────────────
+/* ─── FILLER WORD CONSTANTS ──────────────────────────────────────────────── */
 
-// Phrases that almost always come from the interviewer
-const INTERVIEWER_SIGNALS = [
-  "can you tell me",
-  "tell me about",
-  "how would you",
-  "what would you",
-  "walk me through",
-  "describe a time",
-  "have you ever",
-  "what is your",
-  "why did you",
-  "how do you",
-  "what do you think",
-  "if you had to",
-  "let's say",
-  "suppose",
-  "imagine",
-  "design a",
-  "implement",
-  "explain",
-  "what are the",
-];
+// Canonical list used for display labels and grouping.
+// Deepgram's filler_words=true detects these automatically — this list
+// is used for analytics grouping and UI display only.
+export const KNOWN_FILLERS = new Set([
+  "um", "uh", "like", "you know", "so", "right",
+  "basically", "literally", "actually", "kind of", "sort of",
+  "i mean", "you see", "well", "okay so",
+]);
 
-// Short candidate acknowledgements
-const CANDIDATE_ACK_PHRASES = [
-  "sure",
-  "absolutely",
-  "of course",
-  "great question",
-  "that's a good question",
-  "let me think",
-  "so",
-  "okay so",
-];
+/* ─── TYPES ─────────────────────────────────────────────────────────────── */
 
-// ─────────────────────────────────────────────────────────────────
-// Classify speaker from utterance
-// ─────────────────────────────────────────────────────────────────
+export interface FillerWordAnalysis {
+  /** Total filler word count across all utterances analysed */
+  total_count:   number;
+  /** Per-filler-word breakdown: { "um": 4, "like": 7, ... } */
+  breakdown:     Record<string, number>;
+  /** Filler words per minute at the current session duration */
+  per_minute:    number;
+  /** Whether the count is considered high (> 3 per minute) */
+  is_concerning: boolean;
+}
 
-export function classifySpeaker(
-  utterance: TranscriptUtterance,
-  previousSpeaker: Speaker
-): Speaker {
-  const text = utterance.text.trim().toLowerCase();
+export interface SpeakerChangeEvent {
+  from:      Speaker;
+  to:        Speaker;
+  at_ms:     number;
+  utterance: TranscriptUtterance;
+}
 
-  // Direct from Deepgram diarization — speaker 0 = interviewer by convention
+/* ─── SPEAKER CLASSIFICATION ─────────────────────────────────────────────── */
+
+/**
+ * Maps a completed TranscriptUtterance to its final Speaker label.
+ *
+ * This is intentionally simple — Deepgram's native diarization (diarize=true)
+ * is authoritative. The previous heuristic-based overrides have been removed
+ * because they fought Deepgram's ML model and were unreachable dead code
+ * (speaker was already a string by the time this was called).
+ *
+ * The only remaining logic is the "first voice = interviewer" convention,
+ * which matches how the WebSocket session is typically established
+ * (interviewer speaks first to introduce themselves or ask an opener).
+ */
+export function classifySpeaker(utterance: TranscriptUtterance): Speaker {
+  // Trust Deepgram's diarization — already converted from numeric index
+  // by deepgramStream.ts handleMessage via getMajoritySpeaker().
   if (utterance.speaker === "interviewer") return "interviewer";
   if (utterance.speaker === "candidate")   return "candidate";
 
-  // Heuristic: question mark at end → interviewer
-  if (text.endsWith("?")) return "interviewer";
-
-  // Heuristic: interviewer signal phrases
-  if (INTERVIEWER_SIGNALS.some((s) => text.includes(s))) {
-    return "interviewer";
-  }
-
-  // Heuristic: very short candidate ack
-  if (
-    text.split(" ").length <= 5 &&
-    CANDIDATE_ACK_PHRASES.some((p) => text.startsWith(p))
-  ) {
-    return "candidate";
-  }
-
-  // Default: maintain previous speaker (speaker inertia)
-  return previousSpeaker;
+  // Only reached if speaker field is "unknown" or missing
+  // In streaming + diarize=true, this should be rare
+  return "unknown";
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Extract the interviewer's question from recent utterances
-// ─────────────────────────────────────────────────────────────────
+/* ─── FILLER WORD ANALYSIS ───────────────────────────────────────────────── */
 
+/**
+ * Computes filler word analytics from a list of final utterances.
+ *
+ * Uses filler_word_count and filler_words_used that deepgramStream.ts
+ * populates from Deepgram's word-level type:"filler" flags.
+ * Falls back to regex matching for utterances processed before the
+ * filler_words flag was enabled.
+ */
+export function analyseFillerWords(
+  utterances:        TranscriptUtterance[],
+  sessionDurationMs: number,
+): FillerWordAnalysis {
+  const finalUtterances = utterances.filter((u) => u.is_final);
+  const breakdown: Record<string, number> = {};
+  let totalCount = 0;
+
+  for (const u of finalUtterances) {
+    if (u.filler_words_used && u.filler_words_used.length > 0) {
+      // Primary: use Deepgram's type:"filler" data (accurate)
+      for (const fw of u.filler_words_used) {
+        const normalized = fw.toLowerCase().trim();
+        breakdown[normalized] = (breakdown[normalized] ?? 0) + 1;
+        totalCount++;
+      }
+    } else {
+      // Fallback: regex scan for known fillers when Deepgram data unavailable
+      const words = u.text.toLowerCase().split(/\s+/);
+      for (const word of words) {
+        if (KNOWN_FILLERS.has(word)) {
+          breakdown[word] = (breakdown[word] ?? 0) + 1;
+          totalCount++;
+        }
+      }
+    }
+  }
+
+  const durationMinutes = sessionDurationMs / 60_000;
+  const perMinute       = durationMinutes > 0
+    ? Math.round((totalCount / durationMinutes) * 10) / 10
+    : 0;
+
+  return {
+    total_count:   totalCount,
+    breakdown,
+    per_minute:    perMinute,
+    is_concerning: perMinute > 3,
+  };
+}
+
+/**
+ * Returns the top N most-used filler words for coaching display.
+ */
+export function getTopFillers(
+  analysis: FillerWordAnalysis,
+  topN = 3,
+): Array<{ word: string; count: number }> {
+  return Object.entries(analysis.breakdown)
+    .sort(([, a], [, b]) => b - a)
+    .slice(0, topN)
+    .map(([word, count]) => ({ word, count }));
+}
+
+/* ─── QUESTION EXTRACTION ────────────────────────────────────────────────── */
+
+/**
+ * Returns the most recent interviewer question from the utterance list.
+ * Walks backwards for O(1) in the typical case where the latest question
+ * is near the end.
+ */
 export function extractLatestQuestion(
-  utterances: TranscriptUtterance[]
+  utterances: TranscriptUtterance[],
 ): string | null {
-  // Walk backwards to find last interviewer utterance
+  for (let i = utterances.length - 1; i >= 0; i--) {
+    const u = utterances[i];
+    if (u.speaker === "interviewer" && u.is_final && u.is_interviewer_question) {
+      return u.text;
+    }
+  }
+  // Fallback: any final interviewer utterance even without a "?"
   for (let i = utterances.length - 1; i >= 0; i--) {
     const u = utterances[i];
     if (u.speaker === "interviewer" && u.is_final) {
@@ -103,25 +175,43 @@ export function extractLatestQuestion(
   return null;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Detect speaker change
-// ─────────────────────────────────────────────────────────────────
+/* ─── SPEAKER CHANGE DETECTION ───────────────────────────────────────────── */
 
 export function detectSpeakerChange(
   newUtterance: TranscriptUtterance,
-  segments: DiarizationSegment[]
+  segments:     DiarizationSegment[],
 ): boolean {
   if (segments.length === 0) return true;
-  const lastSegment = segments[segments.length - 1];
-  return lastSegment.speaker !== newUtterance.speaker;
+  return segments[segments.length - 1].speaker !== newUtterance.speaker;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Build diarization segment from utterance
-// ─────────────────────────────────────────────────────────────────
+/**
+ * Extracts speaker change events from an utterance list.
+ * Useful for analytics ("interviewer spoke 8 times, candidate spoke 12 times").
+ */
+export function getSpeakerChangeEvents(
+  utterances: TranscriptUtterance[],
+): SpeakerChangeEvent[] {
+  const events: SpeakerChangeEvent[] = [];
+  for (let i = 1; i < utterances.length; i++) {
+    const prev = utterances[i - 1];
+    const curr = utterances[i];
+    if (prev.speaker !== curr.speaker && curr.is_final) {
+      events.push({
+        from:      prev.speaker,
+        to:        curr.speaker,
+        at_ms:     curr.start_ms,
+        utterance: curr,
+      });
+    }
+  }
+  return events;
+}
+
+/* ─── DIARIZATION SEGMENT BUILDER ────────────────────────────────────────── */
 
 export function buildDiarizationSegment(
-  utterance: TranscriptUtterance
+  utterance: TranscriptUtterance,
 ): DiarizationSegment {
   return {
     speaker:    utterance.speaker,
@@ -132,71 +222,60 @@ export function buildDiarizationSegment(
   };
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Process a new utterance through the full diarization pipeline
-// Updates audio store with classified speaker and segment
-// ─────────────────────────────────────────────────────────────────
+/* ─── PROCESS UTTERANCE (PIPELINE ENTRY POINT) ───────────────────────────── */
 
+/**
+ * Processes a final utterance through the diarization pipeline:
+ * 1. Classifies speaker (trusts Deepgram — no heuristic override)
+ * 2. Builds diarization segment
+ * 3. Updates audio store
+ * 4. Sets last question if utterance is a detected interviewer question
+ */
 export function processUtteranceForDiarization(
-  utterance: TranscriptUtterance
+  utterance: TranscriptUtterance,
 ): TranscriptUtterance {
-  const store = useAudioStore.getState();
-  const { diarization } = store;
+  const store  = useAudioStore.getState();
+  const speaker = classifySpeaker(utterance);
 
-  // Classify speaker
-  const classifiedSpeaker = classifySpeaker(
-    utterance,
-    diarization.current_speaker
-  );
-
-  const enrichedUtterance: TranscriptUtterance = {
+  const enriched: TranscriptUtterance = {
     ...utterance,
-    speaker:                 classifiedSpeaker,
-    is_interviewer_question: classifiedSpeaker === "interviewer" &&
-                             utterance.text.trim().endsWith("?"),
+    speaker,
+    is_interviewer_question:
+      speaker === "interviewer" && utterance.text.trim().endsWith("?"),
   };
 
-  // Update store
-  store.setCurrentSpeaker(classifiedSpeaker);
-  store.addDiarizationSegment(buildDiarizationSegment(enrichedUtterance));
-  store.addUtterance(enrichedUtterance);
+  store.setCurrentSpeaker(speaker);
+  store.addDiarizationSegment(buildDiarizationSegment(enriched));
+  store.addUtterance(enriched);
 
-  // If interviewer just asked a question, set it as last question
-  if (enrichedUtterance.is_interviewer_question) {
-    store.setLastQuestion(enrichedUtterance.text);
+  if (enriched.is_interviewer_question) {
+    store.setLastQuestion(enriched.text);
   }
 
-  return enrichedUtterance;
+  return enriched;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Get full transcript separated by speaker
-// ─────────────────────────────────────────────────────────────────
+/* ─── TRANSCRIPT SPLIT BY SPEAKER ────────────────────────────────────────── */
 
 export function getTranscriptBySpeaker(
-  utterances: TranscriptUtterance[]
-): {
-  interviewer: string[];
-  candidate: string[];
-} {
+  utterances: TranscriptUtterance[],
+): { interviewer: string[]; candidate: string[] } {
   const interviewer: string[] = [];
-  const candidate: string[] = [];
+  const candidate:   string[] = [];
 
   for (const u of utterances) {
     if (!u.is_final) continue;
     if (u.speaker === "interviewer") interviewer.push(u.text);
-    else candidate.push(u.text);
+    else if (u.speaker === "candidate") candidate.push(u.text);
   }
 
   return { interviewer, candidate };
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Summarise speaking time per speaker
-// ─────────────────────────────────────────────────────────────────
+/* ─── SPEAKING TIME SUMMARY ──────────────────────────────────────────────── */
 
 export function getSpeakingTimeSummary(
-  segments: DiarizationSegment[]
+  segments: DiarizationSegment[],
 ): Record<Speaker, number> {
   const totals: Record<Speaker, number> = {
     interviewer: 0,
@@ -205,8 +284,26 @@ export function getSpeakingTimeSummary(
   };
 
   for (const seg of segments) {
-    totals[seg.speaker] += seg.end_ms - seg.start_ms;
+    totals[seg.speaker] = (totals[seg.speaker] ?? 0) + (seg.end_ms - seg.start_ms);
   }
 
   return totals;
+}
+
+/**
+ * Returns speaking ratio as a percentage per speaker.
+ * Useful for the "Talk Ratio" coaching metric — candidates should
+ * aim for 60-70% of speaking time.
+ */
+export function getSpeakingRatio(
+  segments: DiarizationSegment[],
+): { interviewer: number; candidate: number } {
+  const totals  = getSpeakingTimeSummary(segments);
+  const total   = totals.interviewer + totals.candidate + totals.unknown;
+  if (total === 0) return { interviewer: 0, candidate: 0 };
+
+  return {
+    interviewer: Math.round((totals.interviewer / total) * 100),
+    candidate:   Math.round((totals.candidate   / total) * 100),
+  };
 }
