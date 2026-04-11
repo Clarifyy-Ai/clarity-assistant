@@ -73,7 +73,7 @@ export function useSessionOrchestrator() {
     const resumeCtx = overlay.resume_context ?? "";
 
     try {
-      overlay.setIsGenerating(true);
+      overlay.setHintState("generating");
 
       const { data, error } = await supabase.functions.invoke("generate-hint", {
         body: {
@@ -86,16 +86,21 @@ export function useSessionOrchestrator() {
 
       if (error) {
         console.error("[useSessionOrchestrator] generate-hint error:", error);
-        overlay.setIsGenerating(false);
+        overlay.setHintState("error");
+        overlay.setError("Failed to generate hint");
         return;
       }
 
       const hint = data?.hint ?? data?.answer ?? data?.text ?? "";
-      overlay.pushHint(questionText, hint);
-      overlay.setIsGenerating(false);
+      // Add to hint history and set as current hint
+      overlay.setCurrentQuestion(questionText);
+      overlay.appendStreamChunk(hint);
+      overlay.commitStreamedHint();
+      overlay.setHintState("ready");
     } catch (err) {
       console.error("[useSessionOrchestrator] requestHint failed:", err);
-      overlay.setIsGenerating(false);
+      overlay.setHintState("error");
+      overlay.setError("Failed to generate hint");
     }
   }, []);
 
