@@ -1,5 +1,5 @@
 // generate-answer/index.ts — Full STAR-format answer generator with SSE streaming
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
@@ -19,6 +19,8 @@ Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
+  const headers = getCorsHeaders(req);
+
   try {
     /* ── AUTH ──────────────────────────────────────────────────────────── */
     const db          = createServiceClient();
@@ -27,7 +29,7 @@ Deno.serve(async (req: Request) => {
     if (!new RegExp("^bearer\\s+", "i").test(authHeader)) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...headers, "Content-Type": "application/json" },
       });
     }
 
@@ -37,7 +39,7 @@ Deno.serve(async (req: Request) => {
     if (authErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...headers, "Content-Type": "application/json" },
       });
     }
 
@@ -46,7 +48,7 @@ Deno.serve(async (req: Request) => {
     if (!body?.question) {
       return new Response(JSON.stringify({ error: "Missing required field: question" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...headers, "Content-Type": "application/json" },
       });
     }
 
@@ -56,10 +58,9 @@ Deno.serve(async (req: Request) => {
     const interviewType = String(body.interview_type  ?? "behavioral").slice(0, 50);
     const company       = String(body.target_company  ?? "").slice(0, 50);
 
-    /* ── CREDITS CHECK (atomic — uses DB RPC to avoid race conditions) ─── */
+    /* ── CREDITS CHECK ─────────────────────────────────────────────────── */
     const COST = 2;
 
-    // Read current balance first to show a meaningful error message
     const { data: profile, error: profileErr } = await db
       .from("profiles")
       .select("credits")
@@ -69,14 +70,14 @@ Deno.serve(async (req: Request) => {
     if (profileErr || !profile) {
       return new Response(JSON.stringify({ error: "Could not fetch user profile" }), {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...headers, "Content-Type": "application/json" },
       });
     }
 
     if ((profile.credits ?? 0) < COST) {
       return new Response(
         JSON.stringify({ error: `Insufficient credits. Need ${COST}, have ${profile.credits ?? 0}.` }),
-        { status: 402, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        { status: 402, headers: { ...headers, "Content-Type": "application/json" } },
       );
     }
 
@@ -84,7 +85,7 @@ Deno.serve(async (req: Request) => {
     if (!GEMINI_API_KEY) {
       return new Response(JSON.stringify({ error: "AI service not configured" }), {
         status: 503,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...headers, "Content-Type": "application/json" },
       });
     }
 
@@ -121,13 +122,11 @@ Deno.serve(async (req: Request) => {
       console.error("[generate-answer] Gemini API error:", geminiRes.status, errText);
       return new Response(JSON.stringify({ error: "AI generation failed. Please try again." }), {
         status: 502,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...headers, "Content-Type": "application/json" },
       });
     }
 
-    /* ── DEDUCT CREDITS (only after Gemini confirms 200 OK) ────────────── */
-    // Use deduct_credits RPC for atomic decrement — prevents race conditions
-    // where two simultaneous calls both see credits=5 and both deduct 2.
+    /* ── DEDUCT CREDITS ────────────────────────────────────────────────── */
     const { error: deductErr } = await db.rpc("deduct_credits", {
       p_user_id:    user.id,
       p_amount:     COST,
@@ -136,7 +135,6 @@ Deno.serve(async (req: Request) => {
     });
 
     if (deductErr) {
-      // Log but don't fail the request — user already has Gemini response streaming
       console.error("[generate-answer] Credit deduction failed:", deductErr.message);
     }
 
@@ -153,7 +151,6 @@ Deno.serve(async (req: Request) => {
             const { done, value } = await reader.read();
             if (done) break;
 
-            // NOTE: single \n — decoder.decode returns real newlines
             buffer += decoder.decode(value, { stream: true });
             const lines = buffer.split("\n");
             buffer = lines.pop() ?? "";
@@ -170,18 +167,16 @@ Deno.serve(async (req: Request) => {
                   parsed?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 
                 if (text) {
-                  // Forward each Gemini chunk to the client as a proper SSE event
                   controller.enqueue(
                     encoder.encode(`data: ${JSON.stringify({ text })}\n\n`),
                   );
                 }
               } catch {
-                // Skip malformed JSON chunks from Gemini
+                // Skip malformed JSON chunks
               }
             }
           }
 
-          // Signal end of stream
           controller.enqueue(encoder.encode("data: [DONE]\n\n"));
           controller.close();
         } catch (streamErr) {
@@ -197,18 +192,18 @@ Deno.serve(async (req: Request) => {
     return new Response(stream, {
       status: 200,
       headers: {
-        ...corsHeaders,
+        ...headers,
         "Content-Type":  "text/event-stream",
         "Cache-Control": "no-cache, no-transform",
         "Connection":    "keep-alive",
-        "X-Accel-Buffering": "no", // Disable Nginx buffering for true streaming
+        "X-Accel-Buffering": "no",
       },
     });
   } catch (err) {
     console.error("[generate-answer] Unhandled error:", err);
     return new Response(JSON.stringify({ error: "Internal server error" }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
   }
 });
