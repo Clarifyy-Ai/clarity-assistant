@@ -57,6 +57,7 @@ Deno.serve(async (req: Request) => {
     const resumeCtx     = String(body.resume_context  ?? "").slice(0, 500);
     const interviewType = String(body.interview_type  ?? "behavioral").slice(0, 50);
     const company       = String(body.target_company  ?? "").slice(0, 50);
+    const sessionId     = body.session_id ?? null;
 
     /* ── CREDITS CHECK ─────────────────────────────────────────────────── */
     const COST = 2;
@@ -87,6 +88,22 @@ Deno.serve(async (req: Request) => {
         status: 503,
         headers: { ...headers, "Content-Type": "application/json" },
       });
+    }
+
+    /* ── DEDUCT CREDITS BEFORE GENERATION ──────────────────────────────── */
+    // Use the correct DB function signature: deduct_credits(p_action, p_cost, p_session_id)
+    // This RPC uses auth.uid() internally via the service client, but since we're
+    // using createServiceClient (service role), auth.uid() is null.
+    // Instead, use the shared deductCredits helper which does atomic UPDATE.
+    const { deductCredits } = await import("../_shared/supabase.ts");
+    const deductResult = await deductCredits(user.id, "Full STAR answer generation", COST);
+
+    if (!deductResult.success) {
+      console.error("[generate-answer] Credit deduction failed:", deductResult.error);
+      return new Response(
+        JSON.stringify({ error: deductResult.error ?? "Credit deduction failed" }),
+        { status: 402, headers: { ...headers, "Content-Type": "application/json" } },
+      );
     }
 
     /* ── BUILD PROMPT ──────────────────────────────────────────────────── */
@@ -124,18 +141,6 @@ Deno.serve(async (req: Request) => {
         status: 502,
         headers: { ...headers, "Content-Type": "application/json" },
       });
-    }
-
-    /* ── DEDUCT CREDITS ────────────────────────────────────────────────── */
-    const { error: deductErr } = await db.rpc("deduct_credits", {
-      p_user_id:    user.id,
-      p_amount:     COST,
-      p_action:     "usage",
-      p_description: "Full STAR answer generation",
-    });
-
-    if (deductErr) {
-      console.error("[generate-answer] Credit deduction failed:", deductErr.message);
     }
 
     /* ── PROXY SSE STREAM TO CLIENT ────────────────────────────────────── */

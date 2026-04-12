@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useCallback, useRef, useEffect } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";
@@ -71,7 +70,9 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     const cfg = configRef.current;
 
     const { active_context } = useDocumentStore.getState();
-    const context = buildCoachingContext(profile, cfg, active_context);
+    // buildCoachingContext expects UserProfile but profile is ProfileRow — cast is safe
+    // because the function (which has @ts-nocheck) only reads overlapping fields
+    const context = buildCoachingContext(profile as any, cfg, active_context);
     coachStore.initContext(context);
 
     const parsed = active_context.resume_version?.parsed_data ?? null;
@@ -79,7 +80,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     const talkingPoints = generateResumeTalkingPoints(parsed, {
       company: cfg.company,
       role: cfg.role,
-      interview_type: cfg.interview_type,
+      interview_type: cfg.interview_type as any,
     });
     const overlay = useOverlayStore.getState();
     overlay.setResumeContext(resumeCtx);
@@ -104,7 +105,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     sessionStore.setMode("live");
     sessionStore.setConfig(cfg);
     sessionStore.setStatus("active");
-  }, [profile]);
+  }, [profile]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     hotkeyManager.register();
@@ -135,13 +136,72 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     }
   }
 
+  // ── Generate full answer via generate-answer edge function ──────
+  async function requestFullAnswer(
+    question: string,
+    sessionId: string,
+    signal: AbortSignal,
+  ): Promise<void> {
+    const overlay = useOverlayStore.getState();
+    overlay.setHintState("generating");
+
+    const resumeCtx = overlay.resume_context;
+    const cfg = configRef.current;
+
+    const { data, error } = await supabase.functions.invoke("generate-answer", {
+      body: {
+        question,
+        transcript:     "",
+        resume_context: resumeCtx?.summary ?? "",
+        interview_type: cfg.interview_type ?? "behavioral",
+        target_company: cfg.company ?? "",
+        session_id:     sessionId,
+      },
+    });
+
+    if (error) {
+      useOverlayStore.getState().setError(
+        error.message || "Failed to generate full answer"
+      );
+      return;
+    }
+
+    // The edge function returns SSE via streaming.
+    // supabase.functions.invoke returns the full response body as text/json
+    // when Content-Type is text/event-stream, we need to parse SSE lines.
+    if (typeof data === "string") {
+      // Parse SSE data
+      const lines = data.split("\n");
+      let fullText = "";
+      for (const line of lines) {
+        if (!line.startsWith("data: ")) continue;
+        const payload = line.slice(6).trim();
+        if (!payload || payload === "[DONE]") continue;
+        try {
+          const parsed = JSON.parse(payload);
+          if (parsed.text) {
+            fullText += parsed.text;
+            useOverlayStore.getState().appendStreamChunk(parsed.text);
+          }
+        } catch {
+          // skip malformed chunks
+        }
+      }
+      if (fullText) {
+        useOverlayStore.getState().commitStreamedHint();
+      }
+    } else if (data?.error) {
+      useOverlayStore.getState().setError(data.error);
+    }
+  }
+
   // ── Request live hint ──────────────────────────────────────────
   const requestLiveHint = useCallback(async (question: string) => {
     if (!profile) return;
 
     // Rebuild context from current document store state (supports mid-session doc changes)
     const currentDocContext = useDocumentStore.getState().active_context;
-    const freshContext = buildCoachingContext(profile, configRef.current, currentDocContext);
+    const freshContext = buildCoachingContext(profile as any, configRef.current, currentDocContext);
     coachStore.initContext(freshContext);
 
     const context = coachStore.getContext();
@@ -169,37 +229,56 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     overlay.setCurrentQuestion(question);
     overlay.setHintState("generating");
 
-    await routeHint({
-      question,
-      context,
-      preferredModel: selectedModel,
-      interviewType:  context.session_type,
-      isLive:         true,
-      sessionId:      sessionIdRef.current,
-      questionId:     requestId,
-      simpleLanguage: useOverlayStore.getState().simple_language,
-      callType:       useOverlayStore.getState().session_call_type,
-      language:       useOverlayStore.getState().session_language,
-      answerMode:     useOverlayStore.getState().answer_mode,
-      onChunk:  (chunk) => useOverlayStore.getState().appendStreamChunk(chunk),
-      onDone:   async (_fullText) => {
-        useOverlayStore.getState().commitStreamedHint();
-        const result = await deductCredits(selectedModel, sessionIdRef.current);
-        if (result.success) {
-          useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
+    // ── Check answer_mode to decide which path to take ──
+    const answerMode = useOverlayStore.getState().answer_mode;
+
+    if (answerMode === "full_answer") {
+      // Full STAR answer via dedicated edge function
+      try {
+        await requestFullAnswer(question, sessionIdRef.current, controller.signal);
+        // Credits are deducted server-side in generate-answer edge function
+        useSessionStore.getState().consumeCredit(2); // COST = 2 for full answer
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          useOverlayStore.getState().setError(
+            err instanceof Error ? err.message : "Full answer generation failed"
+          );
         }
-      },
-      onError:  (error) => useOverlayStore.getState().setError(error.message),
-      signal:   controller.signal,
-    });
-  }, [profile, coachStore]);
+      }
+    } else {
+      // Hint mode — use routeHint as before
+      await routeHint({
+        question,
+        context,
+        preferredModel: selectedModel,
+        interviewType:  context.session_type,
+        isLive:         true,
+        sessionId:      sessionIdRef.current,
+        questionId:     requestId,
+        simpleLanguage: useOverlayStore.getState().simple_language,
+        callType:       useOverlayStore.getState().session_call_type,
+        language:       useOverlayStore.getState().session_language,
+        answerMode:     "hint",
+        onChunk:  (chunk) => useOverlayStore.getState().appendStreamChunk(chunk),
+        onDone:   async (_fullText) => {
+          useOverlayStore.getState().commitStreamedHint();
+          const result = await deductCredits(selectedModel, sessionIdRef.current);
+          if (result.success) {
+            useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
+          }
+        },
+        onError:  (error) => useOverlayStore.getState().setError(error.message),
+        signal:   controller.signal,
+      });
+    }
+  }, [profile, coachStore]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const submitManualQuestion = useCallback(async (question: string) => {
     if (!profile) return;
 
     // Rebuild context from current document store state (supports mid-session doc changes)
     const currentDocContext = useDocumentStore.getState().active_context;
-    const freshContext = buildCoachingContext(profile, configRef.current, currentDocContext);
+    const freshContext = buildCoachingContext(profile as any, configRef.current, currentDocContext);
     coachStore.initContext(freshContext);
 
     const context = coachStore.getContext();
@@ -270,7 +349,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
       },
       signal: controller.signal,
     });
-  }, [profile, coachStore]);
+  }, [profile, coachStore]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const startLiveSession = useCallback(async () => {
     sessionIdRef.current = generateId();
@@ -286,7 +365,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
           type:       "live",
           status:     "active",
           started_at: new Date().toISOString(),
-          model_used: toDbModel(useOverlayStore.getState().active_model),
+          model_used: toDbModel(useOverlayStore.getState().active_model) as any,
         });
       } catch (err) {
         console.error("[useLiveCopilot] Failed to create session record:", err);
@@ -294,7 +373,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     }
 
     await audio.start();
-  }, [audio.start, initSessionFromConfig, profile?.id]);
+  }, [audio.start, initSessionFromConfig, profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const endLiveSession = useCallback(async () => {
     abortRef.current?.abort();
@@ -317,7 +396,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
         await sessionsDB.update(session.session_id, {
           status:            "completed",
           credits_used:      session.credits_consumed,
-          model_used:        dbModel,
+          model_used:        dbModel as any,
           ended_at:          new Date().toISOString(),
           filler_words:      session.filler_count,
           avg_wpm:           session.current_wpm,
@@ -337,12 +416,13 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
               is_final:   true,
             });
           } catch {
+            // silently ignore transcript save failure
           }
         }
 
         for (const hint of overlay.hint_history) {
           try {
-            await supabase.from("session_ai_interactions").insert({
+            await (supabase.from("session_ai_interactions") as any).insert({
               session_id: session.session_id,
               user_id:    userId,
               type:       "hint",
@@ -351,6 +431,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
               model:      dbModel,
             });
           } catch {
+            // silently ignore interaction save failure
           }
         }
       } catch (err) {
@@ -360,7 +441,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
 
     useSessionStore.getState().setStatus("completed");
     useOverlayStore.getState().hideOverlay();
-  }, [audio.stop, profile?.id]);
+  }, [audio.stop, profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const toggleProctorSafe = useCallback(() => {
     const { is_proctor_safe, setProctorSafe } = useOverlayStore.getState();
