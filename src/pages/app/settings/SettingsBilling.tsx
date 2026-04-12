@@ -22,7 +22,7 @@ import { Button }       from "@/components/ui/Button";
 import { Badge }        from "@/components/ui/Badge";
 import { ProgressBar }  from "@/components/ui/ProgressBar";
 import { PageHeader }   from "@/components/layout/PageHeader";
-import { Skeleton }     from "@/components/ui/Skeleton";
+import { Skeleton }     from "@/components/ui/skeleton";
 import {
   Zap,
   CreditCard,

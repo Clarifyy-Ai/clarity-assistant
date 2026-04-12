@@ -87,7 +87,12 @@ export type BadgeId =
   | "room_host"
   | "referral_3"
   | "resume_uploaded"
+  | "referral_converted"
   | "all_interview_types"
+  | "level_5"
+  | "level_10"
+  | "level_20"
+  | "level_50"
   | "apprentice"
   | "confident"
   | "star_user"
@@ -320,24 +325,37 @@ export const BADGE_DEFINITIONS: Record<BadgeId, BadgeDefinition> = {
   live_ready:  { id: "live_ready", name: "Live Ready",       description: "Reached Level 7", icon: "🎙️", rarity: "rare",      xp_bonus: 0,   condition_description: "Reach Level 7", is_hidden: false },
   strategist:  { id: "strategist", name: "Strategist",       description: "Reached Level 9", icon: "🧠", rarity: "legendary", xp_bonus: 0,   condition_description: "Reach Level 9", is_hidden: false },
   master:      { id: "master",     name: "Clarify AI Master", description: "Reached Level 10",icon: "👑", rarity: "legendary", xp_bonus: 0,   condition_description: "Reach Level 10",is_hidden: false },
+  // Level milestone badges
+  level_5:     { id: "level_5",    name: "Level 5",           description: "Reached Level 5", icon: "🎯", rarity: "uncommon",  xp_bonus: 0,   condition_description: "Reach Level 5", is_hidden: false },
+  level_10:    { id: "level_10",   name: "Level 10",          description: "Reached Level 10",icon: "🏅", rarity: "rare",      xp_bonus: 0,   condition_description: "Reach Level 10",is_hidden: false },
+  level_20:    { id: "level_20",   name: "Level 20",          description: "Reached Level 20",icon: "🌟", rarity: "rare",      xp_bonus: 0,   condition_description: "Reach Level 20",is_hidden: false },
+  level_50:    { id: "level_50",   name: "Level 50",          description: "Reached Level 50",icon: "💎", rarity: "legendary", xp_bonus: 0,   condition_description: "Reach Level 50",is_hidden: false },
+  referral_converted: { id: "referral_converted", name: "Referral Pro", description: "Had a referral convert", icon: "🤝", rarity: "uncommon", xp_bonus: 50, condition_description: "Referral converted", is_hidden: false },
 };
 
 // ── Weekly Challenge ──────────────────────────────────────────────
 
 export interface WeeklyChallenge {
   id: string;
-  week_start: string;              // ISO date Monday
-  week_end: string;                // ISO date Sunday
+  week_start: string;
+  week_end: string;
   title: string;
   description: string;
-  target_count: number;
-  interview_type: string | null;
-  session_mode: string | null;
-  xp_reward: number;
-  badge_reward: BadgeId | null;
-  is_completed: boolean;
+  goal: number;
   progress: number;
-  completed_at: string | null;
+  reward_xp: number;
+  type: string;
+  user_id: string;
+  completed: boolean;
+  created_at: string;
+  // Optional fields from frontend logic
+  target_count?: number;
+  interview_type?: string | null;
+  session_mode?: string | null;
+  xp_reward?: number;
+  badge_reward?: BadgeId | null;
+  is_completed?: boolean;
+  completed_at?: string | null;
 }
 
 // ── Gamification Store State ──────────────────────────────────────

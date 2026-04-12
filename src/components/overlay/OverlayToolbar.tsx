@@ -48,6 +48,7 @@ interface OverlayToolbarProps {
   onToggleSystemAudio?: () => void;
   onGenerate?: () => void;
   onEndSession?: () => void;
+  onSetupNewSession?: () => void;
 }
 
 export function OverlayToolbar({
@@ -55,6 +56,7 @@ export function OverlayToolbar({
   onToggleSystemAudio,
   onGenerate,
   onEndSession,
+  onSetupNewSession,
 }: OverlayToolbarProps) {
   const isMuted             = useAudioStore((s) => s.is_muted);
   const isCapturing         = useAudioStore((s) => s.streams?.is_capturing ?? false);

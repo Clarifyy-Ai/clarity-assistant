@@ -49,10 +49,15 @@ type SessionRow = Pick<
  * scheduled_at and interview_type are patched into types.ts in Fix 16.
  * Using Pick<Tables<"scheduled_interviews">, ...> once the patch is applied.
  */
-type ScheduledInterview = Pick<
-  Tables<"scheduled_interviews">,
-  "id" | "company_name" | "role_title" | "scheduled_at" | "interview_type"
->;
+type ScheduledInterview = {
+  id: string;
+  company_name: string;
+  role_title: string;
+  stage?: string;
+  status?: string;
+  scheduled_at?: string;
+  interview_type?: string;
+};
 
 /**
  * Return shape of useGamification().

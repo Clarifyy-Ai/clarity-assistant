@@ -123,7 +123,7 @@ export const OAuthButton = ({
         );
         setLastError(message);
         toast.error(message, {
-          description: "Error code: " + (error.code ?? error.message),
+          description: "Error code: " + ((error as unknown as Record<string, unknown>).code ?? error.message),
           duration:    6000,
         });
         return;

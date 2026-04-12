@@ -7,7 +7,7 @@ import { BADGE_DEFINITIONS, XP_LEVELS } from "@/types/gamification.types";
 import type { XPEventType, BadgeId } from "@/types/gamification.types";
 
 // ─────────────────────────────────────────────────────────────────
-// XP awarded per action (source of truth — referenced by both hooks)
+// XP awarded per action (source of truth)
 // ─────────────────────────────────────────────────────────────────
 
 export const XP_REWARDS: Record<XPEventType, number> = {
@@ -28,16 +28,12 @@ export const XP_REWARDS: Record<XPEventType, number> = {
 
 // ─────────────────────────────────────────────────────────────────
 // Badge unlock evaluation
-// Pure function — no side effects — so it can be tested in isolation.
-// Takes the full context after an XP grant and returns every badge
-// that should now be unlocked (caller is responsible for deduplication
-// against already-unlocked badges).
 // ─────────────────────────────────────────────────────────────────
 
 interface BadgeCheckParams {
   xp:       number;
   level:    number;
-  prevLevel: number;   // level before this XP grant
+  prevLevel: number;
   sessions: number;
   streak:   number;
   action:   XPEventType;
@@ -46,7 +42,6 @@ interface BadgeCheckParams {
 function checkBadgeUnlocks(params: BadgeCheckParams): BadgeId[] {
   const unlocked: BadgeId[] = [];
 
-  // ── Session-count milestones ──────────────────────────────────
   const sessionMilestones: Array<[number, BadgeId]> = [
     [1,   "first_session"],
     [10,  "ten_sessions"],
@@ -58,7 +53,6 @@ function checkBadgeUnlocks(params: BadgeCheckParams): BadgeId[] {
     if (params.sessions >= count) unlocked.push(badge);
   }
 
-  // ── Streak milestones ─────────────────────────────────────────
   const streakMilestones: Array<[number, BadgeId]> = [
     [7,  "streak_7"],
     [14, "streak_14"],
@@ -69,18 +63,12 @@ function checkBadgeUnlocks(params: BadgeCheckParams): BadgeId[] {
     if (params.streak >= days) unlocked.push(badge);
   }
 
-  // ── Level-up badges ───────────────────────────────────────────
-  // Only award for levels crossed in THIS grant (prevLevel → level).
-  // Iterating the range prevents missing a badge when a single large
-  // XP grant crosses multiple level thresholds at once.
   if (params.level > params.prevLevel) {
     for (let lvl = params.prevLevel + 1; lvl <= params.level; lvl++) {
-      // Badges baked into the XP_LEVELS definition (e.g. badge_id field)
       const levelDef = XP_LEVELS.find((l) => l.level === lvl);
       if (levelDef?.badge_id) {
         unlocked.push(levelDef.badge_id as BadgeId);
       }
-      // Explicit level → badge map (supplements the XP_LEVELS definition)
       const LEVEL_BADGES: Partial<Record<number, BadgeId>> = {
         5:  "level_5",
         10: "level_10",
@@ -92,7 +80,6 @@ function checkBadgeUnlocks(params: BadgeCheckParams): BadgeId[] {
     }
   }
 
-  // ── Action-specific badges ────────────────────────────────────
   if (params.action === "zero_filler_session") unlocked.push("zero_filler");
   if (params.action === "perfect_score")       unlocked.push("perfect_score");
   if (params.action === "resume_uploaded")     unlocked.push("resume_uploaded");
@@ -103,16 +90,11 @@ function checkBadgeUnlocks(params: BadgeCheckParams): BadgeId[] {
 
 // ─────────────────────────────────────────────────────────────────
 // useXPSystem hook
-// Lightweight alternative to useGamification for components that
-// only need to fire XP events without the full gamification state.
-// Uses the same Zustand store so state stays in sync.
 // ─────────────────────────────────────────────────────────────────
 
 export function useXPSystem() {
   const { user }     = useAuthStore();
   const gamification = useGamificationStore();
-
-  // ── Award XP, persist to DB, check badge unlocks ─────────────
 
   const awardXP = useCallback(async (action: XPEventType): Promise<void> => {
     if (!user) return;
@@ -122,83 +104,91 @@ export function useXPSystem() {
 
     const prevLevel = gamification.level;
 
-    // Optimistic local update — keeps UI responsive
+    // Optimistic local update
     gamification.addXP(amount);
 
-    // Persist to DB via RPC (returns server-authoritative totals)
-    const { data, error } = await supabase.rpc("award_xp", {
-      p_user_id: user.id,
-      p_action:  action,
-      p_amount:  amount,
-    });
+    // Persist to DB via direct profile update (no RPC needed)
+    const { data: profileData, error } = await supabase
+      .from("profiles")
+      .select("xp, total_sessions")
+      .eq("id", user.id)
+      .single();
 
-    if (error) {
-      // Roll back optimistic update on failure
+    if (error || !profileData) {
       gamification.addXP(-amount);
-      console.error("[useXPSystem] award_xp RPC failed:", error.message);
+      console.error("[useXPSystem] XP fetch failed:", error?.message);
       return;
     }
 
-    if (data) {
-      // Sync with server-authoritative total (prevents drift)
-      gamification.setXP(data.new_total);
+    const newTotal = (profileData.xp ?? 0) + amount;
 
-      // ── Badge unlock check ────────────────────────────────────
-      const newLevel  = gamification.level; // re-read after setXP
-      const toUnlock  = checkBadgeUnlocks({
-        xp:       data.new_total,
-        level:    newLevel,
-        prevLevel,
-        sessions: data.total_sessions ?? 0,
-        streak:   gamification.streak_current,
-        action,
-      });
+    const { error: updateErr } = await supabase
+      .from("profiles")
+      .update({ xp: newTotal, updated_at: new Date().toISOString() })
+      .eq("id", user.id);
 
-      for (const badgeId of toUnlock) {
-        // Skip already-unlocked badges (deduplication)
-        if (gamification.unlocked_badges.includes(badgeId)) continue;
+    if (updateErr) {
+      gamification.addXP(-amount);
+      console.error("[useXPSystem] XP update failed:", updateErr.message);
+      return;
+    }
 
-        // Optimistic local unlock + toast trigger
-        gamification.unlockBadge(badgeId);
-        gamification.setPendingBadge(badgeId);
+    // Sync with server-authoritative total
+    gamification.setXP(newTotal);
 
-        // Persist to DB
-        const { error: badgeErr } = await supabase
-          .from("user_badges")
-          .insert({
-            user_id:     user.id,
-            badge_id:    badgeId,
-            unlocked_at: new Date().toISOString(),
-          });
+    // Badge unlock check
+    const newLevel  = gamification.level;
+    const toUnlock  = checkBadgeUnlocks({
+      xp:       newTotal,
+      level:    newLevel,
+      prevLevel,
+      sessions: profileData.total_sessions ?? 0,
+      streak:   gamification.streak_current,
+      action,
+    });
 
-        if (badgeErr) {
-          // Badge insert failed — roll back local unlock to stay consistent
-          console.error("[useXPSystem] Badge insert failed:", badgeErr.message);
-          // Note: we don't roll back the store badge here because duplicate
-          // inserts are harmless and the badge was earned — just log it.
-        }
+    for (const badgeId of toUnlock) {
+      if (gamification.unlocked_badges.includes(badgeId)) continue;
 
-        // Award any XP bonus defined on the badge definition
-        const bonus = BADGE_DEFINITIONS[badgeId]?.xp_bonus ?? 0;
-        if (bonus > 0) {
-          gamification.addXP(bonus);
-          // Persist the bonus XP too (fire-and-forget, non-blocking)
-          supabase.rpc("award_xp", {
-            p_user_id: user.id,
-            p_action:  "badge_bonus" as XPEventType,
-            p_amount:  bonus,
-          }).catch((err: Error) => {
-            console.warn("[useXPSystem] badge bonus persist failed:", err.message);
-          });
-        }
+      gamification.unlockBadge(badgeId);
+      gamification.setPendingBadge(badgeId);
 
-        // Clear pending badge after the animation window
-        setTimeout(() => {
-          if (useGamificationStore.getState().pending_badge_unlock === badgeId) {
-            gamification.setPendingBadge(null);
+      // Persist badge to DB (fire-and-forget)
+      supabase
+        .from("user_badges")
+        .insert({
+          user_id:     user.id,
+          badge_id:    badgeId,
+          unlocked_at: new Date().toISOString(),
+        })
+        .then(({ error: badgeErr }) => {
+          if (badgeErr) {
+            console.error("[useXPSystem] Badge insert failed:", badgeErr.message);
           }
-        }, 4000);
+        });
+
+      // Award any XP bonus defined on the badge definition
+      const bonus = BADGE_DEFINITIONS[badgeId]?.xp_bonus ?? 0;
+      if (bonus > 0) {
+        gamification.addXP(bonus);
+        // Persist the bonus XP too (fire-and-forget)
+        supabase
+          .from("profiles")
+          .update({ xp: newTotal + bonus })
+          .eq("id", user.id)
+          .then(({ error: bonusErr }) => {
+            if (bonusErr) {
+              console.warn("[useXPSystem] badge bonus persist failed:", bonusErr.message);
+            }
+          });
       }
+
+      // Clear pending badge after animation window
+      setTimeout(() => {
+        if (useGamificationStore.getState().pending_badge_unlock === badgeId) {
+          gamification.setPendingBadge(null);
+        }
+      }, 4000);
     }
   }, [user, gamification]);
 
