@@ -69,7 +69,7 @@ export function OverlayHintPanel({
   const isOffline    = hintState === "offline_fallback";
   const hasContent   = text.trim().length > 0;
 
-  const isHintMode      = hintStyle === "hint";
+  const isHintMode      = hintStyle === "short_hints" || hintStyle === "keywords_only";
   const isFullAnswerMode = hintStyle === "full_answer";
 
   /**
@@ -171,7 +171,7 @@ export function OverlayHintPanel({
         <div className="flex items-center gap-1 p-0.5 bg-white/[0.05] rounded-xl border border-white/[0.07]">
           <ModeToggleButton
             active={isHintMode}
-            onClick={() => handleModeSwitch("hint")}
+            onClick={() => handleModeSwitch("short_hints")}
             icon={<Zap className="w-3 h-3" />}
             label="Quick Hints"
             title="Get 3 short bullet-point hints (fast, 1 credit)"
