@@ -100,6 +100,11 @@ interface PricingCardProps {
    */
   size?: 'sm' | 'md' | 'lg';
 
+  /**
+   * Loading state for upgrade button
+   */
+  loading?: boolean;
+
   className?: string;
 }
 
