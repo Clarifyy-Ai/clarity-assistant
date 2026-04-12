@@ -202,7 +202,7 @@ export async function refreshCredits(): Promise<number | null> {
 
   const { data, error } = await supabase
     .from("profiles")
-    .select("credits, plan, subscription_status")
+    .select("credits, plan_id, subscription_status")
     .eq("id", user.id)
     .single();
 
@@ -210,7 +210,7 @@ export async function refreshCredits(): Promise<number | null> {
 
   useAuthStore.getState().updateProfile({
     credits:             data.credits,
-    plan:                data.plan,
+    plan:                data.plan_id as any,
     subscription_status: data.subscription_status,
   });
 
@@ -235,13 +235,19 @@ export async function fetchCreditHistory(
 
   const { data, error } = await supabase
     .from("credit_transactions")
-    .select("id, model, credits, session_id, created_at")
+    .select("id, action, amount, session_id, created_at, description")
     .eq("user_id", user.id)
     .order("created_at", { ascending: false })
     .limit(limit);
 
   if (error || !data) return [];
-  return data as CreditTransaction[];
+  return data.map((row) => ({
+    id:         row.id,
+    model:      row.action ?? "unknown",
+    credits:    row.amount,
+    session_id: row.session_id,
+    created_at: row.created_at,
+  })) as CreditTransaction[];
 }
 
 // ── BYOK check ────────────────────────────────────────────────────

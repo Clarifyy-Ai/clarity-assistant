@@ -325,6 +325,12 @@ export const BADGE_DEFINITIONS: Record<BadgeId, BadgeDefinition> = {
   live_ready:  { id: "live_ready", name: "Live Ready",       description: "Reached Level 7", icon: "🎙️", rarity: "rare",      xp_bonus: 0,   condition_description: "Reach Level 7", is_hidden: false },
   strategist:  { id: "strategist", name: "Strategist",       description: "Reached Level 9", icon: "🧠", rarity: "legendary", xp_bonus: 0,   condition_description: "Reach Level 9", is_hidden: false },
   master:      { id: "master",     name: "Clarify AI Master", description: "Reached Level 10",icon: "👑", rarity: "legendary", xp_bonus: 0,   condition_description: "Reach Level 10",is_hidden: false },
+  // Level milestone badges
+  level_5:     { id: "level_5",    name: "Level 5",           description: "Reached Level 5", icon: "🎯", rarity: "uncommon",  xp_bonus: 0,   condition_description: "Reach Level 5", is_hidden: false },
+  level_10:    { id: "level_10",   name: "Level 10",          description: "Reached Level 10",icon: "🏅", rarity: "rare",      xp_bonus: 0,   condition_description: "Reach Level 10",is_hidden: false },
+  level_20:    { id: "level_20",   name: "Level 20",          description: "Reached Level 20",icon: "🌟", rarity: "rare",      xp_bonus: 0,   condition_description: "Reach Level 20",is_hidden: false },
+  level_50:    { id: "level_50",   name: "Level 50",          description: "Reached Level 50",icon: "💎", rarity: "legendary", xp_bonus: 0,   condition_description: "Reach Level 50",is_hidden: false },
+  referral_converted: { id: "referral_converted", name: "Referral Pro", description: "Had a referral convert", icon: "🤝", rarity: "uncommon", xp_bonus: 50, condition_description: "Referral converted", is_hidden: false },
 };
 
 // ── Weekly Challenge ──────────────────────────────────────────────
