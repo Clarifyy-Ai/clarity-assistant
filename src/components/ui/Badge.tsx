@@ -6,9 +6,9 @@ import type { ReactNode } from "react";
 // Inline label chip used across scorecard, categories, tags.
 // ─────────────────────────────────────────────────────────────────
 
-type BadgeVariant =
+export type BadgeVariant =
   | "default" | "violet" | "emerald" | "red"
-  | "amber" | "blue" | "gray";
+  | "amber" | "blue" | "gray" | "outline" | "secondary";
 
 interface BadgeProps {
   children:   ReactNode;
@@ -20,23 +20,27 @@ interface BadgeProps {
 }
 
 const VARIANT_STYLES: Record<BadgeVariant, string> = {
-  default: "bg-secondary border-border text-muted-foreground",
-  violet:  "bg-violet-500/10 border-violet-500/20 text-violet-600 dark:text-violet-300",
-  emerald: "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-300",
-  red:     "bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400",
-  amber:   "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400",
-  blue:    "bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-300",
-  gray:    "bg-secondary border-border text-muted-foreground",
+  default:   "bg-secondary border-border text-muted-foreground",
+  violet:    "bg-violet-500/10 border-violet-500/20 text-violet-600 dark:text-violet-300",
+  emerald:   "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-300",
+  red:       "bg-red-500/10 border-red-500/20 text-red-600 dark:text-red-400",
+  amber:     "bg-amber-500/10 border-amber-500/20 text-amber-600 dark:text-amber-400",
+  blue:      "bg-blue-500/10 border-blue-500/20 text-blue-600 dark:text-blue-300",
+  gray:      "bg-secondary border-border text-muted-foreground",
+  outline:   "bg-transparent border-border text-foreground",
+  secondary: "bg-secondary border-border text-secondary-foreground",
 };
 
 const DOT_COLORS: Record<BadgeVariant, string> = {
-  default: "bg-muted-foreground",
-  violet:  "bg-violet-400",
-  emerald: "bg-emerald-400",
-  red:     "bg-red-400",
-  amber:   "bg-amber-400",
-  blue:    "bg-blue-400",
-  gray:    "bg-muted-foreground",
+  default:   "bg-muted-foreground",
+  violet:    "bg-violet-400",
+  emerald:   "bg-emerald-400",
+  red:       "bg-red-400",
+  amber:     "bg-amber-400",
+  blue:      "bg-blue-400",
+  gray:      "bg-muted-foreground",
+  outline:   "bg-muted-foreground",
+  secondary: "bg-muted-foreground",
 };
 
 export function Badge({
