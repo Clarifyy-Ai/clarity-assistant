@@ -87,7 +87,12 @@ export type BadgeId =
   | "room_host"
   | "referral_3"
   | "resume_uploaded"
+  | "referral_converted"
   | "all_interview_types"
+  | "level_5"
+  | "level_10"
+  | "level_20"
+  | "level_50"
   | "apprentice"
   | "confident"
   | "star_user"
@@ -326,18 +331,25 @@ export const BADGE_DEFINITIONS: Record<BadgeId, BadgeDefinition> = {
 
 export interface WeeklyChallenge {
   id: string;
-  week_start: string;              // ISO date Monday
-  week_end: string;                // ISO date Sunday
+  week_start: string;
+  week_end: string;
   title: string;
   description: string;
-  target_count: number;
-  interview_type: string | null;
-  session_mode: string | null;
-  xp_reward: number;
-  badge_reward: BadgeId | null;
-  is_completed: boolean;
+  goal: number;
   progress: number;
-  completed_at: string | null;
+  reward_xp: number;
+  type: string;
+  user_id: string;
+  completed: boolean;
+  created_at: string;
+  // Optional fields from frontend logic
+  target_count?: number;
+  interview_type?: string | null;
+  session_mode?: string | null;
+  xp_reward?: number;
+  badge_reward?: BadgeId | null;
+  is_completed?: boolean;
+  completed_at?: string | null;
 }
 
 // ── Gamification Store State ──────────────────────────────────────

@@ -93,11 +93,12 @@ export interface DeepgramConfig {
 
 export interface TranscriptWord {
   word: string;
-  start: number;                   // seconds from audio start
+  start: number;
   end: number;
   confidence: number;
-  speaker?: number;                // Deepgram speaker index
+  speaker?: number;
   punctuated_word?: string;
+  type?: string;                   // e.g. "filler" from Deepgram
 }
 
 export interface TranscriptUtterance {
@@ -110,6 +111,8 @@ export interface TranscriptUtterance {
   is_final: boolean;
   is_interviewer_question: boolean;
   confidence: number;
+  filler_word_count?: number;
+  filler_words_used?: string[];
 }
 
 export interface TranscriptState {
