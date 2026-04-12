@@ -1,6 +1,6 @@
 // stripe-webhook/index.ts — Handles Stripe webhook events
 
-import { corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 const STRIPE_SECRET_KEY      = Deno.env.get("STRIPE_SECRET_KEY")      ?? "";
@@ -46,7 +46,6 @@ async function verifyStripeSignature(
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("");
 
-  // Constant-time comparison — avoids early-exit timing oracle
   if (hexSig.length !== expectedSig.length) return false;
   let diff = 0;
   for (let i = 0; i < hexSig.length; i++) {
@@ -73,7 +72,6 @@ async function getProfileByCustomer(
 
 // ─────────────────────────────────────────────────────────────────
 // Helper: map Stripe subscription status → plan_id
-// Falls back to reading price metadata if available.
 // ─────────────────────────────────────────────────────────────────
 
 function derivePlanId(metadata: Record<string, string>): string {
@@ -85,19 +83,21 @@ function derivePlanId(metadata: Record<string, string>): string {
 // ─────────────────────────────────────────────────────────────────
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  // Note: Stripe webhooks are server-to-server (no Origin header),
+  // but we still handle OPTIONS for any proxy/testing scenarios.
+  const cors = handleCors(req);
+  if (cors) return cors;
+
+  const headers = getCorsHeaders(req);
 
   if (!STRIPE_SECRET_KEY) {
     console.error("[stripe-webhook] STRIPE_SECRET_KEY not configured");
     return new Response(
       JSON.stringify({ error: "Stripe not configured" }),
-      { status: 503, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { status: 503, headers: { ...headers, "Content-Type": "application/json" } },
     );
   }
 
-  // Warn loudly in logs if webhook secret is absent — never silently skip
   if (!STRIPE_WEBHOOK_SECRET) {
     console.warn(
       "[stripe-webhook] STRIPE_WEBHOOK_SECRET is not set — " +
@@ -111,14 +111,13 @@ Deno.serve(async (req) => {
     const rawBody  = await req.text();
     const signature = req.headers.get("stripe-signature") ?? "";
 
-    // Verify webhook signature (required in production)
     if (STRIPE_WEBHOOK_SECRET) {
       const valid = await verifyStripeSignature(rawBody, signature, STRIPE_WEBHOOK_SECRET);
       if (!valid) {
         console.error("[stripe-webhook] Invalid webhook signature — rejecting event");
         return new Response(
           JSON.stringify({ error: "Invalid signature" }),
-          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          { status: 400, headers: { ...headers, "Content-Type": "application/json" } },
         );
       }
     }
@@ -146,20 +145,22 @@ Deno.serve(async (req) => {
         const planId = derivePlanId(metadata);
 
         // Activate subscription on profile
+        // Columns used: stripe_customer_id ✅, subscription_id ✅,
+        //   subscription_status ✅, plan_id ✅, updated_at ✅
         await db.from("profiles").update({
           stripe_customer_id:  customerId,
           subscription_id:     subscriptionId,
           subscription_status: "active",
-          plan:                planId,   // keep both plan + plan_id in sync
           plan_id:             planId,
           updated_at:          new Date().toISOString(),
         }).eq("id", userId);
 
         // Upsert subscription record
+        // subscriptions table columns: user_id, stripe_subscription_id, plan_id,
+        //   status, updated_at (NO stripe_customer_id column)
         if (subscriptionId) {
           await db.from("subscriptions").upsert({
             user_id:                userId,
-            stripe_customer_id:     customerId,
             stripe_subscription_id: subscriptionId,
             plan_id:                planId,
             status:                 "active",
@@ -186,13 +187,12 @@ Deno.serve(async (req) => {
       }
 
       // ── Invoice paid → keep subscription active, reset monthly credits ──
-      // Stripe fires `invoice.paid` for both initial payment AND renewals.
       case "invoice.paid": {
         const invoice        = event.data.object;
         const customerId     = invoice.customer     as string;
         const subscriptionId = invoice.subscription as string | null;
 
-        if (!subscriptionId) break; // one-off invoice, not a subscription renewal
+        if (!subscriptionId) break;
 
         const profile = await getProfileByCustomer(db, customerId);
         if (!profile) {
@@ -228,7 +228,6 @@ Deno.serve(async (req) => {
         }
 
         await db.from("profiles").update({
-          plan:                "free",
           plan_id:             "free",
           subscription_status: "canceled",
           subscription_id:     null,
@@ -254,7 +253,6 @@ Deno.serve(async (req) => {
         const profile = await getProfileByCustomer(db, customerId);
         if (!profile) break;
 
-        // If scheduled to cancel at period end, show "canceling" rather than "active"
         const status = subscription.cancel_at_period_end
           ? "canceling"
           : (subscription.status as string);
@@ -304,14 +302,14 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({ received: true }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { status: 200, headers: { ...headers, "Content-Type": "application/json" } },
     );
 
   } catch (err) {
     console.error("[stripe-webhook] Unhandled error:", err);
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : "Unknown error" }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { status: 500, headers: { ...headers, "Content-Type": "application/json" } },
     );
   }
 });

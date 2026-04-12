@@ -320,10 +320,10 @@ export const creditsDB = {
     );
   },
 
-  async deduct(userId: string, amount: number): Promise<void> {
+  async deduct(userId: string, amount: number, action = "usage"): Promise<void> {
     const { error } = await supabase.rpc("deduct_credits", {
-      p_user_id: userId,
-      p_amount:  amount,
+      p_action: action,
+      p_cost:   amount,
     });
     if (error) throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED,
       { table: "credits", operation: "deduct" });
