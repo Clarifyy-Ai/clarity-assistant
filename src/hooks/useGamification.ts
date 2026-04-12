@@ -61,7 +61,7 @@ export const useGamificationStore = create<GamificationStore>()(
       xp_progress_percent:       0,
       streak_current:            0,
       streak_longest:            0,
-      streak_last_activity_date: null,
+      streak_last_activity:      null,
       unlocked_badges:           [],
       recent_xp_events:          [],
       weekly_challenge:          null,
@@ -75,8 +75,8 @@ export const useGamificationStore = create<GamificationStore>()(
           return { xp: newXP, ...computeLevel(newXP) };
         }),
 
-      setStreak: (streak_current, streak_longest, streak_last_activity_date) =>
-        set({ streak_current, streak_longest, streak_last_activity_date }),
+      setStreak: (streak_current, streak_longest, streak_last_activity) =>
+        set({ streak_current, streak_longest, streak_last_activity }),
 
       unlockBadge: (id) =>
         set((s) =>
@@ -98,7 +98,7 @@ export const useGamificationStore = create<GamificationStore>()(
           xp_progress_percent:       0,
           streak_current:            0,
           streak_longest:            0,
-          streak_last_activity_date: null,
+          streak_last_activity:      null,
           unlocked_badges:           [],
           recent_xp_events:          [],
           weekly_challenge:          null,
@@ -258,38 +258,37 @@ export function useGamification() {
 
     const { data } = await supabase
       .from("profiles")
-      .select("streak_current, streak_longest, streak_last_activity_date")
+      .select("streak_days, longest_streak, last_active_date")
       .eq("id", user.id)
       .single();
 
     if (!data) return;
 
-    const lastActivity = data.streak_last_activity_date
-      ? new Date(data.streak_last_activity_date)
+    const lastActivity = data.last_active_date
+      ? new Date(data.last_active_date)
       : null;
     const now      = new Date();
     const daysDiff = lastActivity
       ? Math.floor((now.getTime() - lastActivity.getTime()) / 86_400_000)
       : null;
 
-    let newStreak = data.streak_current ?? 0;
+    let newStreak = data.streak_days ?? 0;
     if (daysDiff === null || daysDiff > 1) {
-      newStreak = 1;           // Reset or start fresh
+      newStreak = 1;
     } else if (daysDiff === 1) {
-      newStreak += 1;          // Continue streak
+      newStreak += 1;
     }
-    // daysDiff === 0 → same day, no change
 
-    const newLongest = Math.max(newStreak, data.streak_longest ?? 0);
+    const newLongest = Math.max(newStreak, data.longest_streak ?? 0);
     store.setStreak(newStreak, newLongest, now.toISOString());
 
     // Persist updated streak to DB
     await supabase
       .from("profiles")
       .update({
-        streak_current:            newStreak,
-        streak_longest:            newLongest,
-        streak_last_activity_date: now.toISOString(),
+        streak_days:       newStreak,
+        longest_streak:    newLongest,
+        last_active_date:  now.toISOString(),
       })
       .eq("id", user.id);
 
@@ -407,25 +406,24 @@ export function useGamification() {
     //    the active weekly challenge (e.g. "Complete 3 mock tests this week")
     const challenge = useGamificationStore.getState().weekly_challenge;
     if (challenge && !challenge.completed) {
-      const updatedProgress = (challenge.current_count ?? 0) + 1;
-      if (updatedProgress >= (challenge.target_count ?? 1)) {
+      const updatedProgress = (challenge.progress ?? 0) + 1;
+      if (updatedProgress >= (challenge.goal ?? 1)) {
         await awardXP("weekly_challenge_complete");
         // Persist challenge completion
         await supabase
           .from("weekly_challenges")
           .update({
-            current_count: updatedProgress,
-            completed:     true,
-            completed_at:  new Date().toISOString(),
+            progress:     updatedProgress,
+            completed:    true,
           })
           .eq("id", challenge.id);
-        store.setWeeklyChallenge({ ...challenge, completed: true, current_count: updatedProgress });
+        store.setWeeklyChallenge({ ...challenge, completed: true, progress: updatedProgress });
       } else {
         await supabase
           .from("weekly_challenges")
-          .update({ current_count: updatedProgress })
+          .update({ progress: updatedProgress })
           .eq("id", challenge.id);
-        store.setWeeklyChallenge({ ...challenge, current_count: updatedProgress });
+        store.setWeeklyChallenge({ ...challenge, progress: updatedProgress });
       }
     }
 
