@@ -365,7 +365,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
           type:       "live",
           status:     "active",
           started_at: new Date().toISOString(),
-          model_used: toDbModel(useOverlayStore.getState().active_model),
+          model_used: toDbModel(useOverlayStore.getState().active_model) as any,
         });
       } catch (err) {
         console.error("[useLiveCopilot] Failed to create session record:", err);
@@ -396,7 +396,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
         await sessionsDB.update(session.session_id, {
           status:            "completed",
           credits_used:      session.credits_consumed,
-          model_used:        dbModel,
+          model_used:        dbModel as any,
           ended_at:          new Date().toISOString(),
           filler_words:      session.filler_count,
           avg_wpm:           session.current_wpm,
@@ -422,7 +422,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
 
         for (const hint of overlay.hint_history) {
           try {
-            await supabase.from("session_ai_interactions").insert({
+            await (supabase.from("session_ai_interactions") as any).insert({
               session_id: session.session_id,
               user_id:    userId,
               type:       "hint",
