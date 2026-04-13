@@ -174,10 +174,8 @@ export function handleCors(req: Request): Response | null {
  *   New: headers: { ...getCorsHeaders(req), "Content-Type": "application/json" }
  */
 export const corsHeaders: Record<string, string> = {
+  "Access-Control-Allow-Origin":  "*",
   "Access-Control-Allow-Methods": ALLOWED_METHODS,
   "Access-Control-Allow-Headers": ALLOWED_HEADERS,
   "Access-Control-Max-Age":       "86400",
-  "Vary":                         "Origin",
-  // NOTE: No Access-Control-Allow-Origin here intentionally.
-  // Browsers will block responses using this object — migrate to getCorsHeaders(req).
 };
