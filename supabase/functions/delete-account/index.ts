@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
     if (!authHeader?.toLowerCase().startsWith("bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: });
+        headers: getCorsHeaders(req) });
     }
 
     const token = authHeader.replace(/^bearer\s+/i, "");
@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
     if (authErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: });
+        headers: getCorsHeaders(req) });
     }
 
     const authenticatedUserId = user.id;
@@ -44,7 +44,7 @@ Deno.serve(async (req) => {
     if (!body || typeof body.user_id !== "string") {
       return new Response(JSON.stringify({ error: "Invalid body" }), {
         status: 400,
-        headers: });
+        headers: getCorsHeaders(req) });
     }
 
     const targetUserId = body.user_id;
@@ -132,12 +132,12 @@ Deno.serve(async (req) => {
     }).catch(() => {});
 
     return new Response(JSON.stringify({ success: true }), {
-      headers: });
+      headers: getCorsHeaders(req) });
 
   } catch (err) {
     console.error("delete-account error:", err);
     return new Response(JSON.stringify({ error: "Internal error" }), {
       status: 500,
-      headers: });
+      headers: getCorsHeaders(req) });
   }
 });

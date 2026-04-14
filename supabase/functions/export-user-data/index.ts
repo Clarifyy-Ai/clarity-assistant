@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
     if (!authHeader?.toLowerCase().startsWith("bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: });
+        headers: getCorsHeaders(req) });
     }
 
     const token = authHeader.replace(/^bearer\s+/i, "");
@@ -32,7 +32,7 @@ Deno.serve(async (req) => {
     if (userErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: });
+        headers: getCorsHeaders(req) });
     }
 
     /* ---------------------------------------------------
@@ -44,14 +44,14 @@ Deno.serve(async (req) => {
     if (!user_id) {
       return new Response(JSON.stringify({ error: "Missing user_id" }), {
         status: 400,
-        headers: });
+        headers: getCorsHeaders(req) });
     }
 
     // User can export ONLY their own data
     if (user.id !== user_id) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403,
-        headers: });
+        headers: getCorsHeaders(req) });
     }
 
     /* ---------------------------------------------------

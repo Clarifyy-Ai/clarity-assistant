@@ -49,7 +49,7 @@ Deno.serve(async (req) => {
 
     if (!authHeader?.toLowerCase().startsWith("bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: });
+        status: 401, headers: getCorsHeaders(req) });
     }
 
     const token = authHeader.replace(/^bearer\s+/i, "");
@@ -57,7 +57,7 @@ Deno.serve(async (req) => {
 
     if (error || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: });
+        status: 401, headers: getCorsHeaders(req) });
     }
 
     // ------------------------------

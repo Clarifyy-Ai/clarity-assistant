@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
     if (!authHeader?.toLowerCase().startsWith("bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: });
+        headers: getCorsHeaders(req) });
     }
 
     const token = authHeader.replace(/^bearer\s+/i, "");
@@ -52,7 +52,7 @@ Deno.serve(async (req) => {
     if (userErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: });
+        headers: getCorsHeaders(req) });
     }
 
     /* -------------------------------------------
@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
     if (!body) {
       return new Response(JSON.stringify({ error: "Invalid request body" }), {
         status: 400,
-        headers: });
+        headers: getCorsHeaders(req) });
     }
 
     const interview_type_raw   = sanitize(body.interview_type, 40) || "behavioural";
@@ -90,7 +90,7 @@ Deno.serve(async (req) => {
     if (!credit.success) {
       return new Response(JSON.stringify({ error: "Insufficient credits" }), {
         status: 402,
-        headers: });
+        headers: getCorsHeaders(req) });
     }
 
     /* -------------------------------------------
