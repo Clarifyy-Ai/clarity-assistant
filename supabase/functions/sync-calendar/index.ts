@@ -1,6 +1,6 @@
 // sync-calendar/index.ts
 
-import { corsHeaders } from "../_shared/cors.ts";
+
 import {
   handleCors,
   parseBody,

@@ -1,6 +1,6 @@
 // polish-star-section/index.ts — SECURE, FIXED PRODUCTION VERSION
 
-import { corsHeaders } from "../_shared/cors.ts";
+
 import {
   handleCors, parseBody, requireAuth,
   successResponse, errorResponse,

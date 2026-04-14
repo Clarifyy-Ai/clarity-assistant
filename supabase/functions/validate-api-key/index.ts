@@ -1,6 +1,6 @@
 // validate-api-key/index.ts — FIXED & PRODUCTION READY
 
-import { corsHeaders } from "../_shared/cors.ts";
+
 import {
   handleCors,
   requireAuth,

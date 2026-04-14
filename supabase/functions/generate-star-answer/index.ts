@@ -1,6 +1,6 @@
 // generate-star-answer/index.ts — FIXED & SECURE VERSION
 
-import { corsHeaders } from "../_shared/cors.ts";
+
 import {
   handleCors,
   parseBody,
