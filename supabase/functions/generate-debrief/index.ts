@@ -1,6 +1,6 @@
 // generate-debrief/index.ts — FIXED, SECURE, PRODUCTION READY
 
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
 import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
 
@@ -28,8 +28,7 @@ Deno.serve(async (req) => {
     if (!authHeader?.toLowerCase().startsWith("bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: corsHeaders,
-      });
+        headers: });
     }
 
     const token = authHeader.replace(/^bearer\s+/i, "");
@@ -38,8 +37,7 @@ Deno.serve(async (req) => {
     if (uErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: corsHeaders,
-      });
+        headers: });
     }
 
     const authenticatedUserId = user.id;
@@ -52,8 +50,7 @@ Deno.serve(async (req) => {
     if (!body || typeof body.session_id !== "string") {
       return new Response(JSON.stringify({ error: "Missing session_id" }), {
         status: 400,
-        headers: corsHeaders,
-      });
+        headers: });
     }
 
     const session_id = body.session_id.trim();
@@ -61,8 +58,7 @@ Deno.serve(async (req) => {
     if (!session_id) {
       return new Response(JSON.stringify({ error: "Invalid session_id" }), {
         status: 400,
-        headers: corsHeaders,
-      });
+        headers: });
     }
 
     /* -----------------------------------------------------------
@@ -78,8 +74,7 @@ Deno.serve(async (req) => {
     if (sErr || !session) {
       return new Response(JSON.stringify({ error: "Session not found" }), {
         status: 404,
-        headers: corsHeaders,
-      });
+        headers: });
     }
 
     /* -----------------------------------------------------------
@@ -95,8 +90,7 @@ Deno.serve(async (req) => {
     if (aErr) {
       return new Response(JSON.stringify({ error: "Failed to fetch answers" }), {
         status: 500,
-        headers: corsHeaders,
-      });
+        headers: });
     }
 
     /* -----------------------------------------------------------
@@ -114,8 +108,7 @@ Deno.serve(async (req) => {
         error: "Insufficient credits",
       }), {
         status: 402,
-        headers: corsHeaders,
-      });
+        headers: });
     }
 
     /* -----------------------------------------------------------
@@ -191,7 +184,7 @@ Return ONLY valid JSON in this exact schema:
 
       return new Response(
         JSON.stringify({ error: "AI service failed" }),
-        { status: 500, headers: corsHeaders }
+        { status: 500, headers: getCorsHeaders(req) }
       );
     }
 
@@ -229,20 +222,20 @@ Return ONLY valid JSON in this exact schema:
 
       return new Response(
         JSON.stringify({ error: "Failed to save debrief" }),
-        { status: 500, headers: corsHeaders }
+        { status: 500, headers: getCorsHeaders(req) }
       );
     }
 
     return new Response(
       JSON.stringify({ debrief, session }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ..."Content-Type": "application/json" } }
     );
 
   } catch (err) {
     console.error("generate-debrief error:", err);
     return new Response(
       JSON.stringify({ error: "Internal server error" }),
-      { status: 500, headers: corsHeaders }
+      { status: 500, headers: getCorsHeaders(req) }
     );
   }
 });

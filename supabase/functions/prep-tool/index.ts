@@ -1,6 +1,6 @@
 // prep-tool/index.ts — FIXED, SECURE, PRODUCTION-READY
 
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import {
   requireAuth,
   successResponse,

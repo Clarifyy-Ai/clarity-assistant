@@ -1,6 +1,6 @@
 // export-user-data/index.ts — FIXED & SECURE VERSION
 
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 Deno.serve(async (req) => {
@@ -20,8 +20,7 @@ Deno.serve(async (req) => {
     if (!authHeader?.toLowerCase().startsWith("bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: corsHeaders,
-      });
+        headers: });
     }
 
     const token = authHeader.replace(/^bearer\s+/i, "");
@@ -33,8 +32,7 @@ Deno.serve(async (req) => {
     if (userErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: corsHeaders,
-      });
+        headers: });
     }
 
     /* ---------------------------------------------------
@@ -46,16 +44,14 @@ Deno.serve(async (req) => {
     if (!user_id) {
       return new Response(JSON.stringify({ error: "Missing user_id" }), {
         status: 400,
-        headers: corsHeaders,
-      });
+        headers: });
     }
 
     // User can export ONLY their own data
     if (user.id !== user_id) {
       return new Response(JSON.stringify({ error: "Forbidden" }), {
         status: 403,
-        headers: corsHeaders,
-      });
+        headers: });
     }
 
     /* ---------------------------------------------------
@@ -175,8 +171,7 @@ Deno.serve(async (req) => {
 
     return new Response(encoded, {
       headers: {
-        ...corsHeaders,
-        "Content-Type": "application/json",
+        ..."Content-Type": "application/json",
         "Content-Disposition": `attachment; filename="clarify-ai-export-${type}.json"`,
       },
     });
@@ -186,7 +181,7 @@ Deno.serve(async (req) => {
       JSON.stringify({ error: "Internal server error" }),
       {
         status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ..."Content-Type": "application/json" },
       }
     );
   }

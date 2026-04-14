@@ -1,6 +1,6 @@
 // supabase/functions/company-research/index.ts — PRODUCTION READY (ALL FEATURES PRESERVED)
 
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { 
   requireAuth, 
   parseBody, 
@@ -110,7 +110,7 @@ Notes:
     log(FN, "info", "Company research generated", { userId, company });
 
     return new Response(JSON.stringify(data), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ..."Content-Type": "application/json" },
     });
 
   } catch (err) {

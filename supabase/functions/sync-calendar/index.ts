@@ -229,7 +229,7 @@ Deno.serve(async (req) => {
       }),
       {
         status:  501,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ..."Content-Type": "application/json" },
       },
     );
   }

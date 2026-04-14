@@ -1,10 +1,9 @@
-import { corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 Deno.serve(async (req: Request) => {
-  if (req.method === "OPTIONS") {
-    return new Response(null, { headers: corsHeaders });
-  }
+  const cors = handleCors(req);
+  if (cors) return cors;
 
   try {
     /* ---------------------------
@@ -18,7 +17,7 @@ Deno.serve(async (req: Request) => {
     if (!authHeader.toLowerCase().startsWith("bearer ")) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders } }
+        { status: 401, headers: getCorsHeaders(req) }
       );
     }
 
@@ -29,7 +28,7 @@ Deno.serve(async (req: Request) => {
     if (authErr || !user) {
       return new Response(
         JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: { ...corsHeaders } }
+        { status: 401, headers: getCorsHeaders(req) }
       );
     }
 
@@ -165,13 +164,13 @@ Deno.serve(async (req: Request) => {
     };
 
     return new Response(JSON.stringify(result), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ..."Content-Type": "application/json" },
     });
   } catch (err) {
     console.error("stats-dashboard error:", err);
     return new Response(JSON.stringify({ error: String(err?.message ?? err) }), {
       status: 500,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ..."Content-Type": "application/json" },
     });
   }
 });

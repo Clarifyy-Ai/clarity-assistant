@@ -1,6 +1,6 @@
 // generate-questions/index.ts — SECURE, FIXED VERSION
 
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
 import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
 
@@ -43,8 +43,7 @@ Deno.serve(async (req) => {
     if (!authHeader?.toLowerCase().startsWith("bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: corsHeaders,
-      });
+        headers: });
     }
 
     const token = authHeader.replace(/^bearer\s+/i, "");
@@ -53,8 +52,7 @@ Deno.serve(async (req) => {
     if (userErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: corsHeaders,
-      });
+        headers: });
     }
 
     /* -------------------------------------------
@@ -65,8 +63,7 @@ Deno.serve(async (req) => {
     if (!body) {
       return new Response(JSON.stringify({ error: "Invalid request body" }), {
         status: 400,
-        headers: corsHeaders,
-      });
+        headers: });
     }
 
     const interview_type_raw   = sanitize(body.interview_type, 40) || "behavioural";
@@ -93,8 +90,7 @@ Deno.serve(async (req) => {
     if (!credit.success) {
       return new Response(JSON.stringify({ error: "Insufficient credits" }), {
         status: 402,
-        headers: corsHeaders,
-      });
+        headers: });
     }
 
     /* -------------------------------------------
@@ -155,7 +151,7 @@ JSON format:
     if (cleaned.length === 0) {
       return new Response(
         JSON.stringify({ error: "AI returned no usable questions" }),
-        { status: 500, headers: corsHeaders }
+        { status: 500, headers: getCorsHeaders(req) }
       );
     }
 
@@ -168,14 +164,14 @@ JSON format:
         count: cleaned.length,
         generated_by: "gemini",
       }),
-      { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { headers: { ..."Content-Type": "application/json" } }
     );
 
   } catch (err) {
     console.error("[generate-questions] error:", err);
     return new Response(
       JSON.stringify({ error: "Internal error", detail: String(err) }),
-      { status: 500, headers: corsHeaders }
+      { status: 500, headers: getCorsHeaders(req) }
     );
   }
 });

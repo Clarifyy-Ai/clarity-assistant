@@ -1,4 +1,4 @@
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 // -----------------------------------------------------------
@@ -49,8 +49,7 @@ Deno.serve(async (req) => {
 
     if (!authHeader?.toLowerCase().startsWith("bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: corsHeaders,
-      });
+        status: 401, headers: });
     }
 
     const token = authHeader.replace(/^bearer\s+/i, "");
@@ -58,8 +57,7 @@ Deno.serve(async (req) => {
 
     if (error || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401, headers: corsHeaders,
-      });
+        status: 401, headers: });
     }
 
     // ------------------------------
@@ -71,7 +69,7 @@ Deno.serve(async (req) => {
     if (!supabaseUrl || !serviceKey) {
       return new Response(
         JSON.stringify({ error: "Server configuration missing" }),
-        { status: 500, headers: corsHeaders }
+        { status: 500, headers: getCorsHeaders(req) }
       );
     }
 
@@ -82,7 +80,7 @@ Deno.serve(async (req) => {
       const identity = await getGoogleIdentity(supabaseUrl, serviceKey, user.id);
       return new Response(
         JSON.stringify({ connected: identity !== null }),
-        { headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        { headers: { ..."Content-Type": "application/json" } }
       );
     }
 
@@ -95,7 +93,7 @@ Deno.serve(async (req) => {
     if (!identity) {
       return new Response(
         JSON.stringify({ success: true, revoke_attempted: false }),
-        { headers: corsHeaders }
+        { headers: getCorsHeaders(req) }
       );
     }
 
@@ -147,20 +145,20 @@ Deno.serve(async (req) => {
           error: "Unable to unlink Google account. Try again later.",
           revoke_attempted: revokeAttempted,
         }),
-        { status: 502, headers: corsHeaders }
+        { status: 502, headers: getCorsHeaders(req) }
       );
     }
 
     return new Response(
       JSON.stringify({ success: true, revoke_attempted: revokeAttempted }),
-      { headers: corsHeaders }
+      { headers: getCorsHeaders(req) }
     );
 
   } catch (err) {
     console.error("[disconnect-calendar] Error:", err);
     return new Response(
       JSON.stringify({ error: "Internal server error" }),
-      { status: 500, headers: corsHeaders }
+      { status: 500, headers: getCorsHeaders(req) }
     );
   }
 });

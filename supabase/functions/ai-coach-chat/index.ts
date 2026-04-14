@@ -1,6 +1,6 @@
 // supabase/functions/ai-coach-chat/index.ts — PRODUCTION READY (ALL FEATURES PRESERVED)
 
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { 
   requireAuth, 
   parseBody, 
@@ -116,7 +116,7 @@ Candidate's answer so far: "${safeTranscript}"
 
     // Preserved exact original response format
     return new Response(JSON.stringify({ reply: aiResult.text }), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ..."Content-Type": "application/json" },
     });
 
   } catch (err) {
@@ -127,7 +127,7 @@ Candidate's answer so far: "${safeTranscript}"
         error: "Internal error",
         reply: "Sorry, I'm having trouble responding right now. Please try again.",
       }),
-      { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+      { status: 500, headers: { ..."Content-Type": "application/json" } }
     );
   }
 });

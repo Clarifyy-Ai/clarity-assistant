@@ -1,6 +1,6 @@
 // supabase/functions/gap-analysis/index.ts — PRODUCTION READY (ALL FEATURES PRESERVED)
 
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { 
   requireAuth, 
   parseBody, 
@@ -138,7 +138,7 @@ ${safeJD}
     log(FN, "info", "Gap analysis generated", { userId, resume_id, jd_id });
 
     return new Response(JSON.stringify(analysis), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ..."Content-Type": "application/json" },
     });
 
   } catch (err: any) {
