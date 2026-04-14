@@ -142,10 +142,7 @@ export async function parseBody<T = Record<string, unknown>>(req: Request): Prom
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function handleCors(req: Request): Response | null {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-  return null;
+  return _handleCorsFn(req);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
