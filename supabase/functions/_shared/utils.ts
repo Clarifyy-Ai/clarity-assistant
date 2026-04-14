@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "./cors.ts";
+import { corsHeaders, getCorsHeaders, handleCors as _handleCorsFn } from "./cors.ts";
 import type {
   AuthContext, EdgeError, EdgeSuccess,
   AICompletionRequest, AICompletionResponse,
