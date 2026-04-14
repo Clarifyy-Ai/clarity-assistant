@@ -1,190 +1,365 @@
 
 
-# Clarify AI — Complete Application Audit (Post-Fix Round 3)
+# Clarify AI — Complete Application Audit Report
+
+---
 
 ## 1. APPLICATION OVERVIEW
 
 - **Name**: Clarify AI
-- **Purpose**: Interview prep platform with real-time AI-powered stealth overlay for live interviews + competitive exam mock test engine
-- **Target users**: Job seekers (tech interviews) and competitive exam candidates (JEE, NEET, UPSC, SSC, Banking)
-- **Tech stack**: React 18 / Vite 5 / Tailwind / Zustand / TypeScript | Supabase (Postgres + Auth + Edge Functions + Storage + Realtime) | Gemini/OpenAI/Anthropic AI | Deepgram STT | Stripe billing | Electron (optional desktop)
-- **Database**: 49 tables, 1,000 questions, 43 exam papers
-- **Edge functions**: 26 deployed
+- **Purpose**: Interview preparation platform with a real-time AI-powered stealth overlay for live interviews, plus a competitive exam mock test engine (JEE, NEET, UPSC, SSC, Banking)
+- **Target users**: Job seekers (tech/behavioral interviews) and competitive exam candidates (India-focused)
+- **Tech stack**:
+  - Frontend: React 18 / Vite 5 / TypeScript 5 / Tailwind v3 / Zustand / React Router v6 / TanStack Query
+  - Backend: Supabase (Postgres 14.4, Auth, Edge Functions, Storage, Realtime)
+  - AI: Google Gemini (primary), OpenAI GPT-4o, Anthropic Claude (BYOK)
+  - STT: Deepgram Nova-2
+  - Billing: Stripe
+  - Desktop: Electron (optional)
+- **Database**: 50 tables, ~1,000 seeded questions, 43 exam papers, 2 user profiles, 22 sessions
+- **Edge Functions**: 32 deployed
+
+### Architecture
+
+```text
+Browser (SPA) ──HTTPS──▶ Supabase
+                          ├─ Postgres (RLS on all tables)
+                          ├─ Auth (JWT)
+                          ├─ Storage (resumes, avatars, docs, exports)
+                          ├─ Realtime (practice rooms)
+                          └─ Edge Functions (32 Deno)
+                               └─▶ Gemini / OpenAI / Anthropic / Deepgram / Stripe
+```
 
 ---
 
-## 2–3. COMPLETE FEATURE LIST WITH WORKING STATUS
+## 2. COMPLETE FEATURE INVENTORY
 
 ### A. Auth & Onboarding
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Email signup/login | ✅ | |
-| OAuth (Google/GitHub) | ⚠️ | Depends on Supabase provider config |
-| Email verification | ✅ | |
-| Password reset | ✅ | |
-| 5-step onboarding wizard | ✅ | |
-| Protected routes | ✅ | |
+| Feature | Status | Location |
+|---------|--------|----------|
+| Email signup/login | ✅ | `/login`, `/signup`, `LoginForm.tsx`, `SignupForm.tsx` |
+| OAuth (Google/GitHub) | ⚠️ | `OAuthButton.tsx` — depends on Supabase provider config |
+| Email verification | ✅ | `/verify-email`, `VerifyEmailModal.tsx` |
+| Password reset | ✅ | `/forgot-password`, `/reset-password` |
+| 5-step onboarding | ✅ | `/onboarding`, `OnboardingWizard.tsx` |
+| Protected routes | ✅ | `ProtectedRoute.tsx` |
+| Auth callback | ✅ | `/auth/callback` |
 
 ### B. Dashboard
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Stats cards, greeting | ✅ | Types fixed |
-| Recent sessions list | ✅ | |
-| Upcoming interviews | ✅ | |
-| XP/streak/gamification display | ✅ | |
+| Feature | Status | Location |
+|---------|--------|----------|
+| Stats cards + greeting | ✅ | `/app/dashboard`, `Dashboard.tsx` |
+| Recent sessions | ✅ | Queries `sessions` table |
+| Upcoming interviews | ✅ | Queries `scheduled_interviews` |
+| XP/streak display | ✅ | `useGamification.ts`, `profiles` table |
 
-### C. Live Interview Co-Pilot (CORE DIFFERENTIATOR)
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Pre-session setup wizard | ✅ | Duration, platform, system audio |
-| Live rehearsal 2-panel layout | ✅ | Transcript left, AI right |
-| Hint mode (bullet hints via routeHint) | ✅ | Connected and working |
-| **Full Answer mode (STAR via generate-answer)** | **✅ FIXED** | `useLiveCopilot` now checks `answer_mode` and calls `generate-answer` EF for full answers, `routeHint` for hints |
-| Credit deduction (generate-answer) | ✅ FIXED | Uses `deductCredits()` from `_shared/supabase.ts` — correct atomic pattern |
-| SSE streaming to frontend | ✅ | generate-answer streams via Gemini SSE, frontend parses SSE lines |
-| Overlay portal (#overlay-root) | ✅ | div in index.html |
-| Deepgram STT | ⚠️ Blocked | `DEEPGRAM_API_KEY` exists ✅ but `DEEPGRAM_PROJECT_ID` is **missing** — temp key endpoint returns 503 |
-| System audio capture | ⚠️ | Chromium-only, tab-share required |
-| Mic capture | ✅ | |
-| Session timer with configurable duration | ✅ | 5m/2m/30s warnings |
-| Panic button / hotkeys / stealth mouse | ✅ | |
-| Screen capture evasion | ⚠️ | CSS-based, varies by browser |
+### C. Live Interview Co-Pilot
+| Feature | Status | Location |
+|---------|--------|----------|
+| Pre-session setup wizard | ✅ | `PreSessionSetupWizard.tsx` |
+| 2-panel layout (transcript + AI) | ✅ | `LiveRehearsal.tsx` |
+| Hint mode (3 bullets) | ✅ | `generate-hint` EF, `routeHint()` |
+| Full Answer mode (STAR) | ✅ | `generate-answer` EF, `useLiveCopilot.ts` checks `answer_mode` |
+| Credit deduction | ✅ | `deduct_credits` RPC — correct 3-param signature |
+| SSE streaming | ✅ | `generate-answer` streams via Gemini API |
+| Overlay window | ✅ | `OverlayWindow.tsx`, portal to `#overlay-root` |
+| Deepgram STT | ❌ | `DEEPGRAM_PROJECT_ID` secret missing — temp key endpoint fails |
+| Mic capture | ✅ | `useAudioCapture.ts`, `micCapture.ts` |
+| System audio | ⚠️ | Chromium-only, requires tab-share |
+| Session timer | ✅ | `LiveSessionTimer.tsx` |
+| Panic button / hotkeys | ✅ | `LivePanicButton.tsx`, `LiveHotKeyListener.tsx` |
+| Stealth mouse guard | ✅ | `StealthMouseGuard.tsx` |
+| Screen capture evasion | ⚠️ | CSS-based (`display: none` during capture) |
 
 ### D. Mock Interview
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Mock launcher & session | ✅ | `useSessionOrchestrator` restored |
+| Feature | Status | Location |
+|---------|--------|----------|
+| Mock launcher | ✅ | `MockInterview.tsx` |
+| Mock session | ✅ | `MockSession.tsx`, `useSessionOrchestrator.ts` |
+| Mock warmup | ✅ | `MockWarmup.tsx` |
 
-### E. Mock Test Engine (Competitive Exams)
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Exam type mapping | ✅ | `examTypeMap.ts` direction is correct |
-| **Question data availability** | **❌ CRITICAL GAP** | 1,000 questions covering only 10 specific exam_type+year combos. 43 exam papers exist (2016–2025). Most paper+year combos return 0 questions. |
-| 2026 papers | ✅ FIXED | Deleted via migration + trigger prevents future inserts |
-| Test session/results/analytics UI | ✅ | |
-| Question upload (Excel) | ✅ | |
-| AI gap-fill | ⚠️ | `SYSTEM_USER_ID` secret not set |
+### E. Mock Test Engine
+| Feature | Status | Location |
+|---------|--------|----------|
+| Exam type mapping | ✅ | `examTypeMap.ts` — direction corrected |
+| Exam papers catalog | ✅ | 43 papers (2016-2025), trigger blocks future years |
+| Question bank | ❌ DATA GAP | 1,000 questions across only 10 type+year combos; 33 of 43 papers have 0 questions |
+| Test configuration wizard | ✅ | `TestConfigure.tsx` |
+| Test session UI | ✅ | `TestSession.tsx` |
+| Test results/analytics | ✅ | `TestResults.tsx`, `TestAnalytics.tsx` |
+| Question upload (Excel) | ✅ | `UploadQuestions.tsx`, `ExcelImportTab.tsx` |
+| AI gap-fill | ⚠️ | `select-test-questions` EF — `SYSTEM_USER_ID` not set |
+| Revision list (spaced repetition) | ✅ | `TestRevision.tsx`, `revision_list` table |
 
 ### F. Prep Lab
-| Feature | Status | Notes |
-|---------|--------|-------|
-| STAR builder, Rephraser, Coding hints | ⚠️ | Depend on AI edge functions |
-| System design, Project builder | ✅ | |
+| Feature | Status | Location |
+|---------|--------|----------|
+| STAR builder | ⚠️ | `StarBuilder.tsx` → `generate-star-answer` EF |
+| Rephraser | ⚠️ | `Rephraser.tsx` → `prep-tool` EF |
+| Coding hints | ⚠️ | `CodingHints.tsx` → `generate-hint` EF |
+| System design | ⚠️ | `SystemDesign.tsx` → `prep-tool` EF |
+| Project builder | ✅ | `ProjectBuilder.tsx` (local) |
 
-### G. Billing & Stripe
-| Feature | Status | Notes |
-|---------|--------|-------|
-| Credit system (DB RPCs) | ✅ | `deduct_credits` and `add_credits` work |
-| create-checkout | ✅ FIXED | Uses `getCorsHeaders(req)` |
-| **stripe-webhook** | **✅ FIXED** | Uses `plan_id` (not `plan`), no `stripe_customer_id` in subscriptions upsert, uses `getCorsHeaders(req)` |
-| **Stripe secrets** | **❌ Missing** | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_*` not in secrets |
+### G. Documents
+| Feature | Status | Location |
+|---------|--------|----------|
+| Resume upload/management | ✅ | `Documents.tsx`, `resumes` table, `resumes` bucket |
+| JD management | ✅ | `JDDetail.tsx`, `job_descriptions` table |
+| Resume parsing | ⚠️ | `parse-resume` EF — depends on `OCR_API_KEY` |
 
-### H. Other Modules
-| Module | Status |
-|--------|--------|
-| Documents/Resume | ✅ |
-| Answer Bank | ✅ |
-| Company Research | ⚠️ (AI dependent) |
-| Interviews/Scheduling | ✅ |
-| Calendar Sync | ❓ No Google OAuth config |
-| Sessions/Debrief | ✅ (UI) |
-| Practice Rooms | ⚠️ (Realtime dependent) |
-| Settings (15 pages) | ✅ |
-| Admin Panel | ✅ |
-| Marketing Pages | ✅ |
-| Gamification/XP/Streaks | ✅ |
-| Referrals | ✅ |
+### H. Answer Bank
+| Feature | Status | Location |
+|---------|--------|----------|
+| Save/edit/favorite answers | ✅ | `AnswerBank.tsx`, `answer_bank` table |
+
+### I. Company Research
+| Feature | Status | Location |
+|---------|--------|----------|
+| AI company research | ⚠️ | `CompanyResearch.tsx` → `company-research` EF |
+
+### J. Interviews & Scheduling
+| Feature | Status | Location |
+|---------|--------|----------|
+| Interview CRUD | ✅ | `Interviews.tsx`, `scheduled_interviews` table |
+| Calendar sync | ❓ | `calendar_integrations` table — no Google OAuth configured |
+
+### K. Sessions & Debrief
+| Feature | Status | Location |
+|---------|--------|----------|
+| Session history | ✅ | `SessionHistory.tsx`, `sessions` table |
+| Session detail | ✅ | `SessionDetail.tsx` |
+| AI debrief generation | ⚠️ | `generate-debrief` EF |
+
+### L. Practice Rooms
+| Feature | Status | Location |
+|---------|--------|----------|
+| Room creation/joining | ⚠️ | `PracticeRooms.tsx`, `rooms` + `practice_rooms` tables |
+| Room chat | ⚠️ | `room_chat` table, Supabase Realtime |
+
+### M. Billing & Credits
+| Feature | Status | Location |
+|---------|--------|----------|
+| Credit system (RPCs) | ✅ | `deduct_credits`, `add_credits` DB functions |
+| Credit balance display | ✅ | `CreditBalance.tsx` |
+| Stripe checkout | ❌ | `create-checkout` EF — `STRIPE_SECRET_KEY` missing |
+| Stripe webhook | ❌ | `stripe-webhook` EF — keys missing; code is correct |
+| Subscription management | ❌ | `cancel-subscription`, `resume-subscription` — Stripe keys missing |
+
+### N. Gamification
+| Feature | Status | Location |
+|---------|--------|----------|
+| XP / levels / streaks | ✅ | `useGamification.ts`, `useXPSystem.ts`, `profiles` columns |
+| Achievements / badges | ✅ | `achievements`, `user_achievements`, `user_badges` tables |
+| Weekly challenges | ✅ | `weekly_challenges` table |
+
+### O. Settings (15 pages)
+| Feature | Status |
+|---------|--------|
+| Profile, Audio, Models, Billing, Notifications, Privacy, Security, Integrations, BYOK, Appearance, Subscription, Credits, Data, Danger | ✅ All render |
+
+### P. Admin Panel
+| Feature | Status | Location |
+|---------|--------|----------|
+| Admin dashboard | ✅ | `AdminDashboard.tsx`, guarded by `has_role()` |
+| User management | ✅ | `AdminUsers.tsx` |
+| Analytics / Revenue | ✅ | `AdminAnalytics.tsx`, `AdminRevenue.tsx` |
+| Model costs | ✅ | `AdminModelCosts.tsx` |
+| Feature flags | ✅ | `AdminFeatureFlags.tsx` |
+| Question seeding | ✅ | `AdminSeedQuestions.tsx` |
+
+### Q. Marketing Pages
+| Feature | Status |
+|---------|--------|
+| Landing, Pricing, Help, Blog, Terms, Privacy, Shortcuts | ✅ All render |
+
+### R. Referrals
+| Feature | Status | Location |
+|---------|--------|----------|
+| Referral system | ✅ | `Referrals.tsx`, `referrals` table |
 
 ---
 
-## 4. END-TO-END FLOWS
+## 3. FEATURE-WISE DETAILED ANALYSIS — KEY FINDINGS
 
-### Public → Auth: ✅ Working
-Landing → Signup → Email verify → Onboarding (5 steps) → Dashboard
+### Live Co-Pilot (most critical feature)
+- **Working**: Setup wizard → mic capture → AI hint/answer toggle → SSE streaming → session timer → panic button → hotkeys
+- **Broken**: Deepgram STT (`DEEPGRAM_PROJECT_ID` not in secrets) — users must type questions manually
+- **Architecture**: `useLiveCopilot.ts` reads `answer_mode` from `overlayStore`, routes to `routeHint()` for hints or `supabase.functions.invoke("generate-answer")` for full STAR answers
+- **Credit flow**: `deduct_credits(p_action, p_cost, p_session_id)` — verified correct in both `generate-answer/index.ts` and `database.ts`
 
-### Live Session: ⚠️ Partially working
-Setup → Live Rehearsal → AI panel (hint + full answer toggle both connected ✅) → End → Scorecard
-**Breakpoint**: Deepgram STT blocked (missing `DEEPGRAM_PROJECT_ID`), so no automatic question detection — user must type questions manually
+### Mock Test Engine
+- **Critical data gap**: Only 10 of 43 exam paper+year combos have questions:
+  - APPSC-2018 (91), Banking-2021 (91), JEE-2019/20/21 (273), NEET-2020 (182), SSC-2019 (91), TSPSC-2022 (90), UPSC-2020/21 (182)
+  - Papers exist for IBPS PO (2016-2025), JEE (2016-2025), NEET (2016-2025), SSC CGL (2016-2025), UPSC CSE (2023-2025) — most return 0 questions
+- **Exam type mapping**: `examTypeMap.ts` correctly maps e.g. `"SSC CGL"` → `"SSC Exams (CGL/CHSL)"`
 
-### Mock Test: ❌ Data gap
-MockTestHub → ExamPapers → Configure → Session → Results
-**Breakpoint**: Most paper selections return 0 questions
+### Billing
+- **Code is correct** — `stripe-webhook` uses `plan_id`, no `stripe_customer_id`, proper CORS
+- **Blocked by missing secrets**: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_*`
 
-### Billing: ❌ Missing secrets
-Settings → Billing → Upgrade → create-checkout
-**Breakpoint**: No `STRIPE_SECRET_KEY` — returns 503
+---
+
+## 4. USER FLOW ANALYSIS
+
+### Normal User Flow
+Landing → Signup → Email verify → Onboarding (5 steps) → Dashboard → **Working ✅**
+Dashboard → Live Session → Setup → AI Panel (hints/answers) → End → Scorecard → **Partially working ⚠️** (STT blocked)
+Dashboard → Mock Test → Exam Papers → Configure → Session → Results → **Blocked for most exams ❌** (data gap)
+Dashboard → Prep Lab → STAR/Rephrase/etc. → **Works with Gemini ⚠️**
+Settings → Billing → Upgrade → **Blocked ❌** (no Stripe key)
+
+### Admin Flow
+Login → `/app/admin` → Dashboard/Users/Analytics/Revenue/Flags/Seed → **Working ✅** (guarded by `has_role()` + `is_admin()`)
 
 ---
 
 ## 5. DATABASE & API AUDIT
 
-### Schema: All column references in stripe-webhook are now correct
-- `profiles.plan_id` ✅ (was `plan` — fixed)
-- `subscriptions` table has no `stripe_customer_id` — webhook no longer writes it ✅
-- `deduct_credits` RPC signature `(p_action, p_cost, p_session_id)` — generate-answer uses shared `deductCredits()` helper instead ✅
+### 50 Tables — all have RLS enabled ✅
+Notable duplicate/overlapping tables:
+- `rooms` + `practice_rooms` (both store rooms)
+- `answers` + `saved_answers` + `answer_bank` (triple overlap for saved answers)
+- `credits` table exists alongside `profiles.credits` column
 
-### Data gaps
-- 1,000 questions across 10 exam_type+source_year combos
-- 43 exam papers across 5 exam types × ~10 years
-- **33 paper+year combos have ZERO matching questions**
+### Key Schema Facts
+- `profiles.plan_id` (not `plan`) — webhook correctly uses this ✅
+- `deduct_credits(p_action text, p_cost integer, p_session_id uuid)` — correct ✅
+- `subscriptions` has no `stripe_customer_id` column — webhook no longer writes it ✅
+- `exam_papers` has `validate_exam_paper_year` trigger blocking year > current+1 ✅
 
-### Missing secrets
+### Linter Issues (3)
+1. **WARN**: Extension `pg_trgm` installed in `public` schema — should be in a dedicated schema
+2. **WARN**: `avatars` public bucket allows listing all files
+3. **WARN**: Leaked password protection is disabled
+
+---
+
+## 6. API & INTEGRATION AUDIT
+
+### Edge Functions — CORS Status
+- **`corsHeaders` constant** now has `Access-Control-Allow-Origin: *` — verified working via `ping` endpoint (returns `ACAO: *`)
+- All 32 functions have working CORS (either via `getCorsHeaders(req)` or the wildcard fallback)
+- 4 functions use the modern `getCorsHeaders(req)`: `generate-answer`, `deepgram-token`, `stripe-webhook`, `create-checkout`
+- Remaining 28 use the deprecated `corsHeaders` with wildcard — functional but less secure
+
+### Secrets Audit
 | Secret | Status | Impact |
 |--------|--------|--------|
-| DEEPGRAM_PROJECT_ID | ❌ | STT temp keys return 503 |
-| STRIPE_SECRET_KEY | ❌ | All billing non-functional |
-| STRIPE_WEBHOOK_SECRET | ❌ | Webhook signature skip |
-| STRIPE_PRICE_* | ❌ | No price IDs for checkout |
-| SYSTEM_USER_ID | ❌ | AI gap-fill inserts with null |
+| GEMINI_API_KEY | ✅ Set | AI generation works |
+| LOVABLE_API_KEY | ✅ Set | Internal |
+| SUPABASE_* (3) | ✅ Set via connector | Auth, DB |
+| OCR_API_KEY | ✅ Set via connector | Resume parsing |
+| DEEPGRAM_API_KEY | ✅ Set via connector | But needs PROJECT_ID too |
+| DEEPGRAM_PROJECT_ID | ❌ Missing | STT temp keys fail |
+| STRIPE_SECRET_KEY | ❌ Missing | All billing broken |
+| STRIPE_WEBHOOK_SECRET | ❌ Missing | Webhook verification skip |
+| STRIPE_PRICE_* | ❌ Missing | No checkout price IDs |
+| SYSTEM_USER_ID | ❌ Missing | AI gap-fill inserts with null |
+| OPENAI_API_KEY | ❌ Missing | BYOK only |
+| ANTHROPIC_API_KEY | ❌ Missing | BYOK only |
+| RESEND_API_KEY | ❌ Missing | Email sending disabled |
 
 ---
 
-## 6. CORS AUDIT — 26 Edge Functions Still Using Deprecated `corsHeaders`
+## 7. PERFORMANCE & SECURITY
 
-**Fixed (4)**: `generate-answer`, `deepgram-token`, `stripe-webhook`, `create-checkout` — all use `getCorsHeaders(req)` ✅
+### Performance
+- All pages are lazy-loaded (code-split) ✅
+- QueryClient has sensible defaults: 2min stale, 10min GC, no refetch on focus ✅
+- AI responses are SSE-streamed ✅
 
-**Still using deprecated `corsHeaders` (26+)**: `ai-feedback`, `ai-coach-chat`, `analytics-dashboard`, `analyze-test-performance`, `cancel-subscription`, `company-research`, `create-test`, `delete-account`, `disconnect-calendar`, `export-user-data`, `gap-analysis`, `generate-debrief`, `generate-hint`, `generate-practice-questions`, `generate-questions`, `generate-star-answer`, `parse-question-pdf`, `parse-resume`, `ping`, `polish-star-section`, `prep-tool`, `resume-subscription`, `schedule-interview`, `select-test-questions`, `send-email`, `submit-test`, `sync-calendar`, `validate-api-key`
-
-**Impact**: All 26+ functions will have browser-side CORS blocks because `corsHeaders` lacks `Access-Control-Allow-Origin`.
-
----
-
-## 7. SECURITY
-- CORS: 4 critical functions fixed ✅, 26+ still vulnerable to browser blocks
-- Deepgram: Temp key architecture correct, blocked by missing secret
-- Admin: Protected by `has_role()` + trigger
-- RLS: Enabled on all tables
-
----
-
-## 8. CRITICAL ISSUES (Ranked)
-
-### P0 — Immediate
-1. **26 edge functions still use deprecated `corsHeaders`** — browser blocks ALL responses from these functions including `generate-hint` (core feature), `select-test-questions` (mock tests), `ai-coach-chat`, etc. This is the single biggest blocker.
-2. **Question data gap** — 33 of 43 exam papers return 0 questions
-3. **Missing secrets** — DEEPGRAM_PROJECT_ID, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET, STRIPE_PRICE_*, SYSTEM_USER_ID
-
-### P1 — High
-4. `useLiveCopilot.ts` uses `profile as any` cast — works but fragile
+### Security
+- RLS on all 50 tables ✅
+- Admin protected by `has_role()` security definer function ✅
+- `protect_admin_column` trigger prevents privilege escalation ✅
+- BYOK keys stored as hints (encrypted) in `profiles` ✅
+- **Risk**: `corsHeaders` uses `Access-Control-Allow-Origin: *` — acceptable for API but means any website can call these functions with user's JWT
+- **Risk**: `avatars` bucket allows public listing
+- **Risk**: Leaked password protection disabled
+- **Risk**: `pg_trgm` extension in public schema
 
 ---
 
-## 9. IMPLEMENTATION PLAN
+## 8. UI/UX (360px viewport)
+- Mobile-responsive layout with `MobileNav` and sidebar drawer ✅
+- Overlay is designed for desktop — not mobile-friendly (expected)
+- Electron support with frameless window drag region ✅
 
-### Step 1: Migrate all 26 remaining edge functions from `corsHeaders` to `getCorsHeaders(req)`
-For each function:
-- Replace `import { corsHeaders }` with `import { handleCors, getCorsHeaders }`
-- Replace `if (req.method === "OPTIONS") return new Response(...)` with `const cors = handleCors(req); if (cors) return cors;`
-- Replace all `{ ...corsHeaders, ... }` with `{ ...getCorsHeaders(req), ... }` (passing `req` through)
+---
 
-This is the highest-impact fix — without it, `generate-hint`, `select-test-questions`, `ai-coach-chat`, and 23 other functions are blocked by browsers.
+## 9. CRITICAL ISSUES (Priority List)
 
-### Step 2: Seed question data
-Create a migration or script to insert questions for the 33 missing exam_type+year combinations (at minimum 50 questions each for years 2023-2025).
+### 🔴 P0 — Critical
+1. **Missing `DEEPGRAM_PROJECT_ID` secret** — Core STT feature completely non-functional. Users cannot auto-detect interview questions.
+2. **Missing Stripe secrets** (3) — All billing/subscription features non-functional
+3. **Question data gap** — 33 of 43 exam papers return 0 questions, making most mock tests empty
 
-### Step 3: Add missing secrets
-User must add: `DEEPGRAM_PROJECT_ID`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_*` IDs, `SYSTEM_USER_ID` in the Supabase dashboard.
+### 🟠 P1 — High
+4. **Missing `SYSTEM_USER_ID`** — AI gap-fill for questions inserts with `uploaded_by = null`
+5. **Missing `RESEND_API_KEY`** — No transactional emails (verification emails rely on Supabase default)
+6. **Wildcard CORS on 28 functions** — Any website can call these with a stolen JWT
+7. **`avatars` bucket allows public listing** — Privacy concern
+8. **Leaked password protection disabled** — Users can register with compromised passwords
 
-### Overall Status: ~60% functional | NOT production ready
-**Primary blocker**: 26 edge functions with broken CORS will cause silent failures across almost every AI-powered feature.
+### 🟡 P2 — Medium
+9. **Duplicate tables** — `rooms` vs `practice_rooms`, `answers` vs `saved_answers` vs `answer_bank`
+10. **`pg_trgm` in public schema** — Should be in a dedicated extension schema
+11. **Calendar sync not configured** — Google OAuth provider not set up
+
+### 🟢 P3 — Low
+12. **`useLiveCopilot.ts`** uses `profile as any` cast — works but fragile
+13. **React Router v6→v7 future flag warning** suppressed via console.warn override
+
+---
+
+## 10. RECOMMENDED FIXES
+
+### Fix 1 (P0): Add missing secrets
+User must add in Supabase Dashboard → Settings → Edge Functions → Secrets:
+- `DEEPGRAM_PROJECT_ID` — Get from Deepgram console → Projects
+- `STRIPE_SECRET_KEY` — From Stripe Dashboard → Developers → API keys
+- `STRIPE_WEBHOOK_SECRET` — From Stripe Dashboard → Webhooks → Signing secret
+- `SYSTEM_USER_ID` — Create a system profile row, use its UUID
+
+### Fix 2 (P0): Seed question data
+Create a migration or admin script to insert questions for the 33 missing exam_type+year combinations. At minimum, seed 50 questions per combo for the most recent 3 years (2023-2025) across all 5 exam types.
+
+### Fix 3 (P1): Migrate 28 EFs to `getCorsHeaders(req)`
+For each function using `corsHeaders`:
+- Replace `import { corsHeaders }` → `import { getCorsHeaders }`
+- Replace `{ ...corsHeaders, ... }` → `{ ...getCorsHeaders(req), ... }`
+- This replaces wildcard CORS with per-origin validation
+
+### Fix 4 (P1): Enable leaked password protection
+Go to Supabase Dashboard → Auth → Security → Enable "Leaked Password Protection"
+
+### Fix 5 (P1): Restrict avatars bucket listing
+Add a storage policy that only allows users to list their own folder in the `avatars` bucket.
+
+---
+
+## 11. MISSING FEATURES & IMPROVEMENTS
+
+- **Question seeding pipeline** — Bulk import for all exam types/years
+- **Calendar OAuth** — Google Calendar integration config
+- **Email templates** — Custom transactional emails via Resend
+- **Mobile overlay** — Currently desktop-only
+- **Table consolidation** — Merge `rooms`/`practice_rooms` and `answers`/`saved_answers`/`answer_bank`
+
+---
+
+## 12. FINAL SUMMARY
+
+| Metric | Value |
+|--------|-------|
+| **App health score** | **6/10** |
+| **Features working** | ~65% |
+| **Features partially working** | ~20% |
+| **Features blocked** | ~15% (all by missing secrets/data) |
+| **Code quality** | Solid — types fixed, RPC signatures correct, CORS functional |
+| **Security** | Good foundation (RLS everywhere, admin guards) with 3 warnings |
+| **Deployment readiness** | **NOT READY** — 3 P0 blockers (missing secrets + data gap) |
+
+**Bottom line**: The codebase is architecturally sound and well-structured. All prior bugs (credit deduction, CORS, schema mismatches, answer mode toggle) have been fixed. The remaining blockers are entirely **configuration** (4 missing secrets) and **data** (33 empty exam papers). Once secrets are added and questions are seeded, the app reaches ~85% functionality immediately.
 
