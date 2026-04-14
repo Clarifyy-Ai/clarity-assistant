@@ -1,6 +1,6 @@
 // supabase/functions/ai-feedback/index.ts — PRODUCTION READY (ALL FEATURES PRESERVED)
 
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { 
   requireAuth, 
   parseBody, 
@@ -185,7 +185,7 @@ Return ONLY valid JSON matching EXACTLY this structure:
     log(FN, "info", "Feedback generated successfully", { userId, answer_id });
 
     return new Response(JSON.stringify(feedback), {
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
 
   } catch (err) {

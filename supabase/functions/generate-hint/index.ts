@@ -1,5 +1,5 @@
 // generate-hint/index.ts — Lightweight live interview hint generator (3 bullets, quick)
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { geminiGenerate } from "../_shared/gemini.ts";
 
@@ -29,7 +29,7 @@ Deno.serve(async (req: Request) => {
     if (!new RegExp("^bearer\\s+", "i").test(authHeader)) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -39,7 +39,7 @@ Deno.serve(async (req: Request) => {
     if (authErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -49,7 +49,7 @@ Deno.serve(async (req: Request) => {
     if (!body?.question) {
       return new Response(JSON.stringify({ error: "Missing required field: question" }), {
         status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       });
     }
 
@@ -76,7 +76,7 @@ Deno.serve(async (req: Request) => {
     if (!hints || hints.trim().length === 0) {
       return new Response(
         JSON.stringify({ hints: FALLBACK_HINTS, source: "fallback" }),
-        { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        { status: 200, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
       );
     }
 
@@ -94,7 +94,7 @@ Deno.serve(async (req: Request) => {
 
     return new Response(
       JSON.stringify({ hints: normalisedHints, source: "ai" }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { status: 200, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
     );
   } catch (err) {
     console.error("[generate-hint] Error:", err);
@@ -105,7 +105,7 @@ Deno.serve(async (req: Request) => {
         source: "fallback",
         error:  err instanceof Error ? err.message : "Unknown error",
       }),
-      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      { status: 200, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
     );
   }
 });

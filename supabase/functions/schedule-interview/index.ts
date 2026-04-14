@@ -1,6 +1,6 @@
 // schedule-interview/index.ts — FIXED, SECURE, PRODUCTION VERSION
 
-import { corsHeaders } from "../_shared/cors.ts";
+
 import {
   handleCors, parseBody, requireAuth,
   successResponse, errorResponse,

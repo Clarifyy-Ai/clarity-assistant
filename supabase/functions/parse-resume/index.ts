@@ -1,6 +1,6 @@
 // parse-resume/index.ts — FIXED: uses Storage download (private bucket)
 
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { parseJSON } from "../_shared/gemini.ts";
 import { requireAuth } from "../_shared/utils.ts";
@@ -111,13 +111,13 @@ Deno.serve(async (req) => {
     const { resume_id, version_id, file_path } = await req.json();
 
     if (!resume_id || !file_path) {
-      return new Response(JSON.stringify({ error: "Missing resume_id or file_path" }), { status: 400, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "Missing resume_id or file_path" }), { status: 400, headers: getCorsHeaders(req) });
     }
 
     // Verify resume belongs to user
     const { data: resumeRow } = await db.from("resumes").select("id, user_id").eq("id", resume_id).single();
     if (!resumeRow || resumeRow.user_id !== userId) {
-      return new Response(JSON.stringify({ error: "Resume not found or not yours." }), { status: 403, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "Resume not found or not yours." }), { status: 403, headers: getCorsHeaders(req) });
     }
 
     // If version_id provided, verify it
@@ -125,7 +125,7 @@ Deno.serve(async (req) => {
     if (version_id) {
       const { data: versionRow } = await db.from("resume_versions").select("id, resume_id").eq("id", version_id).single();
       if (!versionRow || versionRow.resume_id !== resume_id) {
-        return new Response(JSON.stringify({ error: "Version not found." }), { status: 403, headers: corsHeaders });
+        return new Response(JSON.stringify({ error: "Version not found." }), { status: 403, headers: getCorsHeaders(req) });
       }
     } else {
       // Create a version record if not provided
@@ -137,12 +137,12 @@ Deno.serve(async (req) => {
     const { data: fileData, error: downloadError } = await db.storage.from("resumes").download(file_path);
     if (downloadError || !fileData) {
       console.error("Storage download error:", downloadError);
-      return new Response(JSON.stringify({ error: "Failed to download resume file" }), { status: 502, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "Failed to download resume file" }), { status: 502, headers: getCorsHeaders(req) });
     }
 
     const buf = await fileData.arrayBuffer();
     if (!buf.byteLength || buf.byteLength > MAX_FILE_BYTES) {
-      return new Response(JSON.stringify({ error: "File empty or too large" }), { status: 400, headers: corsHeaders });
+      return new Response(JSON.stringify({ error: "File empty or too large" }), { status: 400, headers: getCorsHeaders(req) });
     }
 
     const fileBytes = new Uint8Array(buf);
@@ -171,7 +171,7 @@ Deno.serve(async (req) => {
         if (effectiveVersionId) {
           await db.from("resume_versions").update({ parsed_data: parsed, parse_status: "ready", parse_error: null }).eq("id", effectiveVersionId);
         }
-        return new Response(JSON.stringify({ success: true, source: "gemini", parsed }), { headers: corsHeaders });
+        return new Response(JSON.stringify({ success: true, source: "gemini", parsed }), { headers: getCorsHeaders(req) });
       }
     }
 
@@ -184,7 +184,7 @@ Deno.serve(async (req) => {
         if (effectiveVersionId) {
           await db.from("resume_versions").update({ parsed_data: parsed, parse_status: "ready", parse_error: null }).eq("id", effectiveVersionId);
         }
-        return new Response(JSON.stringify({ success: true, source: "claude", parsed }), { headers: corsHeaders });
+        return new Response(JSON.stringify({ success: true, source: "claude", parsed }), { headers: getCorsHeaders(req) });
       }
     }
 
@@ -199,7 +199,7 @@ Deno.serve(async (req) => {
           if (effectiveVersionId) {
             await db.from("resume_versions").update({ parsed_data: parsed, parse_status: "ready", parse_error: null }).eq("id", effectiveVersionId);
           }
-          return new Response(JSON.stringify({ success: true, source: "ocr", parsed }), { headers: corsHeaders });
+          return new Response(JSON.stringify({ success: true, source: "ocr", parsed }), { headers: getCorsHeaders(req) });
         }
       }
     }
@@ -208,10 +208,10 @@ Deno.serve(async (req) => {
     if (effectiveVersionId) {
       await db.from("resume_versions").update({ parse_status: "error", parse_error: "All extraction methods failed" }).eq("id", effectiveVersionId);
     }
-    return new Response(JSON.stringify({ error: "Resume parsing failed after all attempts." }), { status: 500, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: "Resume parsing failed after all attempts." }), { status: 500, headers: getCorsHeaders(req) });
 
   } catch (err) {
     console.error("parse-resume error:", err);
-    return new Response(JSON.stringify({ error: "Internal error", details: String(err) }), { status: 500, headers: corsHeaders });
+    return new Response(JSON.stringify({ error: "Internal error", details: String(err) }), { status: 500, headers: getCorsHeaders(req) });
   }
 });

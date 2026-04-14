@@ -1,6 +1,6 @@
 // sync-calendar/index.ts
 
-import { corsHeaders } from "../_shared/cors.ts";
+
 import {
   handleCors,
   parseBody,
@@ -229,7 +229,7 @@ Deno.serve(async (req) => {
       }),
       {
         status:  501,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       },
     );
   }

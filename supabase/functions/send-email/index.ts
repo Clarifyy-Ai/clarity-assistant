@@ -1,6 +1,6 @@
 // send-email/index.ts — FIXED, SECURE, PRODUCTION VERSION
 
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import {
   requireAuth,
   errorResponse,

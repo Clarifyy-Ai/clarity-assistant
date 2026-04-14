@@ -1,5 +1,5 @@
 // supabase/functions/create-test/index.ts
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
 
 const CREATE_TEST_CREDIT_COST = 2;
@@ -7,7 +7,7 @@ const CREATE_TEST_CREDIT_COST = 2;
 function jsonResponse(payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" },
+    headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
   });
 }
 

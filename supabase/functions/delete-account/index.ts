@@ -1,4 +1,4 @@
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 // delete-account — securely delete account and all linked data
@@ -20,8 +20,7 @@ Deno.serve(async (req) => {
     if (!authHeader?.toLowerCase().startsWith("bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: corsHeaders,
-      });
+        headers: getCorsHeaders(req) });
     }
 
     const token = authHeader.replace(/^bearer\s+/i, "");
@@ -33,8 +32,7 @@ Deno.serve(async (req) => {
     if (authErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: corsHeaders,
-      });
+        headers: getCorsHeaders(req) });
     }
 
     const authenticatedUserId = user.id;
@@ -46,8 +44,7 @@ Deno.serve(async (req) => {
     if (!body || typeof body.user_id !== "string") {
       return new Response(JSON.stringify({ error: "Invalid body" }), {
         status: 400,
-        headers: corsHeaders,
-      });
+        headers: getCorsHeaders(req) });
     }
 
     const targetUserId = body.user_id;
@@ -56,7 +53,7 @@ Deno.serve(async (req) => {
     if (targetUserId !== authenticatedUserId) {
       return new Response(
         JSON.stringify({ error: "Cannot delete another user's account" }),
-        { status: 403, headers: corsHeaders }
+        { status: 403, headers: getCorsHeaders(req) }
       );
     }
 
@@ -83,7 +80,7 @@ Deno.serve(async (req) => {
         console.error(`Error deleting from ${table}:`, error);
         return new Response(
           JSON.stringify({ error: `Failed deleting ${table}` }),
-          { status: 500, headers: corsHeaders }
+          { status: 500, headers: getCorsHeaders(req) }
         );
       }
     }
@@ -121,7 +118,7 @@ Deno.serve(async (req) => {
       console.error("auth delete error:", deleteErr);
       return new Response(
         JSON.stringify({ error: "Failed to delete auth user" }),
-        { status: 500, headers: corsHeaders }
+        { status: 500, headers: getCorsHeaders(req) }
       );
     }
 
@@ -135,14 +132,12 @@ Deno.serve(async (req) => {
     }).catch(() => {});
 
     return new Response(JSON.stringify({ success: true }), {
-      headers: corsHeaders,
-    });
+      headers: getCorsHeaders(req) });
 
   } catch (err) {
     console.error("delete-account error:", err);
     return new Response(JSON.stringify({ error: "Internal error" }), {
       status: 500,
-      headers: corsHeaders,
-    });
+      headers: getCorsHeaders(req) });
   }
 });

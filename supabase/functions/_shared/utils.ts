@@ -7,7 +7,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders } from "./cors.ts";
+import { corsHeaders, getCorsHeaders, handleCors as _handleCorsFn } from "./cors.ts";
 import type {
   AuthContext, EdgeError, EdgeSuccess,
   AICompletionRequest, AICompletionResponse,
@@ -142,10 +142,7 @@ export async function parseBody<T = Record<string, unknown>>(req: Request): Prom
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function handleCors(req: Request): Response | null {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
-  return null;
+  return _handleCorsFn(req);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

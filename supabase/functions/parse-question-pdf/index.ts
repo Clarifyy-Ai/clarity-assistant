@@ -1,5 +1,5 @@
 // supabase/functions/parse-question-pdf/index.ts
-import { corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import {
   requireAuth,
   getAdminClient,
@@ -323,9 +323,8 @@ function manualParse(text: string): ParsedQuestion[] {
 }
 
 Deno.serve(async (req) => {
-  if (req.method === "OPTIONS") {
-    return new Response("ok", { headers: corsHeaders });
-  }
+  const cors = handleCors(req);
+  if (cors) return cors;
 
   let charged = false;
   let userId = "";

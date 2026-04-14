@@ -1,4 +1,4 @@
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
 import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
 
@@ -34,8 +34,7 @@ Deno.serve(async (req) => {
     if (!authHeader.toLowerCase().startsWith("bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: corsHeaders,
-      });
+        headers: getCorsHeaders(req) });
     }
 
     const token = authHeader.replace(/^bearer\s+/i, "");
@@ -45,8 +44,7 @@ Deno.serve(async (req) => {
     if (authErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: corsHeaders,
-      });
+        headers: getCorsHeaders(req) });
     }
 
     // ---------------------------------------------
@@ -61,7 +59,7 @@ Deno.serve(async (req) => {
     if (!rawTopic || !rawSubject) {
       return new Response(
         JSON.stringify({ error: "Missing valid topic or subject" }),
-        { status: 400, headers: corsHeaders }
+        { status: 400, headers: getCorsHeaders(req) }
       );
     }
 
@@ -72,7 +70,7 @@ Deno.serve(async (req) => {
     if (!credit.success) {
       return new Response(
         JSON.stringify({ error: "Insufficient credits" }),
-        { status: 402, headers: corsHeaders }
+        { status: 402, headers: getCorsHeaders(req) }
       );
     }
 
@@ -93,7 +91,7 @@ Deno.serve(async (req) => {
           generated: 0,
           message: "Topic already has sufficient questions",
         }),
-        { headers: corsHeaders }
+        { headers: getCorsHeaders(req) }
       );
     }
 
@@ -146,7 +144,7 @@ JSON Format:
     if (!Array.isArray(generated.questions) || generated.questions.length === 0) {
       return new Response(
         JSON.stringify({ error: "AI failed to generate questions" }),
-        { status: 500, headers: corsHeaders }
+        { status: 500, headers: getCorsHeaders(req) }
       );
     }
 
@@ -184,7 +182,7 @@ JSON Format:
     if (cleaned.length === 0) {
       return new Response(
         JSON.stringify({ error: "Validation failed: No valid questions" }),
-        { status: 500, headers: corsHeaders }
+        { status: 500, headers: getCorsHeaders(req) }
       );
     }
 
@@ -196,20 +194,20 @@ JSON Format:
       console.error("[generate-practice-questions] DB insert error:", insertErr);
       return new Response(
         JSON.stringify({ error: "Failed to save questions" }),
-        { status: 500, headers: corsHeaders }
+        { status: 500, headers: getCorsHeaders(req) }
       );
     }
 
     return new Response(
       JSON.stringify({ success: true, generated: cleaned.length }),
-      { headers: corsHeaders }
+      { headers: getCorsHeaders(req) }
     );
 
   } catch (err) {
     console.error("[generate-practice-questions] error:", err);
     return new Response(
       JSON.stringify({ error: "Internal server error" }),
-      { status: 500, headers: corsHeaders }
+      { status: 500, headers: getCorsHeaders(req) }
     );
   }
 });

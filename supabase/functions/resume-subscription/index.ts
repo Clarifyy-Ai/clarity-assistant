@@ -1,7 +1,7 @@
 // resume-subscription/index.ts — FIXED VERSION
 
 import Stripe from "https://esm.sh/stripe@14.21.0?target=deno&deno-std=0.132.0";
-import { handleCors, corsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 Deno.serve(async (req) => {
@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   if (!stripeKey) {
     return new Response(
       JSON.stringify({ error: "Stripe not configured" }),
-      { status: 503, headers: { ...corsHeaders } }
+      { status: 503, headers: getCorsHeaders(req) }
     );
   }
 
@@ -34,8 +34,7 @@ Deno.serve(async (req) => {
     if (!authHeader?.toLowerCase().startsWith("bearer ")) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: corsHeaders,
-      });
+        headers: getCorsHeaders(req) });
     }
 
     const token = authHeader.replace(/^bearer\s+/i, "");
@@ -47,8 +46,7 @@ Deno.serve(async (req) => {
     if (userErr || !user) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
         status: 401,
-        headers: corsHeaders,
-      });
+        headers: getCorsHeaders(req) });
     }
 
     /* -------------------------------
@@ -63,7 +61,7 @@ Deno.serve(async (req) => {
     if (subErr || !subRow?.stripe_subscription_id) {
       return new Response(
         JSON.stringify({ error: "No active subscription found" }),
-        { status: 404, headers: corsHeaders }
+        { status: 404, headers: getCorsHeaders(req) }
       );
     }
 
@@ -79,7 +77,7 @@ Deno.serve(async (req) => {
     } catch {
       return new Response(
         JSON.stringify({ error: "Stripe subscription not found" }),
-        { status: 404, headers: corsHeaders }
+        { status: 404, headers: getCorsHeaders(req) }
       );
     }
 
@@ -89,7 +87,7 @@ Deno.serve(async (req) => {
     if (subscription.customer !== stripeCustomerId) {
       return new Response(
         JSON.stringify({ error: "Subscription does not belong to this user" }),
-        { status: 403, headers: corsHeaders }
+        { status: 403, headers: getCorsHeaders(req) }
       );
     }
 
@@ -99,7 +97,7 @@ Deno.serve(async (req) => {
     if (subscription.cancel_at_period_end === false) {
       return new Response(
         JSON.stringify({ success: true, already_active: true }),
-        { status: 200, headers: corsHeaders }
+        { status: 200, headers: getCorsHeaders(req) }
       );
     }
 
@@ -108,7 +106,7 @@ Deno.serve(async (req) => {
         JSON.stringify({
           error: "Subscription is already fully canceled",
         }),
-        { status: 400, headers: corsHeaders }
+        { status: 400, headers: getCorsHeaders(req) }
       );
     }
 
@@ -132,13 +130,13 @@ Deno.serve(async (req) => {
 
     return new Response(
       JSON.stringify({ success: true, cancel_at: updated.cancel_at }),
-      { status: 200, headers: corsHeaders }
+      { status: 200, headers: getCorsHeaders(req) }
     );
   } catch (err) {
     console.error("[resume-subscription] Error:", err);
     return new Response(
       JSON.stringify({ error: "Internal server error" }),
-      { status: 500, headers: corsHeaders }
+      { status: 500, headers: getCorsHeaders(req) }
     );
   }
 });
