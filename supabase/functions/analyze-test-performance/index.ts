@@ -65,7 +65,7 @@ Deno.serve(async (req) => {
           cached: true,
           analysis: analysis.ai_analysis_text,
         }),
-        { headers: { ..."Content-Type": "application/json" } }
+        { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -189,7 +189,7 @@ Use topic and subject names exactly as provided.
         cached: false,
         analysis: analysisText,
       }),
-      { headers: { ..."Content-Type": "application/json" } }
+      { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
     );
 
   } catch (err) {

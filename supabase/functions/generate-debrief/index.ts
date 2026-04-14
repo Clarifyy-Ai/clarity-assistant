@@ -228,7 +228,7 @@ Return ONLY valid JSON in this exact schema:
 
     return new Response(
       JSON.stringify({ debrief, session }),
-      { headers: { ..."Content-Type": "application/json" } }
+      { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
     );
 
   } catch (err) {

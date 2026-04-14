@@ -164,7 +164,7 @@ JSON format:
         count: cleaned.length,
         generated_by: "gemini",
       }),
-      { headers: { ..."Content-Type": "application/json" } }
+      { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
     );
 
   } catch (err) {

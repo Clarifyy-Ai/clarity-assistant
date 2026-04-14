@@ -164,13 +164,13 @@ Deno.serve(async (req: Request) => {
     };
 
     return new Response(JSON.stringify(result), {
-      headers: { ..."Content-Type": "application/json" },
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
   } catch (err) {
     console.error("stats-dashboard error:", err);
     return new Response(JSON.stringify({ error: String(err?.message ?? err) }), {
       status: 500,
-      headers: { ..."Content-Type": "application/json" },
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
   }
 });

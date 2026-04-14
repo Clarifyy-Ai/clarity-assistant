@@ -138,7 +138,7 @@ ${safeJD}
     log(FN, "info", "Gap analysis generated", { userId, resume_id, jd_id });
 
     return new Response(JSON.stringify(analysis), {
-      headers: { ..."Content-Type": "application/json" },
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
 
   } catch (err: any) {

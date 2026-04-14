@@ -171,7 +171,7 @@ Deno.serve(async (req) => {
 
     return new Response(encoded, {
       headers: {
-        ..."Content-Type": "application/json",
+        ...getCorsHeaders(req), "Content-Type": "application/json",
         "Content-Disposition": `attachment; filename="clarify-ai-export-${type}.json"`,
       },
     });
@@ -181,7 +181,7 @@ Deno.serve(async (req) => {
       JSON.stringify({ error: "Internal server error" }),
       {
         status: 500,
-        headers: { ..."Content-Type": "application/json" },
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
       }
     );
   }

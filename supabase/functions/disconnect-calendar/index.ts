@@ -80,7 +80,7 @@ Deno.serve(async (req) => {
       const identity = await getGoogleIdentity(supabaseUrl, serviceKey, user.id);
       return new Response(
         JSON.stringify({ connected: identity !== null }),
-        { headers: { ..."Content-Type": "application/json" } }
+        { headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 

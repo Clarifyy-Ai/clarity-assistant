@@ -185,7 +185,7 @@ Return ONLY valid JSON matching EXACTLY this structure:
     log(FN, "info", "Feedback generated successfully", { userId, answer_id });
 
     return new Response(JSON.stringify(feedback), {
-      headers: { ..."Content-Type": "application/json" },
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
 
   } catch (err) {

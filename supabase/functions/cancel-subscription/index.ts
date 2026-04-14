@@ -12,7 +12,7 @@ Deno.serve(async (req) => {
   if (!stripeKey) {
     return new Response(
       JSON.stringify({ error: "Stripe is not configured." }),
-      { status: 503, headers: { ..."Content-Type": "application/json" } }
+      { status: 503, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
     );
   }
 

@@ -110,7 +110,7 @@ Notes:
     log(FN, "info", "Company research generated", { userId, company });
 
     return new Response(JSON.stringify(data), {
-      headers: { ..."Content-Type": "application/json" },
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
 
   } catch (err) {
