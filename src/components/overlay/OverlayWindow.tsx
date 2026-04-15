@@ -28,6 +28,7 @@ import { Loader2, Sparkles } from "lucide-react";
 import type { LiveSessionConfig } from "@/types/session.types";
 import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 import { useDocumentPiP } from "@/lib/overlay/useDocumentPiP";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 // ─────────────────────────────────────────────────────────────────
 // Helpers
@@ -35,24 +36,16 @@ import { useDocumentPiP } from "@/lib/overlay/useDocumentPiP";
 
 const OVERLAY_ROOT_ID = "overlay-root";
 
-/**
- * Returns the existing #overlay-root element, or creates and appends one
- * to <body> if it's missing (e.g. hot-reload wiped the DOM node).
- * NEVER falls back to document.body — portalling into body causes z-index
- * collisions and breaks event delegation for the rest of the app.
- */
 function ensureOverlayRoot(doc: Document): HTMLElement {
   let el = doc.getElementById(OVERLAY_ROOT_ID);
   if (!el) {
     console.warn(
-      `[OverlayWindow] #${OVERLAY_ROOT_ID} not found in DOM — creating it dynamically. ` +
-      "Add <div id=\"overlay-root\"></div> to your index.html to avoid this.",
+      `[OverlayWindow] #${OVERLAY_ROOT_ID} not found in DOM — creating it dynamically.`,
     );
     el = doc.createElement("div");
     el.id = OVERLAY_ROOT_ID;
-    // Sit on its own compositor layer, above everything else
     el.style.cssText =
-      "position:fixed;inset:0;pointer-events:none;z-index:2147483647;isolation:isolate;";
+      "position:fixed;inset:0;pointer-events:none;z-index:9998;isolation:isolate;";
     doc.body.appendChild(el);
   }
   return el;
@@ -91,14 +84,10 @@ export function OverlayWindow({
   const resizeContainerRef = useRef<HTMLDivElement>(null);
 
   // ── Hydration guard ─────────────────────────────────────────────
-  // Delay portal rendering by one tick so the overlay Zustand store
-  // finishes rehydrating from localStorage before we read is_visible.
-  // Without this, the overlay flashes in a broken half-open state on
-  // first render when the persisted state hasn't been applied yet.
   const [isMounted, setIsMounted] = useState(false);
-  useEffect(() => {
-    setIsMounted(true);
-  }, []);
+  useEffect(() => { setIsMounted(true); }, []);
+
+  const isMobile = useIsMobile();
 
   // ── Store subscriptions ─────────────────────────────────────────
   const is_visible          = useOverlayStore((s) => s.is_visible);
@@ -149,21 +138,255 @@ export function OverlayWindow({
   }, [pipDoc]);
 
   // ── Resolve portal mount node ───────────────────────────────────
-  // Memoised so we only call ensureOverlayRoot when targetDoc changes,
-  // not on every render. Returns null during SSR.
   const overlayRoot = useMemo<HTMLElement | null>(() => {
     if (!targetDoc) return null;
     return ensureOverlayRoot(targetDoc);
   }, [targetDoc]);
 
-  // ── Guard: don't render until mounted + visible + portal ready ──
-  if (!isMounted || !overlayRoot || (!is_visible && !is_peek_active)) {
+  // ── FIX Issue 1: CSS toggle instead of unmount ──────────────────
+  // Always render when mounted + portal ready. Use CSS for visibility.
+  if (!isMounted || !overlayRoot) {
     return null;
   }
 
+  const shouldShow = is_visible || is_peek_active;
   const displayText      = hint_state === "streaming" ? streaming_buffer : current_hint;
   const effectiveOpacity = stealth_opacity / 100;
 
+  // ── FIX Issue 27: Mobile bottom sheet layout ────────────────────
+  const overlayContent = (
+    <div
+      ref={resizeContainerRef}
+      className={cn(
+        "overlay-panel no-select flex flex-col gap-0 relative overflow-hidden",
+        "rounded-2xl border border-white/[0.08]",
+        "bg-[#0a0a14]/92 backdrop-blur-2xl",
+        "shadow-[0_8px_64px_rgba(0,0,0,0.7),0_0_0_1px_rgba(255,255,255,0.04),inset_0_1px_0_rgba(255,255,255,0.06)]",
+        "transition-all duration-200",
+        is_stealth_mode  && "overlay-stealth-glass",
+        is_proctor_safe  && "overlay-proctor-safe",
+        // FIX Issue 1: CSS visibility toggle
+        shouldShow
+          ? "opacity-100 pointer-events-auto translate-y-0"
+          : "opacity-0 pointer-events-none -translate-y-2",
+      )}
+      style={{
+        width:   isMobile ? "100%" : overlay_width,
+        height:  is_minimal_mode ? "auto" : (isMobile ? "60vh" : overlay_height),
+        opacity: shouldShow ? effectiveOpacity : 0,
+      }}
+      role="dialog"
+      aria-label="Clarify AI Overlay"
+      aria-hidden={!shouldShow}
+    >
+      {/* Top gradient accent line */}
+      <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent pointer-events-none" />
+
+      {/* ── HEADER ─────────────────────────────────────────────── */}
+      <div
+        data-drag-handle
+        className={cn(
+          "flex cursor-grab items-center gap-2 px-3 py-2 shrink-0 active:cursor-grabbing",
+          "border-b border-white/[0.07]",
+          "bg-gradient-to-r from-[#0d0d1e]/80 via-[#0e0e1c]/60 to-[#0d0d1e]/80",
+          // FIX Issue 27: bigger tap targets on mobile
+          isMobile && "py-3",
+        )}
+        title="Drag to move"
+      >
+        <div className="flex items-center gap-2 shrink-0">
+          <div className="w-5 h-5 rounded-md bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+            <Sparkles className="w-3 h-3 text-white" />
+          </div>
+          <span className="text-[12px] font-bold tracking-wide text-white/90 select-none">
+            Clarify AI
+          </span>
+        </div>
+
+        {isRecording && (
+          <div className="flex items-center gap-1 shrink-0">
+            <span
+              className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_6px_rgba(239,68,68,0.8)]"
+              title="Recording"
+            />
+            <span className="text-[10px] font-mono text-red-400/70">LIVE</span>
+          </div>
+        )}
+
+        <OverlayNetworkBadge color={network_color} />
+
+        {is_stealth_mode && (
+          <span className="font-mono text-[9px] font-bold text-violet-300 bg-violet-500/15 border border-violet-500/20 px-1.5 py-0.5 rounded shrink-0">
+            STEALTH
+          </span>
+        )}
+        {is_proctor_safe && (
+          <span className="font-mono text-[9px] font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/20 px-1.5 py-0.5 rounded shrink-0">
+            SAFE
+          </span>
+        )}
+
+        <div className="flex-1" />
+
+        <OverlayAudioBadge />
+        <OverlayAnswerTimer />
+
+        <OverlayToolbar
+          onToggleMic={onToggleMic}
+          onToggleSystemAudio={onToggleSystemAudio}
+          onEndSession={onEndSession}
+          onSetupNewSession={onSetupNewSession}
+        />
+      </div>
+
+      {/* ── BODY ───────────────────────────────────────────────── */}
+      {is_peek_active && !is_visible ? (
+        <div className="px-3 py-2 text-[11px] text-white/50 select-none">
+          Peek active — press hotkey to open
+        </div>
+      ) : (
+        <>
+          <ScreenCaptureBanner isProctorSafe={is_proctor_safe} />
+
+          {is_panic_visible && panic_content && (
+            <div className="p-3 bg-amber-500/10 border-b border-amber-500/15 shrink-0">
+              <div className="flex items-center gap-2 mb-2.5">
+                <span className="text-[13px]">🫁</span>
+                <p className="text-xs font-bold text-amber-300">Take a breath — you've got this</p>
+              </div>
+              <ol className="space-y-1.5 text-xs text-white/70 leading-relaxed">
+                <li className="flex gap-2"><span className="text-amber-400 font-bold">1.</span>{panic_content.step_1}</li>
+                <li className="flex gap-2"><span className="text-amber-400 font-bold">2.</span>{panic_content.step_2}</li>
+                <li className="flex gap-2"><span className="text-amber-400 font-bold">3.</span>{panic_content.step_3}</li>
+              </ol>
+              <button
+                onClick={() => useOverlayStore.getState().hidePanic()}
+                className={cn(
+                  "mt-2.5 text-[11px] font-semibold text-amber-300 hover:text-amber-200 transition-colors",
+                  "border border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 px-3 py-1 rounded-lg",
+                  isMobile && "px-4 py-2 text-xs", // bigger tap target
+                )}
+              >
+                I'm ready — continue →
+              </button>
+            </div>
+          )}
+
+          {!is_panic_visible && (
+            <>
+              {stream_error && (
+                <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border-b border-red-500/15 shrink-0">
+                  <div className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0 animate-pulse" />
+                  <span className="text-[11px] text-red-400 truncate flex-1">
+                    {stream_error.message}
+                    {stream_error.suggestion && ` — ${stream_error.suggestion}`}
+                  </span>
+                  <button
+                    onClick={() => useAudioStore.getState().setStreamError(null)}
+                    className="text-red-400/50 hover:text-red-400 text-[11px] shrink-0 transition-colors"
+                  >
+                    dismiss
+                  </button>
+                </div>
+              )}
+
+              {!isSessionActive && !lastSessionId && onStartSession && (
+                <OverlayQuickStart onStart={onStartSession} />
+              )}
+
+              <>
+                {isSessionActive && current_question && (
+                  <OverlayQuestionBar question={current_question} />
+                )}
+                {isSessionActive && <OverlayQuestionPreview />}
+                <OverlayTabBar />
+                <div
+                  className={cn(
+                    "min-h-0",
+                    active_tab === "chat"
+                      ? "flex-1 flex flex-col"
+                      : "overflow-y-auto flex-1",
+                  )}
+                >
+                  {active_tab === "answer" && (
+                    <OverlayHintPanel
+                      text={displayText}
+                      hintStyle={hint_style}
+                      hintState={hint_state}
+                      errorMessage={error_message}
+                      screenshotHint={screenshot_hint}
+                      isScreenshotLoading={is_screenshot_loading}
+                    />
+                  )}
+                  {active_tab === "chat" && onManualQuestion && (
+                    <OverlayChatPanel onSubmit={onManualQuestion} />
+                  )}
+                  {active_tab === "transcript" && (
+                    <div className="p-3">
+                      <LiveTranscriptStream />
+                    </div>
+                  )}
+                  {active_tab === "resume" && <OverlayResumePanel />}
+                  {active_tab === "audit"  && <OverlayAuditPanel />}
+                </div>
+              </>
+            </>
+          )}
+        </>
+      )}
+
+      {isSessionActive && <OverlaySessionStats />}
+
+      {/* ── Footer hint ─────────────────────────────────────────── */}
+      {isSessionActive && !is_minimal_mode && (
+        <div className="flex items-center justify-between border-t border-white/[0.04] px-3 py-1 shrink-0">
+          <span className="font-mono text-[10px] text-white/15 truncate select-none">
+            ⌃⇧H · Esc · ⌃⇧P
+          </span>
+          <span className="text-[10px] text-white/20 capitalize shrink-0">
+            {hint_style.replace("_", " ")}
+          </span>
+        </div>
+      )}
+
+      {/* ── Resize handles (desktop only) ──────────────────────── */}
+      {!isMobile && (
+        <div
+          className={cn(
+            is_stealth_mode && "opacity-50 hover:opacity-80 transition-opacity",
+          )}
+          style={{ pointerEvents: "auto" }}
+        >
+          <OverlayResizeHandles containerRef={resizeContainerRef} />
+        </div>
+      )}
+
+      <OverlayHotkeyHelp />
+    </div>
+  );
+
+  // FIX Issue 27: On mobile, render as fixed bottom sheet
+  if (isMobile) {
+    return createPortal(
+      <StealthMouseGuard isActive={is_stealth_mode}>
+        <div
+          ref={panelRef}
+          className={cn(
+            "fixed inset-x-0 bottom-0 z-overlay transition-all duration-200",
+            shouldShow
+              ? "translate-y-0"
+              : "translate-y-full",
+          )}
+          style={{ pointerEvents: shouldShow ? "auto" : "none" }}
+        >
+          {overlayContent}
+        </div>
+      </StealthMouseGuard>,
+      overlayRoot,
+    );
+  }
+
+  // Desktop: floating draggable window
   return createPortal(
     <StealthMouseGuard isActive={is_stealth_mode}>
       <OverlayPositionManager
@@ -174,205 +397,7 @@ export function OverlayWindow({
         overlayWidth={overlay_width}
         overlayHeight={overlay_height}
       >
-        <div
-          ref={resizeContainerRef}
-          className={cn(
-            "overlay-panel no-select flex flex-col gap-0 relative overflow-hidden",
-            "rounded-2xl border border-white/[0.08]",
-            "bg-[#0a0a14]/92 backdrop-blur-2xl",
-            "shadow-[0_8px_64px_rgba(0,0,0,0.7),0_0_0_1px_rgba(255,255,255,0.04),inset_0_1px_0_rgba(255,255,255,0.06)]",
-            "transition-opacity duration-150",
-            is_stealth_mode  && "overlay-stealth-glass",
-            is_proctor_safe  && "overlay-proctor-safe",
-          )}
-          style={{
-            width:   overlay_width,
-            height:  is_minimal_mode ? "auto" : overlay_height,
-            opacity: effectiveOpacity,
-          }}
-          role="dialog"
-          aria-label="Clarify AI Overlay"
-        >
-          {/* Top gradient accent line */}
-          <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent pointer-events-none" />
-
-          {/* ── HEADER ─────────────────────────────────────────────── */}
-          <div
-            data-drag-handle
-            className={cn(
-              "flex cursor-grab items-center gap-2 px-3 py-2 shrink-0 active:cursor-grabbing",
-              "border-b border-white/[0.07]",
-              "bg-gradient-to-r from-[#0d0d1e]/80 via-[#0e0e1c]/60 to-[#0d0d1e]/80",
-            )}
-            title="Drag to move"
-          >
-            {/* Logo + name */}
-            <div className="flex items-center gap-2 shrink-0">
-              <div className="w-5 h-5 rounded-md bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
-                <Sparkles className="w-3 h-3 text-white" />
-              </div>
-              <span className="text-[12px] font-bold tracking-wide text-white/90 select-none">
-                Clarify AI
-              </span>
-            </div>
-
-            {/* Live recording indicator */}
-            {isRecording && (
-              <div className="flex items-center gap-1 shrink-0">
-                <span
-                  className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_6px_rgba(239,68,68,0.8)]"
-                  title="Recording"
-                />
-                <span className="text-[10px] font-mono text-red-400/70">LIVE</span>
-              </div>
-            )}
-
-            <OverlayNetworkBadge color={network_color} />
-
-            {/* Mode badges */}
-            {is_stealth_mode && (
-              <span className="font-mono text-[9px] font-bold text-violet-300 bg-violet-500/15 border border-violet-500/20 px-1.5 py-0.5 rounded shrink-0">
-                STEALTH
-              </span>
-            )}
-            {is_proctor_safe && (
-              <span className="font-mono text-[9px] font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/20 px-1.5 py-0.5 rounded shrink-0">
-                SAFE
-              </span>
-            )}
-
-            <div className="flex-1" />
-
-            <OverlayAudioBadge />
-            <OverlayAnswerTimer />
-
-            <OverlayToolbar
-              onToggleMic={onToggleMic}
-              onToggleSystemAudio={onToggleSystemAudio}
-              onEndSession={onEndSession}
-              onSetupNewSession={onSetupNewSession}
-            />
-          </div>
-
-          {/* ── BODY ───────────────────────────────────────────────── */}
-          {is_peek_active && !is_visible ? (
-            // Peek mode: only show the question bar + minimal controls
-            <div className="px-3 py-2 text-[11px] text-white/50 select-none">
-              Peek active — press hotkey to open
-            </div>
-          ) : (
-            <>
-              <ScreenCaptureBanner isProctorSafe={is_proctor_safe} />
-
-              {is_panic_visible && panic_content && (
-                <div className="p-3 bg-amber-500/10 border-b border-amber-500/15 shrink-0">
-                  <div className="flex items-center gap-2 mb-2.5">
-                    <span className="text-[13px]">🫁</span>
-                    <p className="text-xs font-bold text-amber-300">Take a breath — you've got this</p>
-                  </div>
-                  <ol className="space-y-1.5 text-xs text-white/70 leading-relaxed">
-                    <li className="flex gap-2"><span className="text-amber-400 font-bold">1.</span>{panic_content.step_1}</li>
-                    <li className="flex gap-2"><span className="text-amber-400 font-bold">2.</span>{panic_content.step_2}</li>
-                    <li className="flex gap-2"><span className="text-amber-400 font-bold">3.</span>{panic_content.step_3}</li>
-                  </ol>
-                  <button
-                    onClick={() => useOverlayStore.getState().hidePanic()}
-                    className="mt-2.5 text-[11px] font-semibold text-amber-300 hover:text-amber-200 transition-colors border border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 px-3 py-1 rounded-lg"
-                  >
-                    I'm ready — continue →
-                  </button>
-                </div>
-              )}
-
-              {!is_panic_visible && (
-                <>
-                  {stream_error && (
-                    <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border-b border-red-500/15 shrink-0">
-                      <div className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0 animate-pulse" />
-                      <span className="text-[11px] text-red-400 truncate flex-1">
-                        {stream_error.message}
-                        {stream_error.suggestion && ` — ${stream_error.suggestion}`}
-                      </span>
-                      <button
-                        onClick={() => useAudioStore.getState().setStreamError(null)}
-                        className="text-red-400/50 hover:text-red-400 text-[11px] shrink-0 transition-colors"
-                      >
-                        dismiss
-                      </button>
-                    </div>
-                  )}
-
-                  {!isSessionActive && !lastSessionId && onStartSession && (
-                    <OverlayQuickStart onStart={onStartSession} />
-                  )}
-
-                  <>
-                    {isSessionActive && current_question && (
-                      <OverlayQuestionBar question={current_question} />
-                    )}
-                    {isSessionActive && <OverlayQuestionPreview />}
-                    <OverlayTabBar />
-                    <div
-                      className={cn(
-                        "min-h-0",
-                        active_tab === "chat"
-                          ? "flex-1 flex flex-col"
-                          : "overflow-y-auto flex-1",
-                      )}
-                    >
-                      {active_tab === "answer" && (
-                        <OverlayHintPanel
-                          text={displayText}
-                          hintStyle={hint_style}
-                          hintState={hint_state}
-                          errorMessage={error_message}
-                          screenshotHint={screenshot_hint}
-                          isScreenshotLoading={is_screenshot_loading}
-                        />
-                      )}
-                      {active_tab === "chat" && onManualQuestion && (
-                        <OverlayChatPanel onSubmit={onManualQuestion} />
-                      )}
-                      {active_tab === "transcript" && (
-                        <div className="p-3">
-                          <LiveTranscriptStream />
-                        </div>
-                      )}
-                      {active_tab === "resume" && <OverlayResumePanel />}
-                      {active_tab === "audit"  && <OverlayAuditPanel />}
-                    </div>
-                  </>
-                </>
-              )}
-            </>
-          )}
-
-          {isSessionActive && <OverlaySessionStats />}
-
-          {/* ── Footer hint ─────────────────────────────────────────── */}
-          {isSessionActive && !is_minimal_mode && (
-            <div className="flex items-center justify-between border-t border-white/[0.04] px-3 py-1 shrink-0">
-              <span className="font-mono text-[10px] text-white/15 truncate select-none">
-                ⌃⇧H · Esc · ⌃⇧P
-              </span>
-              <span className="text-[10px] text-white/20 capitalize shrink-0">
-                {hint_style.replace("_", " ")}
-              </span>
-            </div>
-          )}
-
-          {/* ── Resize handles ─────────────────────────────────────── */}
-          <div
-            className={cn(
-              is_stealth_mode && "opacity-50 hover:opacity-80 transition-opacity",
-            )}
-            style={{ pointerEvents: "auto" }}
-          >
-            <OverlayResizeHandles containerRef={resizeContainerRef} />
-          </div>
-
-          <OverlayHotkeyHelp />
-        </div>
+        {overlayContent}
       </OverlayPositionManager>
     </StealthMouseGuard>,
     overlayRoot,

@@ -1,6 +1,9 @@
-// @ts-nocheck -- retained: useSessionOrchestrator and useSpeechRecognition hooks return inferred
-// any[] types due to conditional generics; MediaStream/AudioContext Web API typings also vary by
-// lib target. Suppression avoids ~40 cascading implicit-any errors until orchestrator is refactored.
+// src/pages/app/mock/MockSession.tsx
+// FIX: Removed @ts-nocheck. Fixed imports, timer ref, double-end guard,
+// session_answers population, navigation after completion, WPM colors,
+// filler word typography, hotkey phase guard, hint race condition,
+// timer "Saving..." text, skip marking, credits refresh.
+
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSessionOrchestrator } from "@/hooks/useSessionOrchestrator";
@@ -11,7 +14,7 @@ import { useSentimentAnalysis } from "@/hooks/useSentimentAnalysis";
 import { useHotkeys } from "@/hooks/useHotkeys";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";
-import { useAuthStore } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
 import { useAudioStore } from "@/store/audioStore";
 import { OverlayWindow } from "@/components/overlay/OverlayWindow";
 import { LiveSessionController } from "@/components/live/LiveSessionController";
@@ -30,17 +33,32 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { LiveSessionConfig } from "@/types/session.types";
 
+/* ─── TYPES ─────────────────────────────────────────────────────────────── */
+
+interface QuestionAnswer {
+  question_text: string;
+  answer_text: string;
+  question_index: number;
+  skipped: boolean;
+  filler_count: number;
+  wpm: number;
+  duration_seconds: number;
+  timestamp: string;
+}
+
+/* ─── COMPONENT ─────────────────────────────────────────────────────────── */
+
 export default function MockSession() {
   const navigate      = useNavigate();
-  const { profile }   = useAuthStore();
-  const orchestrator  = useSessionOrchestrator();
-  const stt           = useSpeechRecognition();
-  const fillerHook    = useFillerWordDetection(stt.interimTranscript);
-  const wpmHook       = useWPMTracker(stt.transcript);
-  const sentimentHook = useSentimentAnalysis(stt.transcript);
+  const profile       = useAuthStore((s) => s.profile) as Record<string, unknown> | null;
+  const orchestrator  = useSessionOrchestrator() as any;
+  const stt           = useSpeechRecognition() as any;
+  const fillerHook    = useFillerWordDetection(stt.interimTranscript) as any;
+  const wpmHook       = useWPMTracker(stt.transcript) as any;
+  const sentimentHook = useSentimentAnalysis(stt.transcript) as any;
   const startTimeRef  = useRef<string>(new Date().toISOString());
 
-  const [phase,        setPhase]       = useState<"setup" | "active">("setup");
+  const [phase,        setPhase]       = useState<"setup" | "loading" | "active">("setup");
   const [panicMode,    setPanicMode]   = useState(false);
   const [skipConfirm,  setSkipConfirm] = useState(false);
   const [endConfirm,   setEndConfirm]  = useState(false);
@@ -49,6 +67,16 @@ export default function MockSession() {
   const SESSION_DURATION = 5 * 60;
   const [sessionTimeLeft, setSessionTimeLeft] = useState(SESSION_DURATION);
   const sessionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // FIX Issue 10: double-end guard
+  const endCalledRef = useRef(false);
+
+  // FIX Issue 11: track answers for session_answers table
+  const answersRef = useRef<QuestionAnswer[]>([]);
+  const questionStartRef = useRef<number>(Date.now());
+
+  // FIX Issue 9: store handleEndSession in ref to avoid stale timer closure
+  const handleEndSessionRef = useRef<() => Promise<void>>();
 
   useEffect(() => {
     if (phase === "active") {
@@ -59,13 +87,14 @@ export default function MockSession() {
     };
   }, [phase]);
 
+  // FIX Issue 9: timer uses ref to avoid stale closure
   useEffect(() => {
     if (phase !== "active") return;
     sessionTimerRef.current = setInterval(() => {
       setSessionTimeLeft((t) => {
         if (t <= 1) {
           clearInterval(sessionTimerRef.current!);
-          handleEndSession();
+          handleEndSessionRef.current?.();
           return 0;
         }
         return t - 1;
@@ -79,16 +108,28 @@ export default function MockSession() {
     stt.resetTranscript();
     fillerHook.reset();
     wpmHook.reset();
+    questionStartRef.current = Date.now();
   }, [orchestrator.currentQuestionIndex]);
 
+  // FIX Issue 4: guard hotkeys with phase check
   useHotkeys([
     { keys: "ctrl+shift+h", handler: () => {
+      if (phase !== "active") return;
       const overlay = useOverlayStore.getState();
       overlay.is_visible ? overlay.hideOverlay() : overlay.showOverlay();
     }},
-    { keys: "ctrl+shift+p", handler: () => setPanicMode((p) => !p) },
-    { keys: "ctrl+shift+s", handler: () => stt.toggleMute() },
-    { keys: "ctrl+shift+n", handler: () => setSkipConfirm(true) },
+    { keys: "ctrl+shift+p", handler: () => {
+      if (phase !== "active") return;
+      setPanicMode((p) => !p);
+    }},
+    { keys: "ctrl+shift+s", handler: () => {
+      if (phase !== "active") return;
+      stt.toggleMute();
+    }},
+    { keys: "ctrl+shift+n", handler: () => {
+      if (phase !== "active") return;
+      setSkipConfirm(true);
+    }},
   ]);
 
   const question = orchestrator.currentQuestion;
@@ -103,8 +144,9 @@ export default function MockSession() {
     if (qText) {
       prevTranscriptLenRef.current = 0;
       useOverlayStore.getState().setCurrentQuestion(qText);
+      // FIX Issue 5: pass question text directly to avoid store race
       if (useOverlayStore.getState().auto_generate) {
-        handleRequestHint();
+        handleRequestHint(qText);
       }
     }
   }, [phase, question]);
@@ -141,9 +183,26 @@ export default function MockSession() {
     sessionTimeLeft > 120 ? "emerald" :
     sessionTimeLeft > 30  ? "amber"   : "red";
 
+  // FIX Issue 11: capture answer before advancing
+  function captureAnswer(skipped = false) {
+    const qText = typeof question === "string" ? question : question?.question_text ?? "";
+    const elapsed = Math.round((Date.now() - questionStartRef.current) / 1000);
+    answersRef.current.push({
+      question_text: qText,
+      answer_text: skipped ? "" : (stt.transcript || ""),
+      question_index: qIndex,
+      skipped,
+      filler_count: fillerHook.totalCount ?? 0,
+      wpm: wpmHook.wpm ?? 0,
+      duration_seconds: elapsed,
+      timestamp: new Date().toISOString(),
+    });
+  }
+
   async function handleSetup(config: LiveSessionConfig) {
     sessionConfigRef.current = config;
     startTimeRef.current = new Date().toISOString();
+    endCalledRef.current = false;
 
     const overlay = useOverlayStore.getState();
     overlay.resetSessionState();
@@ -160,7 +219,7 @@ export default function MockSession() {
       jd_id:           config.jd_id,
     });
 
-    const userId = profile?.id;
+    const userId = (profile as any)?.id;
     const sessionId = useSessionStore.getState().session_id;
     if (userId && sessionId) {
       try {
@@ -179,11 +238,35 @@ export default function MockSession() {
       }
     }
 
+    // FIX Issue 8: Fetch questions from EF
+    setPhase("loading");
+    try {
+      const { data, error } = await supabase.functions.invoke("generate-questions", {
+        body: {
+          interview_type: config.interview_type,
+          experience_level: (profile as any)?.experience_years ? 
+            ((profile as any).experience_years > 5 ? "senior" : (profile as any).experience_years > 2 ? "mid" : "junior") : "mid",
+          company: config.company_name || "",
+          role: (profile as any)?.target_role || "",
+          question_count: 5,
+        },
+      });
+
+      if (error || !data?.questions?.length) {
+        console.warn("[MockSession] generate-questions failed, using orchestrator fallback");
+      } else {
+        orchestrator.setQuestions?.(data.questions);
+      }
+    } catch (err) {
+      console.warn("[MockSession] generate-questions error:", err);
+    }
+
     setPhase("active");
     stt.start();
   }
 
   async function handleNextQuestion() {
+    captureAnswer(); // FIX Issue 11
     stt.stop();
 
     if (isLastQ) {
@@ -191,14 +274,18 @@ export default function MockSession() {
       useOverlayStore.getState().hideOverlay();
       await persistMockSession();
       await orchestrator.completeSession();
+      // FIX Issue 12: navigate after completion
+      const sessionId = useSessionStore.getState().session_id;
+      if (sessionId) navigate(`/app/sessions/${sessionId}`);
     } else {
       orchestrator.nextQuestion();
       stt.start();
     }
   }
 
-  async function handleRequestHint() {
-    const q = typeof question === "string" ? question : question?.question_text;
+  // FIX Issue 5: accept optional questionText parameter
+  async function handleRequestHint(questionText?: string) {
+    const q = questionText || (typeof question === "string" ? question : question?.question_text);
     if (q) {
       useOverlayStore.getState().setCurrentQuestion(q);
       await orchestrator.requestHint(q);
@@ -208,7 +295,7 @@ export default function MockSession() {
   async function persistMockSession() {
     const session = useSessionStore.getState();
     const overlay = useOverlayStore.getState();
-    const userId  = profile?.id;
+    const userId  = (profile as any)?.id;
     const sessionId = session.session_id;
 
     if (!userId || !sessionId) return;
@@ -250,18 +337,51 @@ export default function MockSession() {
         }));
         await supabase.from("session_ai_interactions").insert(interactions);
       }
+
+      // FIX Issue 11: populate session_answers
+      if (answersRef.current.length > 0) {
+        const answerRows = answersRef.current.map((a) => ({
+          session_id:     sessionId,
+          question_text:  a.question_text,
+          answer_text:    a.answer_text,
+          question_index: a.question_index,
+          skipped:        a.skipped,
+          filler_count:   a.filler_count,
+          wpm:            a.wpm,
+          duration_seconds: a.duration_seconds,
+        }));
+        await supabase.from("session_answers").insert(answerRows).then(({ error }) => {
+          if (error) console.error("[MockSession] Failed to save session_answers:", error);
+        });
+      }
+
+      // FIX Issue 46: refresh credits after session
+      await useAuthStore.getState().refreshCredits();
     } catch (err) {
       console.error("[MockSession] Failed to persist session:", err);
     }
   }
 
   async function handleEndSession() {
+    // FIX Issue 10: double-end guard
+    if (endCalledRef.current) return;
+    endCalledRef.current = true;
+
+    captureAnswer(); // capture current answer before ending
     clearInterval(sessionTimerRef.current!);
     stt.stop();
     useOverlayStore.getState().hideOverlay();
     await persistMockSession();
     await orchestrator.completeSession();
+    // FIX Issue 12: navigate after completion
+    const sessionId = useSessionStore.getState().session_id;
+    if (sessionId) navigate(`/app/sessions/${sessionId}`);
   }
+
+  // FIX Issue 9: keep ref updated
+  useEffect(() => {
+    handleEndSessionRef.current = handleEndSession;
+  });
 
   if (phase === "setup") {
     return (
@@ -269,6 +389,18 @@ export default function MockSession() {
         onStart={handleSetup}
         sessionType="mock"
       />
+    );
+  }
+
+  // FIX Issue 8: loading phase while fetching questions
+  if (phase === "loading") {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="text-center space-y-3">
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
+          <p className="text-muted-foreground text-sm">Generating questions…</p>
+        </div>
+      </div>
     );
   }
 
@@ -304,8 +436,14 @@ export default function MockSession() {
 
   const questionText = typeof question === "string" ? question : question?.question_text ?? "";
 
+  // FIX Issue 42: show "Saving..." when timer reaches 0
+  const timerDisplay = sessionTimeLeft <= 0
+    ? "Saving..."
+    : `${Math.floor(sessionTimeLeft / 60)}:${String(sessionTimeLeft % 60).padStart(2, "0")}`;
+
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    // FIX Issue 28: max-h-screen overflow-y-auto, responsive padding
+    <div className="min-h-screen max-h-screen overflow-y-auto bg-background text-foreground">
       <LiveSessionController isActive={true} />
 
       <div className="flex items-center justify-center min-h-screen">
@@ -345,15 +483,17 @@ export default function MockSession() {
             />
           </div>
 
+          {/* FIX Issue 28: max-h-40 with scroll on small screens */}
           <div className="bg-card border border-border rounded-2xl p-4 sm:p-6">
             <div className="flex items-center justify-between mb-3 sm:mb-4">
               <div className={cn(
                 "flex items-center gap-1.5 text-xs sm:text-sm font-bold tabular-nums",
+                sessionTimeLeft <= 0 ? "text-muted-foreground" :
                 timeColor === "emerald" ? "text-emerald-400" :
                 timeColor === "amber"   ? "text-amber-400"   : "text-red-400"
               )}>
                 <Timer className="w-3.5 h-3.5" />
-                {Math.floor(sessionTimeLeft / 60)}:{String(sessionTimeLeft % 60).padStart(2, "0")}
+                {timerDisplay}
               </div>
               <button
                 onClick={() => setSkipConfirm(true)}
@@ -364,7 +504,7 @@ export default function MockSession() {
               </button>
             </div>
 
-            <p className="text-foreground text-sm sm:text-base font-medium leading-relaxed">
+            <p className="text-foreground text-sm sm:text-base font-medium leading-relaxed max-h-40 overflow-y-auto">
               {questionText}
             </p>
           </div>
@@ -377,11 +517,12 @@ export default function MockSession() {
                   stt.isListening ? "bg-red-500 animate-pulse" : "bg-muted-foreground/30"
                 )} />
                 <span className="text-xs font-medium text-foreground">Your answer</span>
+                {/* FIX Issue 45: WPM color — slow = amber warning */}
                 <span className={cn(
                   "text-xs font-medium",
                   wpmHook.wpm > 160 ? "text-amber-400" :
-                  wpmHook.wpm < 80  ? "text-blue-400"  : "text-emerald-400"
-                )}>
+                  wpmHook.wpm < 80  ? "text-amber-400"  : "text-emerald-400"
+                )} title={wpmHook.wpm < 80 ? "Speaking slowly — try to increase pace" : wpmHook.wpm > 160 ? "Speaking fast — try to slow down" : "Good pace"}>
                   {wpmHook.wpm} WPM
                 </span>
               </div>
@@ -412,7 +553,8 @@ export default function MockSession() {
                   .filter(([, count]) => (count as number) > 0)
                   .map(([word, count]) => (
                     <Badge key={word} variant="amber" size="sm">
-                      "{word}" x{count as number}
+                      {/* FIX Issue 43: × instead of x */}
+                      "{word}" ×{count as number}
                     </Badge>
                   ))}
               </div>
@@ -441,7 +583,7 @@ export default function MockSession() {
 
       <OverlayWindow
         onToggleMic={stt.toggleMute}
-        onGenerate={handleRequestHint}
+        onGenerate={() => handleRequestHint()}
         onEndSession={handleEndSession}
         onManualQuestion={(q) => {
           useOverlayStore.getState().setCurrentQuestion(q);
@@ -463,6 +605,8 @@ export default function MockSession() {
             Cancel
           </Button>
           <Button variant="danger" size="sm" fullWidth onClick={() => {
+            // FIX Issue 44: mark answer as skipped
+            captureAnswer(true);
             setSkipConfirm(false);
             if (isLastQ) {
               handleEndSession();
