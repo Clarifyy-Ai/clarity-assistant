@@ -1,8 +1,6 @@
 // src/pages/app/Dashboard.tsx
-// REMOVED: @ts-nocheck — all types are now explicit.
-// Sessions query types are derived from Tables<"sessions"> via Pick<>.
-// GamificationData and ScheduledInterview interfaces cover the two
-// remaining any-typed props.
+// FIX: session count flicker (null→skeleton), XP div-by-zero,
+// window.location.href→navigate, error handling on queries.
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -35,20 +33,11 @@ import type { Tables } from "@/integrations/supabase/types";
 
 /* ─── LOCAL TYPES ────────────────────────────────────────────────────────── */
 
-/**
- * Only the columns we SELECT — keeps the type minimal and avoids coupling
- * to the full Row type for columns we don't render.
- */
 type SessionRow = Pick<
   Tables<"sessions">,
   "id" | "type" | "status" | "overall_score" | "title" | "created_at"
 >;
 
-/**
- * scheduled_interviews columns accessed in Dashboard.
- * scheduled_at and interview_type are patched into types.ts in Fix 16.
- * Using Pick<Tables<"scheduled_interviews">, ...> once the patch is applied.
- */
 type ScheduledInterview = {
   id: string;
   company_name: string;
@@ -59,10 +48,6 @@ type ScheduledInterview = {
   interview_type?: string;
 };
 
-/**
- * Return shape of useGamification().
- * Mirrors the hook's return value so XPLevelCard is fully typed.
- */
 interface GamificationData {
   streakCurrent: number;
   streakLongest: number;
@@ -129,15 +114,13 @@ export default function Dashboard() {
   const stealth    = useUIStore((s) => s.stealth_mode);
   const docStore   = useDocumentStore();
   const scheduler  = useInterviewSchedulerStore();
-  // Cast here: useGamification() has inferred return type that widened to any
-  // via implicit-any in the hook itself. The GamificationData interface above
-  // precisely mirrors its runtime shape. Remove cast once hook is typed.
   const gamification = useGamification() as GamificationData;
   const navigate     = useNavigate();
 
   useInterviewScheduler();
 
-  const [sessionCount, setSessionCount] = useState<number>(0);
+  // FIX Issue 22: null = loading, number = loaded
+  const [sessionCount, setSessionCount] = useState<number | null>(null);
 
   useEffect(() => {
     if (!profile?.id) return;
@@ -145,7 +128,14 @@ export default function Dashboard() {
       .from("sessions")
       .select("id", { count: "exact", head: true })
       .eq("user_id", profile.id)
-      .then(({ count }) => setSessionCount(count ?? 0));
+      .then(({ count, error }) => {
+        // FIX Issue 36: handle query error
+        if (error) {
+          toast.error("Failed to load session count. Please refresh.");
+          console.error("[Dashboard] session count error:", error);
+        }
+        setSessionCount(count ?? 0);
+      });
   }, [profile?.id]);
 
   const todayInterview = (scheduler.interviews as ScheduledInterview[]).find((i) => {
@@ -235,6 +225,7 @@ export default function Dashboard() {
       )}
 
       {/* ── Quick Actions ───────────────────────────────────────────── */}
+      {/* FIX Issue 29: smaller padding on xs, truncate labels */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {QUICK_ACTIONS.map((action) => {
           const Icon  = stealth ? (action.stealthIcon ?? action.icon) : action.icon;
@@ -245,7 +236,7 @@ export default function Dashboard() {
               key={action.to}
               to={action.to}
               className={cn(
-                "flex flex-col gap-2 sm:gap-3 p-3 sm:p-4 rounded-2xl border transition-all group",
+                "flex flex-col gap-2 sm:gap-3 p-2 sm:p-4 rounded-2xl border transition-all group",
                 action.highlight
                   ? "bg-primary/10 border-primary/30 hover:bg-primary/15 hover:border-primary/40"
                   : "bg-card border-border hover:bg-secondary/60 hover:border-border",
@@ -262,12 +253,12 @@ export default function Dashboard() {
               </div>
               <div>
                 <p className={cn(
-                  "text-sm font-semibold",
+                  "text-sm font-semibold truncate",
                   action.highlight ? "text-primary" : "text-foreground",
                 )}>
                   {label}
                 </p>
-                <p className="text-[11px] text-muted-foreground mt-0.5">{sub}</p>
+                <p className="text-[11px] text-muted-foreground mt-0.5 truncate">{sub}</p>
               </div>
               <ChevronRight className="w-3.5 h-3.5 text-muted-foreground transition-colors mt-auto" />
             </Link>
@@ -279,7 +270,7 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           label="Total sessions"
-          value={sessionCount}
+          value={sessionCount === null ? "—" : sessionCount}
           icon={<ClipboardList className="w-4 h-4 text-blue-400" />}
           color="blue"
         />
@@ -305,16 +296,12 @@ export default function Dashboard() {
 
       {/* ── Main content: 2-col layout ──────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-
-        {/* Left col (2/3) */}
         <div className="lg:col-span-2 space-y-5">
           <RecentSessions />
           <UpcomingInterviews
             interviews={(scheduler.interviews as ScheduledInterview[]).slice(0, 3)}
           />
         </div>
-
-        {/* Right col (1/3) */}
         <div className="space-y-5">
           <SetupChecklist />
           <XPLevelCard gamification={gamification} />
@@ -355,6 +342,7 @@ function StatCard({ label, value, icon, trend }: StatCardProps) {
 function RecentSessions() {
   const stealth       = useUIStore((s) => s.stealth_mode);
   const { user }      = useAuthStore();
+  const navigate      = useNavigate();
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [loading, setLoading]   = useState(true);
 
@@ -397,7 +385,8 @@ function RecentSessions() {
           title="No sessions yet"
           description="Start a mock interview to see your recent activity here."
           actionLabel="Start mock interview"
-          onAction={() => { window.location.href = "/app/mock"; }}
+          // FIX Issue 33: use navigate instead of window.location.href
+          onAction={() => navigate("/app/mock")}
           compact
         />
       ) : (
@@ -454,7 +443,8 @@ function RecentSessions() {
 /* ─── UPCOMING INTERVIEWS ────────────────────────────────────────────────── */
 
 function UpcomingInterviews({ interviews }: { interviews: ScheduledInterview[] }) {
-  const stealth = useUIStore((s) => s.stealth_mode);
+  const stealth  = useUIStore((s) => s.stealth_mode);
+  const navigate = useNavigate();
 
   return (
     <Card>
@@ -479,7 +469,8 @@ function UpcomingInterviews({ interviews }: { interviews: ScheduledInterview[] }
             ? "Add a meeting to track it here."
             : "Schedule an interview to see it here."}
           actionLabel={stealth ? "+ Add meeting" : "+ Add interview"}
-          onAction={() => { window.location.href = "/app/interviews/new"; }}
+          // FIX Issue 33: use navigate instead of window.location.href
+          onAction={() => navigate("/app/interviews/new")}
           compact
         />
       ) : (
@@ -518,7 +509,8 @@ function UpcomingInterviews({ interviews }: { interviews: ScheduledInterview[] }
 
 function XPLevelCard({ gamification }: { gamification: GamificationData }) {
   const XP_PER_LEVEL = 200;
-  const xpForNext    = gamification.level * XP_PER_LEVEL;
+  // FIX Issue 23: prevent division by zero for level 0
+  const xpForNext    = Math.max(gamification.level * XP_PER_LEVEL, 1);
   const xpInLevel    = gamification.xp % XP_PER_LEVEL;
 
   return (
