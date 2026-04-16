@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { Spinner } from "@/components/ui/Spinner";
@@ -13,7 +14,7 @@ interface ProtectedRouteProps {
   children?: React.ReactNode;
 }
 
-export function ProtectedRoute({
+export const ProtectedRoute = memo(function ProtectedRoute({
   requireOnboarding = false,
   requireOnboarded = false,
   requireAdmin = false,
@@ -97,6 +98,6 @@ export function ProtectedRoute({
 
   // 6) All checks passed
   return children ? <>{children}</> : <Outlet />;
-}
+});
 
 export default ProtectedRoute;

@@ -212,6 +212,6 @@ Deno.serve(async (req) => {
 
   } catch (err) {
     console.error("parse-resume error:", err);
-    return new Response(JSON.stringify({ error: "Internal error", details: String(err) }), { status: 500, headers: getCorsHeaders(req) });
+    return new Response(JSON.stringify({ error: "Internal error" }), { status: 500, headers: getCorsHeaders(req) });
   }
 });

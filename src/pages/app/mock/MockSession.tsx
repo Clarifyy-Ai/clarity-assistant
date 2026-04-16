@@ -387,6 +387,7 @@ export default function MockSession() {
       <PreSessionSetup
         onStart={handleSetup}
         sessionType="mock"
+        initialConfig={sessionConfigRef.current ?? undefined}
       />
     );
   }
