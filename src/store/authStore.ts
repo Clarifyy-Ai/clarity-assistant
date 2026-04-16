@@ -20,6 +20,7 @@ import { devtools, persist } from "zustand/middleware";
 import { immer }             from "zustand/middleware/immer";
 import posthog               from "posthog-js";
 import { supabase }          from "@/lib/supabase/client";
+import { useOverlayStore }   from "@/store/overlayStore";
 
 import type {
   SupabaseSession,
@@ -321,6 +322,13 @@ export const useAuthStore = create<AuthStore>()(
               s.planId          = (row.plan_id              as string)  ?? "free";
               s.credits         = (row.credits              as number)  ?? 0;
             });
+
+            // FIX Issue 3: seed overlay store from profile settings
+            try {
+              const overlay = useOverlayStore.getState();
+              const opacity = row.overlay_opacity as number | undefined;
+              if (opacity != null) overlay.setStealthOpacity(opacity);
+            } catch { /* overlay store not ready yet — safe to skip */ }
           },
 
           updateProfile: async (updates) => {

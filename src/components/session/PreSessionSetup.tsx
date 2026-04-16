@@ -16,6 +16,7 @@ import type { PreferredAIModel, HintStyle, UserProfile } from "@/types/user.type
 interface PreSessionSetupProps {
   onStart: (config: LiveSessionConfig) => void;
   sessionType?: "live" | "mock";
+  initialConfig?: LiveSessionConfig;
 }
 
 const MODEL_OPTIONS: { id: PreferredAIModel; label: string; desc: string }[] = [
@@ -35,16 +36,16 @@ const INTERVIEW_TYPES = [
   { value: "leadership",     label: "Leadership" },
 ];
 
-export function PreSessionSetup({ onStart, sessionType = "live" }: PreSessionSetupProps) {
+export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }: PreSessionSetupProps) {
   const { profile } = useAuthStore();
   const resumes     = useDocumentStore((s) => s.resumes);
   const jds         = useDocumentStore((s) => s.jds);
   const activeResumeId = useDocumentStore((s) => s.active_resume_id);
   const activeJdId     = useDocumentStore((s) => s.active_jd_id);
-  const [interviewType,     setInterviewType]     = useState("behavioral");
-  const [resumeId,          setResumeId]          = useState<string | null>(activeResumeId);
-  const [jdId,              setJdId]              = useState<string | null>(activeJdId);
-  const [instructions,      setInstructions]      = useState("");
+  const [interviewType,     setInterviewType]     = useState(initialConfig?.interview_type ?? "behavioral");
+  const [resumeId,          setResumeId]          = useState<string | null>(initialConfig?.resume_id ?? activeResumeId);
+  const [jdId,              setJdId]              = useState<string | null>(initialConfig?.jd_id ?? activeJdId);
+  const [instructions,      setInstructions]      = useState(initialConfig?.instructions ?? "");
   const typedProfile = profile as UserProfile | null;
   const [model,             setModel]             = useState<PreferredAIModel>(
     typedProfile?.preferred_model ?? "gemini-flash"

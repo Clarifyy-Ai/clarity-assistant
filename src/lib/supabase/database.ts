@@ -246,7 +246,7 @@ export const documentsDB = {
 
   async getById(docId: string): Promise<Tables<"documents">> {
     return query(
-      () => supabase.from("documents").select("*").eq("id", docId).single(),
+      () => supabase.from("documents").select("id, title, type, user_id, is_primary, is_active, file_name, file_size, file_url, mime_type, company_name, job_title, job_location, salary_range, keywords, requirements, parsed_skills, parsed_summary, parsed_education, parsed_experience, is_remote, created_at, updated_at").eq("id", docId).single(),
       { table: "documents", operation: "getById" }
     );
   },

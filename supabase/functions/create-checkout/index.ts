@@ -214,7 +214,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error("[create-checkout] Unhandled error:", err);
     return new Response(
-      JSON.stringify({ error: "Internal error", detail: String(err) }),
+      JSON.stringify({ error: "Internal error" }),
       { status: 500, headers: { ...headers, "Content-Type": "application/json" } },
     );
   }
