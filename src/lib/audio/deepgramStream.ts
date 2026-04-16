@@ -32,7 +32,7 @@ const RECONNECT_BASE_DELAY_MS = 1000;
  * Our scoped tokens have a 60s TTL — reconnects happening more than
  * 50s after initial connect will get a fresh token automatically.
  */
-const TOKEN_REFRESH_BUFFER_S = 10;
+const TOKEN_REFRESH_BUFFER_S = 50;
 
 /* ─── TYPES ─────────────────────────────────────────────────────────────── */
 
