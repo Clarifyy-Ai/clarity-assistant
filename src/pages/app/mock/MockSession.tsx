@@ -50,7 +50,7 @@ interface QuestionAnswer {
 
 export default function MockSession() {
   const navigate      = useNavigate();
-  const profile       = useAuthStore((s) => s.profile) as Record<string, unknown> | null;
+  const profile       = useAuthStore((s) => s.profile);
   const orchestrator  = useSessionOrchestrator() as any;
   const stt           = useSpeechRecognition() as any;
   const fillerHook    = useFillerWordDetection(stt.interimTranscript) as any;
@@ -112,25 +112,25 @@ export default function MockSession() {
   }, [orchestrator.currentQuestionIndex]);
 
   // FIX Issue 4: guard hotkeys with phase check
-  useHotkeys([
-    { keys: "ctrl+shift+h", handler: () => {
+  useHotkeys({
+    "ctrl+shift+h": () => {
       if (phase !== "active") return;
       const overlay = useOverlayStore.getState();
       overlay.is_visible ? overlay.hideOverlay() : overlay.showOverlay();
-    }},
-    { keys: "ctrl+shift+p", handler: () => {
+    },
+    "ctrl+shift+p": () => {
       if (phase !== "active") return;
       setPanicMode((p) => !p);
-    }},
-    { keys: "ctrl+shift+s", handler: () => {
+    },
+    "ctrl+shift+s": () => {
       if (phase !== "active") return;
       stt.toggleMute();
-    }},
-    { keys: "ctrl+shift+n", handler: () => {
+    },
+    "ctrl+shift+n": () => {
       if (phase !== "active") return;
       setSkipConfirm(true);
-    }},
-  ]);
+    },
+  });
 
   const question = orchestrator.currentQuestion;
   const qIndex   = orchestrator.currentQuestionIndex ?? 0;
@@ -162,7 +162,7 @@ export default function MockSession() {
     useAudioStore.getState().addUtterance({
       id: `mock-${now}`,
       text: delta,
-      speaker: "user",
+      speaker: "candidate",
       words: [],
       start_ms: now,
       end_ms: now,
@@ -219,7 +219,7 @@ export default function MockSession() {
       jd_id:           config.jd_id,
     });
 
-    const userId = (profile as any)?.id;
+    const userId = profile?.id;
     const sessionId = useSessionStore.getState().session_id;
     if (userId && sessionId) {
       try {
@@ -229,7 +229,7 @@ export default function MockSession() {
           type:       "mock",
           status:     "active",
           started_at: startTimeRef.current,
-          model_used: toDbModel(config.model),
+          model_used: toDbModel(config.model) as any,
         });
       } catch (err) {
         console.error("[MockSession] Failed to create session record:", err);
@@ -244,10 +244,10 @@ export default function MockSession() {
       const { data, error } = await supabase.functions.invoke("generate-questions", {
         body: {
           interview_type: config.interview_type,
-          experience_level: (profile as any)?.experience_years ? 
-            ((profile as any).experience_years > 5 ? "senior" : (profile as any).experience_years > 2 ? "mid" : "junior") : "mid",
-          company: config.company_name || "",
-          role: (profile as any)?.target_role || "",
+          experience_level: profile?.experience_years ? 
+            (profile.experience_years > 5 ? "senior" : profile.experience_years > 2 ? "mid" : "junior") : "mid",
+          company: config.company || "",
+          role: profile?.target_role || "",
           question_count: 5,
         },
       });
@@ -295,20 +295,20 @@ export default function MockSession() {
   async function persistMockSession() {
     const session = useSessionStore.getState();
     const overlay = useOverlayStore.getState();
-    const userId  = (profile as any)?.id;
+    const userId  = profile?.id;
     const sessionId = session.session_id;
 
     if (!userId || !sessionId) return;
 
     try {
-      const dbModel = toDbModel(overlay.active_model);
+      const dbModel = toDbModel(overlay.active_model) as any;
       const transcript = stt.transcript || "";
       const questionCount = orchestrator.totalQuestions ?? 0;
 
       await sessionsDB.update(sessionId, {
         status:            "completed",
         credits_used:      session.credits_consumed,
-        model_used:        dbModel,
+        model_used:        dbModel as any,
         ended_at:          new Date().toISOString(),
         filler_words:      fillerHook.totalCount,
         avg_wpm:           wpmHook.wpm,
@@ -316,41 +316,40 @@ export default function MockSession() {
         answers_generated: overlay.hint_history.length,
         questions_asked:   questionCount,
         notes:             transcript || null,
-      });
+      } as any);
 
       if (transcript) {
         await supabase.from("session_transcripts").insert({
           session_id: sessionId,
+          user_id:    userId,
           content:    transcript,
           speaker:    "candidate",
           is_final:   true,
-        });
+        } as any);
       }
 
       if (overlay.hint_history.length > 0) {
         const interactions = overlay.hint_history.map((h) => ({
           session_id: sessionId,
+          user_id:    userId,
           type:       "hint" as const,
           prompt:     h.question,
           response:   h.hint,
           model:      dbModel,
         }));
-        await supabase.from("session_ai_interactions").insert(interactions);
+        await supabase.from("session_ai_interactions").insert(interactions as any);
       }
 
       // FIX Issue 11: populate session_answers
       if (answersRef.current.length > 0) {
         const answerRows = answersRef.current.map((a) => ({
-          session_id:     sessionId,
-          question_text:  a.question_text,
-          answer_text:    a.answer_text,
-          question_index: a.question_index,
-          skipped:        a.skipped,
-          filler_count:   a.filler_count,
-          wpm:            a.wpm,
-          duration_seconds: a.duration_seconds,
+          session_id: sessionId,
+          user_id:    userId,
+          question:   a.question_text,
+          answer:     a.answer_text,
+          duration_ms: a.duration_seconds * 1000,
         }));
-        await supabase.from("session_answers").insert(answerRows).then(({ error }) => {
+        await supabase.from("session_answers").insert(answerRows as any).then(({ error }: any) => {
           if (error) console.error("[MockSession] Failed to save session_answers:", error);
         });
       }
