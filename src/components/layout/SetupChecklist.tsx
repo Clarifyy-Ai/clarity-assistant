@@ -88,7 +88,7 @@ export function SetupChecklist() {
       </div>
 
       {/* Steps — always shown on desktop (md+), toggled on mobile */}
-      <ul className={cn("space-y-2", "hidden md:block", expanded && "!block")}>
+      <ul className={cn("space-y-2 overflow-y-auto max-h-96", "hidden md:block", expanded && "!block")}>
         {steps.map((step) => (
           <li key={step.id}>
             <Link

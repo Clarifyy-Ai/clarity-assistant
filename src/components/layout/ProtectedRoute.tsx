@@ -30,13 +30,9 @@ export function ProtectedRoute({
 
   const location = useLocation();
 
-  // 1) Loading
+  // FIX Issue 14: blank screen during auth hydration to prevent flash of protected content
   if (status === "idle" || status === "loading") {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background">
-        <Spinner size="lg" />
-      </div>
-    );
+    return <div className="min-h-screen bg-background" />;
   }
 
   // 2) Error

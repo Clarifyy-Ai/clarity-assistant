@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect } from "react";
+import { lazy, Suspense, useEffect, memo } from "react";
 import { cn } from "@/lib/utils";
 import {
   createBrowserRouter,
@@ -9,7 +9,7 @@ import {
   useLocation,
 } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-
+import { supabase } from "@/integrations/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { useUIStore } from "@/store/uiStore";
 import { useOverlayStore } from "@/store/overlayStore";
@@ -473,6 +473,17 @@ export default function App() {
   const stealthMode  = useUIStore((s) => s.stealth_mode);
 
   useEffect(() => { initialize(); }, []); // eslint-disable-line
+
+  // FIX Issue 15: refresh JWT when tab becomes visible after being backgrounded
+  useEffect(() => {
+    const handler = () => {
+      if (document.visibilityState === "visible") {
+        supabase.auth.getSession();
+      }
+    };
+    document.addEventListener("visibilitychange", handler);
+    return () => document.removeEventListener("visibilitychange", handler);
+  }, []);
 
   useEffect(() => {
     useUIStore.getState().setTheme(useUIStore.getState().theme);
