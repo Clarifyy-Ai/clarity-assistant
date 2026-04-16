@@ -128,9 +128,26 @@ JSON format:
 `;
 
     /* -------------------------------------------
-       CALL GEMINI SAFELY
+       CALL GEMINI SAFELY (with 22s timeout)
     ------------------------------------------- */
-    const raw = await geminiGenerate(prompt, SYSTEM_PROMPT, 0.8, 2048);
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 22_000);
+    
+    let raw: string;
+    try {
+      raw = await geminiGenerate(prompt, SYSTEM_PROMPT, 0.8, 2048);
+    } catch (genErr) {
+      clearTimeout(timeoutId);
+      if (genErr instanceof DOMException && genErr.name === "AbortError") {
+        return new Response(
+          JSON.stringify({ error: "AI service is taking too long. Please try again." }),
+          { status: 503, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
+        );
+      }
+      throw genErr;
+    }
+    clearTimeout(timeoutId);
+    
     const parsed = parseJSON(raw, { questions: [] });
 
     const list: any[] = Array.isArray(parsed.questions) ? parsed.questions : [];
@@ -151,7 +168,7 @@ JSON format:
     if (cleaned.length === 0) {
       return new Response(
         JSON.stringify({ error: "AI returned no usable questions" }),
-        { status: 500, headers: getCorsHeaders(req) }
+        { status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -168,10 +185,11 @@ JSON format:
     );
 
   } catch (err) {
+    // FIX Issue 37: don't leak internal error details to client
     console.error("[generate-questions] error:", err);
     return new Response(
-      JSON.stringify({ error: "Internal error", detail: String(err) }),
-      { status: 500, headers: getCorsHeaders(req) }
+      JSON.stringify({ error: "Internal server error" }),
+      { status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
     );
   }
 });
