@@ -417,11 +417,26 @@ export const useAuthStore = create<AuthStore>()(
       }),
       {
         name: "clarify-auth-v1",
-        // Never persist session/user/tokens — only persist stable UI flags
+        // ─────────────────────────────────────────────────────────────────
+        // SECURITY: Persist ONLY non-privileged UI hint flags.
+        //
+        // Never persist:
+        //   • session / user / access tokens  (Supabase manages its own
+        //     httpOnly-equivalent storage — we MUST NOT duplicate JWTs)
+        //   • isAdmin   — privilege escalation risk if attacker edits
+        //                 localStorage. Always re-derived on loadProfile()
+        //                 from the user_roles table via has_role().
+        //   • planId    — billing privilege; must be re-fetched from DB
+        //                 on every load to prevent feature-gate spoofing.
+        //   • byokKeys  — user API keys; never written to plaintext storage.
+        //                 Kept in-memory only for the active tab session.
+        //
+        // isOnboarded is the only persisted hint — it's purely cosmetic
+        // (skips an onboarding redirect flash) and is re-validated against
+        // profiles.onboarding_completed on every loadProfile() call.
+        // ─────────────────────────────────────────────────────────────────
         partialize: (s) => ({
           isOnboarded: s.isOnboarded,
-          planId:      s.planId,
-          isAdmin:     s.isAdmin,
         }),
       }
     ),
