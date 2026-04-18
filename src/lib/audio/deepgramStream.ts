@@ -20,7 +20,25 @@ import type {
   DeepgramConnectionStatus,
 } from "@/types/audio.types";
 import { useAudioStore } from "@/store/audioStore";
+import { useAuthStore } from "@/store/authStore";
+import { FEATURE_FLAGS, FEATURE_PLAN_GATE } from "@/lib/constants/features";
 import { generateId } from "@/lib/utils";
+
+/**
+ * Plan-gate check: speaker diarization is a paid Deepgram feature.
+ * We only request it on plans that allow it (Pro+) per FEATURE_PLAN_GATE.
+ * Free / Starter users get faster, cheaper transcripts without speaker IDs.
+ */
+function isDiarizationAllowed(): boolean {
+  try {
+    const planId = useAuthStore.getState().planId ?? "free";
+    const required = FEATURE_PLAN_GATE[FEATURE_FLAGS.DIARIZATION];
+    const ORDER = ["free", "starter", "pro", "elite", "enterprise"];
+    return ORDER.indexOf(planId) >= ORDER.indexOf(required);
+  } catch {
+    return false;
+  }
+}
 
 /* ─── CONSTANTS ─────────────────────────────────────────────────────────── */
 
@@ -98,7 +116,8 @@ export class DeepgramStreamClient {
       interim_results:  true,
       utterance_end_ms: 1200,
       vad_events:       true,
-      diarize:          true,   // word-level speaker index (0, 1, ...)
+      // Diarization is a paid Deepgram feature — gate to Pro+ plans only.
+      diarize:          isDiarizationAllowed(),
       punctuate:        true,
       filler_words:     true,   // marks words with type:"filler"
       ...opts.config,

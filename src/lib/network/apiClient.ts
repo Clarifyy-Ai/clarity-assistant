@@ -135,6 +135,18 @@ async function request<TResponse, TBody = unknown>(
     if (token) finalHeaders.Authorization = `Bearer ${token}`;
   }
 
+  // BYOK: forward in-memory user keys to edge functions via custom headers.
+  // These are NEVER persisted to localStorage (see authStore partialize).
+  // Edge functions read them in _shared/utils.ts and prefer them over server keys.
+  try {
+    const byok = useAuthStore.getState().byokKeys ?? {};
+    if (byok.openai)    finalHeaders["x-byok-openai"]    = byok.openai;
+    if (byok.anthropic) finalHeaders["x-byok-anthropic"] = byok.anthropic;
+    if (byok.gemini)    finalHeaders["x-byok-gemini"]    = byok.gemini;
+  } catch {
+    // authStore not ready — proceed without BYOK
+  }
+
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= retries; attempt++) {
