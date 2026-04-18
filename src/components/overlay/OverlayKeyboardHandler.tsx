@@ -53,6 +53,7 @@ export function OverlayKeyboardHandler({
     enabled && is_visible
   );
 
+  // Mic mute: Ctrl+Shift+M (audio category). Overlay minimize lives on Ctrl+Shift+J.
   useHotkey(['ctrl', 'shift', 'm'], () => { onToggleMute?.(); }, enabled);
 
   // ── Quick Dock Positions ──────────────────────────────────────

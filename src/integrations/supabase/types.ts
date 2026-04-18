@@ -1285,6 +1285,7 @@ export type Database = {
           current_company: string | null
           current_title: string | null
           data_collection: boolean
+          data_retention_days: number
           deepgram_model: string
           deleted_at: string | null
           domain: string | null
@@ -1361,6 +1362,7 @@ export type Database = {
           current_company?: string | null
           current_title?: string | null
           data_collection?: boolean
+          data_retention_days?: number
           deepgram_model?: string
           deleted_at?: string | null
           domain?: string | null
@@ -1437,6 +1439,7 @@ export type Database = {
           current_company?: string | null
           current_title?: string | null
           data_collection?: boolean
+          data_retention_days?: number
           deepgram_model?: string
           deleted_at?: string | null
           domain?: string | null
@@ -2849,6 +2852,7 @@ export type Database = {
         Args: { p_action: string; p_cost: number; p_session_id?: string }
         Returns: Json
       }
+      delete_expired_session_data: { Args: never; Returns: Json }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

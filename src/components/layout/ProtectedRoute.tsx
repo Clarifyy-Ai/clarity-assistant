@@ -91,7 +91,12 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     );
   }
 
-  // 5) Onboarding check
+  // 5) Email verification check — block unverified users from /app/*
+  if (requireEmailVerification && user && !user.email_confirmed_at) {
+    return <Navigate to="/verify-email" state={{ from: location }} replace />;
+  }
+
+  // 6) Onboarding check
   if ((requireOnboarding || requireOnboarded) && profile && !isOnboarded) {
     return <Navigate to="/onboarding" state={{ from: location }} replace />;
   }
