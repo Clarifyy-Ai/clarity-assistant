@@ -1,68 +1,90 @@
 
 
-The user wants a master audit and fix prompt for Clarify AI. The 46-issue prompt has already been fully implemented over the previous sessions (Batches 1-12 complete, plus the 7 remaining fixes 3, 17, 31, 37, 38, 39, 41 in the last loop).
+The user has provided a thorough third-party audit with specific findings. I need to plan a targeted fix pass for the actionable items. Let me categorize:
 
-Now they're asking again — but this is the SAME prompt that was just completed. Before re-running fixes, I need to actually verify the current state by running through the 4 acceptance journeys and identifying what's STILL broken vs. what's now working. The user explicitly says "so many features are not working properly, overlay not working visible was not properly working, there are many issues" — meaning despite past fixes, real problems remain in production.
+**🔴 Critical (must fix):**
+1. Electron `sandbox: false` → `sandbox: true`
+2. `apiClient.ts` calling `supabase.auth.getSession()` on every request → read from authStore first
 
-I should present a focused **verification + targeted re-fix plan** rather than re-running 46 fixes blindly.
+**🟡 Important:**
+3. `generate-answer` credit deduction before Gemini call → refund on failure (or deduct after)
+4. PostHog `identify()` not called on returning sessions
+5. Zod validation in `generate-answer` (skip — adds dependency, current slice() is acceptable defensive)
 
-## Plan
+**🟢 Nice-to-have:**
+6. Remove `console.warn` monkey-patch in `App.tsx`, use proper router future flags
+7. Drag region overlap check in `App.tsx`
+8. authStore listener cleanup (memory leak in dev hot-reload)
+9. `extractErrorMessage` string fallback in apiClient
+10. `ensureOverlayRoot` IIFE → put in index.html
 
-# Clarify AI — Targeted Re-Audit & Fix Plan
+Let me verify a few claims by reading the actual files before planning.
 
-The 46-issue master prompt has already been implemented across prior sessions. Re-running the entire pass would overwrite already-fixed code and waste effort. Instead, I'll **verify each acceptance journey against the current codebase**, identify what's actually still broken, and fix only the real regressions.
+Plan structure:
+- Phase 1: Critical security/perf (Electron sandbox, apiClient token caching)
+- Phase 2: Important reliability (credit refund saga, PostHog identify on resume, listener cleanup)
+- Phase 3: Polish (router warnings, drag region, overlay root in HTML, error message fallback)
 
-## Phase 1 — Live Verification (read-only audit)
+Skip Zod (heavy dep for marginal gain — current slice() bounds are adequate defensive coding).
 
-For each of the 4 acceptance journeys, inspect the current code path end-to-end and log actual defects:
+# Targeted Fix Pass — Third-Party Audit Findings
 
-1. **Mock Interview Journey** — verify `MockSession.tsx` → `generate-questions` EF wiring → `session_answers` insert → navigation to `/app/sessions/:id`
-2. **Live Co-Pilot Journey** — verify mic permission gate → `deepgram-token` fetch → WebSocket connect → transcript stream → hint generation in overlay
-3. **Stealth Mode Journey** — verify `screenCaptureEvasion.ts` real protection (not just CSS) → `WarningBanner` tier display
-4. **Auth Journey** — verify OAuth redirect target → back-button blank screen → tab-resume token refresh
+Acting on the audit's specific, verifiable findings. Skipping Zod (heavyweight dep for marginal gain over existing `String().slice()` bounds) and the "drag region malware flagging" item (subjective UX advice, not a bug).
 
-Tools used: `code--view`, `code--search_files`, `supabase--read_query` (check actual `session_answers` rows from recent sessions), `supabase--edge_function_logs` (check `generate-questions` for timeouts/errors), `supabase--linter` (DB security state).
+## Phase 1 — Critical
 
-## Phase 2 — Overlay Deep Dive (the user's #1 complaint)
+**1. Electron sandbox** (`electron/main.cjs`)
+- Change `sandbox: false` → `sandbox: true`. `contextIsolation: true` is already set, so the IPC bridge keeps working.
+- Acceptance: app launches, tray + overlay still functional, IPC events fire.
 
-Specifically inspect:
-- `OverlayWindow.tsx` — confirm CSS opacity toggle is active (no conditional unmount)
-- `useOverlayVisibility.ts` + `OverlayKeyboardHandler.tsx` — confirm Ctrl+Shift+H actually toggles `is_visible` during a real session
-- `OverlayPositionManager.tsx` — confirm position persists across re-renders and touch events fire on mobile
-- `overlayStore.ts` — confirm `is_visible` defaults and persistence behavior
-- Check whether the overlay is actually mounted on `LiveOverlay.tsx` / `MockSession.tsx` / `LiveRehearsal.tsx` routes
+**2. apiClient token caching** (`src/lib/network/apiClient.ts` + `src/lib/network/fetchEdge.ts`)
+- Replace `await supabase.auth.getSession()` with: read `useAuthStore.getState().session?.access_token` first; only fall back to `supabase.auth.getSession()` if the store has no token.
+- Same change in `fetchEdge.ts` `getAuthHeaders()`.
+- Acceptance: 5 parallel API calls trigger 0 IndexedDB reads when authenticated.
 
-## Phase 3 — Categorize Findings
+## Phase 2 — Important
 
-Output a delta report:
-- **Confirmed fixed** (no action)
-- **Regressed** (was fixed, broken again — re-fix)
-- **Never actually fixed** (prompt claimed fix but code shows otherwise — fix now)
-- **New issues discovered** (not in original 46 — fix now)
+**3. Credit deduction saga** (`supabase/functions/generate-answer/index.ts`)
+- Wrap the Gemini fetch in try/catch. On any failure after `deductCredits()` succeeds, call the existing `refund_credits` RPC to restore the 2 credits.
+- Inside the SSE `ReadableStream` `start()`, also catch stream-mid failures and trigger refund (via a separate edge call or a shared helper — simplest: refund only on pre-stream Gemini errors; mid-stream failures already returned partial value).
+- Acceptance: simulate Gemini 503 → user credits unchanged after request.
 
-## Phase 4 — Targeted Fix Pass
+**4. PostHog identify on resume** (`src/store/authStore.ts`)
+- In `initialize()`, after the existing-session branch sets `s.session = session`, also call `posthog.identify(session.user.id, { email })` if PostHog is loaded.
+- Acceptance: refresh page while logged in → PostHog session has `distinct_id = user.id`.
 
-Apply only the fixes for items in categories 2/3/4 above. Each fix gets a one-line acceptance check.
+**5. authStore listener cleanup** (`src/store/authStore.ts`)
+- Before assigning `_unsubAuthListener`, check if one already exists and call `.unsubscribe()` on it. Prevents duplicate listeners during HMR.
+- Acceptance: trigger HMR 5 times → only one auth listener fires per event.
 
-## Phase 5 — Browser QA
+## Phase 3 — Polish
 
-Once fixes land, use browser tools to actually exercise:
-- Mock session start → question render → end → scorecard
-- Overlay Ctrl+Shift+H toggle on `/app/live`
-- Mobile viewport (360px) for overlay bottom-sheet behavior
+**6. Remove `console.warn` monkey-patch** (`src/App.tsx`)
+- Delete the override block. Add `future: { v7_startTransition: true, v7_relativeSplatPath: true }` to `createBrowserRouter` options.
+- Note: project memory says `v7_startTransition` causes "Cannot update component during render" loops — verify by reading the memory note before applying. If it conflicts, keep the override but scope it to only suppress the specific Router warning string instead of all `console.warn`.
 
-## Why this approach (not re-running the 46-issue prompt)
+**7. apiClient error message fallback** (`src/lib/network/apiClient.ts`)
+- In `extractErrorMessage`, add `if (typeof error === "string") return error;` before the generic fallback.
 
-- Re-applying already-implemented fixes risks introducing regressions
-- The user's complaint ("overlay not visible properly, many issues") suggests **specific** broken paths, not a global breakdown
-- Reading the actual current state takes ~10 file reads vs. 46 blind re-edits
-- Final fix list will be small, focused, and verifiable
+**8. Overlay root in HTML** (`index.html` + `src/main.tsx`)
+- Confirm `<div id="overlay-root"></div>` exists in `index.html` (memory says it does). If present, simplify the `ensureOverlayRoot` IIFE in `main.tsx` to just an idempotent guard (keep as defensive belt-and-braces but skip the createElement call when found).
 
-## Out of scope for this plan
+## Out of scope / declined
 
-- New features
-- Performance load testing (1000 concurrent users) — requires staging infra
-- Penetration testing — requires explicit authorization
+- **Zod validation in edge functions**: existing `String(x).slice(N)` is sufficient defensive bounding. Adding Zod = +30KB cold start, marginal benefit.
+- **Drag region overlap**: subjective UX, no concrete bug reproduced.
+- **vendor-ui chunk splitting**: premature optimization without measured bundle bloat.
+- **Malware-flagging concerns** (alwaysOnTop + contentProtection + skipTaskbar): these are intentional product features (stealth overlay) — Tray quit menu already exists.
 
-Once you approve, I'll switch to default mode, run the verification phase, share the delta report, and apply targeted fixes.
+## Files to edit
+
+| File | Change |
+|------|--------|
+| `electron/main.cjs` | `sandbox: true` |
+| `src/lib/network/apiClient.ts` | Token from store + string error fallback |
+| `src/lib/network/fetchEdge.ts` | Token from store |
+| `supabase/functions/generate-answer/index.ts` | Refund on Gemini failure |
+| `src/store/authStore.ts` | PostHog identify on resume + listener cleanup |
+| `src/App.tsx` | Router future flags (conditional on memory check) |
+| `src/main.tsx` | Simplify `ensureOverlayRoot` |
 
