@@ -117,27 +117,68 @@ Deno.serve(async (req: Request) => {
       "Generate a complete, natural STAR-format answer (150-200 words) for this interview question.",
     ].join("\n");
 
+    /* ── REFUND HELPER (used on Gemini failure) ────────────────────────── */
+    const refundCredits = async (reason: string) => {
+      try {
+        const { error: refundErr } = await db
+          .from("profiles")
+          .update({
+            credits: (profile.credits ?? 0), // restore to pre-deduction balance
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", user.id);
+        if (refundErr) {
+          console.error("[generate-answer] Refund failed:", refundErr.message, "reason:", reason);
+        } else {
+          console.log("[generate-answer] Refunded", COST, "credits to", user.id, "—", reason);
+          // Log a refund transaction so audit trail is complete
+          await db.from("credit_transactions").insert({
+            user_id: user.id,
+            action: "refund",
+            amount: COST,
+            balance_after: profile.credits ?? 0,
+            description: `Refund: ${reason}`,
+          });
+        }
+      } catch (e) {
+        console.error("[generate-answer] Refund threw:", e);
+      }
+    };
+
     /* ── CALL GEMINI WITH STREAMING ────────────────────────────────────── */
     const geminiUrl = `${GEMINI_BASE}/models/${MODEL}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
 
-    const geminiRes = await fetch(geminiUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-        systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-        generationConfig: {
-          temperature:     0.7,
-          maxOutputTokens: 1024,
-          topP:            0.95,
-        },
-      }),
-    });
+    let geminiRes: Response;
+    try {
+      geminiRes = await fetch(geminiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          generationConfig: {
+            temperature:     0.7,
+            maxOutputTokens: 1024,
+            topP:            0.95,
+          },
+        }),
+      });
+    } catch (fetchErr) {
+      // Network failure before Gemini even responds — refund the user.
+      await refundCredits("Gemini network error");
+      console.error("[generate-answer] Gemini fetch threw:", fetchErr);
+      return new Response(JSON.stringify({ error: "AI service unreachable. Credits refunded." }), {
+        status: 502,
+        headers: { ...headers, "Content-Type": "application/json" },
+      });
+    }
 
     if (!geminiRes.ok) {
       const errText = await geminiRes.text().catch(() => "Unknown Gemini error");
       console.error("[generate-answer] Gemini API error:", geminiRes.status, errText);
-      return new Response(JSON.stringify({ error: "AI generation failed. Please try again." }), {
+      // Pre-stream failure (4xx/5xx from Gemini) — refund.
+      await refundCredits(`Gemini HTTP ${geminiRes.status}`);
+      return new Response(JSON.stringify({ error: "AI generation failed. Credits refunded." }), {
         status: 502,
         headers: { ...headers, "Content-Type": "application/json" },
       });
