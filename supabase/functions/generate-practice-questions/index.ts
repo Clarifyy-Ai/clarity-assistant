@@ -136,14 +136,29 @@ JSON Format:
 `.trim();
 
     // ---------------------------------------------
-    // CALL GEMINI (with error guard)
+    // CALL GEMINI (refund on failure)
     // ---------------------------------------------
-    const raw = await geminiGenerate(prompt, SYSTEM_PROMPT, 0.7, 3000);
+    let raw: string;
+    try {
+      raw = await geminiGenerate(prompt, SYSTEM_PROMPT, 0.7, 3000);
+    } catch (genErr) {
+      console.error("[generate-practice-questions] Gemini failed:", genErr);
+      // Refund the 3 credits (negative amount = credit back)
+      try { await deductCredits(user.id, "refund_practice_questions", -3); }
+      catch (refundErr) { console.error("[generate-practice-questions] Refund failed:", refundErr); }
+      return new Response(
+        JSON.stringify({ error: "AI service unavailable. Your credits have been refunded." }),
+        { status: 502, headers: getCorsHeaders(req) }
+      );
+    }
     const generated = parseJSON(raw, { questions: [] });
 
     if (!Array.isArray(generated.questions) || generated.questions.length === 0) {
+      // Also refund if AI returned no questions
+      try { await deductCredits(user.id, "refund_practice_questions", -3); }
+      catch (refundErr) { console.error("[generate-practice-questions] Refund failed:", refundErr); }
       return new Response(
-        JSON.stringify({ error: "AI failed to generate questions" }),
+        JSON.stringify({ error: "AI failed to generate questions. Your credits have been refunded." }),
         { status: 500, headers: getCorsHeaders(req) }
       );
     }

@@ -131,16 +131,29 @@ ${styleInstruction}
 Return ONLY the rewritten ${sectionLabel} text:
 `.trim();
 
-    // AI CALL
-    const aiResult = await callAI({
-      model,
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user",   content: userPrompt },
-      ],
-      maxTokens: 400,
-      temperature: 0.65,
-    });
+    // AI CALL — refund on failure
+    let aiResult;
+    try {
+      aiResult = await callAI({
+        model,
+        messages: [
+          { role: "system", content: systemPrompt },
+          { role: "user",   content: userPrompt },
+        ],
+        maxTokens: 400,
+        temperature: 0.65,
+      });
+    } catch (aiErr) {
+      // Refund the credit since the AI provider failed
+      try { await deductCredits(auth.userId, "refund_polish_star" as any, -1); }
+      catch (refundErr) { log(FN, "error", "Refund failed", refundErr); }
+      log(FN, "error", "AI provider failed", aiErr);
+      return errorResponse(
+        "AI service temporarily unavailable. Your credit has been refunded.",
+        "AI_ERROR",
+        502
+      );
+    }
 
     const polished = sanitizeAIOutput(aiResult.text);
 

@@ -103,18 +103,32 @@ Candidate's answer so far: "${safeTranscript}"
     ];
 
     /* --------------------------
-       CALL AI (Unified)
+       CALL AI (Unified) — refund on failure
     -------------------------- */
-    const aiResult = await callAI({
-      model: "gemini-1.5-pro",
-      messages,
-      maxTokens: 1024,
-      temperature: 0.6,
-    });
+    let aiResult;
+    try {
+      aiResult = await callAI({
+        model: "gemini-1.5-pro",
+        messages,
+        maxTokens: 1024,
+        temperature: 0.6,
+      });
+    } catch (aiErr) {
+      // Refund the credit since the AI provider failed (negative cost = credit back)
+      try { await deductCredits(userId, "refund_coach_message" as any, -1); }
+      catch (refundErr) { log(FN, "error", "Refund failed", refundErr); }
+      log(FN, "error", "AI provider failed", aiErr);
+      return new Response(
+        JSON.stringify({
+          error: "AI service temporarily unavailable. Your credit has been refunded.",
+          reply: "Sorry, I'm having trouble responding right now. Please try again.",
+        }),
+        { status: 502, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
+      );
+    }
 
     log(FN, "info", "Coach reply generated", { userId, tokens: aiResult.totalTokens });
 
-    // Preserved exact original response format
     return new Response(JSON.stringify({ reply: aiResult.text }), {
       headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
