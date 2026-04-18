@@ -1,6 +1,26 @@
 // electron/main.cjs
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require("electron");
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, session } = require("electron");
 const path = require("path");
+
+// ── Strict Content Security Policy for the renderer ───────────────
+// Defends against XSS in markdown renderers and prevents the app from
+// loading scripts/styles from unexpected origins. Connect-src whitelist
+// covers Supabase (REST + Realtime WSS), Deepgram WSS, and Stripe checkout.
+const CSP_DIRECTIVES = [
+  "default-src 'self'",
+  "script-src 'self'",
+  "style-src 'self' 'unsafe-inline'", // shadcn/Tailwind requires inline styles
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co " +
+    "https://api.deepgram.com wss://api.deepgram.com " +
+    "https://api.stripe.com https://checkout.stripe.com",
+  "frame-src https://checkout.stripe.com",
+  "media-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
 
 const isDev = process.env.NODE_ENV === "development";
 
@@ -103,6 +123,17 @@ function createTray() {
 // ── App lifecycle ─────────────────────────────────────────────────
 
 app.whenReady().then(() => {
+  // Inject strict CSP header into every renderer response.
+  // Must run before createOverlay() so the first page load is covered.
+  session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    callback({
+      responseHeaders: {
+        ...details.responseHeaders,
+        "Content-Security-Policy": [CSP_DIRECTIVES],
+      },
+    });
+  });
+
   createOverlay();
   createTray();
 });

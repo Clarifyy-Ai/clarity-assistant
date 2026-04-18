@@ -179,8 +179,20 @@ Deno.serve(async (req: Request) => {
     /* ----------------------- PROMPT ----------------------- */
     const prompt = promptFn(sanitizedInput);
 
-    /* ----------------------- AI CALL ----------------------- */
-    const raw = await geminiGenerate(prompt, undefined, 0.6, 1200);
+    /* ----------------------- AI CALL (with refund-on-failure) ----------------------- */
+    let raw: string;
+    try {
+      raw = await geminiGenerate(prompt, undefined, 0.6, 1200);
+      if (!raw || raw.trim().length === 0) {
+        throw new Error("AI returned empty response");
+      }
+    } catch (aiErr) {
+      // Refund the 3 credits since the user didn't get a useful result
+      await deductCredits(userId, `refund_prep_tool_${tool_id}` as any, -3);
+      log(FN, "error", "AI call failed, credits refunded", { userId, tool_id, err: String(aiErr) });
+      return errorResponse("AI service temporarily unavailable. Credits refunded.", "AI_ERROR", 502);
+    }
+
     const cleaned = sanitizeAIOutput(raw);
 
     /* ----------------------- RESPOND ----------------------- */

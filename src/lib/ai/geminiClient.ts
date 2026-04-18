@@ -1,6 +1,14 @@
 // src/lib/ai/geminiClient.ts
+// ─────────────────────────────────────────────────────────────────────────────
+// SECURITY AUDIT NOTE — VERIFIED CLEAN (Phase 1 fix pass)
 // All AI API keys live server-side (Supabase Edge Functions).
-// This file is 100% browser-safe — no secrets, no direct AI API calls.
+// This file is 100% browser-safe — no secrets, no direct AI provider calls.
+// All requests proxy through `${EDGE_BASE}/generate-hint`,
+// `/generate-answer`, and `/prep-tool` which read GEMINI_API_KEY from Deno.env.
+// Audit grep "api.openai.com|generativelanguage.googleapis.com|api.anthropic.com"
+// in src/ should return zero hits. If it doesn't, the new file MUST also be a
+// proxy through edge functions — never embed provider URLs in client code.
+// ─────────────────────────────────────────────────────────────────────────────
 
 import { EDGE_BASE } from "@/lib/env";
 // REMOVED: SUPABASE_ANON_KEY — was imported but never used

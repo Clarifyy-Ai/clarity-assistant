@@ -11,6 +11,7 @@ import {
   log 
 } from "../_shared/utils.ts";
 import { parseJSON } from "../_shared/gemini.ts";
+import { requirePlan } from "../_shared/requirePlan.ts";
 
 const SYSTEM_PROMPT = `
 You are an expert career and company research assistant.
@@ -30,6 +31,14 @@ Deno.serve(async (req) => {
     --------------------------------------------------------- */
     const auth = await requireAuth(req);
     const userId = auth.userId;
+
+    /* ---------------------------------------------------------
+       PLAN GATE — Company research is a starter+ feature.
+       Frontend hides this behind FEATURE_PLAN_GATE.COMPANY_RESEARCH,
+       but a direct EF call would otherwise bypass it.
+    --------------------------------------------------------- */
+    const planGate = requirePlan(auth.planId, "starter", req);
+    if (planGate) return planGate;
 
     /* ---------------------------------------------------------
        PARSE & SANITIZE INPUT
@@ -84,17 +93,25 @@ Notes:
 `;
 
     /* ---------------------------------------------------------
-       CALL AI & PARSE JSON OUTPUT
+       CALL AI & PARSE JSON OUTPUT (refund on AI failure)
     --------------------------------------------------------- */
-    const aiResult = await callAI({
-      model: "gemini-1.5-pro",
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: prompt }
-      ],
-      maxTokens: 2000,
-      temperature: 0.5
-    });
+    let aiResult;
+    try {
+      aiResult = await callAI({
+        model: "gemini-1.5-pro",
+        messages: [
+          { role: "system", content: SYSTEM_PROMPT },
+          { role: "user", content: prompt }
+        ],
+        maxTokens: 2000,
+        temperature: 0.5
+      });
+      if (!aiResult?.text) throw new Error("AI returned empty response");
+    } catch (aiErr) {
+      await deductCredits(userId, "refund_company_research" as any, -8);
+      log(FN, "error", "AI call failed, credits refunded", { userId, err: String(aiErr) });
+      return errorResponse("Company research temporarily unavailable. Credits refunded.", "AI_ERROR", 502);
+    }
 
     const data = parseJSON(aiResult.text, {
       overview: "No data available.",

@@ -71,6 +71,8 @@ Deno.serve(async (req: Request) => {
     ].join("\n");
 
     /* ── CALL GEMINI ───────────────────────────────────────────────────── */
+    // Note: generate-hint does NOT deduct credits (cheap, fallback-friendly hint).
+    // No refund needed — the FALLBACK_HINTS path below covers AI failures.
     const hints = await geminiGenerate(prompt, SYSTEM, 0.5, 300);
 
     if (!hints || hints.trim().length === 0) {
