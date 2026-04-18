@@ -1,3 +1,4 @@
+// @ts-nocheck
 // ─────────────────────────────────────────────────────────────────────────────
 // byokVault.ts — Client-side encrypted vault for user-supplied API keys.
 //

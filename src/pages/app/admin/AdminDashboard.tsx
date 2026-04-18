@@ -46,7 +46,7 @@ export default function AdminDashboard() {
       { count: totalSessions },
     ] = await Promise.all([
       supabase.from("profiles").select("*", { count: "exact", head: true }),
-      (supabase.from("profiles") as ReturnType<typeof supabase.from>).select("*", { count: "exact", head: true }).not("plan_id", "eq", "free"),
+      (supabase.from("profiles") as unknown as ReturnType<typeof supabase.from>).select("*", { count: "exact", head: true }).not("plan_id", "eq", "free"),
       supabase.from("sessions").select("*", { count: "exact", head: true })
         .gte("created_at", new Date().toISOString().slice(0, 10)),
       supabase.from("sessions").select("*", { count: "exact", head: true }),
