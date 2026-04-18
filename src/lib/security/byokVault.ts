@@ -84,10 +84,12 @@ async function encryptJSON(value: unknown): Promise<EncryptedBlob> {
   const iv        = crypto.getRandomValues(new Uint8Array(12));
   const plaintext = new TextEncoder().encode(JSON.stringify(value));
 
+  // Cast through ArrayBuffer to satisfy TS strict BufferSource typing on
+  // Uint8Array (lib.dom flips between ArrayBufferLike / SharedArrayBuffer).
   const cipher = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv },
+    { name: "AES-GCM", iv: iv as unknown as ArrayBuffer },
     key,
-    plaintext,
+    plaintext as unknown as ArrayBuffer,
   );
 
   return {
@@ -102,9 +104,9 @@ async function decryptJSON<T>(blob: EncryptedBlob): Promise<T> {
   const data = b64ToBytes(blob.ciphertext);
 
   const plain = await crypto.subtle.decrypt(
-    { name: "AES-GCM", iv },
+    { name: "AES-GCM", iv: iv as unknown as ArrayBuffer },
     key,
-    data,
+    data as unknown as ArrayBuffer,
   );
 
   return JSON.parse(new TextDecoder().decode(plain)) as T;
