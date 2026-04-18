@@ -70,10 +70,34 @@ export function getAdminClient(): SupabaseClient {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AUTH HELPER
+// AUTH HELPER + BYOK HEADER EXTRACTION
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function requireAuth(req: Request): Promise<AuthContext> {
+/**
+ * Read user-supplied BYOK keys from request headers.
+ * The frontend `apiClient` attaches these from in-memory authStore — they
+ * are never persisted to localStorage. Edge functions should pass these
+ * to `geminiGenerate(..., byokKey)` / `callAI(..., byok)` to prefer the
+ * user's own provider account over our shared server keys.
+ */
+export interface BYOK {
+  openai?:    string;
+  anthropic?: string;
+  gemini?:    string;
+}
+
+export function extractBYOK(req: Request): BYOK {
+  const out: BYOK = {};
+  const o = req.headers.get("x-byok-openai");
+  const a = req.headers.get("x-byok-anthropic");
+  const g = req.headers.get("x-byok-gemini");
+  if (o && o.trim()) out.openai    = o.trim();
+  if (a && a.trim()) out.anthropic = a.trim();
+  if (g && g.trim()) out.gemini    = g.trim();
+  return out;
+}
+
+export async function requireAuth(req: Request): Promise<AuthContext & { byok: BYOK }> {
   const header = req.headers.get("Authorization");
   if (!header?.startsWith("Bearer ")) {
     throw errorResponse("Missing or invalid Authorization header", "AUTH_REQUIRED", 401);
@@ -103,7 +127,8 @@ export async function requireAuth(req: Request): Promise<AuthContext> {
     email:   user.email ?? "",
     planId:  profile?.plan_id ?? "free",
     credits: profile?.credits ?? 0,
-    isAdmin: profile?.is_admin ?? false
+    isAdmin: profile?.is_admin ?? false,
+    byok:    extractBYOK(req),
   };
 }
 
