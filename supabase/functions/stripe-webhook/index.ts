@@ -98,10 +98,17 @@ Deno.serve(async (req) => {
     );
   }
 
+  // SECURITY: Hard-fail if webhook secret is missing. We must NEVER process
+  // payment events without verifying the signature — accepting unsigned
+  // webhooks would let any attacker mint subscriptions or credit grants.
   if (!STRIPE_WEBHOOK_SECRET) {
-    console.warn(
-      "[stripe-webhook] STRIPE_WEBHOOK_SECRET is not set — " +
-      "signature verification is DISABLED. Set this in production.",
+    console.error(
+      "[stripe-webhook] STRIPE_WEBHOOK_SECRET not configured — refusing to process events. " +
+      "Set this secret in the Edge Function environment before going live.",
+    );
+    return new Response(
+      JSON.stringify({ error: "Webhook secret not configured" }),
+      { status: 503, headers: { ...headers, "Content-Type": "application/json" } },
     );
   }
 
@@ -111,15 +118,21 @@ Deno.serve(async (req) => {
     const rawBody  = await req.text();
     const signature = req.headers.get("stripe-signature") ?? "";
 
-    if (STRIPE_WEBHOOK_SECRET) {
-      const valid = await verifyStripeSignature(rawBody, signature, STRIPE_WEBHOOK_SECRET);
-      if (!valid) {
-        console.error("[stripe-webhook] Invalid webhook signature — rejecting event");
-        return new Response(
-          JSON.stringify({ error: "Invalid signature" }),
-          { status: 400, headers: { ...headers, "Content-Type": "application/json" } },
-        );
-      }
+    if (!signature) {
+      console.error("[stripe-webhook] Missing stripe-signature header");
+      return new Response(
+        JSON.stringify({ error: "Missing signature" }),
+        { status: 400, headers: { ...headers, "Content-Type": "application/json" } },
+      );
+    }
+
+    const valid = await verifyStripeSignature(rawBody, signature, STRIPE_WEBHOOK_SECRET);
+    if (!valid) {
+      console.error("[stripe-webhook] Invalid webhook signature — rejecting event");
+      return new Response(
+        JSON.stringify({ error: "Invalid signature" }),
+        { status: 400, headers: { ...headers, "Content-Type": "application/json" } },
+      );
     }
 
     const event     = JSON.parse(rawBody);
