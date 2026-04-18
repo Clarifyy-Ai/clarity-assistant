@@ -20,6 +20,18 @@ import { useOverlayStore } from "@/store/overlayStore";
 //   3. User preference
 //   4. BYOK status
 //   5. Primary model failure → automatic fallback chain
+//
+// IMPORTANT — multi-provider routing actually happens server-side:
+//   - The frontend `geminiClient`, `openaiClient`, `anthropicClient`
+//     modules all proxy through Supabase Edge Functions. Browsers
+//     cannot safely hold provider API keys, so direct provider calls
+//     would either leak keys or require BYOK on every request.
+//   - The real provider dispatch lives in `_shared/utils.ts` `callAI()`
+//     and uses `PROVIDER_MAP` to route by model id (gpt-4o → OpenAI,
+//     claude-* → Anthropic, gemini-* → Gemini).
+//   - When the user provides BYOK keys, the apiClient attaches them as
+//     `x-byok-{provider}` headers; the EF reads them via `extractBYOK()`
+//     and prefers them over the server-side fallback keys.
 // ─────────────────────────────────────────────────────────────────
 
 export interface RouteHintOptions {
