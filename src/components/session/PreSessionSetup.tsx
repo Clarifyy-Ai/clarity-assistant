@@ -1,7 +1,6 @@
-// @ts-nocheck
 import { useState, useEffect } from "react";
 import { useDocumentStore } from "@/store/documentStore";
-import { useAuthStore } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { setAppStealthMode } from "@/lib/stealth/stealthActions";
 import {
