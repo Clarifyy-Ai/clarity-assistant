@@ -284,7 +284,13 @@ function AppShell() {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Suppress React Router v6→v7 future-flag warning
+// Suppress React Router v6→v7 future-flag warning.
+//
+// We deliberately do NOT enable `v7_startTransition` (project memory:
+// architecture/router-configuration-constraints) — it triggers a
+// "Cannot update component during render" loop in App.tsx. The warning is
+// noise we filter narrowly (only the Router future-flag string), leaving
+// every other console.warn call untouched.
 // ─────────────────────────────────────────────────────────────────────────────
 {
   const _w = console.warn.bind(console);

@@ -83,24 +83,21 @@ if (!rootEl) {
   );
 }
 
-// Ensure the overlay portal root exists. index.html declares it statically,
-// but if a CDN or browser extension strips unknown <div>s, this recreates it
-// so OverlayWindow never has to fall back to document.body.
+// Defensive guard: index.html declares <div id="overlay-root"></div> as a
+// sibling of #root. If a CDN, browser extension, or HTML-rewriting proxy
+// strips it, recreate it here so OverlayWindow never has to fall back to
+// document.body. In the common case (HTML intact) this is a single getElementById.
 (function ensureOverlayRoot() {
   const OVERLAY_ROOT_ID = "overlay-root";
-  if (!document.getElementById(OVERLAY_ROOT_ID)) {
-    console.warn(
-      `[Clarify AI] #${OVERLAY_ROOT_ID} missing from HTML — creating it. ` +
-      "Ensure index.html contains <div id=\"overlay-root\"></div>.",
-    );
-    const overlayRoot = document.createElement("div");
-    overlayRoot.id = OVERLAY_ROOT_ID;
-    // Fixed, full-viewport, pointer-events-none so it never intercepts clicks
-    // for the main app. Individual overlay panels set pointer-events:auto.
-    overlayRoot.style.cssText =
-      "position:fixed;inset:0;pointer-events:none;z-index:2147483647;isolation:isolate;";
-    document.body.appendChild(overlayRoot);
-  }
+  if (document.getElementById(OVERLAY_ROOT_ID)) return; // ✅ fast path
+  console.warn(
+    `[Clarify AI] #${OVERLAY_ROOT_ID} missing from HTML — recreating it.`,
+  );
+  const overlayRoot = document.createElement("div");
+  overlayRoot.id = OVERLAY_ROOT_ID;
+  overlayRoot.style.cssText =
+    "position:fixed;inset:0;pointer-events:none;z-index:2147483647;isolation:isolate;";
+  document.body.appendChild(overlayRoot);
 })();
 
 // ── Mount React ───────────────────────────────────────────────────────────

@@ -1,12 +1,24 @@
 // src/lib/network/fetchEdge.ts
 import { supabase } from "@/integrations/supabase/client";
+import { useAuthStore } from "@/store/authStore";
 import { EDGE_BASE, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
+
+/**
+ * Read the JWT from the in-memory authStore first (sync, zero IO).
+ * Only fall back to supabase.auth.getSession() when the store is empty —
+ * avoids hitting IndexedDB on every parallel API call.
+ */
+async function readToken(): Promise<string | undefined> {
+  const cached = useAuthStore.getState().session?.access_token;
+  if (cached) return cached;
+  const { data } = await supabase.auth.getSession();
+  return data?.session?.access_token;
+}
 
 export async function getAuthHeaders(
   extraHeaders?: Record<string, string>
 ): Promise<Record<string, string>> {
-  const { data } = await supabase.auth.getSession();
-  const token = data?.session?.access_token;
+  const token = await readToken();
 
   return {
     ...(token
