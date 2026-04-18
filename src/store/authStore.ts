@@ -21,6 +21,11 @@ import { immer }             from "zustand/middleware/immer";
 import posthog               from "posthog-js";
 import { supabase }          from "@/lib/supabase/client";
 import { useOverlayStore }   from "@/store/overlayStore";
+import {
+  loadBYOKVault,
+  saveBYOKVault,
+  clearBYOKVault,
+} from "@/lib/security/byokVault";
 
 import type {
   SupabaseSession,
@@ -146,6 +151,18 @@ export const useAuthStore = create<AuthStore>()(
             }
 
             dset((s) => { s.status = "loading"; });
+
+            // Hydrate BYOK keys from encrypted local vault (WebCrypto).
+            // These never touch the server / DB; they're attached per-request
+            // by apiClient as x-byok-* headers.
+            try {
+              const vault = await loadBYOKVault();
+              if (Object.keys(vault).length > 0) {
+                _set((s) => { s.byokKeys = vault; });
+              }
+            } catch (e) {
+              console.warn("[authStore] BYOK vault hydration failed:", e);
+            }
 
             try {
               const { data: { session }, error } = await supabase.auth.getSession();
@@ -282,6 +299,8 @@ export const useAuthStore = create<AuthStore>()(
           signOut: async () => {
             dset((s) => { s.status = "loading"; });
             await supabase.auth.signOut();
+            // Wipe BYOK vault on sign-out — protects shared devices.
+            try { clearBYOKVault(); } catch { /* localStorage unavailable */ }
             get().reset();
           },
 
@@ -382,9 +401,27 @@ export const useAuthStore = create<AuthStore>()(
           },
 
           // ── BYOK ──────────────────────────────────────────────────────────
+          // Keys live in encrypted localStorage (WebCrypto AES-GCM).
+          // The device key never leaves the browser. Edge functions receive
+          // them as `x-byok-*` headers per request and prefer them over
+          // server-side fallback keys.
 
-          setBYOKKey:  (provider, key) => { _set((s) => { s.byokKeys[provider] = key; }); },
-          clearBYOKKey:(provider) =>      { _set((s) => { delete s.byokKeys[provider]; }); },
+          setBYOKKey: (provider, key) => {
+            _set((s) => { s.byokKeys[provider] = key; });
+            // Fire-and-forget persist; UI surfaces failures via toast in SettingsBYOK
+            void saveBYOKVault({ ...get().byokKeys, [provider]: key }).catch((e) =>
+              console.error("[authStore] BYOK persist failed:", e),
+            );
+          },
+
+          clearBYOKKey: (provider) => {
+            _set((s) => { delete s.byokKeys[provider]; });
+            const next = { ...get().byokKeys };
+            delete next[provider];
+            void saveBYOKVault(next).catch((e) =>
+              console.error("[authStore] BYOK clear failed:", e),
+            );
+          },
 
           // ── Internal setters ──────────────────────────────────────────────
 

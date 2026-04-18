@@ -2835,7 +2835,39 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      feature_flags_public: {
+        Row: {
+          created_at: string | null
+          description: string | null
+          id: string | null
+          is_enabled: boolean | null
+          key: string | null
+          name: string | null
+          rollout_percent: number | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          is_enabled?: boolean | null
+          key?: string | null
+          name?: string | null
+          rollout_percent?: number | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string | null
+          id?: string | null
+          is_enabled?: boolean | null
+          key?: string | null
+          name?: string | null
+          rollout_percent?: number | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       add_credits: {
