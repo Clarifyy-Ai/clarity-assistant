@@ -30,16 +30,32 @@ export interface GeminiMessage {
 /*                          INTERNAL FETCH WRAPPER                             */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Resolve which Gemini API key to use for this request.
+ * Priority: caller-supplied BYOK key > server-side GEMINI_API_KEY env var.
+ * Pass `byokKey` extracted from the `x-byok-gemini` header inside the EF.
+ */
+function resolveGeminiKey(byokKey?: string): string {
+  if (byokKey && byokKey.trim().length > 0) return byokKey.trim();
+  return GEMINI_API_KEY;
+}
+
 async function geminiRequest(
-  payload: Record<string, unknown>
+  payload: Record<string, unknown>,
+  byokKey?: string,
 ): Promise<any> {
+  const apiKey = resolveGeminiKey(byokKey);
+  if (!apiKey) {
+    throw new Error("No Gemini API key available (server key missing and no BYOK provided)");
+  }
+
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
   let res: Response;
   try {
     res = await fetch(
-      `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+      `${GEMINI_BASE}/models/${MODEL}:generateContent?key=${apiKey}`,
       {
         method: "POST",
         signal: controller.signal,
@@ -85,7 +101,8 @@ export async function geminiGenerate(
   prompt: string,
   systemPrompt?: string,
   temperature = 0.7,
-  maxTokens = 2048
+  maxTokens = 2048,
+  byokKey?: string,
 ): Promise<string> {
   const safePrompt = sanitizePrompt(prompt);
   const safeSystem = systemPrompt ? sanitizePrompt(systemPrompt) : undefined;
@@ -107,7 +124,7 @@ export async function geminiGenerate(
     payload.systemInstruction = { parts: [{ text: safeSystem }] };
   }
 
-  const data = await geminiRequest(payload);
+  const data = await geminiRequest(payload, byokKey);
   return extractTextFromGemini(data);
 }
 

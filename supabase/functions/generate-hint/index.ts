@@ -2,6 +2,7 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { geminiGenerate } from "../_shared/gemini.ts";
+import { extractBYOK } from "../_shared/utils.ts";
 
 const SYSTEM = `You are a discreet interview assistant giving rapid coaching hints.
 Rules (non-negotiable):
@@ -70,10 +71,23 @@ Deno.serve(async (req: Request) => {
       "Give exactly 3 short hint bullets to guide the candidate. Do NOT write the answer for them.",
     ].join("\n");
 
-    /* ── CALL GEMINI ───────────────────────────────────────────────────── */
-    // Note: generate-hint does NOT deduct credits (cheap, fallback-friendly hint).
-    // No refund needed — the FALLBACK_HINTS path below covers AI failures.
-    const hints = await geminiGenerate(prompt, SYSTEM, 0.5, 300);
+    /* ── CALL GEMINI (BYOK aware, refund-on-failure) ───────────────────── */
+    // generate-hint does not deduct credits today, but we wrap in try/catch
+    // for symmetry with paid EFs. If we ever start charging, the refund call
+    // can be enabled by uncommenting the line below.
+    const byok = extractBYOK(req);
+
+    let hints = "";
+    try {
+      hints = await geminiGenerate(prompt, SYSTEM, 0.5, 300, byok.gemini);
+    } catch (aiErr) {
+      console.error("[generate-hint] Gemini call failed:", aiErr);
+      // Free hint endpoint — return fallback so the overlay still shows guidance.
+      return new Response(
+        JSON.stringify({ hints: FALLBACK_HINTS, source: "fallback", error: String(aiErr) }),
+        { status: 200, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+      );
+    }
 
     if (!hints || hints.trim().length === 0) {
       return new Response(

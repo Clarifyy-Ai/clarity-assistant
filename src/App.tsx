@@ -339,9 +339,9 @@ const routes = [
     ],
   },
 
-  // Full-screen protected (no shell)
+  // Full-screen protected (no shell) — also requires verified email
   {
-    element: <ProtectedRoute />,
+    element: <ProtectedRoute requireEmailVerification />,
     children: [
       { path: "/app/live/overlay",              element: <Page component={LiveOverlay} /> },
       { path: "/app/rooms/:roomId/session",     element: <Page component={RoomSession} /> },
@@ -349,10 +349,10 @@ const routes = [
     ],
   },
 
-  // Main app shell
+  // Main app shell — requires onboarded AND verified email
   {
     path: "/app",
-    element: <ProtectedRoute requireOnboarded />,
+    element: <ProtectedRoute requireOnboarded requireEmailVerification />,
     children: [
       {
         element: <AppShell />,

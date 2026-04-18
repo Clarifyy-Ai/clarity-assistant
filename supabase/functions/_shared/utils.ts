@@ -70,10 +70,34 @@ export function getAdminClient(): SupabaseClient {
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// AUTH HELPER
+// AUTH HELPER + BYOK HEADER EXTRACTION
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function requireAuth(req: Request): Promise<AuthContext> {
+/**
+ * Read user-supplied BYOK keys from request headers.
+ * The frontend `apiClient` attaches these from in-memory authStore — they
+ * are never persisted to localStorage. Edge functions should pass these
+ * to `geminiGenerate(..., byokKey)` / `callAI(..., byok)` to prefer the
+ * user's own provider account over our shared server keys.
+ */
+export interface BYOK {
+  openai?:    string;
+  anthropic?: string;
+  gemini?:    string;
+}
+
+export function extractBYOK(req: Request): BYOK {
+  const out: BYOK = {};
+  const o = req.headers.get("x-byok-openai");
+  const a = req.headers.get("x-byok-anthropic");
+  const g = req.headers.get("x-byok-gemini");
+  if (o && o.trim()) out.openai    = o.trim();
+  if (a && a.trim()) out.anthropic = a.trim();
+  if (g && g.trim()) out.gemini    = g.trim();
+  return out;
+}
+
+export async function requireAuth(req: Request): Promise<AuthContext & { byok: BYOK }> {
   const header = req.headers.get("Authorization");
   if (!header?.startsWith("Bearer ")) {
     throw errorResponse("Missing or invalid Authorization header", "AUTH_REQUIRED", 401);
@@ -103,7 +127,8 @@ export async function requireAuth(req: Request): Promise<AuthContext> {
     email:   user.email ?? "",
     planId:  profile?.plan_id ?? "free",
     credits: profile?.credits ?? 0,
-    isAdmin: profile?.is_admin ?? false
+    isAdmin: profile?.is_admin ?? false,
+    byok:    extractBYOK(req),
   };
 }
 
@@ -280,13 +305,16 @@ const PROVIDER_MAP: Record<string, "openai" | "anthropic" | "gemini"> = {
   "gemini-1.5-pro":             "gemini"
 };
 
-export async function callAI(req: AICompletionRequest): Promise<AICompletionResponse> {
+export async function callAI(
+  req: AICompletionRequest,
+  byok?: BYOK,
+): Promise<AICompletionResponse> {
   const start = Date.now();
   const provider = PROVIDER_MAP[req.model];
 
-  if (provider === "openai")    return callOpenAI(req, start);
-  if (provider === "anthropic") return callAnthropic(req, start);
-  if (provider === "gemini")    return callGemini(req, start);
+  if (provider === "openai")    return callOpenAI(req, start, byok?.openai);
+  if (provider === "anthropic") return callAnthropic(req, start, byok?.anthropic);
+  if (provider === "gemini")    return callGemini(req, start, byok?.gemini);
 
   throw new Error(`Unknown model provider for ${req.model}`);
 }
@@ -295,7 +323,14 @@ const AI_TIMEOUT_MS = 50_000;
 
 // ───── OpenAI ───────────────────────────────────────────────────────────────
 
-async function callOpenAI(req: AICompletionRequest, start: number): Promise<AICompletionResponse> {
+async function callOpenAI(
+  req: AICompletionRequest,
+  start: number,
+  byokKey?: string,
+): Promise<AICompletionResponse> {
+  const apiKey = byokKey?.trim() || ENV.OPENAI_API_KEY;
+  if (!apiKey) throw new Error("OpenAI API key not available (server + BYOK both missing)");
+
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), AI_TIMEOUT_MS);
 
@@ -306,7 +341,7 @@ async function callOpenAI(req: AICompletionRequest, start: number): Promise<AICo
       signal: ctrl.signal,
       headers: {
         "Content-Type": "application/json",
-        Authorization: `Bearer ${ENV.OPENAI_API_KEY}`
+        Authorization: `Bearer ${apiKey}`
       },
       body: JSON.stringify({
         model: req.model,
@@ -341,7 +376,14 @@ async function callOpenAI(req: AICompletionRequest, start: number): Promise<AICo
 
 // ───── Anthropic ─────────────────────────────────────────────────────────────
 
-async function callAnthropic(req: AICompletionRequest, start: number): Promise<AICompletionResponse> {
+async function callAnthropic(
+  req: AICompletionRequest,
+  start: number,
+  byokKey?: string,
+): Promise<AICompletionResponse> {
+  const apiKey = byokKey?.trim() || ENV.ANTHROPIC_API_KEY;
+  if (!apiKey) throw new Error("Anthropic API key not available (server + BYOK both missing)");
+
   const system = req.messages.find(m => m.role === "system")?.content ?? "";
   const userMessages = req.messages.filter(m => m.role !== "system");
 
@@ -355,7 +397,7 @@ async function callAnthropic(req: AICompletionRequest, start: number): Promise<A
       signal: ctrl.signal,
       headers: {
         "Content-Type": "application/json",
-        "x-api-key": ENV.ANTHROPIC_API_KEY,
+        "x-api-key": apiKey,
         "anthropic-version": "2023-06-01"
       },
       body: JSON.stringify({
@@ -387,7 +429,14 @@ async function callAnthropic(req: AICompletionRequest, start: number): Promise<A
 
 // ───── Gemini ───────────────────────────────────────────────────────────────
 
-async function callGemini(req: AICompletionRequest, start: number): Promise<AICompletionResponse> {
+async function callGemini(
+  req: AICompletionRequest,
+  start: number,
+  byokKey?: string,
+): Promise<AICompletionResponse> {
+  const apiKey = byokKey?.trim() || ENV.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("Gemini API key not available (server + BYOK both missing)");
+
   const systemParts = req.messages
     .filter(m => m.role === "system")
     .map(m => ({ text: m.content }));
@@ -414,7 +463,7 @@ async function callGemini(req: AICompletionRequest, start: number): Promise<AICo
   let res: Response;
   try {
     res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${req.model}:generateContent?key=${ENV.GEMINI_API_KEY}`,
+      `https://generativelanguage.googleapis.com/v1beta/models/${req.model}:generateContent?key=${apiKey}`,
       {
         method: "POST",
         signal: ctrl.signal,

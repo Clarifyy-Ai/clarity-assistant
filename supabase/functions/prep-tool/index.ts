@@ -179,10 +179,10 @@ Deno.serve(async (req: Request) => {
     /* ----------------------- PROMPT ----------------------- */
     const prompt = promptFn(sanitizedInput);
 
-    /* ----------------------- AI CALL (with refund-on-failure) ----------------------- */
+    /* ----------------------- AI CALL (with refund-on-failure + BYOK) ----------------------- */
     let raw: string;
     try {
-      raw = await geminiGenerate(prompt, undefined, 0.6, 1200);
+      raw = await geminiGenerate(prompt, undefined, 0.6, 1200, auth.byok?.gemini);
       if (!raw || raw.trim().length === 0) {
         throw new Error("AI returned empty response");
       }

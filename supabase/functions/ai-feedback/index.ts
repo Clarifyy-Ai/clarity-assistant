@@ -137,17 +137,28 @@ Return ONLY valid JSON matching EXACTLY this structure:
 `;
 
     /* ------------------------
-       CALL AI
+       CALL AI (with refund-on-failure + BYOK passthrough)
     ------------------------ */
-    const aiResult = await callAI({
-      model: "gpt-4o-mini", // Better for complex JSON schema adherence
-      messages: [
-        { role: "system", content: SYSTEM_PROMPT },
-        { role: "user", content: prompt }
-      ],
-      maxTokens: 1500,
-      temperature: 0.3,
-    });
+    let aiResult;
+    try {
+      aiResult = await callAI(
+        {
+          model: "gpt-4o-mini",
+          messages: [
+            { role: "system", content: SYSTEM_PROMPT },
+            { role: "user",   content: prompt },
+          ],
+          maxTokens: 1500,
+          temperature: 0.3,
+        },
+        auth.byok, // BYOK keys forwarded from x-byok-* headers
+      );
+    } catch (aiErr) {
+      // Provider failure — refund the credit so the user isn't charged.
+      await deductCredits(userId, "refund_generate_feedback" as any, -1);
+      log(FN, "error", "AI call failed, credits refunded", { userId, err: String(aiErr) });
+      return errorResponse("AI service temporarily unavailable. Credits refunded.", "AI_ERROR", 502);
+    }
 
     /* ------------------------
        STRICT JSON PARSE
@@ -155,9 +166,9 @@ Return ONLY valid JSON matching EXACTLY this structure:
     const feedback = parseJSON(aiResult.text, null);
 
     if (!feedback) {
-      // Refund on failure
+      // Refund on parse failure (the user got nothing usable)
       await deductCredits(userId, "refund_generate_feedback" as any, -1);
-      return errorResponse("AI returned invalid JSON", "AI_ERROR", 500);
+      return errorResponse("AI returned invalid JSON. Credits refunded.", "AI_ERROR", 500);
     }
 
     /* ------------------------

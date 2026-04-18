@@ -435,6 +435,7 @@ export const useAuthStore = create<AuthStore>()(
         // (skips an onboarding redirect flash) and is re-validated against
         // profiles.onboarding_completed on every loadProfile() call.
         // ─────────────────────────────────────────────────────────────────
+        // Persist ONLY isOnboarded. byokKeys MUST stay in-memory (security).
         partialize: (s) => ({
           isOnboarded: s.isOnboarded,
         }),

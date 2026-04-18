@@ -44,8 +44,8 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
     global:      true,
   },
   MINIMIZE_OVERLAY: {
-    keys:        "Ctrl+Shift+M",
-    mac:         "⌘+Shift+M",
+    keys:        "Ctrl+Shift+J",
+    mac:         "⌘+Shift+J",
     action:      "overlay:minimize",
     description: "Minimize overlay to title bar",
     category:    "overlay",
@@ -164,8 +164,8 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
 
   // ── Audio ────────────────────────────────────────────────────────────────────
   TOGGLE_MIC: {
-    keys:        "Ctrl+Shift+K",
-    mac:         "⌘+Shift+K",
+    keys:        "Ctrl+Shift+M",
+    mac:         "⌘+Shift+M",
     action:      "audio:toggle_mic",
     description: "Mute / unmute microphone",
     category:    "audio",

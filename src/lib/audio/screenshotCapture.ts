@@ -132,9 +132,37 @@ function mapRegionToBitmapCoords(
 // ─────────────────────────────────────────────────────────────────
 // Capture full screen via getDisplayMedia (one-shot)
 // Optional region crop (CSS pixels); auto-scaled to video coords.
+//
+// Throttled to 2 fps (one capture per 500ms) — matches the documented
+// rate cap and prevents accidental rapid-fire calls from blowing through
+// AI vision quota or Deepgram bandwidth budgets.
 // ─────────────────────────────────────────────────────────────────
 
+const SCREENSHOT_MIN_INTERVAL_MS = 500; // 2 fps maximum
+let _lastCaptureAt = 0;
+let _inFlightCapture: Promise<ScreenshotResult> | null = null;
+
+export class ScreenshotThrottledError extends Error {
+  constructor(msToWait: number) {
+    super(`Screenshot capture throttled — wait ${msToWait}ms before retrying`);
+    this.name = "ScreenshotThrottledError";
+  }
+}
+
 export async function captureScreen(region?: CaptureRegion): Promise<ScreenshotResult> {
+  // Strict throttle: reject if a previous capture was too recent OR is in flight.
+  const now = Date.now();
+  const elapsed = now - _lastCaptureAt;
+
+  if (_inFlightCapture) {
+    // Coalesce concurrent callers onto the in-flight promise.
+    return _inFlightCapture;
+  }
+
+  if (elapsed < SCREENSHOT_MIN_INTERVAL_MS) {
+    throw new ScreenshotThrottledError(SCREENSHOT_MIN_INTERVAL_MS - elapsed);
+  }
+
   if (!isScreenCaptureSupported()) {
     throw new Error("Screen capture not supported in this browser or context");
   }
@@ -143,60 +171,67 @@ export async function captureScreen(region?: CaptureRegion): Promise<ScreenshotR
   const OUTPUT_FORMAT: "image/png" | "image/jpeg" = "image/png";
   const JPEG_QUALITY = 0.85;
 
-  let stream: MediaStream | null = null;
+  _lastCaptureAt = now;
 
-  try {
-    stream = await navigator.mediaDevices.getDisplayMedia({
-      video: {
-        // Not all browsers honor these constraints; kept as hints
-        displaySurface: "monitor" as any,
-        width: { ideal: 1920 },
-        height: { ideal: 1080 },
-        frameRate: 30,
-      },
-      audio: false,
-    });
+  const work = (async (): Promise<ScreenshotResult> => {
+    let stream: MediaStream | null = null;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia({
+        video: {
+          // Not all browsers honor these constraints; kept as hints
+          displaySurface: "monitor" as any,
+          width: { ideal: 1920 },
+          height: { ideal: 1080 },
+          frameRate: 30,
+        },
+        audio: false,
+      });
 
-    const bitmap = await grabFrameFromStream(stream);
+      const bitmap = await grabFrameFromStream(stream);
 
-    // Render to canvas (with optional region crop)
-    const canvas = document.createElement("canvas");
-    const ctx = canvas.getContext("2d")!;
-    let sx = 0, sy = 0, sw = bitmap.width, sh = bitmap.height;
+      // Render to canvas (with optional region crop)
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d")!;
+      let sx = 0, sy = 0, sw = bitmap.width, sh = bitmap.height;
 
-    if (region) {
-      const mapped = mapRegionToBitmapCoords(region, bitmap.width, bitmap.height);
-      sx = Math.max(0, Math.min(mapped.x, bitmap.width - 1));
-      sy = Math.max(0, Math.min(mapped.y, bitmap.height - 1));
-      sw = Math.max(1, Math.min(mapped.width, bitmap.width - sx));
-      sh = Math.max(1, Math.min(mapped.height, bitmap.height - sy));
+      if (region) {
+        const mapped = mapRegionToBitmapCoords(region, bitmap.width, bitmap.height);
+        sx = Math.max(0, Math.min(mapped.x, bitmap.width - 1));
+        sy = Math.max(0, Math.min(mapped.y, bitmap.height - 1));
+        sw = Math.max(1, Math.min(mapped.width, bitmap.width - sx));
+        sh = Math.max(1, Math.min(mapped.height, bitmap.height - sy));
+      }
+
+      canvas.width = sw;
+      canvas.height = sh;
+      const dw = sw, dh = sh;
+
+      ctx.drawImage(bitmap as any, sx, sy, sw, sh, 0, 0, dw, dh);
+      bitmap.close();
+
+      const { base64, dataOnly, format } = canvasToBase64(
+        canvas,
+        OUTPUT_FORMAT,
+        JPEG_QUALITY
+      );
+
+      return {
+        base64,
+        dataOnly,
+        width: canvas.width,
+        height: canvas.height,
+        capturedAt: Date.now(),
+        format,
+      };
+    } finally {
+      // Always stop the stream immediately — don't leave screen sharing active
+      stream?.getTracks().forEach((t) => t.stop());
+      _inFlightCapture = null;
     }
+  })();
 
-    canvas.width = sw;
-    canvas.height = sh;
-    const dw = sw, dh = sh;
-
-    ctx.drawImage(bitmap as any, sx, sy, sw, sh, 0, 0, dw, dh);
-    bitmap.close();
-
-    const { base64, dataOnly, format } = canvasToBase64(
-      canvas,
-      OUTPUT_FORMAT,
-      JPEG_QUALITY
-    );
-
-    return {
-      base64,
-      dataOnly,
-      width: canvas.width,
-      height: canvas.height,
-      capturedAt: Date.now(),
-      format,
-    };
-  } finally {
-    // Always stop the stream immediately — don't leave screen sharing active
-    stream?.getTracks().forEach((t) => t.stop());
-  }
+  _inFlightCapture = work;
+  return work;
 }
 
 // ─────────────────────────────────────────────────────────────────
