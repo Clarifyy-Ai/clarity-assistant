@@ -1,94 +1,68 @@
 
 
-# Remaining Fixes — Issues 3, 17, 31, 37, 38, 39, 41
+The user wants a master audit and fix prompt for Clarify AI. The 46-issue prompt has already been fully implemented over the previous sessions (Batches 1-12 complete, plus the 7 remaining fixes 3, 17, 31, 37, 38, 39, 41 in the last loop).
 
-Most of the 46-issue roadmap is already implemented. Seven issues remain unfixed.
+Now they're asking again — but this is the SAME prompt that was just completed. Before re-running fixes, I need to actually verify the current state by running through the 4 acceptance journeys and identifying what's STILL broken vs. what's now working. The user explicitly says "so many features are not working properly, overlay not working visible was not properly working, there are many issues" — meaning despite past fixes, real problems remain in production.
 
----
+I should present a focused **verification + targeted re-fix plan** rather than re-running 46 fixes blindly.
 
-## Fix 3: Seed overlay opacity/font from profile on auth load
+## Plan
 
-**File**: `src/store/authStore.ts` (line ~323, after `loadProfile` sets profile)
-- After `s.profile = profileRes.data`, add overlay store seeding:
-  ```ts
-  const overlay = useOverlayStore.getState();
-  const p = profileRes.data;
-  if (p.overlay_opacity != null) overlay.setStealthOpacity(p.overlay_opacity);
-  if (p.overlay_font_size != null) overlay.setFontSize(p.overlay_font_size);
-  ```
-- Import `useOverlayStore` at the top of authStore.ts
+# Clarify AI — Targeted Re-Audit & Fix Plan
 
----
+The 46-issue master prompt has already been implemented across prior sessions. Re-running the entire pass would overwrite already-fixed code and waste effort. Instead, I'll **verify each acceptance journey against the current codebase**, identify what's actually still broken, and fix only the real regressions.
 
-## Fix 17: CORS origin whitelist in cors.ts
+## Phase 1 — Live Verification (read-only audit)
 
-**File**: `supabase/functions/_shared/cors.ts`
-- Update `getCorsHeaders(req)` to read `ALLOWED_ORIGINS` from `Deno.env.get("ALLOWED_ORIGINS")`
-- If set, split by comma and validate `req.headers.get("origin")` against the list
-- If origin not in whitelist, return empty origin (block)
-- If `ALLOWED_ORIGINS` not set, fall back to `*` (current behavior — avoids breaking deployments without the secret)
+For each of the 4 acceptance journeys, inspect the current code path end-to-end and log actual defects:
 
----
+1. **Mock Interview Journey** — verify `MockSession.tsx` → `generate-questions` EF wiring → `session_answers` insert → navigation to `/app/sessions/:id`
+2. **Live Co-Pilot Journey** — verify mic permission gate → `deepgram-token` fetch → WebSocket connect → transcript stream → hint generation in overlay
+3. **Stealth Mode Journey** — verify `screenCaptureEvasion.ts` real protection (not just CSS) → `WarningBanner` tier display
+4. **Auth Journey** — verify OAuth redirect target → back-button blank screen → tab-resume token refresh
 
-## Fix 31: Memoize ProtectedRoute
+Tools used: `code--view`, `code--search_files`, `supabase--read_query` (check actual `session_answers` rows from recent sessions), `supabase--edge_function_logs` (check `generate-questions` for timeouts/errors), `supabase--linter` (DB security state).
 
-**File**: `src/components/layout/ProtectedRoute.tsx`
-- Wrap the component function with `React.memo` to prevent unnecessary re-renders of the `<Outlet />` on route changes
-- Change: `export const ProtectedRoute = memo(function ProtectedRoute(...) { ... })`
+## Phase 2 — Overlay Deep Dive (the user's #1 complaint)
 
----
+Specifically inspect:
+- `OverlayWindow.tsx` — confirm CSS opacity toggle is active (no conditional unmount)
+- `useOverlayVisibility.ts` + `OverlayKeyboardHandler.tsx` — confirm Ctrl+Shift+H actually toggles `is_visible` during a real session
+- `OverlayPositionManager.tsx` — confirm position persists across re-renders and touch events fire on mobile
+- `overlayStore.ts` — confirm `is_visible` defaults and persistence behavior
+- Check whether the overlay is actually mounted on `LiveOverlay.tsx` / `MockSession.tsx` / `LiveRehearsal.tsx` routes
 
-## Fix 37: Remove error detail leaks from edge functions
+## Phase 3 — Categorize Findings
 
-**Files**: 
-- `supabase/functions/create-checkout/index.ts` (line 217): remove `detail: String(err)`
-- `supabase/functions/parse-resume/index.ts` (line 215): remove `details: String(err)`
-- Both already `console.error` the full error server-side, so just strip the client response
+Output a delta report:
+- **Confirmed fixed** (no action)
+- **Regressed** (was fixed, broken again — re-fix)
+- **Never actually fixed** (prompt claimed fix but code shows otherwise — fix now)
+- **New issues discovered** (not in original 46 — fix now)
 
----
+## Phase 4 — Targeted Fix Pass
 
-## Fix 38: Retry UI for failed session start
+Apply only the fixes for items in categories 2/3/4 above. Each fix gets a one-line acceptance check.
 
-**File**: `src/pages/app/mock/MockSession.tsx`
-- `sessionConfigRef.current` is already kept on error (line 237 returns early without clearing)
-- Add: when `phase === "setup"`, pass `sessionConfigRef.current` as `initialConfig` prop to `PreSessionSetup`
-- **File**: `src/components/session/PreSessionSetup.tsx`
-- Accept optional `initialConfig` prop and pre-populate form fields from it
+## Phase 5 — Browser QA
 
----
+Once fixes land, use browser tools to actually exercise:
+- Mock session start → question render → end → scorecard
+- Overlay Ctrl+Shift+H toggle on `/app/live`
+- Mobile viewport (360px) for overlay bottom-sheet behavior
 
-## Fix 39: Dashboard parallel queries
+## Why this approach (not re-running the 46-issue prompt)
 
-**File**: `src/pages/app/Dashboard.tsx`
-- Create `useDashboardData()` hook that wraps the session count query (currently in a useEffect)
-- Since profile, gamification, documents, and interviews are already from stores/hooks, the main sequential query is just the session count — this is a minor optimization
-- The staggered skeleton issue is mostly resolved by the null→skeleton fix already applied
+- Re-applying already-implemented fixes risks introducing regressions
+- The user's complaint ("overlay not visible properly, many issues") suggests **specific** broken paths, not a global breakdown
+- Reading the actual current state takes ~10 file reads vs. 46 blind re-edits
+- Final fix list will be small, focused, and verifiable
 
----
+## Out of scope for this plan
 
-## Fix 41: Explicit column lists for documents
+- New features
+- Performance load testing (1000 concurrent users) — requires staging infra
+- Penetration testing — requires explicit authorization
 
-**File**: `src/pages/app/Dashboard.tsx` — `DocumentsStatusCard` uses `docStore` which reads from documentStore
-- Audit `src/store/documentStore.ts` and any direct `.from("documents").select("*")` calls
-- Replace with `.select("id, title, type, user_id, is_primary, is_active, created_at")` excluding `content`
-
----
-
-## Deployment
-
-- Redeploy `create-checkout` and `parse-resume` edge functions after error leak fix
-- `cors.ts` change propagates to all functions on next deploy
-- No database migration needed
-
-## Summary
-
-| Fix | File(s) | Effort |
-|-----|---------|--------|
-| 3 — Overlay opacity seed | authStore.ts | Small |
-| 17 — CORS whitelist | cors.ts | Small |
-| 31 — Memo ProtectedRoute | ProtectedRoute.tsx | Tiny |
-| 37 — Error leak | create-checkout, parse-resume | Tiny |
-| 38 — Retry UI | MockSession.tsx, PreSessionSetup.tsx | Small |
-| 39 — Parallel queries | Dashboard.tsx | Small |
-| 41 — Column lists | documentStore.ts | Small |
+Once you approve, I'll switch to default mode, run the verification phase, share the delta report, and apply targeted fixes.
 
