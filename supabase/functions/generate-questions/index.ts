@@ -128,23 +128,30 @@ JSON format:
 `;
 
     /* -------------------------------------------
-       CALL GEMINI SAFELY (with 22s timeout)
+       CALL GEMINI SAFELY (with 22s timeout, refund on failure)
     ------------------------------------------- */
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 22_000);
-    
+
     let raw: string;
     try {
       raw = await geminiGenerate(prompt, SYSTEM_PROMPT, 0.8, 2048);
     } catch (genErr) {
       clearTimeout(timeoutId);
+      // Refund the 3 credits since AI failed (negative amount = credit back)
+      try { await deductCredits(user.id, "refund_generate_questions", -3); }
+      catch (refundErr) { console.error("[generate-questions] Refund failed:", refundErr); }
+
       if (genErr instanceof DOMException && genErr.name === "AbortError") {
         return new Response(
-          JSON.stringify({ error: "AI service is taking too long. Please try again." }),
+          JSON.stringify({ error: "AI service is taking too long. Your credits have been refunded." }),
           { status: 503, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
         );
       }
-      throw genErr;
+      return new Response(
+        JSON.stringify({ error: "AI service unavailable. Your credits have been refunded." }),
+        { status: 502, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
+      );
     }
     clearTimeout(timeoutId);
     

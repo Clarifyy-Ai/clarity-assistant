@@ -4,68 +4,78 @@ import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Key, Eye, EyeOff, CheckCircle, AlertTriangle, Loader2, FlaskConical } from "lucide-react";
+import { Key, Eye, EyeOff, CheckCircle, AlertTriangle, Loader2, FlaskConical, ShieldCheck } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
+// ─────────────────────────────────────────────────────────────────────────────
+// SettingsBYOK
+//
+// Storage model:
+//   • Keys are encrypted client-side (WebCrypto AES-GCM) and persisted to
+//     localStorage via authStore.setBYOKKey → byokVault.saveBYOKVault.
+//   • Edge functions receive them per-request as `x-byok-*` headers (set by
+//     apiClient) and prefer them over server-side fallback keys.
+//   • Keys never leave the browser, never hit our database, and are wiped
+//     on sign-out by authStore.signOut().
+// ─────────────────────────────────────────────────────────────────────────────
+
+type Provider = "openai" | "anthropic" | "gemini";
+
 interface KeyField {
-  id: string;
-  label: string;
-  provider: string;
-  placeholder: string;
-  profileField: string; // actual DB column name (byok_*_hint)
+  id:           Provider;
+  label:        string;
+  provider:     string;
+  placeholder:  string;
 }
 
 const KEY_FIELDS: KeyField[] = [
-  { id: "openai",    label: "OpenAI API Key",    provider: "OpenAI",    placeholder: "sk-...",     profileField: "byok_openai_hint" },
-  { id: "anthropic", label: "Anthropic API Key",  provider: "Anthropic", placeholder: "sk-ant-...", profileField: "byok_anthropic_hint" },
-  { id: "gemini",    label: "Google AI API Key",   provider: "Google",    placeholder: "AIza...",    profileField: "byok_gemini_hint" },
+  { id: "openai",    label: "OpenAI API Key",     provider: "OpenAI",    placeholder: "sk-..."     },
+  { id: "anthropic", label: "Anthropic API Key",  provider: "Anthropic", placeholder: "sk-ant-..." },
+  { id: "gemini",    label: "Google AI API Key",  provider: "Google",    placeholder: "AIza..."    },
 ];
 
 export default function SettingsBYOK() {
-  const { profile, updateProfile } = useAuthStore();
-  const [keys, setKeys] = useState<Record<string, string>>({
-    openai: "",
-    anthropic: "",
-    gemini: "",
-  });
-  const [visible, setVisible] = useState<Record<string, boolean>>({});
-  const [saving, setSaving] = useState(false);
-  const [testing, setTesting] = useState<Record<string, boolean>>({});
+  const byokKeys     = useAuthStore((s) => s.byokKeys);
+  const setBYOKKey   = useAuthStore((s) => s.setBYOKKey);
+  const clearBYOKKey = useAuthStore((s) => s.clearBYOKKey);
+
+  const [keys,        setKeys]        = useState<Record<Provider, string>>({ openai: "", anthropic: "", gemini: "" });
+  const [visible,     setVisible]     = useState<Record<string, boolean>>({});
+  const [saving,      setSaving]      = useState(false);
+  const [testing,     setTesting]     = useState<Record<string, boolean>>({});
   const [testResults, setTestResults] = useState<Record<string, "pass" | "fail" | null>>({});
 
-  function hasKey(field: string): boolean {
-    if (!profile) return false;
-    return !!(profile as Record<string, unknown>)?.[field];
+  function hasKey(id: Provider): boolean {
+    return Boolean(byokKeys?.[id]);
   }
 
   async function handleSave() {
     setSaving(true);
     try {
-      const updates: Record<string, string> = {};
-      // Save to correct DB column names (byok_*_hint)
-      if (keys.openai)    updates.byok_openai_hint    = keys.openai;
-      if (keys.anthropic) updates.byok_anthropic_hint  = keys.anthropic;
-      if (keys.gemini)    updates.byok_gemini_hint     = keys.gemini;
+      const entries = (["openai", "anthropic", "gemini"] as Provider[]).filter((p) => keys[p].trim());
 
-      if (Object.keys(updates).length === 0) {
+      if (entries.length === 0) {
         toast.info("No keys to save.");
-        setSaving(false);
         return;
       }
 
-      await updateProfile(updates);
+      for (const p of entries) {
+        setBYOKKey(p, keys[p].trim());
+      }
+
       setKeys({ openai: "", anthropic: "", gemini: "" });
-      toast.success("API keys saved securely");
-    } catch {
+      toast.success("API keys encrypted and saved on this device");
+    } catch (err) {
+      console.error("[SettingsBYOK] save failed:", err);
       toast.error("Failed to save keys");
     } finally {
       setSaving(false);
     }
   }
 
-  async function handleTestKey(providerId: string) {
-    const key = keys[providerId];
+  async function handleTestKey(providerId: Provider) {
+    const key = keys[providerId] || byokKeys?.[providerId];
     if (!key) {
       toast.error("Enter a key first to test it.");
       return;
@@ -91,9 +101,9 @@ export default function SettingsBYOK() {
     }
   }
 
-  async function handleRemove(id: string, profileField: string) {
+  function handleRemove(id: Provider) {
     try {
-      await updateProfile({ [profileField]: "" } as Record<string, string>);
+      clearBYOKKey(id);
       toast.success(`${id} key removed`);
     } catch {
       toast.error("Failed to remove key");
@@ -102,23 +112,30 @@ export default function SettingsBYOK() {
 
   return (
     <div className="space-y-5">
-      <h2 className="text-lg font-bold text-foreground">Bring Your Own Keys</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-bold text-foreground">Bring Your Own Keys</h2>
+        <span className="flex items-center gap-1.5 text-[11px] font-medium text-emerald-500">
+          <ShieldCheck className="w-3.5 h-3.5" /> AES-GCM encrypted on this device
+        </span>
+      </div>
 
       <Card>
-        <div className="flex items-start gap-3 mb-4">
+        <div className="flex items-start gap-3 mb-1">
           <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
           <div>
             <p className="text-sm font-medium text-foreground">Use your own API keys</p>
             <p className="text-xs text-muted-foreground mt-0.5">
               When you provide your own keys, AI calls are billed directly to your provider account
-              instead of using Clarify AI credits. Keys are encrypted and stored securely.
+              instead of using Clarify AI credits. Keys are encrypted with WebCrypto AES-GCM and
+              stored only in your browser — they never reach our servers or database. Clearing site
+              data or signing out wipes the vault.
             </p>
           </div>
         </div>
       </Card>
 
       {KEY_FIELDS.map((field) => {
-        const saved = hasKey(field.profileField);
+        const saved = hasKey(field.id);
         return (
           <Card key={field.id}>
             <div className="flex items-center justify-between mb-3">
@@ -168,7 +185,7 @@ export default function SettingsBYOK() {
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => handleRemove(field.id, field.profileField)}
+                  onClick={() => handleRemove(field.id)}
                   className="text-red-400 hover:text-red-300"
                 >
                   Remove
