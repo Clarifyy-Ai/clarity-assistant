@@ -17,6 +17,7 @@ import { useSessionStore } from "@/store/sessionStore";
 import { useAuthStore } from "@/store/authStore";
 import { useAudioStore } from "@/store/audioStore";
 import { OverlayWindow } from "@/components/overlay/OverlayWindow";
+import { OverlayKeyboardHandler } from "@/components/overlay/OverlayKeyboardHandler";
 import { LiveSessionController } from "@/components/live/LiveSessionController";
 import { PreSessionSetup } from "@/components/session/PreSessionSetup";
 import { sessionsDB } from "@/lib/supabase/database";
@@ -445,6 +446,7 @@ export default function MockSession() {
     // FIX Issue 28: max-h-screen overflow-y-auto, responsive padding
     <div className="min-h-screen max-h-screen overflow-y-auto bg-background text-foreground">
       <LiveSessionController isActive={true} />
+      <OverlayKeyboardHandler enabled={phase === "active"} onToggleMute={stt.toggleMute} />
 
       <div className="flex items-center justify-center min-h-screen">
         <div className="w-full max-w-lg space-y-4 sm:space-y-6 p-3 sm:p-6">

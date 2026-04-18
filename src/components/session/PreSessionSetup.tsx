@@ -1,7 +1,6 @@
-// @ts-nocheck
 import { useState, useEffect } from "react";
 import { useDocumentStore } from "@/store/documentStore";
-import { useAuthStore } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { setAppStealthMode } from "@/lib/stealth/stealthActions";
 import {
@@ -46,7 +45,7 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
   const [resumeId,          setResumeId]          = useState<string | null>(initialConfig?.resume_id ?? activeResumeId);
   const [jdId,              setJdId]              = useState<string | null>(initialConfig?.jd_id ?? activeJdId);
   const [instructions,      setInstructions]      = useState(initialConfig?.instructions ?? "");
-  const typedProfile = profile as UserProfile | null;
+  const typedProfile = profile as unknown as UserProfile | null;
   const [model,             setModel]             = useState<PreferredAIModel>(
     typedProfile?.preferred_model ?? "gemini-flash"
   );
@@ -163,7 +162,7 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
               >
                 <option value="">None selected</option>
                 {resumes.map((r) => (
-                  <option key={r.id} value={r.id}>{r.title || r.file_name}</option>
+                  <option key={r.id} value={r.id}>{r.title || (r as any).file_name}</option>
                 ))}
               </select>
             </div>
@@ -178,7 +177,7 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
               >
                 <option value="">None selected</option>
                 {jds.map((j) => (
-                  <option key={j.id} value={j.id}>{j.title || j.company_name}</option>
+                  <option key={j.id} value={j.id}>{(j as any).title || j.company_name}</option>
                 ))}
               </select>
             </div>
