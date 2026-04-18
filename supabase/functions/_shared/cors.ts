@@ -163,19 +163,8 @@ export function handleCors(req: Request): Response | null {
   });
 }
 
-/**
- * @deprecated Use getCorsHeaders(req) instead.
- * Kept for backward compatibility during migration.
- * Returns headers with no Access-Control-Allow-Origin (safe default)
- * until each edge function is updated to pass the request object.
- *
- * Migration:
- *   Old: headers: { ...corsHeaders, "Content-Type": "application/json" }
- *   New: headers: { ...getCorsHeaders(req), "Content-Type": "application/json" }
- */
-export const corsHeaders: Record<string, string> = {
-  "Access-Control-Allow-Origin":  "*",
-  "Access-Control-Allow-Methods": ALLOWED_METHODS,
-  "Access-Control-Allow-Headers": ALLOWED_HEADERS,
-  "Access-Control-Max-Age":       "86400",
-};
+// NOTE: The previously-exported deprecated `corsHeaders` constant (with
+// Access-Control-Allow-Origin: "*") has been removed in the security hardening
+// pass. All edge functions must now use getCorsHeaders(req) so that responses
+// echo only allowlisted origins. If you see an import error referencing
+// `corsHeaders`, switch the call site to `getCorsHeaders(req)`.

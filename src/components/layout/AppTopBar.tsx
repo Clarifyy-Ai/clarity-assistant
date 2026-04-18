@@ -24,8 +24,19 @@ export function AppTopBar() {
     "U"
   ).toUpperCase();
 
+  // Electron drag region: the header bar itself is draggable so the user can
+  // reposition the window, but every interactive child below opts out via
+  // `WebkitAppRegion: "no-drag"` so clicks reach the button handlers.
+  // CSS-in-JS is used because Tailwind has no first-class utility for the
+  // non-standard `-webkit-app-region` property.
+  const dragStyle = { WebkitAppRegion: "drag" } as React.CSSProperties;
+  const noDragStyle = { WebkitAppRegion: "no-drag" } as React.CSSProperties;
+
   return (
-    <header className="sticky top-0 z-40 h-14 w-full flex-shrink-0 bg-background/95 backdrop-blur border-b border-border flex items-center justify-between px-2 sm:px-4">
+    <header
+      style={dragStyle}
+      className="sticky top-0 z-40 h-14 w-full flex-shrink-0 bg-background/95 backdrop-blur border-b border-border flex items-center justify-between px-2 sm:px-4"
+    >
 
       {/* Mobile hamburger — only visible on small screens */}
       <button
