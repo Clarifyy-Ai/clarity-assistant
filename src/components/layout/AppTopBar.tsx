@@ -41,6 +41,7 @@ export function AppTopBar() {
       {/* Mobile hamburger — only visible on small screens */}
       <button
         type="button"
+        style={noDragStyle}
         onClick={() => uiStore.setMobileNavOpen(!mobileNavOpen)}
         className="md:hidden flex items-center justify-center w-9 h-9 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all mr-1"
         aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
@@ -53,10 +54,11 @@ export function AppTopBar() {
         id="topbar-breadcrumb"
       />
 
-      <div className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
+      <div style={noDragStyle} className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
 
         <button
           type="button"
+          style={noDragStyle}
           onClick={() => uiStore.openUpgradeModal("pro")}
           className={cn(
             "flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-xl border text-[10px] sm:text-xs font-semibold transition-all",
@@ -79,6 +81,7 @@ export function AppTopBar() {
 
         <button
           type="button"
+          style={noDragStyle}
           onClick={toggleAppStealthMode}
           title={stealthMode ? "Disable stealth mode" : "Enable stealth mode"}
           className={cn(
@@ -96,10 +99,13 @@ export function AppTopBar() {
           <span className="hidden sm:inline">Stealth</span>
         </button>
 
-        <ThemeToggle />
+        <div style={noDragStyle}>
+          <ThemeToggle />
+        </div>
 
         <Link
           to="/app/notifications"
+          style={noDragStyle}
           className="relative w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-xl hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-all"
         >
           <Bell className="w-4 h-4" />
@@ -113,6 +119,7 @@ export function AppTopBar() {
 
         <Link
           to="/app/profile"
+          style={noDragStyle}
           className={cn(
             "w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-bold text-white hover:ring-2 transition-all flex-shrink-0",
             stealthMode
