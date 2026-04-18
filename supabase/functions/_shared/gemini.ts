@@ -101,7 +101,8 @@ export async function geminiGenerate(
   prompt: string,
   systemPrompt?: string,
   temperature = 0.7,
-  maxTokens = 2048
+  maxTokens = 2048,
+  byokKey?: string,
 ): Promise<string> {
   const safePrompt = sanitizePrompt(prompt);
   const safeSystem = systemPrompt ? sanitizePrompt(systemPrompt) : undefined;
@@ -123,7 +124,7 @@ export async function geminiGenerate(
     payload.systemInstruction = { parts: [{ text: safeSystem }] };
   }
 
-  const data = await geminiRequest(payload);
+  const data = await geminiRequest(payload, byokKey);
   return extractTextFromGemini(data);
 }
 
