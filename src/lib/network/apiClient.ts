@@ -1,5 +1,6 @@
 // src/lib/network/apiClient.ts
 import { supabase } from "@/lib/supabase/client";
+import { useAuthStore } from "@/store/authStore";
 
 const DEFAULT_TIMEOUT_MS = 30000;
 const DEFAULT_RETRY_COUNT = 2;
@@ -34,8 +35,16 @@ export interface ApiErrorShape {
   status?: number;
 }
 
+/**
+ * Get the current user's JWT.
+ * Reads from the in-memory Zustand authStore first (synchronous, zero IO).
+ * Falls back to supabase.auth.getSession() only when the store has no token —
+ * e.g. during the initial page load before authStore.initialize() resolves.
+ */
 async function getAuthToken(): Promise<string | null> {
   try {
+    const cached = useAuthStore.getState().session?.access_token;
+    if (cached) return cached;
     const { data } = await supabase.auth.getSession();
     return data.session?.access_token ?? null;
   } catch {
@@ -72,6 +81,12 @@ function withTimeout(signal?: AbortSignal, timeoutMs = DEFAULT_TIMEOUT_MS) {
 
 function extractErrorMessage(error: unknown): string {
   if (error instanceof Error) return error.message;
+  if (typeof error === "string") return error;
+  if (error && typeof error === "object") {
+    const maybe = error as { message?: unknown; error?: unknown };
+    if (typeof maybe.message === "string") return maybe.message;
+    if (typeof maybe.error === "string") return maybe.error;
+  }
   return "Request failed";
 }
 

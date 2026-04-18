@@ -27,7 +27,10 @@ function createOverlay() {
       preload:          path.join(__dirname, "preload.cjs"),
       nodeIntegration:  false,
       contextIsolation: true,
-      sandbox:          false,
+      // ★ Sandbox enabled: Chromium's renderer sandbox prevents OS-level escape
+      //   if the renderer is ever compromised (XSS / V8 RCE). Safe with
+      //   contextIsolation: true — IPC bridge in preload.cjs continues to work.
+      sandbox:          true,
     },
   });
 

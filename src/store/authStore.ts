@@ -158,6 +158,14 @@ export const useAuthStore = create<AuthStore>()(
                 });
                 await get().loadProfile();
                 dset((s) => { s.status = "authenticated"; });
+
+                // Identify returning user with PostHog (was only fired on SIGNED_IN
+                // event, which never runs for users restored from an existing session).
+                if (import.meta.env.VITE_POSTHOG_KEY) {
+                  try {
+                    posthog.identify(session.user.id, { email: session.user.email });
+                  } catch { /* posthog not loaded — safe to skip */ }
+                }
               } else {
                 dset((s) => { s.status = "unauthenticated"; });
               }
