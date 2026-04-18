@@ -7,7 +7,26 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-import { corsHeaders, getCorsHeaders, handleCors as _handleCorsFn } from "./cors.ts";
+// Note: deprecated wildcard `corsHeaders` is intentionally NOT imported here.
+// Use getCorsHeaders(req) per-request to honor the ALLOWED_ORIGINS allowlist.
+import { getCorsHeaders, handleCors as _handleCorsFn } from "./cors.ts";
+
+// Internal helper: returns CORS headers when a Request is available, otherwise a
+// safe minimal header set with NO Access-Control-Allow-Origin (browser blocks).
+// This is used by helpers (successResponse/errorResponse/streamResponse) that
+// historically did not receive `req` as an argument.
+function safeCorsHeaders(req?: Request): Record<string, string> {
+  if (req) return getCorsHeaders(req);
+  // No request → server-to-server context. Return only method/header advertisements
+  // without ACAO so browsers cannot exploit a missing-origin response.
+  return {
+    "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+    "Access-Control-Allow-Headers":
+      "authorization, x-client-info, apikey, content-type, x-app-name, x-app-version",
+    "Access-Control-Max-Age":       "86400",
+    "Vary":                         "Origin",
+  };
+}
 import type {
   AuthContext, EdgeError, EdgeSuccess,
   AICompletionRequest, AICompletionResponse,
@@ -95,29 +114,31 @@ export async function requireAuth(req: Request): Promise<AuthContext> {
 export function successResponse<T>(
   data: T,
   meta?: EdgeSuccess<T>["meta"],
-  status = 200
+  status = 200,
+  req?: Request
 ): Response {
   return new Response(JSON.stringify({ success: true, data, ...(meta ? { meta } : {}) }), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" }
+    headers: { ...safeCorsHeaders(req), "Content-Type": "application/json" }
   });
 }
 
 export function errorResponse(
   message: string,
   code = "INTERNAL_ERROR",
-  status = 500
+  status = 500,
+  req?: Request
 ): Response {
   return new Response(JSON.stringify({ success: false, error: message, code }), {
     status,
-    headers: { ...corsHeaders, "Content-Type": "application/json" }
+    headers: { ...safeCorsHeaders(req), "Content-Type": "application/json" }
   });
 }
 
-export function streamResponse(stream: ReadableStream): Response {
+export function streamResponse(stream: ReadableStream, req?: Request): Response {
   return new Response(stream, {
     headers: {
-      ...corsHeaders,
+      ...safeCorsHeaders(req),
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache",
       Connection: "keep-alive"
