@@ -1,247 +1,456 @@
-// supabase/functions/generate-answer/index.ts
-// Full STAR-format answer generator with SSE streaming via Gemini 2.0 Flash.
+// src/lib/ai/contextEnvelopeBuilder.ts
+// Stage 3 — Context Load for the 6‑stage answer pipeline.
+// Gathers resume, JD, answer bank, and company research into a single
+// "context envelope" that can be fed into LLMs. [file:1][file:3]
 
-import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
-import { createServiceClient, deductCreditsAtomic } from "../_shared/supabase.ts";
+import type { CoachingContext } from "@/types/ai.types";
+import { useAuthStore } from "@/store/userStore";
+import { EDGE_BASE } from "@/lib/env";
+import { retry } from "@/lib/utils";
+import { useNetworkStore } from "@/store/networkStore";
 
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-const GEMINI_BASE    = "https://generativelanguage.googleapis.com/v1beta";
-const MODEL          = "gemini-2.0-flash";
+/* ────────────────────────────────────────────────────────────── */
+/* Types                                                         */
+/* ────────────────────────────────────────────────────────────── */
 
-const SYSTEM_PROMPT = `You are an expert interview coach helping a candidate answer live interview questions.
-Generate a complete, confident answer using the STAR method (Situation, Task, Action, Result).
-Requirements:
-- 150-200 words total
-- Write in flowing paragraphs, NOT bullet points
-- Sound natural and conversational, as if spoken aloud
-- Be specific — reference the resume context when available
-- Do NOT say "Situation:", "Task:", etc. — weave the structure naturally into the prose`;
+export interface ResumeContext {
+  raw_text: string | null;
+  summary: string | null;
+}
 
-// Cost in credits for a full STAR answer (manual: “Live Answer Generation Long 200 tokens → 12 credits”,
-// you can adjust this COST to match your pricing model; we keep it 2 per your draft). [file:1][file:3]
-const COST = 2;
+export interface JobDescriptionContext {
+  id: string | null;
+  title: string | null;
+  company: string | null;
+  raw_text: string | null;
+  highlights: string[]; // top skills / responsibilities [file:3]
+}
 
-Deno.serve(async (req: Request) => {
-  const cors = handleCors(req);
-  if (cors) return cors;
+export interface AnswerBankEntry {
+  id: string;
+  question: string;
+  star_summary: string;
+  category: string | null;
+  tags: string[];
+}
 
-  const headers = getCorsHeaders(req);
-  const db = createServiceClient();
+export interface AnswerBankContext {
+  entries: AnswerBankEntry[];
+}
+
+export interface CompanyResearchContext {
+  company: string | null;
+  summary: string | null;
+  recent_news: string[];      // last 90 days [file:3]
+  culture_signals: string[];  // values, interview style
+  interview_format: string | null;
+  tech_stack: string | null;
+}
+
+export interface SessionMetaContext {
+  user_id: string | null;
+  role: string | null;
+  experience_level: string | null;
+  session_type: string | null;
+  target_company: string | null;
+  language: string | null;
+}
+
+export interface ContextEnvelope {
+  session: SessionMetaContext;
+  resume: ResumeContext;
+  job_description: JobDescriptionContext;
+  answer_bank: AnswerBankContext;
+  company_research: CompanyResearchContext;
+  // Concise string representation suitable for LLM prompts
+  prompt_block: string;
+}
+
+/* ────────────────────────────────────────────────────────────── */
+/* Public API                                                    */
+/* ────────────────────────────────────────────────────────────── */
+
+export interface ContextEnvelopeOptions {
+  context: CoachingContext;
+  sessionId?: string;
+  question?: string;
+  // Fine‑grained switches if you ever want to skip heavy pieces
+  includeResume?: boolean;
+  includeJobDescription?: boolean;
+  includeAnswerBank?: boolean;
+  includeCompanyResearch?: boolean;
+}
+
+/**
+ * Main entry point for Stage 3 — loads all relevant context in parallel
+ * and returns a structured envelope plus a prompt‑ready text block. [file:1][file:3]
+ */
+export async function buildContextEnvelope(
+  opts: ContextEnvelopeOptions,
+): Promise<ContextEnvelope> {
+  const {
+    context,
+    sessionId,
+    question,
+    includeResume = true,
+    includeJobDescription = true,
+    includeAnswerBank = true,
+    includeCompanyResearch = true,
+  } = opts;
+
+  const authStore = useAuthStore.getState();
+  const userId = authStore.user?.id ?? context.user_id ?? null;
+
+  const session: SessionMetaContext = {
+    user_id:         userId,
+    role:            context.role ?? null,
+    experience_level: context.experience_level ?? null,
+    session_type:    context.session_type ?? null,
+    target_company:  context.target_company ?? null,
+    language:        context.language ?? null,
+  };
+
+  const [resume, jd, answerBank, company] = await Promise.all([
+    includeResume ? loadResumeContext(userId) : emptyResume(),
+    includeJobDescription
+      ? loadJDContext(userId, context.job_id ?? null)
+      : emptyJD(context.target_company ?? null),
+    includeAnswerBank
+      ? loadAnswerBankContext(userId, question ?? null, context.session_type ?? null)
+      : emptyAnswerBank(),
+    includeCompanyResearch
+      ? loadCompanyResearch(context.target_company ?? null)
+      : emptyCompanyResearch(context.target_company ?? null),
+  ]);
+
+  const prompt_block = buildPromptBlock({
+    session,
+    resume,
+    jd,
+    answerBank,
+    company,
+    question,
+  });
+
+  return {
+    session,
+    resume,
+    job_description: jd,
+    answer_bank: answerBank,
+    company_research: company,
+    prompt_block,
+  };
+}
+
+/* ────────────────────────────────────────────────────────────── */
+/* Resume context                                                */
+/* ────────────────────────────────────────────────────────────── */
+
+async function loadResumeContext(userId: string | null): Promise<ResumeContext> {
+  if (!userId) return emptyResume();
+
+  // Use existing CoachingContext when available to avoid network calls.
+  const ctx = useAuthStore.getState().profile;
+  if (ctx?.resume_experience_summary) {
+    return {
+      raw_text: null,
+      summary: ctx.resume_experience_summary,
+    };
+  }
+
+  // Fallback – call prep-tool EF with tool_id="resume_summary" if it exists.
+  try {
+    const res = await retry(
+      () =>
+        fetch(`${EDGE_BASE}/prep-tool`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tool_id: "resume_context",
+            input: { user_id: userId },
+          }),
+        }),
+      2,
+      300,
+    );
+
+    if (!res.ok) return emptyResume();
+    const data = await res.json();
+    return {
+      raw_text: data.resume_raw ?? null,
+      summary:  data.resume_summary ?? null,
+    };
+  } catch {
+    return emptyResume();
+  }
+}
+
+function emptyResume(): ResumeContext {
+  return { raw_text: null, summary: null };
+}
+
+/* ────────────────────────────────────────────────────────────── */
+/* Job Description context                                       */
+/* ────────────────────────────────────────────────────────────── */
+
+async function loadJDContext(
+  userId: string | null,
+  jobId: string | null,
+): Promise<JobDescriptionContext> {
+  if (!userId) return emptyJD(null);
 
   try {
-    // ── AUTH ─────────────────────────────────────────────────────
-    const authHeader =
-      req.headers.get("authorization") ?? req.headers.get("Authorization") ?? "";
-
-    if (!/^bearer\s+/i.test(authHeader)) {
-      return json(headers, 401, { error: "Unauthorized" });
-    }
-
-    const token = authHeader.replace(/^bearer\s+/i, "");
-    const {
-      data: { user },
-      error: authErr,
-    } = await db.auth.getUser(token);
-
-    if (authErr || !user) {
-      return json(headers, 401, { error: "Unauthorized" });
-    }
-
-    // ── BODY PARSE & VALIDATION ──────────────────────────────────
-    const body = await req.json().catch(() => null);
-    if (!body?.question) {
-      return json(headers, 400, { error: "Missing required field: question" });
-    }
-
-    const question      = String(body.question).slice(0, 500);
-    const transcript    = String(body.transcript      ?? "").slice(0, 800);
-    const resumeCtx     = String(body.resume_context  ?? "").slice(0, 500);
-    const interviewType = String(body.interview_type  ?? "behavioral").slice(0, 50);
-    const company       = String(body.target_company  ?? "").slice(0, 50);
-    const sessionId     = body.session_id ?? null;
-
-    // ── GEMINI CONFIG CHECK ──────────────────────────────────────
-    if (!GEMINI_API_KEY) {
-      return json(headers, 503, { error: "AI service not configured" });
-    }
-
-    // ── CREDITS DEDUCTION (ATOMIC) ───────────────────────────────
-    // Use a shared helper that:
-    //  - Performs an atomic UPDATE on profiles.credits
-    //  - Inserts into credittransactions with balancebefore/balanceafter
-    //  - Returns { success, error, balanceAfter }
-    const deduction = await deductCreditsAtomic({
-      userId: user.id,
-      action: "liveanswerlong", // aligns with manual: Live Answer Generation Long [file:1][file:3]
-      cost: COST,
-      sessionId,
-    });
-
-    if (!deduction.success) {
-      return json(headers, 402, {
-        error: deduction.error ?? "Insufficient credits",
-      });
-    }
-
-    const balanceAfter = deduction.balanceAfter ?? 0;
-
-    // ── GEMINI PROMPT BUILD ──────────────────────────────────────
-    const userPrompt = [
-      `Interview type: ${interviewType}`,
-      `Company: ${company || "not specified"}`,
-      `Question: "${question}"`,
-      `Candidate's answer so far: "${
-        transcript || "Nothing yet — generate a complete answer from scratch"
-      }"`,
-      `Resume context: ${resumeCtx || "None provided"}`,
-      "",
-      "Generate a complete, natural STAR-format answer (150-200 words) for this interview question.",
-    ].join("\n");
-
-    // ── REFUND HELPER (pre-stream failure) ───────────────────────
-    const refundCredits = async (reason: string) => {
-      try {
-        // Re-add COST to credits and log a refund transaction via helper.
-        await db.rpc("refund_credits", {
-          p_user_id: user.id,
-          p_amount:  COST,
-          p_reason:  reason,
-        });
-      } catch (e) {
-        console.error("[generate-answer] Refund failed:", e);
-      }
-    };
-
-    // ── CALL GEMINI STREAMING API ────────────────────────────────
-    const geminiUrl = `${GEMINI_BASE}/models/${MODEL}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
-
-    let geminiRes: Response;
-    try {
-      geminiRes = await fetch(geminiUrl, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
-          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
-          generationConfig: {
-            temperature:     0.7,
-            maxOutputTokens: 1024,
-            topP:            0.95,
-          },
+    const res = await retry(
+      () =>
+        fetch(`${EDGE_BASE}/prep-tool`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tool_id: "job_description_context",
+            input: { user_id: userId, job_id: jobId },
+          }),
         }),
-      });
-    } catch (fetchErr) {
-      console.error("[generate-answer] Gemini fetch error:", fetchErr);
-      await refundCredits("Gemini network error");
-      return json(headers, 502, {
-        error: "AI service unreachable. Credits refunded.",
-      });
-    }
+      2,
+      300,
+    );
 
-    if (!geminiRes.ok) {
-      const errText = await geminiRes.text().catch(() => "Unknown Gemini error");
-      console.error(
-        "[generate-answer] Gemini API error:",
-        geminiRes.status,
-        errText,
-      );
-      await refundCredits(`Gemini HTTP ${geminiRes.status}`);
-      return json(headers, 502, {
-        error: "AI generation failed. Credits refunded.",
-      });
-    }
+    if (!res.ok) return emptyJD(null);
+    const data = await res.json();
 
-    if (!geminiRes.body) {
-      console.error("[generate-answer] Empty Gemini body");
-      await refundCredits("Empty Gemini stream");
-      return json(headers, 502, {
-        error: "Empty AI response. Credits refunded.",
-      });
-    }
-
-    // ── PROXY SSE STREAM TO CLIENT ───────────────────────────────
-    const encoder = new TextEncoder();
-    const reader  = geminiRes.body.getReader();
-    const decoder = new TextDecoder();
-
-    const stream = new ReadableStream<Uint8Array>({
-      async start(controller) {
-        let buffer = "";
-        try {
-          while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n"); // real newline [file:1][web:30]
-            buffer = lines.pop() ?? "";
-
-            for (const line of lines) {
-              if (!line.startsWith("data: ")) continue;
-
-              const jsonStr = line.slice(6).trim();
-              if (!jsonStr || jsonStr === "[DONE]") continue;
-
-              try {
-                const parsed = JSON.parse(jsonStr) as {
-                  candidates?: Array<{
-                    content?: { parts?: Array<{ text?: string }> };
-                  }>;
-                };
-
-                const text =
-                  parsed?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-
-                if (text) {
-                  controller.enqueue(
-                    encoder.encode(
-                      `data: ${JSON.stringify({ text })}\n\n`,
-                    ),
-                  );
-                }
-              } catch {
-                // skip malformed JSON chunks
-              }
-            }
-          }
-
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
-        } catch (streamErr) {
-          console.error("[generate-answer] Stream read error:", streamErr);
-          controller.error(streamErr);
-        }
-      },
-      cancel() {
-        reader.cancel();
-      },
-    });
-
-    return new Response(stream, {
-      status: 200,
-      headers: {
-        ...headers,
-        "Content-Type":      "text/event-stream",
-        "Cache-Control":     "no-cache, no-transform",
-        Connection:          "keep-alive",
-        "X-Accel-Buffering": "no",
-      },
-    });
-  } catch (err) {
-    console.error("[generate-answer] Unhandled error:", err);
-    return json(getCorsHeaders(req), 500, { error: "Internal server error" });
+    return {
+      id:         data.job_id ?? jobId ?? null,
+      title:      data.title ?? null,
+      company:    data.company ?? null,
+      raw_text:   data.text ?? null,
+      highlights: data.highlights ?? [],
+    };
+  } catch {
+    return emptyJD(null);
   }
-});
+}
 
-/* ──────────────────────────────────────────────────────────────── */
+function emptyJD(company: string | null): JobDescriptionContext {
+  return {
+    id: null,
+    title: null,
+    company,
+    raw_text: null,
+    highlights: [],
+  };
+}
 
-function json(
-  headers: HeadersInit,
-  status: number,
-  body: unknown,
-): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...headers, "Content-Type": "application/json" },
-  });
+/* ────────────────────────────────────────────────────────────── */
+/* Answer Bank context                                           */
+/* ────────────────────────────────────────────────────────────── */
+
+async function loadAnswerBankContext(
+  userId: string | null,
+  question: string | null,
+  sessionType: string | null,
+): Promise<AnswerBankContext> {
+  if (!userId) return emptyAnswerBank();
+
+  try {
+    const res = await retry(
+      () =>
+        fetch(`${EDGE_BASE}/prep-tool`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tool_id: "answer_bank_context",
+            input: {
+              user_id: userId,
+              question,
+              session_type: sessionType,
+              limit: 5,
+            },
+          }),
+        }),
+      2,
+      300,
+    );
+
+    if (!res.ok) return emptyAnswerBank();
+    const data = await res.json();
+
+    const entries: AnswerBankEntry[] = (data.entries ?? []).map(
+      (e: any): AnswerBankEntry => ({
+        id: e.id,
+        question: e.question,
+        star_summary: e.star_summary,
+        category: e.category ?? null,
+        tags: e.tags ?? [],
+      }),
+    );
+
+    return { entries };
+  } catch {
+    return emptyAnswerBank();
+  }
+}
+
+function emptyAnswerBank(): AnswerBankContext {
+  return { entries: [] };
+}
+
+/* ────────────────────────────────────────────────────────────── */
+/* Company research context                                      */
+/* ────────────────────────────────────────────────────────────── */
+
+async function loadCompanyResearch(
+  company: string | null,
+): Promise<CompanyResearchContext> {
+  if (!company) return emptyCompanyResearch(null);
+
+  try {
+    const res = await retry(
+      () =>
+        fetch(`${EDGE_BASE}/prep-tool`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            tool_id: "company_research_context",
+            input: { company },
+          }),
+        }),
+      2,
+      300,
+    );
+
+    if (!res.ok) return emptyCompanyResearch(company);
+    const data = await res.json();
+
+    return {
+      company,
+      summary:         data.summary ?? null,
+      recent_news:     data.recent_news ?? [],
+      culture_signals: data.culture ?? [],
+      interview_format: data.interview_format ?? null,
+      tech_stack:      data.tech_stack ?? null,
+    };
+  } catch {
+    return emptyCompanyResearch(company);
+  }
+}
+
+function emptyCompanyResearch(company: string | null): CompanyResearchContext {
+  return {
+    company,
+    summary: null,
+    recent_news: [],
+    culture_signals: [],
+    interview_format: null,
+    tech_stack: null,
+  };
+}
+
+/* ────────────────────────────────────────────────────────────── */
+/* Prompt builder                                                */
+/* ────────────────────────────────────────────────────────────── */
+
+interface PromptBuilderInput {
+  session: SessionMetaContext;
+  resume: ResumeContext;
+  jd: JobDescriptionContext;
+  answerBank: AnswerBankContext;
+  company: CompanyResearchContext;
+  question?: string | null;
+}
+
+/**
+ * Builds a concise, layered context block for the LLM, following the
+ * manual’s guidance: resume + JD + answer bank + company research. [file:1][file:3]
+ */
+function buildPromptBlock(input: PromptBuilderInput): string {
+  const { session, resume, jd, answerBank, company, question } = input;
+
+  const parts: string[] = [];
+
+  // Session metadata
+  parts.push("SESSION CONTEXT");
+  parts.push(
+    [
+      session.role && `Role: ${session.role}`,
+      session.experience_level &&
+        `Seniority: ${session.experience_level}`,
+      session.session_type && `Interview type: ${session.session_type}`,
+      session.target_company &&
+        `Target company: ${session.target_company}`,
+      session.language && `Language: ${session.language}`,
+    ]
+      .filter(Boolean)
+      .join(" | "),
+  );
+
+  if (question) {
+    parts.push("");
+    parts.push(`CURRENT QUESTION: "${question}"`);
+  }
+
+  // Resume summary
+  if (resume.summary) {
+    parts.push("");
+    parts.push("RESUME SUMMARY");
+    parts.push(resume.summary);
+  }
+
+  // Job description
+  if (jd.raw_text || jd.highlights.length) {
+    parts.push("");
+    parts.push(
+      `JOB DESCRIPTION${
+        jd.title || jd.company ? ` — ${jd.title ?? ""} @ ${jd.company ?? ""}` : ""
+      }`.trim(),
+    );
+    if (jd.highlights.length) {
+      parts.push(
+        "Key requirements and priorities: " +
+          jd.highlights.slice(0, 6).join("; "),
+      );
+    }
+  }
+
+  // Answer bank
+  if (answerBank.entries.length) {
+    parts.push("");
+    parts.push("RELEVANT SAVED ANSWERS (STAR SUMMARIES)");
+    answerBank.entries.slice(0, 4).forEach((entry, idx) => {
+      parts.push(
+        `${idx + 1}. Q: ${entry.question}\n   STAR summary: ${entry.star_summary}`,
+      );
+    });
+  }
+
+  // Company research
+  if (company.summary || company.recent_news.length) {
+    parts.push("");
+    parts.push(
+      `COMPANY RESEARCH${
+        company.company ? ` — ${company.company}` : ""
+      }`.trim(),
+    );
+    if (company.summary) {
+      parts.push(company.summary);
+    }
+    if (company.recent_news.length) {
+      parts.push(
+        "Recent news (last 90 days): " +
+          company.recent_news.slice(0, 3).join(" | "),
+      );
+    }
+    if (company.culture_signals.length) {
+      parts.push(
+        "Culture and values signals: " +
+          company.culture_signals.slice(0, 4).join("; "),
+      );
+    }
+    if (company.interview_format) {
+      parts.push(`Interview format intel: ${company.interview_format}`);
+    }
+    if (company.tech_stack) {
+      parts.push(`Tech stack highlights: ${company.tech_stack}`);
+    }
+  }
+
+  return parts.filter(Boolean).join("\n");
 }
