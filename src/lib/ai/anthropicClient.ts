@@ -1,16 +1,6 @@
-import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
-import { consumeSSEStream } from "./geminiClient";
+import { EDGE_BASE } from "@/lib/env";
 import { retry } from "@/lib/utils";
 import type { CoachingContext } from "@/types/ai.types";
-
-// ─────────────────────────────────────────────────────────────────
-// Anthropic Claude Client — redirects to generate-hint (Gemini).
-// Best for: system design, architecture, leadership, complex reasoning.
-// TODO: restore native Claude support once an anthropic edge function
-//       is deployed server-side.
-// ─────────────────────────────────────────────────────────────────
-
-
 
 export interface ClaudeStreamOptions {
   question: string;
@@ -27,16 +17,18 @@ export interface ClaudeStreamOptions {
   signal?: AbortSignal;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Stream Claude hint — falls back to generate-hint (Gemini)
-// ─────────────────────────────────────────────────────────────────
-
-export async function streamClaudeHint(opts: ClaudeStreamOptions): Promise<void> {
+// Stream Claude “hint” — currently proxies to generate-hint EF. [file:1]
+export async function streamClaudeHint(
+  opts: ClaudeStreamOptions
+): Promise<void> {
   const {
-    question, context,
-    sessionId, questionId,
-    simpleLanguage, callType, language,
-    onChunk, onDone, onError, signal,
+    question,
+    context,
+    simpleLanguage,
+    onChunk,
+    onDone,
+    onError,
+    signal,
   } = opts;
 
   const body = JSON.stringify({
@@ -79,10 +71,7 @@ export async function streamClaudeHint(opts: ClaudeStreamOptions): Promise<void>
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Non-streaming Claude call — falls back to generate-hint (Gemini)
-// ─────────────────────────────────────────────────────────────────
-
+// Non‑streaming Claude call → prep-tool EF. [file:1]
 export async function callClaude(payload: {
   system: string;
   messages: Array<{ role: "user" | "assistant"; content: string }>;
@@ -90,7 +79,8 @@ export async function callClaude(payload: {
   max_tokens?: number;
   session_id?: string;
 }): Promise<string> {
-  const userMessage = payload.messages.find((m) => m.role === "user")?.content ?? "";
+  const userMessage =
+    payload.messages.find((m) => m.role === "user")?.content ?? "";
   const combinedPrompt = payload.system
     ? `${payload.system}\n\n${userMessage}`
     : userMessage;
@@ -111,21 +101,23 @@ export async function callClaude(payload: {
   return data.result ?? "";
 }
 
-// ─────────────────────────────────────────────────────────────────
-// System Design specialised prompt — routes through generate-hint
-// ─────────────────────────────────────────────────────────────────
-
+// System design helper — still proxied via prep-tool. [file:1]
 export async function generateSystemDesignGuide(payload: {
   scenario: string;
   scale: "small" | "medium" | "large" | "massive";
   constraints: string[];
-  context: Pick<CoachingContext, "role" | "experience_level" | "target_company">;
+  context: Pick<
+    CoachingContext,
+    "role" | "experience_level" | "target_company"
+  >;
 }): Promise<string> {
   const { scenario, scale, constraints, context } = payload;
 
   const question = `Design a ${scenario}.
 Scale: ${scale} (${getScaleDescription(scale)})
-${constraints.length > 0 ? `Constraints: ${constraints.join(", ")}` : ""}
+${
+  constraints.length > 0 ? `Constraints: ${constraints.join(", ")}` : ""
+}
 
 Provide:
 1. Core components and their responsibilities
@@ -136,7 +128,9 @@ Provide:
 
   return callClaude({
     system: `You are a senior systems architect and technical interviewer coach.
-Candidate: ${context.role ?? "Engineer"}, ${context.experience_level}-level
+Candidate: ${context.role ?? "Engineer"}, ${
+      context.experience_level
+    }-level
 ${context.target_company ? `Target company: ${context.target_company}` : ""}`,
     messages: [{ role: "user", content: question }],
     max_tokens: 1200,
