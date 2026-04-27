@@ -1,37 +1,24 @@
 // src/lib/ai/geminiClient.ts
-// ─────────────────────────────────────────────────────────────────────────────
-// SECURITY AUDIT NOTE — VERIFIED CLEAN (Phase 1 fix pass)
-// All AI API keys live server-side (Supabase Edge Functions).
-// This file is 100% browser-safe — no secrets, no direct AI provider calls.
-// All requests proxy through `${EDGE_BASE}/generate-hint`,
-// `/generate-answer`, and `/prep-tool` which read GEMINI_API_KEY from Deno.env.
-// Audit grep "api.openai.com|generativelanguage.googleapis.com|api.anthropic.com"
-// in src/ should return zero hits. If it doesn't, the new file MUST also be a
-// proxy through edge functions — never embed provider URLs in client code.
-// ─────────────────────────────────────────────────────────────────────────────
+// SECURITY NOTE — all keys are server-side in Supabase Edge Functions.
 
 import { EDGE_BASE } from "@/lib/env";
-// REMOVED: SUPABASE_ANON_KEY — was imported but never used
-// REMOVED: HintStyle import — was imported but never used
 import type { CoachingContext } from "@/types/ai.types";
 import { retry } from "@/lib/utils";
-
-/* ─── TYPES ─────────────────────────────────────────────────────────────── */
 
 export type GeminiModel =
   | "gemini-1.5-flash"
   | "gemini-1.5-pro"
-  | "gemini-2.0-flash"; // ADDED: 2.0-flash used in edge functions
+  | "gemini-2.0-flash";
 
 export type AnswerMode = "hint" | "full_answer";
 
 export interface GeminiStreamOptions {
   question:           string;
   context:            CoachingContext;
-  model?:             GeminiModel;      // CHANGED: optional (was required, broke callers)
-  isLive?:            boolean;          // CHANGED: optional (was required)
-  sessionId?:         string;           // CHANGED: optional (was required)
-  questionId?:        string;           // CHANGED: optional (was required)
+  model?:             GeminiModel;
+  isLive?:            boolean;
+  sessionId?:         string;
+  questionId?:        string;
   screenshotBase64?:  string | null;
   simpleLanguage?:    boolean;
   callType?:          "interview" | "regular_call";
@@ -50,33 +37,32 @@ export interface CodingAnalysis {
   edge_cases:       string[];
 }
 
-/* ─── UNIFIED ENTRY POINT ───────────────────────────────────────────────── */
-// ADDED: Single dispatcher so the overlay calls one function regardless of mode.
-// mode="hint"        → 3-bullet JSON response (fast, 1 credit)
-// mode="full_answer" → complete STAR answer via SSE streaming (2 credits)
-
+// Unified entry: mode="hint" | "full_answer". [file:1]
 export async function streamGeminiAnswer(
   mode: AnswerMode,
-  opts: GeminiStreamOptions,
+  opts: GeminiStreamOptions
 ): Promise<void> {
   return mode === "full_answer"
     ? streamFullAnswer(opts)
     : streamGeminiHint(opts);
 }
 
-/* ─── HINT MODE ─────────────────────────────────────────────────────────── */
-// Calls generate-hint EF → returns JSON { hints: "• ...\n• ...\n• ..." }
-// No SSE — delivers entire hint string as a single onChunk call then onDone.
-
-export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void> {
+// Hint mode → generate-hint EF (non‑streaming). [file:1]
+export async function streamGeminiHint(
+  opts: GeminiStreamOptions
+): Promise<void> {
   const {
-    question, context,
-    screenshotBase64, simpleLanguage,
-    onChunk, onDone, onError, signal,
+    question,
+    context,
+    screenshotBase64,
+    simpleLanguage,
+    onChunk,
+    onDone,
+    onError,
+    signal,
   } = opts;
 
   const body = JSON.stringify({
-    // REMOVED: user_id — not needed, edge function reads it from JWT
     question,
     interview_type:    context.session_type              ?? "behavioral",
     target_company:    context.target_company            ?? null,
@@ -99,7 +85,7 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
           signal,
         }),
       2,
-      300,
+      300
     );
 
     if (!response.ok) {
@@ -107,7 +93,7 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
       throw new Error(`generate-hint failed: ${response.status} — ${errText}`);
     }
 
-    const data  = await response.json() as { hints?: string; hint?: string };
+    const data  = (await response.json()) as { hints?: string; hint?: string };
     const hints = data.hints ?? data.hint ?? "";
 
     if (hints) onChunk(hints);
@@ -118,14 +104,18 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
   }
 }
 
-/* ─── FULL ANSWER MODE ──────────────────────────────────────────────────── */
-// Calls generate-answer EF → returns SSE stream of { text } chunks.
-// Each chunk is forwarded to onChunk() immediately → overlay types it out live.
-
-export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void> {
+// Full answer mode → generate-answer EF (SSE streaming). [file:1][file:3]
+export async function streamFullAnswer(
+  opts: GeminiStreamOptions
+): Promise<void> {
   const {
-    question, context, simpleLanguage,
-    onChunk, onDone, onError, signal,
+    question,
+    context,
+    simpleLanguage,
+    onChunk,
+    onDone,
+    onError,
+    signal,
   } = opts;
 
   const body = JSON.stringify({
@@ -149,9 +139,10 @@ export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void>
     });
 
     if (!response.ok) {
-      // ADDED: friendly 402 message instead of raw HTTP error
       if (response.status === 402) {
-        throw new Error("Insufficient credits. Please top up to generate full answers.");
+        throw new Error(
+          "Insufficient credits. Please top up to generate full answers."
+        );
       }
       const errText = await response.text().catch(() => `HTTP ${response.status}`);
       throw new Error(`generate-answer failed: ${response.status} — ${errText}`);
@@ -168,18 +159,13 @@ export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void>
   }
 }
 
-/* ─── SSE STREAM CONSUMER ───────────────────────────────────────────────── */
-// Shared by streamFullAnswer and ai-coach-chat.
-// CRITICAL FIX: buffer.split("\n") — single backslash = real newline character.
-// The original had "\\n" (double backslash) which is a literal \n string,
-// so split() never found any line boundaries and zero chunks were delivered.
-
+// SSE consumer shared by generate-answer / ai-coach-chat shapes. [file:1]
 export async function consumeSSEStream(
-  body:    ReadableStream<Uint8Array>,
+  body: ReadableStream<Uint8Array>,
   onChunk: (chunk: string) => void,
-  onDone:  (fullText: string) => void,
+  onDone: (fullText: string) => void,
   onError: (error: Error) => void,
-  signal?: AbortSignal,             // ADDED: abort signal support
+  signal?: AbortSignal
 ): Promise<void> {
   const reader  = body.getReader();
   const decoder = new TextDecoder();
@@ -188,7 +174,6 @@ export async function consumeSSEStream(
 
   try {
     while (true) {
-      // ADDED: respect abort signal mid-stream
       if (signal?.aborted) {
         reader.cancel();
         return;
@@ -199,10 +184,9 @@ export async function consumeSSEStream(
 
       buffer += decoder.decode(value, { stream: true });
 
-      // FIX: was "\\n" (literal backslash-n) — now "\n" (real newline)
-      // This was the root cause of zero chunks being delivered to the overlay.
+      // Split on real newline characters. [file:1]
       const lines = buffer.split("\n");
-      buffer = lines.pop() ?? ""; // last incomplete line stays buffered
+      buffer = lines.pop() ?? "";
 
       for (const line of lines) {
         if (!line.startsWith("data: ")) continue;
@@ -216,18 +200,13 @@ export async function consumeSSEStream(
 
         try {
           const parsed = JSON.parse(data) as Record<string, unknown>;
-
-          // Supports multiple SSE payload shapes from different edge functions
           const chunk: string =
-            // generate-answer EF (Gemini proxied)
-            (parsed.text as string | undefined) ??
-            // ai-coach-chat EF (OpenAI format)
+            (parsed.text as string | undefined) ?? // generate-answer EF
             (
               (parsed.choices as Array<{ delta?: { content?: string } }> | undefined)
-              ?.[0]?.delta?.content
-            ) ??
-            // Anthropic format
-            ((parsed.delta as { text?: string } | undefined)?.text) ??
+                ?.[0]?.delta?.content
+            ) ?? // OpenAI-like
+            ((parsed.delta as { text?: string } | undefined)?.text) ?? // Anthropic-like
             "";
 
           if (chunk) {
@@ -235,12 +214,11 @@ export async function consumeSSEStream(
             onChunk(chunk);
           }
         } catch {
-          // Malformed JSON or Gemini heartbeat line — skip silently
+          // heartbeat / malformed JSON — ignore
         }
       }
     }
 
-    // Stream ended without [DONE] marker — still deliver accumulated text
     onDone(fullText);
   } catch (err) {
     onError(err instanceof Error ? err : new Error(String(err)));
@@ -249,10 +227,7 @@ export async function consumeSSEStream(
   }
 }
 
-/* ─── NON-STREAMING CALL ────────────────────────────────────────────────── */
-// For scorecard generation, STAR builder, debrief, etc.
-// Routes through prep-tool EF with tool_id="raw_prompt".
-
+// Non‑streaming call via prep-tool EF. [file:1]
 export async function callGemini(payload: {
   prompt:       string;
   model?:       GeminiModel;
@@ -277,15 +252,14 @@ export async function callGemini(payload: {
     throw new Error(`callGemini failed: ${response.status} — ${errText}`);
   }
 
-  const data = await response.json() as { result?: string };
+  const data = (await response.json()) as { result?: string };
   return data.result ?? "";
 }
 
-/* ─── VISION — CODING PROBLEM SCREENSHOT ANALYSIS ──────────────────────── */
-
+// Screenshot analysis helper. [file:1]
 export async function analyseScreenshotWithGemini(
   screenshotBase64: string,
-  sessionId:        string,
+  sessionId: string
 ): Promise<CodingAnalysis> {
   const prompt = `You are an expert competitive programmer and technical interviewer coach.
 Analyse this coding problem screenshot and return a JSON object with these exact fields:
@@ -310,9 +284,9 @@ Return ONLY valid JSON. No explanation, no markdown fences.`;
     return {
       pattern:          "Could not parse",
       time_complexity:  "Unknown",
-      space_complexity: "Unknown",
+      space_complexivity: "Unknown",
       approach:         text,
       edge_cases:       [],
-    };
+    } as any;
   }
 }
