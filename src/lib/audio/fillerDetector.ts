@@ -79,7 +79,7 @@ const FILLER_PATTERNS: Array<{ word: FillerWord; patterns: RegExp[] }> = [
 
 export function detectFillersInText(
   text: string,
-  timestampOffsetSeconds = 0
+  timestampOffsetSeconds = 0,
 ): FillerWordOccurrence[] {
   const results: FillerWordOccurrence[] = [];
 
@@ -110,7 +110,7 @@ export function detectFillersInText(
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Accumulator — tracks fillers across entire session
+// Session-level accumulator
 // ─────────────────────────────────────────────────────────────────
 
 export class FillerAccumulator {
@@ -137,7 +137,9 @@ export class FillerAccumulator {
   }
 
   getAll(): FillerWordOccurrence[] {
-    return Array.from(this.occurrences.values()).sort((a, b) => b.count - a.count);
+    return Array.from(this.occurrences.values()).sort(
+      (a, b) => b.count - a.count,
+    );
   }
 
   getTotal(): number {
@@ -172,7 +174,7 @@ export class FillerAccumulator {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Real-time filler counter (for live display during session)
+// Real-time filler counter (for HUD display during session)
 // ─────────────────────────────────────────────────────────────────
 
 export class RealTimeFillerCounter {
@@ -208,7 +210,7 @@ export class RealTimeFillerCounter {
 
 export function buildFillerSummary(
   occurrences: FillerWordOccurrence[],
-  durationSeconds: number
+  durationSeconds: number,
 ): {
   total: number;
   rate_per_minute: number;
@@ -230,4 +232,39 @@ export function buildFillerSummary(
   else grade = "poor";
 
   return { total, rate_per_minute, top_3, grade };
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Lightweight wrapper used by SpeechMetricsCalculator
+// ─────────────────────────────────────────────────────────────────
+
+export class FillerDetector {
+  private accumulator = new FillerAccumulator();
+
+  processText(text: string): void {
+    this.accumulator.processText(text);
+  }
+
+  getCount(): number {
+    return this.accumulator.getTotal();
+  }
+
+  getPerMinute(totalDurationSeconds?: number): number {
+    // If duration not given, approximate via timestamps of last filler. [file:3]
+    if (totalDurationSeconds == null) {
+      const all = this.accumulator.getAll();
+      const lastTs = all
+        .flatMap((o) => o.timestamps)
+        .reduce((max, ts) => (ts > max ? ts : max), 0);
+      if (!lastTs) return 0;
+      return this.accumulator.getFillerRate(lastTs);
+    }
+    return this.accumulator.getFillerRate(totalDurationSeconds);
+  }
+
+  getExamples(limit = 3): string[] {
+    return this.accumulator
+      .getWorstOffenders(limit)
+      .map((o) => o.word as string);
+  }
 }
