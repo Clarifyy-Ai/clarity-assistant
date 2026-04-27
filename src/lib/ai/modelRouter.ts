@@ -22,16 +22,10 @@ import { useOverlayStore } from "@/store/overlayStore";
 //   5. Primary model failure → automatic fallback chain
 //
 // IMPORTANT — multi-provider routing actually happens server-side:
-//   - The frontend `geminiClient`, `openaiClient`, `anthropicClient`
-//     modules all proxy through Supabase Edge Functions. Browsers
-//     cannot safely hold provider API keys, so direct provider calls
-//     would either leak keys or require BYOK on every request.
-//   - The real provider dispatch lives in `_shared/utils.ts` `callAI()`
-//     and uses `PROVIDER_MAP` to route by model id (gpt-4o → OpenAI,
-//     claude-* → Anthropic, gemini-* → Gemini).
-//   - When the user provides BYOK keys, the apiClient attaches them as
-//     `x-byok-{provider}` headers; the EF reads them via `extractBYOK()`
-//     and prefers them over the server-side fallback keys.
+//   - The frontend clients all proxy through Supabase Edge Functions.
+//   - Provider dispatch lives in `_shared/utils.ts` callAI() on the
+//     backend, using PROVIDER_MAP to route by model id.
+//   - BYOK keys are attached as x-byok-{provider} headers on EF calls.
 // ─────────────────────────────────────────────────────────────────
 
 export interface RouteHintOptions {
@@ -54,7 +48,83 @@ export interface RouteHintOptions {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Main router entry point
+// Pipeline-facing Stage 4 API (full answer generation)
+// Used by src/lib/ai/answerGenerationPipeline.ts
+// ─────────────────────────────────────────────────────────────────
+
+export interface RouteAnswerGenerationOptions {
+  questionText: string;
+  questionTypeHint?: InterviewType;
+  modelHint?: PreferredAIModel | string;
+  context: CoachingContext;
+  onToken: (chunk: string) => void;
+  onDone: (fullText: string) => void;
+}
+
+/**
+ * Stage 4 – AI Generation for the 6‑stage pipeline.
+ * For v1 this calls the generate-answer EF via Gemini, while still
+ * running client-side model selection to support metrics/logging. [file:1][file:3]
+ */
+export async function routeAnswerGeneration(
+  opts: RouteAnswerGenerationOptions
+): Promise<void> {
+  const networkStore = useNetworkStore.getState();
+  const overlayStore = useOverlayStore.getState();
+  const authStore    = useAuthStore.getState();
+
+  const isOffline  = networkStore.mode === "offline";
+  const isDegraded = networkStore.mode === "degraded";
+
+  // Offline: immediate resume/template fallback, queue real request. [file:3]
+  if (isOffline) {
+    const fallback = getResumeFallbackOrTemplate(
+      (opts.questionTypeHint ?? "behavioural") as InterviewType,
+      opts.context.hint_style
+    );
+    overlayStore.setOfflineFallback(fallback);
+    networkStore.setQueuedHintRequest(true);
+    return;
+  }
+
+  // Derive preferred model from user settings or hint
+  const preferred =
+    (opts.modelHint as PreferredAIModel | undefined) ??
+    (authStore.profile?.preferred_model as PreferredAIModel | undefined) ??
+    ("gemini-flash" as PreferredAIModel);
+
+  const effectiveModel = selectModel(
+    preferred,
+    (opts.questionTypeHint ?? "behavioural") as InterviewType,
+    isDegraded
+  );
+
+  overlayStore.setNetworkColor(networkStore.getOverlayColor());
+
+  const start = Date.now();
+
+  // NOTE: server-side generate-answer can later route Claude/GPT‑4o/Gemini
+  // based on effectiveModel; client only cares about streaming. [file:1][file:3]
+  await streamFullAnswer({
+    question: opts.questionText,
+    context:  opts.context,
+    simpleLanguage: opts.context.simple_language ?? false,
+    onChunk: (chunk) => {
+      opts.onToken(chunk);
+    },
+    onDone: (fullText) => {
+      const elapsed = Date.now() - start;
+      useNetworkStore.getState().recordAIResponseTime(elapsed);
+      opts.onDone(fullText);
+    },
+    onError: (err) => {
+      console.error("[ModelRouter] routeAnswerGeneration error:", err);
+    },
+  });
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Helpers
 // ─────────────────────────────────────────────────────────────────
 
 function getResumeFallbackOrTemplate(
@@ -67,15 +137,24 @@ function getResumeFallbackOrTemplate(
   return getOfflineTemplate(interviewType, hintStyle);
 }
 
+// ─────────────────────────────────────────────────────────────────
+// Main router entry point (hint + full answer from overlay)
+// ─────────────────────────────────────────────────────────────────
+
 export async function routeHint(opts: RouteHintOptions): Promise<void> {
-  // If full_answer mode, bypass model selection and go directly to generate-answer
+  // Full answer mode → delegate to pipeline-style Stage 4 wrapper. [file:1][file:3]
   if (opts.answerMode === "full_answer") {
     try {
       const overlayStore = useOverlayStore.getState();
       overlayStore.setHintState("streaming");
-      await streamFullAnswer({
-        ...opts,
-        model: "gemini-1.5-flash",
+
+      await routeAnswerGeneration({
+        questionText: opts.question,
+        questionTypeHint: opts.interviewType,
+        modelHint: opts.preferredModel,
+        context: opts.context,
+        onToken: opts.onChunk,
+        onDone: opts.onDone,
       });
     } catch (err) {
       console.error("[ModelRouter] Full answer failed:", err);
@@ -89,7 +168,10 @@ export async function routeHint(opts: RouteHintOptions): Promise<void> {
 
   // ── Offline fallback — serve immediately, queue real request ──
   if (networkStore.mode === "offline") {
-    const fallback = getResumeFallbackOrTemplate(opts.interviewType, opts.context.hint_style);
+    const fallback = getResumeFallbackOrTemplate(
+      opts.interviewType,
+      opts.context.hint_style
+    );
     overlayStore.setOfflineFallback(fallback);
     networkStore.setQueuedHintRequest(true);
     return;
@@ -117,21 +199,37 @@ export async function routeHint(opts: RouteHintOptions): Promise<void> {
       try {
         await callModel(fallbackModel, opts);
       } catch (fallbackErr) {
-        console.error(`[ModelRouter] Fallback model ${fallbackModel} also failed.`);
-        const fallback = getResumeFallbackOrTemplate(opts.interviewType, opts.context.hint_style);
+        console.error(
+          `[ModelRouter] Fallback model ${fallbackModel} also failed.`
+        );
+        const fallback = getResumeFallbackOrTemplate(
+          opts.interviewType,
+          opts.context.hint_style
+        );
         overlayStore.setOfflineFallback(fallback);
-        opts.onError(fallbackErr instanceof Error ? fallbackErr : new Error(String(fallbackErr)));
+        opts.onError(
+          fallbackErr instanceof Error
+            ? fallbackErr
+            : new Error(String(fallbackErr))
+        );
       }
     } else {
-      const fallback = getResumeFallbackOrTemplate(opts.interviewType, opts.context.hint_style);
+      const fallback = getResumeFallbackOrTemplate(
+        opts.interviewType,
+        opts.context.hint_style
+      );
       overlayStore.setOfflineFallback(fallback);
-      opts.onError(primaryErr instanceof Error ? primaryErr : new Error(String(primaryErr)));
+      opts.onError(
+        primaryErr instanceof Error
+          ? primaryErr
+          : new Error(String(primaryErr))
+      );
     }
   }
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Model selection logic
+// Model selection logic (matches manual: Ch. 8.2)
 // ─────────────────────────────────────────────────────────────────
 
 export function selectModel(
@@ -146,6 +244,8 @@ export function selectModel(
   if (preferred !== "gemini-flash") return preferred;
 
   // Auto-route by interview type when user chose Flash (default)
+  // Manual mapping: System Design/Technical → Claude; Behavioral/Leadership → GPT‑4o;
+  // HR/simple → Gemini Flash; generic/other → Gemini Pro. [file:1][file:3]
   const typeModelMap: Partial<Record<InterviewType, PreferredAIModel>> = {
     system_design: "claude",
     leadership:    "claude",
@@ -165,16 +265,16 @@ export function selectModel(
 
 function getFallbackModel(failed: PreferredAIModel): PreferredAIModel | null {
   const chain: Record<PreferredAIModel, PreferredAIModel | null> = {
-    "claude":        "gpt-4o",
-    "gpt-4o":        "gemini-pro",
-    "gemini-pro":    "gemini-flash",
-    "gemini-flash":  null,
+    claude:       "gpt-4o",
+    "gpt-4o":     "gemini-pro",
+    "gemini-pro": "gemini-flash",
+    "gemini-flash": null,
   };
   return chain[failed];
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Dispatch to correct client
+// Dispatch to correct client (hint mode)
 // ─────────────────────────────────────────────────────────────────
 
 async function callModel(
@@ -230,13 +330,14 @@ export function getCreditCost(model: PreferredAIModel): number {
     "gemini-flash": 1,
     "gemini-pro":   2,
     "gpt-4o":       3,
-    "claude":       3,
+    claude:         3,
   };
   return costs[model] ?? 1;
 }
 
 // ─────────────────────────────────────────────────────────────────
 // Guard — check credits before routing
+// (actual deduction happens in Blocker 4 via Edge Functions)
 // ─────────────────────────────────────────────────────────────────
 
 export function canAffordModel(
