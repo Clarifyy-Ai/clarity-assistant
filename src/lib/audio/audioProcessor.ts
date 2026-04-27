@@ -7,15 +7,16 @@
 
 import { AudioError } from "@/lib/errors";
 import { ErrorCode } from "@/lib/errors";
+import type { SpeechMetrics } from "@/lib/audio/speechMetricsCalculator";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const DEFAULT_SAMPLE_RATE     = 16000;  // Hz — Deepgram optimal
-const DEFAULT_CHUNK_SIZE_MS   = 100;    // ms per processing chunk
-const DEFAULT_GAIN            = 1.2;    // slight boost
-const NOISE_GATE_THRESHOLD    = 0.01;   // amplitude below this = silence
-const MAX_GAIN                = 4.0;
-const MIN_GAIN                = 0.1;
+const DEFAULT_SAMPLE_RATE   = 16000;  // Hz — Deepgram optimal
+const DEFAULT_CHUNK_SIZE_MS = 100;    // ms per processing chunk
+const DEFAULT_GAIN          = 1.2;    // slight boost
+const NOISE_GATE_THRESHOLD  = 0.01;   // amplitude below this = silence
+const MAX_GAIN              = 4.0;
+const MIN_GAIN              = 0.1;
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -48,6 +49,10 @@ export interface AudioProcessorConfig {
   onSilenceEnd?: (timestampMs: number, silenceDurationMs: number) => void;
   onVolumeChange?: (rms: number, peak: number) => void;
   onError?: (error: AudioError) => void;
+
+  // New hooks for speech metrics integration. [file:3][web:118]
+  onSpeechChunk?: (samples: Float32Array) => void;
+  onMetrics?: (metrics: SpeechMetrics) => void; // reserved for future use
 }
 
 export interface AudioProcessorStats {
@@ -118,7 +123,7 @@ function float32ToPCM16(float32: Float32Array): Int16Array {
 // ─── Auto Gain Control ────────────────────────────────────────────────────────
 
 class AutoGainController {
-  private targetRMS  = 0.15;
+  private targetRMS   = 0.15;
   private currentGain = 1.0;
   private smoothing   = 0.95; // exponential smoothing factor
 
@@ -165,20 +170,22 @@ export class AudioProcessor {
 
   constructor(config: AudioProcessorConfig = {}) {
     this.config = {
-      sampleRate:           config.sampleRate          ?? DEFAULT_SAMPLE_RATE,
-      chunkSizeMs:          config.chunkSizeMs         ?? DEFAULT_CHUNK_SIZE_MS,
-      gain:                 config.gain                ?? DEFAULT_GAIN,
-      noiseGateThreshold:   config.noiseGateThreshold  ?? NOISE_GATE_THRESHOLD,
-      enableNoiseGate:      config.enableNoiseGate     ?? true,
-      enableAutoGain:       config.enableAutoGain      ?? false,
-      enableResampling:     config.enableResampling    ?? true,
-      outputFormat:         config.outputFormat        ?? "pcm16",
-      channelCount:         config.channelCount        ?? 1,
-      onChunk:              config.onChunk             ?? (() => {}),
-      onSilenceStart:       config.onSilenceStart      ?? (() => {}),
-      onSilenceEnd:         config.onSilenceEnd        ?? (() => {}),
-      onVolumeChange:       config.onVolumeChange      ?? (() => {}),
-      onError:              config.onError             ?? (() => {}),
+      sampleRate:         config.sampleRate        ?? DEFAULT_SAMPLE_RATE,
+      chunkSizeMs:        config.chunkSizeMs       ?? DEFAULT_CHUNK_SIZE_MS,
+      gain:               config.gain              ?? DEFAULT_GAIN,
+      noiseGateThreshold: config.noiseGateThreshold ?? NOISE_GATE_THRESHOLD,
+      enableNoiseGate:    config.enableNoiseGate   ?? true,
+      enableAutoGain:     config.enableAutoGain    ?? false,
+      enableResampling:   config.enableResampling  ?? true,
+      outputFormat:       config.outputFormat      ?? "pcm16",
+      channelCount:       config.channelCount      ?? 1,
+      onChunk:            config.onChunk           ?? (() => {}),
+      onSilenceStart:     config.onSilenceStart    ?? (() => {}),
+      onSilenceEnd:       config.onSilenceEnd      ?? (() => {}),
+      onVolumeChange:     config.onVolumeChange    ?? (() => {}),
+      onError:            config.onError           ?? (() => {}),
+      onSpeechChunk:      config.onSpeechChunk     ?? (() => {}),
+      onMetrics:          config.onMetrics         ?? (() => {}),
     };
   }
 
@@ -282,7 +289,12 @@ export class AudioProcessor {
     // 5. Volume change callback
     this.config.onVolumeChange(rms, peak);
 
-    // 6. Convert to output format
+    // 6. Forward candidate speech to metrics engine (16kHz mono). [file:3][web:118]
+    if (!isSilent) {
+      this.config.onSpeechChunk(processed);
+    }
+
+    // 7. Convert to output format
     const durationMs =
       (processed.length / this.config.sampleRate) * 1000;
 
@@ -291,7 +303,7 @@ export class AudioProcessor {
         ? float32ToPCM16(processed)
         : processed;
 
-    // 7. Build chunk
+    // 8. Build chunk
     const chunk: AudioChunk = {
       data:         outputData,
       format:       this.config.outputFormat,
@@ -304,10 +316,10 @@ export class AudioProcessor {
       peakAmplitude: peak,
     };
 
-    // 8. Update stats
+    // 9. Update stats
     this.updateStats(rms, isSilent, durationMs);
 
-    // 9. Dispatch to consumer
+    // 10. Dispatch to consumer (e.g. Deepgram)
     if (!isSilent) {
       this.config.onChunk(chunk);
     }
@@ -417,10 +429,8 @@ export class AudioProcessor {
  *   enableNoiseGate: true,
  *   onChunk: (chunk) => sendToDeepgram(chunk.data),
  *   onSilenceStart: (ts) => console.log("Silence at", ts),
+ *   onSpeechChunk: (samples) => metricsCalculator.processAudioChunk(samples, true),
  * });
- *
- * // Later:
- * await processor.destroy();
  */
 export async function createAudioProcessor(
   stream: MediaStream,
