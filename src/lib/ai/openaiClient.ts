@@ -1,15 +1,6 @@
 import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
-import { consumeSSEStream } from "./geminiClient";
 import { retry } from "@/lib/utils";
 import type { CoachingContext } from "@/types/ai.types";
-
-// ─────────────────────────────────────────────────────────────────
-// OpenAI Client — redirects to generate-hint (Gemini) edge function.
-// TODO: restore native GPT-4o support once an openai edge function
-//       is deployed server-side.
-// ─────────────────────────────────────────────────────────────────
-
-
 
 export interface OpenAIStreamOptions {
   question: string;
@@ -26,17 +17,18 @@ export interface OpenAIStreamOptions {
   signal?: AbortSignal;
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Stream GPT-4o hint — falls back to generate-hint (Gemini) until
-// a dedicated openai edge function is deployed.
-// ─────────────────────────────────────────────────────────────────
-
-export async function streamOpenAIHint(opts: OpenAIStreamOptions): Promise<void> {
+// Stream GPT‑4o “hint” — actually proxies to generate-hint EF (Gemini). [file:1]
+export async function streamOpenAIHint(
+  opts: OpenAIStreamOptions
+): Promise<void> {
   const {
-    question, context,
-    sessionId, questionId,
-    simpleLanguage, callType, language,
-    onChunk, onDone, onError, signal,
+    question,
+    context,
+    simpleLanguage,
+    onChunk,
+    onDone,
+    onError,
+    signal,
   } = opts;
 
   const body = JSON.stringify({
@@ -79,10 +71,7 @@ export async function streamOpenAIHint(opts: OpenAIStreamOptions): Promise<void>
   }
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Non-streaming call — falls back to generate-hint
-// ─────────────────────────────────────────────────────────────────
-
+// Non‑streaming call via prep-tool EF. [file:1]
 export async function callOpenAI(payload: {
   messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
   model?: string;
@@ -91,8 +80,10 @@ export async function callOpenAI(payload: {
   response_format?: { type: "json_object" | "text" };
   session_id?: string;
 }): Promise<string> {
-  const systemMsg  = payload.messages.find((m) => m.role === "system")?.content ?? "";
-  const userMessage = payload.messages.find((m) => m.role === "user")?.content ?? "";
+  const systemMsg =
+    payload.messages.find((m) => m.role === "system")?.content ?? "";
+  const userMessage =
+    payload.messages.find((m) => m.role === "user")?.content ?? "";
   const combined = systemMsg ? `${systemMsg}\n\n${userMessage}` : userMessage;
 
   const response = await fetch(`${EDGE_BASE}/prep-tool`, {
@@ -112,10 +103,7 @@ export async function callOpenAI(payload: {
   return data.result ?? "";
 }
 
-// ─────────────────────────────────────────────────────────────────
-// Coach chat — routes to ai-coach-chat edge function
-// ─────────────────────────────────────────────────────────────────
-
+// Coach chat → ai-coach-chat EF (non‑streaming in current version). [file:1]
 export async function streamCoachChat(opts: {
   messages: Array<{ role: "user" | "assistant"; content: string }>;
   context: CoachingContext;
@@ -125,17 +113,19 @@ export async function streamCoachChat(opts: {
   onError: (error: Error) => void;
   signal?: AbortSignal;
 }): Promise<void> {
-  const { messages, context, sessionId, onChunk, onDone, onError, signal } = opts;
+  const { messages, context, sessionId, onChunk, onDone, onError, signal } =
+    opts;
 
-  const lastUserMessage = [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
+  const lastUserMessage =
+    [...messages].reverse().find((m) => m.role === "user")?.content ?? "";
 
-  // Build a context-rich question string for the coach to understand the session.
-  // ai-coach-chat uses `question` as the current interview question + context prefix.
   const questionContext = [
     context.session_type && `Interview type: ${context.session_type}`,
     context.role && `Role: ${context.role}`,
     context.target_company && `Target company: ${context.target_company}`,
-  ].filter(Boolean).join(" | ");
+  ]
+    .filter(Boolean)
+    .join(" | ");
 
   const body = JSON.stringify({
     session_id:   sessionId,
@@ -158,7 +148,10 @@ export async function streamCoachChat(opts: {
       signal,
     });
 
-    if (!response.ok) throw new Error(`Coach chat failed: ${response.status}`);
+    if (!response.ok) {
+      throw new Error(`Coach chat failed: ${response.status}`);
+    }
+
     const data = await response.json();
     const reply: string = data.reply ?? "";
     if (reply) onChunk(reply);
