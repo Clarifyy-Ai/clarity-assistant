@@ -1,3 +1,5 @@
+// src/lib/stealth/stealthConfig.ts
+
 export const STEALTH_NAV_LABELS: Record<string, string> = {
   "Dashboard": "Home",
   "Live Co-Pilot": "Daily Standup",
@@ -49,6 +51,23 @@ export const STEALTH_BRAND = {
   name: "WorkFlow",
   tagline: "Project Management Suite",
 };
+
+/**
+ * Manual spec: when stealth is active, overlay opacity should auto-fade
+ * to ~15% when the mouse leaves the overlay region (Ch. 6.2).
+ * This is used by screenCaptureBlocker.ts to keep UX consistent.
+ */
+export const STEALTH_OPACITY = {
+  active: 1,
+  faded: 0.15,
+};
+
+/**
+ * DOM id used by the overlay root element so stealth utilities can
+ * attach opacity + focus listeners. Make sure your OverlayWindow
+ * root uses this id (e.g. <div id="clarify-overlay-root">).
+ */
+export const STEALTH_OVERLAY_ROOT_ID = "clarify-overlay-root";
 
 export function getStealthLabel(label: string, isStealth: boolean): string {
   if (!isStealth) return label;
