@@ -1,6 +1,8 @@
-// generate-answer/index.ts — Full STAR-format answer generator with SSE streaming
+// supabase/functions/generate-answer/index.ts
+// Full STAR-format answer generator with SSE streaming via Gemini 2.0 Flash.
+
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
-import { createServiceClient } from "../_shared/supabase.ts";
+import { createServiceClient, deductCreditsAtomic } from "../_shared/supabase.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const GEMINI_BASE    = "https://generativelanguage.googleapis.com/v1beta";
@@ -15,41 +17,40 @@ Requirements:
 - Be specific — reference the resume context when available
 - Do NOT say "Situation:", "Task:", etc. — weave the structure naturally into the prose`;
 
+// Cost in credits for a full STAR answer (manual: “Live Answer Generation Long 200 tokens → 12 credits”,
+// you can adjust this COST to match your pricing model; we keep it 2 per your draft). [file:1][file:3]
+const COST = 2;
+
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
   const headers = getCorsHeaders(req);
+  const db = createServiceClient();
 
   try {
-    /* ── AUTH ──────────────────────────────────────────────────────────── */
-    const db          = createServiceClient();
-    const authHeader  = req.headers.get("authorization") ?? req.headers.get("Authorization") ?? "";
+    // ── AUTH ─────────────────────────────────────────────────────
+    const authHeader =
+      req.headers.get("authorization") ?? req.headers.get("Authorization") ?? "";
 
-    if (!new RegExp("^bearer\\s+", "i").test(authHeader)) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...headers, "Content-Type": "application/json" },
-      });
+    if (!/^bearer\s+/i.test(authHeader)) {
+      return json(headers, 401, { error: "Unauthorized" });
     }
 
-    const token = authHeader.replace(new RegExp("^bearer\\s+", "i"), "");
-    const { data: { user }, error: authErr } = await db.auth.getUser(token);
+    const token = authHeader.replace(/^bearer\s+/i, "");
+    const {
+      data: { user },
+      error: authErr,
+    } = await db.auth.getUser(token);
 
     if (authErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...headers, "Content-Type": "application/json" },
-      });
+      return json(headers, 401, { error: "Unauthorized" });
     }
 
-    /* ── PARSE BODY ────────────────────────────────────────────────────── */
+    // ── BODY PARSE & VALIDATION ──────────────────────────────────
     const body = await req.json().catch(() => null);
     if (!body?.question) {
-      return new Response(JSON.stringify({ error: "Missing required field: question" }), {
-        status: 400,
-        headers: { ...headers, "Content-Type": "application/json" },
-      });
+      return json(headers, 400, { error: "Missing required field: question" });
     }
 
     const question      = String(body.question).slice(0, 500);
@@ -59,93 +60,59 @@ Deno.serve(async (req: Request) => {
     const company       = String(body.target_company  ?? "").slice(0, 50);
     const sessionId     = body.session_id ?? null;
 
-    /* ── CREDITS CHECK ─────────────────────────────────────────────────── */
-    const COST = 2;
-
-    const { data: profile, error: profileErr } = await db
-      .from("profiles")
-      .select("credits")
-      .eq("id", user.id)
-      .single();
-
-    if (profileErr || !profile) {
-      return new Response(JSON.stringify({ error: "Could not fetch user profile" }), {
-        status: 500,
-        headers: { ...headers, "Content-Type": "application/json" },
-      });
-    }
-
-    if ((profile.credits ?? 0) < COST) {
-      return new Response(
-        JSON.stringify({ error: `Insufficient credits. Need ${COST}, have ${profile.credits ?? 0}.` }),
-        { status: 402, headers: { ...headers, "Content-Type": "application/json" } },
-      );
-    }
-
-    /* ── GEMINI AVAILABILITY CHECK ─────────────────────────────────────── */
+    // ── GEMINI CONFIG CHECK ──────────────────────────────────────
     if (!GEMINI_API_KEY) {
-      return new Response(JSON.stringify({ error: "AI service not configured" }), {
-        status: 503,
-        headers: { ...headers, "Content-Type": "application/json" },
+      return json(headers, 503, { error: "AI service not configured" });
+    }
+
+    // ── CREDITS DEDUCTION (ATOMIC) ───────────────────────────────
+    // Use a shared helper that:
+    //  - Performs an atomic UPDATE on profiles.credits
+    //  - Inserts into credittransactions with balancebefore/balanceafter
+    //  - Returns { success, error, balanceAfter }
+    const deduction = await deductCreditsAtomic({
+      userId: user.id,
+      action: "liveanswerlong", // aligns with manual: Live Answer Generation Long [file:1][file:3]
+      cost: COST,
+      sessionId,
+    });
+
+    if (!deduction.success) {
+      return json(headers, 402, {
+        error: deduction.error ?? "Insufficient credits",
       });
     }
 
-    /* ── DEDUCT CREDITS BEFORE GENERATION ──────────────────────────────── */
-    // Use the correct DB function signature: deduct_credits(p_action, p_cost, p_session_id)
-    // This RPC uses auth.uid() internally via the service client, but since we're
-    // using createServiceClient (service role), auth.uid() is null.
-    // Instead, use the shared deductCredits helper which does atomic UPDATE.
-    const { deductCredits } = await import("../_shared/supabase.ts");
-    const deductResult = await deductCredits(user.id, "Full STAR answer generation", COST);
+    const balanceAfter = deduction.balanceAfter ?? 0;
 
-    if (!deductResult.success) {
-      console.error("[generate-answer] Credit deduction failed:", deductResult.error);
-      return new Response(
-        JSON.stringify({ error: deductResult.error ?? "Credit deduction failed" }),
-        { status: 402, headers: { ...headers, "Content-Type": "application/json" } },
-      );
-    }
-
-    /* ── BUILD PROMPT ──────────────────────────────────────────────────── */
+    // ── GEMINI PROMPT BUILD ──────────────────────────────────────
     const userPrompt = [
       `Interview type: ${interviewType}`,
       `Company: ${company || "not specified"}`,
       `Question: "${question}"`,
-      `Candidate's answer so far: "${transcript || "Nothing yet — generate a complete answer from scratch"}"`,
+      `Candidate's answer so far: "${
+        transcript || "Nothing yet — generate a complete answer from scratch"
+      }"`,
       `Resume context: ${resumeCtx || "None provided"}`,
       "",
       "Generate a complete, natural STAR-format answer (150-200 words) for this interview question.",
     ].join("\n");
 
-    /* ── REFUND HELPER (used on Gemini failure) ────────────────────────── */
+    // ── REFUND HELPER (pre-stream failure) ───────────────────────
     const refundCredits = async (reason: string) => {
       try {
-        const { error: refundErr } = await db
-          .from("profiles")
-          .update({
-            credits: (profile.credits ?? 0), // restore to pre-deduction balance
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", user.id);
-        if (refundErr) {
-          console.error("[generate-answer] Refund failed:", refundErr.message, "reason:", reason);
-        } else {
-          console.log("[generate-answer] Refunded", COST, "credits to", user.id, "—", reason);
-          // Log a refund transaction so audit trail is complete
-          await db.from("credit_transactions").insert({
-            user_id: user.id,
-            action: "refund",
-            amount: COST,
-            balance_after: profile.credits ?? 0,
-            description: `Refund: ${reason}`,
-          });
-        }
+        // Re-add COST to credits and log a refund transaction via helper.
+        await db.rpc("refund_credits", {
+          p_user_id: user.id,
+          p_amount:  COST,
+          p_reason:  reason,
+        });
       } catch (e) {
-        console.error("[generate-answer] Refund threw:", e);
+        console.error("[generate-answer] Refund failed:", e);
       }
     };
 
-    /* ── CALL GEMINI WITH STREAMING ────────────────────────────────────── */
+    // ── CALL GEMINI STREAMING API ────────────────────────────────
     const geminiUrl = `${GEMINI_BASE}/models/${MODEL}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
 
     let geminiRes: Response;
@@ -164,32 +131,40 @@ Deno.serve(async (req: Request) => {
         }),
       });
     } catch (fetchErr) {
-      // Network failure before Gemini even responds — refund the user.
+      console.error("[generate-answer] Gemini fetch error:", fetchErr);
       await refundCredits("Gemini network error");
-      console.error("[generate-answer] Gemini fetch threw:", fetchErr);
-      return new Response(JSON.stringify({ error: "AI service unreachable. Credits refunded." }), {
-        status: 502,
-        headers: { ...headers, "Content-Type": "application/json" },
+      return json(headers, 502, {
+        error: "AI service unreachable. Credits refunded.",
       });
     }
 
     if (!geminiRes.ok) {
       const errText = await geminiRes.text().catch(() => "Unknown Gemini error");
-      console.error("[generate-answer] Gemini API error:", geminiRes.status, errText);
-      // Pre-stream failure (4xx/5xx from Gemini) — refund.
+      console.error(
+        "[generate-answer] Gemini API error:",
+        geminiRes.status,
+        errText,
+      );
       await refundCredits(`Gemini HTTP ${geminiRes.status}`);
-      return new Response(JSON.stringify({ error: "AI generation failed. Credits refunded." }), {
-        status: 502,
-        headers: { ...headers, "Content-Type": "application/json" },
+      return json(headers, 502, {
+        error: "AI generation failed. Credits refunded.",
       });
     }
 
-    /* ── PROXY SSE STREAM TO CLIENT ────────────────────────────────────── */
+    if (!geminiRes.body) {
+      console.error("[generate-answer] Empty Gemini body");
+      await refundCredits("Empty Gemini stream");
+      return json(headers, 502, {
+        error: "Empty AI response. Credits refunded.",
+      });
+    }
+
+    // ── PROXY SSE STREAM TO CLIENT ───────────────────────────────
     const encoder = new TextEncoder();
-    const reader  = geminiRes.body!.getReader();
+    const reader  = geminiRes.body.getReader();
     const decoder = new TextDecoder();
 
-    const stream = new ReadableStream({
+    const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
         let buffer = "";
         try {
@@ -198,7 +173,7 @@ Deno.serve(async (req: Request) => {
             if (done) break;
 
             buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n");
+            const lines = buffer.split("\n"); // real newline [file:1][web:30]
             buffer = lines.pop() ?? "";
 
             for (const line of lines) {
@@ -208,17 +183,24 @@ Deno.serve(async (req: Request) => {
               if (!jsonStr || jsonStr === "[DONE]") continue;
 
               try {
-                const parsed = JSON.parse(jsonStr);
-                const text: string =
+                const parsed = JSON.parse(jsonStr) as {
+                  candidates?: Array<{
+                    content?: { parts?: Array<{ text?: string }> };
+                  }>;
+                };
+
+                const text =
                   parsed?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
 
                 if (text) {
                   controller.enqueue(
-                    encoder.encode(`data: ${JSON.stringify({ text })}\n\n`),
+                    encoder.encode(
+                      `data: ${JSON.stringify({ text })}\n\n`,
+                    ),
                   );
                 }
               } catch {
-                // Skip malformed JSON chunks
+                // skip malformed JSON chunks
               }
             }
           }
@@ -239,17 +221,27 @@ Deno.serve(async (req: Request) => {
       status: 200,
       headers: {
         ...headers,
-        "Content-Type":  "text/event-stream",
-        "Cache-Control": "no-cache, no-transform",
-        "Connection":    "keep-alive",
+        "Content-Type":      "text/event-stream",
+        "Cache-Control":     "no-cache, no-transform",
+        Connection:          "keep-alive",
         "X-Accel-Buffering": "no",
       },
     });
   } catch (err) {
     console.error("[generate-answer] Unhandled error:", err);
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
-      status: 500,
-      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
-    });
+    return json(getCorsHeaders(req), 500, { error: "Internal server error" });
   }
 });
+
+/* ──────────────────────────────────────────────────────────────── */
+
+function json(
+  headers: HeadersInit,
+  status: number,
+  body: unknown,
+): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...headers, "Content-Type": "application/json" },
+  });
+}
