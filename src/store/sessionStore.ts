@@ -1,3 +1,5 @@
+// src/store/sessionStore.ts
+
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import type {
@@ -8,12 +10,20 @@ import type {
   SessionMode,
   SessionStatus,
   CoachMessage,
+  WPMDataPoint,
+  FillerWordOccurrence,
 } from "@/types/session.types";
 import { PANIC_RESPONSE } from "@/types/session.types";
 
 // ─────────────────────────────────────────────────────────────────
 // Session Store
 // ─────────────────────────────────────────────────────────────────
+
+interface PanicDisplay {
+  step_1: string;
+  step_2: string;
+  step_3: string;
+}
 
 interface SessionStore extends ActiveSessionState {
   // Setters
@@ -36,6 +46,10 @@ interface SessionStore extends ActiveSessionState {
   tickQuestionElapsed: () => void;
   resetQuestionElapsed: () => void;
 
+  // Advanced metrics (optional now, but matches analytics schema). [file:1][file:3]
+  setWpmSeries: (points: WPMDataPoint[]) => void;
+  setFillerOccurrences: (occurrences: FillerWordOccurrence[]) => void;
+
   // Credits
   consumeCredit: (amount?: number) => void;
 
@@ -51,13 +65,10 @@ interface SessionStore extends ActiveSessionState {
   resetSession: () => void;
 }
 
-interface PanicDisplay {
-  step_1: string;
-  step_2: string;
-  step_3: string;
-}
-
-const INITIAL_STATE: ActiveSessionState = {
+const INITIAL_STATE: ActiveSessionState & {
+  wpm_series?: WPMDataPoint[];
+  filler_occurrences?: FillerWordOccurrence[];
+} = {
   session_id: null,
   mode: "mock",
   status: "idle",
@@ -73,6 +84,9 @@ const INITIAL_STATE: ActiveSessionState = {
   answer_draft: "",
   coach_messages: [],
   credits_consumed: 0,
+  // Extra metrics fields – optional, used by analytics pipeline / mock engine. [file:1][file:3]
+  wpm_series: [],
+  filler_occurrences: [],
 };
 
 export const useSessionStore = create<SessionStore>()(
@@ -140,8 +154,14 @@ export const useSessionStore = create<SessionStore>()(
 
     resetQuestionElapsed: () => set({ question_elapsed_seconds: 0 }),
 
+    setWpmSeries: (points) => set({ wpm_series: points }),
+    setFillerOccurrences: (occurrences) =>
+      set({ filler_occurrences: occurrences }),
+
     consumeCredit: (amount = 1) =>
-      set((state) => ({ credits_consumed: state.credits_consumed + amount })),
+      set((state) => ({
+        credits_consumed: state.credits_consumed + amount,
+      })),
 
     addCoachMessage: (message) =>
       set((state) => ({
@@ -166,5 +186,5 @@ export const useSessionStore = create<SessionStore>()(
     triggerPanic: () => PANIC_RESPONSE,
 
     resetSession: () => set(INITIAL_STATE),
-  }))
+  })),
 );
