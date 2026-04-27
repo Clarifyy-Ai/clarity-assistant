@@ -13,10 +13,10 @@ import type { WPMDataPoint } from "@/types/session.types";
 // > 180 WPM → Too fast (anxious, hard to follow)
 
 export const WPM_RANGES = {
-  TOO_SLOW:   { min: 0,   max: 110 },
-  IDEAL:      { min: 110, max: 160 },
-  FAST:       { min: 160, max: 180 },
-  TOO_FAST:   { min: 180, max: Infinity },
+  TOO_SLOW: { min: 0, max: 110 },
+  IDEAL: { min: 110, max: 160 },
+  FAST: { min: 160, max: 180 },
+  TOO_FAST: { min: 180, max: Infinity },
 } as const;
 
 export type WPMRating = "too_slow" | "ideal" | "fast" | "too_fast";
@@ -25,7 +25,10 @@ export type WPMRating = "too_slow" | "ideal" | "fast" | "too_fast";
 // WPM calculation utilities
 // ─────────────────────────────────────────────────────────────────
 
-export function calculateWPM(wordCount: number, durationSeconds: number): number {
+export function calculateWPM(
+  wordCount: number,
+  durationSeconds: number,
+): number {
   if (durationSeconds <= 0 || wordCount <= 0) return 0;
   return Math.round((wordCount / durationSeconds) * 60);
 }
@@ -35,17 +38,17 @@ export function countWords(text: string): number {
 }
 
 export function rateWPM(wpm: number): WPMRating {
-  if (wpm < WPM_RANGES.TOO_SLOW.max)  return "too_slow";
-  if (wpm <= WPM_RANGES.IDEAL.max)    return "ideal";
-  if (wpm <= WPM_RANGES.FAST.max)     return "fast";
+  if (wpm < WPM_RANGES.TOO_SLOW.max) return "too_slow";
+  if (wpm <= WPM_RANGES.IDEAL.max) return "ideal";
+  if (wpm <= WPM_RANGES.FAST.max) return "fast";
   return "too_fast";
 }
 
 export function getWPMLabel(rating: WPMRating): string {
   const labels: Record<WPMRating, string> = {
     too_slow: "Too slow — try to be more confident",
-    ideal:    "Great pace — clear and comfortable",
-    fast:     "Slightly fast — slow down a little",
+    ideal: "Great pace — clear and comfortable",
+    fast: "Slightly fast — slow down a little",
     too_fast: "Too fast — take a breath and slow down",
   };
   return labels[rating];
@@ -55,8 +58,8 @@ export function getWPMColor(wpm: number): string {
   const rating = rateWPM(wpm);
   const colors: Record<WPMRating, string> = {
     too_slow: "text-blue-400",
-    ideal:    "text-green-400",
-    fast:     "text-yellow-400",
+    ideal: "text-green-400",
+    fast: "text-yellow-400",
     too_fast: "text-red-400",
   };
   return colors[rating];
@@ -71,10 +74,10 @@ export class WPMTracker {
   private startTime: number | null = null;
   private dataPoints: WPMDataPoint[] = [];
   private lastSnapshotTime = 0;
-  private onUpdate: (wpm: number) => void;
+  private onUpdate?: (wpm: number) => void;
   private readonly SNAPSHOT_INTERVAL_MS = 3000; // snapshot every 3 seconds
 
-  constructor(onUpdate: (wpm: number) => void) {
+  constructor(onUpdate?: (wpm: number) => void) {
     this.onUpdate = onUpdate;
   }
 
@@ -101,12 +104,12 @@ export class WPMTracker {
     if (now - this.lastSnapshotTime >= this.SNAPSHOT_INTERVAL_MS) {
       this.dataPoints.push({
         timestamp: elapsedSeconds,
-        wpm:       currentWPM,
+        wpm: currentWPM,
       });
       this.lastSnapshotTime = now;
     }
 
-    this.onUpdate(currentWPM);
+    this.onUpdate?.(currentWPM);
   }
 
   // ── Per-question WPM tracker ──────────────────────────────────
@@ -175,40 +178,45 @@ export class WPMTracker {
 // ─────────────────────────────────────────────────────────────────
 
 export function analyseWPMTrend(
-  dataPoints: WPMDataPoint[]
+  dataPoints: WPMDataPoint[],
 ): {
-  trend:     "improving" | "declining" | "stable";
-  avg:       number;
-  min:       number;
-  max:       number;
-  variance:  number;
+  trend: "improving" | "declining" | "stable";
+  avg: number;
+  min: number;
+  max: number;
+  variance: number;
 } {
   if (dataPoints.length === 0) {
     return { trend: "stable", avg: 0, min: 0, max: 0, variance: 0 };
   }
 
   const values = dataPoints.map((p) => p.wpm);
-  const avg = Math.round(values.reduce((a, b) => a + b, 0) / values.length);
+  const avg = Math.round(
+    values.reduce((a, b) => a + b, 0) / values.length,
+  );
   const min = Math.min(...values);
   const max = Math.max(...values);
   const variance = Math.round(
-    values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) / values.length
+    values.reduce((sum, v) => sum + Math.pow(v - avg, 2), 0) /
+      values.length,
   );
 
   // Trend: compare first third vs last third
   const third = Math.floor(values.length / 3);
   if (third < 1) return { trend: "stable", avg, min, max, variance };
 
-  const earlyAvg = values.slice(0, third).reduce((a, b) => a + b, 0) / third;
-  const lateAvg  = values.slice(-third).reduce((a, b) => a + b, 0) / third;
+  const earlyAvg =
+    values.slice(0, third).reduce((a, b) => a + b, 0) / third;
+  const lateAvg =
+    values.slice(-third).reduce((a, b) => a + b, 0) / third;
   const delta = lateAvg - earlyAvg;
 
   let trend: "improving" | "declining" | "stable";
-  if (Math.abs(delta) < 10)      trend = "stable";
+  if (Math.abs(delta) < 10) trend = "stable";
   else if (delta > 0 && earlyAvg < WPM_RANGES.IDEAL.min) trend = "improving";
   else if (delta < 0 && earlyAvg > WPM_RANGES.IDEAL.max) trend = "improving";
-  else if (delta < 0)            trend = "declining";
-  else                           trend = "stable";
+  else if (delta < 0) trend = "declining";
+  else trend = "stable";
 
   return { trend, avg, min, max, variance };
 }
