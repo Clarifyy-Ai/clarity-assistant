@@ -1,258 +1,247 @@
-// @ts-nocheck
-import type { CoachingContext, AnswerSummary, ResumeProject } from "@/types/ai.types";
-import type { UserProfile } from "@/types/user.types";
-import type { SessionConfig, LiveSessionConfig } from "@/types/session.types";
-import type { ActiveDocumentContext } from "@/types/document.types";
-import { useCoachStore } from "@/store/coachStore";
-import { useSessionStore } from "@/store/sessionStore";
-import { useDocumentStore } from "@/store/documentStore";
-import { useAuthStore } from "@/store/userStore";
-import { useAudioStore } from "@/store/audioStore";
+// supabase/functions/generate-answer/index.ts
+// Full STAR-format answer generator with SSE streaming via Gemini 2.0 Flash.
 
-// ─────────────────────────────────────────────────────────────────
-// Context Envelope Builder
-// ─────────────────────────────────────────────────────────────────
+import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { createServiceClient, deductCreditsAtomic } from "../_shared/supabase.ts";
 
-export function buildCoachingContext(
-  profile: UserProfile,
-  config: SessionConfig | LiveSessionConfig,
-  documentContext: ActiveDocumentContext,
-  sessionOverrides?: Partial<CoachingContext>
-): CoachingContext {
-  const parsed = documentContext.resume_version?.parsed_data ?? null;
-  const parsedJD = documentContext.jd?.parsed_data;
-  const gapAnalysis = documentContext.gap_analysis?.result;
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
+const GEMINI_BASE    = "https://generativelanguage.googleapis.com/v1beta";
+const MODEL          = "gemini-2.0-flash";
 
-  const resumeSkills: string[] = parsed?.skills ?? [];
-  const resumeTechStack: string[] = parsed?.tech_stack ?? [];
-  const allResumeSkills = [...new Set([...resumeSkills, ...resumeTechStack])];
+const SYSTEM_PROMPT = `You are an expert interview coach helping a candidate answer live interview questions.
+Generate a complete, confident answer using the STAR method (Situation, Task, Action, Result).
+Requirements:
+- 150-200 words total
+- Write in flowing paragraphs, NOT bullet points
+- Sound natural and conversational, as if spoken aloud
+- Be specific — reference the resume context when available
+- Do NOT say "Situation:", "Task:", etc. — weave the structure naturally into the prose`;
 
-  const resumeProjects: ResumeProject[] = (parsed?.projects ?? []).map((p) => ({
-    name: p.name,
-    role: p.role,
-    tech_stack: p.tech_stack,
-    impact_metric: p.impact_metric,
-  }));
+// Cost in credits for a full STAR answer (manual: “Live Answer Generation Long 200 tokens → 12 credits”,
+// you can adjust this COST to match your pricing model; we keep it 2 per your draft). [file:1][file:3]
+const COST = 2;
 
-  const resumeExperienceSummary = parsed?.summary
-    ?? buildExperienceSummaryFromParsed(parsed);
+Deno.serve(async (req: Request) => {
+  const cors = handleCors(req);
+  if (cors) return cors;
 
-  const jdRequiredSkills = parsedJD?.required_skills ?? [];
-  const jdSenioritySignals = parsedJD?.key_phrases ?? [];
-  const gapSkills = gapAnalysis?.missing_required_skills ?? [];
+  const headers = getCorsHeaders(req);
+  const db = createServiceClient();
 
-  const weakAreas = extractWeakAreas(profile);
-  const strongAreas = extractStrongAreas(profile);
+  try {
+    // ── AUTH ─────────────────────────────────────────────────────
+    const authHeader =
+      req.headers.get("authorization") ?? req.headers.get("Authorization") ?? "";
 
-  const sessionConfig = config as SessionConfig;
-  const liveConfig = config as LiveSessionConfig;
-  const targetCompany = sessionConfig.company ?? liveConfig.company ?? null;
-
-  // Build additional context snippets from extra context_document_ids
-  const additionalContext: string[] = [];
-  const extraDocIds: string[] = liveConfig.context_document_ids ?? [];
-  if (extraDocIds.length > 0) {
-    const { resumes, jds } = useDocumentStore.getState();
-    for (const docId of extraDocIds) {
-      const resume = resumes.find((r) => r.id === docId);
-      if (resume) {
-        const activeVersion = resume.versions.find((v) => v.id === resume.active_version_id) ?? resume.versions[0];
-        if (activeVersion?.parsed_data?.summary) {
-          additionalContext.push(`Resume (${resume.title}): ${activeVersion.parsed_data.summary}`);
-        }
-      }
-      const jd = jds.find((j) => j.id === docId);
-      if (jd) {
-        const jdLabel = jd.role_title + (jd.company_name ? ` at ${jd.company_name}` : "");
-        const snippet = jd.parsed_data?.responsibilities?.slice(0, 3).join("; ") ?? jd.raw_text?.slice(0, 200);
-        if (snippet) additionalContext.push(`Job Description (${jdLabel}): ${snippet}`);
-      }
+    if (!/^bearer\s+/i.test(authHeader)) {
+      return json(headers, 401, { error: "Unauthorized" });
     }
-  }
 
-  const context: CoachingContext = {
-    user_id:            profile.id,
-    full_name:          profile.full_name,
-    role:               sessionConfig.role ?? profile.role ?? null,
-    domain:             profile.domain,
-    experience_level:   (sessionConfig.experience_level as CoachingContext["experience_level"])
-                        ?? profile.experience_level,
-    years_of_experience: profile.years_of_experience,
-    target_company:     targetCompany,
-    coach_tone:         profile.coach_tone,
-    hint_style:         sessionConfig.hint_style ?? liveConfig.hint_style ?? profile.hint_style,
+    const token = authHeader.replace(/^bearer\s+/i, "");
+    const {
+      data: { user },
+      error: authErr,
+    } = await db.auth.getUser(token);
 
-    resume_skills:              allResumeSkills,
-    resume_projects:            resumeProjects,
-    resume_experience_summary:  resumeExperienceSummary,
+    if (authErr || !user) {
+      return json(headers, 401, { error: "Unauthorized" });
+    }
 
-    jd_required_skills:    jdRequiredSkills,
-    jd_seniority_signals:  jdSenioritySignals,
-    gap_skills:            gapSkills,
+    // ── BODY PARSE & VALIDATION ──────────────────────────────────
+    const body = await req.json().catch(() => null);
+    if (!body?.question) {
+      return json(headers, 400, { error: "Missing required field: question" });
+    }
 
-    session_goals:         [],
-    filler_words_to_watch: [],
-    current_filler_count:  0,
-    current_wpm:           0,
+    const question      = String(body.question).slice(0, 500);
+    const transcript    = String(body.transcript      ?? "").slice(0, 800);
+    const resumeCtx     = String(body.resume_context  ?? "").slice(0, 500);
+    const interviewType = String(body.interview_type  ?? "behavioral").slice(0, 50);
+    const company       = String(body.target_company  ?? "").slice(0, 50);
+    const sessionId     = body.session_id ?? null;
 
-    weak_areas:               weakAreas,
-    strong_areas:             strongAreas,
-    last_3_answer_summaries:  [],
-    avg_confidence_score:     0,
+    // ── GEMINI CONFIG CHECK ──────────────────────────────────────
+    if (!GEMINI_API_KEY) {
+      return json(headers, 503, { error: "AI service not configured" });
+    }
 
-    session_type:    (sessionConfig.interview_type) ?? "mixed",
-    question_number: 1,
-    total_questions: sessionConfig.question_count ?? 5,
+    // ── CREDITS DEDUCTION (ATOMIC) ───────────────────────────────
+    // Use a shared helper that:
+    //  - Performs an atomic UPDATE on profiles.credits
+    //  - Inserts into credittransactions with balancebefore/balanceafter
+    //  - Returns { success, error, balanceAfter }
+    const deduction = await deductCreditsAtomic({
+      userId: user.id,
+      action: "liveanswerlong", // aligns with manual: Live Answer Generation Long [file:1][file:3]
+      cost: COST,
+      sessionId,
+    });
 
-    additional_context: additionalContext.length > 0 ? additionalContext : undefined,
+    if (!deduction.success) {
+      return json(headers, 402, {
+        error: deduction.error ?? "Insufficient credits",
+      });
+    }
 
-    // Grab the latest transcript for live hint context
-    last_transcript: (() => {
+    const balanceAfter = deduction.balanceAfter ?? 0;
+
+    // ── GEMINI PROMPT BUILD ──────────────────────────────────────
+    const userPrompt = [
+      `Interview type: ${interviewType}`,
+      `Company: ${company || "not specified"}`,
+      `Question: "${question}"`,
+      `Candidate's answer so far: "${
+        transcript || "Nothing yet — generate a complete answer from scratch"
+      }"`,
+      `Resume context: ${resumeCtx || "None provided"}`,
+      "",
+      "Generate a complete, natural STAR-format answer (150-200 words) for this interview question.",
+    ].join("\n");
+
+    // ── REFUND HELPER (pre-stream failure) ───────────────────────
+    const refundCredits = async (reason: string) => {
       try {
-        const audioState = useAudioStore.getState();
-        return audioState.transcript?.full_transcript?.slice(-800) ?? null;
-      } catch { return null; }
-    })(),
+        // Re-add COST to credits and log a refund transaction via helper.
+        await db.rpc("refund_credits", {
+          p_user_id: user.id,
+          p_amount:  COST,
+          p_reason:  reason,
+        });
+      } catch (e) {
+        console.error("[generate-answer] Refund failed:", e);
+      }
+    };
 
-    ...sessionOverrides,
-  };
+    // ── CALL GEMINI STREAMING API ────────────────────────────────
+    const geminiUrl = `${GEMINI_BASE}/models/${MODEL}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
 
-  return context;
-}
-
-// ── Convenience — build context from Zustand stores directly ────
-
-export function buildContextFromStores(): CoachingContext | null {
-  const { profile } = useAuthStore.getState();
-  const { config } = useSessionStore.getState();
-  const { active_context } = useDocumentStore.getState();
-  const { context } = useCoachStore.getState();
-
-  if (!profile || !config) return context;
-
-  return buildCoachingContext(profile, config, active_context);
-}
-
-// ── Serialise context for AI prompt injection ───────────────────
-
-export function serialiseContextForPrompt(ctx: CoachingContext): string {
-  const lines: string[] = [
-    `Candidate: ${ctx.full_name ?? "Unknown"}, ${ctx.role ?? "Engineer"}, ${ctx.experience_level ?? "mid"}-level`,
-    `Domain: ${ctx.domain ?? "Technology"}`,
-    `Years of experience: ${ctx.years_of_experience ?? "unknown"}`,
-    ctx.target_company ? `Target company: ${ctx.target_company}` : "",
-    ctx.resume_skills.length > 0 ? `Skills: ${ctx.resume_skills.slice(0, 20).join(", ")}` : "",
-    ctx.resume_experience_summary ? `Background: ${ctx.resume_experience_summary}` : "",
-    ctx.gap_skills.length > 0 ? `Skills gaps (from JD): ${ctx.gap_skills.join(", ")}` : "",
-    ctx.weak_areas.length > 0 ? `Known weak areas: ${ctx.weak_areas.join(", ")}` : "",
-    ctx.strong_areas.length > 0 ? `Strong areas: ${ctx.strong_areas.join(", ")}` : "",
-    ctx.filler_words_to_watch.length > 0 ? `Filler words to watch: ${ctx.filler_words_to_watch.join(", ")}` : "",
-    ctx.session_goals.length > 0 ? `Session goals: ${ctx.session_goals.join(", ")}` : "",
-    `Coach tone: ${ctx.coach_tone}`,
-    `Hint style: ${ctx.hint_style}`,
-    `Interview type: ${ctx.session_type}`,
-    `Question ${ctx.question_number} of ${ctx.total_questions}`,
-    ctx.last_3_answer_summaries.length > 0
-      ? `Recent answers:\n${ctx.last_3_answer_summaries
-          .map((a) => `  Q: "${a.question}" → Score: ${a.score}${a.key_weakness ? `, Weakness: ${a.key_weakness}` : ""}`)
-          .join("\n")}`
-      : "",
-    (ctx.additional_context && ctx.additional_context.length > 0)
-      ? `Additional context documents:\n${ctx.additional_context.map((c) => `  - ${c}`).join("\n")}`
-      : "",
-  ].filter(Boolean);
-
-  return lines.join("\n");
-}
-
-// ── System prompts per hint style ───────────────────────────────
-
-export function buildSystemPrompt(
-  ctx: CoachingContext,
-  isLive: boolean,
-  simpleLanguage?: boolean,
-  callType?: "interview" | "regular_call",
-  language?: string
-): string {
-  const ctxStr = serialiseContextForPrompt(ctx);
-  const hintStyle = ctx.hint_style;
-  const isRegularCall = callType === "regular_call";
-
-  const styleInstruction =
-    hintStyle === "full_answer"
-      ? "Provide a complete, well-structured 2-3 paragraph answer the person can use as a guide."
-      : hintStyle === "short_hints"
-      ? "Provide 3-4 concise bullet point talking points only."
-      : "Provide 5-8 keywords and key phrases only. One per line.";
-
-  const personaInstruction = isRegularCall
-    ? `You are Clarify AI, a real-time conversation assistant. Your role is to help the person navigate a live professional call — this is NOT a job interview. Provide relevant talking points, factual context, and suggested responses appropriate for a business or professional conversation.`
-    : `You are Clarify AI, an expert interview coach AI. Your role is to help the candidate answer interview questions effectively.`;
-
-  const urgencyInstruction = isLive
-    ? isRegularCall
-      ? "This is a LIVE call. Be concise and practical. Start with the most actionable point immediately."
-      : "This is a LIVE interview. Speed is critical. Start with the most important point immediately."
-    : isRegularCall
-      ? "This is a practice call scenario. Be thorough and constructive."
-      : "This is a practice session. Be thorough and educational.";
-
-  const languageInstruction = simpleLanguage
-    ? "Use plain, jargon-free language. Avoid technical acronyms and industry buzzwords. Write as if explaining to a smart friend who is not a specialist."
-    : "";
-
-  const responseLanguageInstruction = (language && language !== "English")
-    ? `Respond entirely in ${language}. All output must be in ${language}.`
-    : "";
-
-  const contextLabel = isRegularCall ? "Participant context:" : "Candidate context:";
-
-  return `${personaInstruction}
-
-${urgencyInstruction}
-
-${styleInstruction}
-${languageInstruction ? `\n${languageInstruction}` : ""}${responseLanguageInstruction ? `\n${responseLanguageInstruction}` : ""}
-${contextLabel}
-${ctxStr}
-
-Rules:
-- Never say "Great question" or similar filler phrases
-- Never mention that you are an AI
-- Keep response under 250 words maximum
-- Respond only with the hint content`;
-}
-
-// ── Private helpers ─────────────────────────────────────────────
-
-function buildExperienceSummaryFromParsed(
-  parsed: any
-): string | null {
-  if (!parsed) return null;
-  const parts: string[] = [];
-  if (parsed.total_years_experience) {
-    parts.push(`${parsed.total_years_experience} years of experience`);
-  }
-  if (parsed.experience && parsed.experience.length > 0) {
-    const companies = parsed.experience
-      .slice(0, 3)
-      .map((e: any) => e.company)
-      .join(", ");
-    parts.push(`previously at ${companies}`);
-  }
-  if (parsed.education && parsed.education.length > 0) {
-    const edu = parsed.education[0];
-    if (edu.degree && edu.institution) {
-      parts.push(`${edu.degree} from ${edu.institution}`);
+    let geminiRes: Response;
+    try {
+      geminiRes = await fetch(geminiUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+          systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
+          generationConfig: {
+            temperature:     0.7,
+            maxOutputTokens: 1024,
+            topP:            0.95,
+          },
+        }),
+      });
+    } catch (fetchErr) {
+      console.error("[generate-answer] Gemini fetch error:", fetchErr);
+      await refundCredits("Gemini network error");
+      return json(headers, 502, {
+        error: "AI service unreachable. Credits refunded.",
+      });
     }
+
+    if (!geminiRes.ok) {
+      const errText = await geminiRes.text().catch(() => "Unknown Gemini error");
+      console.error(
+        "[generate-answer] Gemini API error:",
+        geminiRes.status,
+        errText,
+      );
+      await refundCredits(`Gemini HTTP ${geminiRes.status}`);
+      return json(headers, 502, {
+        error: "AI generation failed. Credits refunded.",
+      });
+    }
+
+    if (!geminiRes.body) {
+      console.error("[generate-answer] Empty Gemini body");
+      await refundCredits("Empty Gemini stream");
+      return json(headers, 502, {
+        error: "Empty AI response. Credits refunded.",
+      });
+    }
+
+    // ── PROXY SSE STREAM TO CLIENT ───────────────────────────────
+    const encoder = new TextEncoder();
+    const reader  = geminiRes.body.getReader();
+    const decoder = new TextDecoder();
+
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        let buffer = "";
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+            const lines = buffer.split("\n"); // real newline [file:1][web:30]
+            buffer = lines.pop() ?? "";
+
+            for (const line of lines) {
+              if (!line.startsWith("data: ")) continue;
+
+              const jsonStr = line.slice(6).trim();
+              if (!jsonStr || jsonStr === "[DONE]") continue;
+
+              try {
+                const parsed = JSON.parse(jsonStr) as {
+                  candidates?: Array<{
+                    content?: { parts?: Array<{ text?: string }> };
+                  }>;
+                };
+
+                const text =
+                  parsed?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+
+                if (text) {
+                  controller.enqueue(
+                    encoder.encode(
+                      `data: ${JSON.stringify({ text })}\n\n`,
+                    ),
+                  );
+                }
+              } catch {
+                // skip malformed JSON chunks
+              }
+            }
+          }
+
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+        } catch (streamErr) {
+          console.error("[generate-answer] Stream read error:", streamErr);
+          controller.error(streamErr);
+        }
+      },
+      cancel() {
+        reader.cancel();
+      },
+    });
+
+    return new Response(stream, {
+      status: 200,
+      headers: {
+        ...headers,
+        "Content-Type":      "text/event-stream",
+        "Cache-Control":     "no-cache, no-transform",
+        Connection:          "keep-alive",
+        "X-Accel-Buffering": "no",
+      },
+    });
+  } catch (err) {
+    console.error("[generate-answer] Unhandled error:", err);
+    return json(getCorsHeaders(req), 500, { error: "Internal server error" });
   }
-  return parts.length > 0 ? parts.join("; ") : null;
-}
+});
 
-function extractWeakAreas(_profile: UserProfile): string[] {
-  return [];
-}
+/* ──────────────────────────────────────────────────────────────── */
 
-function extractStrongAreas(_profile: UserProfile): string[] {
-  return [];
+function json(
+  headers: HeadersInit,
+  status: number,
+  body: unknown,
+): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...headers, "Content-Type": "application/json" },
+  });
 }
