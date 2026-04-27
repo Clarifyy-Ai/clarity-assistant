@@ -1,3 +1,5 @@
+// src/lib/billing/creditsManager.ts
+
 import { EDGE_BASE } from "@/lib/env";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
@@ -8,6 +10,29 @@ import { getCreditCost } from "@/lib/ai/modelRouter";
 // ─────────────────────────────────────────────────────────────────
 // Credits Manager
 // ─────────────────────────────────────────────────────────────────
+
+export type CreditAction =
+  | "liveanswershort"
+  | "liveanswerlong"
+  | "hintgeneration"
+  | "starbuilder"
+  | "documentparse"
+  | "companyresearch"
+  | "rephraser"
+  | "projectbuilder"
+  | "mocksessionquestion";
+
+export const CREDIT_COSTS: Record<CreditAction, number> = {
+  liveanswershort:   5,  // 200 tokens short [file:3]
+  liveanswerlong:   12,  // 200 tokens long
+  hintgeneration:    8,
+  starbuilder:      10,
+  documentparse:    15,
+  companyresearch:  20,
+  rephraser:        6,
+  projectbuilder:  10,
+  mocksessionquestion: 3,
+};
 
 export interface CreditCheckResult {
   canProceed:       boolean;
@@ -27,9 +52,8 @@ export interface CreditDeductionResult {
 
 const LOW_CREDIT_THRESHOLD = 5;
 
-// ── Check if user can afford a model call ─────────────────────────
-// Guard: deduction is blocked if the user's subscription is not active
-// (i.e. Stripe checkout hasn't completed) AND they have no free credits.
+// ── Check if user can afford a model‑based call (legacy helper) ──
+// Guard: deduction is blocked if subscription is not active and no free credits. [file:1][file:3]
 
 export function checkCredits(model: PreferredAIModel): CreditCheckResult {
   const { profile } = useAuthStore.getState();
@@ -45,7 +69,7 @@ export function checkCredits(model: PreferredAIModel): CreditCheckResult {
     };
   }
 
-  // BYOK users bypass credit checks entirely
+  // BYOK users bypass credit checks entirely. [file:3]
   const isBYOKActive = !!(
     profile.byok_gemini ||
     profile.byok_openai ||
@@ -63,8 +87,6 @@ export function checkCredits(model: PreferredAIModel): CreditCheckResult {
     };
   }
 
-  // Guard: if user is on a paid plan but subscription_status is not active,
-  // their Stripe checkout has not completed — block credit use until it does.
   const isPaidPlan = profile.plan && profile.plan !== "free";
   const subStatus  = profile.subscription_status as string | undefined;
 
@@ -104,72 +126,101 @@ export function checkCredits(model: PreferredAIModel): CreditCheckResult {
   };
 }
 
-// ── Deduct credits ────────────────────────────────────────────────
-// Always re-checks canProceed immediately before calling the edge function
-// so stale in-memory state never bypasses the guard.
+// ── Generic deduction by CreditAction (preferred API) ────────────
 
-export async function deductCredits(
-  model: PreferredAIModel,
-  sessionId: string,
+export async function deductCreditsForAction(
+  action: CreditAction,
+  sessionId?: string,
 ): Promise<CreditDeductionResult> {
-
-  // Re-validate with fresh in-memory state before any network call
-  const check = checkCredits(model);
-  if (!check.canProceed) {
+  const { profile } = useAuthStore.getState();
+  if (!profile) {
     return {
       success:          false,
       creditsDeducted:  0,
-      creditsRemaining: check.creditsAvailable,
-      error:            check.reason ?? "Credit check failed",
+      creditsRemaining: 0,
+      error:            "Not authenticated",
     };
   }
 
-  const cost = getCreditCost(model);
+  // BYOK: skip deduction entirely. [file:3]
+  if (profile.byok_gemini || profile.byok_openai || profile.byok_anthropic) {
+    return {
+      success:          true,
+      creditsDeducted:  0,
+      creditsRemaining: profile.credits,
+      error:            null,
+    };
+  }
+
+  const cost = CREDIT_COSTS[action] ?? 0;
+  if (!cost) {
+    return {
+      success:          false,
+      creditsDeducted:  0,
+      creditsRemaining: profile.credits,
+      error:            `Unknown or zero-cost action: ${action}`,
+    };
+  }
+
+  // Simple pre‑flight check to avoid obvious failures.
+  if ((profile.credits ?? 0) < cost) {
+    return {
+      success:          false,
+      creditsDeducted:  0,
+      creditsRemaining: profile.credits,
+      error:            `Insufficient credits. Need ${cost}, have ${profile.credits}.`,
+    };
+  }
 
   try {
     const { getAuthHeaders } = await import("@/lib/network/fetchEdge");
     const headers = await getAuthHeaders();
 
     const response = await fetch(`${EDGE_BASE}/deduct-credits`, {
-      method:  "POST",
+      method: "POST",
       headers,
-      body:    JSON.stringify({
-        model,
-        session_id: sessionId,
-        credits:    cost,
+      body: JSON.stringify({
+        action,
+        cost,
+        session_id: sessionId ?? null,
       }),
     });
 
     if (!response.ok) {
-      // 402 = insufficient credits (race condition — another tab spent them)
       if (response.status === 402) {
-        await refreshCredits(); // sync local state
-        throw new Error("Insufficient credits. Your balance has been refreshed.");
+        // Race condition: another tab used credits. [file:1]
+        await refreshCredits();
+        const errBody = await response.json().catch(() => null);
+        const msg = errBody?.error ?? "Insufficient credits";
+        return {
+          success:          false,
+          creditsDeducted:  0,
+          creditsRemaining: useAuthStore.getState().profile?.credits ?? 0,
+          error:            msg,
+        };
       }
+
       throw new Error(`Credit deduction failed: ${response.status}`);
     }
 
     const data = (await response.json()) as {
       credits_remaining: number;
-      credits_deducted:  number;
     };
 
-    // Sync local profile state
-    useAuthStore.getState().updateProfile({
-      credits: data.credits_remaining,
-    });
+    const remaining = data.credits_remaining ?? 0;
 
-    if (data.credits_remaining < LOW_CREDIT_THRESHOLD) {
-      showLowCreditWarning(data.credits_remaining);
+    useAuthStore.getState().updateProfile({ credits: remaining });
+
+    if (remaining < LOW_CREDIT_THRESHOLD) {
+      showLowCreditWarning(remaining);
     }
 
     return {
       success:          true,
-      creditsDeducted:  data.credits_deducted ?? cost,
-      creditsRemaining: data.credits_remaining,
+      creditsDeducted:  cost,
+      creditsRemaining: remaining,
       error:            null,
     };
-
   } catch (err) {
     return {
       success:          false,
@@ -180,7 +231,24 @@ export async function deductCredits(
   }
 }
 
-// ── Credit top-up ─────────────────────────────────────────────────
+// ── Legacy model-based deduction wrapper (optional) ──────────────
+// Useful where you already call by model only; internally maps to an action.
+
+export async function deductCredits(
+  model: PreferredAIModel,
+  sessionId: string,
+): Promise<CreditDeductionResult> {
+  // Map model → default action (short vs long answers). [file:3]
+  // You can refine this mapping based on token estimates.
+  const action: CreditAction =
+    model === "gpt-4o" || model === "claude"
+      ? "liveanswerlong"
+      : "liveanswershort";
+
+  return deductCreditsForAction(action, sessionId);
+}
+
+// ── Credit top-up / modal helpers ────────────────────────────────
 
 export function openUpgradeFlow(trigger = "out_of_credits"): void {
   useUIStore.getState().openUpgradeModal(trigger);
@@ -194,7 +262,7 @@ export function showLowCreditWarning(creditsRemaining: number): void {
   }
 }
 
-// ── Refetch credits from DB ───────────────────────────────────────
+// ── Refetch credits from DB ──────────────────────────────────────
 
 export async function refreshCredits(): Promise<number | null> {
   const { user } = useAuthStore.getState();
@@ -217,7 +285,7 @@ export async function refreshCredits(): Promise<number | null> {
   return data.credits;
 }
 
-// ── Credit usage history ──────────────────────────────────────────
+// ── Credit usage history ─────────────────────────────────────────
 
 export interface CreditTransaction {
   id:         string;
@@ -250,7 +318,7 @@ export async function fetchCreditHistory(
   })) as CreditTransaction[];
 }
 
-// ── BYOK check ────────────────────────────────────────────────────
+// ── BYOK check ───────────────────────────────────────────────────
 
 export function isBYOKConfigured(
   model:   PreferredAIModel,
