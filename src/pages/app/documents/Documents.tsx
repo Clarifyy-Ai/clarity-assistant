@@ -14,11 +14,19 @@ import { Modal } from "@/components/ui/Modal";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
 import {
   FileText, Upload, Trash2, RefreshCw, Eye,
-  Plus, Star, ClipboardList,
+  Plus, Star, ClipboardList, Link2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import type { ResumeVersion } from "@/types/document.types";
+
+// ─── URL validation helper ────────────────────────────────────────────────────
+
+function isValidUrl(url: string): boolean {
+  try { new URL(url); return true; } catch { return false; }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 export default function Documents() {
   return (
@@ -31,17 +39,21 @@ export default function Documents() {
         <TabsList>
           <TabsTrigger value="resumes">📄 Resumes</TabsTrigger>
           <TabsTrigger value="jds">📋 Job Descriptions</TabsTrigger>
+          <TabsTrigger value="cover_letter">✉️ Cover Letter</TabsTrigger>
+          <TabsTrigger value="portfolio">💼 Portfolio</TabsTrigger>
         </TabsList>
         <TabsContent value="resumes"><ResumeManager /></TabsContent>
         <TabsContent value="jds"><JDManager /></TabsContent>
+        <TabsContent value="cover_letter"><CoverLetterManager /></TabsContent>
+        <TabsContent value="portfolio"><PortfolioManager /></TabsContent>
       </Tabs>
     </div>
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 // ResumeManager
-// ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
 
 function ResumeManager() {
   const docStore = useDocumentStore();
@@ -56,16 +68,18 @@ function ResumeManager() {
 
   const resumes = docStore.resumes;
 
-  // ★ FIX: derive from active_resume_id, not docStore.activeResume
+  // ★ FIX: derive from active_resume_id
   const activeResumeId = docStore.active_resume_id;
 
   async function handleFile(file: File) {
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error("File too large. Maximum size is 5 MB.");
+    // ★ FIX: max 10 MB, accept PDF/DOCX/TXT
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error("File too large. Maximum size is 10 MB.");
       return;
     }
-    if (!file.name.endsWith(".pdf") && !file.name.endsWith(".docx")) {
-      toast.error("Only PDF or DOCX files are supported.");
+    const ext = file.name.split(".").pop()?.toLowerCase();
+    if (!["pdf", "docx", "txt"].includes(ext ?? "")) {
+      toast.error("Only PDF, DOCX or TXT files are supported.");
       return;
     }
     setUploading(true);
@@ -73,7 +87,7 @@ function ResumeManager() {
       const { resumeId, error } = await docMgr.uploadResume(file);
       if (error) toast.error(error);
       else toast.success("Resume uploaded and parsing started.");
-    } catch (err) {
+    } catch {
       toast.error("Failed to upload document. Please try again.");
     } finally {
       setUploading(false);
@@ -81,7 +95,6 @@ function ResumeManager() {
     }
   }
 
-  // ★ FIX: retryParse — re-invoke the edge function for the active version
   async function handleRetryParse(resumeId: string) {
     const resume = resumes.find((r) => r.id === resumeId);
     if (!resume) return;
@@ -155,14 +168,16 @@ function ResumeManager() {
               Drop resume here or{" "}
               <span className="text-violet-400 underline">browse</span>
             </p>
-            <p className="text-xs text-muted-foreground">PDF or DOCX · Max 5 MB</p>
+            {/* ★ FIX: updated text — 10 MB, TXT supported */}
+            <p className="text-xs text-muted-foreground">PDF, DOCX or TXT · Max 10 MB</p>
           </div>
         )}
       </div>
+      {/* ★ FIX: accept .txt */}
       <input
         ref={inputRef}
         type="file"
-        accept=".pdf,.docx"
+        accept=".pdf,.docx,.txt"
         className="hidden"
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
       />
@@ -176,16 +191,14 @@ function ResumeManager() {
       ) : (
         <div className="space-y-2">
           {resumes.map((r) => {
-            // ★ FIX: all display fields come from the active ResumeVersion
             const versions: ResumeVersion[] = (r as any).resume_versions ?? [];
             const activeVer: ResumeVersion | undefined =
               versions.find((v) => v.id === r.active_version_id) ?? versions[0];
-            const isActive    = r.id === activeResumeId;
-            // ★ FIX: correct parse_status values — "parsing"|"processing"|"ready"|"error"
-            const isParsing   = activeVer?.parse_status === "parsing"
-                             || activeVer?.parse_status === "processing";
-            const isError     = activeVer?.parse_status === "error";
-            const isReady     = activeVer?.parse_status === "ready";
+            const isActive  = r.id === activeResumeId;
+            const isParsing = activeVer?.parse_status === "parsing"
+                           || activeVer?.parse_status === "processing";
+            const isError   = activeVer?.parse_status === "error";
+            const isReady   = activeVer?.parse_status === "ready";
 
             return (
               <Card key={r.id} padding="sm">
@@ -196,26 +209,16 @@ function ResumeManager() {
 
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
-                      {/* ★ FIX: use r.title (ResumeDocument) or activeVer.file_name */}
                       <p className="text-xs sm:text-sm font-medium text-foreground truncate">
                         {r.title || activeVer?.file_name || "Untitled"}
                       </p>
-                      {isActive && (
-                        <Badge variant="emerald" size="sm" dot>Active</Badge>
-                      )}
-                      {isParsing && (
-                        <Badge variant="amber" size="sm">Parsing…</Badge>
-                      )}
-                      {isError && (
-                        <Badge variant="red" size="sm">Parse failed</Badge>
-                      )}
-                      {isReady && (
-                        <Badge variant="blue" size="sm">Ready</Badge>
-                      )}
+                      {isActive  && <Badge variant="emerald" size="sm" dot>Active</Badge>}
+                      {isParsing && <Badge variant="amber"   size="sm">Parsing…</Badge>}
+                      {isError   && <Badge variant="red"     size="sm">Parse failed</Badge>}
+                      {isReady   && <Badge variant="blue"    size="sm">Ready</Badge>}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {format(new Date(r.created_at), "MMM d, yyyy")}
-                      {/* ★ FIX: file_size_bytes not file_size */}
                       {activeVer?.file_size_bytes
                         ? ` · ${(activeVer.file_size_bytes / 1024).toFixed(0)} KB`
                         : ""}
@@ -242,7 +245,6 @@ function ResumeManager() {
                         <Eye className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    {/* ★ FIX: retry uses "error" not "failed" */}
                     {isError && (
                       <button
                         onClick={() => handleRetryParse(r.id)}
@@ -267,7 +269,7 @@ function ResumeManager() {
         </div>
       )}
 
-      {/* Preview modal — ★ FIX: read parsed_data not parsed_text */}
+      {/* Preview modal */}
       <Modal
         open={!!previewId}
         onClose={() => setPreviewId(null)}
@@ -277,14 +279,10 @@ function ResumeManager() {
         {previewVer?.parsed_data ? (
           <div className="max-h-96 overflow-y-auto bg-secondary rounded-xl p-4 space-y-3">
             {previewVer.parsed_data.name && (
-              <p className="text-sm font-semibold text-foreground">
-                {previewVer.parsed_data.name}
-              </p>
+              <p className="text-sm font-semibold text-foreground">{previewVer.parsed_data.name}</p>
             )}
             {previewVer.parsed_data.summary && (
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                {previewVer.parsed_data.summary}
-              </p>
+              <p className="text-xs text-muted-foreground leading-relaxed">{previewVer.parsed_data.summary}</p>
             )}
             {previewVer.parsed_data.skills?.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
@@ -318,12 +316,7 @@ function ResumeManager() {
       </Modal>
 
       {/* Delete confirm */}
-      <Modal
-        open={!!deleteId}
-        onClose={() => setDeleteId(null)}
-        title="Delete resume?"
-        size="sm"
-      >
+      <Modal open={!!deleteId} onClose={() => setDeleteId(null)} title="Delete resume?" size="sm">
         <p className="text-sm text-muted-foreground mb-5">
           This will permanently delete the resume and all versions. This cannot be undone.
         </p>
@@ -349,49 +342,56 @@ function ResumeManager() {
   );
 }
 
-// ─────────────────────────────────────────────────────────────────
-// JDManager
-// ─────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// JDManager — supports both Paste text and URL modes
+// ─────────────────────────────────────────────────────────────────────────────
 
 function JDManager() {
   const docStore = useDocumentStore();
   const docMgr   = useDocumentManager();
 
-  const [addOpen,  setAddOpen]  = useState(false);
-  const [title,    setTitle]    = useState("");
-  const [company,  setCompany]  = useState("");
-  const [text,     setText]     = useState("");
-  const [saving,   setSaving]   = useState(false);
-  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [addOpen,   setAddOpen]   = useState(false);
+  const [title,     setTitle]     = useState("");
+  const [company,   setCompany]   = useState("");
+  const [text,      setText]      = useState("");
+  // ★ URL input mode
+  const [jdMode,    setJdMode]    = useState<"paste" | "url">("paste");
+  const [jdUrl,     setJdUrl]     = useState("");
+  const [saving,    setSaving]    = useState(false);
+  const [deleteId,  setDeleteId]  = useState<string | null>(null);
 
-  const jds          = docStore.jds ?? [];
-  const activeJdId   = docStore.active_jd_id;
+  const jds        = docStore.jds ?? [];
+  const activeJdId = docStore.active_jd_id;
+
+  // Validate: paste mode needs text, url mode needs valid URL
+  const isAddValid = title.trim() && (
+    jdMode === "paste" ? text.trim() : (jdUrl.trim() && isValidUrl(jdUrl.trim()))
+  );
 
   async function handleAdd() {
-    if (!title.trim() || !text.trim()) return;
+    if (!isAddValid) return;
     setSaving(true);
     try {
-      // ★ FIX: correct shape — rawText/method/roleTitle, not title/company/text
       const { jdId, error } = await docMgr.addJobDescription({
-        rawText:   text,
-        method:    "paste",
+        rawText:   jdMode === "paste" ? text : `[URL] ${jdUrl}`,
+        method:    jdMode === "paste" ? "paste" : "url",
         roleTitle: title,
         company,
+        fileUrl:   jdMode === "url" ? jdUrl : undefined,
       });
       if (error) toast.error(error);
       else {
         toast.success("Job description saved.");
         setAddOpen(false);
-        setTitle(""); setCompany(""); setText("");
+        setTitle(""); setCompany(""); setText(""); setJdUrl(""); setJdMode("paste");
       }
-    } catch (err) {
+    } catch {
       toast.error("Failed to save job description. Please try again.");
     } finally {
       setSaving(false);
     }
   }
 
-  // ★ FIX: deleteJD wasn't in hook — call supabase + store directly
   const handleDeleteJD = useCallback(async (jdId: string) => {
     await supabase.from("job_descriptions").delete().eq("id", jdId);
     docStore.removeJD(jdId);
@@ -415,9 +415,7 @@ function JDManager() {
         <Card className="text-center py-10">
           <ClipboardList className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
           <p className="text-muted-foreground text-sm">No job descriptions added yet.</p>
-          <p className="text-muted-foreground text-xs mt-1">
-            Add a JD to improve AI answer relevance.
-          </p>
+          <p className="text-muted-foreground text-xs mt-1">Add a JD to improve AI answer relevance.</p>
         </Card>
       ) : (
         <div className="space-y-2">
@@ -431,7 +429,6 @@ function JDManager() {
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
-                      {/* ★ FIX: role_title not title */}
                       <p className="text-xs sm:text-sm font-medium text-foreground truncate">
                         {jd.role_title}
                       </p>
@@ -441,7 +438,6 @@ function JDManager() {
                       )}
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
-                      {/* ★ FIX: company_name not company */}
                       {jd.company_name && `${jd.company_name} · `}
                       {format(new Date(jd.created_at), "MMM d, yyyy")}
                     </p>
@@ -494,16 +490,53 @@ function JDManager() {
               />
             </div>
           </div>
+
+          {/* ★ Input mode toggle */}
           <div>
-            <p className="text-xs text-muted-foreground mb-1.5">Job description text *</p>
-            <textarea
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              placeholder="Paste the full job description here…"
-              rows={8}
-              className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
-            />
+            <p className="text-xs text-muted-foreground mb-2">Job description source</p>
+            <div className="flex gap-2 mb-3">
+              {(["paste", "url"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setJdMode(mode)}
+                  className={cn(
+                    "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
+                    jdMode === mode
+                      ? "bg-primary/10 border-primary/30 text-primary"
+                      : "bg-secondary border-border text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  {mode === "paste" ? "📋 Paste text" : "🔗 URL"}
+                </button>
+              ))}
+            </div>
+
+            {jdMode === "paste" ? (
+              <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                placeholder="Paste the full job description here…"
+                rows={8}
+                className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
+              />
+            ) : (
+              <div>
+                <input
+                  value={jdUrl}
+                  onChange={(e) => setJdUrl(e.target.value)}
+                  placeholder="https://jobs.example.com/senior-engineer"
+                  className={cn(
+                    "w-full bg-background border text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors",
+                    jdUrl && !isValidUrl(jdUrl) ? "border-red-500/60" : "border-input"
+                  )}
+                />
+                {jdUrl && !isValidUrl(jdUrl) && (
+                  <p className="text-xs text-red-400 mt-1">Please enter a valid URL (including https://)</p>
+                )}
+              </div>
+            )}
           </div>
+
           <div className="flex gap-3">
             <Button variant="secondary" size="sm" fullWidth onClick={() => setAddOpen(false)}>
               Cancel
@@ -513,7 +546,7 @@ function JDManager() {
               size="sm"
               fullWidth
               loading={saving}
-              disabled={!title.trim() || !text.trim()}
+              disabled={!isAddValid}
               onClick={handleAdd}
             >
               Save JD
@@ -544,6 +577,222 @@ function JDManager() {
           </Button>
         </div>
       </Modal>
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CoverLetterManager — PDF/DOCX, 5 MB limit
+// ─────────────────────────────────────────────────────────────────────────────
+
+function CoverLetterManager() {
+  const [file,      setFile]      = useState<File | null>(null);
+  const [dragOver,  setDragOver]  = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function handleFile(f: File) {
+    if (f.size > 5 * 1024 * 1024) {
+      toast.error("File too large. Maximum size is 5 MB.");
+      return;
+    }
+    const ext = f.name.split(".").pop()?.toLowerCase();
+    if (!["pdf", "docx"].includes(ext ?? "")) {
+      toast.error("Only PDF or DOCX files are supported for cover letters.");
+      return;
+    }
+    setFile(f);
+    toast.success("Cover letter selected — upload support coming soon.");
+  }
+
+  return (
+    <div className="space-y-4">
+      <div
+        onClick={() => inputRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+        onDragLeave={() => setDragOver(false)}
+        onDrop={(e) => {
+          e.preventDefault();
+          setDragOver(false);
+          const f = e.dataTransfer.files[0];
+          if (f) handleFile(f);
+        }}
+        className={cn(
+          "border-2 border-dashed rounded-2xl p-5 sm:p-8 text-center cursor-pointer transition-all",
+          dragOver
+            ? "border-violet-500/60 bg-violet-500/5"
+            : "border-border hover:border-border bg-card"
+        )}
+      >
+        <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+        <p className="text-sm font-medium text-foreground">
+          Drop cover letter here or{" "}
+          <span className="text-violet-400 underline">browse</span>
+        </p>
+        <p className="text-xs text-muted-foreground mt-1">PDF or DOCX · Max 5 MB</p>
+      </div>
+      <input
+        ref={inputRef}
+        type="file"
+        accept=".pdf,.docx"
+        className="hidden"
+        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+      />
+
+      {file ? (
+        <Card padding="sm">
+          <div className="flex items-center gap-3">
+            <div className="w-8 h-8 bg-emerald-500/10 rounded-xl flex items-center justify-center shrink-0">
+              <FileText className="w-4 h-4 text-emerald-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm text-foreground truncate">{file.name}</p>
+              <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB</p>
+            </div>
+            <Badge variant="amber" size="sm">Ready</Badge>
+            <button
+              onClick={() => setFile(null)}
+              className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-accent/5 transition-all"
+            >
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          </div>
+        </Card>
+      ) : (
+        <Card className="text-center py-8 bg-secondary/30">
+          <p className="text-sm text-muted-foreground">No cover letter uploaded.</p>
+          <p className="text-xs text-muted-foreground/70 mt-1">
+            A tailored cover letter improves your application success rate.
+          </p>
+        </Card>
+      )}
+    </div>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// PortfolioManager — PDF/TXT file OR URL, 15 MB limit
+// ─────────────────────────────────────────────────────────────────────────────
+
+function PortfolioManager() {
+  const [mode,         setMode]         = useState<"file" | "url">("file");
+  const [file,         setFile]         = useState<File | null>(null);
+  const [portfolioUrl, setPortfolioUrl] = useState("");
+  const [dragOver,     setDragOver]     = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  function handleFile(f: File) {
+    if (f.size > 15 * 1024 * 1024) {
+      toast.error("File too large. Maximum size is 15 MB.");
+      return;
+    }
+    const ext = f.name.split(".").pop()?.toLowerCase();
+    if (!["pdf", "txt"].includes(ext ?? "")) {
+      toast.error("Only PDF or TXT files are supported for portfolios.");
+      return;
+    }
+    setFile(f);
+    toast.success("Portfolio file selected.");
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* Mode toggle */}
+      <div className="flex gap-2">
+        {(["file", "url"] as const).map((m) => (
+          <button
+            key={m}
+            onClick={() => setMode(m)}
+            className={cn(
+              "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
+              mode === m
+                ? "bg-primary/10 border-primary/30 text-primary"
+                : "bg-secondary border-border text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {m === "file" ? "📁 Upload file" : "🔗 URL"}
+          </button>
+        ))}
+      </div>
+
+      {mode === "file" ? (
+        <>
+          <div
+            onClick={() => inputRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              const f = e.dataTransfer.files[0];
+              if (f) handleFile(f);
+            }}
+            className={cn(
+              "border-2 border-dashed rounded-2xl p-5 sm:p-8 text-center cursor-pointer transition-all",
+              dragOver
+                ? "border-violet-500/60 bg-violet-500/5"
+                : "border-border hover:border-border bg-card"
+            )}
+          >
+            <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
+            <p className="text-sm font-medium text-foreground">
+              Drop portfolio PDF/TXT or{" "}
+              <span className="text-violet-400 underline">browse</span>
+            </p>
+            <p className="text-xs text-muted-foreground mt-1">PDF or TXT · Max 15 MB</p>
+          </div>
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".pdf,.txt"
+            className="hidden"
+            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+          />
+          {file && (
+            <Card padding="sm">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-violet-500/10 rounded-xl flex items-center justify-center shrink-0">
+                  <FileText className="w-4 h-4 text-violet-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-foreground truncate">{file.name}</p>
+                  <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB</p>
+                </div>
+                <Badge variant="emerald" size="sm">Selected</Badge>
+                <button
+                  onClick={() => setFile(null)}
+                  className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-accent/5 transition-all"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </Card>
+          )}
+        </>
+      ) : (
+        <div className="space-y-2">
+          <p className="text-xs text-muted-foreground">Portfolio URL</p>
+          <div className="flex gap-2">
+            <div className="flex-1 relative">
+              <Link2 className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+              <input
+                value={portfolioUrl}
+                onChange={(e) => setPortfolioUrl(e.target.value)}
+                placeholder="https://yourportfolio.com"
+                className={cn(
+                  "w-full bg-background border text-foreground placeholder:text-muted-foreground rounded-xl pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors",
+                  portfolioUrl && !isValidUrl(portfolioUrl) ? "border-red-500/60" : "border-input"
+                )}
+              />
+            </div>
+          </div>
+          {portfolioUrl && !isValidUrl(portfolioUrl) && (
+            <p className="text-xs text-red-400">Please enter a valid URL (including https://)</p>
+          )}
+          {portfolioUrl && isValidUrl(portfolioUrl) && (
+            <p className="text-xs text-emerald-400">✓ Valid URL saved</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }

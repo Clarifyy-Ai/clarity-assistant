@@ -1,6 +1,7 @@
 // @ts-nocheck
 // src/hooks/useDocuments.ts
 import { EDGE_BASE } from "@/lib/env";
+import { fetchEdge } from "@/lib/network/fetchEdge";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase, uploadFile, deleteFile, STORAGE_BUCKETS } from "@/lib/supabase/client";
 import { useDocumentStore } from "@/store/documentStore";
@@ -158,8 +159,11 @@ export function useDocuments() {
       });
       if (resumeErr) throw new Error(resumeErr.message);
 
+      // Fire-and-forget XP award
+      fetchEdge("award-xp", { event_type: "resume_uploaded", xp: 20, metadata: {} }).catch(() => {});
+
       // Fire-and-forget parse
-      parseResume(resumeId, uploaded.url, file.type);
+      parseResume(resumeId, path, file.type);
 
       await loadDocuments();
       return { resumeId, error: null };
@@ -177,14 +181,14 @@ export function useDocuments() {
 
   async function parseResume(
     resumeId: string,
-    fileUrl: string,
+    filePath: string,
     mimeType: string
   ): Promise<void> {
     if (!mountedRef.current) return;
     setIsParsing(true);
     try {
       const { data } = await supabase.functions.invoke("parse-resume", {
-        body: { resume_id: resumeId, file_url: fileUrl, mime_type: mimeType },
+        body: { resume_id: resumeId, file_path: filePath, mime_type: mimeType },
       });
       // Update content if parsed
       if (data?.content) {
@@ -247,6 +251,9 @@ export function useDocuments() {
     });
 
     if (error) return { jdId: null, error: error.message };
+
+    // Fire-and-forget XP award
+    fetchEdge("award-xp", { event_type: "document_uploaded", xp: 20, metadata: {} }).catch(() => {});
 
     parseJobDescription(jdId, params.rawText);
     await loadDocuments();

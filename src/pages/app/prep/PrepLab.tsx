@@ -20,6 +20,7 @@ import {
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";
 import { refreshCredits } from "@/lib/billing/creditsManager";
+import { EDGE_BASE } from "@/lib/env";
 import { fetchEdge } from "@/lib/network/fetchEdge";
 
 // ─────────────────────────────────────────────────────────────────
@@ -152,7 +153,7 @@ function STARBuilder() {
         },
         body: JSON.stringify({
           questionText: question,
-          resumeText:   docStore.activeResume?.parsed_text || undefined,
+          resumeText:   docStore.active_context?.resume?.content || undefined,
         }),
       });
 
@@ -536,7 +537,7 @@ const AI_TOOLS = [
 function AITools() {
   const { profile } = useAuthStore();
   const [activeToolId, setActiveToolId] = useState<string | null>(null);
-  const isPro = profile?.plan !== "free";
+  const isPro = profile?.plan_id !== "free";
 
   return (
     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">

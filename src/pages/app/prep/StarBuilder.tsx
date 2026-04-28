@@ -151,7 +151,7 @@ export default function StarBuilder() {
               disabled={polishing || !hasContent}
               leftIcon={polishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             >
-              {polishing ? "Polishing..." : "AI Polish (1 credit)"}
+              {polishing ? "Polishing..." : `AI Polish (${credits.costs.star_generate} credits)`}
             </Button>
             <Button
               variant="secondary"

@@ -25,6 +25,7 @@ export default function ProjectBuilder() {
   const [techInput, setTechInput]       = useState("");
   const [description, setDescription]   = useState("");
   const [impact, setImpact]             = useState("");
+  const [githubUrl, setGithubUrl]       = useState("");
   const [showcase, setShowcase]         = useState("");
   const [loading, setLoading]           = useState(false);
   const [saved, setSaved]               = useState(false);
@@ -61,7 +62,7 @@ export default function ProjectBuilder() {
     try {
       
       const techList = techStack.length > 0 ? techStack.join(", ") : "not specified";
-      const input = `Project: ${projectName}\nRole: ${role}\nTech Stack: ${techList}\n\nWhat I did:\n${description}${impact ? `\n\nImpact & Metrics:\n${impact}` : ""}`;
+      const input = `Project: ${projectName}\nRole: ${role}\nTech Stack: ${techList}\n\nWhat I did:\n${description}${impact ? `\n\nImpact & Metrics:\n${impact}` : ""}${githubUrl ? `\n\nGitHub/Portfolio URL: ${githubUrl}` : ""}`;
       const res = await fetchEdge("prep-tool", { tool_id: "project_build", input });
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -121,6 +122,16 @@ export default function ProjectBuilder() {
                   value={role}
                   onChange={(e) => setRole(e.target.value)}
                   placeholder="e.g. Lead Backend Engineer"
+                  className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs text-muted-foreground mb-1 block">GitHub / Portfolio URL (optional)</label>
+                <input
+                  value={githubUrl}
+                  onChange={(e) => setGithubUrl(e.target.value)}
+                  placeholder="e.g. https://github.com/user/project"
                   className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
                 />
               </div>

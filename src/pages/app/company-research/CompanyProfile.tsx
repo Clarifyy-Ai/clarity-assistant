@@ -69,10 +69,14 @@ export default function CompanyProfile() {
       const data = await res.json();
       setBrief(data);
 
+      // Non-blocking XP award
+      fetchEdge("award-xp", { event_type: "company_research", xp: 10, metadata: { company: companyName } }).catch(() => {});
+
       // Cache it
       await supabase.from("company_research").upsert({
         user_id:       user?.id,
         company_name:  companyName,
+        role_title:    params.get("role") ?? null,
         raw_data:      data,
         overview:      data.overview ?? null,
         culture:       data.culture ?? null,

@@ -80,7 +80,7 @@ Deno.serve(async (req: Request) => {
     // -------------------------------
     // DEDUCT CREDITS (Correct signature: userId, action, cost)
     // -------------------------------
-    const credit = await deductCredits(userId, "generate_star", 2);
+    const credit = await deductCredits(userId, "generate_star", 10);
     if (!credit.success) {
       return errorResponse(
         credit.error ?? "Insufficient credits.",
@@ -146,7 +146,7 @@ Return ONLY this JSON:
 
     if (!aiResult?.text) {
       // Refund credits
-      await deductCredits(userId, "refund_generate_star", -2);
+      await deductCredits(userId, "refund_generate_star", -10);
       return errorResponse("AI service failed.", "AI_ERROR", 502);
     }
 
@@ -194,7 +194,7 @@ Return ONLY this JSON:
     return successResponse(star, {
       model,
       tokensUsed: aiResult.totalTokens,
-      creditsCharged: 2,
+      creditsCharged: 10,
       latencyMs: aiResult.latencyMs,
     });
   } catch (err) {

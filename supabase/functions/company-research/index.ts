@@ -58,9 +58,9 @@ Deno.serve(async (req) => {
     /* ---------------------------------------------------------
        CREDIT DEDUCTION (Preserved 8 credits cost)
     --------------------------------------------------------- */
-    const credit = await deductCredits(userId, "company_research" as any, 8);
+    const credit = await deductCredits(userId, "company_research" as any, 20);
     if (!credit.success) {
-      return errorResponse("Insufficient credits. Company research requires 8 credits.", "INSUFFICIENT_CREDITS", 402);
+      return errorResponse("Insufficient credits. Company research requires 20 credits.", "INSUFFICIENT_CREDITS", 402);
     }
 
     /* ---------------------------------------------------------
@@ -108,7 +108,7 @@ Notes:
       });
       if (!aiResult?.text) throw new Error("AI returned empty response");
     } catch (aiErr) {
-      await deductCredits(userId, "refund_company_research" as any, -8);
+      await deductCredits(userId, "refund_company_research" as any, -20);
       log(FN, "error", "AI call failed, credits refunded", { userId, err: String(aiErr) });
       return errorResponse("Company research temporarily unavailable. Credits refunded.", "AI_ERROR", 502);
     }

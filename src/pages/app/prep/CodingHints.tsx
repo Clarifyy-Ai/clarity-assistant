@@ -77,6 +77,7 @@ export default function CodingHints() {
   const [solutionText, setSolutionText] = useState("");
   const [loading, setLoading]       = useState<"hint" | "solution" | null>(null);
   const [error, setError]           = useState<string | null>(null);
+  const [depth, setDepth]           = useState<"surface" | "medium" | "near-complete">("surface");
 
   const filtered = useMemo(() => {
     return PROBLEMS.filter((p) => {
@@ -108,7 +109,7 @@ export default function CodingHints() {
     try {
       
       const input = `Problem: ${activeProblem.title}\n\n${activeProblem.description}\n\nExamples:\n${activeProblem.examples}\n\nTags: ${activeProblem.tags.join(", ")}`;
-      const res = await fetchEdge("prep-tool", { tool_id: "coding_hint", input });
+      const res = await fetchEdge("prep-tool", { tool_id: "coding_hint", input, depth });
 
       if (!res.ok) throw new Error(`API error: ${res.status}`);
       const data = await res.json();
@@ -273,6 +274,28 @@ export default function CodingHints() {
                   </div>
                 </Card>
               )}
+
+              {/* Depth selector */}
+              <div className="flex gap-1.5">
+                {([
+                  { id: "surface",      label: "Quick hint" },
+                  { id: "medium",       label: "Deeper hint" },
+                  { id: "near-complete", label: "Near-complete" },
+                ] as const).map((d) => (
+                  <button
+                    key={d.id}
+                    onClick={() => { setDepth(d.id); setHintText(""); }}
+                    className={cn(
+                      "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
+                      depth === d.id
+                        ? "bg-violet-500/20 border-violet-500/30 text-violet-300"
+                        : "bg-secondary border-border text-muted-foreground hover:text-foreground"
+                    )}
+                  >
+                    {d.label}
+                  </button>
+                ))}
+              </div>
 
               <div className="flex gap-3">
                 <Button

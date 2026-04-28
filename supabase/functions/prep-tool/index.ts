@@ -6,9 +6,8 @@ import {
   successResponse,
   errorResponse,
   deductCredits,
-  log
+  log,
 } from "../_shared/utils.ts";
-
 import { geminiGenerate } from "../_shared/gemini.ts";
 
 /* -------------------------------------------------------------------------- */
@@ -32,7 +31,23 @@ function sanitizeAIOutput(text: string): string {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                               TOOL PROMPTS                                 */
+/*                         PER-TOOL CREDIT COSTS                              */
+/* -------------------------------------------------------------------------- */
+
+const TOOL_COSTS: Record<string, number> = {
+  coding_hint:   8,
+  rephrase:      6,
+  project_build: 10,
+  star_method:   10,
+  system_design: 5,
+};
+
+function getToolCost(tool_id: string): number {
+  return TOOL_COSTS[tool_id] ?? 3;
+}
+
+/* -------------------------------------------------------------------------- */
+/*                              TOOL PROMPTS                                  */
 /* -------------------------------------------------------------------------- */
 
 const TOOL_PROMPTS: Record<string, (input: string) => string> = {
@@ -92,8 +107,10 @@ ${input}
 `,
 
   coding_hint: (input) => `
-Give progressive hints (general → specific) for this coding problem.
-Do NOT reveal the full solution.
+You are a coding interview coach. Give a progressive hint for this problem based on the requested depth level embedded in the input.
+- "surface": general direction, data structure to consider, do NOT reveal the algorithm
+- "medium": explain the key insight and approach, but not the full solution
+- "near-complete": explain the algorithm step by step in detail, including edge cases
 
 ${input}
 `,
@@ -119,20 +136,40 @@ ${input}
 `,
 
   rephrase: (input) => `
-Rephrase and improve this answer. Preserve authenticity.
-Return ONLY the improved answer.
+Rephrase this interview answer in exactly 3 distinct styles.
+Return ONLY valid JSON — no markdown fences, no extra text outside the JSON object.
 
+{
+  "formal": "polished, professional, precise version here",
+  "confident": "assertive, direct, strong-impact version here",
+  "concise": "shorter, punchy, trimmed-down version here"
+}
+
+Answer to rephrase:
 ${input}
 `,
 
   project_build: (input) => `
 Create a polished project showcase with:
 - overview
-- achievements
+- key achievements
 - tech rationale
-- challenges
+- challenges overcome
 - STAR-format version
 - 3 follow-up questions + answers
+
+${input}
+`,
+
+  star_method: (input) => `
+Improve this STAR interview answer. Keep it authentic and specific.
+Polish the language, flow, and impact. Quantify results where possible.
+Return the improved version with all 4 sections clearly labeled:
+
+Situation: ...
+Task: ...
+Action: ...
+Result: ...
 
 ${input}
 `,
@@ -141,7 +178,7 @@ ${input}
 };
 
 /* -------------------------------------------------------------------------- */
-/*                                   HANDLER                                  */
+/*                                  HANDLER                                   */
 /* -------------------------------------------------------------------------- */
 
 Deno.serve(async (req: Request) => {
@@ -152,7 +189,7 @@ Deno.serve(async (req: Request) => {
 
   try {
     /* ----------------------- AUTH ----------------------- */
-    const auth = await requireAuth(req);
+    const auth   = await requireAuth(req);
     const userId = auth.userId;
 
     /* ----------------------- BODY ----------------------- */
@@ -168,10 +205,18 @@ Deno.serve(async (req: Request) => {
       return errorResponse(`Unknown tool_id: ${tool_id}`, "INVALID_TOOL", 400);
     }
 
-    const sanitizedInput = sanitizeInput(body.input);
+    // For coding_hint, prepend depth level to input if provided
+    let rawInput = body.input;
+    if (tool_id === "coding_hint" && typeof body.depth === "string") {
+      const depth = sanitizeInput(body.depth, 20);
+      rawInput = `Depth level: ${depth}\n\n${rawInput}`;
+    }
+
+    const sanitizedInput = sanitizeInput(rawInput);
 
     /* ------------------- CREDIT DEDUCTION ------------------- */
-    const credit = await deductCredits(userId, `prep_tool_${tool_id}`, 3);
+    const toolCost = getToolCost(tool_id);
+    const credit   = await deductCredits(userId, `prep_tool_${tool_id}` as any, toolCost);
     if (!credit.success) {
       return errorResponse("Insufficient credits", "INSUFFICIENT_CREDITS", 402);
     }
@@ -179,7 +224,7 @@ Deno.serve(async (req: Request) => {
     /* ----------------------- PROMPT ----------------------- */
     const prompt = promptFn(sanitizedInput);
 
-    /* ----------------------- AI CALL (with refund-on-failure + BYOK) ----------------------- */
+    /* ----------------------- AI CALL ----------------------- */
     let raw: string;
     try {
       raw = await geminiGenerate(prompt, undefined, 0.6, 1200, auth.byok?.gemini);
@@ -187,24 +232,29 @@ Deno.serve(async (req: Request) => {
         throw new Error("AI returned empty response");
       }
     } catch (aiErr) {
-      // Refund the 3 credits since the user didn't get a useful result
-      await deductCredits(userId, `refund_prep_tool_${tool_id}` as any, -3);
+      // Refund credits — user didn't get a useful result
+      await deductCredits(userId, `refund_prep_tool_${tool_id}` as any, -toolCost);
       log(FN, "error", "AI call failed, credits refunded", { userId, tool_id, err: String(aiErr) });
-      return errorResponse("AI service temporarily unavailable. Credits refunded.", "AI_ERROR", 502);
+      return errorResponse(
+        "AI service temporarily unavailable. Credits refunded.",
+        "AI_ERROR",
+        502
+      );
     }
 
     const cleaned = sanitizeAIOutput(raw);
 
     /* ----------------------- RESPOND ----------------------- */
     log(FN, "info", "Prep tool executed", {
-      userId, tool_id, inputLength: sanitizedInput.length
+      userId,
+      tool_id,
+      inputLength: sanitizedInput.length,
     });
 
     return successResponse(
       { result: cleaned },
-      { creditsCharged: 3 }
+      { creditsCharged: toolCost }
     );
-
   } catch (err) {
     console.error("prep-tool error:", err);
     return errorResponse("Internal error", "INTERNAL", 500);

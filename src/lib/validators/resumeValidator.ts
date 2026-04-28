@@ -7,7 +7,7 @@ import type { ValidationResult } from "./emailValidator";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-const MAX_RESUME_SIZE_MB     = 5;
+const MAX_RESUME_SIZE_MB     = 10;
 const MAX_RESUME_SIZE_BYTES  = MAX_RESUME_SIZE_MB * 1024 * 1024;
 const MAX_JD_LENGTH          = 10000;  // characters
 const MIN_JD_LENGTH          = 50;
