@@ -508,7 +508,7 @@ export const useOverlayStore = create<OverlayStore>()(
       setPipActive: (is_pip_active) => set({ is_pip_active }),
     })),
     {
-      name: "confideq-overlay",
+      name: "clarify-overlay",
       // Only persist position and hint_style — not content
       partialize: (state) => ({
         position: state.position,

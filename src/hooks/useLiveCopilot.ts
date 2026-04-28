@@ -75,7 +75,9 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     const context = buildCoachingContext(profile as any, cfg, active_context);
     coachStore.initContext(context);
 
-    const parsed = active_context.resume_version?.parsed_data ?? null;
+    // FIX: active_context shape is { resume: { content }, jd: {...} }
+    // The old field `resume_version?.parsed_data` no longer exists.
+    const parsed = active_context?.resume?.content ?? null;
     const resumeCtx = buildResumeContext(parsed);
     const talkingPoints = generateResumeTalkingPoints(parsed, {
       company: cfg.company,
@@ -237,7 +239,9 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
       try {
         await requestFullAnswer(question, sessionIdRef.current, controller.signal);
         // Credits are deducted server-side in generate-answer edge function
-        useSessionStore.getState().consumeCredit(2); // COST = 2 for full answer
+        // FIX: use creditCheck.creditsRequired instead of hardcoded 2
+        // so the local session counter stays in sync with the credit model.
+        useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
       } catch (err) {
         if (!controller.signal.aborted) {
           useOverlayStore.getState().setError(

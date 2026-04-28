@@ -34,7 +34,9 @@ import { useIsMobile } from "@/hooks/use-mobile";
 // Helpers
 // ─────────────────────────────────────────────────────────────────
 
-const OVERLAY_ROOT_ID = "overlay-root";
+// FIX: must match the id used by screenCaptureBlocker.ts and triggerPanicKill()
+// so stealth panic-kill correctly hides the portal container in browser mode.
+const OVERLAY_ROOT_ID = "clarify-overlay-root";
 
 function ensureOverlayRoot(doc: Document): HTMLElement {
   let el = doc.getElementById(OVERLAY_ROOT_ID);
