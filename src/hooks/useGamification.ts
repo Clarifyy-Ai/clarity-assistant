@@ -2,7 +2,7 @@
 import { fetchEdge } from "@/lib/network/fetchEdge";
 import { useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
-import { useAuthStore } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
 import {
   XP_LEVELS,
   XP_REWARDS,
@@ -105,7 +105,7 @@ export const useGamificationStore = create<GamificationStore>()(
           pending_badge_unlock:      null,
         }),
     }),
-    { name: "confideq-gamification" },
+    { name: "clarify-gamification" },
   ),
 );
 

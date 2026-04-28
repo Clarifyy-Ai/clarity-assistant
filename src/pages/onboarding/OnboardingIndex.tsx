@@ -1,4 +1,3 @@
-// @ts-nocheck
 // ─────────────────────────────────────────────────────────────────────────────
 // OnboardingIndex.tsx — Master onboarding orchestrator.
 // Manages step progression, shared state across all 5 steps,
@@ -24,36 +23,10 @@ import OnboardingStep5ResumeUpload from "./OnboardingStep5ResumeUpload";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { Button }                from "@/components/ui/Button";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-export interface OnboardingData {
-  // Step 1 — Role
-  targetRole:       string;
-  targetCompanies:  string[];
-  jobDescription:   string;
-
-  // Step 2 — Experience
-  yearsOfExperience: number;
-  currentLevel:      string;
-  techStack:         string[];
-  interviewTypes:    string[];
-
-  // Step 3 — Preferences
-  preferredModel:    string;
-  preferredLanguage: string;
-  overlayEnabled:    boolean;
-  audioAnalysis:     boolean;
-  emailNotifications: boolean;
-
-  // Step 4 — Audio (device IDs only — stream handled inside step)
-  selectedMicId:     string;
-  audioVerified:     boolean;
-
-  // Step 5 — Resume
-  resumeFileId:      string | null;
-  resumeFileName:    string | null;
-  skipResume:        boolean;
-}
+// Re-export OnboardingData from the shared types file so consumers can import
+// from either location without creating circular dependencies.
+export type { OnboardingData } from "@/types/onboarding.types";
+import type { OnboardingData } from "@/types/onboarding.types";
 
 const INITIAL_ONBOARDING_DATA: OnboardingData = {
   targetRole:         "",
@@ -250,32 +223,9 @@ export default function OnboardingIndex() {
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
-  const handleNext = useCallback((stepData?: Partial<OnboardingData>) => {
-    if (stepData) mergeData(stepData);
-
-    setCompletedSteps((prev) => new Set(prev).add(currentStep));
-
-    if (currentStep < TOTAL_STEPS) {
-      goToStep(currentStep + 1);
-    } else {
-      handleFinish(stepData);
-    }
-  }, [currentStep, mergeData, goToStep]);
-
-  const handleBack = useCallback(() => {
-    if (currentStep > 1) goToStep(currentStep - 1);
-  }, [currentStep, goToStep]);
-
-  const handleSkip = useCallback(() => {
-    setCompletedSteps((prev) => new Set(prev).add(currentStep));
-    if (currentStep < TOTAL_STEPS) {
-      goToStep(currentStep + 1);
-    } else {
-      handleFinish();
-    }
-  }, [currentStep, goToStep]);
-
-  // ── Persist to Supabase ────────────────────────────────────────────────────
+  // ── Persist to Supabase — declared BEFORE handleNext/handleSkip so it is
+  //    fully initialised when it appears in their useCallback deps arrays.
+  //    (Referencing a const in a deps array before its declaration = TDZ error)
 
   const handleFinish = useCallback(async (lastStepData?: Partial<OnboardingData>) => {
     const finalData = lastStepData ? { ...data, ...lastStepData } : data;
@@ -293,16 +243,6 @@ export default function OnboardingIndex() {
         ...(refCode ? { referred_by: refCode } : {}),
       } as Record<string, unknown>);
 
-      // Persist extended onboarding data to a metadata column
-      if (user?.id) {
-        await supabase
-          .from("profiles")
-          .update({
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", user.id);
-      }
-
       await loadProfile();
       setIsComplete(true);
     } catch (err) {
@@ -312,7 +252,33 @@ export default function OnboardingIndex() {
     } finally {
       setIsSaving(false);
     }
-  }, [data, updateProfile, loadProfile, user]);
+  }, [data, updateProfile, loadProfile, user, refCode]);
+
+  const handleNext = useCallback((stepData?: Partial<OnboardingData>) => {
+    if (stepData) mergeData(stepData);
+
+    setCompletedSteps((prev) => new Set(prev).add(currentStep));
+
+    if (currentStep < TOTAL_STEPS) {
+      goToStep(currentStep + 1);
+    } else {
+      // Last step — pass stepData so handleFinish can merge it with accumulated data
+      handleFinish(stepData);
+    }
+  }, [currentStep, mergeData, goToStep, handleFinish]);
+
+  const handleBack = useCallback(() => {
+    if (currentStep > 1) goToStep(currentStep - 1);
+  }, [currentStep, goToStep]);
+
+  const handleSkip = useCallback(() => {
+    setCompletedSteps((prev) => new Set(prev).add(currentStep));
+    if (currentStep < TOTAL_STEPS) {
+      goToStep(currentStep + 1);
+    } else {
+      handleFinish();
+    }
+  }, [currentStep, goToStep, handleFinish]);
 
   // ── Redirect to dashboard ─────────────────────────────────────────────────
 

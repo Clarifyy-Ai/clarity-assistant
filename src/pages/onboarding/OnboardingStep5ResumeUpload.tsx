@@ -1,25 +1,26 @@
-// @ts-nocheck
+// ─────────────────────────────────────────────────────────────────────────────
+// OnboardingStep5ResumeUpload.tsx — Step 5: Resume upload + AI parse.
+// Rendered inside OnboardingIndex (no outer page wrapper needed).
+// Completion is handled by OnboardingIndex.handleFinish — this step just
+// calls onNext() / onSkip() to hand off control to the orchestrator.
+// ─────────────────────────────────────────────────────────────────────────────
+
 import { fetchEdge } from "@/lib/network/fetchEdge";
 import { useState, useRef } from "react";
-import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase/client";
-import { useAuthStore } from "@/store/userStore";
-import { recordReferral } from "@/lib/referrals";
-import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
+import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/Button";
 import {
   Upload, FileText, CheckCircle,
   Loader2, AlertCircle, SkipForward,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import type { StepProps } from "@/types/onboarding.types";
 
-// ─────────────────────────────────────────────────────────────────
-// Step 5 — Resume upload + AI parse
-// ─────────────────────────────────────────────────────────────────
+// ─── Component ───────────────────────────────────────────────────────────────
 
-export default function OnboardingStep5ResumeUpload() {
-  const navigate  = useNavigate();
-  const { user, profile, setProfile } = useAuthStore();
+export default function OnboardingStep5ResumeUpload({ onNext, onBack, onSkip }: StepProps) {
+  const { user } = useAuthStore();
 
   const [file,      setFile]      = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
@@ -27,9 +28,11 @@ export default function OnboardingStep5ResumeUpload() {
   const [done,      setDone]      = useState(false);
   const [error,     setError]     = useState<string | null>(null);
   const [dragOver,  setDragOver]  = useState(false);
-  const inputRef   = useRef<HTMLInputElement>(null);
+  // Track the saved resume record so we can pass the ID to onNext
+  const [resumeId,  setResumeId]  = useState<string | null>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // ── Handle file selection ──────────────────────────────────────
+  // ── File validation ─────────────────────────────────────────────────────
 
   function onFileChange(f: File) {
     if (f.type !== "application/pdf" && !f.name.endsWith(".docx")) {
@@ -44,7 +47,7 @@ export default function OnboardingStep5ResumeUpload() {
     setFile(f);
   }
 
-  // ── Upload + trigger AI parse ──────────────────────────────────
+  // ── Upload + trigger AI parse ───────────────────────────────────────────
 
   async function handleUpload() {
     if (!file || !user) return;
@@ -63,7 +66,7 @@ export default function OnboardingStep5ResumeUpload() {
       return;
     }
 
-    // 2. Create resume record in DB (matches actual resumes table schema)
+    // 2. Create resume record in DB
     const { data: resumeRecord, error: dbError } = await supabase
       .from("resumes")
       .insert({
@@ -90,193 +93,179 @@ export default function OnboardingStep5ResumeUpload() {
       .single();
 
     if (versionError) {
+      // Non-fatal — still mark as done
       setError("Resume saved but version tracking failed.");
+      setResumeId(resumeRecord.id);
       setDone(true);
       return;
     }
 
     // 4. Trigger AI parse via Edge Function
     setParsing(true);
-    
     const res = await fetchEdge("parse-resume", {
       resume_id:  resumeRecord.id,
       version_id: versionRecord.id,
       file_path:  path,
     });
-
     setParsing(false);
 
     if (!res.ok) {
-      // Parse failed — non-fatal, continue
       setError("Resume uploaded but parsing failed. You can retry in Documents.");
     }
 
+    setResumeId(resumeRecord.id);
     setDone(true);
   }
 
-  // ── Complete onboarding ────────────────────────────────────────
-
-  async function completeOnboarding() {
-    if (!user) return;
-
-    await recordReferral(user.id, profile?.referred_by);
-
-    const { data } = await supabase
-      .from("profiles")
-      .update({ onboarding_completed: true, onboarding_step: 5 })
-      .eq("id", user.id)
-      .select()
-      .single();
-
-    if (data) setProfile(data);
-    navigate("/app");
-  }
-
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4 py-12">
-      <div className="w-full max-w-lg">
+    <div className="max-w-lg mx-auto space-y-5">
 
-        <div className="w-9 h-9 bg-violet-600 rounded-xl flex items-center justify-center mb-8">
-          <span className="text-foreground text-sm font-bold">CQ</span>
-        </div>
-
-        <OnboardingProgress current={5} />
-
-        <h2 className="text-2xl font-bold text-foreground mb-1">Upload your resume</h2>
-        <p className="text-muted-foreground text-sm mb-8">
+      {/* ── Heading ─────────────────────────────────────────────────────── */}
+      <div>
+        <h2 className="text-2xl font-bold text-foreground mb-1">
+          Upload your resume
+        </h2>
+        <p className="text-muted-foreground text-sm">
           We parse your resume so every AI answer references your actual experience.
           This makes hints dramatically more relevant.
         </p>
+      </div>
 
-        <div className="space-y-5">
+      {done ? (
+        /* ── Success state ──────────────────────────────────────────────── */
+        <div className="flex flex-col items-center gap-4 py-8 text-center">
+          <div className="w-14 h-14 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-center">
+            <CheckCircle className="w-7 h-7 text-emerald-400" />
+          </div>
+          <div>
+            <p className="text-foreground font-semibold">Resume uploaded!</p>
+            <p className="text-muted-foreground text-sm mt-1">
+              {parsing
+                ? "Parsing your resume…"
+                : "AI parse complete. Your profile is ready."}
+            </p>
+          </div>
 
-          {done ? (
-            /* ── Success state ───────────────────────── */
-            <div className="flex flex-col items-center gap-4 py-8 text-center">
-              <div className="w-14 h-14 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl flex items-center justify-center">
-                <CheckCircle className="w-7 h-7 text-emerald-400" />
-              </div>
-              <div>
-                <p className="text-foreground font-semibold">Resume uploaded!</p>
-                <p className="text-muted-foreground text-sm mt-1">
-                  {parsing ? "Parsing your resume…" : "AI parse complete. Your profile is ready."}
+          {error && (
+            <div className="flex items-center gap-2 text-xs text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-xl px-3 py-2.5 w-full">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              {error}
+            </div>
+          )}
+
+          {/* Hand off to OnboardingIndex.handleFinish */}
+          <Button
+            variant="primary"
+            size="md"
+            onClick={() => onNext({ resumeFileId: resumeId, resumeFileName: file?.name ?? null })}
+            disabled={parsing}
+            loading={parsing}
+          >
+            Finish setup →
+          </Button>
+        </div>
+
+      ) : (
+        <>
+          {/* ── Drop zone ───────────────────────────────────────────────── */}
+          <div
+            onClick={() => inputRef.current?.click()}
+            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+            onDragLeave={() => setDragOver(false)}
+            onDrop={(e) => {
+              e.preventDefault();
+              setDragOver(false);
+              const f = e.dataTransfer.files[0];
+              if (f) onFileChange(f);
+            }}
+            className={cn(
+              "border-2 border-dashed rounded-2xl p-10 flex flex-col items-center gap-3",
+              "cursor-pointer transition-all",
+              dragOver
+                ? "border-violet-500/60 bg-violet-500/5"
+                : "border-border hover:border-primary/30 bg-secondary/50",
+            )}
+          >
+            {file ? (
+              <>
+                <FileText className="w-10 h-10 text-violet-400" />
+                <p className="text-sm font-medium text-foreground">{file.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {(file.size / 1024).toFixed(0)} KB
                 </p>
-              </div>
+              </>
+            ) : (
+              <>
+                <Upload className="w-10 h-10 text-muted-foreground" />
+                <div className="text-center">
+                  <p className="text-sm font-medium text-muted-foreground">
+                    Drop your resume here
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    PDF or DOCX · Max 5 MB
+                  </p>
+                </div>
+                <span className="text-xs text-violet-400 underline">
+                  or click to browse
+                </span>
+              </>
+            )}
+          </div>
+
+          <input
+            ref={inputRef}
+            type="file"
+            accept=".pdf,.docx"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) onFileChange(f);
+            }}
+          />
+
+          {error && (
+            <div className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2.5">
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              {error}
+            </div>
+          )}
+
+          {/* ── Navigation ──────────────────────────────────────────────── */}
+          <div className="flex gap-3">
+            <Button variant="ghost" size="md" onClick={onBack}>
+              ← Back
+            </Button>
+
+            {file ? (
               <Button
                 variant="primary"
                 size="md"
-                onClick={completeOnboarding}
-                disabled={parsing}
-                loading={parsing}
+                fullWidth
+                loading={uploading || parsing}
+                onClick={handleUpload}
+                leftIcon={
+                  uploading
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <Upload className="w-4 h-4" />
+                }
               >
-                Go to Dashboard →
+                {uploading ? "Uploading…" : parsing ? "Parsing with AI…" : "Upload & parse"}
               </Button>
-            </div>
-
-          ) : (
-            <>
-              {/* ── Drop zone ─────────────────────────── */}
-              <div
-                onClick={() => inputRef.current?.click()}
-                onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                onDragLeave={() => setDragOver(false)}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  setDragOver(false);
-                  const f = e.dataTransfer.files[0];
-                  if (f) onFileChange(f);
-                }}
-                className={cn(
-                  "border-2 border-dashed rounded-2xl p-10 flex flex-col items-center gap-3",
-                  "cursor-pointer transition-all",
-                  dragOver
-                    ? "border-violet-500/60 bg-violet-500/5"
-                    : "border-border hover:border-primary/30 bg-secondary/50"
-                )}
+            ) : (
+              /* Skip — let OnboardingIndex.handleFinish handle completion */
+              <Button
+                variant="ghost"
+                size="md"
+                fullWidth
+                onClick={onSkip}
+                rightIcon={<SkipForward className="w-4 h-4" />}
               >
-                {file ? (
-                  <>
-                    <FileText className="w-10 h-10 text-violet-400" />
-                    <p className="text-sm font-medium text-foreground">{file.name}</p>
-                    <p className="text-xs text-muted-foreground">
-                      {(file.size / 1024).toFixed(0)} KB
-                    </p>
-                  </>
-                ) : (
-                  <>
-                    <Upload className="w-10 h-10 text-muted-foreground" />
-                    <div className="text-center">
-                      <p className="text-sm font-medium text-muted-foreground">
-                        Drop your resume here
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-1">
-                        PDF or DOCX · Max 5 MB
-                      </p>
-                    </div>
-                    <span className="text-xs text-violet-400 underline">
-                      or click to browse
-                    </span>
-                  </>
-                )}
-              </div>
-
-              <input
-                ref={inputRef}
-                type="file"
-                accept=".pdf,.docx"
-                className="hidden"
-                onChange={(e) => {
-                  const f = e.target.files?.[0];
-                  if (f) onFileChange(f);
-                }}
-              />
-
-              {error && (
-                <div className="flex items-center gap-2 text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2.5">
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  {error}
-                </div>
-              )}
-
-              <div className="flex gap-3">
-                <Button
-                  variant="ghost"
-                  size="md"
-                  onClick={() => navigate("/onboarding/step-4")}
-                >
-                  ← Back
-                </Button>
-
-                {file ? (
-                  <Button
-                    variant="primary"
-                    size="md"
-                    fullWidth
-                    loading={uploading || parsing}
-                    onClick={handleUpload}
-                    leftIcon={
-                      uploading ? <Loader2 className="w-4 h-4 animate-spin" /> :
-                      <Upload className="w-4 h-4" />
-                    }
-                  >
-                    {uploading ? "Uploading…" : parsing ? "Parsing with AI…" : "Upload & parse"}
-                  </Button>
-                ) : (
-                  <Button
-                    variant="ghost"
-                    size="md"
-                    fullWidth
-                    onClick={completeOnboarding}
-                    rightIcon={<SkipForward className="w-4 h-4" />}
-                  >
-                    Skip for now
-                  </Button>
-                )}
-              </div>
-            </>
-          )}
-        </div>
-      </div>
+                Skip for now
+              </Button>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }

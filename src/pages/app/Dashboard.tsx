@@ -49,11 +49,14 @@ type ScheduledInterview = {
 };
 
 interface GamificationData {
-  streakCurrent: number;
-  streakLongest: number;
-  xp:            number;
-  level:         number;
-  levelLabel?:   string;
+  streakCurrent:     number;
+  streakLongest:     number;
+  xp:                number;
+  level:             number;
+  levelLabel?:       string;
+  // FIX: include computed level-progress fields from useGamification
+  xpToNextLevel:     number;
+  xpProgressPercent: number;
 }
 
 /* ─── QUICK ACTIONS ──────────────────────────────────────────────────────── */
@@ -186,14 +189,48 @@ export default function Dashboard() {
               {gamification.streakCurrent} day streak
             </span>
           </div>
-          <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-primary/10 border border-primary/20 rounded-xl">
-            <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-primary" />
-            <span className="text-[10px] sm:text-xs font-bold text-primary">
-              {profile?.credits ?? 0} credits
-            </span>
-          </div>
+
+          {/* FIX: low-credit warning badge at <50 credits (manual Ch.2) */}
+          {(() => {
+            const credits     = profile?.credits ?? 0;
+            const isLowCredit = credits < 50;
+            return (
+              <div className={cn(
+                "flex items-center gap-1.5 px-2 sm:px-3 py-1.5 border rounded-xl",
+                isLowCredit
+                  ? "bg-red-500/10 border-red-500/30"
+                  : "bg-primary/10 border-primary/20",
+              )}>
+                {isLowCredit
+                  ? <AlertTriangle className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-red-400" />
+                  : <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-primary" />}
+                <span className={cn(
+                  "text-[10px] sm:text-xs font-bold",
+                  isLowCredit ? "text-red-400" : "text-primary",
+                )}>
+                  {credits} credits{isLowCredit ? " — low" : ""}
+                </span>
+              </div>
+            );
+          })()}
         </div>
       </div>
+
+      {/* FIX: persistent low-credit warning banner (manual Ch.2 — show when <50) */}
+      {(profile?.credits ?? 0) < 50 && (
+        <div className="flex items-center gap-3 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl">
+          <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
+          <p className="text-xs text-red-300 flex-1">
+            You have fewer than 50 credits remaining. Top up to keep practising without interruptions.
+          </p>
+          <a
+            href="/app/billing"
+            className="text-xs font-semibold text-red-400 hover:text-red-300 transition-colors whitespace-nowrap"
+          >
+            Add credits →
+          </a>
+        </div>
+      )}
 
       {/* ── Interview Day Banner ────────────────────────────────────── */}
       {todayInterview && (
@@ -508,11 +545,9 @@ function UpcomingInterviews({ interviews }: { interviews: ScheduledInterview[] }
 /* ─── XP LEVEL CARD ──────────────────────────────────────────────────────── */
 
 function XPLevelCard({ gamification }: { gamification: GamificationData }) {
-  const XP_PER_LEVEL = 200;
-  // FIX Issue 23: prevent division by zero for level 0
-  const xpForNext    = Math.max(gamification.level * XP_PER_LEVEL, 1);
-  const xpInLevel    = gamification.xp % XP_PER_LEVEL;
-
+  // FIX: use pre-computed values from useGamification's computeLevel() which
+  // correctly uses the non-linear XP_LEVELS thresholds instead of the old
+  // flat XP_PER_LEVEL = 200 constant (wrong for levels 2+).
   return (
     <Card>
       <div className="flex items-center justify-between mb-3">
@@ -532,12 +567,12 @@ function XPLevelCard({ gamification }: { gamification: GamificationData }) {
         <Zap className="w-4 h-4 text-violet-400" />
       </div>
       <ProgressBar
-        value={xpInLevel}
-        max={xpForNext}
+        value={gamification.xpProgressPercent}
+        max={100}
         color="violet"
         size="sm"
         showLabel
-        label={`${xpForNext - xpInLevel} XP to next level`}
+        label={`${gamification.xpToNextLevel.toLocaleString()} XP to next level`}
       />
     </Card>
   );

@@ -1,2 +1,2 @@
 export { OnboardingProgress } from './OnboardingProgress';
-export { OnboardingWizard } from './OnboardingWizard';
+// OnboardingWizard was dead code (never mounted in App.tsx) — removed.
