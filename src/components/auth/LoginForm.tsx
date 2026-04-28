@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { useState } from 'react';
+import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
@@ -60,7 +59,7 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
   };
 
   // Handle input change
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
@@ -77,7 +76,7 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
   };
 
   // Handle form submission
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (!validateForm()) {
@@ -133,7 +132,7 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
 
   // Handle forgot password
   const handleForgotPassword = () => {
-    navigate('/auth/reset-password', { state: { email: formData.email } });
+    navigate('/forgot-password', { state: { email: formData.email } });
   };
 
   return (
@@ -268,7 +267,7 @@ export const LoginForm = ({ onSuccess }: LoginFormProps) => {
           <p className="text-sm text-muted-foreground">
             Don't have an account?{' '}
             <button
-              onClick={() => navigate('/auth/signup')}
+              onClick={() => navigate('/signup')}
               disabled={isLoading}
               className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium disabled:opacity-50"
             >

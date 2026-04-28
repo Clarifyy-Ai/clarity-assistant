@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
@@ -47,7 +46,7 @@ export const VerifyEmailModal = ({
   }, [resendTimer, canResend]);
 
   // Handle code verification
-  const handleVerify = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleVerify = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setErrors({});
 
@@ -78,7 +77,7 @@ export const VerifyEmailModal = ({
 
         // Redirect to login after 2 seconds
         setTimeout(() => {
-          navigate('/auth/login', { state: { email } });
+          navigate('/login', { state: { email } });
         }, 2000);
       }
     } catch (error) {
@@ -261,7 +260,7 @@ export const VerifyEmailModal = ({
                 Your email has been successfully verified. You can now log in to your account.
               </p>
               <Button
-                onClick={() => navigate('/auth/login', { state: { email } })}
+                onClick={() => navigate('/login', { state: { email } })}
                 className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 rounded-lg transition"
               >
                 Go to Login

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/lib/supabase/client";
@@ -89,7 +88,7 @@ export function useAuth() {
     const { error } = await supabase.auth.resend({
       type:  "signup",
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/verify-email` },
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     });
     return { error: error ?? null };
   }, []);
@@ -121,7 +120,7 @@ export function useAuth() {
     email: string
   ): Promise<{ error: Error | null }> => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/reset-password`,
+      redirectTo: `${window.location.origin}/reset-password`,
     });
     return { error: error ?? null };
   }, []);

@@ -1,5 +1,4 @@
-// @ts-nocheck
-import { useState } from 'react';
+import { useState, type ChangeEvent, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/Button';
@@ -109,7 +108,7 @@ export const SignupForm = ({ onSuccess }: SignupFormProps) => {
   };
 
   // Handle input change
-  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleInputChange = (e: ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
@@ -125,7 +124,7 @@ export const SignupForm = ({ onSuccess }: SignupFormProps) => {
   };
 
   // Handle form submission
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
 
     if (!validateForm()) {
@@ -159,7 +158,7 @@ export const SignupForm = ({ onSuccess }: SignupFormProps) => {
         toast.success('Account created! Check your email to verify before logging in.');
 
         // Redirect to verification screen
-        navigate('/auth/verify-email', {
+        navigate('/verify-email', {
           state: { email: formData.email },
         });
 
@@ -454,7 +453,7 @@ export const SignupForm = ({ onSuccess }: SignupFormProps) => {
           <p className="text-sm text-muted-foreground">
             Already have an account?{' '}
             <button
-              onClick={() => navigate('/auth/login')}
+              onClick={() => navigate('/login')}
               disabled={isLoading}
               className="text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 font-medium disabled:opacity-50"
             >

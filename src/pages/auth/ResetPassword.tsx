@@ -1,4 +1,3 @@
-// @ts-nocheck
 // ─────────────────────────────────────────────────────────────────────────────
 // ResetPassword.tsx — Two-phase password reset page.
 // Phase 1 (/forgot-password): user enters email → sends reset link.
@@ -6,12 +5,11 @@
 // Supabase handles the token via the URL hash (#access_token=...).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useEffect }  from "react";
+import { useState, useEffect, type ChangeEvent, type FormEvent }  from "react";
 import { useNavigate, Link }    from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 
 import { supabase }             from "@/lib/supabase/client";
-import { useAuthStore }         from "@/store";
 import { ROUTES }               from "@/lib/constants";
 import {
   validateEmail,
@@ -31,7 +29,6 @@ import {
   CardTitle,
 }                               from "@/components/ui/Card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Progress }             from "@/components/ui/progress";
 import { cn }                   from "@/lib/utils";
 
 import {
@@ -150,7 +147,7 @@ export default function ResetPassword() {
   // ── Field helpers ────────────────────────────────────────────────────────────
 
   const setField = (field: keyof FormState) =>
-    (e: React.ChangeEvent<HTMLInputElement>) => {
+    (e: ChangeEvent<HTMLInputElement>) => {
       setForm((prev) => ({ ...prev, [field]: e.target.value }));
       if (errors[field as keyof FormErrors]) {
         setErrors((prev) => ({ ...prev, [field]: undefined }));
@@ -159,7 +156,7 @@ export default function ResetPassword() {
 
   // ── Phase 1: Request reset email ─────────────────────────────────────────────
 
-  const handleRequestReset = async (e: React.FormEvent) => {
+  const handleRequestReset = async (e: FormEvent) => {
     e.preventDefault();
 
     const emailResult = validateEmail(form.email);
@@ -190,7 +187,7 @@ export default function ResetPassword() {
 
   // ── Phase 2: Set new password ────────────────────────────────────────────────
 
-  const handleSetPassword = async (e: React.FormEvent) => {
+  const handleSetPassword = async (e: FormEvent) => {
     e.preventDefault();
 
     const newErrors: FormErrors = {};
