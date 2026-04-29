@@ -6,7 +6,6 @@ import { useAuthStore } from "@/store/userStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { useAudioSession } from "./useAudioSession";
 import { useAudioStore } from "@/store/audioStore";
-import { buildCoachingContext } from "@/lib/ai/contextEnvelopeBuilder";
 import { routeHint } from "@/lib/ai/modelRouter";
 import { checkCredits, deductCredits } from "@/lib/billing/creditsManager";
 import { buildResumeContext, generateResumeTalkingPoints, formatTalkingPointsAsHint } from "@/lib/ai/resumeFallback";
@@ -70,10 +69,6 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     const cfg = configRef.current;
 
     const { active_context } = useDocumentStore.getState();
-    // buildCoachingContext expects UserProfile but profile is ProfileRow — cast is safe
-    // because the function (which has @ts-nocheck) only reads overlapping fields
-    const context = buildCoachingContext(profile as any, cfg, active_context);
-    coachStore.initContext(context);
 
     // FIX: active_context shape is { resume: { content }, jd: {...} }
     // The old field `resume_version?.parsed_data` no longer exists.
@@ -203,8 +198,6 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
 
     // Rebuild context from current document store state (supports mid-session doc changes)
     const currentDocContext = useDocumentStore.getState().active_context;
-    const freshContext = buildCoachingContext(profile as any, configRef.current, currentDocContext);
-    coachStore.initContext(freshContext);
 
     const context = coachStore.getContext();
     if (!context) return;
@@ -282,8 +275,6 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
 
     // Rebuild context from current document store state (supports mid-session doc changes)
     const currentDocContext = useDocumentStore.getState().active_context;
-    const freshContext = buildCoachingContext(profile as any, configRef.current, currentDocContext);
-    coachStore.initContext(freshContext);
 
     const context = coachStore.getContext();
     if (!context) return;

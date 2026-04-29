@@ -1,6 +1,6 @@
 // src/lib/stealth/electronBridge.ts
 
-import { isElectron } from "../env/isElectron";
+import { isElectron } from "../overlay/screenCaptureEvasion";
 
 export interface ElectronStealthAPI {
   /**

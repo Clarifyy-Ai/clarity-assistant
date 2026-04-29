@@ -1,6 +1,6 @@
 // src/lib/stealth/screenCaptureBlocker.ts
 
-import { isElectron } from "../env/isElectron"; // adjust import path to your env helper
+import { isElectron } from "../overlay/screenCaptureEvasion";
 import { stealthBridge } from "./electronBridge";
 
 export type StealthPlatform = "windows" | "macos" | "browser";
