@@ -3,16 +3,20 @@ import { useAuthStore } from "@/store/authStore";
 import {
   LayoutDashboard, Users, BarChart2,
   Flag, Shield, ChevronRight, DollarSign, Cpu,
+  MessageSquare, FileText, Database,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const ADMIN_NAV: { to: string; icon: React.ElementType; label: string }[] = [
-  { to: "/app/admin",              icon: LayoutDashboard, label: "Dashboard"     },
-  { to: "/app/admin/users",        icon: Users,           label: "Users"         },
-  { to: "/app/admin/analytics",    icon: BarChart2,       label: "Analytics"     },
-  { to: "/app/admin/feature-flags",icon: Flag,            label: "Feature Flags" },
-  { to: "/app/admin/revenue",      icon: DollarSign,      label: "Revenue"       },
-  { to: "/app/admin/model-costs",  icon: Cpu,             label: "Model Costs"   },
+  { to: "/app/admin",               icon: LayoutDashboard, label: "Dashboard"     },
+  { to: "/app/admin/users",         icon: Users,           label: "Users"         },
+  { to: "/app/admin/analytics",     icon: BarChart2,       label: "Analytics"     },
+  { to: "/app/admin/live-chat",     icon: MessageSquare,   label: "Live Chat"     },
+  { to: "/app/admin/questions",     icon: FileText,        label: "Questions"     },
+  { to: "/app/admin/seed-questions",icon: Database,        label: "Seed / Import" },
+  { to: "/app/admin/feature-flags", icon: Flag,            label: "Feature Flags" },
+  { to: "/app/admin/revenue",       icon: DollarSign,      label: "Revenue"       },
+  { to: "/app/admin/model-costs",   icon: Cpu,             label: "Model Costs"   },
 ];
 
 export default function AdminLayout() {

@@ -150,6 +150,8 @@ const AdminRevenue      = lazy(() => import("@/pages/app/admin/AdminRevenue"));
 const AdminModelCosts   = lazy(() => import("@/pages/app/admin/AdminModelCosts"));
 const AdminFeatureFlags = lazy(() => import("@/pages/app/admin/AdminFeatureFlags"));
 const AdminSeedQuestions = lazy(() => import("@/pages/app/admin/AdminSeedQuestions"));
+const AdminLiveChat      = lazy(() => import("@/pages/app/admin/AdminLiveChat"));
+const AdminQuestionEditor = lazy(() => import("@/pages/app/admin/AdminQuestionEditor"));
 const AdminLayout       = lazy(() => import("@/pages/app/admin/AdminLayout"));
 const Scorecard         = lazy(() => import("@/pages/Scorecard"));
 const NotFound          = lazy(() => import("@/pages/NotFound"));
@@ -457,6 +459,9 @@ const routes = [
               { path: "model-costs",   element: <Page component={AdminModelCosts} /> },
               { path: "feature-flags", element: <Page component={AdminFeatureFlags} /> },
               { path: "seed-questions", element: <Page component={AdminSeedQuestions} /> },
+              { path: "live-chat",     element: <Page component={AdminLiveChat} /> },
+              { path: "questions",     element: <Page component={AdminQuestionEditor} /> },
+              { path: "questions/:id", element: <Page component={AdminQuestionEditor} /> },
             ],
           },
         ],
