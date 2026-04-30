@@ -14,6 +14,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
+import { Whiteboard } from "@/components/prep/Whiteboard";
 
 interface DesignTopic {
   id: string;
@@ -219,6 +220,14 @@ export default function SystemDesign() {
                   <div className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{breakdown}</div>
                 </Card>
               )}
+
+              {/* Sprint D: Sketch your architecture */}
+              <div className="mt-4">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">
+                  Sketch your design
+                </p>
+                <Whiteboard height={380} />
+              </div>
             </>
           ) : (
             <Card className="text-center py-20">

@@ -1,5 +1,5 @@
 // electron/main.cjs
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, session } = require("electron");
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, session, globalShortcut } = require("electron");
 const path = require("path");
 
 // ── Strict Content Security Policy for the renderer ───────────────
@@ -136,6 +136,29 @@ app.whenReady().then(() => {
 
   createOverlay();
   createTray();
+  registerGlobalShortcuts();
+});
+
+// ── Global shortcuts (system-wide, work even when app is not focused) ──
+function registerGlobalShortcuts() {
+  // Toggle overlay visibility — primary stealth hotkey
+  globalShortcut.register("CommandOrControl+Shift+H", () => {
+    if (!overlayWindow) return;
+    if (overlayWindow.isVisible()) overlayWindow.hide();
+    else { overlayWindow.show(); overlayWindow.focus(); }
+  });
+  // Panic — instantly hide overlay
+  globalShortcut.register("CommandOrControl+Shift+P", () => {
+    overlayWindow?.hide();
+  });
+  // Forward Ctrl+Shift+A to renderer (request AI answer)
+  globalShortcut.register("CommandOrControl+Shift+A", () => {
+    overlayWindow?.webContents.send("global-shortcut", "request-ai-answer");
+  });
+}
+
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
 });
 
 // ★ Never quit automatically

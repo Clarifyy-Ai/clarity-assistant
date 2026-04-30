@@ -5,6 +5,7 @@ import { useNotificationStore } from "@/store/notificationStore";
 import { useUIStore } from "@/store/uiStore";
 import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { CommandPalette } from "@/components/common/CommandPalette";
 import { cn } from "@/lib/utils";
 
 export function AppTopBar() {
@@ -130,6 +131,7 @@ export function AppTopBar() {
           {initial}
         </Link>
       </div>
+      <CommandPalette />
     </header>
   );
 }

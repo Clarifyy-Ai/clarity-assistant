@@ -127,6 +127,7 @@ const SettingsSubscription  = lazy(() => import("@/pages/app/settings/SettingsSu
 const SettingsCredits       = lazy(() => import("@/pages/app/settings/SettingsCredits"));
 const SettingsData          = lazy(() => import("@/pages/app/settings/SettingsData"));
 const SettingsDanger        = lazy(() => import("@/pages/app/settings/SettingsDanger"));
+const SettingsHotkeys       = lazy(() => import("@/pages/app/settings/SettingsHotkeys"));
 
 // Marketing
 const Landing      = lazy(() => import("@/pages/marketing/Landing"));
@@ -433,6 +434,7 @@ const routes = [
               { path: "credits",      element: <Page component={SettingsCredits} /> },
               { path: "data",         element: <Page component={SettingsData} /> },
               { path: "danger",       element: <Page component={SettingsDanger} /> },
+              { path: "hotkeys",      element: <Page component={SettingsHotkeys} /> },
             ],
           },
 
