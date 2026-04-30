@@ -1,285 +1,151 @@
 // @ts-nocheck
 // ─────────────────────────────────────────────────────────────────────────────
-// useCredits.test.ts — Tests for the useCredits hook:
-// balance reads, sufficiency checks, deduction flows,
-// optimistic updates, plan-gate guards, and low-balance warnings.
+// useCredits.test.ts — Tests for useCredits hook against current API:
+//   balance, isLow, isEmpty, canAfford(action), deduct(action), refund, refresh
+// Catalog refs: T-0120..T-0129 (credits & deduction)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { renderHook, act, waitFor }             from "@testing-library/react";
+import { renderHook, act } from "@testing-library/react";
 
-// ─── Mock Supabase ────────────────────────────────────────────────────────────
+// ─── Supabase mock ───────────────────────────────────────────────────────────
+const mockRpc       = vi.fn();
+const mockFromChain = {
+  select: vi.fn().mockReturnThis(),
+  eq:     vi.fn().mockReturnThis(),
+  single: vi.fn(),
+};
 
-const mockUpdateCredits  = vi.fn();
-const mockSelectCredits  = vi.fn();
-
-vi.mock("@/integrations/supabase/client", () => ({
+vi.mock("@/lib/supabase/client", () => ({
   supabase: {
-    from: vi.fn(() => ({
-      select:  vi.fn().mockReturnThis(),
-      update:  vi.fn().mockReturnThis(),
-      eq:      vi.fn().mockReturnThis(),
-      single:  mockSelectCredits,
-    })),
+    rpc:  (...args: unknown[]) => mockRpc(...args),
+    from: vi.fn(() => mockFromChain),
   },
 }));
 
-// ─── Mock stores ──────────────────────────────────────────────────────────────
+import { useAuthStore } from "@/store/authStore";
+import { useCredits, CREDIT_COSTS } from "@/hooks/useCredits";
 
-import { useAuthStore }   from "@/store/authStore";
-import { useGlobalStore } from "@/store/globalStore";
-
-function setCredits(credits: number, planId = "pro") {
+function seed(credits: number) {
   useAuthStore.setState({
-    credits,
-    planId,
-    user:    { id: "user-123", email: "test@example.com" } as never,
-    status:  "authenticated",
-    profile: { credits, plan_id: planId } as never,
+    user:    { id: "u1", email: "u@x.com" } as never,
+    profile: { id: "u1", credits } as never,
+    session: { access_token: "tok" } as never,
+    isAuthenticated: true,
+    isLoading: false,
   });
 }
 
-// ─── Import hook ──────────────────────────────────────────────────────────────
+beforeEach(() => {
+  vi.clearAllMocks();
+  seed(50);
+});
 
-import { useCredits } from "@/hooks/useCredits";
-
-// ─── Tests ────────────────────────────────────────────────────────────────────
-
-describe("useCredits — balance reads", () => {
-  beforeEach(() => {
-    useAuthStore.setState({ credits: 50, planId: "pro", status: "authenticated" });
-    vi.clearAllMocks();
-  });
-
-  it("returns current credit balance from the store", () => {
-    setCredits(50);
+describe("useCredits — balance & flags [T-0120]", () => {
+  it("returns balance from profile", () => {
     const { result } = renderHook(() => useCredits());
     expect(result.current.balance).toBe(50);
   });
 
-  it("returns unlimited balance as -1 for enterprise plan", () => {
-    setCredits(-1, "enterprise");
-    const { result } = renderHook(() => useCredits());
-    expect(result.current.balance).toBe(-1);
-    expect(result.current.isUnlimited).toBe(true);
-  });
-
-  it("returns isUnlimited as false for non-enterprise plans", () => {
-    setCredits(100, "pro");
-    const { result } = renderHook(() => useCredits());
-    expect(result.current.isUnlimited).toBe(false);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("useCredits — sufficiency checks", () => {
-  it("hasEnough returns true when balance covers the cost", () => {
-    setCredits(10);
-    const { result } = renderHook(() => useCredits());
-    expect(result.current.hasEnough(5)).toBe(true);
-    expect(result.current.hasEnough(10)).toBe(true);
-  });
-
-  it("hasEnough returns false when balance is insufficient", () => {
-    setCredits(3);
-    const { result } = renderHook(() => useCredits());
-    expect(result.current.hasEnough(5)).toBe(false);
-  });
-
-  it("hasEnough always returns true when unlimited", () => {
-    setCredits(-1, "enterprise");
-    const { result } = renderHook(() => useCredits());
-    expect(result.current.hasEnough(9999)).toBe(true);
-  });
-
-  it("hasEnough returns false when balance is 0", () => {
-    setCredits(0);
-    const { result } = renderHook(() => useCredits());
-    expect(result.current.hasEnough(1)).toBe(false);
-  });
-});
-
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("useCredits — low balance warnings", () => {
-  it("isLow is true when balance is at or below the threshold (default 10)", () => {
-    setCredits(5);
+  it("flags isLow when balance <= 2", () => {
+    seed(2);
     const { result } = renderHook(() => useCredits());
     expect(result.current.isLow).toBe(true);
+    expect(result.current.isEmpty).toBe(false);
   });
 
-  it("isLow is true at exactly the threshold", () => {
-    setCredits(10);
-    const { result } = renderHook(() => useCredits());
-    expect(result.current.isLow).toBe(true);
-  });
-
-  it("isLow is false above the threshold", () => {
-    setCredits(11);
-    const { result } = renderHook(() => useCredits());
-    expect(result.current.isLow).toBe(false);
-  });
-
-  it("isLow is false when unlimited", () => {
-    setCredits(-1, "enterprise");
-    const { result } = renderHook(() => useCredits());
-    expect(result.current.isLow).toBe(false);
-  });
-
-  it("isEmpty is true when balance is 0", () => {
-    setCredits(0);
+  it("flags isEmpty when balance is 0", () => {
+    seed(0);
     const { result } = renderHook(() => useCredits());
     expect(result.current.isEmpty).toBe(true);
   });
+});
 
-  it("isEmpty is false when balance is positive", () => {
-    setCredits(1);
+describe("useCredits — canAfford [T-0121]", () => {
+  it("true when balance covers cost", () => {
+    seed(20);
     const { result } = renderHook(() => useCredits());
-    expect(result.current.isEmpty).toBe(false);
+    expect(result.current.canAfford("live_hint")).toBe(true);
+  });
+
+  it("false when insufficient", () => {
+    seed(1);
+    const { result } = renderHook(() => useCredits());
+    expect(result.current.canAfford("company_brief")).toBe(false);
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("useCredits — deductCredits", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockSelectCredits.mockResolvedValue({
-      data:  { credits: 45 },
-      error: null,
-    });
-  });
-
-  it("optimistically deducts credits before server confirms", async () => {
-    setCredits(50);
+describe("useCredits — deduct [T-0122]", () => {
+  it("calls deduct_credits RPC and updates balance on success", async () => {
+    mockRpc.mockResolvedValueOnce({ data: { new_balance: 49 }, error: null });
     const { result } = renderHook(() => useCredits());
 
-    act(() => { result.current.deductOptimistic(5); });
-
-    expect(useAuthStore.getState().credits).toBe(45);
-  });
-
-  it("deductCredits returns true on success and persists balance", async () => {
-    setCredits(50);
-    const { result } = renderHook(() => useCredits());
-
-    let success: boolean | undefined;
+    let res: any;
     await act(async () => {
-      success = await result.current.deductCredits(5, "generate_answer");
+      res = await result.current.deduct("live_hint", "sess-1");
     });
 
-    expect(success).toBe(true);
-    expect(useAuthStore.getState().credits).toBe(45);
+    expect(mockRpc).toHaveBeenCalledWith("deduct_credits", {
+      p_action:     "live_hint",
+      p_cost:       CREDIT_COSTS.live_hint,
+      p_session_id: "sess-1",
+    });
+    expect(res.success).toBe(true);
+    expect(res.newBalance).toBe(49);
   });
 
-  it("deductCredits returns false and rolls back when insufficient", async () => {
-    setCredits(3);
+  it("blocks deduction when balance < cost (no RPC call)", async () => {
+    seed(0);
     const { result } = renderHook(() => useCredits());
 
-    let success: boolean | undefined;
+    let res: any;
     await act(async () => {
-      success = await result.current.deductCredits(5, "generate_answer");
+      res = await result.current.deduct("live_hint");
     });
 
-    expect(success).toBe(false);
-    expect(useAuthStore.getState().credits).toBe(3); // unchanged
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(res.success).toBe(false);
+    expect(res.error).toMatch(/not enough/i);
   });
 
-  it("rolls back optimistic deduction on server error", async () => {
-    setCredits(50);
-    mockSelectCredits.mockResolvedValueOnce({
-      data: null, error: { message: "DB error" },
-    });
-
+  it("returns error from RPC failure", async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: { message: "rpc fail" } });
     const { result } = renderHook(() => useCredits());
 
+    let res: any;
     await act(async () => {
-      await result.current.deductCredits(5, "generate_answer");
+      res = await result.current.deduct("live_hint");
     });
 
-    // Balance should be restored on rollback
-    expect(useAuthStore.getState().credits).toBe(50);
-  });
-
-  it("skips deduction entirely for unlimited plan", async () => {
-    setCredits(-1, "enterprise");
-    const { result } = renderHook(() => useCredits());
-
-    let success: boolean | undefined;
-    await act(async () => {
-      success = await result.current.deductCredits(100, "generate_answer");
-    });
-
-    expect(success).toBe(true);
-    expect(mockSelectCredits).not.toHaveBeenCalled();
+    expect(res.success).toBe(false);
+    expect(res.error).toBe("rpc fail");
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
+describe("useCredits — refund [T-0123]", () => {
+  it("calls refund_credits RPC with cost", async () => {
+    mockRpc.mockResolvedValueOnce({ data: null, error: null });
+    const { result } = renderHook(() => useCredits());
 
-describe("useCredits — canUseFeature", () => {
-  it("returns true when user has enough credits and feature is enabled", () => {
-    setCredits(20, "pro");
-    useGlobalStore.setState({
-      featureFlags: { generate_answer: true } as never,
+    await act(async () => {
+      await result.current.refund("live_hint");
     });
 
-    const { result } = renderHook(() => useCredits());
-    expect(result.current.canUseFeature("generate_answer", 2)).toBe(true);
-  });
-
-  it("returns false when feature is gated (flag disabled)", () => {
-    setCredits(100, "free");
-    useGlobalStore.setState({
-      featureFlags: { company_research: false } as never,
+    expect(mockRpc).toHaveBeenCalledWith("refund_credits", {
+      p_cost: CREDIT_COSTS.live_hint,
     });
-
-    const { result } = renderHook(() => useCredits());
-    expect(result.current.canUseFeature("company_research", 3)).toBe(false);
-  });
-
-  it("returns false when feature is enabled but credits are insufficient", () => {
-    setCredits(1, "pro");
-    useGlobalStore.setState({
-      featureFlags: { session_debrief: true } as never,
-    });
-
-    const { result } = renderHook(() => useCredits());
-    expect(result.current.canUseFeature("session_debrief", 5)).toBe(false);
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("useCredits — refreshCredits", () => {
-  it("refreshes balance from the server", async () => {
-    setCredits(10);
-    mockSelectCredits.mockResolvedValueOnce({
-      data: { credits: 75 }, error: null,
-    });
-
+describe("useCredits — refresh [T-0124]", () => {
+  it("re-reads credits from profiles", async () => {
+    mockFromChain.single.mockResolvedValueOnce({ data: { credits: 99 }, error: null });
     const { result } = renderHook(() => useCredits());
 
     await act(async () => {
-      await result.current.refreshCredits();
+      await result.current.refresh();
     });
 
-    expect(useAuthStore.getState().credits).toBe(75);
-  });
-
-  it("does not update state when refresh fails", async () => {
-    setCredits(10);
-    mockSelectCredits.mockResolvedValueOnce({
-      data: null, error: { message: "Timeout" },
-    });
-
-    const { result } = renderHook(() => useCredits());
-
-    await act(async () => {
-      await result.current.refreshCredits();
-    });
-
-    expect(useAuthStore.getState().credits).toBe(10); // unchanged
+    expect(useAuthStore.getState().profile?.credits).toBe(99);
   });
 });
