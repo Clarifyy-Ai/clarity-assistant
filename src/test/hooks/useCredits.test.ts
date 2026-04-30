@@ -44,7 +44,14 @@ function seed(credits: number) {
     session: { access_token: "tok" } as never,
     isAuthenticated: true,
     isLoading: false,
-  });
+    // Stub the async DB-touching method so the hook's fire-and-forget calls
+    // don't generate unhandled rejections in the test environment.
+    updateProfile: async (patch: any) => {
+      useAuthStore.setState((s: any) => ({
+        profile: { ...s.profile, ...patch },
+      }));
+    },
+  } as never);
 }
 
 beforeEach(() => {
