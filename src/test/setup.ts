@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom";
-import { vi } from "vitest";
+import { vi, beforeEach } from "vitest";
 
 // matchMedia
 Object.defineProperty(window, "matchMedia", {
@@ -43,12 +43,12 @@ if (!globalThis.crypto) {
 }
 if (!globalThis.crypto.randomUUID) {
   // @ts-ignore
-  globalThis.crypto.randomUUID = () =>
+  globalThis.crypto.randomUUID = (() =>
     "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, (c) => {
       const r = (Math.random() * 16) | 0;
       const v = c === "x" ? r : (r & 0x3) | 0x8;
       return v.toString(16);
-    });
+    })) as any;
 }
 
 // URL.createObjectURL
