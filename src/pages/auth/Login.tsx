@@ -255,7 +255,20 @@ export default function Login() {
               </div>
             </div>
 
-            {error && (
+            {isLocked && (
+              <div className="flex items-start gap-2 text-sm text-amber-600 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">Account temporarily locked</p>
+                  <p className="text-xs mt-0.5 opacity-90">
+                    Too many failed attempts. Try again in {lockMinsLeft} minute{lockMinsLeft === 1 ? "" : "s"}, or{" "}
+                    <Link to="/forgot-password" className="underline">reset your password</Link>.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {error && !isLocked && (
               <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2.5">
                 <AlertCircle className="w-4 h-4 shrink-0" />
                 {error}
@@ -267,9 +280,10 @@ export default function Login() {
               variant="primary"
               size="md"
               loading={loading}
+              disabled={isLocked}
               fullWidth
             >
-              Sign in
+              {isLocked ? `Locked (${lockMinsLeft}m)` : "Sign in"}
             </Button>
           </form>
 
