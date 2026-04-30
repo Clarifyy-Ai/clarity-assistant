@@ -131,6 +131,7 @@ export function AppTopBar() {
           {initial}
         </Link>
       </div>
+      <CommandPalette />
     </header>
   );
 }
