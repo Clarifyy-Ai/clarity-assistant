@@ -284,7 +284,7 @@ export default function Signup() {
               />
               {/* Password strength indicator */}
               {password.length > 0 && (
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   <div className="flex gap-1">
                     {[1, 2, 3, 4, 5].map((n) => (
                       <div
@@ -299,9 +299,46 @@ export default function Signup() {
                   <p className="text-[11px] text-muted-foreground">
                     Password strength: <span className="font-medium text-foreground">{pwStrength.label}</span>
                   </p>
+                  {/* Hard requirements checklist */}
+                  <ul className="text-[11px] space-y-0.5 mt-1.5">
+                    {[
+                      { ok: pwChecks.length,  text: "At least 8 characters" },
+                      { ok: pwChecks.upper,   text: "One uppercase letter (A-Z)" },
+                      { ok: pwChecks.number,  text: "One number (0-9)" },
+                      { ok: pwChecks.special, text: "One special character (!@#$…)" },
+                    ].map((c) => (
+                      <li
+                        key={c.text}
+                        className={cn(
+                          "flex items-center gap-1.5",
+                          c.ok ? "text-emerald-500" : "text-muted-foreground"
+                        )}
+                      >
+                        <span className="inline-block w-3 text-center">{c.ok ? "✓" : "○"}</span>
+                        {c.text}
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               )}
             </div>
+
+            {/* Required Terms checkbox */}
+            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={acceptTerms}
+                onChange={(e) => setAcceptTerms(e.target.checked)}
+                required
+                className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/40 cursor-pointer"
+              />
+              <span className="text-[12px] text-muted-foreground leading-snug">
+                I agree to the{" "}
+                <Link to="/terms" className="text-primary underline hover:opacity-80">Terms of Service</Link>{" "}
+                and{" "}
+                <Link to="/privacy" className="text-primary underline hover:opacity-80">Privacy Policy</Link>.
+              </span>
+            </label>
 
             {error && (
               <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2.5">
@@ -310,7 +347,14 @@ export default function Signup() {
               </div>
             )}
 
-            <Button type="submit" variant="primary" size="md" loading={loading} fullWidth>
+            <Button
+              type="submit"
+              variant="primary"
+              size="md"
+              loading={loading}
+              disabled={!formValid}
+              fullWidth
+            >
               Create account
             </Button>
           </form>
@@ -320,12 +364,6 @@ export default function Signup() {
             <Link to="/login" className="text-primary font-medium hover:opacity-80 transition-opacity">
               Sign in
             </Link>
-          </p>
-
-          <p className="text-center text-[11px] text-muted-foreground mt-4 leading-relaxed">
-            By signing up you agree to our{" "}
-            <Link to="/terms" className="underline hover:text-foreground transition-colors">Terms</Link> and{" "}
-            <Link to="/privacy" className="underline hover:text-foreground transition-colors">Privacy Policy</Link>.
           </p>
         </div>
       </div>
