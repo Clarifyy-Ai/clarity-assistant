@@ -9,9 +9,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 
 // ─── Supabase mock ───────────────────────────────────────────────────────────
-const mockRpc           = vi.fn();
-const mockSingleSelect  = vi.fn();
-const mockSingleUpdate  = vi.fn().mockResolvedValue({ data: { id: "u1" }, error: null });
+const mockRpc          = vi.fn();
+const singleQueue: Array<{ data: any; error: any }> = [];
+const mockSingleSelect = {
+  mockResolvedValueOnce(v: { data: any; error: any }) { singleQueue.push(v); return this; },
+};
 
 function chain() {
   const c: any = {};
@@ -19,11 +21,9 @@ function chain() {
   c.update = vi.fn(() => c);
   c.insert = vi.fn(() => c);
   c.eq     = vi.fn(() => c);
-  // .single() resolves differently depending on which path:
-  // we just resolve to whichever mock was last primed.
-  c.single = vi.fn(() => mockSingleSelect.getMockImplementation()
-    ? mockSingleSelect()
-    : mockSingleUpdate());
+  c.single = vi.fn(async () =>
+    singleQueue.shift() ?? { data: { id: "u1", credits: 0 }, error: null }
+  );
   return c;
 }
 
