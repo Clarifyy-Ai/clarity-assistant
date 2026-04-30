@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   User, Bell, Shield, CreditCard,
   Zap, Palette, Download, Trash2,
-  ChevronRight, Globe, Mic,
+  ChevronRight, Globe, Mic, Keyboard,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -21,6 +21,7 @@ const SETTINGS_NAV = [
   { to: "/app/settings/credits",        icon: Zap,         label: "Credits"         },
   { to: "/app/settings/integrations",   icon: Globe,       label: "Integrations"    },
   { to: "/app/settings/data",           icon: Download,    label: "Data & export"   },
+  { to: "/app/settings/hotkeys",        icon: Keyboard,    label: "Keyboard shortcuts" },
   { to: "/app/settings/danger",         icon: Trash2,      label: "Danger zone",    danger: true },
 ];
 
