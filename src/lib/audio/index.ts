@@ -15,7 +15,7 @@ export { AudioProcessor, processStaticBuffer } from "./audioProcessor";
 export type { AudioChunk, AudioFormat, AudioProcessorConfig, AudioProcessorStats } from "./audioProcessor";
 
 // ─── Deepgram ─────────────────────────────────────────────────────────────────
-export { DeepgramClient, deepgramClient } from "./deepgramClient";
+export { DeepgramClient } from "./deepgramClient";
 export { DeepgramStreamClient } from "./deepgramStream";
 export type { DeepgramStreamOptions } from "./deepgramStream";
 

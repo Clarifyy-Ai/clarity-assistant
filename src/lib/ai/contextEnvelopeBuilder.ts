@@ -107,13 +107,13 @@ export async function buildContextEnvelope(
     experience_level: context.experience_level ?? null,
     session_type:    context.session_type ?? null,
     target_company:  context.target_company ?? null,
-    language:        context.language ?? null,
+    language:        (context as any).language ?? null,
   };
 
   const [resume, jd, answerBank, company] = await Promise.all([
     includeResume ? loadResumeContext(userId) : emptyResume(),
     includeJobDescription
-      ? loadJDContext(userId, context.job_id ?? null)
+      ? loadJDContext(userId, (context as any).job_id ?? null)
       : emptyJD(context.target_company ?? null),
     includeAnswerBank
       ? loadAnswerBankContext(userId, question ?? null, context.session_type ?? null)
@@ -150,7 +150,7 @@ async function loadResumeContext(userId: string | null): Promise<ResumeContext> 
   if (!userId) return emptyResume();
 
   // Use existing CoachingContext when available to avoid network calls.
-  const ctx = useAuthStore.getState().profile;
+  const ctx = useAuthStore.getState().profile as any;
   if (ctx?.resume_experience_summary) {
     return {
       raw_text: null,

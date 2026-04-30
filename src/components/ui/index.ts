@@ -12,11 +12,9 @@ export {
   Breadcrumb, BreadcrumbList, BreadcrumbItem, BreadcrumbLink,
   BreadcrumbPage, BreadcrumbSeparator, BreadcrumbEllipsis,
 } from "./breadcrumb";
-export { Calendar } from "./calendar";
 export { Carousel, CarouselContent, CarouselItem, CarouselPrevious, CarouselNext } from "./carousel";
 export { ChartContainer, ChartTooltip, ChartTooltipContent, ChartLegend, ChartLegendContent, ChartStyle } from "./chart";
 export { Checkbox } from "./checkbox";
-export { Collapsible, CollapsibleTrigger, CollapsibleContent } from "./collapsible";
 export {
   Command, CommandDialog, CommandInput, CommandList, CommandEmpty,
   CommandGroup, CommandItem, CommandShortcut, CommandSeparator,
