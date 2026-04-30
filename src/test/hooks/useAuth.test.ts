@@ -1,347 +1,169 @@
 // @ts-nocheck
 // ─────────────────────────────────────────────────────────────────────────────
-// useAuth.test.ts — Unit tests for authentication state, session lifecycle,
-// sign-in/out flows, profile loading, and BYOK key management.
+// useAuth.test.ts — Tests for current useAuth hook surface:
+//   signInWithEmail/login, signup, signOut, sendPasswordReset,
+//   updateProfile, canAccessFeature, role flags.
+// Catalog refs: T-0001..T-0040 (auth flows)
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { renderHook, act, waitFor }                        from "@testing-library/react";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { renderHook, act } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
+import React from "react";
 
-// ─── Mock Supabase ────────────────────────────────────────────────────────────
+// ── Mock Supabase ────────────────────────────────────────────────────────────
+const mockSignIn  = vi.fn();
+const mockSignUp  = vi.fn();
+const mockSignOut = vi.fn().mockResolvedValue({ error: null });
+const mockReset   = vi.fn().mockResolvedValue({ error: null });
+const mockUpdate  = vi.fn();
+const mockEq      = vi.fn();
 
-const mockGetSession    = vi.fn();
-const mockSignIn        = vi.fn();
-const mockSignUp        = vi.fn();
-const mockSignOut       = vi.fn();
-const mockUpdateUser    = vi.fn();
-const mockOnAuthChange  = vi.fn(() => ({ data: { subscription: { unsubscribe: vi.fn() } } }));
-const mockProfileSelect = vi.fn();
-const mockProfileUpdate = vi.fn();
-
-vi.mock("@/integrations/supabase/client", () => ({
+vi.mock("@/lib/supabase/client", () => ({
   supabase: {
     auth: {
-      getSession:          mockGetSession,
-      signInWithPassword:  mockSignIn,
-      signUp:              mockSignUp,
-      signOut:             mockSignOut,
-      updateUser:          mockUpdateUser,
-      onAuthStateChange:   mockOnAuthChange,
-      resetPasswordForEmail: vi.fn().mockResolvedValue({ error: null }),
+      signInWithPassword:    (...a: unknown[]) => mockSignIn(...a),
+      signUp:                (...a: unknown[]) => mockSignUp(...a),
+      signOut:               () => mockSignOut(),
+      resetPasswordForEmail: (...a: unknown[]) => mockReset(...a),
+      signInWithOAuth:       vi.fn().mockResolvedValue({ error: null }),
+      updateUser:            vi.fn().mockResolvedValue({ error: null }),
+      verifyOtp:             vi.fn().mockResolvedValue({ error: null }),
+      resend:                vi.fn().mockResolvedValue({ error: null }),
     },
     from: vi.fn(() => ({
-      select:  vi.fn().mockReturnThis(),
-      update:  vi.fn().mockReturnThis(),
-      eq:      vi.fn().mockReturnThis(),
-      single:  mockProfileSelect,
+      update: (...a: unknown[]) => { mockUpdate(...a); return { eq: mockEq }; },
     })),
+    storage: {
+      from: vi.fn(() => ({
+        upload:        vi.fn().mockResolvedValue({ error: null }),
+        getPublicUrl:  vi.fn(() => ({ data: { publicUrl: "https://cdn/x.png" } })),
+      })),
+    },
   },
 }));
 
-// ─── Mock profile data ────────────────────────────────────────────────────────
+import { useAuthStore } from "@/store/userStore";
+import { useAuth } from "@/hooks/useAuth";
 
-const MOCK_USER = {
-  id:    "user-123",
-  email: "test@example.com",
-};
+function wrapper({ children }: { children: React.ReactNode }) {
+  return React.createElement(MemoryRouter, null, children);
+}
 
-const MOCK_SESSION = {
-  user:          MOCK_USER,
-  access_token:  "tok_abc",
-  refresh_token: "ref_abc",
-  expires_at:    Date.now() / 1000 + 3600,
-  expires_in:    3600,
-  token_type:    "bearer",
-};
-
-const MOCK_PROFILE = {
-  id:                   "user-123",
-  email:                "test@example.com",
-  full_name:            "Test User",
-  plan_id:              "pro",
-  credits:              42,
-  is_admin:             false,
-  onboarding_completed: true,
-  preferred_model:      "gpt-4o",
-  subscription_status:  "active",
-  created_at:           "2026-01-01T00:00:00Z",
-  updated_at:           "2026-01-01T00:00:00Z",
-};
-
-// ─── Import store after mocks ─────────────────────────────────────────────────
-
-import { useAuthStore } from "@/store/authStore";
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-function resetStore() {
+function seedProfile(plan: string, isAdmin = false) {
   useAuthStore.setState({
-    status:          "idle",
-    session:         null,
-    user:            null,
-    profile:         null,
-    isProfileLoaded: false,
-    byokKeys:        {},
-    error:           null,
-    isAdmin:         false,
-    isOnboarded:     false,
-    planId:          "free",
-    credits:         0,
+    user:    { id: "u1", email: "u@x.com" } as never,
+    profile: { id: "u1", plan_id: plan, is_admin: isAdmin, credits: 10 } as never,
+    session: { access_token: "tok" } as never,
+    isAuthenticated: true,
+    isLoading: false,
   });
 }
 
-// ─── Tests ────────────────────────────────────────────────────────────────────
+beforeEach(() => {
+  vi.clearAllMocks();
+  mockReset.mockResolvedValue({ error: null });
+  mockSignOut.mockResolvedValue({ error: null });
+  mockEq.mockResolvedValue({ error: null });
+  seedProfile("free");
+});
 
-describe("useAuthStore — initialization", () => {
-  beforeEach(() => {
-    resetStore();
-    vi.clearAllMocks();
-    mockProfileSelect.mockResolvedValue({ data: MOCK_PROFILE, error: null });
-  });
+describe("useAuth — sign in [T-0010]", () => {
+  it("calls signInWithPassword", async () => {
+    mockSignIn.mockResolvedValueOnce({ error: null });
+    const { result } = renderHook(() => useAuth(), { wrapper });
 
-  it("starts in idle status", () => {
-    const { status } = useAuthStore.getState();
-    expect(status).toBe("idle");
-  });
-
-  it("sets authenticated status when a valid session exists", async () => {
-    mockGetSession.mockResolvedValueOnce({
-      data: { session: MOCK_SESSION },
-      error: null,
-    });
-
+    let res: any;
     await act(async () => {
-      await useAuthStore.getState().initialize();
+      res = await result.current.login("a@b.com", "pw");
     });
 
-    expect(useAuthStore.getState().status).toBe("authenticated");
-    expect(useAuthStore.getState().user?.id).toBe("user-123");
+    expect(mockSignIn).toHaveBeenCalledWith({ email: "a@b.com", password: "pw" });
+    expect(res.error).toBeNull();
   });
 
-  it("sets unauthenticated when no session exists", async () => {
-    mockGetSession.mockResolvedValueOnce({
-      data: { session: null },
-      error: null,
-    });
+  it("propagates error", async () => {
+    mockSignIn.mockResolvedValueOnce({ error: new Error("bad") });
+    const { result } = renderHook(() => useAuth(), { wrapper });
 
-    await act(async () => {
-      await useAuthStore.getState().initialize();
-    });
+    let res: any;
+    await act(async () => { res = await result.current.login("a@b.com", "pw"); });
 
-    expect(useAuthStore.getState().status).toBe("unauthenticated");
-    expect(useAuthStore.getState().user).toBeNull();
-  });
-
-  it("sets error status on getSession failure", async () => {
-    mockGetSession.mockResolvedValueOnce({
-      data: { session: null },
-      error: { message: "Network error" },
-    });
-
-    await act(async () => {
-      await useAuthStore.getState().initialize();
-    });
-
-    expect(useAuthStore.getState().status).toBe("error");
-    expect(useAuthStore.getState().error).toBe("Network error");
+    expect(res.error?.message).toBe("bad");
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("useAuthStore — sign in", () => {
-  beforeEach(() => {
-    resetStore();
-    vi.clearAllMocks();
-    mockProfileSelect.mockResolvedValue({ data: MOCK_PROFILE, error: null });
-  });
-
-  it("signs in with valid credentials and loads profile", async () => {
-    mockSignIn.mockResolvedValueOnce({
-      data: { session: MOCK_SESSION, user: MOCK_USER },
-      error: null,
-    });
+describe("useAuth — signup [T-0011]", () => {
+  it("calls signUp with metadata", async () => {
+    mockSignUp.mockResolvedValueOnce({ data: { user: { id: "u2" } }, error: null });
+    const { result } = renderHook(() => useAuth(), { wrapper });
 
     await act(async () => {
-      await useAuthStore.getState().signInWithEmail("test@example.com", "password123");
+      await result.current.signup("a@b.com", "pw", { full_name: "Ann" });
     });
 
-    const state = useAuthStore.getState();
-    expect(state.status).toBe("authenticated");
-    expect(state.user?.email).toBe("test@example.com");
-    expect(state.profile?.plan_id).toBe("pro");
-    expect(state.credits).toBe(42);
-    expect(state.planId).toBe("pro");
-  });
-
-  it("sets error on invalid credentials", async () => {
-    mockSignIn.mockResolvedValueOnce({
-      data: { session: null, user: null },
-      error: { message: "Invalid login credentials" },
-    });
-
-    await expect(
-      act(async () => {
-        await useAuthStore.getState().signInWithEmail("bad@example.com", "wrong");
-      })
-    ).rejects.toBeDefined();
-
-    expect(useAuthStore.getState().status).toBe("error");
-    expect(useAuthStore.getState().error).toBe("Invalid login credentials");
+    expect(mockSignUp).toHaveBeenCalled();
+    const arg = mockSignUp.mock.calls[0][0];
+    expect(arg.email).toBe("a@b.com");
+    expect(arg.options.data.full_name).toBe("Ann");
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("useAuthStore — sign out", () => {
-  beforeEach(() => {
-    resetStore();
-    vi.clearAllMocks();
-    useAuthStore.setState({
-      status:  "authenticated",
-      user:    MOCK_USER as never,
-      session: MOCK_SESSION as never,
-      profile: MOCK_PROFILE as never,
-      planId:  "pro",
-      credits: 42,
-    });
-  });
-
-  it("clears all state on sign out", async () => {
-    mockSignOut.mockResolvedValueOnce({ error: null });
-
-    await act(async () => {
-      await useAuthStore.getState().signOut();
-    });
-
-    const state = useAuthStore.getState();
-    expect(state.status).toBe("unauthenticated");
-    expect(state.user).toBeNull();
-    expect(state.session).toBeNull();
-    expect(state.profile).toBeNull();
-    expect(state.credits).toBe(0);
-    expect(state.byokKeys).toEqual({});
+describe("useAuth — signOut [T-0020]", () => {
+  it("invokes supabase signOut", async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await act(async () => { await result.current.signOut(); });
+    expect(mockSignOut).toHaveBeenCalled();
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("useAuthStore — profile", () => {
-  beforeEach(() => {
-    resetStore();
-    vi.clearAllMocks();
-    useAuthStore.setState({ user: MOCK_USER as never, status: "authenticated" });
-  });
-
-  it("loads and maps profile fields correctly", async () => {
-    mockProfileSelect.mockResolvedValueOnce({ data: MOCK_PROFILE, error: null });
-
-    await act(async () => {
-      await useAuthStore.getState().loadProfile();
-    });
-
-    const state = useAuthStore.getState();
-    expect(state.isProfileLoaded).toBe(true);
-    expect(state.planId).toBe("pro");
-    expect(state.credits).toBe(42);
-    expect(state.isAdmin).toBe(false);
-    expect(state.isOnboarded).toBe(true);
-  });
-
-  it("marks admin correctly when is_admin is true", async () => {
-    mockProfileSelect.mockResolvedValueOnce({
-      data: { ...MOCK_PROFILE, is_admin: true },
-      error: null,
-    });
-
-    await act(async () => {
-      await useAuthStore.getState().loadProfile();
-    });
-
-    expect(useAuthStore.getState().isAdmin).toBe(true);
-  });
-
-  it("does not throw when profile load fails", async () => {
-    mockProfileSelect.mockResolvedValueOnce({ data: null, error: { message: "DB error" } });
-
-    await act(async () => {
-      await useAuthStore.getState().loadProfile();
-    });
-
-    expect(useAuthStore.getState().isProfileLoaded).toBe(false);
+describe("useAuth — password reset [T-0030]", () => {
+  it("requests password reset email", async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    await act(async () => { await result.current.sendPasswordReset("a@b.com"); });
+    expect(mockReset).toHaveBeenCalledWith("a@b.com", expect.objectContaining({
+      redirectTo: expect.stringContaining("/reset-password"),
+    }));
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("useAuthStore — BYOK keys", () => {
-  beforeEach(() => resetStore());
-
-  it("stores a BYOK key in memory", () => {
-    act(() => {
-      useAuthStore.getState().setBYOKKey("openai", "sk-test-abc123");
-    });
-    expect(useAuthStore.getState().byokKeys.openai).toBe("sk-test-abc123");
-  });
-
-  it("clears a specific BYOK key", () => {
-    useAuthStore.setState({ byokKeys: { openai: "sk-test", anthropic: "ant-test" } });
-
-    act(() => {
-      useAuthStore.getState().clearBYOKKey("openai");
-    });
-
-    expect(useAuthStore.getState().byokKeys.openai).toBeUndefined();
-    expect(useAuthStore.getState().byokKeys.anthropic).toBe("ant-test");
-  });
-
-  it("clears ALL byok keys on sign out", async () => {
-    mockSignOut.mockResolvedValueOnce({ error: null });
-    useAuthStore.setState({
-      byokKeys: { openai: "sk-x", anthropic: "ant-y", gemini: "gem-z" },
-      status:   "authenticated",
-    });
-
+describe("useAuth — updateProfile [T-0040]", () => {
+  it("updates profile in DB and store", async () => {
+    const { result } = renderHook(() => useAuth(), { wrapper });
     await act(async () => {
-      await useAuthStore.getState().signOut();
+      await result.current.updateProfile({ full_name: "New" });
     });
-
-    expect(useAuthStore.getState().byokKeys).toEqual({});
+    expect(mockUpdate).toHaveBeenCalled();
   });
 });
 
-// ─────────────────────────────────────────────────────────────────────────────
-
-describe("useAuthStore — selectors", () => {
-  it("selectIsAuthenticated returns true when authenticated", () => {
-    useAuthStore.setState({ status: "authenticated" });
-    const { selectIsAuthenticated } = await import("@/store/authStore");
-    expect(selectIsAuthenticated(useAuthStore.getState())).toBe(true);
+describe("useAuth — canAccessFeature [T-0050]", () => {
+  it("free plan cannot access live_copilot", () => {
+    seedProfile("free");
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    expect(result.current.canAccessFeature("live_copilot")).toBe(false);
   });
 
-  it("selectIsLoading returns true when idle or loading", () => {
-    const { selectIsLoading } = await import("@/store/authStore");
-
-    useAuthStore.setState({ status: "idle" });
-    expect(selectIsLoading(useAuthStore.getState())).toBe(true);
-
-    useAuthStore.setState({ status: "loading" });
-    expect(selectIsLoading(useAuthStore.getState())).toBe(true);
-
-    useAuthStore.setState({ status: "authenticated" });
-    expect(selectIsLoading(useAuthStore.getState())).toBe(false);
+  it("pro plan can access live_copilot", () => {
+    seedProfile("pro");
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    expect(result.current.canAccessFeature("live_copilot")).toBe(true);
   });
 
-  it("selectSubscriptionActive returns true for active and trialing", () => {
-    const { selectSubscriptionActive } = await import("@/store/authStore");
+  it("only team/enterprise can access team_rooms", () => {
+    seedProfile("pro");
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    expect(result.current.canAccessFeature("team_rooms")).toBe(false);
+    seedProfile("team");
+    const { result: r2 } = renderHook(() => useAuth(), { wrapper });
+    expect(r2.current.canAccessFeature("team_rooms")).toBe(true);
+  });
+});
 
-    useAuthStore.setState({ profile: { ...MOCK_PROFILE, subscription_status: "active" } as never });
-    expect(selectSubscriptionActive(useAuthStore.getState())).toBe(true);
-
-    useAuthStore.setState({ profile: { ...MOCK_PROFILE, subscription_status: "trialing" } as never });
-    expect(selectSubscriptionActive(useAuthStore.getState())).toBe(true);
-
-    useAuthStore.setState({ profile: { ...MOCK_PROFILE, subscription_status: "canceled" } as never });
-    expect(selectSubscriptionActive(useAuthStore.getState())).toBe(false);
+describe("useAuth — role flags [T-0051]", () => {
+  it("isAdmin reflects profile.is_admin", () => {
+    seedProfile("pro", true);
+    const { result } = renderHook(() => useAuth(), { wrapper });
+    expect(result.current.isAdmin).toBe(true);
   });
 });

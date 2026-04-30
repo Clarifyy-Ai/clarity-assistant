@@ -163,12 +163,12 @@ describe("useLocalStorage — cross-tab storage event", () => {
     );
 
     act(() => {
-      window.dispatchEvent(
-        new StorageEvent("storage", {
-          key:      "sync-key",
-          newValue: JSON.stringify("from-other-tab"),
-        })
-      );
+      const ev = new StorageEvent("storage", {
+        key:      "sync-key",
+        newValue: JSON.stringify("from-other-tab"),
+      });
+      Object.defineProperty(ev, "storageArea", { value: window.localStorage });
+      window.dispatchEvent(ev);
     });
 
     expect(result.current[0]).toBe("from-other-tab");
@@ -199,12 +199,12 @@ describe("useLocalStorage — cross-tab storage event", () => {
     act(() => { result.current[1]("set-value"); });
 
     act(() => {
-      window.dispatchEvent(
-        new StorageEvent("storage", {
-          key:      "deleted-key",
-          newValue: null,
-        })
-      );
+      const ev = new StorageEvent("storage", {
+        key:      "deleted-key",
+        newValue: null,
+      });
+      Object.defineProperty(ev, "storageArea", { value: window.localStorage });
+      window.dispatchEvent(ev);
     });
 
     expect(result.current[0]).toBe("fallback");
