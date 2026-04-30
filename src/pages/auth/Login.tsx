@@ -36,9 +36,51 @@ export default function Login() {
   const [showPw,    setShowPw]    = useState(false);
   const [loading,   setLoading]   = useState(false);
   const [error,     setError]     = useState<string | null>(null);
+  const [lockedUntil, setLockedUntil] = useState<number | null>(null);
+  const [tick, setTick] = useState(0); // forces re-render for countdown
+
+  // ── Brute-force lockout: 5 failed attempts → 30 min cooldown ───
+  const LOCK_KEY = "clarify_login_lock";
+  const ATTEMPT_KEY = "clarify_login_attempts";
+  const MAX_ATTEMPTS = 5;
+  const LOCK_DURATION_MS = 30 * 60 * 1000;
+
+  // Restore lockout state on mount
+  useEffect(() => {
+    const stored = localStorage.getItem(LOCK_KEY);
+    if (stored) {
+      const until = parseInt(stored, 10);
+      if (!isNaN(until) && until > Date.now()) {
+        setLockedUntil(until);
+      } else {
+        localStorage.removeItem(LOCK_KEY);
+        localStorage.removeItem(ATTEMPT_KEY);
+      }
+    }
+  }, []);
+
+  // Tick every second while locked to update countdown
+  useEffect(() => {
+    if (!lockedUntil) return;
+    const id = setInterval(() => {
+      if (Date.now() >= lockedUntil) {
+        setLockedUntil(null);
+        localStorage.removeItem(LOCK_KEY);
+        localStorage.removeItem(ATTEMPT_KEY);
+      } else {
+        setTick((t) => t + 1);
+      }
+    }, 1000);
+    return () => clearInterval(id);
+  }, [lockedUntil]);
+
+  const isLocked = !!lockedUntil && lockedUntil > Date.now();
+  const lockMinsLeft = isLocked ? Math.ceil((lockedUntil! - Date.now()) / 60000) : 0;
+  void tick; // referenced to keep eslint happy
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (isLocked) return;
     setError(null);
     setLoading(true);
 
@@ -50,8 +92,24 @@ export default function Login() {
     setLoading(false);
 
     if (authError) {
-      setError(authError.message);
+      // Increment failed-attempt counter
+      const prev = parseInt(localStorage.getItem(ATTEMPT_KEY) || "0", 10) || 0;
+      const next = prev + 1;
+      localStorage.setItem(ATTEMPT_KEY, String(next));
+
+      if (next >= MAX_ATTEMPTS) {
+        const until = Date.now() + LOCK_DURATION_MS;
+        localStorage.setItem(LOCK_KEY, String(until));
+        setLockedUntil(until);
+        setError(`Too many failed attempts. Account locked for 30 minutes.`);
+      } else {
+        const remaining = MAX_ATTEMPTS - next;
+        setError(`${authError.message} (${remaining} attempt${remaining === 1 ? "" : "s"} remaining)`);
+      }
     } else {
+      // Successful login → clear counters
+      localStorage.removeItem(ATTEMPT_KEY);
+      localStorage.removeItem(LOCK_KEY);
       navigate(from, { replace: true });
     }
   }
