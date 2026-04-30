@@ -150,7 +150,7 @@ describe("useCredits — refund [T-0123]", () => {
 
 describe("useCredits — refresh [T-0124]", () => {
   it("re-reads credits from profiles", async () => {
-    mockFromChain.single.mockResolvedValueOnce({ data: { credits: 99 }, error: null });
+    mockSingleSelect.mockResolvedValueOnce({ data: { credits: 99 }, error: null });
     const { result } = renderHook(() => useCredits());
 
     await act(async () => {
