@@ -56,22 +56,38 @@ export default function Signup() {
     }
   }, [refCode]);
 
-  const [name,      setName]      = useState("");
-  const [email,     setEmail]     = useState("");
-  const [password,  setPassword]  = useState("");
-  const [showPw,    setShowPw]    = useState(false);
-  const [loading,   setLoading]   = useState(false);
-  const [error,     setError]     = useState<string | null>(null);
-  const [done,      setDone]      = useState(false);
+  const [name,         setName]         = useState("");
+  const [email,        setEmail]        = useState("");
+  const [password,     setPassword]     = useState("");
+  const [showPw,       setShowPw]       = useState(false);
+  const [acceptTerms,  setAcceptTerms]  = useState(false);
+  const [loading,      setLoading]      = useState(false);
+  const [error,        setError]        = useState<string | null>(null);
+  const [done,         setDone]         = useState(false);
 
   const pwStrength = useMemo(() => getPasswordStrength(password), [password]);
+
+  // Strong password policy — all four must pass
+  const pwChecks = useMemo(() => ({
+    length:  password.length >= 8,
+    upper:   /[A-Z]/.test(password),
+    number:  /[0-9]/.test(password),
+    special: /[^A-Za-z0-9]/.test(password),
+  }), [password]);
+  const pwValid = pwChecks.length && pwChecks.upper && pwChecks.number && pwChecks.special;
+
+  const formValid = !!name.trim() && !!email.trim() && pwValid && acceptTerms;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
 
-    if (password.length < 8) {
-      setError("Password must be at least 8 characters.");
+    if (!pwValid) {
+      setError("Password must be 8+ characters with an uppercase letter, a number, and a special character.");
+      return;
+    }
+    if (!acceptTerms) {
+      setError("You must accept the Terms and Privacy Policy to continue.");
       return;
     }
 
