@@ -62,6 +62,8 @@ function seedProfile(plan: string, isAdmin = false) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockReset.mockResolvedValue({ error: null });
+  mockSignOut.mockResolvedValue({ error: null });
   mockEq.mockResolvedValue({ error: null });
   seedProfile("free");
 });
