@@ -11,6 +11,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { CodeScratchpad } from "@/components/prep/CodeScratchpad";
 
 const CATEGORIES = [
   { id: "all",       label: "All",           icon: "📋" },
@@ -355,6 +356,14 @@ export default function CodingHints() {
                   <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{solutionText}</p>
                 </Card>
               )}
+
+              {/* Sprint D: Code scratchpad */}
+              <div className="mt-4">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">
+                  Your solution
+                </p>
+                <CodeScratchpad />
+              </div>
             </>
           ) : (
             <Card className="text-center py-20">
