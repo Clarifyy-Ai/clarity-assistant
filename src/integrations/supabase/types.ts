@@ -1517,6 +1517,7 @@ export type Database = {
           downvotes: number | null
           exam_type: string | null
           explanation: string | null
+          explanation_blocks: Json | null
           explanation_html: string | null
           has_image: boolean | null
           id: string
@@ -1526,7 +1527,9 @@ export type Database = {
           latex_present: boolean | null
           marks_negative: number | null
           marks_positive: number | null
+          option_blocks: Json | null
           options: Json | null
+          question_blocks: Json | null
           question_html: string | null
           question_text: string
           question_type: string
@@ -1547,6 +1550,7 @@ export type Database = {
           downvotes?: number | null
           exam_type?: string | null
           explanation?: string | null
+          explanation_blocks?: Json | null
           explanation_html?: string | null
           has_image?: boolean | null
           id?: string
@@ -1556,7 +1560,9 @@ export type Database = {
           latex_present?: boolean | null
           marks_negative?: number | null
           marks_positive?: number | null
+          option_blocks?: Json | null
           options?: Json | null
+          question_blocks?: Json | null
           question_html?: string | null
           question_text: string
           question_type?: string
@@ -1577,6 +1583,7 @@ export type Database = {
           downvotes?: number | null
           exam_type?: string | null
           explanation?: string | null
+          explanation_blocks?: Json | null
           explanation_html?: string | null
           has_image?: boolean | null
           id?: string
@@ -1586,7 +1593,9 @@ export type Database = {
           latex_present?: boolean | null
           marks_negative?: number | null
           marks_positive?: number | null
+          option_blocks?: Json | null
           options?: Json | null
+          question_blocks?: Json | null
           question_html?: string | null
           question_text?: string
           question_type?: string
@@ -1655,6 +1664,33 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      request_metrics: {
+        Row: {
+          created_at: string
+          duration_ms: number
+          function_name: string
+          id: string
+          status_code: number
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          duration_ms: number
+          function_name: string
+          id?: string
+          status_code: number
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          duration_ms?: number
+          function_name?: string
+          id?: string
+          status_code?: number
+          user_id?: string | null
+        }
+        Relationships: []
       }
       resume_versions: {
         Row: {
@@ -2496,6 +2532,89 @@ export type Database = {
           },
         ]
       }
+      support_messages: {
+        Row: {
+          attachments: Json
+          body: string
+          created_at: string
+          id: string
+          sender_id: string
+          sender_role: string
+          thread_id: string
+        }
+        Insert: {
+          attachments?: Json
+          body: string
+          created_at?: string
+          id?: string
+          sender_id: string
+          sender_role: string
+          thread_id: string
+        }
+        Update: {
+          attachments?: Json
+          body?: string
+          created_at?: string
+          id?: string
+          sender_id?: string
+          sender_role?: string
+          thread_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "support_messages_thread_id_fkey"
+            columns: ["thread_id"]
+            isOneToOne: false
+            referencedRelation: "support_threads"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      support_threads: {
+        Row: {
+          assigned_admin_id: string | null
+          created_at: string
+          id: string
+          last_message_at: string
+          last_message_preview: string | null
+          priority: string
+          status: string
+          subject: string
+          unread_for_admin: boolean
+          unread_for_user: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          assigned_admin_id?: string | null
+          created_at?: string
+          id?: string
+          last_message_at?: string
+          last_message_preview?: string | null
+          priority?: string
+          status?: string
+          subject?: string
+          unread_for_admin?: boolean
+          unread_for_user?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          assigned_admin_id?: string | null
+          created_at?: string
+          id?: string
+          last_message_at?: string
+          last_message_preview?: string | null
+          priority?: string
+          status?: string
+          subject?: string
+          unread_for_admin?: boolean
+          unread_for_user?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       test_analyses: {
         Row: {
           accuracy: number | null
@@ -2880,11 +2999,35 @@ export type Database = {
         }
         Returns: number
       }
+      bulk_update_users: {
+        Args: { p_patch: Json; p_user_ids: string[] }
+        Returns: number
+      }
       deduct_credits: {
         Args: { p_action: string; p_cost: number; p_session_id?: string }
         Returns: Json
       }
       delete_expired_session_data: { Args: never; Returns: Json }
+      get_admin_dau_mau: {
+        Args: { p_days?: number }
+        Returns: {
+          dau: number
+          day: string
+        }[]
+      }
+      get_admin_perf_stats: {
+        Args: { p_days?: number }
+        Returns: {
+          avg_ms: number
+          call_count: number
+          error_count: number
+          error_rate: number
+          function_name: string
+          p50_ms: number
+          p95_ms: number
+          p99_ms: number
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
