@@ -9,17 +9,28 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { renderHook, act } from "@testing-library/react";
 
 // ─── Supabase mock ───────────────────────────────────────────────────────────
-const mockRpc       = vi.fn();
-const mockFromChain = {
-  select: vi.fn().mockReturnThis(),
-  eq:     vi.fn().mockReturnThis(),
-  single: vi.fn(),
-};
+const mockRpc           = vi.fn();
+const mockSingleSelect  = vi.fn();
+const mockSingleUpdate  = vi.fn().mockResolvedValue({ data: { id: "u1" }, error: null });
+
+function chain() {
+  const c: any = {};
+  c.select = vi.fn(() => c);
+  c.update = vi.fn(() => c);
+  c.insert = vi.fn(() => c);
+  c.eq     = vi.fn(() => c);
+  // .single() resolves differently depending on which path:
+  // we just resolve to whichever mock was last primed.
+  c.single = vi.fn(() => mockSingleSelect.getMockImplementation()
+    ? mockSingleSelect()
+    : mockSingleUpdate());
+  return c;
+}
 
 vi.mock("@/lib/supabase/client", () => ({
   supabase: {
     rpc:  (...args: unknown[]) => mockRpc(...args),
-    from: vi.fn(() => mockFromChain),
+    from: vi.fn(() => chain()),
   },
 }));
 
