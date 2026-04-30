@@ -1,4 +1,5 @@
 import type { WPMDataPoint } from "@/types/session.types";
+export type { WPMDataPoint } from "@/types/session.types";
 
 // ─────────────────────────────────────────────────────────────────
 // WPM (Words Per Minute) Tracker

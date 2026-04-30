@@ -143,7 +143,7 @@ export function useAuth() {
 
     const { error } = await supabase
       .from("profiles")
-      .update({ ...patch, updated_at: new Date().toISOString() })
+      .update({ ...patch, updated_at: new Date().toISOString() } as any)
       .eq("id", user.id);
 
     if (!error) {

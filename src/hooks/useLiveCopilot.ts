@@ -72,7 +72,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
 
     // FIX: active_context shape is { resume: { content }, jd: {...} }
     // The old field `resume_version?.parsed_data` no longer exists.
-    const parsed = active_context?.resume?.content ?? null;
+    const parsed = (active_context?.resume as any)?.content ?? null;
     const resumeCtx = buildResumeContext(parsed);
     const talkingPoints = generateResumeTalkingPoints(parsed, {
       company: cfg.company,

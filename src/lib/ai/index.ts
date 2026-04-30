@@ -34,7 +34,7 @@ export type {
 } from "./promptTemplates";
 
 // ─── Context Envelope Builder ─────────────────────────────────────────────────
-export { buildCoachingContext, buildContextFromStores } from "./contextEnvelopeBuilder";
+export { buildContextEnvelope } from "./contextEnvelopeBuilder";
 
 // ─── Offline Templates ────────────────────────────────────────────────────────
 export { getOfflineTemplate, getAllOfflineTemplates, getPanicResponse, OFFLINE_PANIC } from "./offlineTemplates";

@@ -1,7 +1,8 @@
 // src/lib/audio/speechMetricsCalculator.ts
 // High-level speech metrics aggregator for WPM, fillers, silence, volume, and confidence. [file:1][file:3]
 
-import { WPMTracker, WPMDataPoint } from "./wpmTracker";
+import { WPMTracker } from "./wpmTracker";
+import type { WPMDataPoint } from "./wpmTracker";
 import { FillerDetector } from "./fillerDetector";
 import { SilenceDetector, type SilenceEvent } from "./silenceDetector";
 import { VolumeMonitor, type VolumeAlert } from "./volumeMonitor";

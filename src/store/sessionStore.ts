@@ -154,9 +154,9 @@ export const useSessionStore = create<SessionStore>()(
 
     resetQuestionElapsed: () => set({ question_elapsed_seconds: 0 }),
 
-    setWpmSeries: (points) => set({ wpm_series: points }),
+    setWpmSeries: (points) => set({ wpm_series: points } as any),
     setFillerOccurrences: (occurrences) =>
-      set({ filler_occurrences: occurrences }),
+      set({ filler_occurrences: occurrences } as any),
 
     consumeCredit: (amount = 1) =>
       set((state) => ({
