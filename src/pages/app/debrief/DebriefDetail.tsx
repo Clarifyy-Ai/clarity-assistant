@@ -19,6 +19,7 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { DebriefExtras } from "@/components/session/DebriefExtras";
 
 // ─────────────────────────────────────────────────────────────────
 // DebriefDetail — full AI post-session debrief page
@@ -380,6 +381,15 @@ export default function DebriefDetail() {
           </div>
         </Card>
       )}
+
+      {/* Sprint B: WPM chart, missed keywords, speaker labels, thumbs rating */}
+      <DebriefExtras
+        debriefId={debrief.id}
+        wpmSeries={debrief.detailed_report?.wpm_series}
+        missedKeywords={debrief.detailed_report?.missed_keywords}
+        speakers={debrief.detailed_report?.speakers}
+        initialRating={debrief.detailed_report?.rating ?? null}
+      />
 
       {/* CTA row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
