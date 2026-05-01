@@ -65,6 +65,17 @@
       style="position:fixed;inset:0;pointer-events:none;z-index:2147483647;isolation:isolate;"
     ></div>
 
+    <!--
+      Stealth overlay portal root. The OverlayWindow component portals its
+      panel into this node. Kept separate from #overlay-root so panic-kill
+      and screen-capture-blocker can target it by id without affecting other
+      portals (toasts, command palette, etc.).
+    -->
+    <div
+      id="clarify-overlay-root"
+      style="position:fixed;inset:0;pointer-events:none;z-index:2147483647;isolation:isolate;"
+    ></div>
+
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
