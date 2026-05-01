@@ -87,17 +87,17 @@ if (!rootEl) {
 // sibling of #root. If a CDN, browser extension, or HTML-rewriting proxy
 // strips it, recreate it here so OverlayWindow never has to fall back to
 // document.body. In the common case (HTML intact) this is a single getElementById.
-(function ensureOverlayRoot() {
-  const OVERLAY_ROOT_ID = "overlay-root";
-  if (document.getElementById(OVERLAY_ROOT_ID)) return; // ✅ fast path
-  console.warn(
-    `[Clarify AI] #${OVERLAY_ROOT_ID} missing from HTML — recreating it.`,
-  );
-  const overlayRoot = document.createElement("div");
-  overlayRoot.id = OVERLAY_ROOT_ID;
-  overlayRoot.style.cssText =
-    "position:fixed;inset:0;pointer-events:none;z-index:2147483647;isolation:isolate;";
-  document.body.appendChild(overlayRoot);
+(function ensureOverlayRoots() {
+  const ROOT_IDS = ["overlay-root", "clarify-overlay-root"];
+  for (const id of ROOT_IDS) {
+    if (document.getElementById(id)) continue;
+    console.warn(`[Clarify AI] #${id} missing from HTML — recreating it.`);
+    const el = document.createElement("div");
+    el.id = id;
+    el.style.cssText =
+      "position:fixed;inset:0;pointer-events:none;z-index:2147483647;isolation:isolate;";
+    document.body.appendChild(el);
+  }
 })();
 
 // ── Mount React ───────────────────────────────────────────────────────────

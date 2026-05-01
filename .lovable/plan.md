@@ -1,104 +1,137 @@
+
 ## Goal
 
-Transform the admin portal at `/app/admin` from a basic stats view into a complete control center for Clarify AI. Add real analytics for response times and live chat, full user management actions, a powerful question paper authoring tool that supports inline images placed *anywhere* inside the question (and inside individual options), and round out every existing admin page with the data the user actually needs.
+Three things, in order:
 
-## Scope (5 areas)
+1. **Overlay is the only UI on the Live page** (today both the `LiveRehearsal` 2‑panel page AND the floating overlay show at the same time). Overlay must be top‑most, hideable, and its buttons must work.
+2. **Audit every sidebar feature + backend wiring** (edge functions, RPCs, RLS) and fix the broken connections that block production use.
+3. **Read all `docs/*.md`** and produce a single, accurate audit/gap report so we stop chasing ghosts.
 
-### 1. Admin Analytics — full dashboard rewrite (`AdminAnalytics.tsx`)
-Replace the current 3-card view with tabbed analytics:
-- **Overview**: DAU/WAU/MAU, total sessions, signups/day (14-day bar), retention cohort.
-- **Performance / Response Times**: edge-function p50/p95/p99 latency, error rate, slowest 10 functions. Data source: new `request_metrics` table populated by a lightweight logger in `fetchEdge`, plus a `get_admin_perf_stats` RPC that aggregates last 24h / 7d / 30d.
-- **AI Usage**: tokens in/out per model, cost USD, credits charged (from existing `model_cost_logs`).
-- **Mock Tests**: tests created/submitted per day, avg score, top exam types (from `mock_tests`, `test_responses`).
-- **Live Chat / Support**: open vs resolved tickets, avg first-response time, agent leaderboard (depends on chat tables — see #2).
-- Period switcher (24h / 7d / 30d / 90d), CSV export per tab.
+---
 
-### 2. Live Chat / Support Console (new `AdminLiveChat.tsx` + tables)
-New Supabase tables: `support_threads` (user_id, status, subject, last_message_at, assigned_admin_id) and `support_messages` (thread_id, sender_id, sender_role, body, attachments, created_at). RLS: users see own threads, admins see all.
-Admin page features:
-- Inbox split-view (threads list ↔ message pane), filters: open/pending/resolved/mine.
-- Real-time updates via Supabase channel.
-- Reply composer with attachments; quick actions: resolve, reassign, snooze, ban-user.
-- KPIs at top: open count, median first-response, avg resolution time.
-- (User-side surface is out of scope for this pass — schema + admin console only; we'll wire a user widget in a follow-up.)
+## What I found while exploring
 
-### 3. User Management upgrades (`AdminUsers.tsx`)
-- Add columns: last_login_at, total_sessions, lifetime credits used.
-- Bulk select + bulk actions (grant credits, change plan, ban).
-- New actions: reset password (admin-trigger email), impersonate (issue short-lived magic link via edge fn `admin-impersonate`), edit profile fields, view session history drawer, view billing history.
-- CSV export of filtered users.
-- Audit-log every admin action into existing `admin_audit_log`.
+### Problem 1 — Two live UIs render at once
 
-### 4. Question Paper Authoring with inline images (new `AdminQuestionEditor.tsx` + enhanced `AdminSeedQuestions.tsx`)
-A real authoring panel for building/editing questions one at a time, in addition to the existing Excel/PDF importers.
-- **Block-based question body**: the question is stored as ordered blocks `[{type:'text',content}|{type:'image',url,alt,width}|{type:'latex',tex}]` serialized into `question_html` (Markdown/HTML) and a new `question_blocks` jsonb column. Admin can insert an image *between* paragraphs — exactly the "image in the middle of the question" requirement.
-- Toolbar: Add Text, Add Image (drag-drop / paste / file picker, uploaded to `question-images` storage bucket), Add LaTeX, reorder via drag handles, delete.
-- **Per-option image support**: each MCQ option (A/B/C/D) gets the same block editor — useful for diagram-based options.
-- **Explanation block editor** with the same capabilities.
-- Metadata sidebar: subject, topic, subtopic, exam_type, year, difficulty, marks, tags, public/verified toggles.
-- Live preview pane showing exactly how the student will see it (renders blocks + KaTeX).
-- Save → upserts into `questions` table with normalized `question_text` (plaintext fallback) plus the `question_blocks` jsonb.
-- Bulk question browser tab: search/filter existing questions, click to edit, duplicate, delete (admin only via existing RLS).
-- New storage bucket `question-images` (public-read, admin-write).
+`/app/live` route → `LiveRehearsal.tsx`. It renders **both**:
+- A full 2‑panel page (Live Transcript + AI Answer) as the main view
+- `<OverlayWindow />` floating on top via portal
 
-### 5. Round out the rest of the admin portal
-- **AdminRevenue**: connect to Stripe-synced `subscriptions` data — MRR, ARR, churn %, new vs churned charts, plan mix donut, recent payments table.
-- **AdminModelCosts**: add per-user breakdown, top-10 spenders, budget alerts, model-cost trend.
-- **AdminFeatureFlags**: add rollout-percent slider, allowed-users multi-select, audit history, copy-flag-key button.
-- **AdminLayout**: add nav entries for new pages (Live Chat, Question Editor), collapse sidebar on mobile, show admin user chip + sign-out.
-- **AdminDashboard**: surface new live-chat KPI and perf KPI tiles; replace hardcoded "+12%" deltas with real period-over-period values.
+That's why the user sees "overlay AND live interview panel both working". `LiveOverlay.tsx` (route `/app/live/overlay`) does it correctly — overlay only, with a small "Overlay Mode Active" centered hint.
 
-## Technical details
+There are also **two files named `OverlayWindow.tsx`**:
+- `src/components/overlay/OverlayWindow.tsx` — the real, full overlay (486 lines)
+- `src/components/live/OverlayWindow.tsx` — a stale 30‑line stub left over from a refactor
 
-### New / changed tables (one migration)
-- `support_threads`, `support_messages` (+ RLS, + realtime publication).
-- `request_metrics(id, function_name, status_code, duration_ms, user_id, created_at)` — admin-only RLS.
-- `questions` ALTER: add `question_blocks jsonb`, `option_blocks jsonb`, `explanation_blocks jsonb` (nullable; existing rows stay valid).
-- Storage: create `question-images` bucket (public read, admin insert/update/delete via policy on `storage.objects`).
-- RPCs: `get_admin_perf_stats(p_days int)`, `get_admin_dau_mau(p_days int)`, `bulk_update_users(p_user_ids uuid[], p_patch jsonb)`.
+`MockSession.tsx` also mounts `OverlayWindow` alongside its own UI — same dual‑UI bug.
 
-### New edge functions
-- `admin-impersonate` — verifies caller is admin via `has_role`, returns a magic-link URL for the target user using service role. Logs to `admin_audit_log`.
-- `admin-support-reply` — sends email notification when an admin replies to a thread (uses existing `send-email` infra).
-- Update `_shared/fetchEdge` (or a wrapper inside each function) to insert a row into `request_metrics` after every call.
+### Problem 2 — Overlay buttons not working / not visible properly
 
-### Frontend
-- New components: `BlockEditor.tsx`, `BlockRenderer.tsx`, `ImageUploader.tsx`, `ChatThreadList.tsx`, `ChatMessagePane.tsx`, `BulkActionBar.tsx`, `PerfChart.tsx`.
-- Use existing `Card`, `Button`, `Input`, `Modal`, `sonner` toasts. KaTeX for LaTeX preview (already a dep if present; else add `katex`). `dnd-kit` for block reordering (lightweight).
-- All admin routes already protected by `<ProtectedRoute requireAdmin>` — keep that pattern.
-- Add lazy imports + routes for `/app/admin/live-chat`, `/app/admin/questions` (editor), `/app/admin/questions/:id` (edit one).
+Likely causes confirmed by code reading:
+- Overlay portal mounts into `#clarify-overlay-root` but `index.html`/`main.tsx` only ensures `#overlay-root` (different id) — console log confirms the warning fires every load: `#clarify-overlay-root not found in DOM — creating it dynamically`. It works, but the dynamic root is created with `pointer-events:none` and z‑index `9998`, and the children rely on `pointer-events:auto` cascading. On some pages this is fighting the page's own toolbar (LiveRehearsal header sits at z‑40, fine — but the `Toaster` and `MobileNav` can intercept clicks).
+- Toolbar buttons depend on `onToggleMic`, `onToggleSystemAudio`, `onEndSession`, `onGenerate` props. On the `LiveOverlay` page those are wired; on `LiveRehearsal` `onGenerate` is **not passed** to `<OverlayWindow />` (line 124–130) — Get AI Answer is dead from the overlay.
+- `OverlayQuickStart` only renders when `!isSessionActive && !lastSessionId && onStartSession`. On `LiveRehearsal` `onStartSession` isn't passed → if the session ever stops, the overlay shows nothing.
+- `is_visible` defaults to false in `overlayStore`; `LiveRehearsal` never calls `showOverlay()` after start. `LiveOverlay` does (line 84).
 
-### File map (high level)
+### Problem 3 — Backend connection state
+
+- `.env` is correct (Supabase URL/anon key resolved). Client init is healthy.
+- Two parallel Supabase client wrappers exist (`@/integrations/supabase/client` and `@/lib/supabase/client`). They re‑export the same instance, so this isn't a bug — just confusing.
+- 38 edge functions are deployed (`generate-answer`, `start-session`, `end-session`, `deepgram-token`, `parse-resume`, `process-stripe-webhook`, etc.). All live secrets exist (`GEMINI_API_KEY`, `DEEPGRAM_API_KEY`, `LOVABLE_API_KEY`, `OCR_API_KEY`, Stripe… not present).
+- Sidebar links several pages whose backend isn't fully wired: **Practice Rooms** (`useRoom` hook exists but no edge function for room sessions visible), **Companies / Company Research** (function exists), **Interviews** (`schedule-interview` exists), **Referrals** (`lib/referrals.ts` reads/writes but no edge function), **Notifications** (`mark_notifications_read` RPC exists but no realtime subscription is wired).
+- `process-stripe-webhook` and `stripe-webhook` both exist but **no Stripe secret is set** → all billing flows silently fail.
+- Console shows `captureAndAnalyseCodingProblem` → `TypeError: Failed to fetch` — Gemini client is hitting a CDN URL instead of the edge function (`callGemini` in `geminiClient.ts:132`). Needs to route through `analyze-test-performance` / `generate-answer` edge functions.
+
+---
+
+## Plan
+
+### Step 1 — Overlay is the only live UI
+
+- Make `/app/live` (LiveRehearsal) **headless**: same logic for setup wizard + session start, but the active phase renders only `<OverlayWindow />` + `<ScreenCaptureBlocker />` + a small centered "Overlay Active" hint (mirror `LiveOverlay.tsx`). Remove the 2‑panel transcript/answer page UI.
+- Pass **all** required props to `<OverlayWindow />` from LiveRehearsal: `onToggleMic`, `onToggleSystemAudio`, `onGenerate`, `onEndSession`, `onManualQuestion`, `onStartSession`, `onSetupNewSession`.
+- Call `useOverlayStore.getState().showOverlay()` immediately when the active phase begins.
+- Apply the same change to `MockSession.tsx`: keep its question stepper UI but **only when overlay is hidden**; default behavior is overlay‑first.
+- Delete the stub `src/components/live/OverlayWindow.tsx` and update `src/components/live/index.ts` if it's exported.
+- Collapse the `/app/live` and `/app/live/overlay` routes into one (`/app/live` → overlay experience). Keep `/app/live/overlay` as alias for back‑compat.
+
+### Step 2 — Overlay visibility + button fixes
+
+- `index.html`: add `<div id="clarify-overlay-root" style="position:fixed;inset:0;pointer-events:none;z-index:2147483647;isolation:isolate"></div>` next to `#overlay-root` so the dynamic creation warning goes away and z‑index is the topmost (`2147483647`, matching `OverlayPositionManager`).
+- Update `main.tsx` `ensureOverlayRoot` to also seed `#clarify-overlay-root` (defensive).
+- Remove the `pointer-events:none` from the overlay root (the panel manages its own pointer‑events; that style was making chrome behind the panel non‑clickable but also breaking some hit‑tests inside).
+- Confirm `OverlayToolbar` actions actually call props (audit: Mic, System Audio, Generate, End, Stealth, Panic, Minimal, Auto‑gen, Hint style, Model). Add visible disabled tooltips when handlers are missing instead of silently noop.
+- Add a guaranteed‑visible "Show Overlay" floating pill on the Live page when `is_visible === false`, so the user can always recover the overlay (replaces relying solely on Ctrl+Shift+H, which doesn't fire on some browsers).
+
+### Step 3 — Sidebar feature audit + production wiring
+
+For each sidebar entry, verify: route exists → page renders → page's data source resolves → write‑actions hit either RLS table or edge function → toasts on error. Fix the broken ones:
+
+| Sidebar item | Issue I will fix |
+|---|---|
+| Live Co‑Pilot | Dual UI → overlay only (Step 1) |
+| Mock Interview | `MockSession` dual UI → overlay‑first (Step 1) |
+| Mock Tests (sub‑pages) | Confirm `select-test-questions`, `submit-test`, `analyze-test-performance` are reachable; add error toasts where they swallow failures |
+| Call Sessions | `sessions/history` query — confirm RLS lets the user read; add empty state + retry |
+| Analytics | Wire `analytics-dashboard` edge function to the page; today the page partially uses local mock data |
+| Documents | Resume upload uses `parse-resume`; verify storage policies for `resumes` private bucket and surface upload errors |
+| Answer Bank | CRUD against `session_answers`; add insert/update on save |
+| Interviews | `schedule-interview` and `sync-calendar` exist but page doesn't call them; wire create + sync buttons |
+| Companies | `company-research` edge function exists; page must call it on submit (currently uses placeholder) |
+| Practice Rooms | `useRoom` is local‑only; gate this behind a "coming soon" badge until realtime channel + RLS table are added — do not pretend it works |
+| Notifications | Subscribe to `notifications` realtime channel; call `mark_notifications_read` RPC on open |
+| Settings → Billing | No Stripe secret. Show a clear "Stripe not configured — contact admin" banner instead of a silent failure. (Adding the secret is a user action.) |
+| Admin Panel | Already implemented in last loops; verify routes still resolve with `requireAdmin` guard |
+
+For each fix, add `toast.error(...)` on failure and skeleton/empty state on load so production users aren't staring at blank screens.
+
+### Step 4 — Fix the Gemini "Failed to fetch" (console error)
+
+`src/lib/ai/geminiClient.ts` is calling `https://cdn.gpteng.co/...` (sandbox proxy) for screenshot analysis, which doesn't work in production. Route screenshot analysis through a new `analyze-screenshot` thin edge function that wraps the existing `gemini.ts` shared util, OR re‑use `generate-answer` with an `image_data` payload. This unblocks "Analyze Screen" overlay button.
+
+### Step 5 — Documentation audit
+
+Read all 8 files in `docs/` and produce `docs/AUDIT_2026-05-01.md` containing:
+- Verified working features (with the edge function / RPC each one calls)
+- Stub/broken features (with the file + line where they fail)
+- Missing secrets (Stripe)
+- Recommended next sprint
+
+I will NOT rewrite the existing docs in this loop — just add the audit file.
+
+---
+
+## Out of scope (will call out, not fix)
+
+- Adding the Stripe secret (user must paste it).
+- Building Practice Rooms backend (requires new tables + realtime — separate epic).
+- Electron preload changes (current preload is minimal; desktop hardening is a separate task).
+- Refactoring the two parallel Supabase client wrappers — both work, just cosmetic.
+
+---
+
+## Files I'll touch
+
 ```text
-src/pages/app/admin/
-  AdminAnalytics.tsx          (rewrite, tabbed)
-  AdminLiveChat.tsx           (new)
-  AdminQuestionEditor.tsx     (new — list + create/edit)
-  AdminRevenue.tsx            (enhance)
-  AdminModelCosts.tsx         (enhance)
-  AdminFeatureFlags.tsx       (enhance)
-  AdminUsers.tsx              (enhance: bulk, drawer, export)
-  AdminDashboard.tsx          (real deltas + new KPIs)
-  AdminLayout.tsx             (nav + mobile)
-src/components/admin/
-  BlockEditor.tsx
-  BlockRenderer.tsx
-  ImageUploader.tsx
-  ChatThreadList.tsx
-  ChatMessagePane.tsx
-  BulkActionBar.tsx
-  PerfChart.tsx
-supabase/functions/
-  admin-impersonate/
-  admin-support-reply/
-  _shared/metrics.ts          (request_metrics logger)
-supabase/migrations/<ts>_admin_portal.sql
+index.html                                       (add overlay root div)
+src/main.tsx                                     (seed clarify-overlay-root)
+src/pages/app/live/LiveRehearsal.tsx             (overlay-only)
+src/pages/app/live/LiveOverlay.tsx               (small polish)
+src/pages/app/mock/MockSession.tsx               (overlay-first)
+src/components/live/OverlayWindow.tsx            (DELETE stub)
+src/components/live/index.ts                     (drop stub export if present)
+src/components/overlay/OverlayWindow.tsx         (always show after start)
+src/components/overlay/OverlayToolbar.tsx        (disabled tooltips)
+src/App.tsx                                      (route alias)
+src/lib/ai/geminiClient.ts                       (route via edge function)
+supabase/functions/analyze-screenshot/index.ts   (NEW thin function)
+src/pages/app/Notifications.tsx                  (realtime + mark-read)
+src/pages/app/interviews/NewInterview.tsx        (wire schedule-interview)
+src/pages/app/company-research/CompanyResearch.tsx (wire company-research)
+src/pages/app/Analytics.tsx                      (wire analytics-dashboard)
+src/pages/app/rooms/PracticeRooms.tsx            ("coming soon" gate)
+src/pages/app/settings/SettingsBilling.tsx       (Stripe-not-configured banner)
+docs/AUDIT_2026-05-01.md                         (NEW gap report)
 ```
 
-## Out of scope (flag for later)
-- End-user-facing live-chat widget (only admin console + schema this pass).
-- Full WYSIWYG rich-text — block editor is intentionally simple (text/image/latex blocks) to match the "image in middle of question" requirement without bloating the bundle.
-- Mobile-optimized question editor (desktop-first; usable but not polished on phones).
-
-## Approval needed
-Approving this plan switches me to build mode where I'll: run the migration, deploy the new edge functions, scaffold the new pages/components, and wire everything up. Estimated as one large change set — I'll commit it as a single coherent update so the admin portal lights up end-to-end.
+After approval I'll execute in this order: Step 1 (overlay unification) → Step 2 (visibility/buttons) → Step 4 (screenshot fix) → Step 3 (sidebar wiring) → Step 5 (audit doc).
