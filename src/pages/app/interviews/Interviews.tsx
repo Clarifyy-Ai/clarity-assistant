@@ -72,14 +72,35 @@ export default function Interviews() {
         title="Interviews"
         subtitle="Track and manage your scheduled interviews"
         action={
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => navigate("/app/interviews/new")}
-            leftIcon={<Plus className="w-3.5 h-3.5" />}
-          >
-            Schedule interview
-          </Button>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleCalendarAction}
+              loading={calendar.isSyncing}
+              disabled={calendar.isCheckingConnection}
+              leftIcon={
+                calendar.isConnected
+                  ? <RefreshCw className="w-3.5 h-3.5" />
+                  : <CalendarDays className="w-3.5 h-3.5" />
+              }
+              title={
+                calendar.lastSynced
+                  ? `Last synced ${format(calendar.lastSynced, "MMM d, h:mm a")}`
+                  : undefined
+              }
+            >
+              {calendar.isConnected ? "Sync calendar" : "Connect calendar"}
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => navigate("/app/interviews/new")}
+              leftIcon={<Plus className="w-3.5 h-3.5" />}
+            >
+              Schedule interview
+            </Button>
+          </div>
         }
       />
 
