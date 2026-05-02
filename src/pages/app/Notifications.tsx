@@ -30,8 +30,10 @@ export default function Notifications() {
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Initial load
   useEffect(() => {
     if (!user?.id) return;
+    let cancelled = false;
     (async () => {
       const { data } = await supabase
         .from("notifications")
@@ -39,9 +41,48 @@ export default function Notifications() {
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(50);
-      setNotifications((data as Notification[]) ?? []);
-      setLoading(false);
+      if (!cancelled) {
+        setNotifications((data as Notification[]) ?? []);
+        setLoading(false);
+      }
     })();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id]);
+
+  // Realtime subscription — keeps unread badge & list fresh without refresh.
+  useEffect(() => {
+    if (!user?.id) return;
+    const channel = supabase
+      .channel(`notifications:${user.id}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          setNotifications((prev) => [payload.new as Notification, ...prev].slice(0, 50));
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "UPDATE", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          setNotifications((prev) =>
+            prev.map((n) => (n.id === (payload.new as Notification).id ? (payload.new as Notification) : n))
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "DELETE", schema: "public", table: "notifications", filter: `user_id=eq.${user.id}` },
+        (payload) => {
+          setNotifications((prev) => prev.filter((n) => n.id !== (payload.old as Notification).id));
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user?.id]);
 
   async function markRead(id: string) {
@@ -53,12 +94,22 @@ export default function Notifications() {
 
   async function markAllRead() {
     if (!user?.id) return;
-    const { error } = await supabase.from("notifications").update({ is_read: true }).eq("user_id", user.id).eq("is_read", false);
+    // Use the mark_notifications_read RPC for batch update (server-defined, audited).
+    const { error } = await supabase.rpc("mark_notifications_read", { p_user_id: user.id });
     if (error) {
       toast.error("Failed to mark notifications as read.");
     } else {
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       toast.success("All notifications marked as read");
+    }
+  }
+
+  async function deleteNotification(id: string) {
+    const { error } = await supabase.from("notifications").delete().eq("id", id);
+    if (!error) {
+      setNotifications((prev) => prev.filter((n) => n.id !== id));
+    } else {
+      toast.error("Failed to delete notification.");
     }
   }
 

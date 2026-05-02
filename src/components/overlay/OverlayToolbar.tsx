@@ -6,6 +6,7 @@ import { useSessionStore } from "@/store/sessionStore";
 import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 import { PANIC_RESPONSE } from "@/types/session.types";
 import { captureAndAnalyseCodingProblem } from "@/lib/audio/screenshotCapture";
+import { toast } from "sonner";
 import {
   Mic, MicOff, Volume2, VolumeX, Zap, RefreshCw,
   Eye, EyeOff, Square, AlertCircle, Type, ChevronDown,
@@ -130,7 +131,18 @@ export function OverlayToolbar({
           icon={Monitor}
           label="Screen"
           isActive={isScreenshotLoading}
-          onClick={() => captureAndAnalyseCodingProblem()}
+          onClick={async () => {
+            try {
+              await captureAndAnalyseCodingProblem();
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Screen capture failed";
+              if (/permission|denied|NotAllowed/i.test(msg)) {
+                toast.error("Screen capture permission denied. Please allow screen sharing and try again.");
+              } else {
+                toast.error(msg);
+              }
+            }
+          }}
           disabled={isScreenshotLoading}
           className={isScreenshotLoading
             ? "bg-sky-500/20 border-sky-500/40 text-sky-300"
@@ -183,7 +195,18 @@ export function OverlayToolbar({
                   icon={hasSystemAudio ? Volume2 : VolumeX}
                   label={hasSystemAudio ? "System audio ON" : "System audio OFF"}
                   active={hasSystemAudio}
-                  onClick={onToggleSystemAudio}
+                  onClick={async () => {
+                    try {
+                      await onToggleSystemAudio();
+                    } catch (err) {
+                      const msg = err instanceof Error ? err.message : "System audio toggle failed";
+                      if (/permission|denied|NotAllowed/i.test(msg)) {
+                        toast.error("System audio requires screen-share permission. Please allow it and pick a tab with audio.");
+                      } else {
+                        toast.error(msg);
+                      }
+                    }
+                  }}
                 />
               )}
 
