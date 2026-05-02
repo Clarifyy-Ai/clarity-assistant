@@ -195,7 +195,18 @@ export function OverlayToolbar({
                   icon={hasSystemAudio ? Volume2 : VolumeX}
                   label={hasSystemAudio ? "System audio ON" : "System audio OFF"}
                   active={hasSystemAudio}
-                  onClick={onToggleSystemAudio}
+                  onClick={async () => {
+                    try {
+                      await onToggleSystemAudio();
+                    } catch (err) {
+                      const msg = err instanceof Error ? err.message : "System audio toggle failed";
+                      if (/permission|denied|NotAllowed/i.test(msg)) {
+                        toast.error("System audio requires screen-share permission. Please allow it and pick a tab with audio.");
+                      } else {
+                        toast.error(msg);
+                      }
+                    }
+                  }}
                 />
               )}
 
