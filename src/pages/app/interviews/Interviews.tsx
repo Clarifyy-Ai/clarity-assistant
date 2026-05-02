@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
 import { useInterviewScheduler } from "@/hooks/useInterviewScheduler";
+import { useCalendarSync } from "@/hooks/useCalendarSync";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -11,10 +12,11 @@ import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
   CalendarDays, Plus, Building2, Clock,
   ChevronRight, CheckCircle, AlertCircle,
-  Circle, Filter, Trash2,
+  Circle, Filter, Trash2, RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, isPast, isToday, isFuture } from "date-fns";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
 // Interviews — full scheduled interview list
@@ -27,10 +29,25 @@ export default function Interviews() {
   const navigate   = useNavigate();
   const scheduler  = useInterviewScheduler();
   const store      = useInterviewSchedulerStore();
+  const calendar   = useCalendarSync();
 
   const [filter, setFilter] = useState<StatusFilter>("all");
 
   useEffect(() => { scheduler.reload(); }, []);
+
+  async function handleCalendarAction() {
+    if (!calendar.isConnected) {
+      await calendar.connectGoogle();
+      return;
+    }
+    const { imported, error } = await calendar.syncNow();
+    if (error) {
+      toast.error(error);
+    } else {
+      toast.success(`Synced ${imported} interview${imported === 1 ? "" : "s"} from Google Calendar`);
+      scheduler.reload();
+    }
+  }
 
   const filtered = store.interviews.filter((iv) => {
     const d = new Date(iv.scheduled_at);

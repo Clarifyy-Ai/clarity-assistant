@@ -2,20 +2,28 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useInterviewScheduler } from "@/hooks/useInterviewScheduler";
+import { useCalendarSync } from "@/hooks/useCalendarSync";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
-import { Badge } from "@/components/ui/Badge";
 import {
   CalendarDays, Building2, Clock,
-  User, MessageSquare, ChevronLeft,
+  User, ChevronLeft,
   Globe, Link as LinkIcon,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
 // NewInterview — schedule a new interview
+//
+// Two-step persistence:
+//   1) createInterview()  → row in `scheduled_interviews` (parent)
+//   2) addRound()         → row in `interview_rounds` (date/platform/etc.)
+//
+// If Google Calendar is connected, fire-and-forget a sync so the new
+// event flows into the user's calendar.
 // ─────────────────────────────────────────────────────────────────
 
 const INTERVIEW_TYPES = [
@@ -28,15 +36,36 @@ const PLATFORMS = [
   { value: "google_meet",  label: "Google Meet"   },
   { value: "teams",        label: "MS Teams"      },
   { value: "phone",        label: "Phone call"    },
-  { value: "in_person",   label: "In person"     },
+  { value: "onsite",       label: "In person"     },
   { value: "other",        label: "Other"         },
 ];
 
 const ROUND_NUMBERS = [1, 2, 3, 4, 5];
 
+// Map UI interview-type label → backend InterviewType slug used by RoundFormValues.
+function toInterviewTypeSlug(label: string): string {
+  return label
+    .toLowerCase()
+    .replace(/\s*\/\s*/g, "_")
+    .replace(/\s+/g, "_");
+}
+
+// Map UI interview-type → InterviewStage on the parent record so the
+// pipeline kanban shows the right column from day one.
+function toStageFromType(label: string): string {
+  switch (label) {
+    case "Phone Screen":   return "phone_screen";
+    case "Technical":
+    case "System Design":  return "technical_round";
+    case "Final Round":    return "final_round";
+    default:               return "applied";
+  }
+}
+
 export default function NewInterview() {
   const navigate  = useNavigate();
   const scheduler = useInterviewScheduler();
+  const calendar  = useCalendarSync();
 
   const [company,       setCompany]       = useState("");
   const [roleTitle,     setRoleTitle]     = useState("");
@@ -59,25 +88,60 @@ export default function NewInterview() {
     setLoading(true);
     setError(null);
 
-    const { error: err } = await scheduler.createInterview({
-      company_name:     company.trim(),
-      role_title:       roleTitle.trim(),
-      interview_type:   interviewType,
-      platform,
-      scheduled_at:     new Date(scheduledAt).toISOString(),
-      duration_minutes: duration,
-      round_number:     roundNumber,
-      interviewer_name: interviewerName.trim() || null,
-      meeting_link:     meetingLink.trim() || null,
-      notes:            notes.trim() || null,
+    // 1) Create the parent scheduled_interviews row.
+    const { id, error: createErr } = await scheduler.createInterview({
+      company_name:    company.trim(),
+      role_title:      roleTitle.trim(),
+      stage:           toStageFromType(interviewType),
+      priority:        "medium",
+      is_remote:       platform !== "onsite",
+      location:        "",
+      job_posting_url: "",
+      salary_range:    "",
+      notes:           notes.trim(),
+      resume_id:       null,
+      jd_id:           null,
     });
 
-    setLoading(false);
-    if (err) {
-      setError(err);
-    } else {
-      navigate("/app/interviews");
+    if (createErr || !id) {
+      setLoading(false);
+      const msg = createErr ?? "Failed to schedule interview";
+      setError(msg);
+      toast.error(msg);
+      return;
     }
+
+    // 2) Attach the round (date, platform, interviewer).
+    const { error: roundErr } = await scheduler.addRound(id, {
+      round_number:      roundNumber,
+      round_label:       `Round ${roundNumber} — ${interviewType}`,
+      interview_type:    toInterviewTypeSlug(interviewType),
+      scheduled_at:      new Date(scheduledAt).toISOString(),
+      duration_minutes:  duration,
+      interviewer_name:  interviewerName.trim(),
+      interviewer_title: "",
+      platform,
+      meeting_link:      meetingLink.trim(),
+      notes:             "",
+    });
+
+    if (roundErr) {
+      // Parent saved, round failed — non-fatal, user can add round later.
+      toast.warning("Interview saved, but the round details failed: " + roundErr);
+    } else {
+      toast.success("Interview scheduled");
+    }
+
+    // 3) Fire-and-forget calendar sync if connected.
+    if (calendar.isConnected) {
+      calendar.syncNow().then(({ imported, error }) => {
+        if (error) toast.error("Calendar sync failed: " + error);
+        else if (imported > 0) toast.message(`Synced ${imported} calendar event${imported === 1 ? "" : "s"}`);
+      });
+    }
+
+    setLoading(false);
+    navigate("/app/interviews");
   }
 
   return (
@@ -95,6 +159,30 @@ export default function NewInterview() {
           className="mb-0"
         />
       </div>
+
+      {!calendar.isCheckingConnection && (
+        <Card className="flex items-center justify-between gap-3 py-3">
+          <div className="flex items-center gap-2 text-xs">
+            <CalendarDays className="w-4 h-4 text-blue-400" />
+            <span className="text-muted-foreground">
+              Google Calendar:{" "}
+              <span className={calendar.isConnected ? "text-emerald-400" : "text-muted-foreground"}>
+                {calendar.isConnected ? "Connected — new interviews auto-sync" : "Not connected"}
+              </span>
+            </span>
+          </div>
+          {!calendar.isConnected && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => calendar.connectGoogle()}
+            >
+              Connect
+            </Button>
+          )}
+        </Card>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-5">
 
@@ -127,7 +215,6 @@ export default function NewInterview() {
           <h3 className="text-sm font-semibold text-foreground mb-4">Interview details</h3>
 
           <div className="space-y-4">
-            {/* Type */}
             <div>
               <p className="text-xs font-medium text-foreground mb-2">Interview type</p>
               <div className="flex flex-wrap gap-2">
@@ -149,7 +236,6 @@ export default function NewInterview() {
               </div>
             </div>
 
-            {/* Round */}
             <div>
               <p className="text-xs font-medium text-foreground mb-2">Round number</p>
               <div className="flex gap-2">
@@ -181,9 +267,7 @@ export default function NewInterview() {
           </h3>
           <div className="space-y-4">
             <div>
-              <p className="text-xs font-medium text-foreground mb-1.5">
-                Date & time
-              </p>
+              <p className="text-xs font-medium text-foreground mb-1.5">Date & time</p>
               <input
                 type="datetime-local"
                 value={scheduledAt}
@@ -194,9 +278,7 @@ export default function NewInterview() {
             </div>
 
             <div>
-              <p className="text-xs font-medium text-foreground mb-2">
-                Duration (minutes)
-              </p>
+              <p className="text-xs font-medium text-foreground mb-2">Duration (minutes)</p>
               <div className="flex gap-2">
                 {[30, 45, 60, 90, 120].map((d) => (
                   <button
@@ -266,9 +348,7 @@ export default function NewInterview() {
               placeholder="e.g. Sarah Chen"
             />
             <div>
-              <p className="text-xs font-medium text-foreground mb-1.5">
-                Notes (optional)
-              </p>
+              <p className="text-xs font-medium text-foreground mb-1.5">Notes (optional)</p>
               <textarea
                 value={notes}
                 onChange={(e) => setNotes(e.target.value)}
