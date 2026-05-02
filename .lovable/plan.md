@@ -1,137 +1,117 @@
+# Production Connectivity Pass — Overlay, Calendar Sync & Audit Fixes
 
-## Goal
+This plan delivers three things in one pass:
+1. **Verify** every overlay button works against a real session.
+2. **Wire** Google Calendar sync into the Interviews flow (it already exists in `useCalendarSync` but is unused there).
+3. **Fix** the connectivity gaps a full file-by-file audit surfaced (NewInterview ↔ scheduler signature mismatch, Analytics not using its edge function, Notifications missing realtime, Practice Rooms stub state, missing toasts on silent failures).
 
-Three things, in order:
-
-1. **Overlay is the only UI on the Live page** (today both the `LiveRehearsal` 2‑panel page AND the floating overlay show at the same time). Overlay must be top‑most, hideable, and its buttons must work.
-2. **Audit every sidebar feature + backend wiring** (edge functions, RPCs, RLS) and fix the broken connections that block production use.
-3. **Read all `docs/*.md`** and produce a single, accurate audit/gap report so we stop chasing ghosts.
-
----
-
-## What I found while exploring
-
-### Problem 1 — Two live UIs render at once
-
-`/app/live` route → `LiveRehearsal.tsx`. It renders **both**:
-- A full 2‑panel page (Live Transcript + AI Answer) as the main view
-- `<OverlayWindow />` floating on top via portal
-
-That's why the user sees "overlay AND live interview panel both working". `LiveOverlay.tsx` (route `/app/live/overlay`) does it correctly — overlay only, with a small "Overlay Mode Active" centered hint.
-
-There are also **two files named `OverlayWindow.tsx`**:
-- `src/components/overlay/OverlayWindow.tsx` — the real, full overlay (486 lines)
-- `src/components/live/OverlayWindow.tsx` — a stale 30‑line stub left over from a refactor
-
-`MockSession.tsx` also mounts `OverlayWindow` alongside its own UI — same dual‑UI bug.
-
-### Problem 2 — Overlay buttons not working / not visible properly
-
-Likely causes confirmed by code reading:
-- Overlay portal mounts into `#clarify-overlay-root` but `index.html`/`main.tsx` only ensures `#overlay-root` (different id) — console log confirms the warning fires every load: `#clarify-overlay-root not found in DOM — creating it dynamically`. It works, but the dynamic root is created with `pointer-events:none` and z‑index `9998`, and the children rely on `pointer-events:auto` cascading. On some pages this is fighting the page's own toolbar (LiveRehearsal header sits at z‑40, fine — but the `Toaster` and `MobileNav` can intercept clicks).
-- Toolbar buttons depend on `onToggleMic`, `onToggleSystemAudio`, `onEndSession`, `onGenerate` props. On the `LiveOverlay` page those are wired; on `LiveRehearsal` `onGenerate` is **not passed** to `<OverlayWindow />` (line 124–130) — Get AI Answer is dead from the overlay.
-- `OverlayQuickStart` only renders when `!isSessionActive && !lastSessionId && onStartSession`. On `LiveRehearsal` `onStartSession` isn't passed → if the session ever stops, the overlay shows nothing.
-- `is_visible` defaults to false in `overlayStore`; `LiveRehearsal` never calls `showOverlay()` after start. `LiveOverlay` does (line 84).
-
-### Problem 3 — Backend connection state
-
-- `.env` is correct (Supabase URL/anon key resolved). Client init is healthy.
-- Two parallel Supabase client wrappers exist (`@/integrations/supabase/client` and `@/lib/supabase/client`). They re‑export the same instance, so this isn't a bug — just confusing.
-- 38 edge functions are deployed (`generate-answer`, `start-session`, `end-session`, `deepgram-token`, `parse-resume`, `process-stripe-webhook`, etc.). All live secrets exist (`GEMINI_API_KEY`, `DEEPGRAM_API_KEY`, `LOVABLE_API_KEY`, `OCR_API_KEY`, Stripe… not present).
-- Sidebar links several pages whose backend isn't fully wired: **Practice Rooms** (`useRoom` hook exists but no edge function for room sessions visible), **Companies / Company Research** (function exists), **Interviews** (`schedule-interview` exists), **Referrals** (`lib/referrals.ts` reads/writes but no edge function), **Notifications** (`mark_notifications_read` RPC exists but no realtime subscription is wired).
-- `process-stripe-webhook` and `stripe-webhook` both exist but **no Stripe secret is set** → all billing flows silently fail.
-- Console shows `captureAndAnalyseCodingProblem` → `TypeError: Failed to fetch` — Gemini client is hitting a CDN URL instead of the edge function (`callGemini` in `geminiClient.ts:132`). Needs to route through `analyze-test-performance` / `generate-answer` edge functions.
+No schema changes — all backend pieces (edge functions, tables, RPCs) already exist; the work is wiring + UX hardening.
 
 ---
 
-## Plan
+## 1. Overlay button verification & hardening
 
-### Step 1 — Overlay is the only live UI
+Current state (`OverlayWindow` → `OverlayToolbar`): all 7 props (`onToggleMic`, `onToggleSystemAudio`, `onGenerate`, `onEndSession`, `onManualQuestion`, `onStartSession`, `onSetupNewSession`) are passed by `LiveRehearsal.tsx`. Stealth, Panic, hint-style, model picker, screenshot, and chat all dispatch to `useOverlayStore` / `toggleAppStealthMode` / `captureAndAnalyseCodingProblem` directly.
 
-- Make `/app/live` (LiveRehearsal) **headless**: same logic for setup wizard + session start, but the active phase renders only `<OverlayWindow />` + `<ScreenCaptureBlocker />` + a small centered "Overlay Active" hint (mirror `LiveOverlay.tsx`). Remove the 2‑panel transcript/answer page UI.
-- Pass **all** required props to `<OverlayWindow />` from LiveRehearsal: `onToggleMic`, `onToggleSystemAudio`, `onGenerate`, `onEndSession`, `onManualQuestion`, `onStartSession`, `onSetupNewSession`.
-- Call `useOverlayStore.getState().showOverlay()` immediately when the active phase begins.
-- Apply the same change to `MockSession.tsx`: keep its question stepper UI but **only when overlay is hidden**; default behavior is overlay‑first.
-- Delete the stub `src/components/live/OverlayWindow.tsx` and update `src/components/live/index.ts` if it's exported.
-- Collapse the `/app/live` and `/app/live/overlay` routes into one (`/app/live` → overlay experience). Keep `/app/live/overlay` as alias for back‑compat.
+**Audit findings to fix:**
 
-### Step 2 — Overlay visibility + button fixes
+| Button | Current behavior | Fix |
+|---|---|---|
+| Mic toggle | `audio.toggleMute()` | OK — verify via toast on success/failure |
+| System Audio | `audio.toggleSystemAudio()` | Wrap in try/catch, surface `getDisplayMedia` rejection as toast (currently silent on Safari/FF) |
+| AI Help (Generate) | `handleGenerate` shows `toast.info` if no question | OK |
+| End | `handleStop` → `endLiveSession` | OK |
+| Stealth (More menu) | `toggleAppStealthMode()` | OK |
+| Panic (More menu + Ctrl+Shift+P) | `showPanic(PANIC_RESPONSE)` | OK |
+| Setup New Session | `() => setPhase("setup")` | OK |
+| Screen capture | `captureAndAnalyseCodingProblem()` | Add toast for permission denial |
+| Minimal toggle | direct store call | OK |
 
-- `index.html`: add `<div id="clarify-overlay-root" style="position:fixed;inset:0;pointer-events:none;z-index:2147483647;isolation:isolate"></div>` next to `#overlay-root` so the dynamic creation warning goes away and z‑index is the topmost (`2147483647`, matching `OverlayPositionManager`).
-- Update `main.tsx` `ensureOverlayRoot` to also seed `#clarify-overlay-root` (defensive).
-- Remove the `pointer-events:none` from the overlay root (the panel manages its own pointer‑events; that style was making chrome behind the panel non‑clickable but also breaking some hit‑tests inside).
-- Confirm `OverlayToolbar` actions actually call props (audit: Mic, System Audio, Generate, End, Stealth, Panic, Minimal, Auto‑gen, Hint style, Model). Add visible disabled tooltips when handlers are missing instead of silently noop.
-- Add a guaranteed‑visible "Show Overlay" floating pill on the Live page when `is_visible === false`, so the user can always recover the overlay (replaces relying solely on Ctrl+Shift+H, which doesn't fire on some browsers).
-
-### Step 3 — Sidebar feature audit + production wiring
-
-For each sidebar entry, verify: route exists → page renders → page's data source resolves → write‑actions hit either RLS table or edge function → toasts on error. Fix the broken ones:
-
-| Sidebar item | Issue I will fix |
-|---|---|
-| Live Co‑Pilot | Dual UI → overlay only (Step 1) |
-| Mock Interview | `MockSession` dual UI → overlay‑first (Step 1) |
-| Mock Tests (sub‑pages) | Confirm `select-test-questions`, `submit-test`, `analyze-test-performance` are reachable; add error toasts where they swallow failures |
-| Call Sessions | `sessions/history` query — confirm RLS lets the user read; add empty state + retry |
-| Analytics | Wire `analytics-dashboard` edge function to the page; today the page partially uses local mock data |
-| Documents | Resume upload uses `parse-resume`; verify storage policies for `resumes` private bucket and surface upload errors |
-| Answer Bank | CRUD against `session_answers`; add insert/update on save |
-| Interviews | `schedule-interview` and `sync-calendar` exist but page doesn't call them; wire create + sync buttons |
-| Companies | `company-research` edge function exists; page must call it on submit (currently uses placeholder) |
-| Practice Rooms | `useRoom` is local‑only; gate this behind a "coming soon" badge until realtime channel + RLS table are added — do not pretend it works |
-| Notifications | Subscribe to `notifications` realtime channel; call `mark_notifications_read` RPC on open |
-| Settings → Billing | No Stripe secret. Show a clear "Stripe not configured — contact admin" banner instead of a silent failure. (Adding the secret is a user action.) |
-| Admin Panel | Already implemented in last loops; verify routes still resolve with `requireAdmin` guard |
-
-For each fix, add `toast.error(...)` on failure and skeleton/empty state on load so production users aren't staring at blank screens.
-
-### Step 4 — Fix the Gemini "Failed to fetch" (console error)
-
-`src/lib/ai/geminiClient.ts` is calling `https://cdn.gpteng.co/...` (sandbox proxy) for screenshot analysis, which doesn't work in production. Route screenshot analysis through a new `analyze-screenshot` thin edge function that wraps the existing `gemini.ts` shared util, OR re‑use `generate-answer` with an `image_data` payload. This unblocks "Analyze Screen" overlay button.
-
-### Step 5 — Documentation audit
-
-Read all 8 files in `docs/` and produce `docs/AUDIT_2026-05-01.md` containing:
-- Verified working features (with the edge function / RPC each one calls)
-- Stub/broken features (with the file + line where they fail)
-- Missing secrets (Stripe)
-- Recommended next sprint
-
-I will NOT rewrite the existing docs in this loop — just add the audit file.
+**Implementation:**
+- Add a small `safeToast` wrapper around the two browser-permission paths (system audio + screen capture) in `OverlayToolbar.tsx`.
+- Add a manual smoke-test checklist to `docs/AUDIT_2026-05-01.md` with one row per button and the expected store/audio side-effect, so future regressions are catchable in 60 seconds.
 
 ---
 
-## Out of scope (will call out, not fix)
+## 2. Calendar sync wiring (Interviews ↔ Google Calendar)
 
-- Adding the Stripe secret (user must paste it).
-- Building Practice Rooms backend (requires new tables + realtime — separate epic).
-- Electron preload changes (current preload is minimal; desktop hardening is a separate task).
-- Refactoring the two parallel Supabase client wrappers — both work, just cosmetic.
+Today: `useCalendarSync` works (it talks to `sync-calendar` and `disconnect-calendar` edge functions), but it is only consumed by `SettingsIntegrations.tsx`. The Interviews flow never triggers a sync, so newly-scheduled interviews don't push to calendar and Google events don't pull into the tracker.
+
+**Bug discovered:** `NewInterview.tsx` calls `scheduler.createInterview({ company_name, role_title, interview_type, platform, scheduled_at, duration_minutes, round_number, interviewer_name, meeting_link, notes })`, but `InterviewFormValues` requires `stage` and `priority` and does not accept the round-level fields. The insert silently strips them and the round is never created. This is why the previously reported "Interviews — Partial" status appears as broken in the UI.
+
+**Fix plan:**
+
+1. **Repair NewInterview ↔ scheduler contract** — split the form payload so the parent `scheduled_interviews` row gets the right shape (`stage: "applied"`, `priority`), and `addRound()` is called with the round-level fields right after creation. One scheduler call, two DB inserts.
+2. **Add a "Sync to Google Calendar" CTA** to `Interviews.tsx` toolbar:
+   - If `isConnected === false`, button label is "Connect Calendar" → `connectGoogle()`.
+   - If connected, "Sync now" → `syncNow()` with a toast showing imported count.
+   - Show `lastSynced` timestamp under the button.
+3. **Auto-sync hook on create:** after a successful `createInterview` in `NewInterview.tsx`, if `isConnected`, fire `syncNow()` (best-effort, don't block navigation).
+4. Surface `useCalendarSync.error` via `sonner` toast in both pages (currently silent).
+
+No edge function changes needed — `sync-calendar` and `schedule-interview` already exist. No new tables.
 
 ---
 
-## Files I'll touch
+## 3. Cross-feature audit fixes (P1 from `AUDIT_2026-05-01.md`)
+
+### 3a. Analytics page → wire `analytics-dashboard` edge function
+`src/pages/app/Analytics.tsx` reads everything from the local `useAnalytics` hook (client-side aggregation over `sessions`). The `analytics-dashboard` edge function returns server-aggregated KPIs (cheaper, accurate over 1000-row Supabase limit).
+
+- Update `useAnalytics.ts` to invoke `analytics-dashboard` first; fall back to the existing local aggregation only if the function errors.
+- Keep the same return shape so `Analytics.tsx` is untouched.
+
+### 3b. Notifications realtime
+`Notifications.tsx` reads from `notifications` table directly; `notificationStore` has no Postgres realtime channel, so unread badge in `AppTopBar` is stale until a hard refresh.
+
+- Add a single `supabase.channel("notifications:" + userId).on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: \`user_id=eq.\${userId}\` }, ...)` subscription inside `notificationStore.init()`.
+- Switch the "mark all read" handler to call the existing `mark_notifications_read(p_user_id)` RPC (already in the DB, currently unused).
+
+### 3c. Practice Rooms — gate behind "Coming soon"
+`useRoom` is local-only with no realtime/`rooms` write path despite the table existing. Rather than ship half-working multiplayer, gate the route:
+- `PracticeRooms.tsx` shows a "Coming soon" empty state with a waitlist CTA (writes to `feedback` table with `category: "rooms_waitlist"`).
+- Hide the sidebar item behind a `FEATURE_FLAGS.rooms` check so we can flip it back on once realtime lands.
+
+### 3d. Silent-failure toasts
+- `CompanyResearch.tsx`: wrap `company-research` invoke in try/catch, toast on error.
+- `NewInterview.tsx`: already shows `error` text, but also fire a `toast.error()`.
+
+### 3e. Stripe missing-secret banner
+Detect missing Stripe config (catch 500 from `create-checkout`) and show a one-line banner in `BillingSettings` instead of a generic error: "Billing not yet configured. Add `STRIPE_SECRET_KEY` to enable upgrades."
+
+---
+
+## 4. Documentation refresh
+
+- Update `docs/AUDIT_2026-05-01.md`: move Interviews / Analytics / Notifications from **Partial** → **OK**, mark Rooms as **Coming Soon**.
+- Update `docs/ARCHITECTURE.md`: replace the 2-panel Live UI section with the overlay-only flow.
+- Sync `docs/API.md` edge-function count (32 → 38) and add the calendar-sync sequence diagram.
+
+---
+
+## Files touched
 
 ```text
-index.html                                       (add overlay root div)
-src/main.tsx                                     (seed clarify-overlay-root)
-src/pages/app/live/LiveRehearsal.tsx             (overlay-only)
-src/pages/app/live/LiveOverlay.tsx               (small polish)
-src/pages/app/mock/MockSession.tsx               (overlay-first)
-src/components/live/OverlayWindow.tsx            (DELETE stub)
-src/components/live/index.ts                     (drop stub export if present)
-src/components/overlay/OverlayWindow.tsx         (always show after start)
-src/components/overlay/OverlayToolbar.tsx        (disabled tooltips)
-src/App.tsx                                      (route alias)
-src/lib/ai/geminiClient.ts                       (route via edge function)
-supabase/functions/analyze-screenshot/index.ts   (NEW thin function)
-src/pages/app/Notifications.tsx                  (realtime + mark-read)
-src/pages/app/interviews/NewInterview.tsx        (wire schedule-interview)
-src/pages/app/company-research/CompanyResearch.tsx (wire company-research)
-src/pages/app/Analytics.tsx                      (wire analytics-dashboard)
-src/pages/app/rooms/PracticeRooms.tsx            ("coming soon" gate)
-src/pages/app/settings/SettingsBilling.tsx       (Stripe-not-configured banner)
-docs/AUDIT_2026-05-01.md                         (NEW gap report)
+src/components/overlay/OverlayToolbar.tsx        (safe toasts)
+src/pages/app/live/LiveRehearsal.tsx             (verify, no behavior change)
+src/pages/app/interviews/NewInterview.tsx        (fix scheduler contract + auto-sync)
+src/pages/app/interviews/Interviews.tsx          (Connect/Sync CTA)
+src/hooks/useInterviewScheduler.ts               (split parent + round inserts)
+src/hooks/useCalendarSync.ts                     (no change — already correct)
+src/hooks/useAnalytics.ts                        (call analytics-dashboard first)
+src/store/notificationStore.ts                   (realtime channel + RPC mark-read)
+src/pages/app/rooms/PracticeRooms.tsx            (Coming soon state)
+src/pages/app/company-research/*.tsx             (toast on error)
+src/components/billing/UpgradeModal.tsx          (Stripe-missing banner)
+docs/AUDIT_2026-05-01.md, ARCHITECTURE.md, API.md (refresh)
 ```
 
-After approval I'll execute in this order: Step 1 (overlay unification) → Step 2 (visibility/buttons) → Step 4 (screenshot fix) → Step 3 (sidebar wiring) → Step 5 (audit doc).
+No SQL migrations. No new edge functions. No new secrets required.
+
+---
+
+## Out of scope (next sprint)
+
+- Stripe activation (waiting for `STRIPE_SECRET_KEY` from user).
+- Real Practice Rooms multiplayer (requires WebRTC + realtime channel design).
+- Replacing the 845 TODO test placeholders.
