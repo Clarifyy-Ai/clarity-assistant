@@ -6,6 +6,7 @@ import { useSessionStore } from "@/store/sessionStore";
 import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 import { PANIC_RESPONSE } from "@/types/session.types";
 import { captureAndAnalyseCodingProblem } from "@/lib/audio/screenshotCapture";
+import { toast } from "sonner";
 import {
   Mic, MicOff, Volume2, VolumeX, Zap, RefreshCw,
   Eye, EyeOff, Square, AlertCircle, Type, ChevronDown,
