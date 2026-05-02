@@ -131,7 +131,18 @@ export function OverlayToolbar({
           icon={Monitor}
           label="Screen"
           isActive={isScreenshotLoading}
-          onClick={() => captureAndAnalyseCodingProblem()}
+          onClick={async () => {
+            try {
+              await captureAndAnalyseCodingProblem();
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : "Screen capture failed";
+              if (/permission|denied|NotAllowed/i.test(msg)) {
+                toast.error("Screen capture permission denied. Please allow screen sharing and try again.");
+              } else {
+                toast.error(msg);
+              }
+            }
+          }}
           disabled={isScreenshotLoading}
           className={isScreenshotLoading
             ? "bg-sky-500/20 border-sky-500/40 text-sky-300"
