@@ -1,117 +1,77 @@
-# Production Connectivity Pass — Overlay, Calendar Sync & Audit Fixes
+## Goal
 
-This plan delivers three things in one pass:
-1. **Verify** every overlay button works against a real session.
-2. **Wire** Google Calendar sync into the Interviews flow (it already exists in `useCalendarSync` but is unused there).
-3. **Fix** the connectivity gaps a full file-by-file audit surfaced (NewInterview ↔ scheduler signature mismatch, Analytics not using its edge function, Notifications missing realtime, Practice Rooms stub state, missing toasts on silent failures).
+Deliver a single authoritative audit document (`docs/PRODUCTION_AUDIT_2026-05-03.md`) that walks **every page in every user portal**, with frontend, UI/UX, backend, edge function, table, and RLS verification — plus a prioritized P0/P1/P2 fix list. Supersedes `docs/AUDIT_2026-05-01.md`.
 
-No schema changes — all backend pieces (edge functions, tables, RPCs) already exist; the work is wiring + UX hardening.
-
----
-
-## 1. Overlay button verification & hardening
-
-Current state (`OverlayWindow` → `OverlayToolbar`): all 7 props (`onToggleMic`, `onToggleSystemAudio`, `onGenerate`, `onEndSession`, `onManualQuestion`, `onStartSession`, `onSetupNewSession`) are passed by `LiveRehearsal.tsx`. Stealth, Panic, hint-style, model picker, screenshot, and chat all dispatch to `useOverlayStore` / `toggleAppStealthMode` / `captureAndAnalyseCodingProblem` directly.
-
-**Audit findings to fix:**
-
-| Button | Current behavior | Fix |
-|---|---|---|
-| Mic toggle | `audio.toggleMute()` | OK — verify via toast on success/failure |
-| System Audio | `audio.toggleSystemAudio()` | Wrap in try/catch, surface `getDisplayMedia` rejection as toast (currently silent on Safari/FF) |
-| AI Help (Generate) | `handleGenerate` shows `toast.info` if no question | OK |
-| End | `handleStop` → `endLiveSession` | OK |
-| Stealth (More menu) | `toggleAppStealthMode()` | OK |
-| Panic (More menu + Ctrl+Shift+P) | `showPanic(PANIC_RESPONSE)` | OK |
-| Setup New Session | `() => setPhase("setup")` | OK |
-| Screen capture | `captureAndAnalyseCodingProblem()` | Add toast for permission denial |
-| Minimal toggle | direct store call | OK |
-
-**Implementation:**
-- Add a small `safeToast` wrapper around the two browser-permission paths (system audio + screen capture) in `OverlayToolbar.tsx`.
-- Add a manual smoke-test checklist to `docs/AUDIT_2026-05-01.md` with one row per button and the expected store/audio side-effect, so future regressions are catchable in 60 seconds.
-
----
-
-## 2. Calendar sync wiring (Interviews ↔ Google Calendar)
-
-Today: `useCalendarSync` works (it talks to `sync-calendar` and `disconnect-calendar` edge functions), but it is only consumed by `SettingsIntegrations.tsx`. The Interviews flow never triggers a sync, so newly-scheduled interviews don't push to calendar and Google events don't pull into the tracker.
-
-**Bug discovered:** `NewInterview.tsx` calls `scheduler.createInterview({ company_name, role_title, interview_type, platform, scheduled_at, duration_minutes, round_number, interviewer_name, meeting_link, notes })`, but `InterviewFormValues` requires `stage` and `priority` and does not accept the round-level fields. The insert silently strips them and the round is never created. This is why the previously reported "Interviews — Partial" status appears as broken in the UI.
-
-**Fix plan:**
-
-1. **Repair NewInterview ↔ scheduler contract** — split the form payload so the parent `scheduled_interviews` row gets the right shape (`stage: "applied"`, `priority`), and `addRound()` is called with the round-level fields right after creation. One scheduler call, two DB inserts.
-2. **Add a "Sync to Google Calendar" CTA** to `Interviews.tsx` toolbar:
-   - If `isConnected === false`, button label is "Connect Calendar" → `connectGoogle()`.
-   - If connected, "Sync now" → `syncNow()` with a toast showing imported count.
-   - Show `lastSynced` timestamp under the button.
-3. **Auto-sync hook on create:** after a successful `createInterview` in `NewInterview.tsx`, if `isConnected`, fire `syncNow()` (best-effort, don't block navigation).
-4. Surface `useCalendarSync.error` via `sonner` toast in both pages (currently silent).
-
-No edge function changes needed — `sync-calendar` and `schedule-interview` already exist. No new tables.
-
----
-
-## 3. Cross-feature audit fixes (P1 from `AUDIT_2026-05-01.md`)
-
-### 3a. Analytics page → wire `analytics-dashboard` edge function
-`src/pages/app/Analytics.tsx` reads everything from the local `useAnalytics` hook (client-side aggregation over `sessions`). The `analytics-dashboard` edge function returns server-aggregated KPIs (cheaper, accurate over 1000-row Supabase limit).
-
-- Update `useAnalytics.ts` to invoke `analytics-dashboard` first; fall back to the existing local aggregation only if the function errors.
-- Keep the same return shape so `Analytics.tsx` is untouched.
-
-### 3b. Notifications realtime
-`Notifications.tsx` reads from `notifications` table directly; `notificationStore` has no Postgres realtime channel, so unread badge in `AppTopBar` is stale until a hard refresh.
-
-- Add a single `supabase.channel("notifications:" + userId).on("postgres_changes", { event: "*", schema: "public", table: "notifications", filter: \`user_id=eq.\${userId}\` }, ...)` subscription inside `notificationStore.init()`.
-- Switch the "mark all read" handler to call the existing `mark_notifications_read(p_user_id)` RPC (already in the DB, currently unused).
-
-### 3c. Practice Rooms — gate behind "Coming soon"
-`useRoom` is local-only with no realtime/`rooms` write path despite the table existing. Rather than ship half-working multiplayer, gate the route:
-- `PracticeRooms.tsx` shows a "Coming soon" empty state with a waitlist CTA (writes to `feedback` table with `category: "rooms_waitlist"`).
-- Hide the sidebar item behind a `FEATURE_FLAGS.rooms` check so we can flip it back on once realtime lands.
-
-### 3d. Silent-failure toasts
-- `CompanyResearch.tsx`: wrap `company-research` invoke in try/catch, toast on error.
-- `NewInterview.tsx`: already shows `error` text, but also fire a `toast.error()`.
-
-### 3e. Stripe missing-secret banner
-Detect missing Stripe config (catch 500 from `create-checkout`) and show a one-line banner in `BillingSettings` instead of a generic error: "Billing not yet configured. Add `STRIPE_SECRET_KEY` to enable upgrades."
-
----
-
-## 4. Documentation refresh
-
-- Update `docs/AUDIT_2026-05-01.md`: move Interviews / Analytics / Notifications from **Partial** → **OK**, mark Rooms as **Coming Soon**.
-- Update `docs/ARCHITECTURE.md`: replace the 2-panel Live UI section with the overlay-only flow.
-- Sync `docs/API.md` edge-function count (32 → 38) and add the calendar-sync sequence diagram.
-
----
-
-## Files touched
+## Portals & roles in scope
 
 ```text
-src/components/overlay/OverlayToolbar.tsx        (safe toasts)
-src/pages/app/live/LiveRehearsal.tsx             (verify, no behavior change)
-src/pages/app/interviews/NewInterview.tsx        (fix scheduler contract + auto-sync)
-src/pages/app/interviews/Interviews.tsx          (Connect/Sync CTA)
-src/hooks/useInterviewScheduler.ts               (split parent + round inserts)
-src/hooks/useCalendarSync.ts                     (no change — already correct)
-src/hooks/useAnalytics.ts                        (call analytics-dashboard first)
-src/store/notificationStore.ts                   (realtime channel + RPC mark-read)
-src/pages/app/rooms/PracticeRooms.tsx            (Coming soon state)
-src/pages/app/company-research/*.tsx             (toast on error)
-src/components/billing/UpgradeModal.tsx          (Stripe-missing banner)
-docs/AUDIT_2026-05-01.md, ARCHITECTURE.md, API.md (refresh)
+Anonymous (Public)        →  Marketing + Auth pages
+Authenticated User        →  /onboarding/*, /app/*
+Admin (has_role 'admin')  →  /app/admin/*  (in addition to user portal)
+Service role (server)     →  Edge functions + webhooks
 ```
 
-No SQL migrations. No new edge functions. No new secrets required.
+## Sections of the audit
 
----
+### 1. Public / Marketing portal
+Per page (Landing, Pricing, Blog, BlogPost, Help, HelpArticle, Privacy, Terms, Shortcuts, NotFound):
+- Renders without auth, SEO meta (`usePageMeta`), responsive at 360/768/1280, broken links, CTA wiring, robots/sitemap.
 
-## Out of scope (next sprint)
+### 2. Auth portal
+Login, Signup, AuthCallback, ResetPassword, VerifyEmail, OAuthButton:
+- `onAuthStateChange` ordering, `emailRedirectTo`, recovery flow, guest-only guard, profile auto-creation trigger (`handle_new_user`), error toasts.
 
-- Stripe activation (waiting for `STRIPE_SECRET_KEY` from user).
-- Real Practice Rooms multiplayer (requires WebRTC + realtime channel design).
-- Replacing the 845 TODO test placeholders.
+### 3. Onboarding (5 steps)
+Each step: schema persistence to `profiles`, validation, back/forward, resume upload to `resumes` bucket + `parse-resume` edge function, audio device permission UX, completion sets `onboarding_completed=true`.
+
+### 4. User app portal — every route under `/app/*`
+For each page in this matrix, verify: route guard, data fetch, mutation, edge function call, loading/empty/error states, credit deduction (where paid), realtime where applicable, mobile layout.
+
+| Group | Pages |
+|---|---|
+| Core | Dashboard, Live (LiveRehearsal/Overlay), MockSession, Mock hub |
+| Mock Tests | MockTestHub, ExamPapers, ExcelImportTab, MyQuestions, TestAnalytics, TestConfigure, TestResults, TestRevision, TestSession, UploadQuestions |
+| Prep | Prep Lab subpages (STAR, Practice Questions, Whiteboard, CodeScratchpad, etc.) |
+| Sessions | Sessions list + detail, Scorecard, Debrief |
+| Growth | Analytics, Documents, Answer Bank, CompanyResearch |
+| Planner | Interviews, NewInterview, InterviewDetail, InterviewDay, Rooms |
+| Account | Profile, Referrals, Notifications |
+| Settings | Settings + 17 sub-pages (Profile, Audio, BYOK, Billing, Subscription, Credits, Models, Hotkeys, Appearance, Notifications, Integrations, Privacy, Data, Security, Polish, Danger) |
+
+### 5. Admin portal — `/app/admin/*`
+Admin, AdminDashboard, AdminUsers, AdminAnalytics, AdminLiveChat, AdminQuestionEditor, AdminSeedQuestions, AdminFeatureFlags, AdminRevenue, AdminModelCosts:
+- `requireAdmin` guard, RLS via `has_role`, admin-only RPCs (`get_admin_perf_stats`, `get_admin_dau_mau`, `bulk_update_users`), audit log writes.
+
+### 6. Backend matrix
+- All 38 edge functions: auth check, CORS, JSON content-type, error path, called-from frontend mapping.
+- All 40+ tables: RLS enabled, owner-scoped policies, admin policy, nullable `user_id` audit.
+- Storage buckets: privacy, signed URL usage.
+- Secrets present vs required (highlight missing Stripe secrets).
+
+### 7. Cross-cutting concerns
+- Z-index/overlay stack, stealth mode, keyboard hotkeys, network/offline fallback, error boundaries, Sentry, PostHog, env validation, toaster mounting.
+
+### 8. Findings & prioritized fix list
+- **P0 (blocks production):** missing Stripe secrets, any unprotected route, any silent-failure mutation, any RLS gap.
+- **P1:** unwired edge functions, stub pages (Practice Rooms WebRTC), realtime gaps.
+- **P2:** doc reconciliation, test placeholders, polish.
+
+## Method (read-only)
+
+1. Enumerate routes from `src/App.tsx` and confirm guards.
+2. For each page, open the file and check: data hooks used, edge function calls, mutation paths, empty/error handling.
+3. For each edge function, open `index.ts` to confirm `requireAuth`, `deductCredits` (if paid), CORS, response shape.
+4. Cross-check tables in schema for RLS + owner column nullability.
+5. Run `supabase--linter` and `security--run_security_scan` to catch RLS / policy gaps.
+6. Check console + network logs from current preview session for runtime errors.
+
+## Deliverable
+
+A single markdown file `docs/PRODUCTION_AUDIT_2026-05-03.md` with:
+- Executive summary (% production-ready per portal)
+- Per-page table (Status: OK / Partial / Stub / Broken; Owner column; Notes)
+- Backend matrix tables
+- Findings list with file paths + line refs
+- P0/P1/P2 action plan with effort estimates
+
+No code changes in this pass — audit only. A follow-up plan will batch the P0/P1 fixes once you approve.
