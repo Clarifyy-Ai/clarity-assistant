@@ -6,54 +6,54 @@ import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Video, Loader2, Briefcase, Code, Users, Brain, Mic } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { Video, Globe, Lock } from "lucide-react";
 import { toast } from "sonner";
-
-const SESSION_TYPES = [
-  { id: "behavioral", label: "Behavioral", icon: Users, desc: "STAR-method behavioral questions" },
-  { id: "technical", label: "Technical", icon: Code, desc: "Coding & algorithm questions" },
-  { id: "system_design", label: "System Design", icon: Brain, desc: "Architecture & scalability discussions" },
-  { id: "role_specific", label: "Role-Specific", icon: Briefcase, desc: "Questions tailored to your target role" },
-];
-
-const DIFFICULTIES = ["Easy", "Medium", "Hard"];
-const DURATIONS = [15, 30, 45, 60];
+import { cn } from "@/lib/utils";
 
 export default function NewRoom() {
   const navigate = useNavigate();
-  const { user, profile } = useAuthStore();
+  const { user } = useAuthStore();
 
   const [name, setName] = useState("");
-  const [type, setType] = useState("behavioral");
-  const [difficulty, setDifficulty] = useState("Medium");
-  const [duration, setDuration] = useState(30);
-  const [maxParticipants, setMaxParticipants] = useState(2);
+  const [description, setDescription] = useState("");
+  const [maxPlayers, setMaxPlayers] = useState(2);
+  const [isPublic, setIsPublic] = useState(true);
   const [creating, setCreating] = useState(false);
 
   async function handleCreate() {
     if (!user?.id) return;
+    if (!name.trim()) {
+      toast.error("Please give the room a name");
+      return;
+    }
     setCreating(true);
     try {
       const { data, error } = await supabase
         .from("practice_rooms")
         .insert({
           host_id: user.id,
-          title: name || `${type.replace("_", " ")} Practice`,
-          type,
-          difficulty: difficulty.toLowerCase(),
-          duration_minutes: duration,
-          capacity: maxParticipants,
-          status: "in_progress",
+          name: name.trim(),
+          description: description.trim() || null,
+          status: "waiting",
+          max_players: maxPlayers,
+          is_public: isPublic,
         })
         .select("id")
         .single();
 
       if (error) throw error;
-      toast.success("Session started!");
+
+      // Auto-join the host as a participant
+      await supabase.from("room_participants").insert({
+        room_id: data.id,
+        user_id: user.id,
+        role: "host",
+      });
+
+      toast.success("Room created!");
       navigate(`/app/rooms/${data.id}/session`);
-    } catch {
-      toast.error("Failed to create session");
+    } catch (e: any) {
+      toast.error(e?.message ?? "Failed to create room");
       setCreating(false);
     }
   }
@@ -61,121 +61,81 @@ export default function NewRoom() {
   return (
     <div>
       <PageHeader
-        title="New Practice Session"
-        description="Configure your mock interview"
+        title="New Practice Room"
+        subtitle="Host a live mock interview session"
         icon={<Video className="w-5 h-5 text-violet-400" />}
         breadcrumbs={[
           { label: "Practice Rooms", href: "/app/rooms" },
-          { label: "New Session" },
+          { label: "New Room" },
         ]}
       />
 
-      <div className="max-w-2xl space-y-6">
+      <div className="max-w-2xl space-y-4">
         <Card>
-          <label className="block text-sm font-semibold text-foreground mb-1.5">Room Name</label>
+          <label className="block text-sm font-semibold text-foreground mb-1.5">Room name</label>
           <input
             type="text"
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Frontend Interview Prep"
-            className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+            className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+          />
+          <label className="block text-sm font-semibold text-foreground mb-1.5 mt-4">Description (optional)</label>
+          <textarea
+            value={description}
+            onChange={(e) => setDescription(e.target.value)}
+            placeholder="What will you practice?"
+            rows={3}
+            className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
           />
         </Card>
 
         <Card>
-          <h3 className="text-sm font-semibold text-foreground mb-3">Session Type</h3>
+          <h3 className="text-sm font-semibold text-foreground mb-3">Visibility</h3>
           <div className="grid grid-cols-2 gap-2">
-            {SESSION_TYPES.map((t) => (
+            {[
+              { value: true, label: "Public", icon: Globe, desc: "Anyone can join" },
+              { value: false, label: "Private", icon: Lock, desc: "Invite only" },
+            ].map((opt) => (
               <button
-                key={t.id}
-                onClick={() => setType(t.id)}
+                key={String(opt.value)}
+                type="button"
+                onClick={() => setIsPublic(opt.value)}
                 className={cn(
-                  "flex items-start gap-3 p-3 rounded-xl border text-left transition-all",
-                  type === t.id
-                    ? "border-violet-500/40 bg-violet-500/10"
-                    : "border-border hover:border-border hover:bg-accent/5"
+                  "p-3 rounded-xl border text-left transition",
+                  isPublic === opt.value
+                    ? "border-violet-500/50 bg-violet-500/5"
+                    : "border-border hover:border-border/80"
                 )}
               >
-                <t.icon className={cn("w-5 h-5 mt-0.5", type === t.id ? "text-violet-500" : "text-muted-foreground")} />
-                <div>
-                  <p className="text-sm font-medium text-foreground">{t.label}</p>
-                  <p className="text-xs text-muted-foreground">{t.desc}</p>
-                </div>
+                <opt.icon className="w-4 h-4 mb-1 text-violet-400" />
+                <p className="text-sm font-medium text-foreground">{opt.label}</p>
+                <p className="text-xs text-muted-foreground">{opt.desc}</p>
               </button>
             ))}
           </div>
         </Card>
 
         <Card>
-          <h3 className="text-sm font-semibold text-foreground mb-3">Difficulty</h3>
-          <div className="flex gap-2">
-            {DIFFICULTIES.map((d) => (
-              <button
-                key={d}
-                onClick={() => setDifficulty(d)}
-                className={cn(
-                  "px-4 py-2 rounded-xl border text-sm font-medium transition-all",
-                  difficulty === d
-                    ? "border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300"
-                    : "border-border text-muted-foreground hover:bg-accent/5"
-                )}
-              >
-                {d}
-              </button>
-            ))}
-          </div>
+          <label className="block text-sm font-semibold text-foreground mb-2">
+            Max participants: {maxPlayers}
+          </label>
+          <input
+            type="range"
+            min={2}
+            max={6}
+            value={maxPlayers}
+            onChange={(e) => setMaxPlayers(Number(e.target.value))}
+            className="w-full"
+          />
         </Card>
 
-        <Card>
-          <h3 className="text-sm font-semibold text-foreground mb-3">Duration</h3>
-          <div className="flex gap-2">
-            {DURATIONS.map((d) => (
-              <button
-                key={d}
-                onClick={() => setDuration(d)}
-                className={cn(
-                  "px-4 py-2 rounded-xl border text-sm font-medium transition-all",
-                  duration === d
-                    ? "border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300"
-                    : "border-border text-muted-foreground hover:bg-accent/5"
-                )}
-              >
-                {d} min
-              </button>
-            ))}
-          </div>
-        </Card>
-
-        <Card>
-          <h3 className="text-sm font-semibold text-foreground mb-3">Max Participants</h3>
-          <div className="flex gap-2">
-            {[1, 2, 3, 4, 6].map((n) => (
-              <button
-                key={n}
-                onClick={() => setMaxParticipants(n)}
-                className={cn(
-                  "px-4 py-2 rounded-xl border text-sm font-medium transition-all",
-                  maxParticipants === n
-                    ? "border-violet-500/40 bg-violet-500/10 text-violet-700 dark:text-violet-300"
-                    : "border-border text-muted-foreground hover:bg-accent/5"
-                )}
-              >
-                {n}
-              </button>
-            ))}
-          </div>
-        </Card>
-
-        <Button
-          variant="primary"
-          size="lg"
-          onClick={handleCreate}
-          disabled={creating}
-          leftIcon={creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Mic className="w-4 h-4" />}
-          className="w-full"
-        >
-          {creating ? "Starting Session..." : "Start Interview Session"}
-        </Button>
+        <div className="flex gap-2 justify-end">
+          <Button variant="ghost" onClick={() => navigate("/app/rooms")}>Cancel</Button>
+          <Button variant="primary" onClick={handleCreate} loading={creating}>
+            Create Room
+          </Button>
+        </div>
       </div>
     </div>
   );
