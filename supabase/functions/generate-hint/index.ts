@@ -114,12 +114,12 @@ Deno.serve(async (req: Request) => {
     );
   } catch (err) {
     console.error("[generate-hint] Error:", err);
-    // Return fallback hints instead of an error so the overlay still shows something
+    // Return fallback hints instead of an error so the overlay still shows something.
+    // Do NOT include err.message — leaks internal details to clients.
     return new Response(
       JSON.stringify({
         hints:  FALLBACK_HINTS,
         source: "fallback",
-        error:  err instanceof Error ? err.message : "Unknown error",
       }),
       { status: 200, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
     );

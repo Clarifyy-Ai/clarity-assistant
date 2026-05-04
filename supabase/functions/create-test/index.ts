@@ -163,7 +163,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error("[create-test] Error:", err);
     return jsonResponse(
-      { error: err instanceof Error ? err.message : "Unknown error" },
+      { error: "Internal server error" },
       500
     );
   }

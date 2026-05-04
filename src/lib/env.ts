@@ -33,7 +33,9 @@ export const ENV = {
     "VITE_SUPABASE_ANON_KEY",
   ]),
   SENTRY_DSN: optional(["VITE_SENTRY_DSN"]),
-  DEEPGRAM_API_KEY: optional(["VITE_DEEPGRAM_API_KEY"]),
+  // NOTE: Deepgram API key is server-side only — minted as scoped tokens by the
+  // `deepgram-token` edge function. Never expose as VITE_ env (would be bundled
+  // into client JS).
   STRIPE_PUBLIC_KEY: optional(["VITE_STRIPE_PUBLIC_KEY"]),
   APP_ENV: optional(["VITE_APP_ENV"], "development"),
   APP_URL: optional(["VITE_APP_URL"]),
