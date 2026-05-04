@@ -17,6 +17,7 @@ const SETTINGS_NAV = [
   { to: "/app/settings/appearance",     icon: Palette,     label: "Appearance"      },
   { to: "/app/settings/audio",          icon: Mic,         label: "Audio & speech"  },
   { to: "/app/settings/privacy",        icon: Shield,      label: "Privacy"         },
+  { to: "/app/settings/security-config", icon: ShieldCheck, label: "Security config" },
   { to: "/app/settings/subscription",   icon: CreditCard,  label: "Subscription"    },
   { to: "/app/settings/credits",        icon: Zap,         label: "Credits"         },
   { to: "/app/settings/integrations",   icon: Globe,       label: "Integrations"    },
