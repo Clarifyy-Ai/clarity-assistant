@@ -3,7 +3,7 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   User, Bell, Shield, CreditCard,
   Zap, Palette, Download, Trash2,
-  ChevronRight, Globe, Mic, Keyboard, Sparkles,
+  ChevronRight, Globe, Mic, Keyboard, Sparkles, ShieldCheck,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
