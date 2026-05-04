@@ -120,6 +120,7 @@ const SettingsBilling       = lazy(() => import("@/pages/app/settings/SettingsBi
 const SettingsNotifications = lazy(() => import("@/pages/app/settings/SettingsNotifications"));
 const SettingsPrivacy       = lazy(() => import("@/pages/app/settings/SettingsPrivacy"));
 const SettingsSecurity      = lazy(() => import("@/pages/app/settings/SettingsSecurity"));
+const SettingsSecurityConfig = lazy(() => import("@/pages/app/settings/SettingsSecurityConfig"));
 const SettingsIntegrations  = lazy(() => import("@/pages/app/settings/SettingsIntegrations"));
 const SettingsBYOK          = lazy(() => import("@/pages/app/settings/SettingsBYOK"));
 const SettingsAppearance    = lazy(() => import("@/pages/app/settings/SettingsAppearance"));
