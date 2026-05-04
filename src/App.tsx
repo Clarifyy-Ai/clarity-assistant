@@ -431,6 +431,7 @@ const routes = [
               { path: "notifications",element: <Page component={SettingsNotifications} /> },
               { path: "privacy",      element: <Page component={SettingsPrivacy} /> },
               { path: "security",     element: <Page component={SettingsSecurity} /> },
+              { path: "security-config", element: <Page component={SettingsSecurityConfig} /> },
               { path: "integrations", element: <Page component={SettingsIntegrations} /> },
               { path: "byok",         element: <Page component={SettingsBYOK} /> },
               { path: "appearance",   element: <Page component={SettingsAppearance} /> },
