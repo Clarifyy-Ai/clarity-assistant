@@ -120,6 +120,7 @@ const SettingsBilling       = lazy(() => import("@/pages/app/settings/SettingsBi
 const SettingsNotifications = lazy(() => import("@/pages/app/settings/SettingsNotifications"));
 const SettingsPrivacy       = lazy(() => import("@/pages/app/settings/SettingsPrivacy"));
 const SettingsSecurity      = lazy(() => import("@/pages/app/settings/SettingsSecurity"));
+const SettingsSecurityConfig = lazy(() => import("@/pages/app/settings/SettingsSecurityConfig"));
 const SettingsIntegrations  = lazy(() => import("@/pages/app/settings/SettingsIntegrations"));
 const SettingsBYOK          = lazy(() => import("@/pages/app/settings/SettingsBYOK"));
 const SettingsAppearance    = lazy(() => import("@/pages/app/settings/SettingsAppearance"));
@@ -430,6 +431,7 @@ const routes = [
               { path: "notifications",element: <Page component={SettingsNotifications} /> },
               { path: "privacy",      element: <Page component={SettingsPrivacy} /> },
               { path: "security",     element: <Page component={SettingsSecurity} /> },
+              { path: "security-config", element: <Page component={SettingsSecurityConfig} /> },
               { path: "integrations", element: <Page component={SettingsIntegrations} /> },
               { path: "byok",         element: <Page component={SettingsBYOK} /> },
               { path: "appearance",   element: <Page component={SettingsAppearance} /> },
