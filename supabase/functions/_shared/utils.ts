@@ -118,16 +118,26 @@ export async function requireAuth(req: Request): Promise<AuthContext & { byok: B
   const admin = getAdminClient();
   const { data: profile } = await admin
     .from("profiles")
-    .select("plan_id, credits, is_admin")
+    .select("plan_id, credits")
     .eq("id", user.id)
     .single();
+
+  // Derive admin status from user_roles (source of truth) rather than
+  // profiles.is_admin, which is a denormalized flag that could be stale or
+  // tampered with via RLS misconfigurations.
+  const { data: roleRow } = await admin
+    .from("user_roles")
+    .select("role")
+    .eq("user_id", user.id)
+    .eq("role", "admin")
+    .maybeSingle();
 
   return {
     userId:  user.id,
     email:   user.email ?? "",
     planId:  profile?.plan_id ?? "free",
     credits: profile?.credits ?? 0,
-    isAdmin: profile?.is_admin ?? false,
+    isAdmin: !!roleRow,
     byok:    extractBYOK(req),
   };
 }
