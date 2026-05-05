@@ -2,9 +2,12 @@
 // conditional generic resolution; removing suppression causes ~30 cascading "implicit any" errors
 // across destructured hook values (warmupQuestions, sessionQuestions, etc.). Full typing requires
 // rewriting the orchestrator generics — tracked as future refactor.
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSessionOrchestrator } from "@/hooks/useSessionOrchestrator";
+import { getOrCreateSession } from "@/lib/session/sessionLifecycle";
+import { useSessionStore } from "@/store/sessionStore";
+import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
