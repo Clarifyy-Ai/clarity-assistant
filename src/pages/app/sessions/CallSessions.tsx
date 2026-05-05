@@ -197,9 +197,19 @@ export default function CallSessions() {
                   <p className="text-sm font-medium text-foreground truncate">
                     {s.title ?? `${s.type ?? "practice"} session`}
                   </p>
-                  {s.status && s.status !== "completed" && (
-                    <Badge variant="secondary" className="text-[9px] mt-0.5">{s.status}</Badge>
-                  )}
+                  {(() => {
+                    const ageMs = Date.now() - new Date(s.created_at).getTime();
+                    const isExpired =
+                      s.status === "abandoned" ||
+                      (s.status !== "completed" && ageMs > 24 * 60 * 60 * 1000);
+                    if (isExpired) {
+                      return <Badge variant="secondary" className="text-[9px] mt-0.5">Expired</Badge>;
+                    }
+                    if (s.status && s.status !== "completed") {
+                      return <Badge variant="secondary" className="text-[9px] mt-0.5">{s.status}</Badge>;
+                    }
+                    return null;
+                  })()}
                 </div>
 
                 {/* Type */}
