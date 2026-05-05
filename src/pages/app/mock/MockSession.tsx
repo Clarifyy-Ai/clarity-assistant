@@ -21,6 +21,7 @@ import { OverlayKeyboardHandler } from "@/components/overlay/OverlayKeyboardHand
 import { LiveSessionController } from "@/components/live/LiveSessionController";
 import { PreSessionSetup } from "@/components/session/PreSessionSetup";
 import { sessionsDB } from "@/lib/supabase/database";
+import { getOrCreateSession, activateSession } from "@/lib/session/sessionLifecycle";
 import { supabase } from "@/lib/supabase/client";
 import { toDbModel } from "@/lib/ai/modelMapping";
 import { Button } from "@/components/ui/Button";
@@ -211,6 +212,32 @@ export default function MockSession() {
     overlay.setHintStyle(config.hint_style);
     overlay.setProctorSafe(config.stealth_mode);
 
+    // Create-or-reuse the sessions DB row first (24h reuse window).
+    const userId = profile?.id;
+    if (!userId) {
+      toast.error("You must be signed in to start a session.");
+      return;
+    }
+
+    let dbSessionId: string | null = null;
+    try {
+      const { session, reused } = await getOrCreateSession({
+        user_id: userId,
+        type: "mock",
+        title: config.company ? `Mock — ${config.company}` : "Mock interview",
+        document_id: config.resume_id ?? null,
+        jd_id: config.jd_id ?? null,
+        model_used: toDbModel(config.model) as any,
+      });
+      dbSessionId = session.id;
+      if (reused) toast.message("Resuming your in-progress session");
+      await activateSession(session.id);
+    } catch (err) {
+      console.error("[MockSession] Failed to create/reuse session record:", err);
+      toast.error("Failed to start session — could not save to database. Check your connection and try again.");
+      return;
+    }
+
     await orchestrator.createSession({
       session_type:    "mock",
       interview_type:  config.interview_type,
@@ -219,25 +246,7 @@ export default function MockSession() {
       resume_id:       config.resume_id,
       jd_id:           config.jd_id,
     });
-
-    const userId = profile?.id;
-    const sessionId = useSessionStore.getState().session_id;
-    if (userId && sessionId) {
-      try {
-        await sessionsDB.create({
-          id:         sessionId,
-          user_id:    userId,
-          type:       "mock",
-          status:     "active",
-          started_at: startTimeRef.current,
-          model_used: toDbModel(config.model) as any,
-        });
-      } catch (err) {
-        console.error("[MockSession] Failed to create session record:", err);
-        toast.error("Failed to start session — could not save to database. Check your connection and try again.");
-        return;
-      }
-    }
+    useSessionStore.getState().setSessionId(dbSessionId);
 
     // FIX Issue 8: Fetch questions from EF
     setPhase("loading");

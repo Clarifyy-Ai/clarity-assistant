@@ -2,9 +2,12 @@
 // conditional generic resolution; removing suppression causes ~30 cascading "implicit any" errors
 // across destructured hook values (warmupQuestions, sessionQuestions, etc.). Full typing requires
 // rewriting the orchestrator generics — tracked as future refactor.
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useSessionOrchestrator } from "@/hooks/useSessionOrchestrator";
+import { getOrCreateSession } from "@/lib/session/sessionLifecycle";
+import { useSessionStore } from "@/store/sessionStore";
+import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -37,32 +40,50 @@ const COMPANIES = [
 export default function MockInterview() {
   const navigate    = useNavigate();
   const orchestrator = useSessionOrchestrator();
+  const { user } = useAuthStore();
 
   const [type,       setType]       = useState("behavioural");
   const [company,    setCompany]    = useState("");
   const [numQ,       setNumQ]       = useState(5);
   const [warmup,     setWarmup]     = useState(true);
   const [loading,    setLoading]    = useState(false);
+  const startingRef = useRef(false);
 
   async function handleStart() {
+    if (startingRef.current || loading) return; // guard double-click
+    if (!user?.id) {
+      toast.error("Please sign in to start a mock session.");
+      return;
+    }
+    startingRef.current = true;
     setLoading(true);
     try {
+      // 1. Create or reuse a sessions row (24h reuse window).
+      const { session, reused } = await getOrCreateSession({
+        user_id: user.id,
+        type: "mock",
+        title: company ? `Mock — ${company}` : `Mock — ${type}`,
+      });
+      if (reused) {
+        toast.message("Resuming your in-progress session");
+      }
+
+      // 2. Hydrate Zustand orchestrator with the real session_id.
       await orchestrator.createSession({
         session_type:     "mock",
         interview_type:   type,
         target_company:   company || null,
         question_count:   numQ,
       });
-      if (warmup) {
-        navigate("/app/mock/warmup");
-      } else {
-        navigate("/app/mock/session");
-      }
+      useSessionStore.getState().setSessionId(session.id);
+
+      navigate(warmup ? "/app/mock/warmup" : "/app/mock/session");
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to start session";
       toast.error(message);
     } finally {
       setLoading(false);
+      startingRef.current = false;
     }
   }
 
