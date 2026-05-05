@@ -3,11 +3,24 @@ type RawEnv = Record<string, string | undefined>;
 
 const rawEnv = import.meta.env as RawEnv;
 
+const PUBLIC_FALLBACKS: Record<string, string> = {
+  VITE_SUPABASE_URL: "https://qzgvjrvtkwlzxpmlddkx.supabase.co",
+  VITE_SUPABASE_ANON_KEY:
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6Z3ZqcnZ0a3dsenhwbWxkZGt4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MDE4MzAsImV4cCI6MjA4OTM3NzgzMH0.hsDv4Sk7L8on5zlr9K6LT1FQe3bEEzmav5bCYes-0so",
+  VITE_SUPABASE_PUBLISHABLE_KEY:
+    "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6Z3ZqcnZ0a3dsenhwbWxkZGt4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MDE4MzAsImV4cCI6MjA4OTM3NzgzMH0.hsDv4Sk7L8on5zlr9K6LT1FQe3bEEzmav5bCYes-0so",
+};
+
 function firstDefined(keys: string[], fallback?: string): string {
   for (const key of keys) {
     const value = rawEnv[key];
     if (typeof value === "string" && value.trim().length > 0) {
       return value.trim();
+    }
+
+    const fallbackValue = PUBLIC_FALLBACKS[key];
+    if (typeof fallbackValue === "string" && fallbackValue.trim().length > 0) {
+      return fallbackValue.trim();
     }
   }
 
