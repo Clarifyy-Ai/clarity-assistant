@@ -21,6 +21,7 @@ import { OverlayKeyboardHandler } from "@/components/overlay/OverlayKeyboardHand
 import { LiveSessionController } from "@/components/live/LiveSessionController";
 import { PreSessionSetup } from "@/components/session/PreSessionSetup";
 import { sessionsDB } from "@/lib/supabase/database";
+import { getOrCreateSession, activateSession } from "@/lib/session/sessionLifecycle";
 import { supabase } from "@/lib/supabase/client";
 import { toDbModel } from "@/lib/ai/modelMapping";
 import { Button } from "@/components/ui/Button";
