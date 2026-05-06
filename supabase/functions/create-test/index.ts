@@ -4,7 +4,7 @@ import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
 
 const CREATE_TEST_CREDIT_COST = 2;
 
-function jsonResponse(payload: unknown, status = 200) {
+function jsonResponse(req: Request, payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
     headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
@@ -43,7 +43,7 @@ Deno.serve(async (req) => {
       req.headers.get("authorization") ?? req.headers.get("Authorization");
 
     if (!authHeader?.toLowerCase().startsWith("bearer ")) {
-      return jsonResponse({ error: "Unauthorized" }, 401);
+      return jsonResponse(req, { error: "Unauthorized" }, 401);
     }
 
     const token = authHeader.replace(/^bearer\s+/i, "");
@@ -53,12 +53,12 @@ Deno.serve(async (req) => {
     } = await db.auth.getUser(token);
 
     if (authErr || !user) {
-      return jsonResponse({ error: "Unauthorized" }, 401);
+      return jsonResponse(req, { error: "Unauthorized" }, 401);
     }
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {
-      return jsonResponse({ error: "Invalid JSON body" }, 400);
+      return jsonResponse(req, { error: "Invalid JSON body" }, 400);
     }
 
     const config = typeof body.config === "object" && body.config ? body.config : {};
@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
     );
 
     if (questionIds.length === 0) {
-      return jsonResponse({ error: "No question IDs provided" }, 400);
+      return jsonResponse(req, { error: "No question IDs provided" }, 400);
     }
 
     const examType = sanitizeString(config.exam_type ?? body.exam_type ?? "CUSTOM", 50, "CUSTOM");
@@ -120,6 +120,7 @@ Deno.serve(async (req) => {
 
     if (!creditResult?.success) {
       return jsonResponse(
+        req,
         { error: "Insufficient credits to create test" },
         402
       );
@@ -152,10 +153,10 @@ Deno.serve(async (req) => {
 
     if (insertErr || !test) {
       console.error("[create-test] Insert error:", insertErr);
-      return jsonResponse({ error: "Failed to create test" }, 500);
+      return jsonResponse(req, { error: "Failed to create test" }, 500);
     }
 
-    return jsonResponse({
+    return jsonResponse(req, {
       test_id: test.id,
       test,
       question_count: questionIds.length,
@@ -163,6 +164,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error("[create-test] Error:", err);
     return jsonResponse(
+      req,
       { error: "Internal server error" },
       500
     );
