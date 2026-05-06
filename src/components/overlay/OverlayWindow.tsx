@@ -236,6 +236,7 @@ export function OverlayWindow({
         <OverlayToolbar
           onToggleMic={onToggleMic}
           onToggleSystemAudio={onToggleSystemAudio}
+          onGenerate={onGenerate}
           onEndSession={onEndSession}
           onSetupNewSession={onSetupNewSession}
         />

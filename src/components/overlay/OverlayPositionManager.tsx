@@ -84,7 +84,10 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
           left: `${position.x}px`,
           top: `${position.y}px`,
           zIndex: 2147483647,
-          pointerEvents: "auto",
+          // Wrapper passes through clicks; the inner panel toggles pointer-events
+          // via `pointer-events-auto/none` based on visibility. This prevents the
+          // hidden overlay from blocking underlying UI (Issue 2.1).
+          pointerEvents: "none",
           isolation: "isolate",
           willChange: "transform",
           transform: "translateZ(0)",
