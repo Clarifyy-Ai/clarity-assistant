@@ -98,7 +98,7 @@ Notes:
     let aiResult;
     try {
       aiResult = await callAI({
-        model: "gemini-1.5-pro",
+        model: "gemini-2.0-flash",
         messages: [
           { role: "system", content: SYSTEM_PROMPT },
           { role: "user", content: prompt }
