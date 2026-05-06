@@ -120,6 +120,7 @@ Deno.serve(async (req) => {
 
     if (!creditResult?.success) {
       return jsonResponse(
+        req,
         { error: "Insufficient credits to create test" },
         402
       );
