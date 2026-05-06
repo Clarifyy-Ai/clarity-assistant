@@ -181,17 +181,28 @@ Deno.serve(async (req) => {
           }, { onConflict: "user_id" });
         }
 
-        // One-time credit top-up (credit pack purchase)
+        // One-time credit top-up (credit pack purchase) — idempotent via stripe_payment_id
         if (metadata.credit_amount) {
           const amount = parseInt(metadata.credit_amount, 10);
-          if (amount > 0) {
-            await db.rpc("add_credits", {
-              p_user_id:    userId,
-              p_amount:     amount,
-              p_action:     "purchase",
-              p_description: `Purchased ${amount} credits`,
-              p_payment_id: session.payment_intent ?? null,
-            });
+          const paymentId = (session.payment_intent as string | null) ?? session.id;
+          if (amount > 0 && paymentId) {
+            const { data: existing } = await db
+              .from("credit_transactions")
+              .select("id")
+              .eq("stripe_payment_id", paymentId)
+              .maybeSingle();
+
+            if (!existing) {
+              await db.rpc("add_credits", {
+                p_user_id:    userId,
+                p_amount:     amount,
+                p_action:     "purchase",
+                p_description: `Purchased ${amount} credits`,
+                p_payment_id: paymentId,
+              });
+            } else {
+              console.log(`[stripe-webhook] Skipping duplicate credit grant for ${paymentId}`);
+            }
           }
         }
 
