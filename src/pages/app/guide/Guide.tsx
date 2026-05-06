@@ -11,6 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import { formatHotkeyLabel } from "@/lib/overlay/hotkeys";
 import { OVERLAY_HOTKEYS } from "@/components/overlay/OverlayHotkeyHelp";
+import { APP_VERSION, APP_LAST_UPDATED } from "@/lib/constants/version";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
