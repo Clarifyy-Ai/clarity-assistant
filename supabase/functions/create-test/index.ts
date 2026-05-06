@@ -4,7 +4,7 @@ import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
 
 const CREATE_TEST_CREDIT_COST = 2;
 
-function jsonResponse(payload: unknown, status = 200) {
+function jsonResponse(req: Request, payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
     status,
     headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
