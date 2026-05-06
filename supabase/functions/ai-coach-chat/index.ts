@@ -108,7 +108,7 @@ Candidate's answer so far: "${safeTranscript}"
     let aiResult;
     try {
       aiResult = await callAI({
-        model: "gemini-1.5-pro",
+        model: "gemini-2.0-flash",
         messages,
         maxTokens: 1024,
         temperature: 0.6,
