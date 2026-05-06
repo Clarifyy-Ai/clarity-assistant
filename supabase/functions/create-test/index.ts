@@ -164,6 +164,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error("[create-test] Error:", err);
     return jsonResponse(
+      req,
       { error: "Internal server error" },
       500
     );
