@@ -262,7 +262,12 @@ export default function Guide() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Guide Hub</h1>
+        <div className="flex items-center gap-2 flex-wrap">
+          <h1 className="text-2xl font-bold tracking-tight">Guide Hub</h1>
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-secondary/40 px-2.5 py-0.5 text-[11px] font-medium text-muted-foreground">
+            v{APP_VERSION} · Updated {APP_LAST_UPDATED}
+          </span>
+        </div>
         <p className="mt-1 text-sm text-muted-foreground">
           Everything you need to get the most out of Clarify AI — in one place.
         </p>
