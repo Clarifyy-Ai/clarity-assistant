@@ -236,6 +236,28 @@ Deno.serve(async (req) => {
           updated_at: new Date().toISOString(),
         }).eq("user_id", profile.id);
 
+        // Monthly subscription credit grant — idempotent on invoice.id
+        const monthlyCredits = parseInt(
+          (invoice.lines?.data?.[0]?.metadata?.monthly_credits as string) ?? "0",
+          10,
+        ) || 500; // default Pro grant; override via Stripe price metadata
+        if (monthlyCredits > 0 && invoice.id) {
+          const { data: existing } = await db
+            .from("credit_transactions")
+            .select("id")
+            .eq("stripe_payment_id", invoice.id)
+            .maybeSingle();
+          if (!existing) {
+            await db.rpc("add_credits", {
+              p_user_id:    profile.id,
+              p_amount:     monthlyCredits,
+              p_action:     "subscription_grant",
+              p_description: `Monthly subscription credits`,
+              p_payment_id: invoice.id,
+            });
+          }
+        }
+
         console.log(`[stripe-webhook] invoice.paid — customer: ${customerId}`);
         break;
       }
