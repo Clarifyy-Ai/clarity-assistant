@@ -58,14 +58,15 @@ export default function OnboardingStep1Role({ onNext }: StepProps) {
       .from("profiles")
       .update({
         full_name:       name.trim(),
-        role,
+        role_type:       role,
+        target_role:     role,
         domain,
         onboarding_step: 2,
         ...(refCode ? { referred_by: refCode } : {}),
       })
       .eq("id", user.id)
       .select()
-      .single();
+      .maybeSingle();
 
     setLoading(false);
 
