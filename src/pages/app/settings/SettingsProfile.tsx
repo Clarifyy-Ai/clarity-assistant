@@ -69,13 +69,14 @@ export default function SettingsProfile() {
     if (!user) return;
     setSaving(true);
 
-    const updates = {
+    const yearsNum = parseInt(experience, 10);
+    const updates: Record<string, unknown> = {
       full_name:        name.trim(),
       bio:              bio.trim(),
-      location:         location.trim(),
-      website:          website.trim(),
-      experience_level: experience,
-      target_role:      targetRole,
+      timezone:         location.trim() || "UTC",
+      website_url:      website.trim() || null,
+      experience_years: Number.isFinite(yearsNum) ? yearsNum : null,
+      target_role:      targetRole || null,
       avatar_url:       avatarUrl,
       updated_at:       new Date().toISOString(),
     };
@@ -90,8 +91,9 @@ export default function SettingsProfile() {
 
       setProfile({ ...profile, ...updates } as any);
       setSaved(true);
+      toast.success("Profile saved");
       setTimeout(() => setSaved(false), 2000);
-    } catch (err) {
+    } catch (err: any) {
       toast.error(err?.message ?? "Failed to save profile. Please try again.");
     } finally {
       setSaving(false);
