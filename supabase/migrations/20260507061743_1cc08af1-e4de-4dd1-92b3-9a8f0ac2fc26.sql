@@ -1,0 +1,2 @@
+INSERT INTO public.user_roles (user_id, role) VALUES ('bc24720c-78c0-4367-ab48-b415fc58d807','admin') ON CONFLICT (user_id, role) DO NOTHING;
+UPDATE public.profiles SET is_admin = true WHERE id = 'bc24720c-78c0-4367-ab48-b415fc58d807';
