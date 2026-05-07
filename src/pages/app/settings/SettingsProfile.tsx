@@ -148,7 +148,7 @@ export default function SettingsProfile() {
             <p className="text-sm text-foreground font-medium">{name || "Your name"}</p>
             <p className="text-xs text-muted-foreground mt-0.5">{user?.email}</p>
             <Badge variant="violet" size="sm" className="mt-1.5">
-              {profile?.plan ?? "free"}
+              {profile?.plan_id ?? "free"}
             </Badge>
           </div>
         </div>
