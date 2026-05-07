@@ -63,14 +63,13 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
     const { data, error } = await supabase
       .from("profiles")
       .update({
-        hint_style:      hintStyle,
-        coach_tone:      coachTone,
+        response_style:  hintStyle,
         preferred_model: model,
         onboarding_step: 4,
       })
       .eq("id", user.id)
       .select()
-      .single();
+      .maybeSingle();
 
     setLoading(false);
     if (error) return; // non-blocking — still advance on failure

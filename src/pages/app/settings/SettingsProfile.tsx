@@ -32,9 +32,9 @@ export default function SettingsProfile() {
 
   const [name,       setName]       = useState(profile?.full_name ?? "");
   const [bio,        setBio]        = useState(profile?.bio ?? "");
-  const [location,   setLocation]   = useState(profile?.location ?? "");
-  const [website,    setWebsite]    = useState(profile?.website ?? "");
-  const [experience, setExperience] = useState(profile?.experience_level ?? "");
+  const [location,   setLocation]   = useState(profile?.timezone ?? "");
+  const [website,    setWebsite]    = useState(profile?.website_url ?? "");
+  const [experience, setExperience] = useState<string>(String(profile?.experience_years ?? ""));
   const [targetRole, setTargetRole] = useState(profile?.target_role ?? "");
   const [saving,     setSaving]     = useState(false);
   const [saved,      setSaved]      = useState(false);
@@ -69,13 +69,14 @@ export default function SettingsProfile() {
     if (!user) return;
     setSaving(true);
 
-    const updates = {
+    const yearsNum = parseInt(experience, 10);
+    const updates: Record<string, unknown> = {
       full_name:        name.trim(),
       bio:              bio.trim(),
-      location:         location.trim(),
-      website:          website.trim(),
-      experience_level: experience,
-      target_role:      targetRole,
+      timezone:         location.trim() || "UTC",
+      website_url:      website.trim() || null,
+      experience_years: Number.isFinite(yearsNum) ? yearsNum : null,
+      target_role:      targetRole || null,
       avatar_url:       avatarUrl,
       updated_at:       new Date().toISOString(),
     };
@@ -90,8 +91,9 @@ export default function SettingsProfile() {
 
       setProfile({ ...profile, ...updates } as any);
       setSaved(true);
+      toast.success("Profile saved");
       setTimeout(() => setSaved(false), 2000);
-    } catch (err) {
+    } catch (err: any) {
       toast.error(err?.message ?? "Failed to save profile. Please try again.");
     } finally {
       setSaving(false);
@@ -146,7 +148,7 @@ export default function SettingsProfile() {
             <p className="text-sm text-foreground font-medium">{name || "Your name"}</p>
             <p className="text-xs text-muted-foreground mt-0.5">{user?.email}</p>
             <Badge variant="violet" size="sm" className="mt-1.5">
-              {profile?.plan ?? "free"}
+              {profile?.plan_id ?? "free"}
             </Badge>
           </div>
         </div>

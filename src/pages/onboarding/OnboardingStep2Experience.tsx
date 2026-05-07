@@ -53,17 +53,22 @@ export default function OnboardingStep2Experience({ onNext, onBack }: StepProps)
       .map((c) => c.trim())
       .filter(Boolean);
 
+    // Map UI level → numeric experience_years (schema column)
+    const yearsMap: Record<string, number> = {
+      intern: 0, junior: 1, mid: 3, senior: 6, staff: 10, manager: 8,
+    };
+
     const { data, error: dbError } = await supabase
       .from("profiles")
       .update({
-        experience_level: level,
-        target_companies: targetCompanies,
-        anxiety_score:    anxiety,
-        onboarding_step:  3,
+        role_type:         level,
+        experience_years:  yearsMap[level] ?? 0,
+        target_companies:  targetCompanies,
+        onboarding_step:   3,
       })
       .eq("id", user.id)
       .select()
-      .single();
+      .maybeSingle();
 
     setLoading(false);
 
