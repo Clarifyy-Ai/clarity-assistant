@@ -32,7 +32,7 @@ const DEFAULT_CONFIG: LiveSessionConfig = {
 export default function LiveOverlay() {
   const sessionStatus = useSessionStore((s) => s.status);
 
-  const [phase,         setPhase]         = useState<"setup" | "active" | "restarting">("setup");
+  const [phase,         setPhase]         = useState<"setup" | "starting" | "active">("setup");
   const [config,        setConfig]        = useState<LiveSessionConfig>(DEFAULT_CONFIG);
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
 
@@ -68,9 +68,7 @@ export default function LiveOverlay() {
     didEndRef.current     = false;
     setLastSessionId(null);
     setConfig(sessionConfig);
-    // Brief "restarting" phase so the active effect re-fires reliably
-    setPhase("restarting");
-    requestAnimationFrame(() => setPhase("active"));
+    setPhase("starting");
   }, []);
 
   // ── Start session when phase becomes active ──────────────────────────────
@@ -79,12 +77,17 @@ export default function LiveOverlay() {
   // lint rule intentionally — copilot.startLiveSession is pulled via getState()
   // inside the hook and is always the latest reference.
   useEffect(() => {
-    if (phase !== "active" || hasStartedRef.current) return;
+    if (phase !== "starting" || hasStartedRef.current) return;
     hasStartedRef.current = true;
-    useOverlayStore.getState().showOverlay();
-    copilot.startLiveSession().catch((err: unknown) => {
+    copilot.startLiveSession().then(() => {
+      setPhase("active");
+    }).catch((err: unknown) => {
       const message = err instanceof Error ? err.message : "Failed to start live session";
       toast.error(message);
+      hasStartedRef.current = false;
+      useSessionStore.getState().resetSession();
+      useOverlayStore.getState().hideOverlay();
+      setPhase("setup");
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
@@ -130,6 +133,15 @@ export default function LiveOverlay() {
         onStart={handleSetup}
         sessionType="live"
       />
+    );
+  }
+
+  if (phase === "starting") {
+    return (
+      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3">
+        <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+        <p className="text-sm text-muted-foreground">Starting live co-pilot…</p>
+      </div>
     );
   }
 
