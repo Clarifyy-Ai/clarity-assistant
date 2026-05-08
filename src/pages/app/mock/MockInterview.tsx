@@ -4,9 +4,6 @@
 // rewriting the orchestrator generics — tracked as future refactor.
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useSessionOrchestrator } from "@/hooks/useSessionOrchestrator";
-import { getOrCreateSession } from "@/lib/session/sessionLifecycle";
-import { useSessionStore } from "@/store/sessionStore";
 import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -39,7 +36,6 @@ const COMPANIES = [
 
 export default function MockInterview() {
   const navigate    = useNavigate();
-  const orchestrator = useSessionOrchestrator();
   const { user } = useAuthStore();
 
   const [type,       setType]       = useState("behavioural");
@@ -58,26 +54,22 @@ export default function MockInterview() {
     startingRef.current = true;
     setLoading(true);
     try {
-      // 1. Create or reuse a sessions row (24h reuse window).
-      const { session, reused } = await getOrCreateSession({
-        user_id: user.id,
-        type: "mock",
-        title: company ? `Mock — ${company}` : `Mock — ${type}`,
-      });
-      if (reused) {
-        toast.message("Resuming your in-progress session");
-      }
+      const config = {
+        company: company || null,
+        role: null,
+        hint_style: "short_hints",
+        model: "gemini-flash",
+        smart_routing: false,
+        stealth_mode: false,
+        resume_id: null,
+        jd_id: null,
+        interview_type: type,
+        instructions: "",
+        enable_system_audio: true,
+        question_count: numQ,
+      };
 
-      // 2. Hydrate Zustand orchestrator with the real session_id.
-      await orchestrator.createSession({
-        session_type:     "mock",
-        interview_type:   type,
-        target_company:   company || null,
-        question_count:   numQ,
-      });
-      useSessionStore.getState().setSessionId(session.id);
-
-      navigate(warmup ? "/app/mock/warmup" : "/app/mock/session");
+      navigate(warmup ? "/app/mock/warmup" : "/app/mock/session", { state: { config } });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to start session";
       toast.error(message);
