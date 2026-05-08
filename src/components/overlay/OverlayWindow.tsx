@@ -4,6 +4,8 @@ import { useRef, useCallback, useState, useEffect, useMemo } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";
 import { useAudioStore } from "@/store/audioStore";
+import { useAuthStore } from "@/store/userStore";
+import { supabase } from "@/lib/supabase/client";
 import { useStealthMouse } from "@/hooks/useStealthMouse";
 import { OverlayHintPanel } from "./OverlayHintPanel";
 import { OverlayQuestionBar } from "./OverlayQuestionBar";
@@ -84,6 +86,7 @@ export function OverlayWindow({
 }: OverlayWindowProps) {
   const panelRef           = useRef<HTMLDivElement>(null);
   const resizeContainerRef = useRef<HTMLDivElement>(null);
+  const persistPositionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // ── Hydration guard ─────────────────────────────────────────────
   const [isMounted, setIsMounted] = useState(false);
@@ -113,6 +116,7 @@ export function OverlayWindow({
   const stealth_opacity     = useOverlayStore((s) => s.stealth_opacity);
   const is_peek_active      = useOverlayStore((s) => s.is_peek_active);
   const is_minimal_mode     = useOverlayStore((s) => s.is_minimal_mode);
+  const profileId           = useAuthStore((s) => s.profile?.id ?? null);
 
   const sessionStatus   = useSessionStore((s) => s.status);
   const isSessionActive = sessionStatus === "active";
@@ -123,9 +127,18 @@ export function OverlayWindow({
   const isGenerating    = hint_state === "generating" || hint_state === "streaming";
 
   const handlePositionChange = useCallback(
-    (pos: import("@/store/overlayStore").OverlayPosition) =>
-      useOverlayStore.getState().setPosition(pos),
-    [],
+    (pos: import("@/store/overlayStore").OverlayPosition) => {
+      useOverlayStore.getState().setPosition(pos);
+      if (!profileId) return;
+      if (persistPositionTimerRef.current) clearTimeout(persistPositionTimerRef.current);
+      persistPositionTimerRef.current = setTimeout(() => {
+        void supabase
+          .from("profiles")
+          .update({ overlay_position: JSON.stringify(pos), updated_at: new Date().toISOString() })
+          .eq("id", profileId);
+      }, 500);
+    },
+    [profileId],
   );
 
   useStealthMouse(panelRef, is_stealth_mode);
