@@ -354,6 +354,13 @@ export const useAuthStore = create<AuthStore>()(
               const overlay = useOverlayStore.getState();
               const opacity = row.overlay_opacity as number | undefined;
               if (opacity != null) overlay.setStealthOpacity(opacity);
+              const pos = row.overlay_position as string | undefined;
+              if (pos) {
+                const parsed = JSON.parse(pos);
+                if (Number.isFinite(parsed?.x) && Number.isFinite(parsed?.y)) {
+                  overlay.setPosition({ x: parsed.x, y: parsed.y });
+                }
+              }
             } catch { /* overlay store not ready yet — safe to skip */ }
           },
 
