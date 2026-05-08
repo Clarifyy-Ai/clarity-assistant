@@ -5,7 +5,7 @@
 // timer "Saving..." text, skip marking, credits refresh.
 
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { useSessionOrchestrator } from "@/hooks/useSessionOrchestrator";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useFillerWordDetection } from "@/hooks/useFillerWordDetection";
@@ -52,6 +52,7 @@ interface QuestionAnswer {
 
 export default function MockSession() {
   const navigate      = useNavigate();
+  const location      = useLocation();
   const profile       = useAuthStore((s) => s.profile);
   const orchestrator  = useSessionOrchestrator() as any;
   const stt           = useSpeechRecognition() as any;
@@ -65,6 +66,8 @@ export default function MockSession() {
   const [skipConfirm,  setSkipConfirm] = useState(false);
   const [endConfirm,   setEndConfirm]  = useState(false);
   const sessionConfigRef = useRef<LiveSessionConfig | null>(null);
+  const isStartingRef = useRef(false);
+  const autoStartedRef = useRef(false);
 
   const SESSION_DURATION = 5 * 60;
   const [sessionTimeLeft, setSessionTimeLeft] = useState(SESSION_DURATION);
@@ -202,6 +205,8 @@ export default function MockSession() {
   }
 
   async function handleSetup(config: LiveSessionConfig) {
+    if (isStartingRef.current) return;
+    isStartingRef.current = true;
     sessionConfigRef.current = config;
     startTimeRef.current = new Date().toISOString();
     endCalledRef.current = false;
@@ -216,6 +221,7 @@ export default function MockSession() {
     const userId = profile?.id;
     if (!userId) {
       toast.error("You must be signed in to start a session.");
+      isStartingRef.current = false;
       return;
     }
 
@@ -235,6 +241,7 @@ export default function MockSession() {
     } catch (err) {
       console.error("[MockSession] Failed to create/reuse session record:", err);
       toast.error("Failed to start session — could not save to database. Check your connection and try again.");
+      isStartingRef.current = false;
       return;
     }
 
@@ -258,22 +265,40 @@ export default function MockSession() {
             (profile.experience_years > 5 ? "senior" : profile.experience_years > 2 ? "mid" : "junior") : "mid",
           company: config.company || "",
           role: profile?.target_role || "",
-          question_count: 5,
+          question_count: (config as any).question_count ?? 5,
+          session_id: dbSessionId,
+          user_id: userId,
+          config,
+          free_session: true,
         },
       });
 
       if (error || !data?.questions?.length) {
-        console.warn("[MockSession] generate-questions failed, using orchestrator fallback");
+        await sessionsDB.update(dbSessionId, { status: "abandoned", ended_at: new Date().toISOString() } as any);
+        throw new Error(error?.message || data?.error || "Failed to generate questions");
       } else {
         orchestrator.setQuestions?.(data.questions);
       }
     } catch (err) {
-      console.warn("[MockSession] generate-questions error:", err);
+      console.error("[MockSession] generate-questions error:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to generate questions. Please try again.");
+      setPhase("setup");
+      isStartingRef.current = false;
+      return;
     }
 
     setPhase("active");
+    isStartingRef.current = false;
     stt.start();
   }
+
+  useEffect(() => {
+    const configFromRoute = (location.state as { config?: LiveSessionConfig } | null)?.config;
+    if (!configFromRoute || autoStartedRef.current || phase !== "setup") return;
+    autoStartedRef.current = true;
+    void handleSetup(configFromRoute);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.state, phase]);
 
   async function handleNextQuestion() {
     captureAnswer(); // FIX Issue 11
