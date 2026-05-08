@@ -11,7 +11,7 @@
 // ─────────────────────────────────────────────────────────────────
 
 import { supabase } from "@/lib/supabase/client";
-import type { Tables, TablesInsert } from "@/integrations/supabase";
+import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase";
 
 export type SessionRow = Tables<"sessions">;
 export type SessionType = SessionRow["type"];
@@ -38,6 +38,19 @@ export function isSessionExpired(row: Pick<SessionRow, "created_at">): boolean {
   return Date.now() - created > EXPIRY_MS;
 }
 
+async function abandonExpiredSessions(userId: string, type?: SessionType): Promise<void> {
+  const beforeIso = new Date(Date.now() - EXPIRY_MS).toISOString();
+  let query = supabase
+    .from("sessions")
+    .update({ status: "abandoned", ended_at: new Date().toISOString() })
+    .eq("user_id", userId)
+    .in("status", ["pending", "active"])
+    .lt("created_at", beforeIso);
+
+  if (type) query = query.eq("type", type);
+  await query;
+}
+
 /**
  * Find an existing reusable session, or create a new one.
  * Throws on DB failure so callers can show a toast.
@@ -46,6 +59,8 @@ export async function getOrCreateSession(
   input: GetOrCreateSessionInput,
 ): Promise<GetOrCreateSessionResult> {
   const sinceIso = new Date(Date.now() - EXPIRY_MS).toISOString();
+
+  await abandonExpiredSessions(input.user_id, input.type);
 
   const { data: existing, error: findErr } = await supabase
     .from("sessions")
@@ -65,14 +80,6 @@ export async function getOrCreateSession(
 
   if (existing && !isSessionExpired(existing)) {
     return { session: existing as SessionRow, reused: true };
-  }
-
-  // Best-effort: mark stale row as abandoned so it doesn't keep matching.
-  if (existing && isSessionExpired(existing)) {
-    await supabase
-      .from("sessions")
-      .update({ status: "abandoned", ended_at: new Date().toISOString() })
-      .eq("id", existing.id);
   }
 
   const insert: TablesInsert<"sessions"> = {
@@ -105,12 +112,32 @@ export async function getOrCreateSession(
  * Sets started_at if not already set.
  */
 export async function activateSession(sessionId: string): Promise<void> {
+  const { data: existing, error: lookupError } = await supabase
+    .from("sessions")
+    .select("id, created_at, status")
+    .eq("id", sessionId)
+    .maybeSingle();
+
+  if (lookupError || !existing) {
+    throw new Error(lookupError?.message || "Session not found");
+  }
+
+  if (isSessionExpired(existing)) {
+    await supabase
+      .from("sessions")
+      .update({ status: "abandoned", ended_at: new Date().toISOString() })
+      .eq("id", sessionId);
+    throw new Error("This session expired after 24 hours; please start a new one.");
+  }
+
+  const update: TablesUpdate<"sessions"> = {
+    status: "active",
+    ...(existing.status === "active" ? {} : { started_at: new Date().toISOString() }),
+  };
+
   const { error } = await supabase
     .from("sessions")
-    .update({
-      status: "active",
-      started_at: new Date().toISOString(),
-    })
+    .update(update)
     .eq("id", sessionId)
     .in("status", ["pending", "active"]);
 

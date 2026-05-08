@@ -1,6 +1,6 @@
 // @ts-nocheck
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ type Phase = "breathing" | "warmup" | "done";
 
 export default function MockWarmup() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [phase,     setPhase]     = useState<Phase>("breathing");
   const [breathIdx, setBreathIdx] = useState(0);   // 0=inhale 1=hold 2=exhale
@@ -185,7 +186,7 @@ export default function MockWarmup() {
             <Button
               variant="primary"
               size="lg"
-              onClick={() => navigate("/app/mock/session")}
+              onClick={() => navigate("/app/mock/session", { state: location.state })}
             >
               Begin Session →
             </Button>

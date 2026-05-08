@@ -13,6 +13,7 @@ import { hotkeyManager } from "@/lib/overlay/hotkeys";
 import { createDragHandler } from "@/lib/overlay/stealthMouse";
 import { generateId } from "@/lib/utils";
 import { sessionsDB } from "@/lib/supabase/database";
+import { getOrCreateSession, activateSession } from "@/lib/session/sessionLifecycle";
 import { supabase } from "@/lib/supabase/client";
 import { toDbModel } from "@/lib/ai/modelMapping";
 import type { LiveSessionConfig } from "@/types/session.types";
@@ -347,26 +348,28 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
   }, [profile, coachStore]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const startLiveSession = useCallback(async () => {
-    sessionIdRef.current = generateId();
-    initSessionFromConfig();
-    useOverlayStore.getState().showOverlay();
-
     const userId = profile?.id;
-    if (userId) {
-      try {
-        await sessionsDB.create({
-          id:         sessionIdRef.current,
-          user_id:    userId,
-          type:       "live",
-          status:     "active",
-          started_at: new Date().toISOString(),
-          model_used: toDbModel(useOverlayStore.getState().active_model) as any,
-        });
-      } catch (err) {
-        console.error("[useLiveCopilot] Failed to create session record:", err);
-      }
+    if (!userId) throw new Error("Please sign in to start a live session.");
+
+    const cfg = configRef.current;
+    try {
+      const { session } = await getOrCreateSession({
+        user_id: userId,
+        type: "live",
+        title: cfg.company ? `Live — ${cfg.company}` : "Live co-pilot",
+        document_id: cfg.resume_id ?? null,
+        jd_id: cfg.jd_id ?? null,
+        model_used: toDbModel(useOverlayStore.getState().active_model) as any,
+      });
+      sessionIdRef.current = session.id;
+      await activateSession(session.id);
+    } catch (err) {
+      console.error("[useLiveCopilot] Failed to create/reuse session record:", err);
+      throw err instanceof Error ? err : new Error("Failed to start live session");
     }
 
+    initSessionFromConfig();
+    useOverlayStore.getState().showOverlay();
     await audio.start();
   }, [audio.start, initSessionFromConfig, profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 

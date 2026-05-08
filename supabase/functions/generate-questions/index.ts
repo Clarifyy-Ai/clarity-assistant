@@ -72,6 +72,7 @@ Deno.serve(async (req) => {
     const role                 = sanitize(body.role, 200);
     const resume_context_raw   = sanitize(JSON.stringify(body.resume_context ?? ""), 600);
     const jd_context_raw       = sanitize(JSON.stringify(body.jd_context ?? ""), 400);
+    const free_session         = body.free_session === true;
 
     // Normalize valid interview types
     const interview_type =
@@ -86,11 +87,13 @@ Deno.serve(async (req) => {
     /* -------------------------------------------
        CREDIT DEDUCTION (3 credits)
     ------------------------------------------- */
-    const credit = await deductCredits(user.id, "generate_questions", 3);
-    if (!credit.success) {
-      return new Response(JSON.stringify({ error: "Insufficient credits" }), {
-        status: 402,
-        headers: getCorsHeaders(req) });
+    if (!free_session) {
+      const credit = await deductCredits(user.id, "generate_questions", 3);
+      if (!credit.success) {
+        return new Response(JSON.stringify({ error: "Insufficient credits" }), {
+          status: 402,
+          headers: getCorsHeaders(req) });
+      }
     }
 
     /* -------------------------------------------
