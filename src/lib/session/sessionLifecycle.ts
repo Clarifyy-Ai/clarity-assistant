@@ -11,7 +11,7 @@
 // ─────────────────────────────────────────────────────────────────
 
 import { supabase } from "@/lib/supabase/client";
-import type { Tables, TablesInsert } from "@/integrations/supabase";
+import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase";
 
 export type SessionRow = Tables<"sessions">;
 export type SessionType = SessionRow["type"];
