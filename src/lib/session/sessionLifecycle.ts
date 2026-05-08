@@ -130,12 +130,14 @@ export async function activateSession(sessionId: string): Promise<void> {
     throw new Error("This session expired after 24 hours; please start a new one.");
   }
 
+  const update: TablesUpdate<"sessions"> = {
+    status: "active",
+    ...(existing.status === "active" ? {} : { started_at: new Date().toISOString() }),
+  };
+
   const { error } = await supabase
     .from("sessions")
-    .update({
-      status: "active",
-      started_at: existing.status === "active" ? undefined : new Date().toISOString(),
-    })
+    .update(update)
     .eq("id", sessionId)
     .in("status", ["pending", "active"]);
 
