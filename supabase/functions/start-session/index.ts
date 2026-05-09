@@ -4,6 +4,16 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
+function toDbModel(model: unknown): string {
+  const value = String(model ?? "gemini-1-5-flash");
+  const map: Record<string, string> = {
+    "gemini-flash": "gemini-1-5-flash",
+    "gemini-pro": "gemini-1-5-pro",
+    "gpt_4o": "gpt-4o",
+  };
+  return map[value] ?? value;
+}
+
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
@@ -119,9 +129,12 @@ Deno.serve(async (req: Request) => {
     }
 
     if (existing?.id) {
+      const activePatch = existing.status === "active"
+        ? { status: "active" }
+        : { status: "active", started_at: nowIso };
       const { error: activeError } = await db
         .from("sessions")
-        .update({ status: "active", started_at: existing.status === "active" ? undefined : nowIso })
+        .update(activePatch)
         .eq("id", existing.id);
       if (activeError) {
         console.error("[start-session] Reuse activation error:", activeError.message);
@@ -136,7 +149,7 @@ Deno.serve(async (req: Request) => {
         user_id: user.id,
         type: sessionType,
         status: "active",
-        model_used: config.model,
+        model_used: toDbModel(config.model),
         title: company ? `${sessionType === "live" ? "Live" : "Mock"} — ${company}` : `${sessionType === "live" ? "Live co-pilot" : "Mock interview"}`,
         document_id: resumeId,
         jd_id: jdId,
