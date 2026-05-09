@@ -4,6 +4,16 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
+function toDbModel(model: unknown): string {
+  const value = String(model ?? "gemini-1-5-flash");
+  const map: Record<string, string> = {
+    "gemini-flash": "gemini-1-5-flash",
+    "gemini-pro": "gemini-1-5-pro",
+    "gpt_4o": "gpt-4o",
+  };
+  return map[value] ?? value;
+}
+
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
   if (cors) return cors;
@@ -36,6 +46,8 @@ Deno.serve(async (req: Request) => {
       return json(headers, 400, { error: "Invalid JSON body" });
     }
 
+    const rawType = String(body.session_type ?? body.type ?? "mock");
+    const sessionType = rawType === "live" ? "live" : "mock";
     const interviewType: string = body.interview_type ?? "behavioural";
     const company: string | null = body.company ?? null;
     const role: string | null = body.role ?? null;
@@ -77,7 +89,7 @@ Deno.serve(async (req: Request) => {
       time_per_question_seconds: Math.round(
         (durationMinutes * 60) / questionCount,
       ),
-      model: body.model ?? "gpt_4o",
+      model: body.model ?? "gemini-1-5-flash",
       hint_style: body.hint_style ?? "balanced",
       include_warmup: false,
       resume_id: resumeId,
@@ -90,24 +102,60 @@ Deno.serve(async (req: Request) => {
       enable_metrics: enableMetrics,
     };
 
+    const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+
+    await db
+      .from("sessions")
+      .update({ status: "abandoned", ended_at: nowIso })
+      .eq("user_id", user.id)
+      .eq("type", sessionType)
+      .in("status", ["pending", "active"])
+      .lt("created_at", sinceIso);
+
+    const { data: existing, error: lookupError } = await db
+      .from("sessions")
+      .select("id, created_at, status")
+      .eq("user_id", user.id)
+      .eq("type", sessionType)
+      .in("status", ["pending", "active"])
+      .gte("created_at", sinceIso)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (lookupError) {
+      console.error("[start-session] Lookup error:", lookupError.message);
+      return json(headers, 500, { error: "Could not start session" });
+    }
+
+    if (existing?.id) {
+      const activePatch = existing.status === "active"
+        ? { status: "active" }
+        : { status: "active", started_at: nowIso };
+      const { error: activeError } = await db
+        .from("sessions")
+        .update(activePatch)
+        .eq("id", existing.id);
+      if (activeError) {
+        console.error("[start-session] Reuse activation error:", activeError.message);
+        return json(headers, 500, { error: "Could not start session" });
+      }
+      return json(headers, 200, { session_id: existing.id, config, started_at: nowIso, reused: true });
+    }
+
     const { data, error } = await db
       .from("sessions")
       .insert({
         user_id: user.id,
-        mode: "mock",
+        type: sessionType,
         status: "active",
-        config,
-        questions: [],
-        answers: [],
-        scorecard: null,
-        transcript_full: null,
-        model_used: config.model,
-        credits_consumed: 0,
+        model_used: toDbModel(config.model),
+        title: company ? `${sessionType === "live" ? "Live" : "Mock"} — ${company}` : `${sessionType === "live" ? "Live co-pilot" : "Mock interview"}`,
+        document_id: resumeId,
+        jd_id: jdId,
         duration_seconds: durationMinutes * 60,
         started_at: nowIso,
         ended_at: null,
-        is_privacy_mode: false,
-        room_id: null,
       })
       .select("id")
       .single();

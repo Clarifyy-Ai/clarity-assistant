@@ -85,12 +85,14 @@ export default function OnboardingStep4AudioSetup({ onNext, onBack, onSkip }: St
     const { data, error } = await supabase
       .from("profiles")
       .update({
-        audio_setup_verified: true,
-        onboarding_step:      5,
+        audio_input_device:  "default",
+        auto_transcript:     true,
+        noise_suppression:   true,
+        onboarding_step:     5,
       })
       .eq("id", user.id)
       .select()
-      .single();
+      .maybeSingle();
 
     setLoading(false);
     if (!error && data) {
