@@ -17,10 +17,22 @@ import { toast } from "sonner";
 // SettingsProfile — edit name, avatar, role, bio
 // ─────────────────────────────────────────────────────────────────
 
-const EXPERIENCE_LEVELS = [
-  "Student", "0–1 years", "1–3 years",
-  "3–5 years", "5–10 years", "10+ years",
+const EXPERIENCE_LEVELS: { label: string; years: number }[] = [
+  { label: "Student",     years: 0  },
+  { label: "0–1 years",   years: 1  },
+  { label: "1–3 years",   years: 2  },
+  { label: "3–5 years",   years: 4  },
+  { label: "5–10 years",  years: 7  },
+  { label: "10+ years",   years: 10 },
 ];
+
+function yearsToLabel(years: number | null | undefined): string {
+  if (years == null) return "";
+  // Find closest bucket
+  return (
+    EXPERIENCE_LEVELS.slice().reverse().find((l) => years >= l.years)?.label ?? ""
+  );
+}
 
 const TARGET_ROLES = [
   "Software Engineer", "Product Manager", "Data Scientist",
@@ -34,7 +46,7 @@ export default function SettingsProfile() {
   const [bio,        setBio]        = useState(profile?.bio ?? "");
   const [location,   setLocation]   = useState(profile?.timezone ?? "");
   const [website,    setWebsite]    = useState(profile?.website_url ?? "");
-  const [experience, setExperience] = useState<string>(String(profile?.experience_years ?? ""));
+  const [experience, setExperience] = useState<string>(yearsToLabel(profile?.experience_years));
   const [targetRole, setTargetRole] = useState(profile?.target_role ?? "");
   const [saving,     setSaving]     = useState(false);
   const [saved,      setSaved]      = useState(false);
@@ -69,13 +81,13 @@ export default function SettingsProfile() {
     if (!user) return;
     setSaving(true);
 
-    const yearsNum = parseInt(experience, 10);
+    const yearsNum = EXPERIENCE_LEVELS.find((l) => l.label === experience)?.years ?? null;
     const updates: Record<string, unknown> = {
       full_name:        name.trim(),
       bio:              bio.trim(),
       timezone:         location.trim() || "UTC",
       website_url:      website.trim() || null,
-      experience_years: Number.isFinite(yearsNum) ? yearsNum : null,
+      experience_years: yearsNum,
       target_role:      targetRole || null,
       avatar_url:       avatarUrl,
       updated_at:       new Date().toISOString(),
@@ -211,16 +223,16 @@ export default function SettingsProfile() {
             <div className="flex flex-wrap gap-2">
               {EXPERIENCE_LEVELS.map((lvl) => (
                 <button
-                  key={lvl}
-                  onClick={() => setExperience(lvl)}
+                  key={lvl.label}
+                  onClick={() => setExperience(lvl.label)}
                   className={cn(
                     "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
-                    experience === lvl
+                    experience === lvl.label
                       ? "bg-primary/10 border-primary/30 text-primary"
                       : "bg-secondary border-border text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  {lvl}
+                  {lvl.label}
                 </button>
               ))}
             </div>
