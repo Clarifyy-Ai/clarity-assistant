@@ -223,16 +223,16 @@ export default function SettingsProfile() {
             <div className="flex flex-wrap gap-2">
               {EXPERIENCE_LEVELS.map((lvl) => (
                 <button
-                  key={lvl}
-                  onClick={() => setExperience(lvl)}
+                  key={lvl.label}
+                  onClick={() => setExperience(lvl.label)}
                   className={cn(
                     "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
-                    experience === lvl
+                    experience === lvl.label
                       ? "bg-primary/10 border-primary/30 text-primary"
                       : "bg-secondary border-border text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  {lvl}
+                  {lvl.label}
                 </button>
               ))}
             </div>
