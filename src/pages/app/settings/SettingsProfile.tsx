@@ -17,10 +17,22 @@ import { toast } from "sonner";
 // SettingsProfile — edit name, avatar, role, bio
 // ─────────────────────────────────────────────────────────────────
 
-const EXPERIENCE_LEVELS = [
-  "Student", "0–1 years", "1–3 years",
-  "3–5 years", "5–10 years", "10+ years",
+const EXPERIENCE_LEVELS: { label: string; years: number }[] = [
+  { label: "Student",     years: 0  },
+  { label: "0–1 years",   years: 1  },
+  { label: "1–3 years",   years: 2  },
+  { label: "3–5 years",   years: 4  },
+  { label: "5–10 years",  years: 7  },
+  { label: "10+ years",   years: 10 },
 ];
+
+function yearsToLabel(years: number | null | undefined): string {
+  if (years == null) return "";
+  // Find closest bucket
+  return (
+    EXPERIENCE_LEVELS.slice().reverse().find((l) => years >= l.years)?.label ?? ""
+  );
+}
 
 const TARGET_ROLES = [
   "Software Engineer", "Product Manager", "Data Scientist",
