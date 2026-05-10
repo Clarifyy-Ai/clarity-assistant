@@ -81,13 +81,13 @@ export default function SettingsProfile() {
     if (!user) return;
     setSaving(true);
 
-    const yearsNum = parseInt(experience, 10);
+    const yearsNum = EXPERIENCE_LEVELS.find((l) => l.label === experience)?.years ?? null;
     const updates: Record<string, unknown> = {
       full_name:        name.trim(),
       bio:              bio.trim(),
       timezone:         location.trim() || "UTC",
       website_url:      website.trim() || null,
-      experience_years: Number.isFinite(yearsNum) ? yearsNum : null,
+      experience_years: yearsNum,
       target_role:      targetRole || null,
       avatar_url:       avatarUrl,
       updated_at:       new Date().toISOString(),
