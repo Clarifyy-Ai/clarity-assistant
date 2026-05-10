@@ -46,7 +46,7 @@ export default function SettingsProfile() {
   const [bio,        setBio]        = useState(profile?.bio ?? "");
   const [location,   setLocation]   = useState(profile?.timezone ?? "");
   const [website,    setWebsite]    = useState(profile?.website_url ?? "");
-  const [experience, setExperience] = useState<string>(String(profile?.experience_years ?? ""));
+  const [experience, setExperience] = useState<string>(yearsToLabel(profile?.experience_years));
   const [targetRole, setTargetRole] = useState(profile?.target_role ?? "");
   const [saving,     setSaving]     = useState(false);
   const [saved,      setSaved]      = useState(false);
