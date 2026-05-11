@@ -31,9 +31,11 @@ import type { LiveSessionConfig } from "@/types/session.types";
 interface UseLiveCopilotOptions {
   config:     LiveSessionConfig;
   overlayRef?: React.RefObject<HTMLDivElement> | null;
+  sessionType?: "live" | "mock" | "warmup" | "rehearsal";
+  existingSessionId?: string | null;
 }
 
-export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
+export function useLiveCopilot({ config, overlayRef, sessionType = "live", existingSessionId }: UseLiveCopilotOptions) {
   // ── Reactive state: individual selectors only ──────────────────
   const { profile }        = useAuthStore();
   const sessionStatus      = useSessionStore((s) => s.status);
@@ -64,6 +66,8 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
 
   const configRef = useRef(config);
   configRef.current = config;
+  const existingSessionIdRef = useRef(existingSessionId ?? null);
+  existingSessionIdRef.current = existingSessionId ?? null;
 
   const initSessionFromConfig = useCallback(() => {
     if (!profile) return;
@@ -353,16 +357,22 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
 
     const cfg = configRef.current;
     try {
-      const { session } = await getOrCreateSession({
-        user_id: userId,
-        type: "live",
-        title: cfg.company ? `Live — ${cfg.company}` : "Live co-pilot",
-        document_id: cfg.resume_id ?? null,
-        jd_id: cfg.jd_id ?? null,
-        model_used: toDbModel(useOverlayStore.getState().active_model) as any,
-      });
-      sessionIdRef.current = session.id;
-      await activateSession(session.id);
+      const reusableSessionId = existingSessionIdRef.current;
+      if (reusableSessionId) {
+        sessionIdRef.current = reusableSessionId;
+        await activateSession(reusableSessionId);
+      } else {
+        const { session } = await getOrCreateSession({
+          user_id: userId,
+          type: sessionType,
+          title: cfg.company ? `${sessionType === "mock" ? "Mock" : sessionType === "warmup" ? "Warmup" : "Live"} — ${cfg.company}` : sessionType === "mock" ? "Mock interview" : sessionType === "warmup" ? "Mock warmup" : "Live co-pilot",
+          document_id: cfg.resume_id ?? null,
+          jd_id: cfg.jd_id ?? null,
+          model_used: toDbModel(useOverlayStore.getState().active_model) as any,
+        });
+        sessionIdRef.current = session.id;
+        await activateSession(session.id);
+      }
     } catch (err) {
       console.error("[useLiveCopilot] Failed to create/reuse session record:", err);
       throw err instanceof Error ? err : new Error("Failed to start live session");
@@ -371,7 +381,7 @@ export function useLiveCopilot({ config, overlayRef }: UseLiveCopilotOptions) {
     initSessionFromConfig();
     useOverlayStore.getState().showOverlay();
     await audio.start();
-  }, [audio.start, initSessionFromConfig, profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [audio.start, initSessionFromConfig, profile?.id, sessionType]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const endLiveSession = useCallback(async () => {
     abortRef.current?.abort();

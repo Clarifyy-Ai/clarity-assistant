@@ -166,7 +166,14 @@ export function OverlayWindow({
 
   const shouldShow = is_visible || is_peek_active;
   const displayText      = hint_state === "streaming" ? streaming_buffer : current_hint;
-  const effectiveOpacity = stealth_opacity / 100;
+  const effectiveOpacity = shouldShow ? Math.max(0.88, stealth_opacity / 100) : 0;
+
+  useEffect(() => {
+    if (!overlayRoot || !shouldShow) return;
+    overlayRoot.style.display = "";
+    overlayRoot.style.opacity = "1";
+    overlayRoot.style.visibility = "visible";
+  }, [overlayRoot, shouldShow]);
 
   // ── FIX Issue 27: Mobile bottom sheet layout ────────────────────
   const overlayContent = (
@@ -188,7 +195,7 @@ export function OverlayWindow({
       style={{
         width:   isMobile ? "100%" : overlay_width,
         height:  is_minimal_mode ? "auto" : (isMobile ? "60vh" : overlay_height),
-        opacity: shouldShow ? effectiveOpacity : 0,
+        opacity: effectiveOpacity,
       }}
       role="dialog"
       aria-label="Clarify AI Overlay"
