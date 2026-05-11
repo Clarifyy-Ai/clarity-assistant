@@ -4,7 +4,9 @@ import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 const STRIPE_SECRET_KEY      = Deno.env.get("STRIPE_SECRET_KEY")      ?? "";
-const STRIPE_WEBHOOK_SECRET  = Deno.env.get("STRIPE_WEBHOOK_SECRET")  ?? "";
+const STRIPE_WEBHOOK_SECRET  = Deno.env.get("STRIPE_WEBHOOK_SECRET")
+  ?? Deno.env.get("STRIPE_WEBHOOK_SIGNING_SECRET")
+  ?? "";
 
 // ─────────────────────────────────────────────────────────────────
 // Constant-time HMAC-SHA256 verification (prevents timing attacks)
@@ -155,22 +157,25 @@ Deno.serve(async (req) => {
           break;
         }
 
+        const creditAmount = metadata.credit_amount ? parseInt(metadata.credit_amount, 10) : 0;
+        const isCreditPurchase = creditAmount > 0 && !subscriptionId;
         const planId = derivePlanId(metadata);
 
-        // Activate subscription on profile
-        // Columns used: stripe_customer_id ✅, subscription_id ✅,
-        //   subscription_status ✅, plan_id ✅, updated_at ✅
-        await db.from("profiles").update({
-          stripe_customer_id:  customerId,
-          subscription_id:     subscriptionId,
-          subscription_status: "active",
-          plan_id:             planId,
-          updated_at:          new Date().toISOString(),
-        }).eq("id", userId);
+        if (isCreditPurchase) {
+          await db.from("profiles").update({
+            stripe_customer_id: customerId,
+            updated_at: new Date().toISOString(),
+          }).eq("id", userId);
+        } else {
+          await db.from("profiles").update({
+            stripe_customer_id:  customerId,
+            subscription_id:     subscriptionId,
+            subscription_status: "active",
+            plan_id:             planId,
+            updated_at:          new Date().toISOString(),
+          }).eq("id", userId);
+        }
 
-        // Upsert subscription record
-        // subscriptions table columns: user_id, stripe_subscription_id, plan_id,
-        //   status, updated_at (NO stripe_customer_id column)
         if (subscriptionId) {
           await db.from("subscriptions").upsert({
             user_id:                userId,
@@ -182,8 +187,8 @@ Deno.serve(async (req) => {
         }
 
         // One-time credit top-up (credit pack purchase) — idempotent via stripe_payment_id
-        if (metadata.credit_amount) {
-          const amount = parseInt(metadata.credit_amount, 10);
+        if (creditAmount > 0) {
+          const amount = creditAmount;
           const paymentId = (session.payment_intent as string | null) ?? session.id;
           if (amount > 0 && paymentId) {
             const { data: existing } = await db
