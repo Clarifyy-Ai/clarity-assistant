@@ -10,6 +10,8 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { PlanGate } from "@/components/layout/PlanGate";
+import { getOrCreateSession } from "@/lib/session/sessionLifecycle";
+import { toDbModel } from "@/lib/ai/modelMapping";
 import {
   ClipboardList, ChevronRight, Timer,
 } from "lucide-react";
@@ -69,7 +71,17 @@ export default function MockInterview() {
         question_count: numQ,
       };
 
-      navigate(warmup ? "/app/mock/warmup" : "/app/mock/session", { state: { config } });
+      const { session, reused } = await getOrCreateSession({
+        user_id: user.id,
+        type: warmup ? "warmup" : "mock",
+        title: company ? `${warmup ? "Warmup" : "Mock"} — ${company}` : warmup ? "Mock warmup" : "Mock interview",
+        document_id: config.resume_id,
+        jd_id: config.jd_id,
+        model_used: toDbModel(config.model) as any,
+      });
+
+      if (reused) toast.message("Resuming your in-progress session");
+      navigate(warmup ? "/app/mock/warmup" : "/app/mock/session", { state: { config, sessionId: session.id } });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to start session";
       toast.error(message);

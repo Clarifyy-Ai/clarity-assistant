@@ -3,7 +3,11 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { useAuthStore } from "@/store/userStore";
+import { getOrCreateSession, activateSession } from "@/lib/session/sessionLifecycle";
+import { toDbModel } from "@/lib/ai/modelMapping";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
 // MockWarmup — 30s breathing + 2 warmup questions
@@ -19,13 +23,18 @@ type Phase = "breathing" | "warmup" | "done";
 export default function MockWarmup() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { user } = useAuthStore();
 
   const [phase,     setPhase]     = useState<Phase>("breathing");
   const [breathIdx, setBreathIdx] = useState(0);   // 0=inhale 1=hold 2=exhale
   const [breathPct, setBreathPct] = useState(0);
   const [qIdx,      setQIdx]      = useState(0);
   const [answer,    setAnswer]    = useState("");
+  const [warmupSessionId, setWarmupSessionId] = useState<string | null>(
+    ((location.state as { sessionId?: string } | null)?.sessionId) ?? null,
+  );
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const preparingRef = useRef(false);
 
   const BREATH_PHASES = [
     { label: "Inhale",  duration: 4, color: "emerald" },
@@ -34,6 +43,35 @@ export default function MockWarmup() {
   ] as const;
 
   // ── Breathing cycle ───────────────────────────────────────────
+
+  useEffect(() => {
+    if (warmupSessionId || preparingRef.current) return;
+    if (!user?.id) {
+      toast.error("Please sign in to start a warmup.");
+      navigate("/app/mock", { replace: true });
+      return;
+    }
+
+    const config = (location.state as { config?: any } | null)?.config ?? {};
+    preparingRef.current = true;
+    getOrCreateSession({
+      user_id: user.id,
+      type: "warmup",
+      title: config.company ? `Warmup — ${config.company}` : "Mock warmup",
+      document_id: config.resume_id ?? null,
+      jd_id: config.jd_id ?? null,
+      model_used: toDbModel(config.model ?? "gemini-flash") as any,
+    }).then(async ({ session, reused }) => {
+      setWarmupSessionId(session.id);
+      await activateSession(session.id);
+      if (reused) toast.message("Resuming your warmup");
+    }).catch((err: unknown) => {
+      toast.error(err instanceof Error ? err.message : "Failed to prepare warmup");
+      navigate("/app/mock", { replace: true });
+    }).finally(() => {
+      preparingRef.current = false;
+    });
+  }, [warmupSessionId, user?.id, location.state, navigate]);
 
   useEffect(() => {
     if (phase !== "breathing") return;

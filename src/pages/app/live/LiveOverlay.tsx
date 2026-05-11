@@ -3,12 +3,15 @@ import { Link } from "react-router-dom";
 import { useLiveCopilot } from "@/hooks/useLiveCopilot";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
+import { useAuthStore } from "@/store/userStore";
 import { OverlayWindow } from "@/components/overlay/OverlayWindow";
 import { OverlayKeyboardHandler } from "@/components/overlay/OverlayKeyboardHandler";
 import { LiveSessionController } from "@/components/live/LiveSessionController";
 import { ScreenCaptureBlocker } from "@/components/overlay/ScreenCaptureBlocker";
 import { PreSessionSetupWizard } from "@/components/session/PreSessionSetupWizard";
 import { Button } from "@/components/ui/Button";
+import { getOrCreateSession } from "@/lib/session/sessionLifecycle";
+import { toDbModel } from "@/lib/ai/modelMapping";
 import { ClipboardCheck, AlertTriangle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import type { LiveSessionConfig } from "@/types/session.types";
@@ -30,16 +33,19 @@ const DEFAULT_CONFIG: LiveSessionConfig = {
 };
 
 export default function LiveOverlay() {
+  const profile = useAuthStore((s) => s.profile);
   const sessionStatus = useSessionStore((s) => s.status);
 
   const [phase,         setPhase]         = useState<"setup" | "starting" | "active">("setup");
   const [config,        setConfig]        = useState<LiveSessionConfig>(DEFAULT_CONFIG);
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
+  const [preparedSessionId, setPreparedSessionId] = useState<string | null>(null);
 
   const hasStartedRef = useRef(false);
   const didEndRef     = useRef(false);
+  const isPreparingSessionRef = useRef(false);
 
-  const copilot   = useLiveCopilot({ config });
+  const copilot   = useLiveCopilot({ config, sessionType: "live", existingSessionId: preparedSessionId });
   const isActive  = sessionStatus === "active";
 
   // Stable ref to endLiveSession so the cleanup effect always calls the latest version
@@ -66,7 +72,9 @@ export default function LiveOverlay() {
     useOverlayStore.getState().setProctorSafe(sessionConfig.stealth_mode);
     hasStartedRef.current = false;
     didEndRef.current     = false;
+    isPreparingSessionRef.current = false;
     setLastSessionId(null);
+    setPreparedSessionId(null);
     setConfig(sessionConfig);
     setPhase("starting");
   }, []);
@@ -78,6 +86,35 @@ export default function LiveOverlay() {
   // inside the hook and is always the latest reference.
   useEffect(() => {
     if (phase !== "starting" || hasStartedRef.current) return;
+    if (!profile?.id) {
+      toast.error("Please sign in to start a live session.");
+      setPhase("setup");
+      return;
+    }
+
+    if (!preparedSessionId) {
+      if (isPreparingSessionRef.current) return;
+      isPreparingSessionRef.current = true;
+      getOrCreateSession({
+        user_id: profile.id,
+        type: "live",
+        title: config.company ? `Live — ${config.company}` : "Live co-pilot",
+        document_id: config.resume_id ?? null,
+        jd_id: config.jd_id ?? null,
+        model_used: toDbModel(config.model) as any,
+      }).then(({ session, reused }) => {
+        setPreparedSessionId(session.id);
+        if (reused) toast.message("Resuming your in-progress live session");
+      }).catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : "Failed to prepare live session";
+        toast.error(message);
+        setPhase("setup");
+      }).finally(() => {
+        isPreparingSessionRef.current = false;
+      });
+      return;
+    }
+
     hasStartedRef.current = true;
     copilot.startLiveSession().then(() => {
       setPhase("active");
@@ -90,7 +127,7 @@ export default function LiveOverlay() {
       setPhase("setup");
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase]);
+  }, [phase, profile?.id, preparedSessionId, config, copilot]);
 
   // ── Cleanup on unmount ───────────────────────────────────────────────────
   useEffect(() => {
