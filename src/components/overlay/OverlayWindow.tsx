@@ -284,7 +284,8 @@ export function OverlayWindow({
       </div>
 
       {/* ── BODY ───────────────────────────────────────────────── */}
-      {is_peek_active && !is_visible ? (
+      {/* ── BODY (hidden in Parakeet pill mode) ───────────────── */}
+      {!is_minimal_mode && (is_peek_active && !is_visible ? (
         <div className="px-3 py-2 text-[11px] text-white/50 select-none">
           Peek active — press hotkey to open
         </div>
