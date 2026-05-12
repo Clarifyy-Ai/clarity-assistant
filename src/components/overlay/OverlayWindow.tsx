@@ -262,6 +262,15 @@ export function OverlayWindow({
 
         <div className="flex-1" />
 
+        {/* Parakeet-style: expand/collapse pill */}
+        <button
+          onClick={() => useOverlayStore.getState().setMinimalMode(!is_minimal_mode)}
+          className="text-[10px] font-semibold text-white/60 hover:text-white/90 px-2 py-0.5 rounded-md hover:bg-white/5 transition-colors shrink-0"
+          title={is_minimal_mode ? "Expand panel" : "Collapse to pill"}
+        >
+          {is_minimal_mode ? "▾" : "▴"}
+        </button>
+
         <OverlayAudioBadge />
         <OverlayAnswerTimer />
 
