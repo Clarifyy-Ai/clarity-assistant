@@ -354,5 +354,9 @@ export function getProctorSafePosition(
 }
 
 export function getDefaultPosition(): OverlayPosition {
-  return { x: 24, y: 80 };
+  // Parakeet-style: pinned to the top-center of the viewport
+  if (typeof window === "undefined") return { x: 0, y: 16 };
+  const width = 560;
+  const x = Math.max(16, Math.round((window.innerWidth - width) / 2));
+  return { x, y: 16 };
 }
