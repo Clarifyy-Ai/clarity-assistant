@@ -204,7 +204,13 @@ interface OverlayStore {
   setPipActive: (active: boolean) => void;
 }
 
-const DEFAULT_POSITION: OverlayPosition = { x: 24, y: 80 };
+// Parakeet-style: pinned to the top-center of the viewport by default
+const DEFAULT_POSITION: OverlayPosition = (() => {
+  if (typeof window === "undefined") return { x: 0, y: 16 };
+  const width = 560;
+  const x = Math.max(16, Math.round((window.innerWidth - width) / 2));
+  return { x, y: 16 };
+})();
 const DEFAULT_WIDTH  = 420;
 const DEFAULT_HEIGHT = 520;
 const MIN_WIDTH      = 320;
