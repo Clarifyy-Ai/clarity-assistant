@@ -378,7 +378,7 @@ export function OverlayWindow({
             </>
           )}
         </>
-      )}
+      ))}
 
       {isSessionActive && <OverlaySessionStats />}
 
