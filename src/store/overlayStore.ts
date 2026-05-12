@@ -264,7 +264,7 @@ export const useOverlayStore = create<OverlayStore>()(
       activity_log: [],
       stealth_opacity: 90,
       is_peek_active: false,
-      is_minimal_mode: false,
+      is_minimal_mode: true,
       is_hotkey_help_visible: false,
       is_pip_active: false,
 
