@@ -180,6 +180,25 @@ export function OverlayWindow({
     overlayRoot.style.visibility = "visible";
   }, [overlayRoot, shouldShow]);
 
+  // Keep pill within viewport bounds on resize so it never gets covered or scrolls off.
+  useEffect(() => {
+    if (typeof window === "undefined" || is_proctor_safe) return;
+    const clamp = () => {
+      const w = is_minimal_mode ? Math.min(640, Math.max(420, overlay_width)) : overlay_width;
+      const maxX = Math.max(8, window.innerWidth - w - 8);
+      const maxY = Math.max(8, window.innerHeight - 60);
+      const cur = useOverlayStore.getState().position;
+      const nx = Math.min(Math.max(8, cur.x), maxX);
+      const ny = Math.min(Math.max(8, cur.y), maxY);
+      if (nx !== cur.x || ny !== cur.y) {
+        useOverlayStore.getState().setPosition({ x: nx, y: ny });
+      }
+    };
+    clamp();
+    window.addEventListener("resize", clamp);
+    return () => window.removeEventListener("resize", clamp);
+  }, [is_minimal_mode, overlay_width, is_proctor_safe]);
+
   // Always render when mounted + portal ready. Use CSS for visibility.
   if (!isMounted || !overlayRoot) {
     return null;
