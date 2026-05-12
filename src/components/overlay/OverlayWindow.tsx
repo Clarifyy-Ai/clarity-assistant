@@ -159,21 +159,23 @@ export function OverlayWindow({
   }, [targetDoc]);
 
   // ── FIX Issue 1: CSS toggle instead of unmount ──────────────────
-  // Always render when mounted + portal ready. Use CSS for visibility.
-  if (!isMounted || !overlayRoot) {
-    return null;
-  }
-
   const shouldShow = is_visible || is_peek_active;
   const displayText      = hint_state === "streaming" ? streaming_buffer : current_hint;
   const effectiveOpacity = shouldShow ? Math.max(0.88, stealth_opacity / 100) : 0;
 
+  // Keep portal root visible whenever overlay should show. Hooks must run
+  // unconditionally — do NOT place this after an early return.
   useEffect(() => {
     if (!overlayRoot || !shouldShow) return;
     overlayRoot.style.display = "";
     overlayRoot.style.opacity = "1";
     overlayRoot.style.visibility = "visible";
   }, [overlayRoot, shouldShow]);
+
+  // Always render when mounted + portal ready. Use CSS for visibility.
+  if (!isMounted || !overlayRoot) {
+    return null;
+  }
 
   // ── FIX Issue 27: Mobile bottom sheet layout ────────────────────
   const overlayContent = (
