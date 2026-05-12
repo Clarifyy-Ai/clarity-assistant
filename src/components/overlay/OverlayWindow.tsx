@@ -161,7 +161,15 @@ export function OverlayWindow({
   // ── FIX Issue 1: CSS toggle instead of unmount ──────────────────
   const shouldShow = is_visible || is_peek_active;
   const displayText      = hint_state === "streaming" ? streaming_buffer : current_hint;
-  const effectiveOpacity = shouldShow ? Math.max(0.88, stealth_opacity / 100) : 0;
+  // Always render solid unless user explicitly dimmed via stealth mode.
+  const effectiveOpacity = !shouldShow
+    ? 0
+    : is_stealth_mode
+      ? Math.max(0.95, stealth_opacity / 100)
+      : 1;
+
+  // Parakeet-style compact pill width when minimal
+  const pillWidth = isMobile ? "100%" : Math.min(640, Math.max(420, overlay_width));
 
   // Keep portal root visible whenever overlay should show. Hooks must run
   // unconditionally — do NOT place this after an early return.
@@ -183,9 +191,11 @@ export function OverlayWindow({
       ref={resizeContainerRef}
       className={cn(
         "overlay-panel no-select flex flex-col gap-0 relative overflow-hidden",
-        "rounded-2xl border border-white/[0.08]",
-        "bg-[#0a0a14]/92 backdrop-blur-2xl",
-        "shadow-[0_8px_64px_rgba(0,0,0,0.7),0_0_0_1px_rgba(255,255,255,0.04),inset_0_1px_0_rgba(255,255,255,0.06)]",
+        is_minimal_mode ? "rounded-full" : "rounded-2xl",
+        "border border-white/10",
+        // Solid background — no transparency-induced "invisible" feel
+        "bg-[#0b0b18] backdrop-blur-2xl",
+        "shadow-[0_12px_48px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.05)]",
         "transition-all duration-200",
         is_stealth_mode  && "overlay-stealth-glass",
         is_proctor_safe  && "overlay-proctor-safe",
@@ -195,7 +205,7 @@ export function OverlayWindow({
           : "opacity-0 pointer-events-none -translate-y-2",
       )}
       style={{
-        width:   isMobile ? "100%" : overlay_width,
+        width:   is_minimal_mode ? pillWidth : (isMobile ? "100%" : overlay_width),
         height:  is_minimal_mode ? "auto" : (isMobile ? "60vh" : overlay_height),
         opacity: effectiveOpacity,
       }}
@@ -252,6 +262,15 @@ export function OverlayWindow({
 
         <div className="flex-1" />
 
+        {/* Parakeet-style: expand/collapse pill */}
+        <button
+          onClick={() => useOverlayStore.getState().setMinimalMode(!is_minimal_mode)}
+          className="text-[10px] font-semibold text-white/60 hover:text-white/90 px-2 py-0.5 rounded-md hover:bg-white/5 transition-colors shrink-0"
+          title={is_minimal_mode ? "Expand panel" : "Collapse to pill"}
+        >
+          {is_minimal_mode ? "▾" : "▴"}
+        </button>
+
         <OverlayAudioBadge />
         <OverlayAnswerTimer />
 
@@ -265,7 +284,8 @@ export function OverlayWindow({
       </div>
 
       {/* ── BODY ───────────────────────────────────────────────── */}
-      {is_peek_active && !is_visible ? (
+      {/* ── BODY (hidden in Parakeet pill mode) ───────────────── */}
+      {!is_minimal_mode && (is_peek_active && !is_visible ? (
         <div className="px-3 py-2 text-[11px] text-white/50 select-none">
           Peek active — press hotkey to open
         </div>
@@ -358,7 +378,7 @@ export function OverlayWindow({
             </>
           )}
         </>
-      )}
+      ))}
 
       {isSessionActive && <OverlaySessionStats />}
 
