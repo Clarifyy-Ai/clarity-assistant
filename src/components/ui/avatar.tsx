@@ -42,7 +42,7 @@ export function Avatar({ src, name, size = "md", className, online }: AvatarProp
       {src ? (
         <img
           src={src}
-          alt={name ?? "User"}
+          alt={name ? `Profile photo of ${name}` : "User profile photo"}
           className="w-full h-full rounded-full object-cover"
         />
       ) : (

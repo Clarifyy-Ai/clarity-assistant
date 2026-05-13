@@ -38,7 +38,7 @@ export function CookieConsent() {
               href="/privacy"
               className="text-primary hover:underline"
             >
-              Learn more
+              Review our privacy policy
             </a>
           </p>
         </div>

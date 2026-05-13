@@ -15,6 +15,7 @@ export function ThemeToggle({ className }: { className?: string }) {
 
   return (
     <button
+      type="button"
       onClick={() => setTheme(next)}
       className={cn(
         "w-9 h-9 flex items-center justify-center rounded-xl transition-all",
@@ -22,6 +23,7 @@ export function ThemeToggle({ className }: { className?: string }) {
         "text-muted-foreground hover:text-foreground",
         className
       )}
+      aria-label={label}
       title={label}
     >
       {theme === "system" ? (
