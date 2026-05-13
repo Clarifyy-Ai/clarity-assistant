@@ -139,7 +139,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
         )}
       </nav>
 
-      {children}
+      <main id="main-content">{children}</main>
 
       <footer className="border-t border-border bg-background">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 pb-8">

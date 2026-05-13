@@ -69,7 +69,7 @@ export default function Profile() {
             {profile?.avatar_url ? (
               <img
                 src={profile.avatar_url}
-                alt={profile.full_name ?? "Avatar"}
+                alt={profile.full_name ? `Profile photo of ${profile.full_name}` : "Your profile photo"}
                 className="w-24 h-24 rounded-full object-cover border-2 border-border"
               />
             ) : (
