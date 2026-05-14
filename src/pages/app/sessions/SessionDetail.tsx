@@ -13,7 +13,7 @@ import { Modal } from "@/components/ui/Modal";
 import { toast } from "sonner";
 import {
   BarChart2, Clock, MessageSquare, Download,
-  ChevronLeft, ChevronDown, ChevronUp,
+  ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
   Star, Zap, AlertTriangle, CheckCircle,
   Brain, Mic, Volume2, TrendingUp,
   RefreshCw, ThumbsUp, Share2,
