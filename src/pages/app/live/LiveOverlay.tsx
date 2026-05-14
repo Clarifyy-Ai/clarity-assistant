@@ -186,7 +186,7 @@ export default function LiveOverlay() {
   return (
     <>
       <ScreenCaptureBlocker isActive={isActive} />
-      <LiveSessionController isActive={isActive} />
+      <LiveSessionController isActive={isActive} onAutoEnd={handleStop} />
       <OverlayKeyboardHandler
         enabled={isActive}
         onToggleMute={copilot.toggleMute}
