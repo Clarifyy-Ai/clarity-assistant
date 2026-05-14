@@ -460,9 +460,26 @@ export function useLiveCopilot({ config, overlayRef, sessionType = "live", exist
     await audio.toggleSystemAudio();
   }, [audio.toggleSystemAudio]);
 
+  // ── Pause / Resume — keep the prepared session row, mute audio, freeze ticker
+  const pauseLiveSession = useCallback(() => {
+    const cur = useSessionStore.getState();
+    if (cur.status !== "active") return;
+    try { if (!audio.isMuted) audio.toggleMute(); } catch { /* ignore */ }
+    cur.setStatus("paused");
+  }, [audio.isMuted, audio.toggleMute]);
+
+  const resumeLiveSession = useCallback(() => {
+    const cur = useSessionStore.getState();
+    if (cur.status !== "paused") return;
+    try { if (audio.isMuted) audio.toggleMute(); } catch { /* ignore */ }
+    cur.setStatus("active");
+  }, [audio.isMuted, audio.toggleMute]);
+
   return {
     startLiveSession,
     endLiveSession,
+    pauseLiveSession,
+    resumeLiveSession,
     toggleMute:        audio.toggleMute,
     toggleSystemAudio,
     reconnectAudio:    audio.reconnect,
