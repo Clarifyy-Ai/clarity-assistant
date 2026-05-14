@@ -141,7 +141,7 @@ export default function LiveRehearsal() {
   return (
     <>
       <ScreenCaptureBlocker isActive={isActive} />
-      <LiveSessionController isActive={isActive} />
+      <LiveSessionController isActive={isActive} onAutoEnd={handleStop} />
       <OverlayKeyboardHandler enabled={isActive} onToggleMute={copilot.toggleMute} />
 
       <OverlayWindow
@@ -163,7 +163,7 @@ export default function LiveRehearsal() {
       )}
 
       {/* Recovery pill — always visible when overlay is hidden during an active session */}
-      {isActive && !isVisible && (
+      {(isActive || isPaused) && !isVisible && (
         <button
           onClick={() => useOverlayStore.getState().showOverlay()}
           className="fixed bottom-6 right-6 z-50 inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/30 hover:opacity-90 transition-opacity"
@@ -176,18 +176,48 @@ export default function LiveRehearsal() {
       {/* Centered status hint */}
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center space-y-3 max-w-md px-4">
-          {isActive ? (
+          {isActive || isPaused ? (
             <>
               <div className="mx-auto w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mb-2">
                 <Sparkles className="w-6 h-6 text-primary" />
               </div>
               <p className="text-lg font-semibold text-foreground">
-                Overlay Mode Active
+                {isPaused ? "Session Paused" : "Overlay Mode Active"}
               </p>
               <p className="text-sm text-muted-foreground">
-                The overlay is floating on your screen. Use{" "}
-                <kbd className="hotkey-badge">Ctrl+Shift+H</kbd> to toggle visibility.
+                {isPaused
+                  ? "Timer and audio are paused. Resume when you're ready."
+                  : (<>The overlay is floating on your screen. Use{" "}<kbd className="hotkey-badge">Ctrl+Shift+H</kbd> to toggle visibility.</>)}
               </p>
+              <div className="flex items-center justify-center gap-2 mt-2 flex-wrap">
+                {isPaused ? (
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    leftIcon={<Play className="w-4 h-4" />}
+                    onClick={copilot.resumeLiveSession}
+                  >
+                    Resume
+                  </Button>
+                ) : (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    leftIcon={<Pause className="w-4 h-4" />}
+                    onClick={copilot.pauseLiveSession}
+                  >
+                    Pause
+                  </Button>
+                )}
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  leftIcon={<ClipboardCheck className="w-4 h-4" />}
+                  onClick={handleStop}
+                >
+                  End Session
+                </Button>
+              </div>
               <p className="text-xs text-muted-foreground/60">
                 Press <kbd className="hotkey-badge">Ctrl+Shift+P</kbd> for panic mode
               </p>
