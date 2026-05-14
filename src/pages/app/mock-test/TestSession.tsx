@@ -468,22 +468,9 @@ export default function TestSession() {
 
       let startedAt = loadedTest.started_at ?? null;
 
-      if (loadedTest.status === "DRAFT") {
-        startedAt = new Date().toISOString();
-
-        const { error: startError } = await supabase
-          .from("mock_tests")
-          .update({
-            status: "IN_PROGRESS",
-            started_at: startedAt,
-          })
-          .eq("id", loadedTest.id);
-
-        if (startError) throw startError;
-
-        loadedTest.status = "IN_PROGRESS";
-        loadedTest.started_at = startedAt;
-      }
+      // FIX: do NOT auto-promote DRAFT → IN_PROGRESS on page load. The user
+      // must explicitly click "Start Test" so the timer doesn't silently begin
+      // the moment they navigate to the page (production-readiness fix).
 
       const remainingSeconds = computeRemainingSeconds(loadedTest);
 
@@ -537,19 +524,9 @@ export default function TestSession() {
       setTimeLeft(remainingSeconds);
       timeSpentMapRef.current = restoredTimeMap;
 
-      if (timerRef.current) clearInterval(timerRef.current);
-
-      if (Number(loadedTest.time_limit_minutes ?? 0) > 0) {
-        timerRef.current = setInterval(() => {
-          setTimeLeft((prev) => {
-            if (prev <= 1) {
-              if (timerRef.current) clearInterval(timerRef.current);
-              void handleSubmit(true);
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
+      // Only auto-start the timer if the test is already IN_PROGRESS (resume).
+      if (loadedTest.status === "IN_PROGRESS") {
+        startTimer(loadedTest);
       }
     } catch (error) {
       console.error("[TestSession] load error:", error);
@@ -560,8 +537,100 @@ export default function TestSession() {
     }
   }
 
+  function startTimer(forTest: MockTest) {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (Number(forTest.time_limit_minutes ?? 0) <= 0) return;
+
+    timerRef.current = setInterval(() => {
+      setTimeLeft((prev) => {
+        if (prev <= 1) {
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
+          void handleSubmit(true);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }
+
+  async function handleStartTest() {
+    if (!test || startingTest) return;
+    setStartingTest(true);
+    try {
+      const startedAt = new Date().toISOString();
+      const { error } = await supabase
+        .from("mock_tests")
+        .update({ status: "IN_PROGRESS", started_at: startedAt })
+        .eq("id", test.id)
+        .eq("user_id", user!.id);
+      if (error) throw error;
+      const updated: MockTest = { ...test, status: "IN_PROGRESS", started_at: startedAt };
+      setTest(updated);
+      setTimeLeft(computeRemainingSeconds(updated));
+      setPaused(false);
+      setPausedAt(null);
+      startTimer(updated);
+      toast.success("Test started — good luck!");
+    } catch (err) {
+      console.error("[TestSession] start error:", err);
+      toast.error(err instanceof Error ? err.message : "Failed to start test.");
+    } finally {
+      setStartingTest(false);
+    }
+  }
+
+  function handlePause() {
+    if (!test || paused) return;
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    setPausedAt(Date.now());
+    setPaused(true);
+    void saveResponses();
+    toast.message("Test paused. Resume when you're ready.");
+  }
+
+  async function handleResume() {
+    if (!test || !paused) return;
+    const pausedDurationMs = pausedAt ? Date.now() - pausedAt : 0;
+    const pausedSeconds = Math.max(0, Math.round(pausedDurationMs / 1000));
+
+    if (pausedSeconds > 0 && test.started_at) {
+      // Push started_at forward so the math `remaining = limit - (now - started_at)`
+      // continues to be correct after the pause window.
+      const newStartedAt = new Date(
+        new Date(test.started_at).getTime() + pausedDurationMs
+      ).toISOString();
+      try {
+        const { error } = await supabase
+          .from("mock_tests")
+          .update({ started_at: newStartedAt })
+          .eq("id", test.id)
+          .eq("user_id", user!.id);
+        if (error) throw error;
+        const updated: MockTest = { ...test, started_at: newStartedAt };
+        setTest(updated);
+        setTimeLeft(computeRemainingSeconds(updated));
+        setPaused(false);
+        setPausedAt(null);
+        startTimer(updated);
+      } catch (err) {
+        console.error("[TestSession] resume error:", err);
+        toast.error("Failed to resume test.");
+      }
+    } else {
+      setPaused(false);
+      setPausedAt(null);
+      startTimer(test);
+    }
+  }
+
   async function saveResponses() {
-    if (!testId || !user?.id || questions.length === 0) return;
+    if (!testId || !user?.id || questionsRef.current.length === 0) return;
 
     try {
       const currentId = currentQuestion?.id;
