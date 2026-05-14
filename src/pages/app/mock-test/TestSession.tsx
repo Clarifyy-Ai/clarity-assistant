@@ -852,6 +852,7 @@ export default function TestSession() {
       toast.error(error instanceof Error ? error.message : "Failed to submit test.");
     } finally {
       setSubmitting(false);
+      submittingRef.current = false;
       setShowSubmitModal(false);
     }
   }
