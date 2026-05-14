@@ -362,6 +362,11 @@ export default function TestSession() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [testId, user?.id]);
 
+  // Keep refs in sync so autosave/unmount handlers see latest data without
+  // having to recreate intervals on every keystroke.
+  useEffect(() => { responsesRef.current = responses; }, [responses]);
+  useEffect(() => { questionsRef.current = questions; }, [questions]);
+
   useEffect(() => {
     if (!testId || !user?.id) return;
 
@@ -373,11 +378,11 @@ export default function TestSession() {
       if (autoSaveRef.current) clearInterval(autoSaveRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [testId, user?.id, responses]);
+  }, [testId, user?.id]);
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
-      if (submitting) return;
+      if (submittingRef.current) return;
       void saveResponses();
       event.preventDefault();
       event.returnValue = "";
@@ -389,7 +394,7 @@ export default function TestSession() {
       window.removeEventListener("beforeunload", handleBeforeUnload);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [responses, submitting]);
+  }, []);
 
   useEffect(() => {
     if (!currentQuestion) return;
