@@ -287,13 +287,19 @@ export default function TestSession() {
   const [submitting, setSubmitting] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
   const [savingBookmark, setSavingBookmark] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [pausedAt, setPausedAt] = useState<number | null>(null);
+  const [startingTest, setStartingTest] = useState(false);
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const responsesRef = useRef<Record<string, ResponseState>>({});
+  const questionsRef = useRef<Question[]>([]);
   const questionEnterTsRef = useRef<number>(Date.now());
   const prevQuestionIdRef = useRef<string | null>(null);
   const timeSpentMapRef = useRef<Record<string, number>>({});
   const mountedRef = useRef(true);
+  const submittingRef = useRef(false);
 
   const currentQuestion = questions[currentIndex] ?? null;
   const currentResponse = currentQuestion
