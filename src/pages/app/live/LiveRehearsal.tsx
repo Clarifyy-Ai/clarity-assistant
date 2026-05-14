@@ -23,6 +23,8 @@ import {
   RefreshCw,
   Eye,
   Sparkles,
+  Pause,
+  Play,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { LiveSessionConfig } from "@/types/session.types";
@@ -58,6 +60,7 @@ export default function LiveRehearsal() {
 
   const copilot = useLiveCopilot({ config });
   const isActive = sessionStatus === "active";
+  const isPaused = sessionStatus === "paused";
 
   const endSessionRef = useRef(copilot.endLiveSession);
   endSessionRef.current = copilot.endLiveSession;
