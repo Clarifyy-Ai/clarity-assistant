@@ -645,8 +645,9 @@ export default function TestSession() {
         questionEnterTsRef.current = Date.now();
       }
 
-      const payload = questions.map((question) => {
-        const response = responses[question.id] ?? {
+      const responsesNow = responsesRef.current;
+      const payload = questionsRef.current.map((question) => {
+        const response = responsesNow[question.id] ?? {
           answer: "",
           state: "unattempted" as QuestionState,
         };
@@ -828,8 +829,9 @@ export default function TestSession() {
   }
 
   async function handleSubmit(autoSubmit = false) {
-    if (!testId || submitting) return;
+    if (!testId || submittingRef.current) return;
 
+    submittingRef.current = true;
     setSubmitting(true);
 
     try {
