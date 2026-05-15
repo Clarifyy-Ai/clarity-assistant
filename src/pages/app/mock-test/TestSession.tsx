@@ -1309,7 +1309,18 @@ export default function TestSession() {
             </div>
           </div>
 
-          <div className="mt-auto border-t border-border bg-muted/5 p-5">
+          <div className="mt-auto border-t border-border bg-muted/5 p-5 space-y-2">
+            {hasTimer && (
+              paused ? (
+                <Button variant="outline" size="sm" className="w-full" onClick={() => void handleResume()}>
+                  Resume Test
+                </Button>
+              ) : (
+                <Button variant="outline" size="sm" className="w-full" onClick={handlePause}>
+                  Pause Test
+                </Button>
+              )
+            )}
             <Button
               size="lg"
               className="w-full text-base font-bold"
