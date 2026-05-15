@@ -1333,6 +1333,20 @@ export default function TestSession() {
         </div>
       </div>
 
+      {paused && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-background/90 backdrop-blur-md p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 text-center shadow-2xl space-y-4">
+            <h2 className="text-xl font-black text-foreground">Test Paused</h2>
+            <p className="text-sm text-muted-foreground">
+              The timer is on hold. Click resume to continue your test.
+            </p>
+            <Button className="w-full" onClick={() => void handleResume()}>
+              Resume Test
+            </Button>
+          </div>
+        </div>
+      )}
+
       {showSubmitModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
           <div className="w-full max-w-md rounded-2xl border border-border bg-card p-6 shadow-2xl md:p-8">
