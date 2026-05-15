@@ -873,6 +873,33 @@ export default function TestSession() {
     );
   }
 
+  // Pre-start gate: test must be explicitly started by the user.
+  if (test.status === "DRAFT") {
+    const limitMins = Number(test.time_limit_minutes ?? 0);
+    return (
+      <div className="flex h-screen items-center justify-center bg-background p-6">
+        <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-xl text-center space-y-5">
+          <h1 className="text-2xl font-black text-foreground">{test.test_name}</h1>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p><strong className="text-foreground">{questions.length}</strong> questions</p>
+            {limitMins > 0 && (
+              <p><strong className="text-foreground">{limitMins} minutes</strong> time limit</p>
+            )}
+            <p className="text-xs">The timer starts only after you click Start. You can pause and resume during the test.</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => navigate("/app/mock-test")}>
+              Cancel
+            </Button>
+            <Button className="flex-1" onClick={() => void handleStartTest()} disabled={startingTest}>
+              {startingTest ? "Starting..." : "Start Test"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const isMarked =
     currentResponse?.state === "marked" ||
     currentResponse?.state === "answered-marked";
