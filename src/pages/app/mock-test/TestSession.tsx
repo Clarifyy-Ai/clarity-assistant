@@ -873,6 +873,33 @@ export default function TestSession() {
     );
   }
 
+  // Pre-start gate: test must be explicitly started by the user.
+  if (test.status === "DRAFT") {
+    const limitMins = Number(test.time_limit_minutes ?? 0);
+    return (
+      <div className="flex h-screen items-center justify-center bg-background p-6">
+        <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-xl text-center space-y-5">
+          <h1 className="text-2xl font-black text-foreground">{test.test_name}</h1>
+          <div className="space-y-2 text-sm text-muted-foreground">
+            <p><strong className="text-foreground">{questions.length}</strong> questions</p>
+            {limitMins > 0 && (
+              <p><strong className="text-foreground">{limitMins} minutes</strong> time limit</p>
+            )}
+            <p className="text-xs">The timer starts only after you click Start. You can pause and resume during the test.</p>
+          </div>
+          <div className="flex gap-2">
+            <Button variant="outline" className="flex-1" onClick={() => navigate("/app/mock-test")}>
+              Cancel
+            </Button>
+            <Button className="flex-1" onClick={() => void handleStartTest()} disabled={startingTest}>
+              {startingTest ? "Starting..." : "Start Test"}
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   const isMarked =
     currentResponse?.state === "marked" ||
     currentResponse?.state === "answered-marked";
@@ -1282,7 +1309,18 @@ export default function TestSession() {
             </div>
           </div>
 
-          <div className="mt-auto border-t border-border bg-muted/5 p-5">
+          <div className="mt-auto border-t border-border bg-muted/5 p-5 space-y-2">
+            {hasTimer && (
+              paused ? (
+                <Button variant="outline" size="sm" className="w-full" onClick={() => void handleResume()}>
+                  Resume Test
+                </Button>
+              ) : (
+                <Button variant="outline" size="sm" className="w-full" onClick={handlePause}>
+                  Pause Test
+                </Button>
+              )
+            )}
             <Button
               size="lg"
               className="w-full text-base font-bold"
@@ -1294,6 +1332,20 @@ export default function TestSession() {
           </div>
         </div>
       </div>
+
+      {paused && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-background/90 backdrop-blur-md p-4">
+          <div className="w-full max-w-sm rounded-2xl border border-border bg-card p-6 text-center shadow-2xl space-y-4">
+            <h2 className="text-xl font-black text-foreground">Test Paused</h2>
+            <p className="text-sm text-muted-foreground">
+              The timer is on hold. Click resume to continue your test.
+            </p>
+            <Button className="w-full" onClick={() => void handleResume()}>
+              Resume Test
+            </Button>
+          </div>
+        </div>
+      )}
 
       {showSubmitModal && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-background/80 p-4 backdrop-blur-sm">
