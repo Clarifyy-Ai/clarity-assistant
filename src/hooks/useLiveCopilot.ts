@@ -306,6 +306,11 @@ export function useLiveCopilot({ config, overlayRef, sessionType = "live", exist
       simpleLanguage: useOverlayStore.getState().simple_language,
       callType:       useOverlayStore.getState().session_call_type,
       language:       useOverlayStore.getState().session_language,
+      // Use the SSE-streaming full_answer pipeline — same reliable path used
+      // by the hint generator. Credits are deducted server-side by the
+      // generate-answer EF, so we do NOT call client-side deductCredits here
+      // (would double-charge).
+      answerMode: "full_answer",
       onChunk: (chunk) => { chatBuffer += chunk; },
       onDone: async () => {
         if (chatBuffer) {
@@ -316,11 +321,13 @@ export function useLiveCopilot({ config, overlayRef, sessionType = "live", exist
           });
         } else {
           useOverlayStore.getState().setChatGenerating(false);
+          useOverlayStore.getState().addChatMessage({
+            role: "assistant",
+            text: "No response received. Please try again.",
+            timestamp: Date.now(),
+          });
         }
-        const result = await deductCredits(selectedModel, sessionIdRef.current);
-        if (result.success) {
-          useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
-        }
+        useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
       },
       onError: (error) => {
         useOverlayStore.getState().setChatGenerating(false);
