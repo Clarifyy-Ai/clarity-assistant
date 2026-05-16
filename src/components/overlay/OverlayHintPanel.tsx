@@ -1,9 +1,4 @@
-// src/components/overlay/OverlayHintPanel.tsx
-import { useMemo, useState, useCallback } from "react";
-import { composeHint, splitInlineCode } from "@/lib/overlay/overlayCompositor";
-import { useOverlayStore } from "@/store/overlayStore";
-import type { HintState } from "@/store/overlayStore";
-import type { HintStyle } from "@/types/user.types";
+// src/components/overlay/OverlayHintPanel.tsx// src/components/overlay/OverlayHintPanel.tsxStyle } from "@/types/user.types";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
@@ -31,11 +26,11 @@ interface CreditCheckResult {
 }
 
 interface OverlayHintPanelProps {
-  text:                string;
-  hintStyle:           HintStyle;
-  hintState:           HintState;
-  errorMessage:        string | null;
-  screenshotHint:      string | null;
+  text: string;
+  hintStyle: HintStyle;
+  hintState: HintState;
+  errorMessage: string | null;
+  screenshotHint: string | null;
   isScreenshotLoading: boolean;
   /** Called when user clicks "Quick Hints" or "Full Answer" toggle button */
   onRequestModeChange?: (mode: HintStyle) => void;
@@ -53,59 +48,54 @@ export function OverlayHintPanel({
   onRequestModeChange,
 }: OverlayHintPanelProps) {
   const [copied, setCopied] = useState(false);
-  const [saved,  setSaved]  = useState(false);
+  const [saved, setSaved] = useState(false);
 
-  const historyLen     = useOverlayStore((s) => s.hint_history.length);
-  const historyIndex   = useOverlayStore((s) => s.hint_history_index);
+  const historyLen = useOverlayStore((s) => s.hint_history.length);
+  const historyIndex = useOverlayStore((s) => s.hint_history_index);
   const viewedQuestion = useOverlayStore((s) => s.viewed_question);
-  const pinnedHints    = useOverlayStore((s) => s.pinned_hints);
-  const currentQ       = useOverlayStore((s) => s.current_question);
-  const isPinned       = text ? pinnedHints.some((p) => p.hint === text) : false;
+  const pinnedHints = useOverlayStore((s) => s.pinned_hints);
+  const currentQ = useOverlayStore((s) => s.current_question);
+
+  const safeText = (text ?? "").toString();
+  const isPinned = safeText ? pinnedHints.some((p) => p.hint === safeText) : false;
   const isViewingHistory = historyLen > 1 && historyIndex < historyLen - 1;
 
-  const isStreaming  = hintState === "streaming";
+  const isStreaming = hintState === "streaming";
   const isGenerating = hintState === "generating";
-  const isIdle       = hintState === "idle" || hintState === "listening";
-  const isOffline    = hintState === "offline_fallback";
-  const hasContent   = text.trim().length > 0;
+  const isIdle = hintState === "idle" || hintState === "listening";
+  const isOffline = hintState === "offline_fallback";
+  const hasContent = safeText.trim().length > 0;
 
-  const isHintMode      = hintStyle === "short_hints" || hintStyle === "keywords_only";
+  const isHintMode = hintStyle === "short_hints" || hintStyle === "keywords_only";
   const isFullAnswerMode = hintStyle === "full_answer";
 
   /**
-   * For hint mode: the server returns "• line1\n• line2\n• line3".
-   * We split on real newlines before composing so each bullet gets its own
-   * "bullet" line type from composeHint(), rather than being treated as a
-   * single prose paragraph.
+   * For hint mode: normalize lines so bullets render as bullets.
    */
   const textForCompose = useMemo(() => {
-    if (!text) return "";
+    if (!safeText) return "";
     if (isHintMode) {
-      // Normalise: ensure each "• " bullet is on its own line
-      return text
+      return safeText
         .split("\n")
         .map((l) => l.trim())
         .filter((l) => l.length > 0)
         .join("\n");
     }
-    return text;
-  }, [text, isHintMode]);
+    return safeText;
+  }, [safeText, isHintMode]);
 
-  const composed = useMemo(
-    () => composeHint(textForCompose, hintStyle),
-    [textForCompose, hintStyle],
-  );
+  const composed = useMemo(() => composeHint(textForCompose, hintStyle), [textForCompose, hintStyle]);
 
   /* ── HANDLERS ────────────────────────────────────────────────────────── */
 
   const handleCopy = useCallback(async () => {
-    if (!text) return;
+    if (!safeText) return;
     try {
-      await navigator.clipboard.writeText(text);
+      await navigator.clipboard.writeText(safeText);
     } catch {
       // Fallback for browsers without clipboard API
       const ta = document.createElement("textarea");
-      ta.value = text;
+      ta.value = safeText;
       document.body.appendChild(ta);
       ta.select();
       document.execCommand("copy");
@@ -113,59 +103,56 @@ export function OverlayHintPanel({
     }
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
-  }, [text]);
+  }, [safeText]);
 
   const handleSaveToBank = useCallback(async () => {
-    if (!text) return;
+    if (!safeText) return;
     const question = useOverlayStore.getState().current_question ?? "Untitled Question";
-    const userId   = useAuthStore.getState().profile?.id;
+    const userId = useAuthStore.getState().profile?.id;
 
     if (userId) {
       const { error } = await supabase.from("answer_bank").insert({
-        user_id:       userId,
+        user_id: userId,
         question_text: question,
-        answer_text:   text,
+        answer_text: safeText,
       });
+
       if (error) {
         // Supabase insert failed — fall back to localStorage and inform user
         console.error("[OverlayHintPanel] save to bank failed:", error.message);
-        const existing = JSON.parse(
-          localStorage.getItem("clarify:answer_bank") ?? "[]",
-        ) as unknown[];
+        const existing = JSON.parse(localStorage.getItem("clarify:answer_bank") ?? "[]") as unknown[];
         localStorage.setItem(
           "clarify:answer_bank",
-          JSON.stringify([...existing, { question, answer: text, saved_at: new Date().toISOString() }]),
+          JSON.stringify([...existing, { question, answer: safeText, saved_at: new Date().toISOString() }])
         );
         toast.warning("Saved locally — will sync when online.");
       }
     } else {
       // Not logged in — save only to localStorage
-      const existing = JSON.parse(
-        localStorage.getItem("clarify:answer_bank") ?? "[]",
-      ) as unknown[];
+      const existing = JSON.parse(localStorage.getItem("clarify:answer_bank") ?? "[]") as unknown[];
       localStorage.setItem(
         "clarify:answer_bank",
-        JSON.stringify([...existing, { question, answer: text, saved_at: new Date().toISOString() }]),
+        JSON.stringify([...existing, { question, answer: safeText, saved_at: new Date().toISOString() }])
       );
+      toast.message("Saved locally.");
     }
 
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
-  }, [text]);
+  }, [safeText]);
 
   const handleModeSwitch = useCallback(
     (mode: HintStyle) => {
       if (mode === hintStyle) return;
       onRequestModeChange?.(mode);
     },
-    [hintStyle, onRequestModeChange],
+    [hintStyle, onRequestModeChange]
   );
 
   /* ─── RENDER ─────────────────────────────────────────────────────────── */
 
   return (
     <div className="scroll-container min-h-[60px] overflow-y-auto px-3.5 py-3 flex flex-col gap-2.5">
-
       {/* ── Mode Toggle ───────────────────────────────────────────────── */}
       {onRequestModeChange && (
         <div className="flex items-center gap-1 p-0.5 bg-white/[0.05] rounded-xl border border-white/[0.07]">
@@ -188,10 +175,7 @@ export function OverlayHintPanel({
 
       {/* ── Error ────────────────────────────────────────────────────── */}
       {errorMessage && (
-        <div
-          className="rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2.5 flex items-start gap-2"
-          role="alert"
-        >
+        <div className="rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2.5 flex items-start gap-2" role="alert">
           <span className="text-red-400 mt-0.5 shrink-0">⚠</span>
           <p className="text-[12px] text-red-400 leading-snug">{errorMessage}</p>
         </div>
@@ -199,10 +183,7 @@ export function OverlayHintPanel({
 
       {/* ── Screenshot loading ────────────────────────────────────────── */}
       {isScreenshotLoading && (
-        <div
-          className="flex items-center gap-2.5 rounded-xl bg-sky-500/[0.08] border border-sky-500/15 px-3 py-2.5"
-          role="status"
-        >
+        <div className="flex items-center gap-2.5 rounded-xl bg-sky-500/[0.08] border border-sky-500/15 px-3 py-2.5" role="status">
           <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400 shrink-0" />
           <span className="text-[12px] text-sky-300/80">Analysing coding problem…</span>
         </div>
@@ -213,13 +194,9 @@ export function OverlayHintPanel({
         <div className="rounded-xl border border-indigo-500/20 bg-gradient-to-b from-indigo-500/10 to-indigo-500/5 p-3">
           <div className="flex items-center gap-1.5 mb-2">
             <span className="text-[11px]">📸</span>
-            <p className="text-[11px] font-bold text-indigo-300 uppercase tracking-widest">
-              Coding Analysis
-            </p>
+            <p className="text-[11px] font-bold text-indigo-300 uppercase tracking-widest">Coding Analysis</p>
           </div>
-          <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-white/85">
-            {screenshotHint}
-          </p>
+          <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-white/85">{screenshotHint}</p>
         </div>
       )}
 
@@ -227,37 +204,22 @@ export function OverlayHintPanel({
       {isGenerating && (
         <div className="flex items-center gap-3 py-2 animate-fade-in" role="status">
           <div className="flex items-center gap-1">
-            <span
-              className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce"
-              style={{ animationDelay: "0ms" }}
-            />
-            <span
-              className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce"
-              style={{ animationDelay: "150ms" }}
-            />
-            <span
-              className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce"
-              style={{ animationDelay: "300ms" }}
-            />
+            <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "0ms" }} />
+            <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "150ms" }} />
+            <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "300ms" }} />
           </div>
-          <span className="text-[12px] text-white/45">
-            {isFullAnswerMode ? "Generating full answer…" : "Generating hints…"}
-          </span>
+          <span className="text-[12px] text-white/45">{isFullAnswerMode ? "Generating full answer…" : "Generating hints…"}</span>
         </div>
       )}
 
       {/* ── Idle state ────────────────────────────────────────────────── */}
-      {isIdle && !errorMessage && !screenshotHint && !hasContent && (
-        <IdleStateContent />
-      )}
+      {isIdle && !errorMessage && !screenshotHint && !hasContent && <IdleStateContent />}
 
       {/* ── Offline badge ─────────────────────────────────────────────── */}
       {isOffline && (
         <div className="flex items-center gap-1.5 rounded-lg bg-amber-500/[0.08] border border-amber-500/15 px-2.5 py-1.5">
           <span className="text-[11px] text-amber-400">⚡</span>
-          <p className="font-mono text-[11px] text-amber-400/70">
-            OFFLINE TEMPLATE — real answer queued
-          </p>
+          <p className="font-mono text-[11px] text-amber-400/70">OFFLINE TEMPLATE — real answer queued</p>
         </div>
       )}
 
@@ -269,10 +231,8 @@ export function OverlayHintPanel({
       )}
 
       {/* ── Answer / Hint content ─────────────────────────────────────── */}
-      {(composed?.lines?.length > 0 || isStreaming) && (
+      {((composed?.lines?.length ?? 0) > 0 || isStreaming) && (
         <div className="space-y-0">
-
-          {/* Content header */}
           {!isGenerating && (hasContent || isStreaming) && (
             <div className="flex items-center gap-2 mb-2.5">
               <div className="flex items-center gap-1.5">
@@ -286,17 +246,12 @@ export function OverlayHintPanel({
           )}
 
           <div className="space-y-1.5">
-            {composed.lines.map((line, i) => {
-              if (line.type === "blank") {
-                return <div key={`blank-${i}`} className="h-1.5" />;
-              }
+            {(composed?.lines ?? []).map((line: any, i: number) => {
+              if (line.type === "blank") return <div key={`blank-${i}`} className="h-1.5" />;
 
               if (line.type === "header") {
                 return (
-                  <p
-                    key={`hdr-${i}`}
-                    className="mt-2.5 mb-1 text-[13px] font-bold text-white/90 leading-snug"
-                  >
+                  <p key={`hdr-${i}`} className="mt-2.5 mb-1 text-[13px] font-bold text-white/90 leading-snug">
                     {line.content}
                   </p>
                 );
@@ -343,21 +298,17 @@ export function OverlayHintPanel({
                           </code>
                         ) : (
                           <span key={`bultxt-${i}-${j}`}>{part.text}</span>
-                        ),
+                        )
                       )}
                     </span>
                   </div>
                 );
               }
 
-              // Default: paragraph line
               return (
                 <p
                   key={`p-${i}`}
-                  className={cn(
-                    "text-[13px] leading-relaxed text-white/80",
-                    line.bold && "font-semibold text-white/90",
-                  )}
+                  className={cn("text-[13px] leading-relaxed text-white/80", line.bold && "font-semibold text-white/90")}
                 >
                   {splitInlineCode(line.content).map((part, j) =>
                     part.isCode ? (
@@ -369,23 +320,21 @@ export function OverlayHintPanel({
                       </code>
                     ) : (
                       <span key={`ptxt-${i}-${j}`}>{part.text}</span>
-                    ),
+                    )
                   )}
                 </p>
               );
             })}
 
-            {/* Streaming cursor — shown while answer is typing out */}
-            {isStreaming && (
-              <span className="stream-cursor text-[13px]" aria-hidden="true" />
-            )}
+            {isStreaming && <span className="stream-cursor text-[13px]" aria-hidden="true" />}
           </div>
         </div>
       )}
 
-      {/* ── Mode upsell (when in hint mode with content, suggest full answer) ── */}
+      {/* ── Mode upsell ─────────────────────────────────────────────── */}
       {hasContent && isHintMode && !isStreaming && !isGenerating && onRequestModeChange && (
         <button
+          type="button"
           onClick={() => handleModeSwitch("full_answer")}
           className="flex items-center gap-2 rounded-xl bg-indigo-500/[0.06] border border-indigo-500/15 px-3 py-2 text-[12px] text-indigo-300/70 hover:bg-indigo-500/10 hover:text-indigo-300 transition-all w-full text-left mt-1"
         >
@@ -406,50 +355,32 @@ export function OverlayHintPanel({
             <ActionButton
               onClick={handleCopy}
               title="Copy to clipboard"
-              icon={
-                copied
-                  ? <Check className="w-3 h-3 text-emerald-400" />
-                  : <Copy className="w-3 h-3" />
-              }
+              icon={copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
               label={copied ? "Copied!" : "Copy"}
               active={copied}
             />
+
             <ActionButton
               onClick={handleSaveToBank}
               title="Save to answer bank"
-              icon={
-                saved
-                  ? <Check className="w-3 h-3 text-emerald-400" />
-                  : <BookmarkPlus className="w-3 h-3" />
-              }
+              icon={saved ? <Check className="w-3 h-3 text-emerald-400" /> : <BookmarkPlus className="w-3 h-3" />}
               label={saved ? "Saved!" : "Save"}
               active={saved}
             />
+
             <ActionButton
-              onClick={() =>
-                useOverlayStore.getState().togglePinHint(text, currentQ)
-              }
+              onClick={() => useOverlayStore.getState().togglePinHint(safeText, currentQ)}
               title={isPinned ? "Unpin hint" : "Pin hint for quick access"}
-              icon={
-                <Pin
-                  className={cn(
-                    "w-3 h-3",
-                    isPinned && "fill-indigo-300 text-indigo-300",
-                  )}
-                />
-              }
+              icon={<Pin className={cn("w-3 h-3", isPinned && "fill-indigo-300 text-indigo-300")} />}
               label={isPinned ? "Pinned" : "Pin"}
               active={isPinned}
             />
 
-            {/* History navigation */}
             {historyLen > 1 && (
               <div className="flex items-center gap-0.5 ml-auto">
                 <NavBtn
                   disabled={historyIndex <= 0}
-                  onClick={() =>
-                    useOverlayStore.getState().navigateHintHistory("prev")
-                  }
+                  onClick={() => useOverlayStore.getState().navigateHintHistory("prev")}
                   label="←"
                   title="Previous hint"
                 />
@@ -458,9 +389,7 @@ export function OverlayHintPanel({
                 </span>
                 <NavBtn
                   disabled={historyIndex >= historyLen - 1}
-                  onClick={() =>
-                    useOverlayStore.getState().navigateHintHistory("next")
-                  }
+                  onClick={() => useOverlayStore.getState().navigateHintHistory("next")}
                   label="→"
                   title="Next hint"
                 />
@@ -482,21 +411,22 @@ function ModeToggleButton({
   label,
   title,
 }: {
-  active:   boolean;
-  onClick:  () => void;
-  icon:     React.ReactNode;
-  label:    string;
-  title:    string;
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+  title: string;
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       title={title}
       className={cn(
         "flex-1 flex items-center justify-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-semibold transition-all",
         active
           ? "bg-indigo-500/20 text-indigo-300 border border-indigo-500/30"
-          : "text-white/35 hover:text-white/60 hover:bg-white/[0.04] border border-transparent",
+          : "text-white/35 hover:text-white/60 hover:bg-white/[0.04] border border-transparent"
       )}
     >
       {icon}
@@ -513,20 +443,21 @@ function ActionButton({
   active,
 }: {
   onClick: () => void;
-  title:   string;
-  icon:    React.ReactNode;
-  label:   string;
+  title: string;
+  icon: React.ReactNode;
+  label: string;
   active?: boolean;
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       title={title}
       className={cn(
         "flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-all border",
         active
           ? "text-emerald-400 bg-emerald-500/[0.12] border-emerald-500/20"
-          : "text-white/35 hover:text-white/75 bg-white/[0.04] hover:bg-white/[0.08] border-white/[0.07]",
+          : "text-white/35 hover:text-white/75 bg-white/[0.04] hover:bg-white/[0.08] border-white/[0.07]"
       )}
     >
       {icon}
@@ -542,20 +473,19 @@ function NavBtn({
   title,
 }: {
   disabled: boolean;
-  onClick:  () => void;
-  label:    string;
-  title:    string;
+  onClick: () => void;
+  label: string;
+  title: string;
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
       title={title}
       className={cn(
         "w-6 h-6 flex items-center justify-center rounded-lg text-[12px] transition-all",
-        disabled
-          ? "text-white/[0.12] cursor-not-allowed"
-          : "text-white/35 hover:text-white hover:bg-white/10",
+        disabled ? "text-white/[0.12] cursor-not-allowed" : "text-white/35 hover:text-white hover:bg-white/10"
       )}
     >
       {label}
@@ -564,10 +494,10 @@ function NavBtn({
 }
 
 function IdleStateContent() {
-  const resumeCtx    = useOverlayStore((s) => s.resume_context);
-  const resumePoints = useOverlayStore((s) => s.resume_talking_points);
+  const resumeCtx = useOverlayStore((s) => s.resume_context) as any;
+  const resumePoints = useOverlayStore((s) => s.resume_talking_points) as any;
   const networkColor = useOverlayStore((s) => s.network_color);
-  const activeModel  = useOverlayStore((s) => s.active_model);
+  const activeModel = useOverlayStore((s) => s.active_model);
 
   const isOffline = networkColor === "red";
   const creditCheck = checkCredits(activeModel) as CreditCheckResult;
@@ -584,9 +514,9 @@ function IdleStateContent() {
         <p className="text-[13px] text-white/75 leading-relaxed whitespace-pre-wrap">
           {resumePoints.intro}
         </p>
-        {resumePoints.experience_points.length > 0 && (
+        {Array.isArray(resumePoints.experience_points) && resumePoints.experience_points.length > 0 && (
           <div className="space-y-1">
-            {resumePoints.experience_points.slice(0, 2).map((pt, i) => (
+            {resumePoints.experience_points.slice(0, 2).map((pt: string, i: number) => (
               <div key={i} className="flex gap-2 text-[13px] text-white/70">
                 <span className="shrink-0 text-indigo-400">•</span>
                 <span>{pt}</span>
@@ -595,6 +525,7 @@ function IdleStateContent() {
           </div>
         )}
         <button
+          type="button"
           onClick={() => useOverlayStore.getState().setActiveTab("resume")}
           className="text-[12px] text-indigo-300 hover:text-indigo-200 transition-colors font-medium"
         >
@@ -605,6 +536,10 @@ function IdleStateContent() {
   }
 
   if (resumeCtx) {
+    const skillsCount = resumeCtx.skills_count ?? resumeCtx.skillsCount ?? 0;
+    const expCount = resumeCtx.experience_count ?? resumeCtx.experienceCount ?? 0;
+    const totalYears = resumeCtx.total_years ?? resumeCtx.totalYears ?? null;
+
     return (
       <div className="space-y-2.5">
         <div className="flex items-center gap-2">
@@ -612,14 +547,14 @@ function IdleStateContent() {
           <p className="text-[12px] text-white/30 italic">Listening for questions…</p>
         </div>
         <button
+          type="button"
           onClick={() => useOverlayStore.getState().setActiveTab("resume")}
           className="flex items-center gap-2 rounded-xl bg-indigo-500/[0.08] border border-indigo-500/15 px-3 py-2 text-[12px] text-indigo-300/75 hover:bg-indigo-500/[0.12] hover:text-indigo-300 transition-all w-full text-left"
         >
           <FileText className="w-3.5 h-3.5 shrink-0" />
           <span>
-            Resume loaded — {resumeCtx.skills_count} skills,{" "}
-            {resumeCtx.experience_count} roles
-            {resumeCtx.total_years ? `, ${resumeCtx.total_years}+ yrs` : ""}
+            Resume loaded — {skillsCount} skills, {expCount} roles
+            {totalYears ? `, ${totalYears}+ yrs` : ""}
           </span>
         </button>
       </div>
@@ -633,3 +568,7 @@ function IdleStateContent() {
     </div>
   );
 }
+import { useMemo, useState, useCallback } from "react";
+import { composeHint, splitInlineCode } from "@/lib/overlay/overlayCompositor";
+import { useOverlayStore } from "@/store/overlayStore";
+import type { HintState } from "@/store/overlayStore";
