@@ -1,12 +1,11 @@
-// @ts-nocheck -- retained: complex Supabase row types with manual schema columns not in generated types; removing suppression produces implicit-any cascade across all data accesses.
+// @ts-nocheck -- retained: complex Supabase row types with manual schema columns
 import { fetchEdge } from "@/lib/network/fetchEdge";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
@@ -14,96 +13,160 @@ import {
   AlertTriangle, CheckCircle, Target,
   BookOpen, Zap, Star, Clock,
   BarChart2, FlaskConical, ChevronRight,
-  Lightbulb, Calendar,
+  Lightbulb, Calendar, RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { DebriefExtras } from "@/components/session/DebriefExtras";
 
-// ─────────────────────────────────────────────────────────────────
-// DebriefDetail — full AI post-session debrief page
-// Sections: grade, gap analysis, skill radar, action plan,
-//           study resources, next-session goals
-// ─────────────────────────────────────────────────────────────────
-
 export default function DebriefDetail() {
   const { id }   = useParams<{ id: string }>();
   const navigate = useNavigate();
   const { user } = useAuthStore();
 
-  const [debrief,  setDebrief]  = useState<any>(null);
-  const [session,  setSession]  = useState<any>(null);
-  const [loading,  setLoading]  = useState(true);
-  const [genning,  setGenning]  = useState(false);
+  const [debrief,    setDebrief]    = useState<any>(null);
+  const [session,    setSession]    = useState<any>(null);
+  const [loading,    setLoading]    = useState(true);
+  const [genning,    setGenning]    = useState(false);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!id || !user) return;
-    fetchDebrief();
-  }, [id]);
-
-  async function fetchDebrief() {
-    setLoading(true);
-
-    const { data: db } = await supabase
-      .from("session_debriefs")
-      .select("*")
-      .eq("id", id!)
-      .eq("user_id", user!.id)
-      .single();
-
-    if (db) {
-      setDebrief(db);
-      if (db.session_id) {
-        const { data: sess } = await supabase
-          .from("sessions")
-          .select("*")
-          .eq("id", db.session_id)
-          .single();
-        setSession(sess);
-      }
-    } else {
-      // id might be a session_id — generate debrief
-      await generateDebrief(id!);
-    }
-
-    setLoading(false);
-  }
-
-  async function generateDebrief(sessionId: string) {
+  // ── Generate debrief from edge function ──────────────────────
+  // FIX 1: fetchEdge returns parsed data directly — no .ok / .json()
+  // FIX 5: removed user_id from body — derived server-side from auth token
+  const generateDebrief = useCallback(async (sessionId: string) => {
     setGenning(true);
     try {
-      
-      const res = await fetchEdge("generate-debrief", { session_id: sessionId, user_id: user?.id });
-      if (!res.ok) throw new Error(`Server error ${res.status}`);
-      const data = await res.json();
+      const data = await fetchEdge("generate-debrief", {
+        body: { session_id: sessionId },
+      });
       if (data?.debrief) setDebrief(data.debrief);
       if (data?.session) setSession(data.session);
-    } catch (err) {
-      console.error("generateDebrief error:", err);
-      toast.error(err?.message ?? "Failed to generate debrief. Please try again.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to generate debrief";
+      console.error("[DebriefDetail] generateDebrief error:", err);
+      toast.error(msg + ". Please try again.");
+      setFetchError(msg);
     } finally {
       setGenning(false);
     }
-  }
+  }, []);
 
-  if (loading || genning) {
+  // ── Fetch existing debrief from DB ────────────────────────────
+  // FIX 2: separate error from "not found" — only generate if truly not found
+  // FIX 4: wrapped in useCallback with proper deps
+  const fetchDebrief = useCallback(async () => {
+    if (!id || !user) return;
+    setLoading(true);
+    setFetchError(null);
+
+    try {
+      const { data: db, error: dbErr } = await supabase
+        .from("session_debriefs")
+        .select("*")
+        .eq("id", id)
+        .eq("user_id", user.id)
+        .maybeSingle();  // maybeSingle returns null (not error) when row missing
+
+      if (dbErr) {
+        // Real DB error — don't accidentally trigger generation
+        throw dbErr;
+      }
+
+      if (db) {
+        // Found an existing debrief by its own ID
+        setDebrief(db);
+        if (db.session_id) {
+          const { data: sess } = await supabase
+            .from("sessions")
+            .select("*")
+            .eq("id", db.session_id)
+            .single();
+          setSession(sess ?? null);
+        }
+      } else {
+        // No debrief found by debrief ID — treat `id` as a session_id
+        // and generate a new debrief for that session
+        await generateDebrief(id);
+      }
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to load debrief";
+      console.error("[DebriefDetail] fetchDebrief error:", err);
+      setFetchError(msg);
+    } finally {
+      setLoading(false);
+    }
+  }, [id, user?.id, generateDebrief]);
+
+  // FIX 3: include user?.id in dep array so it re-runs if user loads after id
+  useEffect(() => {
+    fetchDebrief();
+  }, [fetchDebrief]);
+
+  // ── Derived values ────────────────────────────────────────────
+
+  const gradeColor =
+    debrief?.overall_grade?.startsWith("A") ? "emerald" :
+    debrief?.overall_grade?.startsWith("B") ? "blue"    :
+    debrief?.overall_grade?.startsWith("C") ? "amber"   : "red";
+
+  // ── Loading state — initial DB fetch ─────────────────────────
+  if (loading) {
     return (
       <div className="max-w-3xl space-y-5">
         <SkeletonCard />
         <SkeletonCard />
         <SkeletonCard />
-        {genning && (
-          <div className="text-center">
-            <p className="text-xs text-violet-400 animate-pulse">
-              ✨ AI is generating your personalised debrief…
-            </p>
-          </div>
-        )}
       </div>
     );
   }
 
+  // FIX 6: dedicated generation state — no skeletons during AI generation
+  if (genning) {
+    return (
+      <div className="max-w-3xl flex flex-col items-center justify-center py-24 gap-5">
+        <div className="w-14 h-14 rounded-2xl bg-violet-600/20 flex items-center justify-center">
+          <Brain className="w-7 h-7 text-violet-400 animate-pulse" />
+        </div>
+        <div className="text-center space-y-2">
+          <p className="text-sm font-semibold text-foreground">
+            Generating your debrief…
+          </p>
+          <p className="text-xs text-muted-foreground">
+            ✨ AI is analysing your session and building a personalised action plan
+          </p>
+        </div>
+        <div className="w-48 h-1 bg-secondary rounded-full overflow-hidden">
+          <div className="h-full bg-violet-500 rounded-full animate-[shimmer_1.5s_ease-in-out_infinite] w-1/2" />
+        </div>
+      </div>
+    );
+  }
+
+  // ── Error state ───────────────────────────────────────────────
+  if (fetchError && !debrief) {
+    return (
+      <div className="text-center py-20 space-y-4">
+        <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
+        <p className="text-sm text-muted-foreground">{fetchError}</p>
+        <div className="flex gap-2 justify-center">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={fetchDebrief}
+            leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+          >
+            Retry
+          </Button>
+          <Button variant="secondary" size="sm" onClick={() => navigate("/app/debrief")}>
+            ← Back to debriefs
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Not found state ───────────────────────────────────────────
   if (!debrief) {
     return (
       <div className="text-center py-20 space-y-4">
@@ -115,10 +178,7 @@ export default function DebriefDetail() {
     );
   }
 
-  const gradeColor =
-    debrief.overall_grade?.startsWith("A") ? "emerald" :
-    debrief.overall_grade?.startsWith("B") ? "blue"    :
-    debrief.overall_grade?.startsWith("C") ? "amber"   : "red";
+  // ── Render ────────────────────────────────────────────────────
 
   return (
     <div className="max-w-3xl space-y-5">
@@ -140,7 +200,7 @@ export default function DebriefDetail() {
             gradeColor === "emerald" ? "border-emerald-500/50 bg-emerald-500/10 text-emerald-400" :
             gradeColor === "blue"    ? "border-blue-500/50 bg-blue-500/10 text-blue-400"          :
             gradeColor === "amber"   ? "border-amber-500/50 bg-amber-500/10 text-amber-400"       :
-                                        "border-red-500/50 bg-red-500/10 text-red-400"
+                                       "border-red-500/50 bg-red-500/10 text-red-400"
           )}>
             {debrief.overall_grade ?? "—"}
           </div>
@@ -158,7 +218,6 @@ export default function DebriefDetail() {
             <p className="text-xs text-muted-foreground mt-1">
               {format(new Date(debrief.created_at), "EEEE, MMMM d yyyy")}
             </p>
-
             {debrief.summary && (
               <p className="text-sm text-foreground leading-relaxed mt-3">
                 {debrief.summary}
@@ -173,9 +232,7 @@ export default function DebriefDetail() {
         <Card className="flex items-start gap-4 border-amber-500/20 bg-amber-500/5">
           <AlertTriangle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
           <div>
-            <p className="text-sm font-semibold text-amber-300">
-              Priority focus area
-            </p>
+            <p className="text-sm font-semibold text-amber-300">Priority focus area</p>
             <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
               {debrief.priority_focus}
             </p>
@@ -196,26 +253,20 @@ export default function DebriefDetail() {
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-1 gap-0.5">
                   <p className="text-xs font-medium text-foreground">{gap.skill}</p>
                   <div className="flex items-center gap-2">
-                    <span className="text-[10px] text-muted-foreground">
-                      Current: {gap.current}/10
-                    </span>
-                    <span className="text-[10px] text-muted-foreground">
-                      Target: {gap.target}/10
-                    </span>
+                    <span className="text-[10px] text-muted-foreground">Current: {gap.current}/10</span>
+                    <span className="text-[10px] text-muted-foreground">Target: {gap.target}/10</span>
                   </div>
                 </div>
                 <div className="relative h-2 bg-secondary rounded-full overflow-hidden">
-                  {/* Target marker */}
                   <div
                     className="absolute top-0 h-full w-0.5 bg-violet-400 z-10"
                     style={{ left: `${gap.target * 10}%` }}
                   />
-                  {/* Current fill */}
                   <div
                     className={cn(
                       "h-full rounded-full transition-all",
-                      gap.current >= gap.target ? "bg-emerald-500" :
-                      gap.current >= gap.target - 2 ? "bg-amber-500" : "bg-red-500"
+                      gap.current >= gap.target         ? "bg-emerald-500" :
+                      gap.current >= gap.target - 2     ? "bg-amber-500"   : "bg-red-500"
                     )}
                     style={{ width: `${gap.current * 10}%` }}
                   />
@@ -229,7 +280,7 @@ export default function DebriefDetail() {
         </Card>
       )}
 
-      {/* What went well vs improvements */}
+      {/* Strengths + improvements */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {debrief.strengths?.length > 0 && (
           <Card>
@@ -240,14 +291,12 @@ export default function DebriefDetail() {
             <ul className="space-y-2">
               {debrief.strengths.map((s: string, i: number) => (
                 <li key={i} className="flex items-start gap-2 text-xs text-foreground">
-                  <span className="text-emerald-500 shrink-0 mt-0.5">✓</span>
-                  {s}
+                  <span className="text-emerald-500 shrink-0 mt-0.5">✓</span>{s}
                 </li>
               ))}
             </ul>
           </Card>
         )}
-
         {debrief.improvements?.length > 0 && (
           <Card>
             <div className="flex items-center gap-2 mb-3">
@@ -257,8 +306,7 @@ export default function DebriefDetail() {
             <ul className="space-y-2">
               {debrief.improvements.map((s: string, i: number) => (
                 <li key={i} className="flex items-start gap-2 text-xs text-foreground">
-                  <span className="text-amber-500 shrink-0 mt-0.5">→</span>
-                  {s}
+                  <span className="text-amber-500 shrink-0 mt-0.5">→</span>{s}
                 </li>
               ))}
             </ul>
@@ -275,10 +323,7 @@ export default function DebriefDetail() {
           </div>
           <div className="space-y-3">
             {debrief.action_plan.map((step: any, i: number) => (
-              <div
-                key={i}
-                className="flex items-start gap-3 p-3 bg-secondary border border-border rounded-xl"
-              >
+              <div key={i} className="flex items-start gap-3 p-3 bg-secondary border border-border rounded-xl">
                 <div className="w-7 h-7 bg-blue-500/10 rounded-lg flex items-center justify-center text-[11px] font-bold text-blue-400 shrink-0">
                   D{step.day ?? i + 1}
                 </div>
@@ -292,9 +337,7 @@ export default function DebriefDetail() {
                   {step.time_estimate && (
                     <div className="flex items-center gap-1 mt-1">
                       <Clock className="w-3 h-3 text-muted-foreground" />
-                      <span className="text-[10px] text-muted-foreground">
-                        {step.time_estimate}
-                      </span>
+                      <span className="text-[10px] text-muted-foreground">{step.time_estimate}</span>
                     </div>
                   )}
                 </div>
@@ -313,10 +356,7 @@ export default function DebriefDetail() {
           </div>
           <div className="space-y-2">
             {debrief.resources.map((r: any, i: number) => (
-              <div
-                key={i}
-                className="flex items-center justify-between p-3 bg-secondary border border-border rounded-xl"
-              >
+              <div key={i} className="flex items-center justify-between p-3 bg-secondary border border-border rounded-xl">
                 <div className="flex items-start gap-3">
                   <span className="text-lg">{
                     r.type === "video"   ? "🎥" :
@@ -357,9 +397,7 @@ export default function DebriefDetail() {
           <ul className="space-y-2">
             {debrief.next_session_goals.map((g: string, i: number) => (
               <li key={i} className="flex items-start gap-2 text-xs text-foreground">
-                <span className="text-emerald-500 shrink-0 tabular-nums mt-0.5">
-                  {i + 1}.
-                </span>
+                <span className="text-emerald-500 shrink-0 tabular-nums mt-0.5">{i + 1}.</span>
                 {g}
               </li>
             ))}
@@ -367,14 +405,12 @@ export default function DebriefDetail() {
         </Card>
       )}
 
-      {/* Insight pill */}
+      {/* AI insight */}
       {debrief.insight && (
         <Card className="flex items-start gap-4 bg-violet-600/10 border-violet-500/20">
           <Lightbulb className="w-5 h-5 text-violet-400 shrink-0 mt-0.5" />
           <div>
-            <p className="text-xs font-semibold text-violet-300 mb-1">
-              AI insight
-            </p>
+            <p className="text-xs font-semibold text-violet-300 mb-1">AI insight</p>
             <p className="text-sm text-foreground leading-relaxed italic">
               "{debrief.insight}"
             </p>
@@ -382,7 +418,7 @@ export default function DebriefDetail() {
         </Card>
       )}
 
-      {/* Sprint B: WPM chart, missed keywords, speaker labels, thumbs rating */}
+      {/* Sprint B extras */}
       <DebriefExtras
         debriefId={debrief.id}
         wpmSeries={debrief.detailed_report?.wpm_series}
