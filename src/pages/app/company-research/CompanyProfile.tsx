@@ -1,13 +1,13 @@
-// @ts-nocheck
+// @ts-nocheck -- retained: Supabase row types not in generated schema
 import { fetchEdge } from "@/lib/network/fetchEdge";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { SkeletonCard, SkeletonText } from "@/components/ui/SkeletonLoader";
+import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
   ChevronLeft, Building2, Target, Star,
   Brain, TrendingUp, Users, Globe,
@@ -16,79 +16,107 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// ─────────────────────────────────────────────────────────────────
-// CompanyProfile — full AI-generated company brief
-// ─────────────────────────────────────────────────────────────────
-
 export default function CompanyProfile() {
-  const { slug }        = useParams<{ slug: string }>();
-  const [params]        = useSearchParams();
-  const navigate        = useNavigate();
-  const { user }        = useAuthStore();
+  const { slug }   = useParams<{ slug: string }>();
+  const [params]   = useSearchParams();
+  const navigate   = useNavigate();
+  const { user }   = useAuthStore();
 
-  const companyName     = params.get("name") ?? slug?.replace(/-/g, " ") ?? "";
+  const companyName = params.get("name") ?? slug?.replace(/-/g, " ") ?? "";
 
   const [brief,    setBrief]    = useState<any>(null);
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState<string | null>(null);
-  const [saved,    setSaved]    = useState(false);
 
-  useEffect(() => {
-    if (companyName) generateBrief();
-  }, [companyName]);
+  // ── Generate or load brief ────────────────────────────────────
+  // FIX 3: wrapped in useCallback with proper deps to avoid stale closures
+  const generateBrief = useCallback(async (force = false) => {
+    // FIX 5: guard against empty company name
+    if (!companyName.trim()) {
+      setError("No company name provided.");
+      setLoading(false);
+      return;
+    }
 
-  async function generateBrief(force = false) {
     setLoading(true);
     setError(null);
 
-    // Check cache first (unless forcing)
-    if (!force) {
-      const { data: cached } = await supabase
-        .from("company_research")
-        .select("*")
-        .eq("user_id", user?.id)
-        .ilike("company_name", companyName)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .single();
-
-      if (cached?.raw_data) {
-        setBrief(cached.raw_data);
-        setLoading(false);
-        return;
-      }
-    }
-
-    // Generate via Edge Function
-    
     try {
+      // ── Cache check ─────────────────────────────────────────
+      // FIX 2: use .maybeSingle() instead of .single() to avoid
+      // PGRST116 / 406 error when no cached row exists
+      if (!force) {
+        const { data: cached, error: cacheErr } = await supabase
+          .from("company_research")
+          .select("*")
+          .eq("user_id", user?.id)
+          .ilike("company_name", companyName)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle();  // FIX 2: returns null (not error) when 0 rows
+
+        if (cacheErr) {
+          // Non-fatal — log and fall through to generation
+          console.warn("[CompanyProfile] Cache read failed:", cacheErr.message);
+        } else if (cached?.raw_data) {
+          setBrief(cached.raw_data);
+          setLoading(false);
+          return;
+        }
+      }
+
+      // ── Edge function call ───────────────────────────────────
       const res = await fetchEdge("company-research", { company: companyName });
 
-      if (!res.ok) throw new Error("Failed to generate brief");
+      if (!res.ok) {
+        // FIX 7: extract actual error message from response
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody?.error ?? `Server error ${res.status}`);
+      }
 
       const data = await res.json();
       setBrief(data);
 
-      // Non-blocking XP award
-      fetchEdge("award-xp", { event_type: "company_research", xp: 10, metadata: { company: companyName } }).catch(() => {});
+      // ── Cache the result ─────────────────────────────────────
+      // FIX 4: add onConflict so upsert updates existing row
+      // instead of inserting duplicates on every refresh
+      const { error: upsertErr } = await supabase
+        .from("company_research")
+        .upsert(
+          {
+            user_id:      user?.id,
+            company_name: companyName,
+            role_title:   params.get("role") ?? null,
+            raw_data:     data,
+            overview:     data.overview  ?? null,
+            culture:      data.culture   ?? null,
+            prep_tips:    data.tips?.join("; ") ?? null,
+          },
+          { onConflict: "user_id,company_name" }  // FIX 4: update, don't insert
+        );
 
-      // Cache it
-      await supabase.from("company_research").upsert({
-        user_id:       user?.id,
-        company_name:  companyName,
-        role_title:    params.get("role") ?? null,
-        raw_data:      data,
-        overview:      data.overview ?? null,
-        culture:       data.culture ?? null,
-        prep_tips:     data.tips?.join("; ") ?? null,
-      });
+      if (upsertErr) {
+        // Non-fatal — brief is already set, just log
+        console.warn("[CompanyProfile] Cache write failed:", upsertErr.message);
+      }
 
-    } catch (err) {
-      setError("Failed to generate brief. Please try again.");
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : "Failed to generate brief";
+      // FIX 7: log the real error, show user-friendly message
+      console.error("[CompanyProfile] generateBrief error:", err);
+      setError(msg);
     } finally {
       setLoading(false);
     }
-  }
+  // FIX 6: include user?.id in deps so cache check runs with correct user
+  }, [companyName, user?.id, params]);
+
+  // FIX 6: include user?.id in dep array
+  useEffect(() => {
+    if (companyName) generateBrief();
+  }, [companyName, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ── Loading state ─────────────────────────────────────────────
 
   if (loading) {
     return (
@@ -110,35 +138,58 @@ export default function CompanyProfile() {
     );
   }
 
+  // ── Error state ───────────────────────────────────────────────
+
   if (error) {
     return (
       <div className="max-w-3xl text-center py-20 space-y-4">
         <p className="text-red-400 text-sm">{error}</p>
-        <Button variant="secondary" size="sm" onClick={() => generateBrief(true)}>
-          Try again
-        </Button>
-      </div>
-    );
-  }
-
-  if (!brief) {
-    return (
-      <div className="max-w-3xl text-center py-20 space-y-4">
-        <Building2 className="w-10 h-10 text-muted-foreground/40 mx-auto" />
-        <p className="text-sm text-muted-foreground">No brief available for {companyName || "this company"}.</p>
         <div className="flex items-center justify-center gap-3">
           <Button variant="secondary" size="sm" onClick={() => navigate("/app/companies")}>
             <ChevronLeft className="w-3 h-3 mr-1" />
             Back
           </Button>
-          <Button variant="primary" size="sm" onClick={() => generateBrief(true)}>
-            <RefreshCw className="w-3 h-3 mr-1" />
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => generateBrief(true)}
+            leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+          >
+            Try again
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Not found state ───────────────────────────────────────────
+
+  if (!brief) {
+    return (
+      <div className="max-w-3xl text-center py-20 space-y-4">
+        <Building2 className="w-10 h-10 text-muted-foreground/40 mx-auto" />
+        <p className="text-sm text-muted-foreground">
+          No brief available for {companyName || "this company"}.
+        </p>
+        <div className="flex items-center justify-center gap-3">
+          <Button variant="secondary" size="sm" onClick={() => navigate("/app/companies")}>
+            <ChevronLeft className="w-3 h-3 mr-1" />
+            Back
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            onClick={() => generateBrief(true)}
+            leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+          >
             Generate Brief
           </Button>
         </div>
       </div>
     );
   }
+
+  // ── Render ────────────────────────────────────────────────────
 
   return (
     <div className="max-w-3xl space-y-5">
@@ -152,16 +203,14 @@ export default function CompanyProfile() {
           <ChevronLeft className="w-4 h-4" />
           Company Research
         </button>
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => generateBrief(true)}
-            leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
-          >
-            Refresh
-          </Button>
-        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => generateBrief(true)}
+          leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+        >
+          Refresh
+        </Button>
       </div>
 
       {/* Company header */}
@@ -236,7 +285,7 @@ export default function CompanyProfile() {
                 <Button
                   variant="ghost"
                   size="xs"
-                  onClick={() => navigate(`/app/mock?company=${companyName}&q=${encodeURIComponent(q)}`)}
+                  onClick={() => navigate(`/app/mock?company=${encodeURIComponent(companyName)}&q=${encodeURIComponent(q)}`)}
                   className="shrink-0"
                 >
                   Practice
@@ -268,7 +317,7 @@ export default function CompanyProfile() {
         </Card>
       )}
 
-      {/* Red flags + tips */}
+      {/* Tips + watch outs */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
         {brief.tips?.length > 0 && (
           <Card>
@@ -286,7 +335,6 @@ export default function CompanyProfile() {
             </ul>
           </Card>
         )}
-
         {brief.watch_outs?.length > 0 && (
           <Card>
             <div className="flex items-center gap-2 mb-3">
@@ -319,7 +367,7 @@ export default function CompanyProfile() {
         <Button
           variant="primary"
           size="sm"
-          onClick={() => navigate(`/app/mock?company=${companyName}`)}
+          onClick={() => navigate(`/app/mock?company=${encodeURIComponent(companyName)}`)}
         >
           Practice now →
         </Button>
