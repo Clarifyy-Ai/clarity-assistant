@@ -1,12 +1,14 @@
 // supabase/functions/generate-answer/index.ts
-// Full STAR-format answer generator with SSE streaming via Gemini 2.0 Flash.
+// Full STAR-format answer generator with SSE streaming via Gemini.
+// FIXED: modern default model, header auth, model override, safer refund.
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient, deductCreditsAtomic } from "../_shared/supabase.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-const GEMINI_BASE    = "https://generativelanguage.googleapis.com/v1beta";
-const MODEL          = "gemini-2.0-flash";
+const GEMINI_API_VERSION = Deno.env.get("GEMINI_API_VERSION") ?? "v1beta";
+const GEMINI_BASE = `https://generativelanguage.googleapis.com/${GEMINI_API_VERSION}`;
+const DEFAULT_MODEL = Deno.env.get("GEMINI_MODEL_DEFAULT") ?? "gemini-2.5-flash";
 
 const SYSTEM_PROMPT = `You are an expert interview coach helping a candidate answer live interview questions.
 Generate a complete, confident answer using the STAR method (Situation, Task, Action, Result).
@@ -17,8 +19,6 @@ Requirements:
 - Be specific — reference the resume context when available
 - Do NOT say "Situation:", "Task:", etc. — weave the structure naturally into the prose`;
 
-// Cost in credits for a full STAR answer (manual: “Live Answer Generation Long 200 tokens → 12 credits”,
-// you can adjust this COST to match your pricing model; we keep it 2 per your draft). [file:1][file:3]
 const COST = 2;
 
 Deno.serve(async (req: Request) => {
@@ -53,12 +53,16 @@ Deno.serve(async (req: Request) => {
       return json(headers, 400, { error: "Missing required field: question" });
     }
 
-    const question      = String(body.question).slice(0, 500);
-    const transcript    = String(body.transcript      ?? "").slice(0, 800);
-    const resumeCtx     = String(body.resume_context  ?? "").slice(0, 500);
-    const interviewType = String(body.interview_type  ?? "behavioral").slice(0, 50);
-    const company       = String(body.target_company  ?? "").slice(0, 50);
-    const sessionId     = body.session_id ?? null;
+    const question = String(body.question).slice(0, 500);
+    const transcript = String(body.transcript ?? "").slice(0, 800);
+    const resumeCtx = String(body.resume_context ?? "").slice(0, 500);
+    const interviewType = String(body.interview_type ?? "behavioral").slice(0, 50);
+    const company = String(body.target_company ?? "").slice(0, 50);
+    const sessionId = body.session_id ?? null;
+
+    // Optional model override (frontend-controlled)
+    const requestedModel = String(body.model ?? "").trim();
+    const model = requestedModel || DEFAULT_MODEL;
 
     // ── GEMINI CONFIG CHECK ──────────────────────────────────────
     if (!GEMINI_API_KEY) {
@@ -66,24 +70,16 @@ Deno.serve(async (req: Request) => {
     }
 
     // ── CREDITS DEDUCTION (ATOMIC) ───────────────────────────────
-    // Use a shared helper that:
-    //  - Performs an atomic UPDATE on profiles.credits
-    //  - Inserts into credittransactions with balancebefore/balanceafter
-    //  - Returns { success, error, balanceAfter }
     const deduction = await deductCreditsAtomic({
       userId: user.id,
-      action: "liveanswerlong", // aligns with manual: Live Answer Generation Long [file:1][file:3]
+      action: "liveanswerlong",
       cost: COST,
       sessionId,
     });
 
     if (!deduction.success) {
-      return json(headers, 402, {
-        error: deduction.error ?? "Insufficient credits",
-      });
+      return json(headers, 402, { error: deduction.error ?? "Insufficient credits" });
     }
-
-    const balanceAfter = deduction.balanceAfter ?? 0;
 
     // ── GEMINI PROMPT BUILD ──────────────────────────────────────
     const userPrompt = [
@@ -101,67 +97,74 @@ Deno.serve(async (req: Request) => {
     // ── REFUND HELPER (pre-stream failure) ───────────────────────
     const refundCredits = async (reason: string) => {
       try {
-        // The deployed refund_credits RPC takes a single `p_cost` argument
-        // and uses auth.uid() internally. Calling it with the old
-        // (p_user_id, p_amount, p_reason) signature throws and silently
-        // burns the user's credits.
-        await db.rpc("refund_credits", { p_cost: COST });
-        console.log(`[generate-answer] Refunded ${COST} credits: ${reason}`);
+        // Try newer signature first (if your RPC supports it)
+        const attempt1 = await db.rpc("refund_credits", {
+          p_user_id: user.id,
+          p_cost: COST,
+          p_reason: reason,
+        } as any);
+
+        if (!attempt1?.error) {
+          console.log(`[generate-answer] Refunded ${COST} credits (sig1): ${reason}`);
+          return;
+        }
+
+        // Fallback to older signature (p_cost only)
+        const attempt2 = await db.rpc("refund_credits", { p_cost: COST } as any);
+        if (!attempt2?.error) {
+          console.log(`[generate-answer] Refunded ${COST} credits (sig2): ${reason}`);
+          return;
+        }
+
+        console.error("[generate-answer] Refund RPC failed:", attempt1?.error ?? attempt2?.error);
       } catch (e) {
         console.error("[generate-answer] Refund failed:", e);
       }
     };
 
     // ── CALL GEMINI STREAMING API ────────────────────────────────
-    const geminiUrl = `${GEMINI_BASE}/models/${MODEL}:streamGenerateContent?alt=sse&key=${GEMINI_API_KEY}`;
+    const geminiUrl = `${GEMINI_BASE}/models/${model}:streamGenerateContent?alt=sse`;
 
     let geminiRes: Response;
     try {
       geminiRes = await fetch(geminiUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": GEMINI_API_KEY,
+        },
         body: JSON.stringify({
           contents: [{ role: "user", parts: [{ text: userPrompt }] }],
           systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
           generationConfig: {
-            temperature:     0.7,
+            temperature: 0.7,
             maxOutputTokens: 1024,
-            topP:            0.95,
+            topP: 0.95,
           },
         }),
       });
     } catch (fetchErr) {
       console.error("[generate-answer] Gemini fetch error:", fetchErr);
       await refundCredits("Gemini network error");
-      return json(headers, 502, {
-        error: "AI service unreachable. Credits refunded.",
-      });
+      return json(headers, 502, { error: "AI service unreachable. Credits refunded." });
     }
 
     if (!geminiRes.ok) {
       const errText = await geminiRes.text().catch(() => "Unknown Gemini error");
-      console.error(
-        "[generate-answer] Gemini API error:",
-        geminiRes.status,
-        errText,
-      );
+      console.error("[generate-answer] Gemini API error:", geminiRes.status, errText);
       await refundCredits(`Gemini HTTP ${geminiRes.status}`);
-      return json(headers, 502, {
-        error: "AI generation failed. Credits refunded.",
-      });
+      return json(headers, 502, { error: "AI generation failed. Credits refunded." });
     }
 
     if (!geminiRes.body) {
       console.error("[generate-answer] Empty Gemini body");
       await refundCredits("Empty Gemini stream");
-      return json(headers, 502, {
-        error: "Empty AI response. Credits refunded.",
-      });
+      return json(headers, 502, { error: "Empty AI response. Credits refunded." });
     }
 
     // ── PROXY SSE STREAM TO CLIENT ───────────────────────────────
     const encoder = new TextEncoder();
-    const reader  = geminiRes.body.getReader();
+    const reader = geminiRes.body.getReader();
     const decoder = new TextDecoder();
 
     const stream = new ReadableStream<Uint8Array>({
@@ -173,7 +176,7 @@ Deno.serve(async (req: Request) => {
             if (done) break;
 
             buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split("\n"); // real newline [file:1][web:30]
+            const lines = buffer.split("\n");
             buffer = lines.pop() ?? "";
 
             for (const line of lines) {
@@ -189,15 +192,13 @@ Deno.serve(async (req: Request) => {
                   }>;
                 };
 
-                const text =
-                  parsed?.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+                const parts = parsed?.candidates?.[0]?.content?.parts ?? [];
+                const text = Array.isArray(parts)
+                  ? parts.map((p) => p?.text ?? "").join("")
+                  : "";
 
                 if (text) {
-                  controller.enqueue(
-                    encoder.encode(
-                      `data: ${JSON.stringify({ text })}\n\n`,
-                    ),
-                  );
+                  controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text })}\n\n`));
                 }
               } catch {
                 // skip malformed JSON chunks
@@ -221,9 +222,9 @@ Deno.serve(async (req: Request) => {
       status: 200,
       headers: {
         ...headers,
-        "Content-Type":      "text/event-stream",
-        "Cache-Control":     "no-cache, no-transform",
-        Connection:          "keep-alive",
+        "Content-Type": "text/event-stream",
+        "Cache-Control": "no-cache, no-transform",
+        Connection: "keep-alive",
         "X-Accel-Buffering": "no",
       },
     });
@@ -233,15 +234,10 @@ Deno.serve(async (req: Request) => {
   }
 });
 
-/* ──────────────────────────────────────────────────────────────── */
-
-function json(
-  headers: HeadersInit,
-  status: number,
-  body: unknown,
-): Response {
+function json(headers: HeadersInit, status: number, body: unknown): Response {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...headers, "Content-Type": "application/json" },
   });
 }
+``
