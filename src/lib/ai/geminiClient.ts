@@ -1,4 +1,4 @@
-// src/lib/ai/geminiClient.ts
+// src/lib/ai/geminiClient.ts — FIXED
 // SECURITY NOTE — all keys are server-side in Supabase Edge Functions.
 
 import { EDGE_BASE } from "@/lib/env";
@@ -6,6 +6,9 @@ import type { CoachingContext } from "@/types/ai.types";
 import { retry } from "@/lib/utils";
 
 export type GeminiModel =
+  | "gemini-2.5-flash"
+  | "gemini-2.5-pro"
+  | "gemini-2.5-flash-lite"
   | "gemini-1.5-flash"
   | "gemini-1.5-pro"
   | "gemini-2.0-flash";
@@ -13,44 +16,38 @@ export type GeminiModel =
 export type AnswerMode = "hint" | "full_answer";
 
 export interface GeminiStreamOptions {
-  question:           string;
-  context:            CoachingContext;
-  model?:             GeminiModel;
-  isLive?:            boolean;
-  sessionId?:         string;
-  questionId?:        string;
-  screenshotBase64?:  string | null;
-  simpleLanguage?:    boolean;
-  callType?:          "interview" | "regular_call";
-  language?:          string;
-  onChunk:            (chunk: string) => void;
-  onDone:             (fullText: string) => void;
-  onError:            (error: Error) => void;
-  signal?:            AbortSignal;
+  question: string;
+  context: CoachingContext;
+  model?: GeminiModel;
+  isLive?: boolean;
+  sessionId?: string;
+  questionId?: string;
+  screenshotBase64?: string | null;
+  simpleLanguage?: boolean;
+  callType?: "interview" | "regular_call";
+  language?: string;
+  onChunk: (chunk: string) => void;
+  onDone: (fullText: string) => void;
+  onError: (error: Error) => void;
+  signal?: AbortSignal;
 }
 
 export interface CodingAnalysis {
-  pattern:          string;
-  time_complexity:  string;
+  pattern: string;
+  time_complexity: string;
   space_complexity: string;
-  approach:         string;
-  edge_cases:       string[];
+  approach: string;
+  edge_cases: string[];
 }
 
-// Unified entry: mode="hint" | "full_answer". [file:1]
 export async function streamGeminiAnswer(
   mode: AnswerMode,
   opts: GeminiStreamOptions
 ): Promise<void> {
-  return mode === "full_answer"
-    ? streamFullAnswer(opts)
-    : streamGeminiHint(opts);
+  return mode === "full_answer" ? streamFullAnswer(opts) : streamGeminiHint(opts);
 }
 
-// Hint mode → generate-hint EF (non‑streaming). [file:1]
-export async function streamGeminiHint(
-  opts: GeminiStreamOptions
-): Promise<void> {
+export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void> {
   const {
     question,
     context,
@@ -60,16 +57,18 @@ export async function streamGeminiHint(
     onDone,
     onError,
     signal,
+    model,
   } = opts;
 
   const body = JSON.stringify({
     question,
-    interview_type:    context.session_type              ?? "behavioral",
-    target_company:    context.target_company            ?? null,
-    transcript:        context.last_transcript           ?? null,
-    resume_context:    context.resume_experience_summary ?? null,
-    simple_language:   simpleLanguage                    ?? false,
-    screenshot_base64: screenshotBase64                  ?? null,
+    model: model ?? "gemini-2.5-flash",
+    interview_type: context.session_type ?? "behavioral",
+    target_company: context.target_company ?? null,
+    transcript: context.last_transcript ?? null,
+    resume_context: context.resume_experience_summary ?? null,
+    simple_language: simpleLanguage ?? false,
+    screenshot_base64: screenshotBase64 ?? null,
   });
 
   try {
@@ -79,7 +78,7 @@ export async function streamGeminiHint(
     const response = await retry(
       () =>
         fetch(`${EDGE_BASE}/generate-hint`, {
-          method:  "POST",
+          method: "POST",
           headers: authHeaders,
           body,
           signal,
@@ -93,7 +92,7 @@ export async function streamGeminiHint(
       throw new Error(`generate-hint failed: ${response.status} — ${errText}`);
     }
 
-    const data  = (await response.json()) as { hints?: string; hint?: string };
+    const data = (await response.json()) as { hints?: string; hint?: string };
     const hints = data.hints ?? data.hint ?? "";
 
     if (hints) onChunk(hints);
@@ -104,27 +103,17 @@ export async function streamGeminiHint(
   }
 }
 
-// Full answer mode → generate-answer EF (SSE streaming). [file:1][file:3]
-export async function streamFullAnswer(
-  opts: GeminiStreamOptions
-): Promise<void> {
-  const {
-    question,
-    context,
-    simpleLanguage,
-    onChunk,
-    onDone,
-    onError,
-    signal,
-  } = opts;
+export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void> {
+  const { question, context, simpleLanguage, onChunk, onDone, onError, signal, model } = opts;
 
   const body = JSON.stringify({
     question,
-    interview_type:  context.session_type              ?? "behavioral",
-    target_company:  context.target_company            ?? null,
-    transcript:      context.last_transcript           ?? null,
-    resume_context:  context.resume_experience_summary ?? null,
-    simple_language: simpleLanguage                    ?? false,
+    model: model ?? "gemini-2.5-flash",
+    interview_type: context.session_type ?? "behavioral",
+    target_company: context.target_company ?? null,
+    transcript: context.last_transcript ?? null,
+    resume_context: context.resume_experience_summary ?? null,
+    simple_language: simpleLanguage ?? false,
   });
 
   try {
@@ -132,7 +121,7 @@ export async function streamFullAnswer(
     const authHeaders = await getAuthHeaders();
 
     const response = await fetch(`${EDGE_BASE}/generate-answer`, {
-      method:  "POST",
+      method: "POST",
       headers: authHeaders,
       body,
       signal,
@@ -140,9 +129,7 @@ export async function streamFullAnswer(
 
     if (!response.ok) {
       if (response.status === 402) {
-        throw new Error(
-          "Insufficient credits. Please top up to generate full answers."
-        );
+        throw new Error("Insufficient credits. Please top up to generate full answers.");
       }
       const errText = await response.text().catch(() => `HTTP ${response.status}`);
       throw new Error(`generate-answer failed: ${response.status} — ${errText}`);
@@ -159,7 +146,6 @@ export async function streamFullAnswer(
   }
 }
 
-// SSE consumer shared by generate-answer / ai-coach-chat shapes. [file:1]
 export async function consumeSSEStream(
   body: ReadableStream<Uint8Array>,
   onChunk: (chunk: string) => void,
@@ -167,10 +153,10 @@ export async function consumeSSEStream(
   onError: (error: Error) => void,
   signal?: AbortSignal
 ): Promise<void> {
-  const reader  = body.getReader();
+  const reader = body.getReader();
   const decoder = new TextDecoder();
-  let fullText  = "";
-  let buffer    = "";
+  let fullText = "";
+  let buffer = "";
 
   try {
     while (true) {
@@ -183,8 +169,6 @@ export async function consumeSSEStream(
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
-
-      // Split on real newline characters. [file:1]
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
 
@@ -201,12 +185,9 @@ export async function consumeSSEStream(
         try {
           const parsed = JSON.parse(data) as Record<string, unknown>;
           const chunk: string =
-            (parsed.text as string | undefined) ?? // generate-answer EF
-            (
-              (parsed.choices as Array<{ delta?: { content?: string } }> | undefined)
-                ?.[0]?.delta?.content
-            ) ?? // OpenAI-like
-            ((parsed.delta as { text?: string } | undefined)?.text) ?? // Anthropic-like
+            (parsed.text as string | undefined) ??
+            ((parsed.choices as Array<{ delta?: { content?: string } }> | undefined)?.[0]?.delta?.content) ??
+            ((parsed.delta as { text?: string } | undefined)?.text) ??
             "";
 
           if (chunk) {
@@ -214,7 +195,7 @@ export async function consumeSSEStream(
             onChunk(chunk);
           }
         } catch {
-          // heartbeat / malformed JSON — ignore
+          // ignore
         }
       }
     }
@@ -227,23 +208,26 @@ export async function consumeSSEStream(
   }
 }
 
-// Non‑streaming call via prep-tool EF. [file:1]
 export async function callGemini(payload: {
-  prompt:       string;
-  model?:       GeminiModel;
-  max_tokens?:  number;
+  prompt: string;
+  model?: GeminiModel;
+  max_tokens?: number;
   temperature?: number;
-  session_id?:  string;
+  session_id?: string;
 }): Promise<string> {
   const { getAuthHeaders } = await import("@/lib/network/fetchEdge");
   const authHeaders = await getAuthHeaders();
 
   const response = await fetch(`${EDGE_BASE}/prep-tool`, {
-    method:  "POST",
+    method: "POST",
     headers: authHeaders,
-    body:    JSON.stringify({
+    body: JSON.stringify({
       tool_id: "raw_prompt",
-      input:   payload.prompt,
+      input: payload.prompt,
+      model: payload.model ?? "gemini-2.5-flash",
+      max_tokens: payload.max_tokens,
+      temperature: payload.temperature,
+      session_id: payload.session_id,
     }),
   });
 
@@ -256,7 +240,6 @@ export async function callGemini(payload: {
   return data.result ?? "";
 }
 
-// Screenshot analysis helper. [file:1]
 export async function analyseScreenshotWithGemini(
   screenshotBase64: string,
   sessionId: string
@@ -273,7 +256,7 @@ Return ONLY valid JSON. No explanation, no markdown fences.`;
 
   const text = await callGemini({
     prompt,
-    model:      "gemini-1.5-flash",
+    model: "gemini-2.5-flash",
     session_id: sessionId,
   });
 
@@ -282,11 +265,11 @@ Return ONLY valid JSON. No explanation, no markdown fences.`;
     return JSON.parse(clean) as CodingAnalysis;
   } catch {
     return {
-      pattern:          "Could not parse",
-      time_complexity:  "Unknown",
-      space_complexivity: "Unknown",
-      approach:         text,
-      edge_cases:       [],
-    } as any;
+      pattern: "Could not parse",
+      time_complexity: "Unknown",
+      space_complexity: "Unknown",
+      approach: text,
+      edge_cases: [],
+    };
   }
 }
