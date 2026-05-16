@@ -1,85 +1,81 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// _shared/utils.ts — PRODUCTION READY (ALL FIXES APPLIED)
-// ─────────────────────────────────────────────────────────────────────────────
+// supabase/functions/_shared/utils.ts — FIXED + PRODUCTION READY// supabase/functions// - Updates Gemini provider mapping to 2.5 family (recommended) 【1-c30e89】
+// - Uses x-goog-api-key header for Gemini auth 【2-a9b3ed】
+// - Supports GEMINI_API_VERSION v1 (stable) / v1beta 【3-96ce52】
+// - Joins Gemini parts reliably
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCors as _handleCorsFn } from "./cors.ts";
 
-// Internal helper: returns CORS headers when a Request is available, otherwise a
-// safe minimal header set with NO Access-Control-Allow-Origin.
+import type {
+  AuthContext, EdgeSuccess,
+  AICompletionRequest, AICompletionResponse,
+  CreditDeductionResult, FeatureKey,
+  ValidationResult, ValidationError
+} from "./types.ts";
+import { CREDIT_COSTS } from "./types.ts";
+
+/* -------------------------------------------------------------------------- */
+/*                              CORS SAFE HEADERS                              */
+/* -------------------------------------------------------------------------- */
+
 function safeCorsHeaders(req?: Request): Record<string, string> {
   if (req) return getCorsHeaders(req);
   return {
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type, x-app-name, x-app-version",
+      "authorization, x-client-info, apikey, content-type, x-app-name, x-app-version, x-byok-openai, x-byok-anthropic, x-byok-gemini",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
   };
 }
 
-import type {
-  AuthContext, EdgeError, EdgeSuccess,
-  AICompletionRequest, AICompletionResponse,
-  CreditDeductionResult, FeatureKey,
-  ValidationResult, ValidationError, ChatMessage
-} from "./types.ts";
-import { CREDIT_COSTS } from "./types.ts";
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ENVIRONMENT
-// ─────────────────────────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                              ENVIRONMENT                                    */
+/* -------------------------------------------------------------------------- */
 
 const REQUIRED = ["SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"] as const;
 
-// FIX 1: DO NOT throw at module level — a top-level throw crashes the entire
-// Deno process before Deno.serve() registers, making Supabase return 502 with
-// no headers. The browser sees a CORS error but the real cause is a boot crash.
 for (const key of REQUIRED) {
   if (!Deno.env.get(key)) {
     console.error(
       `[utils] CRITICAL: Missing required env var "${key}". ` +
-      `All requests will fail until this secret is set in Supabase Dashboard → ` +
-      `Settings → Edge Functions → Secrets, then redeploy.`
+      `Set in Supabase Dashboard → Settings → Edge Functions → Secrets and redeploy.`
     );
-    // Do NOT throw here
   }
 }
 
 export const ENV = {
-  SUPABASE_URL:         Deno.env.get("SUPABASE_URL")         ?? "",
-  SUPABASE_ANON_KEY:    Deno.env.get("SUPABASE_ANON_KEY")    ?? "",
+  SUPABASE_URL:         Deno.env.get("SUPABASE_URL") ?? "",
+  SUPABASE_ANON_KEY:    Deno.env.get("SUPABASE_ANON_KEY") ?? "",
   SUPABASE_SERVICE_KEY: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
-  OPENAI_API_KEY:       Deno.env.get("OPENAI_API_KEY")       ?? "",
-  ANTHROPIC_API_KEY:    Deno.env.get("ANTHROPIC_API_KEY")    ?? "",
-  GEMINI_API_KEY:       Deno.env.get("GEMINI_API_KEY")       ?? "",
-  RESEND_API_KEY:       Deno.env.get("RESEND_API_KEY")       ?? "",
+  OPENAI_API_KEY:       Deno.env.get("OPENAI_API_KEY") ?? "",
+  ANTHROPIC_API_KEY:    Deno.env.get("ANTHROPIC_API_KEY") ?? "",
+  GEMINI_API_KEY:       Deno.env.get("GEMINI_API_KEY") ?? "",
+  GEMINI_API_VERSION:   Deno.env.get("GEMINI_API_VERSION") ?? "v1beta", // set "v1" for stable 【3-96ce52】
+  RESEND_API_KEY:       Deno.env.get("RESEND_API_KEY") ?? "",
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SUPABASE ADMIN CLIENT (RLS BYPASS)
-// ─────────────────────────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                         SUPABASE ADMIN CLIENT (RLS BYPASS)                  */
+/* -------------------------------------------------------------------------- */
 
 export function getAdminClient(): SupabaseClient {
-  // FIX 2: Throw inside the function (per-request), not at module level.
   if (!ENV.SUPABASE_URL || !ENV.SUPABASE_SERVICE_KEY) {
-    throw new Error(
-      "[utils] Cannot create admin client: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing."
-    );
+    throw new Error("[utils] Cannot create admin client: missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.");
   }
   return createClient(ENV.SUPABASE_URL, ENV.SUPABASE_SERVICE_KEY, {
     auth: { persistSession: false }
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// AUTH HELPER + BYOK HEADER EXTRACTION
-// ─────────────────────────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                         AUTH + BYOK EXTRACTION                              */
+/* -------------------------------------------------------------------------- */
 
 export interface BYOK {
-  openai?:    string;
+  openai?: string;
   anthropic?: string;
-  gemini?:    string;
+  gemini?: string;
 }
 
 export function extractBYOK(req: Request): BYOK {
@@ -87,14 +83,13 @@ export function extractBYOK(req: Request): BYOK {
   const o = req.headers.get("x-byok-openai");
   const a = req.headers.get("x-byok-anthropic");
   const g = req.headers.get("x-byok-gemini");
-  if (o && o.trim()) out.openai    = o.trim();
+  if (o && o.trim()) out.openai = o.trim();
   if (a && a.trim()) out.anthropic = a.trim();
-  if (g && g.trim()) out.gemini    = g.trim();
+  if (g && g.trim()) out.gemini = g.trim();
   return out;
 }
 
 export async function requireAuth(req: Request): Promise<AuthContext & { byok: BYOK }> {
-  // FIX 3: Guard against missing env vars inside the function.
   if (!ENV.SUPABASE_URL || !ENV.SUPABASE_ANON_KEY) {
     throw errorResponse(
       "Server misconfiguration: missing Supabase credentials.",
@@ -110,20 +105,19 @@ export async function requireAuth(req: Request): Promise<AuthContext & { byok: B
   }
 
   const token = header.slice(7);
+
   const client = createClient(ENV.SUPABASE_URL, ENV.SUPABASE_ANON_KEY, {
     global: { headers: { Authorization: `Bearer ${token}` } },
     auth: { persistSession: false }
   });
 
   const { data: { user }, error } = await client.auth.getUser();
-
   if (error || !user) {
     throw errorResponse("Invalid or expired token", "AUTH_INVALID", 401, req);
   }
 
   const admin = getAdminClient();
 
-  // FIX 4: Use .maybeSingle() instead of .single() — avoids 406 when row missing.
   const { data: profile } = await admin
     .from("profiles")
     .select("plan_id, credits")
@@ -138,18 +132,18 @@ export async function requireAuth(req: Request): Promise<AuthContext & { byok: B
     .maybeSingle();
 
   return {
-    userId:  user.id,
-    email:   user.email ?? "",
-    planId:  profile?.plan_id ?? "free",
+    userId: user.id,
+    email: user.email ?? "",
+    planId: profile?.plan_id ?? "free",
     credits: profile?.credits ?? 0,
     isAdmin: !!roleRow,
-    byok:    extractBYOK(req),
+    byok: extractBYOK(req),
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// RESPONSE HELPERS
-// ─────────────────────────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                            RESPONSE HELPERS                                 */
+/* -------------------------------------------------------------------------- */
 
 export function successResponse<T>(
   data: T,
@@ -186,29 +180,29 @@ export function streamResponse(stream: ReadableStream, req?: Request): Response 
   });
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// JSON BODY PARSER
-// ─────────────────────────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                              JSON BODY PARSER                               */
+/* -------------------------------------------------------------------------- */
 
 export async function parseBody<T = Record<string, unknown>>(req: Request): Promise<T> {
   try {
     return await req.json() as T;
   } catch {
-    throw errorResponse("Invalid JSON body", "INVALID_BODY", 400);
+    throw errorResponse("Invalid JSON body", "INVALID_BODY", 400, req);
   }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// CORS HANDLER (OPTIONS)
-// ─────────────────────────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                              CORS HANDLER                                   */
+/* -------------------------------------------------------------------------- */
 
 export function handleCors(req: Request): Response | null {
   return _handleCorsFn(req);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// VALIDATION UTILITIES
-// ─────────────────────────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                             VALIDATION UTILITIES                            */
+/* -------------------------------------------------------------------------- */
 
 export function validate(
   rules: { condition: boolean; field: string; message: string }[]
@@ -229,9 +223,9 @@ export function requireFields(body: Record<string, unknown>, fields: string[]): 
   })));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ATOMIC CREDIT DEDUCTION (RPC + FALLBACK)
-// ─────────────────────────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                      ATOMIC CREDIT DEDUCTION (RPC + FALLBACK)               */
+/* -------------------------------------------------------------------------- */
 
 export async function deductCredits(
   userId: string,
@@ -241,30 +235,29 @@ export async function deductCredits(
   const admin = getAdminClient();
   const cost = overrideCost ?? CREDIT_COSTS[feature] ?? 1;
 
-  // 1) try atomic RPC
+  // 1) Try atomic RPC (if installed)
   const { data: rpcData, error: rpcError } = await admin.rpc(
     "deduct_credits_atomic",
     { p_user_id: userId, p_amount: cost, p_action: feature }
   );
 
-  if (rpcError && !rpcError.message.includes("deduct_credits_atomic")) {
-    return { success: false, balanceAfter: 0, error: rpcError.message };
+  if (rpcError) {
+    // RPC missing or failed: fall back (keep behavior consistent)
+    console.warn("[credits] deduct_credits_atomic RPC failed, falling back:", rpcError.message);
   }
 
   if (rpcData?.success) {
     return { success: true, balanceAfter: rpcData.balance_after ?? -1 };
   }
 
-  // 2) fallback (safe but not atomic)
+  // 2) Fallback (safe but not fully atomic)
   const { data: profile } = await admin
     .from("profiles")
     .select("credits, plan_id, credits_used_this_month")
     .eq("id", userId)
     .maybeSingle();
 
-  if (!profile) {
-    return { success: false, balanceAfter: 0, error: "Profile not found" };
-  }
+  if (!profile) return { success: false, balanceAfter: 0, error: "Profile not found" };
 
   const { credits, plan_id, credits_used_this_month } = profile;
 
@@ -272,11 +265,11 @@ export async function deductCredits(
     return { success: true, balanceAfter: -1 };
   }
 
-  if (credits < cost) {
-    return { success: false, balanceAfter: credits, error: "Insufficient credits" };
+  if ((credits ?? 0) < cost) {
+    return { success: false, balanceAfter: credits ?? 0, error: "Insufficient credits" };
   }
 
-  const newBal = credits - cost;
+  const newBal = (credits ?? 0) - cost;
 
   const { error: updateErr } = await admin
     .from("profiles")
@@ -288,7 +281,7 @@ export async function deductCredits(
     .eq("id", userId);
 
   if (updateErr) {
-    return { success: false, balanceAfter: credits, error: "Failed to deduct credits" };
+    return { success: false, balanceAfter: credits ?? 0, error: "Failed to deduct credits" };
   }
 
   await admin.from("credit_transactions").insert({
@@ -303,18 +296,28 @@ export async function deductCredits(
   return { success: true, balanceAfter: newBal };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// AI DISPATCHER — OpenAI / Anthropic / Gemini
-// ─────────────────────────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                         AI DISPATCHER — OpenAI / Anthropic / Gemini         */
+/* -------------------------------------------------------------------------- */
 
+// Updated provider map with modern Gemini 2.5 models (recommended) 【1-c30e89】
 const PROVIDER_MAP: Record<string, "openai" | "anthropic" | "gemini"> = {
-  "gpt-4o":                     "openai",
-  "gpt-4o-mini":                "openai",
-  "gpt-4-turbo":                "openai",
+  // OpenAI
+  "gpt-4o": "openai",
+  "gpt-4o-mini": "openai",
+  "gpt-4-turbo": "openai",
+
+  // Anthropic
   "claude-3-5-sonnet-20241022": "anthropic",
-  "claude-3-haiku-20240307":    "anthropic",
-  "gemini-2.0-flash":           "gemini",
-  "gemini-1.5-pro":             "gemini"
+  "claude-3-haiku-20240307": "anthropic",
+
+  // Gemini (modern + legacy)
+  "gemini-2.5-flash": "gemini",
+  "gemini-2.5-pro": "gemini",
+  "gemini-2.5-flash-lite": "gemini",
+  "gemini-2.0-flash": "gemini",
+  "gemini-1.5-flash": "gemini",
+  "gemini-1.5-pro": "gemini",
 };
 
 export async function callAI(
@@ -324,17 +327,18 @@ export async function callAI(
   const start = Date.now();
   const provider = PROVIDER_MAP[req.model];
 
-  if (provider === "openai")    return callOpenAI(req, start, byok?.openai);
+  if (provider === "openai") return callOpenAI(req, start, byok?.openai);
   if (provider === "anthropic") return callAnthropic(req, start, byok?.anthropic);
-  if (provider === "gemini")    return callGemini(req, start, byok?.gemini);
+  if (provider === "gemini") return callGemini(req, start, byok?.gemini);
 
-  throw new Error(`Unknown model provider for "${req.model}". ` +
-    `Add it to PROVIDER_MAP in utils.ts.`);
+  throw new Error(
+    `Unknown model provider for "${req.model}". Add it to PROVIDER_MAP in utils.ts.`
+  );
 }
 
 const AI_TIMEOUT_MS = 50_000;
 
-// ───── OpenAI ───────────────────────────────────────────────────────────────
+/* ------------------------------- OpenAI ----------------------------------- */
 
 async function callOpenAI(
   req: AICompletionRequest,
@@ -342,9 +346,9 @@ async function callOpenAI(
   byokKey?: string,
 ): Promise<AICompletionResponse> {
   const apiKey = byokKey?.trim() || ENV.OPENAI_API_KEY;
-  if (!apiKey) throw new Error(
-    "OpenAI API key not available. Set OPENAI_API_KEY in Supabase secrets or provide a BYOK key."
-  );
+  if (!apiKey) {
+    throw new Error("OpenAI API key not available. Set OPENAI_API_KEY or provide x-byok-openai.");
+  }
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), AI_TIMEOUT_MS);
@@ -390,7 +394,7 @@ async function callOpenAI(
   };
 }
 
-// ───── Anthropic ─────────────────────────────────────────────────────────────
+/* ------------------------------ Anthropic --------------------------------- */
 
 async function callAnthropic(
   req: AICompletionRequest,
@@ -398,9 +402,9 @@ async function callAnthropic(
   byokKey?: string,
 ): Promise<AICompletionResponse> {
   const apiKey = byokKey?.trim() || ENV.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error(
-    "Anthropic API key not available. Set ANTHROPIC_API_KEY in Supabase secrets or provide a BYOK key."
-  );
+  if (!apiKey) {
+    throw new Error("Anthropic API key not available. Set ANTHROPIC_API_KEY or provide x-byok-anthropic.");
+  }
 
   const system = req.messages.find(m => m.role === "system")?.content ?? "";
   const userMessages = req.messages.filter(m => m.role !== "system");
@@ -448,7 +452,13 @@ async function callAnthropic(
   };
 }
 
-// ───── Gemini ───────────────────────────────────────────────────────────────
+/* -------------------------------- Gemini ---------------------------------- */
+
+function extractGeminiText(json: any): string {
+  const parts = json?.candidates?.[0]?.content?.parts ?? [];
+  if (!Array.isArray(parts)) return "";
+  return parts.map((p: any) => p?.text ?? "").join("");
+}
 
 async function callGemini(
   req: AICompletionRequest,
@@ -456,28 +466,32 @@ async function callGemini(
   byokKey?: string,
 ): Promise<AICompletionResponse> {
   const apiKey = byokKey?.trim() || ENV.GEMINI_API_KEY;
-  if (!apiKey) throw new Error(
-    "Gemini API key not available. Set GEMINI_API_KEY in Supabase secrets or provide a BYOK key."
-  );
+  if (!apiKey) {
+    throw new Error("Gemini API key not available. Set GEMINI_API_KEY or provide x-byok-gemini.");
+  }
 
-  const systemParts = req.messages
-    .filter(m => m.role === "system")
-    .map(m => ({ text: m.content }));
+  const base = `https://generativelanguage.googleapis.com/${ENV.GEMINI_API_VERSION}`;
 
-  const userParts = req.messages
+  // Convert OpenAI-style messages to Gemini contents.
+  // Gemini supports "user" and "model" roles; keep system separate.
+  const system = req.messages.filter(m => m.role === "system").map(m => ({ text: m.content }));
+  const contents = req.messages
     .filter(m => m.role !== "system")
-    .map(m => ({ text: m.content }));
+    .map(m => ({
+      role: m.role === "assistant" ? "model" : "user",
+      parts: [{ text: m.content }]
+    }));
 
   const body: Record<string, unknown> = {
-    contents: [{ role: "user", parts: userParts }],
+    contents,
     generationConfig: {
       maxOutputTokens: req.maxTokens ?? 1024,
       temperature: req.temperature ?? 0.7
     }
   };
 
-  if (systemParts.length > 0) {
-    body.systemInstruction = { parts: systemParts };
+  if (system.length > 0) {
+    body.systemInstruction = { parts: system };
   }
 
   const ctrl = new AbortController();
@@ -485,15 +499,16 @@ async function callGemini(
 
   let res: Response;
   try {
-    res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${req.model}:generateContent?key=${apiKey}`,
-      {
-        method: "POST",
-        signal: ctrl.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body)
-      }
-    );
+    // Use header-based key auth (recommended in streaming examples too) 【2-a9b3ed】
+    res = await fetch(`${base}/models/${req.model}:generateContent`, {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": apiKey,
+      },
+      body: JSON.stringify(body)
+    });
   } finally {
     clearTimeout(timer);
   }
@@ -504,11 +519,11 @@ async function callGemini(
   }
 
   const json = await res.json();
-  const part = json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+  const text = extractGeminiText(json);
   const usage = json.usageMetadata ?? {};
 
   return {
-    text: part,
+    text,
     model: req.model,
     tokensIn: usage.promptTokenCount ?? 0,
     tokensOut: usage.candidatesTokenCount ?? 0,
@@ -517,9 +532,9 @@ async function callGemini(
   };
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LOGGING
-// ─────────────────────────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                                  LOGGING                                   */
+/* -------------------------------------------------------------------------- */
 
 export function log(
   fn: string,
@@ -527,22 +542,15 @@ export function log(
   message: string,
   data?: unknown
 ): void {
-  const entry = {
-    fn,
-    level,
-    message,
-    data,
-    ts: new Date().toISOString()
-  };
-
+  const entry = { fn, level, message, data, ts: new Date().toISOString() };
   if (level === "error") console.error(JSON.stringify(entry));
   else if (level === "warn") console.warn(JSON.stringify(entry));
   else console.log(JSON.stringify(entry));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SIMPLE RATE LIMITING (PER INSTANCE)
-// ─────────────────────────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                            SIMPLE RATE LIMIT (PER INSTANCE)                 */
+/* -------------------------------------------------------------------------- */
 
 const RL = new Map<string, { count: number; resetAt: number }>();
 
@@ -560,9 +568,9 @@ export function checkRateLimit(key: string, perMinute: number): boolean {
   return true;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// TEXT UTILITIES
-// ─────────────────────────────────────────────────────────────────────────────
+/* -------------------------------------------------------------------------- */
+/*                               TEXT UTILITIES                                */
+/* -------------------------------------------------------------------------- */
 
 export function trimToMaxTokens(text: string, max = 12_000): string {
   if (text.length <= max) return text;
