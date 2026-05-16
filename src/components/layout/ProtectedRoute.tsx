@@ -27,6 +27,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
   const profile = useAuthStore((s) => s.profile);
   const error   = useAuthStore((s) => s.error);
   const isAdmin = useAuthStore((s) => s.isAdmin);
+  const isProfileLoaded = useAuthStore((s) => s.isProfileLoaded);
   const isOnboarded = useAuthStore((s) => s.isOnboarded);
 
   const location = useLocation();
