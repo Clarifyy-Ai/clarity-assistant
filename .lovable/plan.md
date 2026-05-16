@@ -1,103 +1,60 @@
-## Audit findings
+## What's Broken (Audit Findings)
 
-- The current preview crash is concrete: `SessionDetail.tsx` renders `<ChevronRight />` but does not import `ChevronRight` from `lucide-react`.
-- Live sessions currently create/activate a session in multiple places, but there is no clean prepared → started → paused → resumed → completed lifecycle exposed to the user.
-- `LiveSessionController` only warns when time is up; it does not automatically end/persist the session.
-- Mock tests start immediately on page load by changing `DRAFT` to `IN_PROGRESS`, which prevents a proper “created first, then start” flow.
-- Mock test autosave depends on a response interval tied to changing `responses`, which can create repeated interval resets and unreliable saves.
-- Credits are fragmented: mock test creation deducts credits in the `create-test` edge function, live answer generation deducts elsewhere, and the client credit hook reads from `profiles` only. The UI can go stale unless balances are refreshed after paid actions.
+I inspected the auth flow, admin gating, overlay chat, and the `generate-answer` edge function. Here's what's actually causing each issue — without changing any working features yet.
 
-## Guardrails
+### 1. Admin login / can't access admin
 
-- Do not modify authentication, onboarding, marketing/SEO, payments, admin, or unrelated dashboard features.
-- Do not loosen RLS/security changes already applied to credits.
-- Do not move roles onto `profiles` or client storage.
-- Preserve existing mock test data model (`mock_tests`, `test_responses`, `test_analyses`) unless a migration is strictly required.
-- Keep changes component-by-component and validate each affected flow before moving to the next.
+- Network logs confirm: login succeeds, profile loads, `user_roles` returns `[{role:"admin"}]`, `isAdmin` is set to `true` in `authStore`. So the role IS correct.
+- But `ProtectedRoute` shows the `idle/loading` blank screen until `status` flips. If `loadProfile()` runs *after* `status` becomes `authenticated` (race), the first admin route render uses stale `isAdmin=false` → "Access Denied" card, requiring a refresh.
+- Fix: gate `requireAdmin` on `isProfileLoaded` (already in store) before deciding access; show loader while profile is still loading.
 
-## Implementation plan
+### 2. Deepgram not working
 
-### 1. Fix the immediate production crash
+- `DEEPGRAM_API_KEY` is set, but the `deepgram-token` edge function **also requires `DEEPGRAM_PROJECT_ID`** to mint scoped tokens. That secret is missing → function returns 503 "Transcription service misconfigured" → live transcription never connects.
+- Fix: add the `DEEPGRAM_PROJECT_ID` secret. (No code change needed.)
 
-- Add the missing `ChevronRight` import in `src/pages/app/sessions/SessionDetail.tsx`.
-- Verify the session detail page renders instead of showing “Unexpected Application Error”.
+### 3. Gemini AI answer generator not working
 
-### 2. Define a reliable session lifecycle
+- `generate-answer` streams SSE back. The client (`useLiveCopilot.requestFullAnswer`) calls `supabase.functions.invoke("generate-answer", ...)`. **`functions.invoke` buffers the entire response and does not stream** — and for `text/event-stream`, it can return either a `Blob`/`ReadableStream`, not the plain string the parser expects. So no chunks ever land in the overlay.
+- Secondary bug: the edge function's refund path calls `db.rpc("refund_credits", { p_user_id, p_amount, p_reason })` but the DB function signature is `refund_credits(p_cost integer)` — refunds will throw on every Gemini failure.
+- Fix:
+  - Replace `supabase.functions.invoke` with a direct `fetch` to the function URL with the user JWT, then read the response body with a streaming reader (already used in other places).
+  - Update the `refund_credits` RPC call in the edge function to match the existing signature (`p_cost`).
 
-Implement a single shared lifecycle in `src/lib/session/sessionLifecycle.ts`:
+### 4. Overlay chat panel — manual messages do nothing
 
-```text
-pending/created → active/started → paused → active/resumed → completed
-                         ↓
-                    abandoned/expired
-```
+- `OverlayChatPanel` → `OverlayChatInput` calls `onSubmit(question)`. In `LiveOverlay.tsx` this is wired to `copilot.requestLiveHint(question)` only — the user's message is **never appended to `chat_history`**, and no assistant reply is appended either. So typing a message produces zero visible feedback.
+- Fix:
+  - On submit: push a `{role:"user", text}` message into `overlayStore.chat_history`, set `is_chat_generating=true`, then call the answer generator (same one as #3) and append the result as `{role:"assistant", text}`.
 
-- Keep `getOrCreateSession` for creating/reusing a pending session.
-- Add/update helpers for:
-  - `prepareSession` / create pending row
-  - `startSession` / activate pending row
-  - `pauseSession`
-  - `resumeSession`
-  - `completeSession`
-  - `expireSessionIfNeeded`
-- Ensure sessions past their configured duration automatically close as `completed` or `abandoned` consistently.
+### 5. Other "many features not working"
 
-### 3. Enhance the overlay live-session flow
+I'll only touch what's listed above this round (per your guardrail: component-by-component, don't touch working features). If you can name any other specific feature that's broken, I'll add it as a separate pass.
 
-Update only the live overlay/session components:
+---
 
-- `src/pages/app/live/LiveOverlay.tsx`
-- `src/pages/app/live/LiveRehearsal.tsx`
-- `src/hooks/useLiveCopilot.ts`
-- `src/components/live/LiveSessionController.tsx`
-- `src/store/sessionStore.ts`
+## Implementation Plan (component-by-component)
 
-Changes:
+**Pass A — Secrets** (no code)
+- Prompt for `DEEPGRAM_PROJECT_ID` so the token endpoint can mint scoped keys.
 
-- First create a pending session after setup.
-- Show a clear “Start session” state before audio/overlay begins.
-- Add pause/resume handling that pauses the timer and audio capture without losing the prepared session.
-- Auto-end the session when configured duration reaches zero.
-- Persist final metrics once, and avoid duplicate completion updates on unmount.
+**Pass B — Admin gate race** (`src/components/layout/ProtectedRoute.tsx`)
+- When `requireAdmin`, also wait for `isProfileLoaded`. Show the same loading shell instead of the access-denied card while profile is still hydrating.
+- Guardrail: do not change non-admin routes' behavior.
 
-### 4. Repair mock test create/start/session behavior
+**Pass C — generate-answer streaming** (`src/hooks/useLiveCopilot.ts` + `supabase/functions/generate-answer/index.ts`)
+- Client: switch `requestFullAnswer` to a direct `fetch` against `${VITE_SUPABASE_URL}/functions/v1/generate-answer` with `Authorization: Bearer <session.access_token>` and `apikey: <anon>`, then stream the SSE body via `ReadableStream` reader and `appendStreamChunk` per chunk.
+- Edge fn: fix `refund_credits` RPC params (`{ p_cost: COST }`), keep all auth/CORS exactly as-is.
+- Guardrail: do not alter request body shape, credit cost, or prompt.
 
-Update mock test flow component-by-component:
+**Pass D — Overlay chat manual send** (`src/pages/app/live/LiveOverlay.tsx` + `src/store/overlayStore.ts` if missing helpers)
+- Add an `appendChat(role, text)` helper if not already there.
+- Replace the simple `requestLiveHint(question)` wiring with: append user msg → set generating → call the same streaming answer flow (Pass C) → append final text as assistant msg → clear generating.
+- Guardrail: don't touch auto-detected question handling (`handleQuestionDetected`) or hint panel logic.
 
-- `src/pages/app/mock-test/TestConfigure.tsx`
-- `src/pages/app/mock-test/TestSession.tsx`
-- `supabase/functions/create-test/index.ts`
-- `supabase/functions/submit-test/index.ts` if needed after validation
+**Pass E — Smoke verify**
+- Reload, sign in as admin → admin dashboard renders without "Access Denied".
+- Start a live overlay → Deepgram WS connects (token endpoint returns 200).
+- Type a question in the overlay chat → user bubble appears, streaming answer appears.
 
-Changes:
-
-- Keep test creation as `DRAFT` and navigate to a pre-start screen/state.
-- Do not automatically start the timer just because the user opened the test page.
-- Start the test only when the user clicks Start, then set `IN_PROGRESS` and `started_at`.
-- Add pause/resume UI for resumable tests if the test is still within its allowed time window.
-- Auto-submit when time expires, with a single guarded submit call.
-- Stabilize autosave so it does not recreate intervals every answer change.
-
-### 5. Stabilize credits after paid actions
-
-- Keep server-side deduction as the source of truth.
-- After mock test creation, answer generation, and AI analysis, refresh the authenticated profile credit balance.
-- Normalize client-side action names/costs so the UI matches the server-side deductions.
-- Add user-facing credit failure messages where deductions fail, without charging twice.
-
-### 6. Add focused regression tests
-
-Add/extend tests around the fixed flows:
-
-- Session detail renders without the `ChevronRight` crash.
-- Live session lifecycle: create → start → pause → resume → auto-complete.
-- Mock test lifecycle: create draft → start → autosave → submit/auto-submit.
-- Credits: failed deduction blocks paid action; successful action refreshes balance.
-
-### 7. Validation checklist
-
-- Verify `/app/sessions/:id` no longer crashes.
-- Verify a live session can be created before start, started, paused, resumed, and automatically ended at duration limit.
-- Verify mock test creation, start, answer save, submit, and results navigation.
-- Verify credits decrement once per paid action and displayed balance refreshes.
-- Run targeted tests only; no broad refactor or unrelated feature rewrites.
+I will NOT modify: mock test flow, payments, onboarding, sessions lifecycle, RLS, or anything else outside the four files listed.
