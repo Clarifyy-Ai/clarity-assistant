@@ -1,16 +1,17 @@
-// supabase/functions/_shared/gemini.ts — PRODUCTION READY, HARDENED VERSION
+// supabase/functions/_shared/gemini.ts — PRODUCTION READY (ALL FIXES APPLIED)
 
 /* -------------------------------------------------------------------------- */
 /*                               CONSTANTS                                     */
 /* -------------------------------------------------------------------------- */
 
-const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
-const GEMINI_BASE    = "https://generativelanguage.googleapis.com/v1beta";
-const MODEL          = "gemini-2.0-flash";
-const TIMEOUT_MS     = 50_000;
+// FIX 1: No module-level crash on missing key. Use lazy getter instead.
+const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
+const MODEL       = "gemini-2.0-flash";
+const TIMEOUT_MS  = 50_000;
 
-if (!GEMINI_API_KEY) {
-  console.warn("[gemini] Warning: GEMINI_API_KEY is not configured");
+// Lazy getter for server key
+function getServerGeminiKey(): string {
+  return Deno.env.get("GEMINI_API_KEY") ?? "";
 }
 
 /* -------------------------------------------------------------------------- */
@@ -31,13 +32,12 @@ export interface GeminiMessage {
 /* -------------------------------------------------------------------------- */
 
 /**
- * Resolve which Gemini API key to use for this request.
- * Priority: caller-supplied BYOK key > server-side GEMINI_API_KEY env var.
- * Pass `byokKey` extracted from the `x-byok-gemini` header inside the EF.
+ * Resolve which Gemini API key to use.
+ * Priority: BYOK key > server-side GEMINI_API_KEY.
  */
 function resolveGeminiKey(byokKey?: string): string {
   if (byokKey && byokKey.trim().length > 0) return byokKey.trim();
-  return GEMINI_API_KEY;
+  return getServerGeminiKey();
 }
 
 async function geminiRequest(
@@ -46,7 +46,11 @@ async function geminiRequest(
 ): Promise<any> {
   const apiKey = resolveGeminiKey(byokKey);
   if (!apiKey) {
-    throw new Error("No Gemini API key available (server key missing and no BYOK provided)");
+    throw new Error(
+      "No Gemini API key available. Set GEMINI_API_KEY in Supabase Dashboard → " +
+      "Settings → Edge Functions → Secrets, then redeploy. " +
+      "Or pass a BYOK key via the x-byok-gemini header."
+    );
   }
 
   const controller = new AbortController();
@@ -59,12 +63,15 @@ async function geminiRequest(
       {
         method: "POST",
         signal: controller.signal,
-        headers: {
-          "Content-Type": "application/json"
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       }
     );
+  } catch (err: unknown) {
+    if (err instanceof Error && err.name === "AbortError") {
+      throw new Error(`Gemini request timed out after ${TIMEOUT_MS}ms`);
+    }
+    throw err;
   } finally {
     clearTimeout(timer);
   }
@@ -74,15 +81,15 @@ async function geminiRequest(
     throw new Error(`Gemini API Error (${res.status}): ${errText}`);
   }
 
-  const data = await res.json().catch(() => null);
+  const data = await res.json().catch(() => {
+    throw new Error("Gemini returned non-JSON response");
+  });
   return data;
 }
 
 function extractTextFromGemini(data: any): string {
   return (
-    data?.candidates?.[0]?.content?.parts?.[0]?.text ??
-    data?.candidates?.[0]?.content?.parts?.[0]?.inlineData ??
-    ""
+    data?.candidates?.[0]?.content?.parts?.[0]?.text ?? ""
   );
 }
 
@@ -136,7 +143,8 @@ export async function geminiChat(
   messages: GeminiMessage[],
   systemPrompt?: string,
   temperature = 0.7,
-  maxTokens = 1024
+  maxTokens = 1024,
+  byokKey?: string,
 ): Promise<string> {
   const safeMessages = messages.map((m) => ({
     role: m.role,
@@ -159,7 +167,7 @@ export async function geminiChat(
     };
   }
 
-  const data = await geminiRequest(payload);
+  const data = await geminiRequest(payload, byokKey);
   return extractTextFromGemini(data);
 }
 
@@ -181,14 +189,14 @@ export function parseJSON<T>(raw: string, fallback: T): T {
     blocks.push(block[1].trim());
   }
 
-  // Try fenced blocks (from last → first)
+  // Try fenced blocks (last → first)
   for (let i = blocks.length - 1; i >= 0; i--) {
     try {
       return JSON.parse(blocks[i]) as T;
-    } catch {}
+    } catch { /* ignore */ }
   }
 
-  // Strip leading prose
+  // Strip leading prose and try from first { or [
   const start = Math.min(
     input.indexOf("{") !== -1 ? input.indexOf("{") : Infinity,
     input.indexOf("[") !== -1 ? input.indexOf("[") : Infinity
@@ -197,13 +205,17 @@ export function parseJSON<T>(raw: string, fallback: T): T {
   if (start !== Infinity) {
     try {
       return JSON.parse(input.slice(start)) as T;
-    } catch {}
+    } catch { /* ignore */ }
   }
 
-  // Attempt direct parsing
+  // Attempt direct parsing of full string
   try {
     return JSON.parse(input) as T;
   } catch {
+    console.warn(
+      "[gemini] parseJSON: all parse attempts failed. Raw snippet:",
+      input.slice(0, 200)
+    );
     return fallback;
   }
 }
