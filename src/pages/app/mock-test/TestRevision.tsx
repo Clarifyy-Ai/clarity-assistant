@@ -19,23 +19,32 @@ const INTERVALS = [1, 3, 7, 14, 30];
 
 function nextInterval(currentInterval: number): number {
   const index = INTERVALS.indexOf(currentInterval);
+
   if (index === -1 || index === INTERVALS.length - 1) {
     return INTERVALS[INTERVALS.length - 1];
   }
+
   return INTERVALS[index + 1];
 }
 
 function addDays(days: number): string {
   const date = new Date();
+
   date.setDate(date.getDate() + days);
+
   return date.toISOString().split("T")[0];
+}
+
+interface RevisionOption {
+  label: string;
+  text: string;
 }
 
 interface RevisionQuestion {
   id: string;
   question_text: string;
   question_type: string;
-  options: Array<{ label: string; text: string }> | null;
+  options: RevisionOption[];
   correct_answer: string;
   explanation: string;
   subject: string;
@@ -51,6 +60,39 @@ interface RevisionItem {
   question: RevisionQuestion;
 }
 
+function normalizeOptions(options: unknown): RevisionOption[] {
+  if (!Array.isArray(options)) {
+    return [];
+  }
+
+  return options
+    .filter(
+      (option) =>
+        option &&
+        typeof option === "object" &&
+        typeof (option as any).label === "string" &&
+        typeof (option as any).text === "string"
+    )
+    .map((option) => ({
+      label: String((option as any).label).slice(0, 2),
+      text: String((option as any).text).trim(),
+    }));
+}
+
+function normalizeQuestion(question: any): RevisionQuestion {
+  return {
+    id: String(question?.id ?? crypto.randomUUID()),
+    question_text: String(question?.question_text ?? ""),
+    question_type: String(question?.question_type ?? "SHORT_ANSWER"),
+    options: normalizeOptions(question?.options),
+    correct_answer: String(question?.correct_answer ?? ""),
+    explanation: String(question?.explanation ?? ""),
+    subject: String(question?.subject ?? "General"),
+    topic: String(question?.topic ?? "General"),
+    difficulty: String(question?.difficulty ?? "MEDIUM"),
+  };
+}
+
 export default function TestRevision() {
   const user = useAuthStore((s) => s.user);
 
@@ -62,16 +104,24 @@ export default function TestRevision() {
   const [updating, setUpdating] = useState(false);
 
   useEffect(() => {
-    if (!user?.id) return;
+    if (!user?.id) {
+      return;
+    }
+
     void loadRevisionItems();
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.id]);
 
   const currentItem = items[currentIndex] ?? null;
+
   const isDone = currentIndex >= items.length;
 
   const progressPercent = useMemo(() => {
-    if (items.length === 0) return 0;
+    if (items.length === 0) {
+      return 0;
+    }
+
     return Math.round((doneCount / items.length) * 100);
   }, [doneCount, items.length]);
 
@@ -108,11 +158,26 @@ export default function TestRevision() {
         .order("next_review_date", { ascending: true })
         .limit(50);
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
-      const normalized = ((data ?? []) as unknown as RevisionItem[]).filter(
-        (item) => item.question && item.question.id
-      );
+      const normalized: RevisionItem[] = Array.isArray(data)
+        ? data
+            .filter((item: any) => item?.question)
+            .map((item: any) => ({
+              id: String(item.id),
+              question_id: String(item.question_id),
+              interval_days: Number(item.interval_days ?? 1),
+              review_count: Number(item.review_count ?? 0),
+              question: normalizeQuestion(item.question),
+            }))
+            .filter(
+              (item) =>
+                item.question &&
+                item.question.question_text.length > 0
+            )
+        : [];
 
       setItems(normalized);
       setCurrentIndex(0);
@@ -120,6 +185,7 @@ export default function TestRevision() {
       setShowAnswer(false);
     } catch (error) {
       console.error("[TestRevision] load failed:", error);
+
       toast.error("Failed to load revision items.");
     } finally {
       setLoading(false);
@@ -139,12 +205,18 @@ export default function TestRevision() {
         .update(payload)
         .eq("id", item.id);
 
-      if (error) throw error;
+      if (error) {
+        throw error;
+      }
 
-      if (successMessage) toast.success(successMessage);
+      if (successMessage) {
+        toast.success(successMessage);
+      }
+
       advance();
     } catch (error) {
       console.error("[TestRevision] update failed:", error);
+
       toast.error("Failed to update revision progress.");
     } finally {
       setUpdating(false);
@@ -153,38 +225,52 @@ export default function TestRevision() {
 
   function advance() {
     setDoneCount((prev) => prev + 1);
+
     setShowAnswer(false);
 
     setCurrentIndex((prev) => {
-      if (prev + 1 >= items.length) return items.length;
+      if (prev + 1 >= items.length) {
+        return items.length;
+      }
+
       return prev + 1;
     });
   }
 
   async function handleKnew() {
-    if (!currentItem) return;
+    if (!currentItem) {
+      return;
+    }
 
-    const next = nextInterval(Number(currentItem.interval_days ?? 1));
+    const next = nextInterval(
+      Number(currentItem.interval_days ?? 1)
+    );
 
     await updateRevision(currentItem, {
       next_review_date: addDays(next),
       interval_days: next,
-      review_count: Number(currentItem.review_count ?? 0) + 1,
+      review_count:
+        Number(currentItem.review_count ?? 0) + 1,
     });
   }
 
   async function handleStruggling() {
-    if (!currentItem) return;
+    if (!currentItem) {
+      return;
+    }
 
     await updateRevision(currentItem, {
       next_review_date: addDays(1),
       interval_days: 1,
-      review_count: Number(currentItem.review_count ?? 0) + 1,
+      review_count:
+        Number(currentItem.review_count ?? 0) + 1,
     });
   }
 
   async function handleMastered() {
-    if (!currentItem) return;
+    if (!currentItem) {
+      return;
+    }
 
     await updateRevision(
       currentItem,
@@ -215,9 +301,12 @@ export default function TestRevision() {
           <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
             <div
               className="h-full rounded-full bg-violet-500 transition-all duration-300"
-              style={{ width: `${progressPercent}%` }}
+              style={{
+                width: `${progressPercent}%`,
+              }}
             />
           </div>
+
           <span className="shrink-0 text-xs text-muted-foreground">
             {doneCount}/{items.length}
           </span>
@@ -232,16 +321,22 @@ export default function TestRevision() {
             </div>
 
             <h3 className="text-lg font-bold text-foreground">
-              {items.length === 0 ? "No reviews due today!" : "All done! Great work!"}
+              {items.length === 0
+                ? "No reviews due today!"
+                : "All done! Great work!"}
             </h3>
 
             <p className="max-w-xs text-sm text-muted-foreground">
               {items.length === 0
-                ? "You have no questions due for review. Keep practicing to build your revision queue."
-                : "You've reviewed all due questions. Check back tomorrow for the next batch."}
+                ? "You have no questions due for review."
+                : "You've reviewed all due questions."}
             </p>
 
-            <Button variant="outline" size="sm" onClick={() => void loadRevisionItems()}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void loadRevisionItems()}
+            >
               <RotateCcw className="mr-1.5 h-4 w-4" />
               Reload
             </Button>
@@ -253,10 +348,13 @@ export default function TestRevision() {
         <div className="space-y-4">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>
-              {currentItem.question.subject} · {currentItem.question.topic}
+              {currentItem.question.subject} ·{" "}
+              {currentItem.question.topic}
             </span>
+
             <span>
-              Interval: {currentItem.interval_days}d · Reviews: {currentItem.review_count}
+              Interval: {currentItem.interval_days}d · Reviews:{" "}
+              {currentItem.review_count}
             </span>
           </div>
 
@@ -267,31 +365,38 @@ export default function TestRevision() {
               </p>
 
               {currentItem.question.question_type === "MCQ" &&
-                currentItem.question.options && (
+                currentItem.question.options.length > 0 && (
                   <div className="mt-4 space-y-2">
-                    {currentItem.question.options.map((option) => (
-                      <div
-                        key={option.label}
-                        className={cn(
-                          "flex items-start gap-3 rounded-xl border p-3 text-sm transition-all",
-                          showAnswer && option.label === currentItem.question.correct_answer
-                            ? "border-green-500/50 bg-green-500/10 text-green-400"
-                            : "border-border text-foreground"
-                        )}
-                      >
-                        <span
+                    {currentItem.question.options.map(
+                      (option) => (
+                        <div
+                          key={`${option.label}-${option.text}`}
                           className={cn(
-                            "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold",
-                            showAnswer && option.label === currentItem.question.correct_answer
-                              ? "border-green-500 bg-green-500 text-white"
-                              : "border-border"
+                            "flex items-start gap-3 rounded-xl border p-3 text-sm transition-all",
+                            showAnswer &&
+                              option.label ===
+                                currentItem.question.correct_answer
+                              ? "border-green-500/50 bg-green-500/10 text-green-400"
+                              : "border-border text-foreground"
                           )}
                         >
-                          {option.label}
-                        </span>
-                        {option.text}
-                      </div>
-                    ))}
+                          <span
+                            className={cn(
+                              "flex h-5 w-5 shrink-0 items-center justify-center rounded-full border text-[10px] font-bold",
+                              showAnswer &&
+                                option.label ===
+                                  currentItem.question.correct_answer
+                                ? "border-green-500 bg-green-500 text-white"
+                                : "border-border"
+                            )}
+                          >
+                            {option.label}
+                          </span>
+
+                          <span>{option.text}</span>
+                        </div>
+                      )
+                    )}
                   </div>
                 )}
 
@@ -307,9 +412,10 @@ export default function TestRevision() {
                 </Button>
               ) : (
                 <div className="mt-4 space-y-3">
-                  {currentItem.question.question_type !== "MCQ" && (
+                  {currentItem.question.correct_answer && (
                     <div className="rounded-lg border border-green-500/20 bg-green-500/10 px-4 py-2 text-sm font-semibold text-green-400">
-                      Answer: {currentItem.question.correct_answer}
+                      Answer:{" "}
+                      {currentItem.question.correct_answer}
                     </div>
                   )}
 
@@ -318,6 +424,7 @@ export default function TestRevision() {
                       <span className="mb-1 block font-semibold text-violet-400">
                         Explanation
                       </span>
+
                       {currentItem.question.explanation}
                     </div>
                   )}
