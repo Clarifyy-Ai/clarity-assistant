@@ -8,39 +8,48 @@ interface OverlayQuestionBarProps {
 }
 
 export function OverlayQuestionBar({ question }: OverlayQuestionBarProps) {
-  const hint_history       = useOverlayStore((s) => s.hint_history);
+  const hint_history = useOverlayStore((s) => s.hint_history);
   const hint_history_index = useOverlayStore((s) => s.hint_history_index);
   const navigateHintHistory = useOverlayStore((s) => s.navigateHintHistory);
-  const clearHint           = useOverlayStore((s) => s.clearHint);
-  const setCurrentQuestion  = useOverlayStore((s) => s.setCurrentQuestion);
+  const clearHint = useOverlayStore((s) => s.clearHint);
+  const setCurrentQuestion = useOverlayStore((s) => s.setCurrentQuestion);
 
-  const hasPrev = hint_history_index > 0;
-  const hasNext = hint_history_index < hint_history.length - 1;
-  const total   = hint_history.length;
+  const total = hint_history.length;
   const current = hint_history_index + 1;
+  const hasPrev = hint_history_index > 0;
+  const hasNext = hint_history_index < total - 1;
 
   return (
     <div className="flex items-start gap-2 px-3 py-2 border-b border-white/[0.06] bg-gradient-to-r from-indigo-500/[0.05] to-transparent animate-fade-in shrink-0">
-
-      {/* Question text */}
+      {/* Question */}
       <div className="flex-1 min-w-0">
         <div className="flex items-start gap-1.5">
-          <span className="text-[11px] font-bold text-indigo-400/60 uppercase tracking-widest shrink-0 mt-0.5">Q</span>
-          <p className="text-[12px] text-white/75 leading-snug flex-1 min-w-0 break-words">
+          <span className="text-[11px] font-bold text-indigo-400/60 uppercase tracking-widest mt-0.5">
+            Q
+          </span>
+          <p className="text-[12px] text-white/75 leading-snug break-words">
             {question}
           </p>
         </div>
       </div>
 
       {/* Controls */}
-      <div className="flex items-center gap-0.5 shrink-0 mt-0.5">
+      <div className="flex items-center gap-0.5 mt-0.5">
         {total > 1 && (
           <div className="flex items-center gap-0.5 mr-1">
-            <NavArrow direction="prev" disabled={!hasPrev} onClick={() => navigateHintHistory("prev")} />
-            <span className="text-[10px] font-mono text-white/20 px-0.5 tabular-nums">
+            <NavArrow
+              direction="prev"
+              disabled={!hasPrev}
+              onClick={() => navigateHintHistory("prev")}
+            />
+            <span className="text-[10px] font-mono text-white/20">
               {current}/{total}
             </span>
-            <NavArrow direction="next" disabled={!hasNext} onClick={() => navigateHintHistory("next")} />
+            <NavArrow
+              direction="next"
+              disabled={!hasNext}
+              onClick={() => navigateHintHistory("next")}
+            />
           </div>
         )}
 
@@ -82,7 +91,7 @@ function NavArrow({
       disabled={disabled}
       title={direction === "prev" ? "Previous question" : "Next question"}
       className={cn(
-        "w-5 h-5 flex items-center justify-center rounded-md transition-all text-[11px]",
+        "w-5 h-5 flex items-center justify-center rounded-md text-[11px] transition-all",
         disabled
           ? "text-white/10 cursor-not-allowed"
           : "text-white/40 hover:text-white hover:bg-white/8"
