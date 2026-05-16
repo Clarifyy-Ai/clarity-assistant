@@ -8,8 +8,8 @@ import type { ResumeTalkingPoints, ResumeContext } from "@/lib/ai/resumeFallback
 // ─────────────────────────────────────────────────────────────────
 
 export interface OverlayPosition {
-  x: number;   // px from left
-  y: number;   // px from top
+  x: number; // px from left
+  y: number; // px from top
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -95,10 +95,10 @@ interface OverlayStore {
   // Stealth opacity (persisted, 20–100)
   stealth_opacity: number;
 
-  // Peek mode
+  // Peek mode (used for minimized behavior)
   is_peek_active: boolean;
 
-  // Minimal mode (persisted)
+  // Minimal mode (persisted) — collapses body into pill (but still "visible")
   is_minimal_mode: boolean;
 
   // Hotkey help overlay
@@ -124,6 +124,15 @@ interface OverlayStore {
   toggleOverlay: () => void;
   setStealthMode: (enabled: boolean) => void;
   setProctorSafe: (enabled: boolean) => void;
+
+  /**
+   * ✅ Minimize behavior (NEW, does not break existing features)
+   * - Minimize: hides main overlay, keeps peek pill visible
+   * - Restore: shows overlay again
+   */
+  minimizeOverlay: () => void;
+  restoreOverlay: () => void;
+  toggleMinimize: () => void;
 
   // Actions — content
   setCurrentQuestion: (question: string) => void;
@@ -211,18 +220,15 @@ const DEFAULT_POSITION: OverlayPosition = (() => {
   const x = Math.max(16, Math.round((window.innerWidth - width) / 2));
   return { x, y: 16 };
 })();
-const DEFAULT_WIDTH  = 420;
-const DEFAULT_HEIGHT = 520;
-const MIN_WIDTH      = 320;
-const MIN_HEIGHT     = 280;
-const MAX_WIDTH      = 800;
-const MAX_HEIGHT     = 900;
 
-const HINT_STYLE_CYCLE: HintStyle[] = [
-  "full_answer",
-  "short_hints",
-  "keywords_only",
-];
+const DEFAULT_WIDTH = 420;
+const DEFAULT_HEIGHT = 520;
+const MIN_WIDTH = 320;
+const MIN_HEIGHT = 280;
+const MAX_WIDTH = 800;
+const MAX_HEIGHT = 900;
+
+const HINT_STYLE_CYCLE: HintStyle[] = ["full_answer", "short_hints", "keywords_only"];
 
 export const useOverlayStore = create<OverlayStore>()(
   persist(
@@ -283,27 +289,92 @@ export const useOverlayStore = create<OverlayStore>()(
       pinned_hints: [],
 
       // ── Visibility ─────────────────────────────────────────
-      showOverlay: () => set((s) => ({
-        is_visible: true,
-        session_start_time: s.session_start_time ?? Date.now(),
-        activity_log: [...s.activity_log, { event: "overlay_shown", timestamp: Date.now() }],
-      })),
-      hideOverlay: () => set((s) => ({
-        is_visible: false,
-        is_panic_visible: false,
-        is_peek_active: false,
-        activity_log: [...s.activity_log, { event: "overlay_hidden", timestamp: Date.now() }],
-      })),
-      toggleOverlay: () => set((s) => {
-        const willShow = !s.is_visible;
-        return {
-          is_visible: willShow,
-          activity_log: [...s.activity_log, { event: willShow ? "overlay_shown" : "overlay_hidden", timestamp: Date.now() }],
-          ...(willShow ? { session_start_time: s.session_start_time ?? Date.now() } : { is_panic_visible: false, is_peek_active: false }),
-        };
-      }),
+      showOverlay: () =>
+        set((s) => ({
+          is_visible: true,
+          // restore from minimized if needed
+          is_peek_active: false,
+          session_start_time: s.session_start_time ?? Date.now(),
+          activity_log: [...s.activity_log, { event: "overlay_shown", timestamp: Date.now() }],
+        })),
+
+      hideOverlay: () =>
+        set((s) => ({
+          is_visible: false,
+          is_panic_visible: false,
+          is_peek_active: false,
+          activity_log: [...s.activity_log, { event: "overlay_hidden", timestamp: Date.now() }],
+        })),
+
+      toggleOverlay: () =>
+        set((s) => {
+          const willShow = !s.is_visible;
+          return {
+            is_visible: willShow,
+            activity_log: [
+              ...s.activity_log,
+              { event: willShow ? "overlay_shown" : "overlay_hidden", timestamp: Date.now() },
+            ],
+            ...(willShow
+              ? {
+                  session_start_time: s.session_start_time ?? Date.now(),
+                  is_peek_active: false,
+                }
+              : { is_panic_visible: false, is_peek_active: false }),
+          };
+        }),
+
       setStealthMode: (enabled) => set({ is_stealth_mode: enabled }),
       setProctorSafe: (enabled) => set({ is_proctor_safe: enabled }),
+
+      // ── ✅ Minimize (NEW) ───────────────────────────────────
+      minimizeOverlay: () =>
+        set((s) => ({
+          // keep a draggable “peek” pill visible
+          is_visible: false,
+          is_peek_active: true,
+          // ensure pill mode for minimized
+          is_minimal_mode: true,
+          is_panic_visible: false,
+          activity_log: [...s.activity_log, { event: "overlay_minimized", timestamp: Date.now() }],
+        })),
+
+      restoreOverlay: () =>
+        set((s) => ({
+          is_visible: true,
+          is_peek_active: false,
+          session_start_time: s.session_start_time ?? Date.now(),
+          activity_log: [...s.activity_log, { event: "overlay_restored", timestamp: Date.now() }],
+        })),
+
+      toggleMinimize: () =>
+        set((s) => {
+          // If main overlay is visible, minimize; else if peek is active, restore.
+          if (s.is_visible) {
+            return {
+              is_visible: false,
+              is_peek_active: true,
+              is_minimal_mode: true,
+              is_panic_visible: false,
+              activity_log: [...s.activity_log, { event: "overlay_minimized", timestamp: Date.now() }],
+            };
+          }
+          if (s.is_peek_active) {
+            return {
+              is_visible: true,
+              is_peek_active: false,
+              session_start_time: s.session_start_time ?? Date.now(),
+              activity_log: [...s.activity_log, { event: "overlay_restored", timestamp: Date.now() }],
+            };
+          }
+          // If fully hidden, behave like show
+          return {
+            is_visible: true,
+            is_peek_active: false,
+            session_start_time: s.session_start_time ?? Date.now(),
+            activity_log: [...s.activity_log, { event: "overlay_shown", timestamp: Date.now() }],
+          };
+        }),
 
       // ── Content ────────────────────────────────────────────
       setCurrentQuestion: (current_question) =>
@@ -312,10 +383,12 @@ export const useOverlayStore = create<OverlayStore>()(
           hint_state: "listening" as const,
           current_hint: "",
           streaming_buffer: "",
-          questions_detected: current_question !== s.current_question ? s.questions_detected + 1 : s.questions_detected,
-          activity_log: current_question !== s.current_question
-            ? [...s.activity_log, { event: "question_detected", timestamp: Date.now() }]
-            : s.activity_log,
+          questions_detected:
+            current_question !== s.current_question ? s.questions_detected + 1 : s.questions_detected,
+          activity_log:
+            current_question !== s.current_question
+              ? [...s.activity_log, { event: "question_detected", timestamp: Date.now() }]
+              : s.activity_log,
         })),
 
       setHintState: (hint_state) => set({ hint_state }),
@@ -355,8 +428,7 @@ export const useOverlayStore = create<OverlayStore>()(
           screenshot_hint: null,
         }),
 
-      setError: (error_message) =>
-        set({ error_message, hint_state: "error" }),
+      setError: (error_message) => set({ error_message, hint_state: "error" }),
 
       setOfflineFallback: (hint) =>
         set({
@@ -383,9 +455,10 @@ export const useOverlayStore = create<OverlayStore>()(
       navigateHintHistory: (direction) =>
         set((state) => {
           if (state.hint_history.length === 0) return {};
-          const newIndex = direction === "prev"
-            ? Math.max(0, state.hint_history_index - 1)
-            : Math.min(state.hint_history.length - 1, state.hint_history_index + 1);
+          const newIndex =
+            direction === "prev"
+              ? Math.max(0, state.hint_history_index - 1)
+              : Math.min(state.hint_history.length - 1, state.hint_history_index + 1);
           if (newIndex === state.hint_history_index) return {};
           const entry = state.hint_history[newIndex];
           return {
@@ -400,10 +473,11 @@ export const useOverlayStore = create<OverlayStore>()(
       // ── Position & Size ────────────────────────────────────
       setPosition: (position) => set({ position }),
       resetPosition: () => set({ position: DEFAULT_POSITION }),
-      setOverlaySize: (width, height) => set({
-        overlay_width:  Math.max(MIN_WIDTH,  Math.min(MAX_WIDTH,  width)),
-        overlay_height: Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, height)),
-      }),
+      setOverlaySize: (width, height) =>
+        set({
+          overlay_width: Math.max(MIN_WIDTH, Math.min(MAX_WIDTH, width)),
+          overlay_height: Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, height)),
+        }),
 
       // ── Session Controls ─────────────────────────────────
       setAutoGenerate: (auto_generate) => set({ auto_generate }),
@@ -414,10 +488,11 @@ export const useOverlayStore = create<OverlayStore>()(
       setActiveTab: (active_tab) => set({ active_tab }),
 
       // ── Chat History ────────────────────────────────────────
-      addChatMessage: (msg) => set((s) => ({
-        chat_history: [...s.chat_history, msg],
-        is_chat_generating: false,
-      })),
+      addChatMessage: (msg) =>
+        set((s) => ({
+          chat_history: [...s.chat_history, msg],
+          is_chat_generating: false,
+        })),
       clearChatHistory: () => set({ chat_history: [], is_chat_generating: false }),
       setChatGenerating: (is_chat_generating) => set({ is_chat_generating }),
 
@@ -426,85 +501,92 @@ export const useOverlayStore = create<OverlayStore>()(
       setResumeTalkingPoints: (resume_talking_points) => set({ resume_talking_points }),
 
       // ── Pinned Hints ────────────────────────────────────────
-      togglePinHint: (hint, question) => set((s) => {
-        const alreadyPinned = s.pinned_hints.some((p) => p.hint === hint);
-        if (alreadyPinned) {
-          return { pinned_hints: s.pinned_hints.filter((p) => p.hint !== hint) };
-        }
-        const newPin = {
-          id: `pin-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
-          question,
-          hint,
-          timestamp: Date.now(),
-        };
-        return { pinned_hints: [...s.pinned_hints, newPin] };
-      }),
+      togglePinHint: (hint, question) =>
+        set((s) => {
+          const alreadyPinned = s.pinned_hints.some((p) => p.hint === hint);
+          if (alreadyPinned) {
+            return { pinned_hints: s.pinned_hints.filter((p) => p.hint !== hint) };
+          }
+          const newPin = {
+            id: `pin-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+            question,
+            hint,
+            timestamp: Date.now(),
+          };
+          return { pinned_hints: [...s.pinned_hints, newPin] };
+        }),
       clearPinnedHints: () => set({ pinned_hints: [] }),
 
       // ── Network ────────────────────────────────────────────
       setNetworkColor: (network_color) => set({ network_color }),
 
       // ── Panic ──────────────────────────────────────────────
-      showPanic: (panic_content) =>
-        set({ is_panic_visible: true, panic_content, is_visible: true }),
+      showPanic: (panic_content) => set({ is_panic_visible: true, panic_content, is_visible: true, is_peek_active: false }),
       hidePanic: () => set({ is_panic_visible: false }),
 
       // ── Session Lifecycle ──────────────────────────────────
-      resetSessionState: () => set({
-        current_question: "",
-        current_hint: "",
-        hint_state: "idle" as const,
-        streaming_buffer: "",
-        error_message: null,
-        hint_history: [],
-        hint_history_index: -1,
-        questions_detected: 0,
-        viewed_question: null,
-        is_panic_visible: false,
-        panic_content: null,
-        screenshot_hint: null,
-        is_screenshot_loading: false,
-        network_color: "green" as const,
-        active_tab: "answer" as const,
-        session_start_time: null,
-        activity_log: [],
-        is_peek_active: false,
-        is_hotkey_help_visible: false,
-        chat_history: [],
-        is_chat_generating: false,
-        resume_context: null,
-        resume_talking_points: null,
-        pinned_hints: [],
-        session_call_type: "interview" as const,
-      }),
+      resetSessionState: () =>
+        set({
+          current_question: "",
+          current_hint: "",
+          hint_state: "idle" as const,
+          streaming_buffer: "",
+          error_message: null,
+          hint_history: [],
+          hint_history_index: -1,
+          questions_detected: 0,
+          viewed_question: null,
+          is_panic_visible: false,
+          panic_content: null,
+          screenshot_hint: null,
+          is_screenshot_loading: false,
+          network_color: "green" as const,
+          active_tab: "answer" as const,
+          session_start_time: null,
+          activity_log: [],
+          is_peek_active: false,
+          is_hotkey_help_visible: false,
+          chat_history: [],
+          is_chat_generating: false,
+          resume_context: null,
+          resume_talking_points: null,
+          pinned_hints: [],
+          session_call_type: "interview" as const,
+        }),
 
       // ── Coding ─────────────────────────────────────────────
       setScreenshotLoading: (is_screenshot_loading) => set({ is_screenshot_loading }),
-      setScreenshotHint: (screenshot_hint) =>
-        set({ screenshot_hint, is_screenshot_loading: false }),
+      setScreenshotHint: (screenshot_hint) => set({ screenshot_hint, is_screenshot_loading: false }),
 
       // ── Activity Timer ──────────────────────────────────────
-      startActivityTimer: () => set({
-        session_start_time: Date.now(),
-        activity_log: [{ event: "session_started", timestamp: Date.now() }],
-      }),
-      logActivity: (event) => set((s) => ({
-        activity_log: [...s.activity_log, { event, timestamp: Date.now() }],
-      })),
+      startActivityTimer: () =>
+        set({
+          session_start_time: Date.now(),
+          activity_log: [{ event: "session_started", timestamp: Date.now() }],
+        }),
+      logActivity: (event) =>
+        set((s) => ({
+          activity_log: [...s.activity_log, { event, timestamp: Date.now() }],
+        })),
 
       // ── Stealth Opacity ─────────────────────────────────────
-      setStealthOpacity: (opacity) => set({
-        stealth_opacity: Math.max(20, Math.min(100, opacity)),
-      }),
+      setStealthOpacity: (opacity) =>
+        set({
+          stealth_opacity: Math.max(20, Math.min(100, opacity)),
+        }),
 
       // ── Peek Mode ───────────────────────────────────────────
       setPeekActive: (is_peek_active) => set({ is_peek_active }),
 
       // ── Minimal Mode ────────────────────────────────────────
-      setMinimalMode: (is_minimal_mode) => set((s) => ({
-        is_minimal_mode,
-        active_tab: is_minimal_mode && s.active_tab !== "answer" && s.active_tab !== "resume" ? "answer" as const : s.active_tab,
-      })),
+      setMinimalMode: (is_minimal_mode) =>
+        set((s) => ({
+          is_minimal_mode,
+          active_tab:
+            is_minimal_mode && s.active_tab !== "answer" && s.active_tab !== "resume"
+              ? ("answer" as const)
+              : s.active_tab,
+        })),
 
       // ── Hotkey Help ─────────────────────────────────────────
       setHotkeyHelpVisible: (is_hotkey_help_visible) => set({ is_hotkey_help_visible }),
