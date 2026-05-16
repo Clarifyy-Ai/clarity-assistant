@@ -7,46 +7,23 @@
 //   Settings → Edge Functions → Secrets → Add new secret
 //
 //   Key:   ALLOWED_ORIGINS
-//   Value: https://clarityapp.ai,https://www.clarityapp.ai
+//   Value: https://clarify.ai.sltfinanceindia.com,https://clarityapp.ai,https://www.clarityapp.ai
 //
-//   Localhost is always allowed in non-production (when ALLOWED_ORIGINS
-//   includes no clarityapp.ai domain, or when APP_ENV=development).
+//   Localhost is always allowed for local development.
 //   You never need to add localhost to ALLOWED_ORIGINS manually.
-//
-// HOW CORS HEADERS WORK (why a static object is wrong):
-//   Access-Control-Allow-Origin accepts exactly ONE origin value or "*".
-//   To support multiple origins (prod + staging + localhost), you must:
-//     1. Read the Origin header from the request
-//     2. Check if it's in your allowlist
-//     3. Echo that exact origin back in the response
-//   A static object with "*" cannot do this — hence getCorsHeaders(req).
-//
-// MIGRATION FOR EXISTING EDGE FUNCTIONS:
-//   Replace:  headers: { ...corsHeaders, "Content-Type": "application/json" }
-//   With:     headers: { ...getCorsHeaders(req), "Content-Type": "application/json" }
-//
-//   Replace:  if (cors) return cors;
-//   Keep as-is — handleCors(req) already calls getCorsHeaders(req) internally.
 
 /* ─── ALLOWED ORIGINS ────────────────────────────────────────────────────── */
 
-/**
- * Returns the set of allowed origins for the current deployment.
- *
- * Priority order:
- *   1. ALLOWED_ORIGINS env var (comma-separated, set in Supabase Secrets)
- *   2. Hardcoded production fallback (prevents total lockout if secret is missing)
- *
- * Localhost variants are always included — edge functions are never called
- * from localhost in production (Vite dev server uses the Supabase anon key
- * which is already public, and all secrets stay server-side).
- */
+let _cachedOrigins: Set<string> | null = null;
+
 function getAllowedOrigins(): Set<string> {
+  if (_cachedOrigins) return _cachedOrigins;
+
   const origins = new Set<string>([
     // Always allow local development origins
     "http://localhost:3000",
-    "http://localhost:5173",   // Vite default
-    "http://localhost:4173",   // Vite preview
+    "http://localhost:5173",
+    "http://localhost:4173",
     "http://127.0.0.1:5173",
     "http://127.0.0.1:3000",
   ]);
@@ -54,14 +31,15 @@ function getAllowedOrigins(): Set<string> {
   const envOrigins = Deno.env.get("ALLOWED_ORIGINS") ?? "";
 
   if (envOrigins.trim()) {
-    // Parse comma-separated list from secret, trim whitespace around each entry
     for (const origin of envOrigins.split(",")) {
       const trimmed = origin.trim();
       if (trimmed) origins.add(trimmed);
     }
   } else {
-    // Fallback: hardcoded production domains
-    // Update these when your production domain changes.
+    // ── FALLBACK: hardcoded production domains ──────────────────────────
+    // These are used when ALLOWED_ORIGINS secret is not yet configured.
+    // Add your actual deployed domain here.
+    origins.add("https://clarify.ai.sltfinanceindia.com"); // ← actual production domain
     origins.add("https://clarityapp.ai");
     origins.add("https://www.clarityapp.ai");
     origins.add("https://app.clarityapp.ai");
@@ -71,12 +49,14 @@ function getAllowedOrigins(): Set<string> {
     );
   }
 
+  _cachedOrigins = origins;
   return origins;
 }
 
 /* ─── CORS HEADER BUILDER ────────────────────────────────────────────────── */
 
-const ALLOWED_METHODS = "GET, POST, OPTIONS";
+// Added HEAD, PUT, DELETE — required for networkMonitor ping + REST operations
+const ALLOWED_METHODS = "GET, POST, PUT, DELETE, OPTIONS, HEAD";
 
 const ALLOWED_HEADERS = [
   "authorization",
@@ -105,21 +85,15 @@ export function getCorsHeaders(req: Request): Record<string, string> {
     "Access-Control-Allow-Methods": ALLOWED_METHODS,
     "Access-Control-Allow-Headers": ALLOWED_HEADERS,
     "Access-Control-Max-Age":       "86400",
-    "Vary":                         "Origin",  // tells CDNs the response varies by Origin
+    "Vary":                         "Origin",
   };
 
   if (allowedOrigins.has(requestOrigin)) {
-    // Echo the exact origin back — only way to support multiple allowed origins
     base["Access-Control-Allow-Origin"] = requestOrigin;
-    // Allow cookies/Authorization headers to be included in cross-origin requests
     base["Access-Control-Allow-Credentials"] = "true";
   } else if (requestOrigin) {
-    // Origin present but not allowed — log for debugging, return no ACAO header
-    // Browser will block the response. Do NOT return "*" as fallback.
     console.warn(`[cors] Rejected origin: ${requestOrigin}`);
   }
-  // If no Origin header: same-origin or non-browser request (curl, server-to-server)
-  // No CORS headers needed — request proceeds normally.
 
   return base;
 }
@@ -128,10 +102,8 @@ export function getCorsHeaders(req: Request): Record<string, string> {
 
 /**
  * Handles CORS preflight OPTIONS requests.
- * Returns a 200 response with the correct CORS headers if origin is allowed,
- * or a 403 if the origin is not in the allowlist.
  *
- * Usage in every edge function (unchanged call signature):
+ * Usage at the top of every edge function (unchanged):
  *   const cors = handleCors(req);
  *   if (cors) return cors;
  */
@@ -142,7 +114,7 @@ export function handleCors(req: Request): Response | null {
   const allowedOrigins = getAllowedOrigins();
 
   if (!requestOrigin) {
-    // No Origin header on OPTIONS — unusual but not invalid (e.g. server-to-server)
+    // No Origin header on OPTIONS — server-to-server request, allow it
     return new Response(null, { status: 204, headers: getCorsHeaders(req) });
   }
 
@@ -158,13 +130,7 @@ export function handleCors(req: Request): Response | null {
   }
 
   return new Response(null, {
-    status:  204,   // No Content — standard for preflight
+    status:  204,
     headers: getCorsHeaders(req),
   });
 }
-
-// NOTE: The previously-exported deprecated `corsHeaders` constant (with
-// Access-Control-Allow-Origin: "*") has been removed in the security hardening
-// pass. All edge functions must now use getCorsHeaders(req) so that responses
-// echo only allowlisted origins. If you see an import error referencing
-// `corsHeaders`, switch the call site to `getCorsHeaders(req)`.
