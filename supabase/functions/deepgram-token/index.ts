@@ -16,8 +16,9 @@ Deno.serve(async (req: Request) => {
 
   try {
     /* ── AUTH ──────────────────────────────────────────────────────────── */
-    const db         = createServiceClient();
-    const authHeader = req.headers.get("authorization") ?? req.headers.get("Authorization") ?? "";
+    const db = createServiceClient();
+    const authHeader =
+      req.headers.get("authorization") ?? req.headers.get("Authorization") ?? "";
 
     if (!new RegExp("^bearer\\s+", "i").test(authHeader)) {
       return new Response(JSON.stringify({ error: "Unauthorized" }), {
@@ -37,7 +38,7 @@ Deno.serve(async (req: Request) => {
     }
 
     /* ── ENV VALIDATION ────────────────────────────────────────────────── */
-    const DEEPGRAM_API_KEY    = Deno.env.get("DEEPGRAM_API_KEY");
+    const DEEPGRAM_API_KEY = Deno.env.get("DEEPGRAM_API_KEY");
     const DEEPGRAM_PROJECT_ID = Deno.env.get("DEEPGRAM_PROJECT_ID");
 
     if (!DEEPGRAM_API_KEY) {
@@ -53,24 +54,26 @@ Deno.serve(async (req: Request) => {
       return new Response(
         JSON.stringify({
           error: "Transcription service misconfigured. Contact support.",
-          code:  "MISSING_PROJECT_ID",
+          code: "MISSING_PROJECT_ID",
         }),
         { status: 503, headers: { ...headers, "Content-Type": "application/json" } },
       );
     }
 
     /* ── CREATE SCOPED TEMPORARY KEY ───────────────────────────────────── */
+    // Deepgram indicates a temp key only needs ['usage:write'] for transcription. 【1-34e357】
+    // NOTE: The MANAGEMENT key (DEEPGRAM_API_KEY) used here must include keys:write to create keys. 【1-34e357】
     const tempKeyRes = await fetch(
       `https://api.deepgram.com/v1/projects/${DEEPGRAM_PROJECT_ID}/keys`,
       {
-        method:  "POST",
+        method: "POST",
         headers: {
-          Authorization:  `Token ${DEEPGRAM_API_KEY}`,
+          Authorization: `Token ${DEEPGRAM_API_KEY}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
-          comment:                `session-${user.id.slice(0, 8)}-${Date.now()}`,
-          scopes:                 ["usage:write"],
+          comment: `session-${user.id.slice(0, 8)}-${Date.now()}`,
+          scopes: ["usage:write"], // ✅ correct for STT usage 【1-34e357】
           time_to_live_in_seconds: TOKEN_TTL_SECONDS,
         }),
       },
@@ -80,16 +83,15 @@ Deno.serve(async (req: Request) => {
       const errBody = await tempKeyRes.text().catch(() => "");
       console.error("[deepgram-token] Deepgram key creation failed:", tempKeyRes.status, errBody);
       return new Response(
-        JSON.stringify({ error: "Could not create transcription session. Please retry." }),
+        JSON.stringify({
+          error: "Could not create transcription session. Please retry.",
+          details: "If this persists, ensure DEEPGRAM_API_KEY has keys:write scope.",
+        }),
         { status: 502, headers: { ...headers, "Content-Type": "application/json" } },
       );
     }
 
-    const keyData = await tempKeyRes.json() as {
-      key_id?: string;
-      key?:    string;
-    };
-
+    const keyData = await tempKeyRes.json() as { key_id?: string; key?: string };
     const tempKey = keyData?.key;
 
     if (!tempKey) {
@@ -103,13 +105,13 @@ Deno.serve(async (req: Request) => {
     /* ── RETURN SCOPED TOKEN ────────────────────────────────────────────── */
     return new Response(
       JSON.stringify({
-        token:      tempKey,
+        token: tempKey,
         expires_in: TOKEN_TTL_SECONDS,
-        key_id:     keyData.key_id ?? null,
-        type:       "scoped",
+        key_id: keyData.key_id ?? null,
+        type: "scoped",
       }),
       {
-        status:  200,
+        status: 200,
         headers: { ...headers, "Content-Type": "application/json" },
       },
     );
