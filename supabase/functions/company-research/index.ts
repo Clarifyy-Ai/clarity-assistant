@@ -1,78 +1,138 @@
-// supabase/functions/company-research/index.ts — PRODUCTION READY (ALL FEATURES PRESERVED)
-
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
-import { 
-  requireAuth, 
-  parseBody, 
-  successResponse, 
-  errorResponse, 
-  deductCredits, 
-  callAI, 
-  log 
+import {
+  requireAuth,
+  parseBody,
+  errorResponse,
+  deductCredits,
+  callAI,
+  log,
 } from "../_shared/utils.ts";
 import { parseJSON } from "../_shared/gemini.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
 
+const FN = "company-research";
+const CREDIT_COST = 20;
+
 const SYSTEM_PROMPT = `
 You are an expert career and company research assistant.
-Provide structured, factual, and concise company interview insights.
-Never output markdown. Only output valid JSON. Be specific and practical.
+Provide structured, factual, concise interview insights.
+Return ONLY valid JSON.
 `;
+
+function withTimeout<T>(promise: Promise<T>, ms = 20000): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error("Request timeout")), ms)
+    ),
+  ]);
+}
+
+async function retry<T>(fn: () => Promise<T>, retries = 2): Promise<T> {
+  let lastError;
+
+  for (let i = 0; i <= retries; i++) {
+    try {
+      return await fn();
+    } catch (err) {
+      lastError = err;
+      await new Promise((r) => setTimeout(r, 1000 * (i + 1)));
+    }
+  }
+
+  throw lastError;
+}
+
+function validateResponse(data: any) {
+  return {
+    overview:
+      typeof data?.overview === "string"
+        ? data.overview
+        : "No overview available.",
+
+    industry:
+      typeof data?.industry === "string"
+        ? data.industry
+        : "",
+
+    tags: Array.isArray(data?.tags)
+      ? data.tags.slice(0, 20)
+      : [],
+
+    interview_process: Array.isArray(data?.interview_process)
+      ? data.interview_process
+      : [],
+
+    questions: Array.isArray(data?.questions)
+      ? data.questions
+      : [],
+
+    values: Array.isArray(data?.values)
+      ? data.values
+      : [],
+
+    tips: Array.isArray(data?.tips)
+      ? data.tips
+      : [],
+
+    watch_outs: Array.isArray(data?.watch_outs)
+      ? data.watch_outs
+      : [],
+  };
+}
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
-  
-  const FN = "company-research";
+
+  const requestId = crypto.randomUUID();
 
   try {
-    /* ---------------------------------------------------------
-       AUTHENTICATE USER SAFELY
-    --------------------------------------------------------- */
+    log(FN, "info", "Request started", { requestId });
+
     const auth = await requireAuth(req);
     const userId = auth.userId;
 
-    /* ---------------------------------------------------------
-       PLAN GATE — Company research is a starter+ feature.
-       Frontend hides this behind FEATURE_PLAN_GATE.COMPANY_RESEARCH,
-       but a direct EF call would otherwise bypass it.
-    --------------------------------------------------------- */
     const planGate = requirePlan(auth.planId, "starter", req);
     if (planGate) return planGate;
 
-    /* ---------------------------------------------------------
-       PARSE & SANITIZE INPUT
-    --------------------------------------------------------- */
     const body = await parseBody<any>(req);
+
     const rawCompany = String(body.company || "").trim();
-    const rawRole = body.role ? String(body.role).trim() : "";
+    const rawRole = String(body.role || "").trim();
 
     if (!rawCompany) {
-      return errorResponse("Missing company name", "INVALID_REQUEST", 400);
+      return errorResponse(
+        "Missing company name",
+        "INVALID_REQUEST",
+        400
+      );
     }
 
-    // Exact preservation of original sanitization limits
     const company = rawCompany.slice(0, 100);
     const role = rawRole.slice(0, 100);
 
-    /* ---------------------------------------------------------
-       CREDIT DEDUCTION (Preserved 8 credits cost)
-    --------------------------------------------------------- */
-    const credit = await deductCredits(userId, "company_research" as any, 20);
+    const credit = await deductCredits(
+      userId,
+      "company_research" as any,
+      CREDIT_COST
+    );
+
     if (!credit.success) {
-      return errorResponse("Insufficient credits. Company research requires 20 credits.", "INSUFFICIENT_CREDITS", 402);
+      return errorResponse(
+        "Insufficient credits.",
+        "INSUFFICIENT_CREDITS",
+        402
+      );
     }
 
-    /* ---------------------------------------------------------
-       SAFE PROMPT CONSTRUCTION
-    --------------------------------------------------------- */
     const prompt = `
 Generate a company research brief for interview preparation.
 
 Company: ${company}
 Role: ${role || "General interview"}
 
-Return ONLY valid JSON in this structure:
+Return ONLY valid JSON:
 
 {
   "overview": "",
@@ -84,37 +144,50 @@ Return ONLY valid JSON in this structure:
   "tips": [],
   "watch_outs": []
 }
-
-Notes:
-- Overview: 3-4 sentence summary.
-- Questions: Make them specific to ${company}'s interview style.
-- Include both behavioral and technical questions.
-- Do not use markdown. Do not add commentary. Only return JSON.
 `;
 
-    /* ---------------------------------------------------------
-       CALL AI & PARSE JSON OUTPUT (refund on AI failure)
-    --------------------------------------------------------- */
     let aiResult;
+
     try {
-      aiResult = await callAI({
-        model: "gemini-2.0-flash",
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: prompt }
-        ],
-        maxTokens: 2000,
-        temperature: 0.5
+      aiResult = await withTimeout(
+        retry(() =>
+          callAI({
+            model: "gemini-2.0-flash",
+            messages: [
+              { role: "system", content: SYSTEM_PROMPT },
+              { role: "user", content: prompt },
+            ],
+            maxTokens: 2000,
+            temperature: 0.5,
+          })
+        ),
+        20000
+      );
+
+      if (!aiResult?.text) {
+        throw new Error("Empty AI response");
+      }
+    } catch (err) {
+      await deductCredits(
+        userId,
+        "refund_company_research" as any,
+        -CREDIT_COST
+      );
+
+      log(FN, "error", "AI failed", {
+        requestId,
+        error: String(err),
       });
-      if (!aiResult?.text) throw new Error("AI returned empty response");
-    } catch (aiErr) {
-      await deductCredits(userId, "refund_company_research" as any, -20);
-      log(FN, "error", "AI call failed, credits refunded", { userId, err: String(aiErr) });
-      return errorResponse("Company research temporarily unavailable. Credits refunded.", "AI_ERROR", 502);
+
+      return errorResponse(
+        "Company research unavailable. Credits refunded.",
+        "AI_ERROR",
+        502
+      );
     }
 
-    const data = parseJSON(aiResult.text, {
-      overview: "No data available.",
+    const parsed = parseJSON(aiResult.text, {
+      overview: "",
       industry: "",
       tags: [],
       interview_process: [],
@@ -124,15 +197,45 @@ Notes:
       watch_outs: [],
     });
 
-    log(FN, "info", "Company research generated", { userId, company });
+    const data = validateResponse(parsed);
 
-    return new Response(JSON.stringify(data), {
-      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+    log(FN, "info", "Success", {
+      requestId,
+      company,
+      userId,
     });
 
+    return new Response(
+      JSON.stringify({
+        success: true,
+        data,
+      }),
+      {
+        headers: {
+          ...getCorsHeaders(req),
+          "Content-Type": "application/json",
+        },
+      }
+    );
   } catch (err) {
-    if (err instanceof Response) return err;
-    log(FN, "error", "company-research error", err);
-    return errorResponse("Internal error", "INTERNAL_ERROR", 500);
+    log(FN, "error", "Unhandled error", {
+      requestId,
+      error: String(err),
+    });
+
+    return new Response(
+      JSON.stringify({
+        success: false,
+        error: "Internal server error",
+        code: "INTERNAL_ERROR",
+      }),
+      {
+        status: 500,
+        headers: {
+          ...getCorsHeaders(req),
+          "Content-Type": "application/json",
+        },
+      }
+    );
   }
 });
