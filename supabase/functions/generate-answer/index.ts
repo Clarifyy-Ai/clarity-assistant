@@ -101,12 +101,12 @@ Deno.serve(async (req: Request) => {
     // ── REFUND HELPER (pre-stream failure) ───────────────────────
     const refundCredits = async (reason: string) => {
       try {
-        // Re-add COST to credits and log a refund transaction via helper.
-        await db.rpc("refund_credits", {
-          p_user_id: user.id,
-          p_amount:  COST,
-          p_reason:  reason,
-        });
+        // The deployed refund_credits RPC takes a single `p_cost` argument
+        // and uses auth.uid() internally. Calling it with the old
+        // (p_user_id, p_amount, p_reason) signature throws and silently
+        // burns the user's credits.
+        await db.rpc("refund_credits", { p_cost: COST });
+        console.log(`[generate-answer] Refunded ${COST} credits: ${reason}`);
       } catch (e) {
         console.error("[generate-answer] Refund failed:", e);
       }

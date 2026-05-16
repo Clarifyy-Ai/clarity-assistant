@@ -7,6 +7,7 @@ import { useDocumentStore } from "@/store/documentStore";
 import { useAudioSession } from "./useAudioSession";
 import { useAudioStore } from "@/store/audioStore";
 import { routeHint } from "@/lib/ai/modelRouter";
+import { streamFullAnswer } from "@/lib/ai/geminiClient";
 import { checkCredits, deductCredits } from "@/lib/billing/creditsManager";
 import { buildResumeContext, generateResumeTalkingPoints, formatTalkingPointsAsHint } from "@/lib/ai/resumeFallback";
 import { hotkeyManager } from "@/lib/overlay/hotkeys";
@@ -138,7 +139,7 @@ export function useLiveCopilot({ config, overlayRef, sessionType = "live", exist
     }
   }
 
-  // ── Generate full answer via generate-answer edge function ──────
+  // ── Generate full answer via generate-answer edge function (streaming) ──
   async function requestFullAnswer(
     question: string,
     sessionId: string,
@@ -150,51 +151,33 @@ export function useLiveCopilot({ config, overlayRef, sessionType = "live", exist
     const resumeCtx = overlay.resume_context;
     const cfg = configRef.current;
 
-    const { data, error } = await supabase.functions.invoke("generate-answer", {
-      body: {
-        question,
-        transcript:     "",
-        resume_context: resumeCtx?.summary ?? "",
-        interview_type: cfg.interview_type ?? "behavioral",
-        target_company: cfg.company ?? "",
-        session_id:     sessionId,
+    // Build a minimal CoachingContext compatible with streamFullAnswer
+    const context = {
+      session_type: cfg.interview_type ?? "behavioral",
+      target_company: cfg.company ?? "",
+      last_transcript: "",
+      resume_experience_summary: resumeCtx?.summary ?? "",
+      hint_style: "concise",
+      simple_language: false,
+    } as unknown as Parameters<typeof streamFullAnswer>[0]["context"];
+
+    let fullText = "";
+    await streamFullAnswer({
+      question,
+      context,
+      simpleLanguage: false,
+      onChunk: (chunk) => {
+        fullText += chunk;
+        useOverlayStore.getState().appendStreamChunk(chunk);
       },
+      onDone: () => {
+        if (fullText) useOverlayStore.getState().commitStreamedHint();
+      },
+      onError: (err) => {
+        useOverlayStore.getState().setError(err.message || "Failed to generate full answer");
+      },
+      signal,
     });
-
-    if (error) {
-      useOverlayStore.getState().setError(
-        error.message || "Failed to generate full answer"
-      );
-      return;
-    }
-
-    // The edge function returns SSE via streaming.
-    // supabase.functions.invoke returns the full response body as text/json
-    // when Content-Type is text/event-stream, we need to parse SSE lines.
-    if (typeof data === "string") {
-      // Parse SSE data
-      const lines = data.split("\n");
-      let fullText = "";
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
-        const payload = line.slice(6).trim();
-        if (!payload || payload === "[DONE]") continue;
-        try {
-          const parsed = JSON.parse(payload);
-          if (parsed.text) {
-            fullText += parsed.text;
-            useOverlayStore.getState().appendStreamChunk(parsed.text);
-          }
-        } catch {
-          // skip malformed chunks
-        }
-      }
-      if (fullText) {
-        useOverlayStore.getState().commitStreamedHint();
-      }
-    } else if (data?.error) {
-      useOverlayStore.getState().setError(data.error);
-    }
   }
 
   // ── Request live hint ──────────────────────────────────────────
@@ -323,6 +306,11 @@ export function useLiveCopilot({ config, overlayRef, sessionType = "live", exist
       simpleLanguage: useOverlayStore.getState().simple_language,
       callType:       useOverlayStore.getState().session_call_type,
       language:       useOverlayStore.getState().session_language,
+      // Use the SSE-streaming full_answer pipeline — same reliable path used
+      // by the hint generator. Credits are deducted server-side by the
+      // generate-answer EF, so we do NOT call client-side deductCredits here
+      // (would double-charge).
+      answerMode: "full_answer",
       onChunk: (chunk) => { chatBuffer += chunk; },
       onDone: async () => {
         if (chatBuffer) {
@@ -333,11 +321,13 @@ export function useLiveCopilot({ config, overlayRef, sessionType = "live", exist
           });
         } else {
           useOverlayStore.getState().setChatGenerating(false);
+          useOverlayStore.getState().addChatMessage({
+            role: "assistant",
+            text: "No response received. Please try again.",
+            timestamp: Date.now(),
+          });
         }
-        const result = await deductCredits(selectedModel, sessionIdRef.current);
-        if (result.success) {
-          useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
-        }
+        useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
       },
       onError: (error) => {
         useOverlayStore.getState().setChatGenerating(false);

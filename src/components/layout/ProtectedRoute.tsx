@@ -27,6 +27,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
   const profile = useAuthStore((s) => s.profile);
   const error   = useAuthStore((s) => s.error);
   const isAdmin = useAuthStore((s) => s.isAdmin);
+  const isProfileLoaded = useAuthStore((s) => s.isProfileLoaded);
   const isOnboarded = useAuthStore((s) => s.isOnboarded);
 
   const location = useLocation();
@@ -66,7 +67,10 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     return <Navigate to={loginPath} state={{ from: location }} replace />;
   }
 
-  // 4) Admin check
+  // 4) Admin check — wait for profile (and role) to finish loading before denying
+  if (requireAdmin && !isProfileLoaded) {
+    return <div className="min-h-screen bg-background" />;
+  }
   if (requireAdmin && !isAdmin) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
