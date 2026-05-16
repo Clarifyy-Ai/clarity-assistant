@@ -1,21 +1,30 @@
-import { EDGE_BASE, SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/env";
+// src/lib/network/networkMonitor.ts
+//
+// Continuously probes network quality and updates store.
+// Drives the overlay indicator color and model auto-downgrade.
+
+import { SUPABASE_URL } from "@/lib/env";
 import { useNetworkStore } from "@/store/networkStore";
 import { useOverlayStore } from "@/store/overlayStore";
 
 // ─────────────────────────────────────────────────────────────────
-// Network Monitor
-// Continuously probes network quality and updates store.
-// Drives the overlay indicator color and model auto-downgrade.
+// Constants
 // ─────────────────────────────────────────────────────────────────
 
-const PROBE_INTERVAL_MS  = 10_000;   // probe every 10s
-const FAST_PROBE_TIMEOUT = 5_000;    // abort probe if no response in 5s
+const PROBE_INTERVAL_MS  = 10_000;  // probe every 10s
+const FAST_PROBE_TIMEOUT = 5_000;   // abort probe if no response in 5s
 
-// Lightweight probe endpoint — returns HTTP 200 with minimal payload
-const PROBE_URL = `${SUPABASE_URL}/functions/v1/ping`;
+// FIX 1: Don't probe your own edge function — it requires CORS + auth
+// and causes hundreds of ERR_FAILED errors in the console.
+// Use a reliable public endpoint instead (Google favicon is ~200 bytes,
+// always available, no auth, no CORS needed).
+const PROBE_URL = "https://www.google.com/favicon.ico";
+
+// Kept as fallback RTT reference — used if you ever switch back to own endpoint
+// const PROBE_URL = `${SUPABASE_URL}/functions/v1/ping`;
 
 // ─────────────────────────────────────────────────────────────────
-// Network Monitor class
+// NetworkMonitor class
 // ─────────────────────────────────────────────────────────────────
 
 export class NetworkMonitor {
@@ -35,7 +44,6 @@ export class NetworkMonitor {
     if (this.isRunning) return;
     this.isRunning = true;
 
-    // Listen to browser online/offline events
     window.addEventListener("online",  this.onlineHandler);
     window.addEventListener("offline", this.offlineHandler);
 
@@ -78,17 +86,27 @@ export class NetworkMonitor {
     const startTime = Date.now();
 
     try {
-      await fetch(PROBE_URL, {
-        method:  "HEAD",
-        cache:   "no-cache",
-        signal:  controller.signal,
-        headers: { "x-probe": "1" },
+      // FIX 2: Use GET instead of HEAD.
+      // HEAD requests are often blocked by CORS preflight on edge functions,
+      // and some CDNs/proxies don't respond to HEAD the same way as GET.
+      // GET on a tiny public resource gives accurate RTT with zero auth issues.
+      const res = await fetch(PROBE_URL, {
+        method: "GET",
+        cache:  "no-store",   // FIX 3: "no-store" prevents caching of probe response
+        signal: controller.signal,
+        // FIX 4: Removed "x-probe" custom header — custom headers on cross-origin
+        // requests trigger a CORS preflight even on public URLs, defeating the purpose.
       });
 
-      const rtt = Date.now() - startTime;
-      networkStore.recordRTT(rtt);
+      if (!res.ok && res.status !== 0) {
+        // Non-2xx but reachable — network is degraded, not offline
+        networkStore.recordRTT(FAST_PROBE_TIMEOUT - 1);
+      } else {
+        const rtt = Date.now() - startTime;
+        networkStore.recordRTT(rtt);
+      }
 
-      // Update overlay color
+      // Update overlay color based on latest RTT
       useOverlayStore.getState().setNetworkColor(
         networkStore.getOverlayColor()
       );
@@ -99,11 +117,22 @@ export class NetworkMonitor {
       }
 
     } catch (err) {
-      if ((err as Error).name === "AbortError") {
-        // Timeout — treat as severely degraded, not full offline
+      const error = err as Error;
+
+      if (error.name === "AbortError") {
+        // Timed out — severely degraded but not fully offline
         networkStore.recordRTT(FAST_PROBE_TIMEOUT + 1);
-      } else {
+        useOverlayStore.getState().setNetworkColor(
+          networkStore.getOverlayColor()
+        );
+      } else if (error.name === "TypeError") {
+        // FIX 5: TypeError = actual network failure (offline or DNS failure).
+        // Previously this was not distinguished from AbortError, causing
+        // "degraded" status when the user was actually fully offline.
         this.handleOffline();
+      } else {
+        // Unknown error — treat as degraded, not offline
+        networkStore.recordRTT(FAST_PROBE_TIMEOUT - 1);
       }
     } finally {
       clearTimeout(timeout);
@@ -123,7 +152,6 @@ export class NetworkMonitor {
     networkStore.activateOfflineFallback();
     networkStore.setMode("offline");
     useOverlayStore.getState().setNetworkColor("red");
-    // Network banner is handled by the overlay's network_color
   }
 
   // ── Force probe ───────────────────────────────────────────────
@@ -140,7 +168,7 @@ export class NetworkMonitor {
 export const networkMonitor = new NetworkMonitor();
 
 // ─────────────────────────────────────────────────────────────────
-// React integration hook helper (used in useNetworkMonitor hook)
+// React integration hook helper
 // ─────────────────────────────────────────────────────────────────
 
 export function startNetworkMonitoring(): () => void {
@@ -153,24 +181,26 @@ export function startNetworkMonitoring(): () => void {
 // ─────────────────────────────────────────────────────────────────
 
 export function getConnectionQualityLabel(rttMs: number | null): string {
-  if (rttMs === null)  return "Unknown";
-  if (rttMs < 200)     return "Excellent";
-  if (rttMs < 500)     return "Good";
-  if (rttMs < 800)     return "Fair";
-  if (rttMs < 2000)    return "Poor";
+  if (rttMs === null)           return "Unknown";
+  if (rttMs < 200)              return "Excellent";
+  if (rttMs < 500)              return "Good";
+  if (rttMs < 800)              return "Fair";
+  if (rttMs < 2000)             return "Poor";
   return "Very Poor";
 }
 
 export function getConnectionQualityColor(rttMs: number | null): string {
-  if (rttMs === null)  return "text-gray-400";
-  if (rttMs < 200)     return "text-green-400";
-  if (rttMs < 500)     return "text-green-300";
-  if (rttMs < 800)     return "text-yellow-400";
-  if (rttMs < 2000)    return "text-orange-400";
+  if (rttMs === null)           return "text-gray-400";
+  if (rttMs < 200)              return "text-green-400";
+  if (rttMs < 500)              return "text-green-300";
+  if (rttMs < 800)              return "text-yellow-400";
+  if (rttMs < 2000)             return "text-orange-400";
   return "text-red-400";
 }
 
-export function shouldWarnAboutLatency(avgRTT: number, avgAIResponseMs: number): boolean {
-  // Warn if combined latency would noticeably delay hint delivery
+export function shouldWarnAboutLatency(
+  avgRTT: number,
+  avgAIResponseMs: number
+): boolean {
   return avgRTT + avgAIResponseMs > 3000;
 }
