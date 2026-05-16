@@ -1,6 +1,17 @@
 // src/components/overlay/OverlayPositionManager.tsx
-import { forwardRef, useEffect, useRef, useLayoutEffect, type ReactNode, type Ref, } from "react";
-import { createDragHandler, createTouchDragHandler, getProctorSafePosition } from "@/lib/overlay/stealthMouse";
+import {
+  forwardRef,
+  useEffect,
+  useRef,
+  useLayoutEffect,
+  type ReactNode,
+  type Ref,
+} from "react";
+import {
+  createDragHandler,
+  createTouchDragHandler,
+  getProctorSafePosition,
+} from "@/lib/overlay/stealthMouse";
 import type { OverlayPosition } from "@/store/overlayStore";
 
 interface OverlayPositionManagerProps {
@@ -33,6 +44,7 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
     const localRef = useRef<HTMLDivElement | null>(null);
     const mergedRef = setRefs<HTMLDivElement>(ref, localRef);
     const lastSafePos = useRef<OverlayPosition | null>(null);
+    const proctorSafeInitialized = useRef(false);
 
     useEffect(() => {
       const el = localRef.current;
@@ -46,8 +58,6 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
         cleanupTouch?.();
       };
     }, [onPositionChange]);
-
-    const proctorSafeInitialized = useRef(false);
 
     useLayoutEffect(() => {
       if (!isProctorSafe) {
@@ -69,6 +79,9 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
         applySafe();
       }
 
+      // ✅ guard if window not available (PiP edge cases)
+      if (typeof window === "undefined") return;
+
       const onWinResize = () => applySafe();
       window.addEventListener("resize", onWinResize);
       return () => {
@@ -86,7 +99,7 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
           zIndex: 2147483647,
           // Wrapper passes through clicks; the inner panel toggles pointer-events
           // via `pointer-events-auto/none` based on visibility. This prevents the
-          // hidden overlay from blocking underlying UI (Issue 2.1).
+          // hidden overlay from blocking underlying UI.
           pointerEvents: "none",
           isolation: "isolate",
           willChange: "transform",
