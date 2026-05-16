@@ -12,10 +12,11 @@ import { toggleAppStealthMode, setAppStealthMode } from "@/lib/stealth/stealthAc
 
 export function useOverlayVisibility(enabled = true) {
   // Individual selectors — reactive state returned to callers
-  const is_visible       = useOverlayStore((s) => s.is_visible);
-  const is_stealth_mode  = useOverlayStore((s) => s.is_stealth_mode);
+  const is_visible = useOverlayStore((s) => s.is_visible);
+  const is_stealth_mode = useOverlayStore((s) => s.is_stealth_mode);
   const is_panic_visible = useOverlayStore((s) => s.is_panic_visible);
-  const position         = useOverlayStore((s) => s.position);
+  const position = useOverlayStore((s) => s.position);
+  const is_peek_active = useOverlayStore((s) => s.is_peek_active);
 
   // Hotkey callbacks use .getState() — reads current value at call time,
   // avoiding stale closure issues when the callbacks are long-lived
@@ -23,34 +24,51 @@ export function useOverlayVisibility(enabled = true) {
     {
       toggle_overlay: () => {
         const s = useOverlayStore.getState();
+        // ✅ If minimized (peek), restore instead of only show/hide
+        if (s.is_peek_active && !s.is_visible) {
+          s.restoreOverlay?.();
+          return;
+        }
         s.is_visible ? s.hideOverlay() : s.showOverlay();
       },
       stealth_mode: toggleAppStealthMode,
-      panic:      () => useOverlayStore.getState().showPanic(PANIC_RESPONSE),
+      panic: () => useOverlayStore.getState().showPanic(PANIC_RESPONSE),
       clear_hint: () => useOverlayStore.getState().clearHint(),
     },
     enabled
   );
 
   // Stable action callbacks — .getState() inside body, empty dep array
-  const show   = useCallback(() => useOverlayStore.getState().showOverlay(),  []);
-  const hide   = useCallback(() => useOverlayStore.getState().hideOverlay(),  []);
+  const show = useCallback(() => useOverlayStore.getState().showOverlay(), []);
+  const hide = useCallback(() => useOverlayStore.getState().hideOverlay(), []);
   const toggle = useCallback(() => {
     const s = useOverlayStore.getState();
+    if (s.is_peek_active && !s.is_visible) {
+      s.restoreOverlay?.();
+      return;
+    }
     s.is_visible ? s.hideOverlay() : s.showOverlay();
   }, []);
 
+  const minimize = useCallback(() => useOverlayStore.getState().minimizeOverlay?.(), []);
+  const restore = useCallback(() => useOverlayStore.getState().restoreOverlay?.(), []);
+  const toggleMinimize = useCallback(() => useOverlayStore.getState().toggleMinimize?.(), []);
+
   return {
-    isVisible:   is_visible,
-    isStealth:   is_stealth_mode,
-    isPanic:     is_panic_visible,
+    isVisible: is_visible,
+    isStealth: is_stealth_mode,
+    isPanic: is_panic_visible,
+    isPeek: is_peek_active,
     position,
     show,
     hide,
     toggle,
+    minimize,
+    restore,
+    toggleMinimize,
     setPosition: useOverlayStore.getState().setPosition,
-    setStealth:  setAppStealthMode,
-    showPanic:   useOverlayStore.getState().showPanic,
-    hidePanic:   useOverlayStore.getState().hidePanic,
+    setStealth: setAppStealthMode,
+    showPanic: useOverlayStore.getState().showPanic,
+    hidePanic: useOverlayStore.getState().hidePanic,
   };
 }
