@@ -1,32 +1,26 @@
-// @ts-nocheck
 import { useCallback, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
+import type { AuthChangeEvent } from "@supabase/supabase-js";
 
 // ─────────────────────────────────────────────────────────────────
 // useCalendarSync
 // Connects Google Calendar and imports upcoming interview events.
 // ─────────────────────────────────────────────────────────────────
 
-// Extract structured body from a Supabase FunctionsHttpError.
-// When functions.invoke gets a non-2xx response it surfaces the error
-// through fnError, but data may still carry the parsed response body.
 async function parseInvokeError(
-  fnError: any,
-  data: any
+  fnError: { context?: Response; message?: string } | null,
+  data: Record<string, unknown> | null
 ): Promise<{ code?: string; error?: string } | null> {
-  // data may contain the body if invoke still parsed it
-  if (data && typeof data === "object") return data;
+  if (data && typeof data === "object") return data as { code?: string; error?: string };
 
-  // Try to parse from fnError.context (a Response object in some SDK versions)
   try {
     const ctx = fnError?.context;
     if (ctx && typeof ctx.json === "function") {
       return await ctx.json();
     }
     if (typeof fnError?.message === "string") {
-      const parsed = JSON.parse(fnError.message);
-      return parsed;
+      return JSON.parse(fnError.message);
     }
   } catch {
     // ignore parse failures
@@ -34,19 +28,27 @@ async function parseInvokeError(
   return null;
 }
 
-export function useCalendarSync() {
-  const { user }   = useAuthStore();
-  const [isSyncing, setIsSyncing]             = useState(false);
-  const [isDisconnecting, setIsDisconnecting] = useState(false);
-  const [isCheckingConnection, setIsCheckingConnection] = useState(true);
-  const [lastSynced, setLastSynced]           = useState<Date | null>(null);
-  const [importedCount, setImportedCount]     = useState<number | null>(null);
-  const [error, setError]                     = useState<string | null>(null);
-  const [isConnected, setIsConnected]         = useState(false);
+// Auth events that warrant a re-check of calendar connection status
+const CONNECTION_CHECK_EVENTS: AuthChangeEvent[] = [
+  "SIGNED_IN",
+  "SIGNED_OUT",
+  "USER_UPDATED",
+];
 
-  // Check real connection state from the server (whether a Google identity/
-  // refresh token is linked). This is more reliable than checking
-  // session.provider_token which is session-scoped and can be stale.
+export function useCalendarSync() {
+  const { user } = useAuthStore();
+
+  const [isSyncing,            setIsSyncing]            = useState(false);
+  const [isDisconnecting,      setIsDisconnecting]      = useState(false);
+  const [isCheckingConnection, setIsCheckingConnection] = useState(true);
+  const [lastSynced,           setLastSynced]           = useState<Date | null>(null);
+  const [importedCount,        setImportedCount]        = useState<number | null>(null);
+  const [error,                setError]                = useState<string | null>(null);
+  const [isConnected,          setIsConnected]          = useState(false);
+
+  // ── Check connection status ───────────────────────────────────
+  // Uses GET on disconnect-calendar which returns { connected: boolean }.
+  // Falls back to session provider_token if the edge call fails.
   const checkConnection = useCallback(async (): Promise<void> => {
     if (!user) {
       setIsConnected(false);
@@ -61,7 +63,6 @@ export function useCalendarSync() {
       if (!fnError && data !== null) {
         setIsConnected(!!data?.connected);
       } else {
-        // Fallback to session token check if edge call fails
         const { data: sessionData } = await supabase.auth.getSession();
         setIsConnected(!!sessionData?.session?.provider_token);
       }
@@ -73,20 +74,26 @@ export function useCalendarSync() {
     }
   }, [user]);
 
-  // Load server-truth on mount and on auth state changes
+  // ── Mount + auth state listener ───────────────────────────────
   useEffect(() => {
     checkConnection();
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(() => {
-      checkConnection();
-    });
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (event) => {
+        // FIX: Only re-check on meaningful events, not TOKEN_REFRESHED.
+        // Avoids an unnecessary edge function call every ~60 minutes.
+        if (CONNECTION_CHECK_EVENTS.includes(event)) {
+          checkConnection();
+        }
+      }
+    );
 
     return () => subscription.unsubscribe();
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Start the Google OAuth flow with calendar.readonly scope
+  // ── Connect Google Calendar ───────────────────────────────────
   const connectGoogle = useCallback(async (): Promise<void> => {
-    const { error } = await supabase.auth.signInWithOAuth({
+    const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
         scopes:      "https://www.googleapis.com/auth/calendar.readonly",
@@ -94,13 +101,10 @@ export function useCalendarSync() {
         queryParams: { access_type: "offline", prompt: "consent" },
       },
     });
-    if (error) setError(error.message);
+    if (oauthError) setError(oauthError.message);
   }, []);
 
-  // Call the sync-calendar edge function to import interview events.
-  // The session provider_token is passed if available, but is optional —
-  // the edge function will attempt server-side refresh from stored identity
-  // if the session token is missing or expired.
+  // ── Sync calendar events ──────────────────────────────────────
   const syncNow = useCallback(async (): Promise<{
     imported: number;
     error: string | null;
@@ -114,15 +118,13 @@ export function useCalendarSync() {
       const providerToken = sessionData?.session?.provider_token;
 
       const body: Record<string, unknown> = {};
-      if (providerToken) {
-        body.provider_token = providerToken;
-      }
+      if (providerToken) body.provider_token = providerToken;
 
-      const { data, error: fnError } = await supabase.functions.invoke("sync-calendar", {
-        body,
-      });
+      const { data, error: fnError } = await supabase.functions.invoke(
+        "sync-calendar",
+        { body }
+      );
 
-      // Parse structured error from non-2xx responses
       if (fnError) {
         const parsed = await parseInvokeError(fnError, data);
         const code = parsed?.code;
@@ -155,14 +157,13 @@ export function useCalendarSync() {
         return { imported: 0, error: msg };
       }
 
-      if (data?.error) {
-        throw new Error(data.error);
-      }
+      if (data?.error) throw new Error(data.error);
 
       const count = data?.imported ?? 0;
       setLastSynced(new Date());
       setImportedCount(count);
       return { imported: count, error: null };
+
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Sync failed";
       setError(msg);
@@ -172,12 +173,7 @@ export function useCalendarSync() {
     }
   }, [user]);
 
-  // Revoke the Google Calendar integration without signing the user out.
-  // Calls the disconnect-calendar edge function which:
-  //   1. Revokes the refresh token at Google's OAuth endpoint
-  //   2. Unlinks the Google identity from the user's Supabase account
-  // The user's Supabase session is preserved — they stay logged in.
-  // Returns an error message if the server-side operation failed.
+  // ── Disconnect Google Calendar ────────────────────────────────
   const disconnect = useCallback(async (): Promise<{ error: string | null }> => {
     if (!user) return { error: "Not authenticated" };
     setIsDisconnecting(true);
@@ -202,11 +198,11 @@ export function useCalendarSync() {
         return { error: msg };
       }
 
-      // Server confirmed disconnect — update local state
       setIsConnected(false);
       setLastSynced(null);
       setImportedCount(null);
       return { error: null };
+
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Disconnect failed";
       setError(msg);
