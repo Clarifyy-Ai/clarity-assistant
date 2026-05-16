@@ -1,6 +1,6 @@
 // src/lib/network/fetchEdge.ts
-import { supabase } from "@/lib/supabase/client";         // FIX 1: consistent import path
-import { useAuthStore } from "@/store/userStore";          // FIX 2: consistent store import
+import { supabase } from "@/lib/supabase/client";
+import { useAuthStore } from "@/store/userStore";
 import { EDGE_BASE, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
 
 /**
@@ -34,18 +34,17 @@ export async function fetchEdge(
     method?: "POST" | "GET" | "PUT" | "PATCH" | "DELETE";
     signal?: AbortSignal;
     headers?: Record<string, string>;
-    timeoutMs?: number;  // FIX 3: default 30s timeout
+    timeoutMs?: number;
   }
 ): Promise<Response> {
-  const method     = options?.method    ?? "POST";
-  const timeoutMs  = options?.timeoutMs ?? 30_000;
+  const method = options?.method ?? "POST";
+  const timeoutMs = options?.timeoutMs ?? 30_000;
   const isFormData = body instanceof FormData;
 
   // Internal timeout controller — aborts if edge function hangs
   const controller = new AbortController();
-  const timeout    = timeoutMs > 0
-    ? setTimeout(() => controller.abort(), timeoutMs)
-    : null;
+  const timeout =
+    timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
 
   const signal = options?.signal ?? controller.signal;
 
@@ -59,9 +58,11 @@ export async function fetchEdge(
       method,
       headers,
       body:
-        body === undefined ? undefined :
-        isFormData         ? body      :
-        JSON.stringify(body),
+        body === undefined
+          ? undefined
+          : isFormData
+          ? body
+          : JSON.stringify(body),
       signal,
     });
     return response;
@@ -73,12 +74,20 @@ export async function fetchEdge(
     if (err instanceof TypeError) {
       throw new Error(
         `Edge Function "${fnName}" is unreachable. ` +
-        `Check CORS configuration and that the function is deployed.`
+          `Check CORS configuration and that the function is deployed.`
       );
     }
     throw err;
   } finally {
     if (timeout) clearTimeout(timeout);
+  }
+}
+
+function safeJsonParse(text: string): any {
+  try {
+    return JSON.parse(text);
+  } catch {
+    return null;
   }
 }
 
@@ -94,15 +103,13 @@ export async function fetchEdgeJson<T>(
 ): Promise<T> {
   const response = await fetchEdge(fnName, body, options);
 
-  // FIX 4: fall back to text if JSON parse fails so error body is not lost
-  const payload = await response.json().catch(async () => {
-    const text = await response.text().catch(() => "");
-    return text ? { error: text } : {};
-  });
+  // ✅ FIX: read text first so we never lose the body (json() can consume it)
+  const text = await response.text().catch(() => "");
+  const payload = text ? safeJsonParse(text) ?? { error: text } : {};
 
   if (!response.ok) {
     const message =
-      payload?.error   ||
+      payload?.error ||
       payload?.message ||
       `Edge Function "${fnName}" failed with HTTP ${response.status}`;
     throw new Error(message);
