@@ -6,7 +6,7 @@ function computeStrength(
   isAnswering: boolean,
   wpm: number,
   fillerCount: number,
-  elapsedSeconds: number,
+  elapsedSeconds: number
 ): "off" | "weak" | "ok" | "strong" {
   if (!isAnswering && elapsedSeconds < 5) return "off";
 
@@ -27,31 +27,40 @@ function computeStrength(
   return "off";
 }
 
-const LABEL = { off: "…", weak: "Weak", ok: "Good", strong: "Strong" };
+const LABEL = {
+  off: "…",
+  weak: "Weak",
+  ok: "Good",
+  strong: "Strong",
+};
 
-const STRENGTH_CONFIG = {
-  off:    { bars: 0, color: "bg-white/10",    textColor: "text-white/20" },
-  weak:   { bars: 1, color: "bg-red-500",     textColor: "text-red-400/70" },
-  ok:     { bars: 2, color: "bg-amber-400",   textColor: "text-amber-400/70" },
-  strong: { bars: 3, color: "bg-emerald-400", textColor: "text-emerald-400/70" },
+const CONFIG = {
+  off: { bars: 0, color: "bg-white/10", text: "text-white/20" },
+  weak: { bars: 1, color: "bg-red-500", text: "text-red-400/70" },
+  ok: { bars: 2, color: "bg-amber-400", text: "text-amber-400/70" },
+  strong: { bars: 3, color: "bg-emerald-400", text: "text-emerald-400/70" },
 };
 
 export function OverlayAnswerStrength() {
-  const isAnswering    = useSessionStore((s) => s.is_answering);
-  const wpm            = useSessionStore((s) => s.current_wpm);
-  const fillerCount    = useSessionStore((s) => s.filler_count);
-  const elapsedSeconds = useSessionStore((s) => s.question_elapsed_seconds);
+  const isAnswering = useSessionStore((s) => s.is_answering ?? false);
+  const wpm = useSessionStore((s) => s.current_wpm ?? 0);
+  const fillerCount = useSessionStore((s) => s.filler_count ?? 0);
+  const elapsed = useSessionStore((s) => s.question_elapsed_seconds ?? 0);
 
-  const strength = computeStrength(isAnswering, wpm, fillerCount, elapsedSeconds);
-  const { bars, color, textColor } = STRENGTH_CONFIG[strength];
+  const strength = computeStrength(isAnswering, wpm, fillerCount, elapsed);
+  const { bars, color, text } = CONFIG[strength];
 
   return (
-    <div className="flex items-center gap-2 px-1" title={`Answer strength: ${LABEL[strength]}`}>
-      <span className="text-[10px] font-bold text-white/20 uppercase tracking-widest">Strength</span>
+    <div className="flex items-center gap-2 px-1">
+      <span className="text-[10px] font-bold text-white/20 uppercase">
+        Strength
+      </span>
+
       <div className="flex items-end gap-0.5 h-3">
         {[0, 1, 2].map((i) => {
           const filled = i < bars;
           const height = i === 0 ? "h-1.5" : i === 1 ? "h-2" : "h-3";
+
           return (
             <span
               key={i}
@@ -64,7 +73,8 @@ export function OverlayAnswerStrength() {
           );
         })}
       </div>
-      <span className={cn("text-[11px] font-semibold transition-colors duration-500", textColor)}>
+
+      <span className={cn("text-[11px] font-semibold", text)}>
         {LABEL[strength]}
       </span>
     </div>
