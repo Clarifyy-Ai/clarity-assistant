@@ -7,6 +7,7 @@ import { useDocumentStore } from "@/store/documentStore";
 import { useAudioSession } from "./useAudioSession";
 import { useAudioStore } from "@/store/audioStore";
 import { routeHint } from "@/lib/ai/modelRouter";
+import { streamFullAnswer } from "@/lib/ai/geminiClient";
 import { checkCredits, deductCredits } from "@/lib/billing/creditsManager";
 import { buildResumeContext, generateResumeTalkingPoints, formatTalkingPointsAsHint } from "@/lib/ai/resumeFallback";
 import { hotkeyManager } from "@/lib/overlay/hotkeys";
