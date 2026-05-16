@@ -67,7 +67,10 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     return <Navigate to={loginPath} state={{ from: location }} replace />;
   }
 
-  // 4) Admin check
+  // 4) Admin check — wait for profile (and role) to finish loading before denying
+  if (requireAdmin && !isProfileLoaded) {
+    return <div className="min-h-screen bg-background" />;
+  }
   if (requireAdmin && !isAdmin) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
