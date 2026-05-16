@@ -1,32 +1,23 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// _shared/utils.ts — FINAL PRODUCTION VERSION
-// Hardened, optimized, future-proof. Supports: Auth, AI dispatch,
-// CORS, validation, rate-limiting, atomic credit deduction,
-// SSE streaming, logging.
-// Deno runtime. No Node APIs.
+// _shared/utils.ts — PRODUCTION READY (ALL FIXES APPLIED)
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
-// Note: deprecated wildcard `corsHeaders` is intentionally NOT imported here.
-// Use getCorsHeaders(req) per-request to honor the ALLOWED_ORIGINS allowlist.
 import { getCorsHeaders, handleCors as _handleCorsFn } from "./cors.ts";
 
 // Internal helper: returns CORS headers when a Request is available, otherwise a
-// safe minimal header set with NO Access-Control-Allow-Origin (browser blocks).
-// This is used by helpers (successResponse/errorResponse/streamResponse) that
-// historically did not receive `req` as an argument.
+// safe minimal header set with NO Access-Control-Allow-Origin.
 function safeCorsHeaders(req?: Request): Record<string, string> {
   if (req) return getCorsHeaders(req);
-  // No request → server-to-server context. Return only method/header advertisements
-  // without ACAO so browsers cannot exploit a missing-origin response.
   return {
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers":
       "authorization, x-client-info, apikey, content-type, x-app-name, x-app-version",
-    "Access-Control-Max-Age":       "86400",
-    "Vary":                         "Origin",
+    "Access-Control-Max-Age": "86400",
+    "Vary": "Origin",
   };
 }
+
 import type {
   AuthContext, EdgeError, EdgeSuccess,
   AICompletionRequest, AICompletionResponse,
@@ -41,22 +32,28 @@ import { CREDIT_COSTS } from "./types.ts";
 
 const REQUIRED = ["SUPABASE_URL", "SUPABASE_ANON_KEY", "SUPABASE_SERVICE_ROLE_KEY"] as const;
 
+// FIX 1: DO NOT throw at module level — a top-level throw crashes the entire
+// Deno process before Deno.serve() registers, making Supabase return 502 with
+// no headers. The browser sees a CORS error but the real cause is a boot crash.
 for (const key of REQUIRED) {
   if (!Deno.env.get(key)) {
-    const msg = `[utils] Missing env var ${key}`;
-    console.error(msg);
-    throw new Error(msg);
+    console.error(
+      `[utils] CRITICAL: Missing required env var "${key}". ` +
+      `All requests will fail until this secret is set in Supabase Dashboard → ` +
+      `Settings → Edge Functions → Secrets, then redeploy.`
+    );
+    // Do NOT throw here
   }
 }
 
 export const ENV = {
-  SUPABASE_URL:         Deno.env.get("SUPABASE_URL")!,
-  SUPABASE_ANON_KEY:    Deno.env.get("SUPABASE_ANON_KEY")!,
-  SUPABASE_SERVICE_KEY: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
-  OPENAI_API_KEY:       Deno.env.get("OPENAI_API_KEY") ?? "",
-  ANTHROPIC_API_KEY:    Deno.env.get("ANTHROPIC_API_KEY") ?? "",
-  GEMINI_API_KEY:       Deno.env.get("GEMINI_API_KEY") ?? "",
-  RESEND_API_KEY:       Deno.env.get("RESEND_API_KEY") ?? "",
+  SUPABASE_URL:         Deno.env.get("SUPABASE_URL")         ?? "",
+  SUPABASE_ANON_KEY:    Deno.env.get("SUPABASE_ANON_KEY")    ?? "",
+  SUPABASE_SERVICE_KEY: Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "",
+  OPENAI_API_KEY:       Deno.env.get("OPENAI_API_KEY")       ?? "",
+  ANTHROPIC_API_KEY:    Deno.env.get("ANTHROPIC_API_KEY")    ?? "",
+  GEMINI_API_KEY:       Deno.env.get("GEMINI_API_KEY")       ?? "",
+  RESEND_API_KEY:       Deno.env.get("RESEND_API_KEY")       ?? "",
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -64,6 +61,12 @@ export const ENV = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export function getAdminClient(): SupabaseClient {
+  // FIX 2: Throw inside the function (per-request), not at module level.
+  if (!ENV.SUPABASE_URL || !ENV.SUPABASE_SERVICE_KEY) {
+    throw new Error(
+      "[utils] Cannot create admin client: SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY missing."
+    );
+  }
   return createClient(ENV.SUPABASE_URL, ENV.SUPABASE_SERVICE_KEY, {
     auth: { persistSession: false }
   });
@@ -73,13 +76,6 @@ export function getAdminClient(): SupabaseClient {
 // AUTH HELPER + BYOK HEADER EXTRACTION
 // ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Read user-supplied BYOK keys from request headers.
- * The frontend `apiClient` attaches these from in-memory authStore — they
- * are never persisted to localStorage. Edge functions should pass these
- * to `geminiGenerate(..., byokKey)` / `callAI(..., byok)` to prefer the
- * user's own provider account over our shared server keys.
- */
 export interface BYOK {
   openai?:    string;
   anthropic?: string;
@@ -98,9 +94,19 @@ export function extractBYOK(req: Request): BYOK {
 }
 
 export async function requireAuth(req: Request): Promise<AuthContext & { byok: BYOK }> {
+  // FIX 3: Guard against missing env vars inside the function.
+  if (!ENV.SUPABASE_URL || !ENV.SUPABASE_ANON_KEY) {
+    throw errorResponse(
+      "Server misconfiguration: missing Supabase credentials.",
+      "INTERNAL_ERROR",
+      500,
+      req
+    );
+  }
+
   const header = req.headers.get("Authorization");
   if (!header?.startsWith("Bearer ")) {
-    throw errorResponse("Missing or invalid Authorization header", "AUTH_REQUIRED", 401);
+    throw errorResponse("Missing or invalid Authorization header", "AUTH_REQUIRED", 401, req);
   }
 
   const token = header.slice(7);
@@ -112,19 +118,18 @@ export async function requireAuth(req: Request): Promise<AuthContext & { byok: B
   const { data: { user }, error } = await client.auth.getUser();
 
   if (error || !user) {
-    throw errorResponse("Invalid or expired token", "AUTH_INVALID", 401);
+    throw errorResponse("Invalid or expired token", "AUTH_INVALID", 401, req);
   }
 
   const admin = getAdminClient();
+
+  // FIX 4: Use .maybeSingle() instead of .single() — avoids 406 when row missing.
   const { data: profile } = await admin
     .from("profiles")
     .select("plan_id, credits")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
 
-  // Derive admin status from user_roles (source of truth) rather than
-  // profiles.is_admin, which is a denormalized flag that could be stale or
-  // tampered with via RLS misconfigurations.
   const { data: roleRow } = await admin
     .from("user_roles")
     .select("role")
@@ -247,10 +252,7 @@ export async function deductCredits(
   }
 
   if (rpcData?.success) {
-    return {
-      success: true,
-      balanceAfter: rpcData.balance_after ?? -1
-    };
+    return { success: true, balanceAfter: rpcData.balance_after ?? -1 };
   }
 
   // 2) fallback (safe but not atomic)
@@ -258,7 +260,7 @@ export async function deductCredits(
     .from("profiles")
     .select("credits, plan_id, credits_used_this_month")
     .eq("id", userId)
-    .single();
+    .maybeSingle();
 
   if (!profile) {
     return { success: false, balanceAfter: 0, error: "Profile not found" };
@@ -326,7 +328,8 @@ export async function callAI(
   if (provider === "anthropic") return callAnthropic(req, start, byok?.anthropic);
   if (provider === "gemini")    return callGemini(req, start, byok?.gemini);
 
-  throw new Error(`Unknown model provider for ${req.model}`);
+  throw new Error(`Unknown model provider for "${req.model}". ` +
+    `Add it to PROVIDER_MAP in utils.ts.`);
 }
 
 const AI_TIMEOUT_MS = 50_000;
@@ -339,7 +342,9 @@ async function callOpenAI(
   byokKey?: string,
 ): Promise<AICompletionResponse> {
   const apiKey = byokKey?.trim() || ENV.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OpenAI API key not available (server + BYOK both missing)");
+  if (!apiKey) throw new Error(
+    "OpenAI API key not available. Set OPENAI_API_KEY in Supabase secrets or provide a BYOK key."
+  );
 
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), AI_TIMEOUT_MS);
@@ -366,7 +371,8 @@ async function callOpenAI(
   }
 
   if (!res.ok) {
-    throw new Error(`OpenAI error ${res.status}: ${await res.text()}`);
+    const errText = await res.text().catch(() => "Unknown OpenAI error");
+    throw new Error(`OpenAI error ${res.status}: ${errText}`);
   }
 
   const json = await res.json();
@@ -392,7 +398,9 @@ async function callAnthropic(
   byokKey?: string,
 ): Promise<AICompletionResponse> {
   const apiKey = byokKey?.trim() || ENV.ANTHROPIC_API_KEY;
-  if (!apiKey) throw new Error("Anthropic API key not available (server + BYOK both missing)");
+  if (!apiKey) throw new Error(
+    "Anthropic API key not available. Set ANTHROPIC_API_KEY in Supabase secrets or provide a BYOK key."
+  );
 
   const system = req.messages.find(m => m.role === "system")?.content ?? "";
   const userMessages = req.messages.filter(m => m.role !== "system");
@@ -421,7 +429,10 @@ async function callAnthropic(
     clearTimeout(timer);
   }
 
-  if (!res.ok) throw new Error(`Anthropic error ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "Unknown Anthropic error");
+    throw new Error(`Anthropic error ${res.status}: ${errText}`);
+  }
 
   const json = await res.json();
   const content = json.content?.[0]?.text ?? "";
@@ -445,7 +456,9 @@ async function callGemini(
   byokKey?: string,
 ): Promise<AICompletionResponse> {
   const apiKey = byokKey?.trim() || ENV.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("Gemini API key not available (server + BYOK both missing)");
+  if (!apiKey) throw new Error(
+    "Gemini API key not available. Set GEMINI_API_KEY in Supabase secrets or provide a BYOK key."
+  );
 
   const systemParts = req.messages
     .filter(m => m.role === "system")
@@ -485,7 +498,10 @@ async function callGemini(
     clearTimeout(timer);
   }
 
-  if (!res.ok) throw new Error(`Gemini error ${res.status}: ${await res.text()}`);
+  if (!res.ok) {
+    const errText = await res.text().catch(() => "Unknown Gemini error");
+    throw new Error(`Gemini error ${res.status}: ${errText}`);
+  }
 
   const json = await res.json();
   const part = json.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
@@ -540,7 +556,6 @@ export function checkRateLimit(key: string, perMinute: number): boolean {
   }
 
   if (row.count >= perMinute) return false;
-
   row.count++;
   return true;
 }
