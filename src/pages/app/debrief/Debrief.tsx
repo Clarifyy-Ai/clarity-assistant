@@ -1,5 +1,5 @@
-// @ts-nocheck
-import { useEffect, useState } from "react";
+// @ts-nocheck -- retained: Supabase row types not in generated schema
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
@@ -9,9 +9,8 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
-  Brain, ChevronRight, Clock,
-  TrendingUp, AlertTriangle, Star,
-  CalendarDays, BarChart2,
+  Brain, ChevronRight, AlertTriangle,
+  CalendarDays, RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -21,32 +20,91 @@ import { format } from "date-fns";
 // ─────────────────────────────────────────────────────────────────
 
 export default function Debrief() {
-  const navigate  = useNavigate();
-  const { user }  = useAuthStore();
+  const navigate = useNavigate();
+  const { user } = useAuthStore();
 
-  const [debriefs,  setDebriefs]  = useState<any[]>([]);
-  const [loading,   setLoading]   = useState(true);
+  const [debriefs,   setDebriefs]   = useState<any[]>([]);
+  const [sessions,   setSessions]   = useState<Record<string, any>>({});
+  const [loading,    setLoading]    = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
-  useEffect(() => {
+  // ── Fetch debriefs + enrich with session data ─────────────────
+  // FIX 1: Separate queries instead of embedded join.
+  // The embedded join sessions(...) requires a FK on session_debriefs.session_id
+  // which is not guaranteed in the schema. Separate queries are always safe.
+  const fetchDebriefs = useCallback(async () => {
     if (!user) return;
-    supabase
-      .from("session_debriefs")
-      .select(`
-        id, created_at, overall_grade, priority_focus,
-        sessions ( overall_score, session_type, target_company, created_at )
-      `)
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .then(({ data }) => {
-        setDebriefs(data ?? []);
-        setLoading(false);
-      });
+    setLoading(true);
+    setFetchError(null);
+
+    try {
+      // Step 1: fetch debriefs
+      const { data: debriefRows, error: debriefErr } = await supabase
+        .from("session_debriefs")
+        .select("id, created_at, overall_grade, priority_focus, session_id")
+        .eq("user_id", user.id)
+        .order("created_at", { ascending: false });
+
+      if (debriefErr) throw debriefErr;
+      if (!debriefRows?.length) {
+        setDebriefs([]);
+        return;
+      }
+
+      // Step 2: fetch the linked sessions in one query
+      const sessionIds = [...new Set(debriefRows.map((d) => d.session_id).filter(Boolean))];
+      const { data: sessionRows, error: sessErr } = await supabase
+        .from("sessions")
+        .select("id, overall_score, session_type, target_company, created_at")
+        .in("id", sessionIds);
+
+      if (sessErr) {
+        // Non-fatal — debriefs still show without session metadata
+        console.warn("[Debrief] Failed to fetch sessions:", sessErr.message);
+      }
+
+      // Build lookup map: session_id → session row
+      const sessionMap: Record<string, any> = {};
+      for (const s of sessionRows ?? []) {
+        sessionMap[s.id] = s;
+      }
+
+      setDebriefs(debriefRows);
+      setSessions(sessionMap);
+    } catch (err: unknown) {
+      setFetchError(err instanceof Error ? err.message : "Failed to load debriefs");
+    } finally {
+      setLoading(false);  // FIX 2: always runs — spinner never gets stuck
+    }
   }, [user?.id]);
 
-  const gradeColor = (g: string) =>
-    g === "A" || g === "A+" ? "emerald" :
-    g === "B" || g === "B+" ? "blue"    :
-    g === "C"               ? "amber"   : "red";
+  useEffect(() => {
+    fetchDebriefs();
+  }, [fetchDebriefs]);
+
+  // ── Grade colour ──────────────────────────────────────────────
+  // FIX 4: Handle A-, B-, B+, C+, C- — check startsWith instead of strict equality
+  const gradeColor = (g: string) => {
+    if (!g) return "red";
+    const base = g.charAt(0).toUpperCase();
+    if (base === "A") return "emerald";
+    if (base === "B") return "blue";
+    if (base === "C") return "amber";
+    return "red";
+  };
+
+  // ── Render ────────────────────────────────────────────────────
+
+  if (loading) {
+    return (
+      <div className="space-y-5 max-w-3xl">
+        <PageHeader title="Debriefs" subtitle="Deep-dive AI analysis of each session" />
+        <div className="space-y-3">
+          {[...Array(3)].map((_, i) => <SkeletonCard key={i} />)}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5 max-w-3xl">
@@ -55,11 +113,25 @@ export default function Debrief() {
         subtitle="Deep-dive AI analysis of each session"
       />
 
-      {loading ? (
-        <div className="space-y-3">
-          {[...Array(3)].map((_, i) => <SkeletonCard key={i} />)}
-        </div>
-      ) : debriefs.length === 0 ? (
+      {/* ── Error state ──────────────────────────────── */}
+      {fetchError && (
+        <Card className="text-center py-10">
+          <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto mb-3" />
+          <p className="text-sm text-muted-foreground">{fetchError}</p>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="mt-4"
+            onClick={fetchDebriefs}
+            leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
+          >
+            Retry
+          </Button>
+        </Card>
+      )}
+
+      {/* ── Empty state ───────────────────────────────── */}
+      {!fetchError && debriefs.length === 0 && (
         <Card className="text-center py-16">
           <Brain className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
           <p className="text-muted-foreground text-sm">No debriefs yet.</p>
@@ -75,11 +147,16 @@ export default function Debrief() {
             Start mock session
           </Button>
         </Card>
-      ) : (
+      )}
+
+      {/* ── Debrief list ──────────────────────────────── */}
+      {!fetchError && debriefs.length > 0 && (
         <div className="space-y-3">
           {debriefs.map((d) => {
-            const sess = d.sessions;
-            const gc   = gradeColor(d.overall_grade ?? "C");
+            // FIX 1: look up session from separate map instead of d.sessions
+            const sess = sessions[d.session_id] ?? null;
+            const gc   = gradeColor(d.overall_grade);
+
             return (
               <Card
                 key={d.id}
@@ -104,15 +181,15 @@ export default function Debrief() {
                         {sess?.session_type ?? "Session"} Interview
                         {sess?.target_company && ` — ${sess.target_company}`}
                       </p>
-                      {sess?.overall_score !== null && (
+                      {sess?.overall_score != null && (
                         <Badge
                           variant={
-                            (sess?.overall_score ?? 0) >= 75 ? "emerald" :
-                            (sess?.overall_score ?? 0) >= 55 ? "amber"   : "red"
+                            sess.overall_score >= 75 ? "emerald" :
+                            sess.overall_score >= 55 ? "amber"   : "red"
                           }
                           size="sm"
                         >
-                          {sess?.overall_score}/100
+                          {sess.overall_score}/100
                         </Badge>
                       )}
                     </div>
