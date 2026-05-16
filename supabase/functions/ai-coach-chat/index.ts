@@ -1,16 +1,17 @@
-// supabase/functions/ai-coach-chat/index.ts — PRODUCTION READY (ALL FEATURES PRESERVED)
+// supabase/functions/ai-coach-chat/index.ts — FIXED (model updated + optional override)
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
-import { 
-  requireAuth, 
-  parseBody, 
-  successResponse, 
-  errorResponse, 
-  deductCredits, 
-  callAI, 
-  getAdminClient, 
-  log 
+import {
+  requireAuth,
+  parseBody,
+  errorResponse,
+  deductCredits,
+  callAI,
+  getAdminClient,
+  log
 } from "../_shared/utils.ts";
+
+const DEFAULT_MODEL = Deno.env.get("GEMINI_MODEL_DEFAULT") ?? "gemini-2.5-flash";
 
 const SYSTEM = `
 You are an expert, empathetic interview coach.
@@ -27,31 +28,23 @@ Deno.serve(async (req) => {
   const FN = "ai-coach-chat";
 
   try {
-    /* --------------------------
-       AUTHENTICATE USER
-    -------------------------- */
     const auth = await requireAuth(req);
     const userId = auth.userId;
     const db = getAdminClient();
 
-    /* --------------------------
-       READ BODY
-    -------------------------- */
     const body = await parseBody<{
       session_id: string;
       question: string;
       transcript: string;
       user_message: string;
       history?: { role: string; text: string }[];
+      model?: string;
     }>(req);
 
     if (!body.session_id || !body.user_message) {
       return errorResponse("Missing required fields", "INVALID_REQUEST", 400);
     }
 
-    /* --------------------------
-       VALIDATE SESSION OWNERSHIP
-    -------------------------- */
     const { data: sessionRow, error: sessionErr } = await db
       .from("sessions")
       .select("id, user_id, status")
@@ -66,23 +59,14 @@ Deno.serve(async (req) => {
       return errorResponse("Session not active", "INVALID_STATE", 400);
     }
 
-    /* --------------------------
-       CREDIT DEDUCTION
-    -------------------------- */
     const credit = await deductCredits(userId, "coach_message", 1);
     if (!credit.success) {
       return errorResponse("Insufficient credits", "INSUFFICIENT_CREDITS", 402);
     }
 
-    /* --------------------------
-       SANITIZE INPUT (Preserved exact limits)
-    -------------------------- */
     const safeUserMsg = String(body.user_message).slice(0, 2000);
     const safeTranscript = String(body.transcript ?? "").slice(0, 600);
 
-    /* --------------------------
-       BUILD CHAT HISTORY
-    -------------------------- */
     const contextPrefix = `
 Current interview question: "${body.question ?? "N/A"}"
 Candidate's answer so far: "${safeTranscript}"
@@ -90,7 +74,6 @@ Candidate's answer so far: "${safeTranscript}"
 ---
 `;
 
-    // Map history to standard AI format
     const messages = [
       { role: "system" as const, content: SYSTEM },
       { role: "user" as const, content: contextPrefix },
@@ -102,22 +85,21 @@ Candidate's answer so far: "${safeTranscript}"
       { role: "user" as const, content: safeUserMsg },
     ];
 
-    /* --------------------------
-       CALL AI (Unified) — refund on failure
-    -------------------------- */
+    const model = String(body.model ?? "").trim() || DEFAULT_MODEL;
+
     let aiResult;
     try {
       aiResult = await callAI({
-        model: "gemini-2.0-flash",
+        model,
         messages,
-        maxTokens: 1024,
+        maxTokens: 512,
         temperature: 0.6,
       });
     } catch (aiErr) {
-      // Refund the credit since the AI provider failed (negative cost = credit back)
       try { await deductCredits(userId, "refund_coach_message" as any, -1); }
       catch (refundErr) { log(FN, "error", "Refund failed", refundErr); }
       log(FN, "error", "AI provider failed", aiErr);
+
       return new Response(
         JSON.stringify({
           error: "AI service temporarily unavailable. Your credit has been refunded.",
@@ -132,7 +114,6 @@ Candidate's answer so far: "${safeTranscript}"
     return new Response(JSON.stringify({ reply: aiResult.text }), {
       headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
-
   } catch (err) {
     if (err instanceof Response) return err;
     log(FN, "error", "Coach chat error", err);
