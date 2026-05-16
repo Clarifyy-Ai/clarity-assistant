@@ -240,4 +240,3 @@ function json(headers: HeadersInit, status: number, body: unknown): Response {
     headers: { ...headers, "Content-Type": "application/json" },
   });
 }
-``
