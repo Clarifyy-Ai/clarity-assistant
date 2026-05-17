@@ -9,13 +9,13 @@ import { Wifi, WifiOff, Zap } from "lucide-react";
 // ─────────────────────────────────────────────────────────────────
 
 export function LiveNetworkMonitor() {
-  const {
-    mode,              // "strong" | "degraded" | "offline"
-    avgRTT,            // number | undefined
-    modelOverride,     // string | undefined
-    qualityLabel,      // e.g., "Good / Fair / Poor" (optional)
-    isOfflineFallback, // boolean
-  } = useNetworkMonitor();
+  const monitor = useNetworkMonitor() as ReturnType<typeof useNetworkMonitor> & {
+    modelOverride?: string;
+    isOfflineFallback?: boolean;
+  };
+  const { mode, avgRTT, qualityLabel } = monitor;
+  const modelOverride = monitor.modelOverride;
+  const isOfflineFallback = monitor.isOfflineFallback;
 
   // Format RTT text safely
   const rttText = typeof avgRTT === "number" && isFinite(avgRTT)
