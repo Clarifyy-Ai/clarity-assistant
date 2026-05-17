@@ -1,6 +1,43 @@
 // src/components/overlay/OverlayResizeHandles.tsx
 import { useCallback, useRef } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
+
+interface OverlayResizeHandlesProps {
+  containerRef: React.RefObject<HTMLDivElement>;
+}
+
+type Edge = "e" | "s" | "se";
+
+const HANDLE_STYLES: Record<Edge, React.CSSProperties> = {
+  e: { position: "absolute", top: 8, right: -4, bottom: 8, width: 8, cursor: "ew-resize" },
+  s: { position: "absolute", left: 8, right: 8, bottom: -4, height: 8, cursor: "ns-resize" },
+  se: { position: "absolute", right: -4, bottom: -4, width: 16, height: 16, cursor: "nwse-resize" },
+};
+
+export function OverlayResizeHandles({ containerRef }: OverlayResizeHandlesProps) {
+  const isResizing = useRef(false);
+
+  const handlePointerDown = useCallback(
+    (edge: Edge, e: React.PointerEvent<HTMLDivElement>) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const el = containerRef.current;
+      if (!el || isResizing.current) return;
+
+      isResizing.current = true;
+
+      try {
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+      } catch {
+        // ignore
+      }
+
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startW = el.offsetWidth;
+      const startH = el.offsetHeight;
+
       const prevUserSelect = document.body.style.userSelect;
       const prevCursor = document.body.style.cursor;
       document.body.style.userSelect = "none";
@@ -69,41 +106,3 @@ import { useOverlayStore } from "@/store/overlayStore";
     </>
   );
 }
-
-interface OverlayResizeHandlesProps {
-  containerRef: React.RefObject<HTMLDivElement>;
-}
-
-type Edge = "e" | "s" | "se";
-
-const HANDLE_STYLES: Record<Edge, React.CSSProperties> = {
-  e: { position: "absolute", top: 8, right: -4, bottom: 8, width: 8, cursor: "ew-resize" },
-  s: { position: "absolute", left: 8, right: 8, bottom: -4, height: 8, cursor: "ns-resize" },
-  se: { position: "absolute", right: -4, bottom: -4, width: 16, height: 16, cursor: "nwse-resize" },
-};
-
-export function OverlayResizeHandles({ containerRef }: OverlayResizeHandlesProps) {
-  const isResizing = useRef(false);
-
-  const handlePointerDown = useCallback(
-    (edge: Edge, e: React.PointerEvent<HTMLDivElement>) => {
-      e.preventDefault();
-      e.stopPropagation();
-
-      const el = containerRef.current;
-      if (!el || isResizing.current) return;
-
-      isResizing.current = true;
-
-      // ✅ pointer capture: smoother resizing even if cursor leaves the handle
-      try {
-        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
-      } catch {
-        // ignore
-      }
-
-      const startX = e.clientX;
-      const startY = e.clientY;
-      const startW = el.offsetWidth;
-      const startH = el.offsetHeight;
-
