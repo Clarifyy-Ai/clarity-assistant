@@ -1,7 +1,6 @@
 // src/components/overlay/OverlayWindow.tsx
 import { createPortal } from "react-dom";
 import { useRef, useCallback, useState, useEffect, useMemo } from "react";
-export function OverlayWindow({ onToggleMic, onToggleSystemAudio, onGenerate, onEndSession, onManualQuestion, onStartSession, onSetupNewSession, lastSessionId }: OverlayWindowProps) {
   const pipDoc = useDocumentPiP(false);
   const targetDoc = pipDoc ?? (typeof document !== "undefined" ? document : null);
 
