@@ -1,6 +1,93 @@
 // src/components/overlay/OverlayWindow.tsx
 import { createPortal } from "react-dom";
-import {───────import { useRef, useCallback, useState, useEffect, useMemo } from "react";
+import { useRef, useCallback, useState, useEffect, useMemo } from "react";
+import { useOverlayStore as _ows, type OverlayPosition as _OP } from "@/store/overlayStore";
+import { useSessionStore as _ss } from "@/store/sessionStore";
+import { useAudioStore as _as } from "@/store/audioStore";
+import { useAuthStore as _aus } from "@/store/userStore";
+import { supabase as _sb } from "@/lib/supabase/client";
+import { useStealthMouse as _usm } from "@/hooks/useStealthMouse";
+import { useDocumentPiP as _udpip } from "@/lib/overlay/useDocumentPiP";
+import { useIsMobile as _uim } from "@/hooks/use-mobile";
+
+interface OverlayWindowProps {
+  onToggleMic?: () => void;
+  onToggleSystemAudio?: () => void;
+  onGenerate?: () => void;
+  onEndSession?: () => void;
+  onManualQuestion?: (question: string) => void;
+  onStartSession?: (config: import("@/types/session.types").LiveSessionConfig) => void;
+  onSetupNewSession?: () => void;
+  lastSessionId?: string | null;
+}
+
+export function OverlayWindow({
+  onToggleMic,
+  onToggleSystemAudio,
+  onGenerate,
+  onEndSession,
+  onManualQuestion,
+  onStartSession,
+  onSetupNewSession,
+  lastSessionId,
+}: OverlayWindowProps) {
+  const panelRef = useRef<HTMLDivElement>(null);
+  const resizeContainerRef = useRef<HTMLDivElement>(null);
+  const persistPositionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => { setIsMounted(true); }, []);
+
+  const isMobile = _uim();
+
+  const is_visible = _ows((s) => s.is_visible);
+  const is_stealth_mode = _ows((s) => s.is_stealth_mode);
+  const is_proctor_safe = _ows((s) => s.is_proctor_safe);
+  const is_panic_visible = _ows((s) => s.is_panic_visible);
+  const panic_content = _ows((s) => s.panic_content);
+  const position = _ows((s) => s.position);
+  const overlay_width = _ows((s) => s.overlay_width);
+  const overlay_height = _ows((s) => s.overlay_height);
+  const current_question = _ows((s) => s.current_question);
+  const current_hint = _ows((s) => s.current_hint);
+  const streaming_buffer = _ows((s) => s.streaming_buffer);
+  const hint_state = _ows((s) => s.hint_state);
+  const hint_style = _ows((s) => s.hint_style);
+  const network_color = _ows((s) => s.network_color);
+  const error_message = _ows((s) => s.error_message);
+  const screenshot_hint = _ows((s) => s.screenshot_hint);
+  const is_screenshot_loading = _ows((s) => s.is_screenshot_loading);
+  const active_tab = _ows((s) => s.active_tab);
+  const stealth_opacity = _ows((s) => s.stealth_opacity);
+  const is_peek_active = _ows((s) => s.is_peek_active);
+  const is_minimal_mode = _ows((s) => s.is_minimal_mode);
+  const profileId = _aus((s) => s.profile?.id ?? null);
+
+  const sessionStatus = _ss((s) => s.status);
+  const isSessionActive = sessionStatus === "active";
+
+  const deepgramStatus = _as((s) => s.deepgram_status);
+  const stream_error = _as((s) => s.streams?.error ?? null);
+  const isRecording = deepgramStatus === "connected";
+  const isGenerating = hint_state === "generating" || hint_state === "streaming";
+
+  const handlePositionChange = useCallback(
+    (pos: _OP) => {
+      _ows.getState().setPosition(pos);
+      if (!profileId) return;
+      if (persistPositionTimerRef.current) clearTimeout(persistPositionTimerRef.current);
+      persistPositionTimerRef.current = setTimeout(() => {
+        void _sb
+          .from("profiles")
+          .update({ overlay_position: JSON.stringify(pos), updated_at: new Date().toISOString() })
+          .eq("id", profileId);
+      }, 500);
+    },
+    [profileId],
+  );
+
+  _usm(panelRef, is_stealth_mode);
+
   const pipDoc = useDocumentPiP(false);
   const targetDoc = pipDoc ?? (typeof document !== "undefined" ? document : null);
 
@@ -135,15 +222,6 @@ import {───────import { useRef, useCallback, useState, useEffect, 
         )}
 
         <div className="flex-1" />
-
-        {/* collapse/expand pill */}
-        <button
-          onClick={() => useOverlayStore.getState().setMinimalMode(!is_minimal_mode)}
-          className="text-[10px] font-semibold text-white/60 hover:text-white/90 px-2 py-0.5 rounded-md hover:bg-white/5 transition-colors shrink-0"
-          title={is_minimal_mode ? "Expand panel" : "Collapse to pill"}
-        >
-          {is_minimal_mode ? "▾" : "▴"}
-        </button>
 
         <OverlayAudioBadge />
         <OverlayAnswerTimer />
@@ -447,93 +525,3 @@ function ensureOverlayRoot(doc: Document): HTMLElement {
   }
   return el;
 }
-
-// ─────────────────────────────────────────────────────────────────
-// Types
-// ─────────────────────────────────────────────────────────────────
-
-interface OverlayWindowProps {
-  onToggleMic?: () => void;
-  onToggleSystemAudio?: () => void;
-  onGenerate?: () => void;
-  onEndSession?: () => void;
-  onManualQuestion?: (question: string) => void;
-  onStartSession?: (config: LiveSessionConfig) => void;
-  onSetupNewSession?: () => void;
-  lastSessionId?: string | null;
-}
-
-// ─────────────────────────────────────────────────────────────────
-// Component
-// ─────────────────────────────────────────────────────────────────
-
-export function OverlayWindow({
-  onToggleMic,
-  onToggleSystemAudio,
-  onGenerate,
-  onEndSession,
-  onManualQuestion,
-  onStartSession,
-  onSetupNewSession,
-  lastSessionId,
-}: OverlayWindowProps) {
-  const panelRef = useRef<HTMLDivElement>(null);
-  const resizeContainerRef = useRef<HTMLDivElement>(null);
-  const persistPositionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // ── Hydration guard ─────────────────────────────────────────────
-  const [isMounted, setIsMounted] = useState(false);
-  useEffect(() => { setIsMounted(true); }, []);
-
-  const isMobile = useIsMobile();
-
-  // ── Store subscriptions ─────────────────────────────────────────
-  const is_visible = useOverlayStore((s) => s.is_visible);
-  const is_stealth_mode = useOverlayStore((s) => s.is_stealth_mode);
-  const is_proctor_safe = useOverlayStore((s) => s.is_proctor_safe);
-  const is_panic_visible = useOverlayStore((s) => s.is_panic_visible);
-  const panic_content = useOverlayStore((s) => s.panic_content);
-  const position = useOverlayStore((s) => s.position);
-  const overlay_width = useOverlayStore((s) => s.overlay_width);
-  const overlay_height = useOverlayStore((s) => s.overlay_height);
-  const current_question = useOverlayStore((s) => s.current_question);
-  const current_hint = useOverlayStore((s) => s.current_hint);
-  const streaming_buffer = useOverlayStore((s) => s.streaming_buffer);
-  const hint_state = useOverlayStore((s) => s.hint_state);
-  const hint_style = useOverlayStore((s) => s.hint_style);
-  const network_color = useOverlayStore((s) => s.network_color);
-  const error_message = useOverlayStore((s) => s.error_message);
-  const screenshot_hint = useOverlayStore((s) => s.screenshot_hint);
-  const is_screenshot_loading = useOverlayStore((s) => s.is_screenshot_loading);
-  const active_tab = useOverlayStore((s) => s.active_tab);
-  const stealth_opacity = useOverlayStore((s) => s.stealth_opacity);
-  const is_peek_active = useOverlayStore((s) => s.is_peek_active);
-  const is_minimal_mode = useOverlayStore((s) => s.is_minimal_mode);
-  const profileId = useAuthStore((s) => s.profile?.id ?? null);
-
-  const sessionStatus = useSessionStore((s) => s.status);
-  const isSessionActive = sessionStatus === "active";
-
-  const deepgramStatus = useAudioStore((s) => s.deepgram_status);
-  const stream_error = useAudioStore((s) => s.streams?.error ?? null);
-  const isRecording = deepgramStatus === "connected";
-  const isGenerating = hint_state === "generating" || hint_state === "streaming";
-
-  const handlePositionChange = useCallback(
-    (pos: OverlayPosition) => {
-      useOverlayStore.getState().setPosition(pos);
-      if (!profileId) return;
-
-      if (persistPositionTimerRef.current) clearTimeout(persistPositionTimerRef.current);
-      persistPositionTimerRef.current = setTimeout(() => {
-        void supabase
-          .from("profiles")
-          .update({ overlay_position: JSON.stringify(pos), updated_at: new Date().toISOString() })
-          .eq("id", profileId);
-      }, 500);
-    },
-    [profileId],
-  );
-
-  useStealthMouse(panelRef, is_stealth_mode);
-

@@ -52,45 +52,64 @@ export default function RoomSession() {
 
   // Initial fetch + auto-join
   useEffect(() => {
-    if (!id || !user?.id) return;
+    if (!id) return;
+    // Wait for auth to hydrate before fetching — but never leave the page
+    // stuck on a skeleton: if user is null after first render, flip loading
+    // so the "Room not found" / sign-in fallback can render.
+    if (!user?.id) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
+    setLoading(true);
     (async () => {
-      const { data: r } = await supabase
-        .from("practice_rooms")
-        .select("*")
-        .eq("id", id)
-        .maybeSingle();
-
-      if (cancelled) return;
-      setRoom(r as Room | null);
-
-      if (r) {
-        // Join if not already a participant
-        const { data: existing } = await supabase
-          .from("room_participants")
-          .select("id")
-          .eq("room_id", id)
-          .eq("user_id", user.id)
+      try {
+        const { data: r, error: roomErr } = await supabase
+          .from("practice_rooms")
+          .select("*")
+          .eq("id", id)
           .maybeSingle();
 
-        if (!existing) {
-          await supabase.from("room_participants").insert({
-            room_id: id,
-            user_id: user.id,
-            role: r.host_id === user.id ? "host" : "participant",
-          });
+        if (cancelled) return;
+        if (roomErr) {
+          console.error("[RoomSession] room fetch failed:", roomErr);
+          toast.error(roomErr.message || "Failed to load room");
         }
-      }
+        setRoom((r as Room | null) ?? null);
 
-      const [{ data: parts }, { data: msgs }] = await Promise.all([
-        supabase.from("room_participants").select("*").eq("room_id", id).is("left_at", null),
-        supabase.from("room_chat").select("*").eq("room_id", id).order("created_at", { ascending: true }).limit(200),
-      ]);
+        if (r) {
+          // Join if not already a participant
+          const { data: existing } = await supabase
+            .from("room_participants")
+            .select("id")
+            .eq("room_id", id)
+            .eq("user_id", user.id)
+            .maybeSingle();
 
-      if (!cancelled) {
-        setParticipants((parts as Participant[]) ?? []);
-        setMessages((msgs as ChatMessage[]) ?? []);
-        setLoading(false);
+          if (!existing) {
+            const { error: joinErr } = await supabase.from("room_participants").insert({
+              room_id: id,
+              user_id: user.id,
+              role: r.host_id === user.id ? "host" : "participant",
+            });
+            if (joinErr) console.error("[RoomSession] auto-join failed:", joinErr);
+          }
+
+          const [{ data: parts }, { data: msgs }] = await Promise.all([
+            supabase.from("room_participants").select("*").eq("room_id", id).is("left_at", null),
+            supabase.from("room_chat").select("*").eq("room_id", id).order("created_at", { ascending: true }).limit(200),
+          ]);
+
+          if (!cancelled) {
+            setParticipants((parts as Participant[]) ?? []);
+            setMessages((msgs as ChatMessage[]) ?? []);
+          }
+        }
+      } catch (err) {
+        console.error("[RoomSession] unexpected error:", err);
+        if (!cancelled) toast.error("Failed to load room");
+      } finally {
+        if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };

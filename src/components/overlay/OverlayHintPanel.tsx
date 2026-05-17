@@ -1,4 +1,5 @@
-// src/components/overlay/OverlayHintPanel.tsx// src/components/overlay/OverlayHintPanel.tsxStyle } from "@/types/user.types";
+// src/components/overlay/OverlayHintPanel.tsx
+import type { HintStyle } from "@/types/user.types";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";

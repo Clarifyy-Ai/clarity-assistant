@@ -1,4 +1,5 @@
-// src/components/overlay/OverlayToolbar.tsx// src/components/overlay/OverlayToolbar.tsMemo } from "react";
+// src/components/overlay/OverlayToolbar.tsx
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useAudioStore } from "@/store/audioStore";
 import { useSessionStore } from "@/store/sessionStore";
@@ -200,18 +201,18 @@ export function OverlayToolbar({
           <OverlayActivityTimer />
         </div>
 
-        {/* ✅ Minimize / Restore overlay */}
+        {/* ✅ Minimize / Expand (collapse to pill) — single consolidated button */}
         <button
-          onClick={() => useOverlayStore.getState().toggleMinimize()}
-          title={minimizeLabel}
+          onClick={() => useOverlayStore.getState().setMinimalMode(!isMinimal)}
+          title={isMinimal ? "Expand panel" : "Minimize to pill"}
           className={cn(
             "w-7 h-7 flex items-center justify-center rounded-lg transition-all",
-            isPeekActive && !isVisible
-              ? "bg-indigo-500/15 text-indigo-300 border border-indigo-500/20"
+            isMinimal
+              ? "bg-amber-500/15 text-amber-400 border border-amber-500/20"
               : "text-white/35 hover:text-white/80 hover:bg-white/8"
           )}
         >
-          <Minimize2 className="w-3.5 h-3.5" />
+          {isMinimal ? <Plus className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
         </button>
 
         {/* ⋯ More menu */}
@@ -392,20 +393,6 @@ export function OverlayToolbar({
             </div>
           )}
         </div>
-
-        {/* Minimal mode toggle (collapse/expand body) */}
-        <button
-          onClick={() => useOverlayStore.getState().setMinimalMode(!isMinimal)}
-          title={isMinimal ? "Exit minimal mode" : "Minimal mode"}
-          className={cn(
-            "w-7 h-7 flex items-center justify-center rounded-lg transition-all",
-            isMinimal
-              ? "text-amber-400 bg-amber-500/15 border border-amber-500/20"
-              : "text-white/35 hover:text-white/70 hover:bg-white/8"
-          )}
-        >
-          {isMinimal ? <Plus className="w-3.5 h-3.5" /> : <ChevronUp className="w-3.5 h-3.5" />}
-        </button>
 
         {/* End session */}
         <button
