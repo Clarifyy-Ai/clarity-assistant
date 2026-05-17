@@ -1,6 +1,6 @@
 // src/components/overlay/OverlayResizeHandles.tsx
 import { useCallback, useRef } from "react";
-import text selection while resizingimport { useOverlayStore } from "@/store/overlayStore";
+import { useOverlayStore } from "@/store/overlayStore";
       const prevUserSelect = document.body.style.userSelect;
       const prevCursor = document.body.style.cursor;
       document.body.style.userSelect = "none";

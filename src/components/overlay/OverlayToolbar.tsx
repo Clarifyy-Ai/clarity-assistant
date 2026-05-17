@@ -1,4 +1,5 @@
-// src/components/overlay/OverlayToolbar.tsx// src/components/overlay/OverlayToolbar.tsMemo } from "react";
+// src/components/overlay/OverlayToolbar.tsx
+import { useState, useRef, useEffect, useMemo } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useAudioStore } from "@/store/audioStore";
 import { useSessionStore } from "@/store/sessionStore";
