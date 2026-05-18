@@ -1,11 +1,5 @@
 // src/pages/app/mock/MockSession.tsx
-// FIX: Removed @ts-nocheck. Fixed imports, timer ref, double-end guard,
-// session_answers population, navigation after completion, WPM colors,
-// filler word typography, hotkey phase guard, hint race condition,
-// timer "Saving..." text, skip marking, credits refresh.
-
-import { useState, useEffect, useRef } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useState, use-router-dom";import { useState, useEffect, useRef } from "react";
 import { useSessionOrchestrator } from "@/hooks/useSessionOrchestrator";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useFillerWordDetection } from "@/hooks/useFillerWordDetection";
@@ -28,8 +22,14 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import {
-  Mic, MicOff, Square, ChevronRight,
-  SkipForward, Eye, EyeOff, Timer,
+  Mic,
+  MicOff,
+  Square,
+  ChevronRight,
+  SkipForward,
+  Eye,
+  EyeOff,
+  Timer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -54,17 +54,20 @@ export default function MockSession() {
   const navigate = useNavigate();
   const location = useLocation();
   const profile = useAuthStore((s) => s.profile);
+
   const orchestrator = useSessionOrchestrator() as any;
   const stt = useSpeechRecognition() as any;
   const fillerHook = useFillerWordDetection(stt.interimTranscript) as any;
   const wpmHook = useWPMTracker(stt.transcript) as any;
   const sentimentHook = useSentimentAnalysis(stt.transcript) as any;
+
   const startTimeRef = useRef<string>(new Date().toISOString());
 
   const [phase, setPhase] = useState<"setup" | "loading" | "active">("setup");
   const [panicMode, setPanicMode] = useState(false);
   const [skipConfirm, setSkipConfirm] = useState(false);
   const [endConfirm, setEndConfirm] = useState(false);
+
   const sessionConfigRef = useRef<LiveSessionConfig | null>(null);
   const isStartingRef = useRef(false);
   const autoStartedRef = useRef(false);
@@ -80,6 +83,7 @@ export default function MockSession() {
 
   const handleEndSessionRef = useRef<() => Promise<void>>();
 
+  // Overlay mount/unmount behavior
   useEffect(() => {
     if (phase === "active") {
       useOverlayStore.getState().showOverlay();
@@ -89,29 +93,37 @@ export default function MockSession() {
     };
   }, [phase]);
 
+  // Timer
   useEffect(() => {
     if (phase !== "active") return;
+
     sessionTimerRef.current = setInterval(() => {
       setSessionTimeLeft((t) => {
         if (t <= 1) {
-          clearInterval(sessionTimerRef.current!);
+          if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
           handleEndSessionRef.current?.();
           return 0;
         }
         return t - 1;
       });
     }, 1000);
-    return () => clearInterval(sessionTimerRef.current!);
+
+    return () => {
+      if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+    };
   }, [phase]);
 
+  // Reset per-question metrics when question changes
   useEffect(() => {
     if (phase !== "active") return;
     stt.resetTranscript();
     fillerHook.reset();
     wpmHook.reset();
     questionStartRef.current = Date.now();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orchestrator.currentQuestionIndex]);
 
+  // Hotkeys
   useHotkeys({
     "ctrl+shift+h": () => {
       if (phase !== "active") return;
@@ -139,26 +151,31 @@ export default function MockSession() {
 
   const prevTranscriptLenRef = useRef(0);
 
+  // When question changes, push to overlay and auto-generate hint if enabled
   useEffect(() => {
     if (phase !== "active" || !question) return;
+
     const qText = typeof question === "string" ? question : question.question_text ?? "";
     if (qText) {
       prevTranscriptLenRef.current = 0;
       useOverlayStore.getState().setCurrentQuestion(qText);
       if (useOverlayStore.getState().auto_generate) {
-        handleRequestHint(qText);
+        void handleRequestHint(qText);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, question]);
 
+  // Push transcript deltas to audio store (candidate utterances)
   useEffect(() => {
     if (phase !== "active" || !stt.transcript) return;
     const full = stt.transcript.trim();
     if (!full || full.length <= prevTranscriptLenRef.current) return;
+
     const delta = full.slice(prevTranscriptLenRef.current).trim();
     prevTranscriptLenRef.current = full.length;
     if (!delta) return;
+
     const now = Date.now();
     useAudioStore.getState().addUtterance({
       id: `mock-${now}`,
@@ -173,6 +190,7 @@ export default function MockSession() {
     });
   }, [phase, stt.transcript]);
 
+  // Interim transcript
   useEffect(() => {
     if (phase !== "active") return;
     if (stt.interimTranscript) {
@@ -181,8 +199,7 @@ export default function MockSession() {
   }, [phase, stt.interimTranscript]);
 
   const timeColor =
-    sessionTimeLeft > 120 ? "emerald" :
-    sessionTimeLeft > 30 ? "amber" : "red";
+    sessionTimeLeft > 120 ? "emerald" : sessionTimeLeft > 30 ? "amber" : "red";
 
   function captureAnswer(skipped = false) {
     const qText = typeof question === "string" ? question : question?.question_text ?? "";
@@ -202,15 +219,20 @@ export default function MockSession() {
   async function handleSetup(config: LiveSessionConfig) {
     if (isStartingRef.current) return;
     isStartingRef.current = true;
+
     sessionConfigRef.current = config;
     startTimeRef.current = new Date().toISOString();
     endCalledRef.current = false;
 
     const overlay = useOverlayStore.getState();
     overlay.resetSessionState();
+
+    // ✅ Fix: align stealth + proctor-safe with config (same as LiveOverlay)
+    overlay.setStealthMode(!!config.stealth_mode);
+    overlay.setProctorSafe(!!config.stealth_mode);
+
     overlay.setActiveModel(config.model);
     overlay.setHintStyle(config.hint_style);
-    overlay.setProctorSafe(config.stealth_mode);
 
     const userId = profile?.id;
     if (!userId) {
@@ -234,7 +256,9 @@ export default function MockSession() {
       await activateSession(session.id);
     } catch (err) {
       console.error("[MockSession] Failed to create/reuse session record:", err);
-      toast.error("Failed to start session — could not save to database. Check your connection and try again.");
+      toast.error(
+        "Failed to start session — could not save to database. Check your connection and try again."
+      );
       isStartingRef.current = false;
       return;
     }
@@ -247,6 +271,7 @@ export default function MockSession() {
       resume_id: config.resume_id,
       jd_id: config.jd_id,
     });
+
     useSessionStore.getState().setSessionId(dbSessionId);
 
     setPhase("loading");
@@ -255,7 +280,11 @@ export default function MockSession() {
         body: {
           interview_type: config.interview_type,
           experience_level: profile?.experience_years
-            ? (profile.experience_years > 5 ? "senior" : profile.experience_years > 2 ? "mid" : "junior")
+            ? profile.experience_years > 5
+              ? "senior"
+              : profile.experience_years > 2
+                ? "mid"
+                : "junior"
             : "mid",
           company: config.company || "",
           role: profile?.target_role || "",
@@ -267,7 +296,6 @@ export default function MockSession() {
         },
       });
 
-      // ✅ Robust parsing: support {questions}, {data:{questions}}, or legacy
       const questions =
         (data as any)?.questions ??
         (data as any)?.data?.questions ??
@@ -275,7 +303,10 @@ export default function MockSession() {
         [];
 
       if (error || !Array.isArray(questions) || questions.length === 0) {
-        await sessionsDB.update(dbSessionId, { status: "abandoned", ended_at: new Date().toISOString() } as any);
+        await sessionsDB.update(
+          dbSessionId,
+          { status: "abandoned", ended_at: new Date().toISOString() } as any
+        );
         throw new Error(error?.message || (data as any)?.error || "Failed to generate questions");
       } else {
         orchestrator.setQuestions?.(questions);
@@ -306,7 +337,7 @@ export default function MockSession() {
     stt.stop();
 
     if (isLastQ) {
-      clearInterval(sessionTimerRef.current!);
+      if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
       useOverlayStore.getState().hideOverlay();
       await persistMockSession();
       await orchestrator.completeSession();
@@ -398,7 +429,7 @@ export default function MockSession() {
     endCalledRef.current = true;
 
     captureAnswer();
-    clearInterval(sessionTimerRef.current!);
+    if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
     stt.stop();
     useOverlayStore.getState().hideOverlay();
     await persistMockSession();
@@ -411,6 +442,7 @@ export default function MockSession() {
     handleEndSessionRef.current = handleEndSession;
   });
 
+  // UI phases
   if (phase === "setup") {
     return (
       <PreSessionSetup
@@ -474,6 +506,7 @@ export default function MockSession() {
       <LiveSessionController isActive={true} />
       <OverlayKeyboardHandler enabled={phase === "active"} onToggleMute={stt.toggleMute} />
 
+      {/* Main UI */}
       <div className="flex items-center justify-center min-h-screen">
         <div className="w-full max-w-lg space-y-4 sm:space-y-6 p-3 sm:p-6">
           <div className="flex items-center justify-between">
@@ -481,7 +514,9 @@ export default function MockSession() {
               <span className="text-xs text-muted-foreground font-medium">
                 Question <span className="text-foreground font-bold">{qIndex + 1}</span> / {totalQ}
               </span>
-              <Badge variant="violet" size="sm">mock</Badge>
+              <Badge variant="violet" size="sm">
+                mock
+              </Badge>
             </div>
             <div className="flex items-center gap-2">
               <Button
@@ -515,9 +550,13 @@ export default function MockSession() {
               <div
                 className={cn(
                   "flex items-center gap-1.5 text-xs sm:text-sm font-bold tabular-nums",
-                  sessionTimeLeft <= 0 ? "text-muted-foreground" :
-                  timeColor === "emerald" ? "text-emerald-400" :
-                  timeColor === "amber" ? "text-amber-400" : "text-red-400"
+                  sessionTimeLeft <= 0
+                    ? "text-muted-foreground"
+                    : timeColor === "emerald"
+                      ? "text-emerald-400"
+                      : timeColor === "amber"
+                        ? "text-amber-400"
+                        : "text-red-400"
                 )}
               >
                 <Timer className="w-3.5 h-3.5" />
@@ -550,33 +589,30 @@ export default function MockSession() {
                 <span
                   className={cn(
                     "text-xs font-medium",
-                    wpmHook.wpm > 160 ? "text-amber-400" :
-                    wpmHook.wpm < 80 ? "text-amber-400" : "text-emerald-400"
+                    wpmHook.wpm > 160 ? "text-amber-400" : wpmHook.wpm < 80 ? "text-amber-400" : "text-emerald-400"
                   )}
                   title={
-                    wpmHook.wpm < 80 ? "Speaking slowly — try to increase pace" :
-                    wpmHook.wpm > 160 ? "Speaking fast — try to slow down" :
-                    "Good pace"
+                    wpmHook.wpm < 80
+                      ? "Speaking slowly — try to increase pace"
+                      : wpmHook.wpm > 160
+                        ? "Speaking fast — try to slow down"
+                        : "Good pace"
                   }
                 >
                   {wpmHook.wpm} WPM
                 </span>
               </div>
-              <button
-                onClick={stt.toggleMute}
-                className="p-1.5 rounded-lg hover:bg-accent/10 transition-all"
-              >
-                {stt.isMuted
-                  ? <MicOff className="w-3.5 h-3.5 text-red-400" />
-                  : <Mic className="w-3.5 h-3.5 text-emerald-400" />
-                }
+              <button onClick={stt.toggleMute} className="p-1.5 rounded-lg hover:bg-accent/10 transition-all">
+                {stt.isMuted ? (
+                  <MicOff className="w-3.5 h-3.5 text-red-400" />
+                ) : (
+                  <Mic className="w-3.5 h-3.5 text-emerald-400" />
+                )}
               </button>
             </div>
 
             <div className="min-h-[60px] text-sm text-foreground leading-relaxed">
-              {stt.transcript || (
-                <span className="text-muted-foreground italic">Start speaking…</span>
-              )}
+              {stt.transcript || <span className="text-muted-foreground italic">Start speaking…</span>}
               {stt.interimTranscript && (
                 <span className="text-muted-foreground italic"> {stt.interimTranscript}</span>
               )}
@@ -601,21 +637,19 @@ export default function MockSession() {
             size="lg"
             fullWidth
             onClick={handleNextQuestion}
-            rightIcon={isLastQ
-              ? <Square className="w-4 h-4" />
-              : <ChevronRight className="w-4 h-4" />
-            }
+            rightIcon={isLastQ ? <Square className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
           >
             {isLastQ ? "Finish & see scorecard" : "Next question"}
           </Button>
 
           <p className="text-center text-xs text-muted-foreground/40">
-            The overlay window provides AI hints, transcript, and session status.
-            Use <kbd className="px-1 py-0.5 bg-secondary rounded font-mono">Ctrl+Shift+H</kbd> to toggle it.
+            The overlay window provides AI hints, transcript, and session status. Use{" "}
+            <kbd className="px-1 py-0.5 bg-secondary rounded font-mono">Ctrl+Shift+H</kbd> to toggle it.
           </p>
         </div>
       </div>
 
+      {/* Overlay */}
       <OverlayWindow
         onToggleMic={stt.toggleMute}
         onGenerate={() => handleRequestHint()}
@@ -626,15 +660,9 @@ export default function MockSession() {
         }}
       />
 
-      <Modal
-        open={skipConfirm}
-        onClose={() => setSkipConfirm(false)}
-        title="Skip question?"
-        size="sm"
-      >
-        <p className="text-sm text-muted-foreground mb-5">
-          This question will be marked as skipped.
-        </p>
+      {/* Modals */}
+      <Modal open={skipConfirm} onClose={() => setSkipConfirm(false)} title="Skip question?" size="sm">
+        <p className="text-sm text-muted-foreground mb-5">This question will be marked as skipped.</p>
         <div className="flex gap-3">
           <Button variant="secondary" size="sm" fullWidth onClick={() => setSkipConfirm(false)}>
             Cancel
@@ -647,7 +675,7 @@ export default function MockSession() {
               captureAnswer(true);
               setSkipConfirm(false);
               if (isLastQ) {
-                handleEndSession();
+                void handleEndSession();
               } else {
                 orchestrator.nextQuestion();
               }
@@ -658,20 +686,13 @@ export default function MockSession() {
         </div>
       </Modal>
 
-      <Modal
-        open={endConfirm}
-        onClose={() => setEndConfirm(false)}
-        title="End session early?"
-        size="sm"
-      >
-        <p className="text-sm text-muted-foreground mb-5">
-          Your progress will be saved.
-        </p>
+      <Modal open={endConfirm} onClose={() => setEndConfirm(false)} title="End session early?" size="sm">
+        <p className="text-sm text-muted-foreground mb-5">Your progress will be saved.</p>
         <div className="flex gap-3">
           <Button variant="secondary" size="sm" fullWidth onClick={() => setEndConfirm(false)}>
             Continue
           </Button>
-          <Button variant="danger" size="sm" fullWidth onClick={handleEndSession}>
+          <Button variant="danger" size="sm" fullWidth onClick={() => void handleEndSession()}>
             End & save
           </Button>
         </div>
