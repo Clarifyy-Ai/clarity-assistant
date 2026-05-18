@@ -1,15 +1,4 @@
-// src/lib/audio/deepgramStream.ts
-// Manages Deepgram WebSocket lifecycle, reconnection, and transcript parsing.
-
-import { EDGE_BASE } from "@/lib/env";
-import { getAuthHeaders } from "@/lib/network/fetchEdge";
-import type {
-  DeepgramConfig,
-  TranscriptUtterance,
-  TranscriptWord,
-  DeepgramConnectionStatus,
-} from "@/types/audio.types";
-import { useAudioStore } from "@/store/audioStore";
+// src/lib/audio/deepgramStream.ts// src/lib/audio/deepgramStream "@/store/audioStore";
 import { useAuthStore } from "@/store/authStore";
 import { FEATURE_FLAGS, FEATURE_PLAN_GATE } from "@/lib/constants/features";
 import { generateId } from "@/lib/utils";
@@ -29,6 +18,9 @@ const DEEPGRAM_WSS_URL = "wss://api.deepgram.com/v1/listen";
 const MAX_RECONNECT_ATTEMPTS = 5;
 const RECONNECT_BASE_DELAY_MS = 1000;
 const TOKEN_REFRESH_BUFFER_S = 50;
+
+// Used for controlled restart without triggering reconnect loop
+const RESTART_CLOSE_CODE = 4000;
 
 export interface DeepgramStreamOptions {
   stream: MediaStream;
@@ -59,8 +51,15 @@ interface DeepgramWord {
 export class DeepgramStreamClient {
   private ws: WebSocket | null = null;
   private mediaRecorder: MediaRecorder | null = null;
+
   private reconnectAttempts = 0;
-  private isDestroyed = false;
+
+  // IMPORTANT:
+  // - destroyed: permanent teardown (disconnect/unmount). connect() should not proceed.
+  // - restarting: controlled close+reopen where we do NOT want reconnect loop to kick in.
+  private destroyed = false;
+  private restarting = false;
+
   private pingInterval: ReturnType<typeof setInterval> | null = null;
 
   private currentToken: string | null = null;
@@ -78,6 +77,7 @@ export class DeepgramStreamClient {
       onError: opts.onError,
       onStatusChange: opts.onStatusChange,
     };
+
     this.config = {
       model: "nova-2-meeting",
       language: "en-US",
@@ -93,7 +93,7 @@ export class DeepgramStreamClient {
   }
 
   async connect(): Promise<void> {
-    if (this.isDestroyed) return;
+    if (this.destroyed) return;
 
     this.callbacks.onStatusChange("connecting");
 
@@ -101,7 +101,9 @@ export class DeepgramStreamClient {
       await this.ensureFreshToken();
     } catch (err) {
       this.callbacks.onError(
-        new Error("Failed to obtain Deepgram token. Check DEEPGRAM_PROJECT_ID secret."),
+        new Error(
+          "Failed to obtain Deepgram token. Check DEEPGRAM_PROJECT_ID / DEEPGRAM_API_KEY secrets and edge function logs.",
+        ),
       );
       this.callbacks.onStatusChange("error");
       return;
@@ -115,6 +117,8 @@ export class DeepgramStreamClient {
 
     const url = this.buildWebSocketURL();
 
+    // Deepgram docs: in client-side environments where custom headers aren't supported,
+    // pass auth via Sec-WebSocket-Protocol (subprotocol). 【1-161d4f】
     this.ws = new WebSocket(url, ["token", this.currentToken]);
     this.ws.binaryType = "arraybuffer";
 
@@ -124,27 +128,101 @@ export class DeepgramStreamClient {
     this.ws.onmessage = (e) => this.handleMessage(e);
   }
 
+  /**
+   * Permanent teardown. No further reconnect/restart should happen.
+   */
   disconnect(): void {
-    this.isDestroyed = true;
+    this.destroyed = true;
+    this.restarting = false;
     this.stopMediaRecorder();
     this.stopPing();
 
     if (this.ws) {
-      if (this.ws.readyState === WebSocket.OPEN) {
-        this.ws.send(JSON.stringify({ type: "CloseStream" }));
+      try {
+        if (this.ws.readyState === WebSocket.OPEN) {
+          this.ws.send(JSON.stringify({ type: "CloseStream" }));
+        }
+      } catch {
+        // ignore send failures
       }
-      this.ws.close(1000, "User disconnected");
+
+      try {
+        this.ws.close(1000, "User disconnected");
+      } catch {
+        // ignore close failures
+      }
+
       this.ws = null;
     }
 
     this.callbacks.onStatusChange("disconnected");
   }
 
+  /**
+   * Controlled restart (used for token refresh and "refresh connection" UX).
+   * This does NOT permanently destroy the instance.
+   */
+  async restart(): Promise<void> {
+    if (this.destroyed) return;
+
+    this.restarting = true;
+    this.stopMediaRecorder();
+    this.stopPing();
+
+    const wsToClose = this.ws;
+    this.ws = null;
+
+    if (wsToClose) {
+      await this.closeWebSocket(wsToClose, RESTART_CLOSE_CODE, "Restarting connection");
+    }
+
+    this.reconnectAttempts = 0;
+    this.restarting = false;
+
+    await this.connect();
+  }
+
+  private async closeWebSocket(ws: WebSocket, code: number, reason: string): Promise<void> {
+    await new Promise<void>((resolve) => {
+      let done = false;
+
+      const finish = () => {
+        if (done) return;
+        done = true;
+        resolve();
+      };
+
+      const timeout = setTimeout(finish, 600);
+      try {
+        ws.onclose = () => {
+          clearTimeout(timeout);
+          finish();
+        };
+        ws.onerror = () => {
+          clearTimeout(timeout);
+          finish();
+        };
+
+        try {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: "CloseStream" }));
+          }
+        } catch {
+          // ignore
+        }
+
+        ws.close(code, reason);
+      } catch {
+        clearTimeout(timeout);
+        finish();
+      }
+    });
+  }
+
   private async ensureFreshToken(): Promise<void> {
     const nowMs = Date.now();
     const bufferMs = TOKEN_REFRESH_BUFFER_S * 1000;
-    const isExpiredOrClose =
-      !this.currentToken || (nowMs + bufferMs) >= this.tokenExpiresAt;
+    const isExpiredOrClose = !this.currentToken || nowMs + bufferMs >= this.tokenExpiresAt;
 
     if (isExpiredOrClose) {
       const tokenData = await fetchDeepgramToken();
@@ -164,15 +242,19 @@ export class DeepgramStreamClient {
     this.stopMediaRecorder();
     this.stopPing();
 
-    if (this.isDestroyed) return;
+    if (this.destroyed) return;
+
+    // If we are restarting intentionally, do not trigger backoff loop here.
+    if (this.restarting || event.code === RESTART_CLOSE_CODE) {
+      return;
+    }
 
     if (event.code !== 1000 && this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
       this.reconnectAttempts++;
-      const delay =
-        RECONNECT_BASE_DELAY_MS * Math.pow(2, this.reconnectAttempts - 1);
+      const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, this.reconnectAttempts - 1);
       this.callbacks.onStatusChange("reconnecting");
       setTimeout(() => {
-        if (!this.isDestroyed) void this.connect();
+        if (!this.destroyed) void this.connect();
       }, delay);
     } else {
       this.callbacks.onStatusChange("disconnected");
@@ -189,8 +271,7 @@ export class DeepgramStreamClient {
       const data = JSON.parse(event.data as string) as Record<string, any>;
 
       if (data.type === "Results" && !data.is_final) {
-        const interimText =
-          data.channel?.alternatives?.[0]?.transcript ?? "";
+        const interimText = data.channel?.alternatives?.[0]?.transcript ?? "";
         if (interimText) this.callbacks.onInterim(interimText);
         return;
       }
@@ -225,7 +306,7 @@ export class DeepgramStreamClient {
           words,
           start_ms: Math.round(((data.start as number) ?? 0) * 1000),
           end_ms: Math.round(
-            (((data.start as number) ?? 0) + ((data.duration as number) ?? 0)) * 1000
+            (((data.start as number) ?? 0) + ((data.duration as number) ?? 0)) * 1000,
           ),
           is_final: true,
           is_interviewer_question: speaker === "interviewer" && text.endsWith("?"),
@@ -263,17 +344,24 @@ export class DeepgramStreamClient {
       }
     };
 
+    // Send chunks frequently to avoid Deepgram timing out due to no audio. 【2-499057】
     this.mediaRecorder.start(250);
   }
 
   private stopMediaRecorder(): void {
-    if (this.mediaRecorder && this.mediaRecorder.state !== "inactive") {
-      this.mediaRecorder.stop();
+    try {
+      if (this.mediaRecorder && this.mediaRecorder.state !== "inactive") {
+        this.mediaRecorder.stop();
+      }
+    } catch {
+      // ignore stop failures
+    } finally {
       this.mediaRecorder = null;
     }
   }
 
   private startPing(): void {
+    // Deepgram recommends keepalive when audio isn't continuously streaming. 【2-499057】【1-161d4f】
     this.pingInterval = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({ type: "KeepAlive" }));
@@ -302,6 +390,7 @@ export class DeepgramStreamClient {
       utterances: "true",
       encoding: "opus",
     });
+
     return `${DEEPGRAM_WSS_URL}?${params.toString()}`;
   }
 
@@ -314,25 +403,42 @@ export class DeepgramStreamClient {
   }
 }
 
+function buildEdgeFunctionUrl(fnName: string): string {
+  const base = String(EDGE_BASE ?? "").replace(/\/+$/, "");
+
+  // common patterns:
+  // - https://xyz.supabase.co/functions/v1
+  // - https://xyz.supabase.co (then we must append /functions/v1)
+  if (base.endsWith("/functions/v1")) return `${base}/${fnName}`;
+  if (base.includes("/functions/v1/")) return `${base.replace(/\/functions\/v1\/.*/, "/functions/v1")}/${fnName}`;
+
+  return `${base}/functions/v1/${fnName}`;
+}
+
 async function fetchDeepgramToken(): Promise<TokenResponse> {
   const headers = await getAuthHeaders();
 
-  const response = await fetch(`${EDGE_BASE}/deepgram-token`, {
+  const response = await fetch(buildEdgeFunctionUrl("deepgram-token"), {
     method: "POST",
     headers,
   });
 
   if (!response.ok) {
-    // ✅ FIX: preserve body even if not JSON
     const text = await response.text().catch(() => "");
     const maybeJson = (() => {
-      try { return JSON.parse(text); } catch { return null; }
+      try {
+        return JSON.parse(text);
+      } catch {
+        return null;
+      }
     })();
+
     const msg =
       maybeJson?.error ||
       maybeJson?.message ||
       text ||
       `Token fetch failed: ${response.status}`;
+
     throw new Error(msg);
   }
 
@@ -379,3 +485,13 @@ function getSupportedMimeType(): string {
   }
   return "audio/webm";
 }
+// Manages Deepgram WebSocket lifecycle, reconnection, and transcript parsing.
+
+import { EDGE_BASE } from "@/lib/env";
+import { getAuthHeaders } from "@/lib/network/fetchEdge";
+import type {
+  DeepgramConfig,
+  TranscriptUtterance,
+  TranscriptWord,
+  DeepgramConnectionStatus,
+} from "@/types/audio.types";
