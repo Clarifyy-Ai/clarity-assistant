@@ -1,37 +1,56 @@
-import { useEffect, useRef } from 'react';
-import { useHotkey } from '@/hooks/useHotkeys';
-import { useOverlayStore } from '@/store/overlayStore';
-import { useSessionStore } from '@/store/sessionStore';
-import { toggleAppStealthMode } from '@/lib/stealth/stealthActions';
-import { PANIC_RESPONSE } from '@/types/session.types';
-import { captureAndAnalyseCodingProblem } from '@/lib/audio/screenshotCapture';
+// src/components/overlay/OverlayKeyboardHandler.tsx — PRODUCTION READY
+import { useEffect, useRef } from "react";
+import { useHotkey } from "@/hooks/useHotkeys";
+import { useOverlayStore } from "@/store/overlayStore";
+import { useSessionStore } from "@/store/sessionStore";
+import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
+import { PANIC_RESPONSE } from "@/types/session.types";
+import { captureAndAnalyseCodingProblem } from "@/lib/audio/screenshotCapture";
 
 interface OverlayKeyboardHandlerProps {
   enabled: boolean;
   onToggleMute?: () => void;
 }
 
-export function OverlayKeyboardHandler({
-  enabled,
-  onToggleMute,
-}: OverlayKeyboardHandlerProps) {
-  const toggleOverlay    = useOverlayStore((s) => s.toggleOverlay);
-  const is_visible       = useOverlayStore((s) => s.is_visible);
+export function OverlayKeyboardHandler({ enabled, onToggleMute }: OverlayKeyboardHandlerProps) {
+  const is_visible = useOverlayStore((s) => s.is_visible);
   const is_panic_visible = useOverlayStore((s) => s.is_panic_visible);
-  const showPanic        = useOverlayStore((s) => s.showPanic);
-  const hidePanic        = useOverlayStore((s) => s.hidePanic);
-  const clearHint        = useOverlayStore((s) => s.clearHint);
-  const cycleHintStyle   = useOverlayStore((s) => s.cycleHintStyle);
-  const sessionStatus    = useSessionStore((s) => s.status);
+  const hidePanic = useOverlayStore((s) => s.hidePanic);
+  const clearHint = useOverlayStore((s) => s.clearHint);
+  const cycleHintStyle = useOverlayStore((s) => s.cycleHintStyle);
+  const sessionStatus = useSessionStore((s) => s.status);
 
-  useHotkey(['ctrl', 'shift', 'h'], () => { toggleOverlay?.(); }, enabled);
+  // ✅ Ctrl+Shift+H: Smart toggle (restores from minimize/peek correctly)
+  useHotkey(
+    ["ctrl", "shift", "h"],
+    () => {
+      const os = useOverlayStore.getState();
+      // toggleMinimize handles:
+      // - visible -> minimize(peek)
+      // - peek -> restore
+      // - hidden -> show
+      os.toggleMinimize();
+    },
+    enabled
+  );
 
-  useHotkey(['ctrl', 'shift', 's'], toggleAppStealthMode, enabled && is_visible);
+  // ✅ Ctrl+Shift+J: explicit minimize/restore
+  useHotkey(
+    ["ctrl", "shift", "j"],
+    () => {
+      useOverlayStore.getState().toggleMinimize();
+    },
+    enabled
+  );
 
-  useHotkey(['ctrl', 'shift', 'p'], () => { showPanic?.(PANIC_RESPONSE); }, enabled);
+  useHotkey(["ctrl", "shift", "s"], toggleAppStealthMode, enabled && is_visible);
+
+  useHotkey(["ctrl", "shift", "p"], () => {
+    useOverlayStore.getState().showPanic(PANIC_RESPONSE);
+  }, enabled);
 
   useHotkey(
-    ['escape'],
+    ["escape"],
     () => {
       const os = useOverlayStore.getState();
       if (os.is_hotkey_help_visible) {
@@ -45,36 +64,26 @@ export function OverlayKeyboardHandler({
     enabled && is_visible
   );
 
-  useHotkey(['ctrl', 'shift', 'y'], () => { cycleHintStyle?.(); }, enabled && is_visible);
+  useHotkey(["ctrl", "shift", "y"], () => cycleHintStyle?.(), enabled && is_visible);
 
   useHotkey(
-    ['ctrl', 'shift', 'c'],
-    () => { if (sessionStatus === 'active') captureAndAnalyseCodingProblem(); },
+    ["ctrl", "shift", "c"],
+    () => {
+      if (sessionStatus === "active") captureAndAnalyseCodingProblem();
+    },
     enabled && is_visible
   );
 
-  // Mic mute: Ctrl+Shift+M (audio category). Overlay minimize lives on Ctrl+Shift+J.
-  useHotkey(['ctrl', 'shift', 'm'], () => { onToggleMute?.(); }, enabled);
+  useHotkey(["ctrl", "shift", "m"], () => onToggleMute?.(), enabled);
 
-  // ── Quick Dock Positions ──────────────────────────────────────
-  useHotkey(['ctrl', '1'], () => {
-    useOverlayStore.getState().setPosition({ x: 24, y: 80 });
-  }, enabled && is_visible);
+  // Quick dock positions
+  useHotkey(["ctrl", "1"], () => useOverlayStore.getState().setPosition({ x: 24, y: 80 }), enabled && is_visible);
+  useHotkey(["ctrl", "2"], () => useOverlayStore.getState().setPosition({ x: window.innerWidth - 444, y: 80 }), enabled && is_visible);
+  useHotkey(["ctrl", "3"], () => useOverlayStore.getState().setPosition({ x: 24, y: window.innerHeight - 560 }), enabled && is_visible);
+  useHotkey(["ctrl", "4"], () => useOverlayStore.getState().setPosition({ x: window.innerWidth - 444, y: window.innerHeight - 560 }), enabled && is_visible);
 
-  useHotkey(['ctrl', '2'], () => {
-    useOverlayStore.getState().setPosition({ x: window.innerWidth - 444, y: 80 });
-  }, enabled && is_visible);
-
-  useHotkey(['ctrl', '3'], () => {
-    useOverlayStore.getState().setPosition({ x: 24, y: window.innerHeight - 560 });
-  }, enabled && is_visible);
-
-  useHotkey(['ctrl', '4'], () => {
-    useOverlayStore.getState().setPosition({ x: window.innerWidth - 444, y: window.innerHeight - 560 });
-  }, enabled && is_visible);
-
-  // ── Safe Word / Emergency Exit ────────────────────────────────
-  useHotkey(['ctrl', 'shift', 'escape'], () => {
+  // Emergency exit
+  useHotkey(["ctrl", "shift", "escape"], () => {
     const os = useOverlayStore.getState();
     os.hideOverlay();
     os.resetSessionState();
@@ -86,15 +95,14 @@ export function OverlayKeyboardHandler({
     if (!enabled) return;
 
     function onHotkeyHelp(e: KeyboardEvent) {
-      if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && (e.key === '/' || e.key === '?')) {
+      if (e.ctrlKey && e.shiftKey && !e.altKey && !e.metaKey && (e.key === "/" || e.key === "?")) {
         e.preventDefault();
         const os = useOverlayStore.getState();
-        if (os.is_visible) {
-          os.toggleHotkeyHelp();
-        }
+        if (os.is_visible) os.toggleHotkeyHelp();
       }
     }
-    window.addEventListener('keydown', onHotkeyHelp, true);
+
+    window.addEventListener("keydown", onHotkeyHelp, true);
 
     function clearPeekTimer() {
       if (peekTimerRef.current) {
@@ -112,8 +120,9 @@ export function OverlayKeyboardHandler({
       }
     }
 
+    // Hold Ctrl+Shift to show a temporary peek pill (WITHOUT turning overlay visible)
     function onKeyDown(e: KeyboardEvent) {
-      if (e.key !== 'Control' && e.key !== 'Shift') {
+      if (e.key !== "Control" && e.key !== "Shift") {
         clearPeekArm();
         return;
       }
@@ -122,25 +131,27 @@ export function OverlayKeyboardHandler({
 
       const os = useOverlayStore.getState();
 
+      // already peeking
       if (os.is_peek_active) {
         clearPeekTimer();
         return;
       }
 
+      // arm peek after short hold
       if (!os.is_visible && !os.is_peek_active && !peekArmTimer) {
         peekArmTimer = setTimeout(() => {
           peekArmTimer = null;
-          const current = useOverlayStore.getState();
-          if (!current.is_visible && !current.is_peek_active) {
-            current.setPeekActive(true);
-            current.showOverlay();
+          const cur = useOverlayStore.getState();
+          if (!cur.is_visible && !cur.is_peek_active) {
+            // ✅ FIX: do NOT call showOverlay() (it clears peek)
+            cur.setPeekActive(true);
           }
         }, 400);
       }
     }
 
     function onKeyUp(e: KeyboardEvent) {
-      if (e.key !== 'Control' && e.key !== 'Shift') return;
+      if (e.key !== "Control" && e.key !== "Shift") return;
 
       clearPeekArm();
 
@@ -149,26 +160,26 @@ export function OverlayKeyboardHandler({
 
       clearPeekTimer();
       peekTimerRef.current = setTimeout(() => {
-        const current = useOverlayStore.getState();
-        if (current.is_peek_active) {
-          current.setPeekActive(false);
-          current.hideOverlay();
+        const cur = useOverlayStore.getState();
+        if (cur.is_peek_active) {
+          // ✅ FIX: just disable peek; don't call hideOverlay() (not needed)
+          cur.setPeekActive(false);
         }
         peekTimerRef.current = null;
       }, 2000);
     }
 
-    window.addEventListener('keydown', onKeyDown, true);
-    window.addEventListener('keyup', onKeyUp, true);
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("keyup", onKeyUp, true);
 
     return () => {
-      window.removeEventListener('keydown', onHotkeyHelp, true);
-      window.removeEventListener('keydown', onKeyDown, true);
-      window.removeEventListener('keyup', onKeyUp, true);
+      window.removeEventListener("keydown", onHotkeyHelp, true);
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("keyup", onKeyUp, true);
       clearPeekTimer();
       clearPeekArm();
     };
-  }, [enabled]);
+  }, [enabled, is_panic_visible, hidePanic, clearHint, cycleHintStyle, onToggleMute, is_visible, sessionStatus]);
 
   return null;
 }
