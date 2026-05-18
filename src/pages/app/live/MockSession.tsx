@@ -1,12 +1,12 @@
-// @ts-nocheck
-// ─────────────────────────────────────────────────────────────────────────────
-// live/MockSession.tsx — AI-driven mock interview session inside the live
-// interface. Bridges LiveOverlay and MockInterview logic: loads a question
-// queue from the session store, streams AI interviewer messages, records
-// user audio responses, and hands off to the Debrief page on completion.
-// ─────────────────────────────────────────────────────────────────────────────
+// src/pages/app/live/MockSession.tsx — PRODUCTION READY
+// AI-driven mock interview session inside the live interface.
+// Fixes:
+// - Removed @ts-nocheck and aligned with current audioStore schema
+// - Uses useAudioSession pipeline (mic capture + Deepgram transcription)
+// - Correct per-question answer capture via utterance index snapshot
+// - Keeps fallback questions + best-effort generate-questions load
 
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 
@@ -14,8 +14,8 @@ import { useAudioStore } from "@/store/audioStore";
 import { ROUTES } from "@/lib/constants";
 import { formatDurationSec } from "@/lib/utils/formatters";
 import { cn } from "@/lib/utils";
-
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { useAudioSession } from "@/hooks/useAudioSession";
 
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
@@ -97,13 +97,10 @@ const FALLBACK_QUESTIONS: MockQuestion[] = [
 ];
 
 const TYPE_COLORS: Record<MockQuestion["type"], string> = {
-  behavioral:
-    "bg-blue-100   text-blue-700   dark:bg-blue-900/40   dark:text-blue-300",
-  technical:
-    "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
-  situational:
-    "bg-amber-100  text-amber-700  dark:bg-amber-900/40  dark:text-amber-300",
-  hr: "bg-green-100  text-green-700  dark:bg-green-900/40  dark:text-green-300",
+  behavioral: "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
+  technical: "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+  situational: "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
+  hr: "bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300",
 };
 
 // ─── useCountdown — stable timer hook ────────────────────────────────────────
@@ -112,6 +109,7 @@ function useCountdown(initialSeconds: number, active: boolean, onExpire: () => v
   const [remaining, setRemaining] = useState(initialSeconds);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const onExpireRef = useRef(onExpire);
+
   useEffect(() => {
     onExpireRef.current = onExpire;
   });
@@ -123,13 +121,15 @@ function useCountdown(initialSeconds: number, active: boolean, onExpire: () => v
   useEffect(() => {
     if (!active) {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = null;
       return;
     }
 
     intervalRef.current = setInterval(() => {
       setRemaining((prev) => {
         if (prev <= 1) {
-          clearInterval(intervalRef.current!);
+          if (intervalRef.current) clearInterval(intervalRef.current);
+          intervalRef.current = null;
           onExpireRef.current();
           return 0;
         }
@@ -139,6 +139,7 @@ function useCountdown(initialSeconds: number, active: boolean, onExpire: () => v
 
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
+      intervalRef.current = null;
     };
   }, [active]);
 
@@ -150,16 +151,20 @@ function useCountdown(initialSeconds: number, active: boolean, onExpire: () => v
 
 function MicVisualiser({ isActive, rmsLevel }: { isActive: boolean; rmsLevel: number }) {
   const BAR_COUNT = 8;
+
+  // rmsLevel is expected 0..1-ish; clamp for safety
+  const level = Math.max(0, Math.min(1, rmsLevel));
+
   return (
     <div className="flex items-center gap-1">
       {Array.from({ length: BAR_COUNT }).map((_, i) => {
         const threshold = i / BAR_COUNT;
-        const lit = isActive && rmsLevel > threshold;
+        const lit = isActive && level > threshold;
         return (
           <motion.div
             key={i}
             className="w-1 rounded-full bg-primary"
-            animate={{ height: lit ? `${10 + (rmsLevel - threshold) * 24}px` : "4px" }}
+            animate={{ height: lit ? `${10 + (level - threshold) * 24}px` : "4px" }}
             transition={{ duration: 0.08, ease: "easeOut" }}
           />
         );
@@ -171,7 +176,7 @@ function MicVisualiser({ isActive, rmsLevel }: { isActive: boolean; rmsLevel: nu
   );
 }
 
-function normalizeType(value: any): MockQuestion["type"] {
+function normalizeType(value: unknown): MockQuestion["type"] {
   const v = String(value ?? "").toLowerCase();
   if (v.includes("tech")) return "technical";
   if (v.includes("situ")) return "situational";
@@ -187,11 +192,28 @@ export default function MockSession() {
   const [params] = useSearchParams();
   const sessionId = params.get("sessionId") ?? "mock";
 
-  const isMicActive = useAudioStore((s) => s.is_recording ?? false);
-  const startMic = useAudioStore((s) => s.startRecording);
-  const stopMic = useAudioStore((s) => s.stopRecording);
-  const rmsLevel = useAudioStore((s) => s.rms_level ?? 0);
-  const transcript = useAudioStore((s) => s.transcript);
+  // Audio store (current schema)
+  const utterances = useAudioStore((s) => s.transcript?.utterances ?? []);
+  const rmsLevel = useAudioStore((s) => s.levels?.current_level ?? 0);
+  const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
+  const isMuted = useAudioStore((s) => s.is_muted ?? false);
+
+  // Use master audio pipeline (Deepgram + transcript to store)
+  const audio = useAudioSession({
+    enableSystemAudio: false,
+    micDeviceId: null,
+    onQuestionDetected: () => {
+      // Not needed in this mock flow (questions come from queue)
+    },
+    onFillerDetected: () => {
+      // Optional: could be used for metrics
+    },
+    onWPMUpdate: () => {
+      // Optional: could be used for metrics
+    },
+  });
+
+  const isMicActive = isCapturing && !isMuted;
 
   const [questions, setQuestions] = useState<MockQuestion[]>(FALLBACK_QUESTIONS);
   const [questionIdx, setQuestionIdx] = useState(0);
@@ -199,12 +221,17 @@ export default function MockSession() {
   const [introCount, setIntroCount] = useState(3);
   const [showEndDialog, setShowEndDialog] = useState(false);
   const [elapsedSec, setElapsedSec] = useState(0);
+
+  // Store per-question answer text
   const [answers, setAnswers] = useState<Record<string, string>>({});
+
+  // Track utterance start index for each question so we can capture only that answer
+  const answerStartIndexRef = useRef<number>(0);
 
   const currentQ = questions[questionIdx];
   const progress = ((questionIdx + 1) / questions.length) * 100;
 
-  // ── NEW: best-effort AI question loading (keeps fallback on failure) ───────
+  // Best-effort AI question loading (fallback remains)
   useEffect(() => {
     let cancelled = false;
 
@@ -219,17 +246,18 @@ export default function MockSession() {
 
         const list = result?.questions ?? result?.data?.questions;
         if (!cancelled && Array.isArray(list) && list.length > 0) {
-          const mapped: MockQuestion[] = list.map((q: any) => ({
-            id: q.id ?? crypto.randomUUID(),
-            text: q.question_text ?? q.question ?? "",
-            type: normalizeType(q.type),
-            timeLimit: 120,
-          })).filter((q: MockQuestion) => q.text && q.text.length > 5);
+          const mapped: MockQuestion[] = list
+            .map((q: any) => ({
+              id: q.id ?? (crypto?.randomUUID?.() ?? `q-${Date.now()}-${Math.random()}`),
+              text: q.question_text ?? q.question ?? "",
+              type: normalizeType(q.type),
+              timeLimit: 120,
+            }))
+            .filter((q: MockQuestion) => q.text && q.text.length > 5);
 
           if (mapped.length > 0) setQuestions(mapped);
         }
       } catch (err) {
-        // Do not break session; fallback remains
         console.error("[LiveMockSession] AI question load failed:", err);
       }
     }
@@ -240,14 +268,14 @@ export default function MockSession() {
     };
   }, []);
 
-  // ── Session elapsed timer (starts after intro) ─────────────────────────────
+  // Elapsed timer (after intro)
   useEffect(() => {
     if (phase === "intro" || phase === "complete") return;
     const id = setInterval(() => setElapsedSec((s) => s + 1), 1000);
     return () => clearInterval(id);
   }, [phase]);
 
-  // ── Intro countdown ────────────────────────────────────────────────────────
+  // Intro countdown
   useEffect(() => {
     if (phase !== "intro") return;
     const id = setInterval(() => {
@@ -285,82 +313,118 @@ export default function MockSession() {
         return current + 1;
       });
     },
-    [navigate, sessionId]
+    [navigate, sessionId],
   );
 
+  // Extract only candidate utterances since start index
+  const computeAnswerText = useCallback(() => {
+    const slice = utterances.slice(answerStartIndexRef.current);
+    const text = slice
+      .filter((u) => u?.speaker === "candidate")
+      .map((u) => u.text)
+      .join(" ")
+      .trim();
+    return text;
+  }, [utterances]);
+
   const handleTimeExpired = useCallback(() => {
-    setPhase((currentPhase) => {
-      if (currentPhase !== "answering") return currentPhase;
+    // Only applies if currently answering
+    setPhase((cur) => {
+      if (cur !== "answering") return cur;
 
-      stopMic?.();
+      // "Stop answering" behavior: mute + record answer + transition
+      try {
+        if (!audio.isMuted) audio.toggleMute();
+      } catch {
+        // ignore
+      }
 
-      setQuestionIdx((idx) => {
-        const q = questions[idx];
-        if (q) {
-          const transcriptText = transcript?.utterances
-            ?.map((u) => u.text)
-            .join(" ")
-            .trim();
-          setAnswers((prev) => ({
-            ...prev,
-            [q.id]: transcriptText || "[Time expired — no answer recorded]",
-          }));
-        }
-        return idx;
-      });
+      const q = questions[questionIdx];
+      const answerText = computeAnswerText();
 
+      if (q) {
+        setAnswers((prev) => ({
+          ...prev,
+          [q.id]: answerText || "[Time expired — no answer recorded]",
+        }));
+      }
+
+      // Move forward
+      goToNextQuestion(questions.length);
       return "transition";
     });
-
-    goToNextQuestion(questions.length);
-  }, [stopMic, transcript, questions, goToNextQuestion]);
+  }, [audio, questions, questionIdx, computeAnswerText, goToNextQuestion]);
 
   const { remaining, reset: resetTimer } = useCountdown(
     currentQ?.timeLimit ?? 120,
     phase === "answering",
-    handleTimeExpired
+    handleTimeExpired,
   );
 
-  const startAnswering = useCallback(() => {
+  const startAnswering = useCallback(async () => {
     resetTimer();
     setPhase("answering");
-    startMic?.();
-  }, [resetTimer, startMic]);
+
+    // Snapshot where this answer starts in transcript stream
+    answerStartIndexRef.current = useAudioStore.getState().transcript?.utterances?.length ?? 0;
+
+    // Start pipeline once; if already started just ensure unmuted
+    if (!audio.isCapturing) {
+      await audio.start();
+    }
+
+    // Ensure unmuted while answering
+    try {
+      if (audio.isMuted) audio.toggleMute();
+    } catch {
+      // ignore
+    }
+  }, [resetTimer, audio]);
 
   const stopAnswering = useCallback(() => {
-    stopMic?.();
+    // Stop answering = mute mic (keeps pipeline alive for stability)
+    try {
+      if (!audio.isMuted) audio.toggleMute();
+    } catch {
+      // ignore
+    }
 
-    setQuestionIdx((idx) => {
-      const q = questions[idx];
-      if (q) {
-        const transcriptText = transcript?.utterances
-          ?.map((u) => u.text)
-          .join(" ")
-          .trim();
-        setAnswers((prev) => ({
-          ...prev,
-          [q.id]: transcriptText || "[No speech detected]",
-        }));
-      }
-      return idx;
-    });
+    const q = questions[questionIdx];
+    const answerText = computeAnswerText();
+
+    if (q) {
+      setAnswers((prev) => ({
+        ...prev,
+        [q.id]: answerText || "[No speech detected]",
+      }));
+    }
 
     goToNextQuestion(questions.length);
-  }, [stopMic, transcript, questions, goToNextQuestion]);
+  }, [audio, questions, questionIdx, computeAnswerText, goToNextQuestion]);
 
   const handleSkip = useCallback(() => {
-    stopMic?.();
+    // Mute if answering
+    try {
+      if (!audio.isMuted) audio.toggleMute();
+    } catch {
+      // ignore
+    }
     goToNextQuestion(questions.length);
-  }, [stopMic, questions.length, goToNextQuestion]);
+  }, [audio, goToNextQuestion, questions.length]);
 
   const handleEndSession = useCallback(async () => {
-    stopMic?.();
+    // Stop pipeline fully
+    try {
+      audio.stop();
+    } catch {
+      // ignore
+    }
     setShowEndDialog(false);
     const route = ROUTES.DEBRIEF ? `${ROUTES.DEBRIEF}/${sessionId}` : `/app/debrief/${sessionId}`;
     navigate(route);
-  }, [stopMic, navigate, sessionId]);
+  }, [audio, navigate, sessionId]);
 
-  const timerRatio = remaining / (currentQ?.timeLimit ?? 120);
+  const timerRatio = (currentQ?.timeLimit ?? 120) > 0 ? remaining / (currentQ?.timeLimit ?? 120) : 0;
   const timerColor =
     timerRatio > 0.5 ? "text-foreground" : timerRatio > 0.25 ? "text-amber-500" : "text-red-500";
 
@@ -477,6 +541,7 @@ export default function MockSession() {
                       </div>
                       <MicVisualiser isActive={isMicActive} rmsLevel={rmsLevel} />
                     </div>
+
                     <Progress
                       value={timerRatio * 100}
                       className={cn(
@@ -490,7 +555,7 @@ export default function MockSession() {
 
                 <div className="flex items-center gap-3">
                   {phase === "questioning" && (
-                    <Button size="lg" className="flex-1" onClick={startAnswering}>
+                    <Button size="lg" className="flex-1" onClick={() => void startAnswering()}>
                       <Mic className="h-4 w-4 mr-2" />
                       Start answering
                     </Button>
@@ -546,14 +611,14 @@ export default function MockSession() {
           <AlertDialogHeader>
             <AlertDialogTitle>End this session?</AlertDialogTitle>
             <AlertDialogDescription>
-              You've answered {Object.keys(answers).length} of {questions.length} questions.
-              Your progress will be saved and you'll be taken to the debrief.
+              You&apos;ve answered {Object.keys(answers).length} of {questions.length} questions.
+              Your progress will be saved and you&apos;ll be taken to the debrief.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Keep going</AlertDialogCancel>
             <AlertDialogAction
-              onClick={handleEndSession}
+              onClick={() => void handleEndSession()}
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               End session
