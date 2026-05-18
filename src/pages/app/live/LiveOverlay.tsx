@@ -1,18 +1,23 @@
+// src/pages/app/live/LiveOverlay.tsx — PRODUCTION READY
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Link } from "react-router-dom";
+
 import { useLiveCopilot } from "@/hooks/useLiveCopilot";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useAuthStore } from "@/store/userStore";
+
 import { OverlayWindow } from "@/components/overlay/OverlayWindow";
 import { OverlayKeyboardHandler } from "@/components/overlay/OverlayKeyboardHandler";
 import { LiveSessionController } from "@/components/live/LiveSessionController";
 import { ScreenCaptureBlocker } from "@/components/overlay/ScreenCaptureBlocker";
 import { PreSessionSetupWizard } from "@/components/session/PreSessionSetupWizard";
 import { Button } from "@/components/ui/Button";
+
 import { getOrCreateSession } from "@/lib/session/sessionLifecycle";
 import { toDbModel } from "@/lib/ai/modelMapping";
-import { ClipboardCheck, AlertTriangle, RefreshCw } from "lucide-react";
+
+import { ClipboardCheck, AlertTriangle, RefreshCw, Eye } from "lucide-react";
 import { toast } from "sonner";
 import type { LiveSessionConfig } from "@/types/session.types";
 
@@ -50,6 +55,8 @@ export default function LiveOverlay() {
   });
 
   const isActive = sessionStatus === "active";
+  const isPaused = sessionStatus === "paused"; // safe if you add pause later
+  const overlayVisible = useOverlayStore((s) => s.is_visible);
 
   // Stable ref for cleanup
   const endSessionRef = useRef(copilot.endLiveSession);
@@ -69,7 +76,7 @@ export default function LiveOverlay() {
     useSessionStore.getState().resetSession();
     useOverlayStore.getState().resetSessionState();
 
-    // ✅ Fix: ensure both stealth + proctor-safe are updated from config
+    // Ensure both stealth + proctor-safe are updated from config
     useOverlayStore.getState().setStealthMode(!!sessionConfig.stealth_mode);
     useOverlayStore.getState().setProctorSafe(!!sessionConfig.stealth_mode);
 
@@ -96,7 +103,7 @@ export default function LiveOverlay() {
       return;
     }
 
-    // Prepare session record first
+    // 1) Prepare session record first (best-effort reuse)
     if (!preparedSessionId) {
       if (isPreparingSessionRef.current) return;
       isPreparingSessionRef.current = true;
@@ -125,8 +132,9 @@ export default function LiveOverlay() {
       return;
     }
 
-    // Start live session
+    // 2) Now start live session exactly once
     hasStartedRef.current = true;
+
     copilot
       .startLiveSession()
       .then(() => {
@@ -141,17 +149,12 @@ export default function LiveOverlay() {
         setPhase("setup");
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, profile?.id, preparedSessionId, config, copilot]);
+  }, [phase, profile?.id, preparedSessionId, config]);
 
-  // ✅ Fix: Ensure overlay is visible in active phase by default
-  // (Otherwise OverlayWindow shows nothing because is_visible=false)
+  // Ensure overlay is visible in active phase by default
   useEffect(() => {
     if (phase !== "active") return;
     useOverlayStore.getState().showOverlay();
-    return () => {
-      // Do not force hide on route changes while active? Keep existing behavior:
-      // on unmount we will hide/reset in cleanup effect below.
-    };
   }, [phase]);
 
   // ── Cleanup on unmount ───────────────────────────────────────────────────
@@ -174,20 +177,17 @@ export default function LiveOverlay() {
 
     await copilot.endLiveSession();
     setLastSessionId(sessionId);
-
-    // Keep overlay state as-is (your existing intent)
   }, [copilot]);
 
   // ── Generate hint ─────────────────────────────────────────────────────────
   const handleGenerate = useCallback(() => {
     const question = useOverlayStore.getState().current_question;
     if (question) copilot.requestLiveHint(question);
+    else toast.info("Speak a question or type one in Chat first");
   }, [copilot]);
 
   const handleManualQuestion = useCallback(
-    (question: string) => {
-      copilot.submitManualQuestion(question);
-    },
+    (question: string) => copilot.submitManualQuestion(question),
     [copilot]
   );
 
@@ -211,7 +211,8 @@ export default function LiveOverlay() {
       <ScreenCaptureBlocker isActive={isActive} />
       <LiveSessionController isActive={isActive} onAutoEnd={handleStop} />
 
-      <OverlayKeyboardHandler enabled={isActive} onToggleMute={copilot.toggleMute} />
+      {/* Enable hotkeys when active (and safe if you later allow paused) */}
+      <OverlayKeyboardHandler enabled={isActive || isPaused} onToggleMute={copilot.toggleMute} />
 
       <OverlayWindow
         onToggleMic={copilot.toggleMute}
@@ -223,6 +224,17 @@ export default function LiveOverlay() {
         onSetupNewSession={() => setPhase("setup")}
         lastSessionId={lastSessionId}
       />
+
+      {/* Recovery pill — visible when overlay is hidden during an active/paused session */}
+      {(isActive || isPaused) && !overlayVisible && (
+        <button
+          onClick={() => useOverlayStore.getState().showOverlay()}
+          className="fixed bottom-6 right-6 z-50 inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/30 hover:opacity-90 transition-opacity"
+        >
+          <Eye className="w-4 h-4" />
+          Show Overlay
+        </button>
+      )}
 
       {/* Stream error banner */}
       {streamErrorMessage && (
@@ -239,8 +251,8 @@ export default function LiveOverlay() {
             <>
               <p className="text-lg font-semibold text-foreground">Overlay Mode Active</p>
               <p className="text-sm text-muted-foreground max-w-sm">
-                The overlay is floating on your screen.{" "}
-                Use <kbd className="hotkey-badge">Ctrl+Shift+H</kbd> to toggle visibility.
+                The overlay is floating on your screen. Use{" "}
+                <kbd className="hotkey-badge">Ctrl+Shift+H</kbd> to toggle visibility/minimize.
               </p>
               <p className="text-xs text-muted-foreground/60">
                 Press <kbd className="hotkey-badge">Ctrl+Shift+P</kbd> for panic mode
@@ -278,3 +290,4 @@ export default function LiveOverlay() {
     </>
   );
 }
+``
