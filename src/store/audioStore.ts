@@ -1,9 +1,9 @@
+// src/store/audioStore.ts
 import { create } from "zustand";
 import { subscribeWithSelector } from "zustand/middleware";
 import type {
   AudioStoreState,
   AudioDevice,
-  AudioStreamState,
   AudioLevelSample,
   DiarizationSegment,
   TranscriptUtterance,
@@ -19,7 +19,7 @@ import type {
 // ─────────────────────────────────────────────────────────────────
 
 const MAX_LEVEL_SAMPLES = 120; // 2 seconds at 60fps
-const MAX_UTTERANCES   = 200;
+const MAX_UTTERANCES = 200;
 
 interface AudioStore extends AudioStoreState {
   // Stream actions
@@ -142,16 +142,20 @@ export const useAudioStore = create<AudioStore>()(
 
     stopAllStreams: () => {
       const { streams } = get();
+
       streams.mic_stream?.getTracks().forEach((t) => t.stop());
       streams.system_stream?.getTracks().forEach((t) => t.stop());
       streams.combined_stream?.getTracks().forEach((t) => t.stop());
+
       set((s) => ({
         streams: {
           ...s.streams,
           mic_stream: null,
           system_stream: null,
           combined_stream: null,
+          mic_device_id: null,
           is_capturing: false,
+          error: null,
         },
       }));
     },
@@ -183,7 +187,7 @@ export const useAudioStore = create<AudioStore>()(
           ...s.diarization,
           current_speaker,
           interviewer_speaking: current_speaker === "interviewer",
-          candidate_speaking:   current_speaker === "candidate",
+          candidate_speaking: current_speaker === "candidate",
           last_switch_at: Date.now(),
         },
       })),
@@ -207,7 +211,16 @@ export const useAudioStore = create<AudioStore>()(
           .filter((u) => u.is_final)
           .map((u) => `[${u.speaker}]: ${u.text}`)
           .join("\n");
-        return { transcript: { ...s.transcript, utterances, full_transcript } };
+
+        return {
+          transcript: {
+            ...s.transcript,
+            utterances,
+            full_transcript,
+            // ✅ clear interim when we receive a final utterance
+            interim_text: utterance.is_final ? "" : s.transcript.interim_text,
+          },
+        };
       }),
 
     updateInterimText: (interim_text) =>
@@ -246,14 +259,20 @@ export const useAudioStore = create<AudioStore>()(
       })),
 
     // ── Deepgram actions ───────────────────────────────────
-    setDeepgramStatus: (deepgram_status) => set({ deepgram_status }),
+    setDeepgramStatus: (deepgram_status) =>
+      set((s) => ({
+        deepgram_status,
+        // ✅ clear transient errors once deepgram reconnects successfully
+        streams:
+          deepgram_status === "connected"
+            ? { ...s.streams, error: null }
+            : s.streams,
+      })),
 
     // ── Setup wizard actions ───────────────────────────────
-    setSetupStep: (step) =>
-      set((s) => ({ setup: { ...s.setup, step } })),
+    setSetupStep: (step) => set((s) => ({ setup: { ...s.setup, step } })),
 
-    setMicDevices: (mic_devices) =>
-      set((s) => ({ setup: { ...s.setup, mic_devices } })),
+    setMicDevices: (mic_devices) => set((s) => ({ setup: { ...s.setup, mic_devices } })),
 
     setSelectedMicId: (selected_mic_id) =>
       set((s) => ({ setup: { ...s.setup, selected_mic_id } })),
@@ -267,16 +286,14 @@ export const useAudioStore = create<AudioStore>()(
     setSystemAudioTestPassed: (system_audio_test_passed) =>
       set((s) => ({ setup: { ...s.setup, system_audio_test_passed } })),
 
-    setSetupError: (error) =>
-      set((s) => ({ setup: { ...s.setup, error } })),
+    setSetupError: (error) => set((s) => ({ setup: { ...s.setup, error } })),
 
     // ── General ────────────────────────────────────────────
     setNoiseLevel: (noise_level) => set({ noise_level }),
 
     setIsMuted: (is_muted) => set({ is_muted }),
 
-    setVADConfig: (config) =>
-      set((s) => ({ vad_config: { ...s.vad_config, ...config } })),
+    setVADConfig: (config) => set((s) => ({ vad_config: { ...s.vad_config, ...config } })),
 
     // ── Full reset ─────────────────────────────────────────
     resetAudio: () => {
