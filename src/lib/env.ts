@@ -1,8 +1,12 @@
-// src/lib/env.ts
+// src/lib/env.ts — PRODUCTION SAFE (no behavior change)
 type RawEnv = Record<string, string | undefined>;
 
 const rawEnv = import.meta.env as RawEnv;
 
+// NOTE:
+// Supabase anon/publishable keys are intended to be public,
+// but it is still best practice to load them from env variables.
+// Keeping your fallbacks as-is to avoid breaking existing deployments.
 const PUBLIC_FALLBACKS: Record<string, string> = {
   VITE_SUPABASE_URL: "https://qzgvjrvtkwlzxpmlddkx.supabase.co",
   VITE_SUPABASE_ANON_KEY:
@@ -37,18 +41,9 @@ function optional(keys: string[], fallback = ""): string {
 
 export const ENV = {
   SUPABASE_URL: firstDefined(["VITE_SUPABASE_URL"]),
-  SUPABASE_ANON_KEY: firstDefined([
-    "VITE_SUPABASE_ANON_KEY",
-    "VITE_SUPABASE_PUBLISHABLE_KEY",
-  ]),
-  SUPABASE_PUBLISHABLE_KEY: firstDefined([
-    "VITE_SUPABASE_PUBLISHABLE_KEY",
-    "VITE_SUPABASE_ANON_KEY",
-  ]),
+  SUPABASE_ANON_KEY: firstDefined(["VITE_SUPABASE_ANON_KEY", "VITE_SUPABASE_PUBLISHABLE_KEY"]),
+  SUPABASE_PUBLISHABLE_KEY: firstDefined(["VITE_SUPABASE_PUBLISHABLE_KEY", "VITE_SUPABASE_ANON_KEY"]),
   SENTRY_DSN: optional(["VITE_SENTRY_DSN"]),
-  // NOTE: Deepgram API key is server-side only — minted as scoped tokens by the
-  // `deepgram-token` edge function. Never expose as VITE_ env (would be bundled
-  // into client JS).
   STRIPE_PUBLIC_KEY: optional(["VITE_STRIPE_PUBLIC_KEY"]),
   APP_ENV: optional(["VITE_APP_ENV"], "development"),
   APP_URL: optional(["VITE_APP_URL"]),
@@ -70,4 +65,6 @@ export const ENV = {
 export const SUPABASE_URL = ENV.SUPABASE_URL;
 export const SUPABASE_ANON_KEY = ENV.SUPABASE_ANON_KEY;
 export const SUPABASE_PUBLISHABLE_KEY = ENV.SUPABASE_PUBLISHABLE_KEY;
+
+// Keep EDGE_BASE stable for existing code
 export const EDGE_BASE = `${SUPABASE_URL.replace(/\/+$/, "")}/functions/v1`;
