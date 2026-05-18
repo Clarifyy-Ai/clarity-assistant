@@ -1,14 +1,65 @@
 // src/components/overlay/OverlayWindow.tsx
 import { createPortal } from "react-dom";
-import { useRef, useCallback, useState, useEffect, useMemo } from "react";
-import { useOverlayStore as _ows, type OverlayPosition as _OP } from "@/store/overlayStore";
-import { useSessionStore as _ss } from "@/store/sessionStore";
-import { useAudioStore as _as } from "@/store/audioStore";
-import { useAuthStore as _aus } from "@/store/userStore";
-import { supabase as _sb } from "@/lib/supabase/client";
-import { useStealthMouse as _usm } from "@/hooks/useStealthMouse";
-import { useDocumentPiP as _udpip } from "@/lib/overlay/useDocumentPiP";
-import { useIsMobile as _uim } from "@/hooks/use-mobile";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+
+import { useOverlayStore, type OverlayPosition } from "@/store/overlayStore";
+import { useSessionStore } from "@/store/sessionStore";
+import { useAudioStore } from "@/store/audioStore";
+import { useAuthStore } from "@/store/userStore";
+
+import { supabase } from "@/lib/supabase/client";
+import { useStealthMouse } from "@/hooks/useStealthMouse";
+import { useDocumentPiP } from "@/lib/overlay/useDocumentPiP";
+import { useIsMobile } from "@/hooks/use-mobile";
+
+import { cn } from "@/lib/utils";
+import { Loader2, Sparkles } from "lucide-react";
+
+import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
+import type { LiveSessionConfig } from "@/types/session.types";
+
+import { OverlayHintPanel } from "./OverlayHintPanel";
+import { OverlayQuestionBar } from "./OverlayQuestionBar";
+import { OverlayQuestionPreview } from "./OverlayQuestionPreview";
+import { OverlayNetworkBadge } from "./OverlayNetworkBadge";
+import { OverlayToolbar } from "./OverlayToolbar";
+import { OverlayTabBar } from "./OverlayTabBar";
+import { OverlayChatPanel } from "./OverlayChatPanel";
+import { OverlayAuditPanel } from "./OverlayAuditPanel";
+import { OverlayResumePanel } from "./OverlayResumePanel";
+import { OverlayQuickStart } from "./OverlayQuickStart";
+import { OverlayResizeHandles } from "./OverlayResizeHandles";
+import { StealthMouseGuard } from "./StealthMouseGuard";
+import { OverlayPositionManager } from "./OverlayPositionManager";
+import { OverlaySessionStats } from "./OverlaySessionStats";
+import { OverlayHotkeyHelp } from "./OverlayHotkeyHelp";
+import { OverlayAnswerTimer } from "./OverlayAnswerTimer";
+import { OverlayAudioBadge } from "./OverlayAudioBadge";
+
+import { LiveTranscriptStream } from "@/components/live/LiveTranscriptStream";
+
+// ─────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────
+
+// IMPORTANT: must match the id used elsewhere (screenCaptureBlocker / panic kill)
+const OVERLAY_ROOT_ID = "clarify-overlay-root";
+
+function ensureOverlayRoot(doc: Document): HTMLElement {
+  let el = doc.getElementById(OVERLAY_ROOT_ID) as HTMLElement | null;
+
+  if (!el) {
+    // Create a single stable portal host. Keep pointer-events:none on the host,
+    // and enable pointer-events on the actual panel for clickability.
+    el = doc.createElement("div");
+    el.id = OVERLAY_ROOT_ID;
+    el.style.cssText =
+      "position:fixed;inset:0;z-index:9998;isolation:isolate;pointer-events:none;";
+    doc.body.appendChild(el);
+  }
+
+  return el;
+}
 
 interface OverlayWindowProps {
   onToggleMic?: () => void;
@@ -16,7 +67,7 @@ interface OverlayWindowProps {
   onGenerate?: () => void;
   onEndSession?: () => void;
   onManualQuestion?: (question: string) => void;
-  onStartSession?: (config: import("@/types/session.types").LiveSessionConfig) => void;
+  onStartSession?: (config: LiveSessionConfig) => void;
   onSetupNewSession?: () => void;
   lastSessionId?: string | null;
 }
@@ -36,58 +87,84 @@ export function OverlayWindow({
   const persistPositionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [isMounted, setIsMounted] = useState(false);
-  useEffect(() => { setIsMounted(true); }, []);
+  useEffect(() => setIsMounted(true), []);
 
-  const isMobile = _uim();
+  const isMobile = useIsMobile();
 
-  const is_visible = _ows((s) => s.is_visible);
-  const is_stealth_mode = _ows((s) => s.is_stealth_mode);
-  const is_proctor_safe = _ows((s) => s.is_proctor_safe);
-  const is_panic_visible = _ows((s) => s.is_panic_visible);
-  const panic_content = _ows((s) => s.panic_content);
-  const position = _ows((s) => s.position);
-  const overlay_width = _ows((s) => s.overlay_width);
-  const overlay_height = _ows((s) => s.overlay_height);
-  const current_question = _ows((s) => s.current_question);
-  const current_hint = _ows((s) => s.current_hint);
-  const streaming_buffer = _ows((s) => s.streaming_buffer);
-  const hint_state = _ows((s) => s.hint_state);
-  const hint_style = _ows((s) => s.hint_style);
-  const network_color = _ows((s) => s.network_color);
-  const error_message = _ows((s) => s.error_message);
-  const screenshot_hint = _ows((s) => s.screenshot_hint);
-  const is_screenshot_loading = _ows((s) => s.is_screenshot_loading);
-  const active_tab = _ows((s) => s.active_tab);
-  const stealth_opacity = _ows((s) => s.stealth_opacity);
-  const is_peek_active = _ows((s) => s.is_peek_active);
-  const is_minimal_mode = _ows((s) => s.is_minimal_mode);
-  const profileId = _aus((s) => s.profile?.id ?? null);
+  // Overlay store state
+  const isVisible = useOverlayStore((s) => s.is_visible);
+  const isStealthMode = useOverlayStore((s) => s.is_stealth_mode);
+  const isProctorSafe = useOverlayStore((s) => s.is_proctor_safe);
+  const isPanicVisible = useOverlayStore((s) => s.is_panic_visible);
+  const panicContent = useOverlayStore((s) => s.panic_content);
 
-  const sessionStatus = _ss((s) => s.status);
+  const position = useOverlayStore((s) => s.position);
+  const overlayWidth = useOverlayStore((s) => s.overlay_width);
+  const overlayHeight = useOverlayStore((s) => s.overlay_height);
+
+  const currentQuestion = useOverlayStore((s) => s.current_question);
+  const currentHint = useOverlayStore((s) => s.current_hint);
+  const streamingBuffer = useOverlayStore((s) => s.streaming_buffer);
+
+  const hintState = useOverlayStore((s) => s.hint_state);
+  const hintStyle = useOverlayStore((s) => s.hint_style);
+  const networkColor = useOverlayStore((s) => s.network_color);
+
+  const errorMessage = useOverlayStore((s) => s.error_message);
+  const screenshotHint = useOverlayStore((s) => s.screenshot_hint);
+  const isScreenshotLoading = useOverlayStore((s) => s.is_screenshot_loading);
+
+  const activeTab = useOverlayStore((s) => s.active_tab);
+
+  const stealthOpacity = useOverlayStore((s) => s.stealth_opacity);
+  const isPeekActive = useOverlayStore((s) => s.is_peek_active);
+  const isMinimalMode = useOverlayStore((s) => s.is_minimal_mode);
+
+  // User profile for persisting position
+  const profileId = useAuthStore((s) => s.profile?.id ?? null);
+
+  // Session state
+  const sessionStatus = useSessionStore((s) => s.status);
   const isSessionActive = sessionStatus === "active";
 
-  const deepgramStatus = _as((s) => s.deepgram_status);
-  const stream_error = _as((s) => s.streams?.error ?? null);
-  const isRecording = deepgramStatus === "connected";
-  const isGenerating = hint_state === "generating" || hint_state === "streaming";
+  // Audio state
+  const deepgramStatus = useAudioStore((s) => s.deepgram_status);
+  const streamError = useAudioStore((s) => s.streams?.error ?? null);
 
+  const isRecording = deepgramStatus === "connected";
+  const isGenerating = hintState === "generating" || hintState === "streaming";
+
+  // Persist position (debounced)
   const handlePositionChange = useCallback(
-    (pos: _OP) => {
-      _ows.getState().setPosition(pos);
+    (pos: OverlayPosition) => {
+      useOverlayStore.getState().setPosition(pos);
+
       if (!profileId) return;
       if (persistPositionTimerRef.current) clearTimeout(persistPositionTimerRef.current);
+
       persistPositionTimerRef.current = setTimeout(() => {
-        void _sb
+        void supabase
           .from("profiles")
-          .update({ overlay_position: JSON.stringify(pos), updated_at: new Date().toISOString() })
+          .update({
+            overlay_position: JSON.stringify(pos),
+            updated_at: new Date().toISOString(),
+          })
           .eq("id", profileId);
       }, 500);
     },
-    [profileId],
+    [profileId]
   );
 
-  _usm(panelRef, is_stealth_mode);
+  useEffect(() => {
+    return () => {
+      if (persistPositionTimerRef.current) clearTimeout(persistPositionTimerRef.current);
+    };
+  }, []);
 
+  // Stealth mouse behavior
+  useStealthMouse(panelRef, isStealthMode);
+
+  // Document PiP support (optional)
   const pipDoc = useDocumentPiP(false);
   const targetDoc = pipDoc ?? (typeof document !== "undefined" ? document : null);
 
@@ -96,45 +173,42 @@ export function OverlayWindow({
     return () => useOverlayStore.getState().setPipActive(false);
   }, [pipDoc]);
 
-  // ── Resolve portal mount node ───────────────────────────────────
+  // Portal mount node
   const overlayRoot = useMemo<HTMLElement | null>(() => {
     if (!targetDoc) return null;
     return ensureOverlayRoot(targetDoc);
   }, [targetDoc]);
 
-  // ── Visibility is now CSS-driven (minimize uses peek) ───────────
-  const shouldShow = is_visible || is_peek_active;
-  const displayText = hint_state === "streaming" ? streaming_buffer : current_hint;
+  // Show logic:
+  // - Normal overlay => isVisible
+  // - Peek mode => show a small banner even when not visible
+  const shouldShow = isVisible || isPeekActive;
 
-  // ✅ Respect real stealth opacity, but only when visible
+  const displayText = hintState === "streaming" ? streamingBuffer : currentHint;
+
+  // Opacity behavior
   const effectiveOpacity = !shouldShow
     ? 0
-    : is_stealth_mode
-      ? Math.max(0.2, Math.min(1, stealth_opacity / 100))
+    : isStealthMode
+      ? Math.max(0.2, Math.min(1, stealthOpacity / 100))
       : 1;
 
-  // Parakeet-style compact pill width when minimal
-  const pillWidth = isMobile ? "100%" : Math.min(640, Math.max(420, overlay_width));
+  // Pill width constraints
+  const pillWidth = isMobile ? "100%" : Math.min(640, Math.max(420, overlayWidth));
 
+  // Keep overlay within viewport bounds (desktop browser mode)
   useEffect(() => {
-    if (!overlayRoot || !shouldShow) return;
-    overlayRoot.style.display = "";
-    overlayRoot.style.opacity = "1";
-    overlayRoot.style.visibility = "visible";
-  }, [overlayRoot, shouldShow]);
-
-  // Keep pill within viewport bounds on resize so it never gets covered or scrolls off.
-  useEffect(() => {
-    if (typeof window === "undefined" || is_proctor_safe) return;
+    if (typeof window === "undefined" || isProctorSafe) return;
 
     const clamp = () => {
-      const w = is_minimal_mode ? Math.min(640, Math.max(420, overlay_width)) : overlay_width;
+      const w = isMinimalMode ? Math.min(640, Math.max(420, overlayWidth)) : overlayWidth;
       const maxX = Math.max(8, window.innerWidth - w - 8);
       const maxY = Math.max(8, window.innerHeight - 60);
 
       const cur = useOverlayStore.getState().position;
       const nx = Math.min(Math.max(8, cur.x), maxX);
       const ny = Math.min(Math.max(8, cur.y), maxY);
+
       if (nx !== cur.x || ny !== cur.y) {
         useOverlayStore.getState().setPosition({ x: nx, y: ny });
       }
@@ -143,32 +217,35 @@ export function OverlayWindow({
     clamp();
     window.addEventListener("resize", clamp);
     return () => window.removeEventListener("resize", clamp);
-  }, [is_minimal_mode, overlay_width, is_proctor_safe]);
+  }, [isMinimalMode, overlayWidth, isProctorSafe]);
 
   if (!isMounted || !overlayRoot) return null;
 
-  // ── Overlay content ─────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────
+  // Overlay content
+  // ───────────────────────────────────────────────────────────────
+
   const overlayContent = (
     <div
       ref={resizeContainerRef}
       className={cn(
-        "overlay-panel no-select flex flex-col gap-0 relative overflow-hidden",
-        is_minimal_mode ? "rounded-full" : "rounded-2xl",
+        "overlay-panel no-select relative flex flex-col gap-0 overflow-hidden",
+        isMinimalMode ? "rounded-full" : "rounded-2xl",
         "border border-white/10",
         "bg-[#0b0b18] backdrop-blur-2xl",
         "shadow-[0_12px_48px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.05)]",
         "transition-all duration-200",
-        is_stealth_mode && "overlay-stealth-glass",
-        is_proctor_safe && "overlay-proctor-safe",
+        isStealthMode && "overlay-stealth-glass",
+        isProctorSafe && "overlay-proctor-safe",
         shouldShow
           ? "opacity-100 pointer-events-auto translate-y-0"
-          : "opacity-0 pointer-events-none -translate-y-2",
+          : "opacity-0 pointer-events-none -translate-y-2"
       )}
       style={{
-        width: is_minimal_mode ? pillWidth : (isMobile ? "100%" : overlay_width),
-        height: is_minimal_mode ? "auto" : (isMobile ? "60vh" : overlay_height),
+        width: isMinimalMode ? pillWidth : isMobile ? "100%" : overlayWidth,
+        height: isMinimalMode ? "auto" : isMobile ? "60vh" : overlayHeight,
         opacity: effectiveOpacity,
-        pointerEvents: shouldShow ? "auto" : "none", // ✅ ensure clickable
+        pointerEvents: shouldShow ? "auto" : "none",
       }}
       role="dialog"
       aria-label="Clarify AI Overlay"
@@ -176,18 +253,26 @@ export function OverlayWindow({
     >
       <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent pointer-events-none" />
 
-      {/* ── HEADER ─────────────────────────────────────────────── */}
+      {/* HEADER */}
       <div
         data-drag-handle
         className={cn(
           "flex cursor-grab items-center gap-2 px-3 py-2 shrink-0 active:cursor-grabbing",
           "border-b border-white/[0.07]",
           "bg-gradient-to-r from-[#0d0d1e]/80 via-[#0e0e1c]/60 to-[#0d0d1e]/80",
-          isMobile && "py-3",
+          isMobile && "py-3"
         )}
         title="Drag to move"
-        // ✅ If minimized (peek-only), clicking header restores overlay
-        onDoubleClick={() => useOverlayStore.getState().toggleMinimize()}
+        // Double-click behavior:
+        // - If in peek-only mode, restore overlay visibility
+        // - Otherwise, toggle pill/minimal mode (fast expand/minimize)
+        onDoubleClick={() => {
+          if (isPeekActive && !isVisible && useOverlayStore.getState().toggleMinimize) {
+            useOverlayStore.getState().toggleMinimize();
+            return;
+          }
+          useOverlayStore.getState().setMinimalMode(!isMinimalMode);
+        }}
       >
         <div className="flex items-center gap-2 shrink-0">
           <div className="w-5 h-5 rounded-md bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
@@ -208,14 +293,14 @@ export function OverlayWindow({
           </div>
         )}
 
-        <OverlayNetworkBadge color={network_color} />
+        <OverlayNetworkBadge color={networkColor} />
 
-        {is_stealth_mode && (
+        {isStealthMode && (
           <span className="font-mono text-[9px] font-bold text-violet-300 bg-violet-500/15 border border-violet-500/20 px-1.5 py-0.5 rounded shrink-0">
             STEALTH
           </span>
         )}
-        {is_proctor_safe && (
+        {isProctorSafe && (
           <span className="font-mono text-[9px] font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/20 px-1.5 py-0.5 rounded shrink-0">
             SAFE
           </span>
@@ -235,118 +320,143 @@ export function OverlayWindow({
         />
       </div>
 
-      {/* ── BODY (hidden in pill mode) ─────────────────────────── */}
-      {!is_minimal_mode && (is_peek_active && !is_visible ? (
-        <div className="px-3 py-2 text-[11px] text-white/50 select-none">
-          Peek active — press hotkey to open
-        </div>
-      ) : (
+      {/* BODY */}
+      {!isMinimalMode && (
         <>
-          <ScreenCaptureBanner isProctorSafe={is_proctor_safe} />
-
-          {is_panic_visible && panic_content && (
-            <div className="p-3 bg-amber-500/10 border-b border-amber-500/15 shrink-0">
-              <div className="flex items-center gap-2 mb-2.5">
-                <span className="text-[13px]">🫁</span>
-                <p className="text-xs font-bold text-amber-300">Take a breath — you've got this</p>
-              </div>
-              <ol className="space-y-1.5 text-xs text-white/70 leading-relaxed">
-                <li className="flex gap-2"><span className="text-amber-400 font-bold">1.</span>{panic_content.step_1}</li>
-                <li className="flex gap-2"><span className="text-amber-400 font-bold">2.</span>{panic_content.step_2}</li>
-                <li className="flex gap-2"><span className="text-amber-400 font-bold">3.</span>{panic_content.step_3}</li>
-              </ol>
-              <button
-                onClick={() => useOverlayStore.getState().hidePanic()}
-                className={cn(
-                  "mt-2.5 text-[11px] font-semibold text-amber-300 hover:text-amber-200 transition-colors",
-                  "border border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 px-3 py-1 rounded-lg",
-                  isMobile && "px-4 py-2 text-xs",
-                )}
-              >
-                I'm ready — continue →
-              </button>
+          {/* Peek-only helper banner */}
+          {isPeekActive && !isVisible ? (
+            <div className="px-3 py-2 text-[11px] text-white/60 select-none flex items-center justify-between gap-3">
+              <span className="truncate">Peek active — press hotkey to open</span>
+              {useOverlayStore.getState().toggleMinimize && (
+                <button
+                  onClick={() => useOverlayStore.getState().toggleMinimize()}
+                  className="shrink-0 text-[11px] font-semibold text-indigo-300 hover:text-indigo-200 transition-colors border border-indigo-500/20 bg-indigo-500/10 hover:bg-indigo-500/15 px-2.5 py-1 rounded-lg"
+                >
+                  Restore
+                </button>
+              )}
             </div>
-          )}
-
-          {!is_panic_visible && (
+          ) : (
             <>
-              {stream_error && (
-                <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border-b border-red-500/15 shrink-0">
-                  <div className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0 animate-pulse" />
-                  <span className="text-[11px] text-red-400 truncate flex-1">
-                    {stream_error.message}
-                    {stream_error.suggestion && ` — ${stream_error.suggestion}`}
-                  </span>
+              <ScreenCaptureBanner isProctorSafe={isProctorSafe} />
+
+              {isPanicVisible && panicContent ? (
+                <div className="p-3 bg-amber-500/10 border-b border-amber-500/15 shrink-0">
+                  <div className="flex items-center gap-2 mb-2.5">
+                    <span className="text-[13px]">🫁</span>
+                    <p className="text-xs font-bold text-amber-300">
+                      Take a breath — you&apos;ve got this
+                    </p>
+                  </div>
+                  <ol className="space-y-1.5 text-xs text-white/70 leading-relaxed">
+                    <li className="flex gap-2">
+                      <span className="text-amber-400 font-bold">1.</span>
+                      {panicContent.step_1}
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="text-amber-400 font-bold">2.</span>
+                      {panicContent.step_2}
+                    </li>
+                    <li className="flex gap-2">
+                      <span className="text-amber-400 font-bold">3.</span>
+                      {panicContent.step_3}
+                    </li>
+                  </ol>
                   <button
-                    onClick={() => useAudioStore.getState().setStreamError(null)}
-                    className="text-red-400/50 hover:text-red-400 text-[11px] shrink-0 transition-colors"
+                    onClick={() => useOverlayStore.getState().hidePanic()}
+                    className={cn(
+                      "mt-2.5 text-[11px] font-semibold text-amber-300 hover:text-amber-200 transition-colors",
+                      "border border-amber-500/20 bg-amber-500/10 hover:bg-amber-500/15 px-3 py-1 rounded-lg",
+                      isMobile && "px-4 py-2 text-xs"
+                    )}
                   >
-                    dismiss
+                    I&apos;m ready — continue →
                   </button>
                 </div>
-              )}
-
-              {!isSessionActive && !lastSessionId && onStartSession && (
-                <OverlayQuickStart onStart={onStartSession} />
-              )}
-
-              <>
-                {isSessionActive && current_question && (
-                  <OverlayQuestionBar question={current_question} />
-                )}
-                {isSessionActive && <OverlayQuestionPreview />}
-                <OverlayTabBar />
-                <div
-                  className={cn(
-                    "min-h-0",
-                    active_tab === "chat"
-                      ? "flex-1 flex flex-col"
-                      : "overflow-y-auto flex-1",
-                  )}
-                >
-                  {active_tab === "answer" && (
-                    <OverlayHintPanel
-                      text={displayText}
-                      hintStyle={hint_style}
-                      hintState={hint_state}
-                      errorMessage={error_message}
-                      screenshotHint={screenshot_hint}
-                      isScreenshotLoading={is_screenshot_loading}
-                    />
-                  )}
-                  {active_tab === "chat" && onManualQuestion && (
-                    <OverlayChatPanel onSubmit={onManualQuestion} />
-                  )}
-                  {active_tab === "transcript" && (
-                    <div className="p-3">
-                      <LiveTranscriptStream />
+              ) : (
+                <>
+                  {streamError && (
+                    <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border-b border-red-500/15 shrink-0">
+                      <div className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0 animate-pulse" />
+                      <span className="text-[11px] text-red-400 truncate flex-1">
+                        {streamError.message}
+                        {streamError.suggestion ? ` — ${streamError.suggestion}` : ""}
+                      </span>
+                      <button
+                        onClick={() => useAudioStore.getState().setStreamError(null)}
+                        className="text-red-400/50 hover:text-red-400 text-[11px] shrink-0 transition-colors"
+                      >
+                        dismiss
+                      </button>
                     </div>
                   )}
-                  {active_tab === "resume" && <OverlayResumePanel />}
-                  {active_tab === "audit" && <OverlayAuditPanel />}
-                </div>
-              </>
+
+                  {!isSessionActive && !lastSessionId && onStartSession && (
+                    <OverlayQuickStart onStart={onStartSession} />
+                  )}
+
+                  {isSessionActive && currentQuestion && (
+                    <OverlayQuestionBar question={currentQuestion} />
+                  )}
+                  {isSessionActive && <OverlayQuestionPreview />}
+
+                  <OverlayTabBar />
+
+                  <div
+                    className={cn(
+                      "min-h-0",
+                      activeTab === "chat"
+                        ? "flex-1 flex flex-col"
+                        : "overflow-y-auto flex-1"
+                    )}
+                  >
+                    {activeTab === "answer" && (
+                      <OverlayHintPanel
+                        text={displayText}
+                        hintStyle={hintStyle}
+                        hintState={hintState}
+                        errorMessage={errorMessage}
+                        screenshotHint={screenshotHint}
+                        isScreenshotLoading={isScreenshotLoading}
+                      />
+                    )}
+
+                    {activeTab === "chat" && onManualQuestion && (
+                      <OverlayChatPanel onSubmit={onManualQuestion} />
+                    )}
+
+                    {activeTab === "transcript" && (
+                      <div className="p-3">
+                        <LiveTranscriptStream />
+                      </div>
+                    )}
+
+                    {activeTab === "resume" && <OverlayResumePanel />}
+                    {activeTab === "audit" && <OverlayAuditPanel />}
+                  </div>
+                </>
+              )}
             </>
           )}
         </>
-      ))}
+      )}
 
       {isSessionActive && <OverlaySessionStats />}
 
-      {isSessionActive && !is_minimal_mode && (
+      {isSessionActive && !isMinimalMode && (
         <div className="flex items-center justify-between border-t border-white/[0.04] px-3 py-1 shrink-0">
           <span className="font-mono text-[10px] text-white/15 truncate select-none">
             ⌃⇧H · Esc · ⌃⇧P
           </span>
           <span className="text-[10px] text-white/20 capitalize shrink-0">
-            {hint_style.replace("_", " ")}
+            {String(hintStyle).replace("_", " ")}
           </span>
         </div>
       )}
 
       {!isMobile && (
         <div
-          className={cn(is_stealth_mode && "opacity-50 hover:opacity-80 transition-opacity")}
+          className={cn(isStealthMode && "opacity-50 hover:opacity-80 transition-opacity")}
           style={{ pointerEvents: "auto" }}
         >
           <OverlayResizeHandles containerRef={resizeContainerRef} />
@@ -357,40 +467,40 @@ export function OverlayWindow({
     </div>
   );
 
-  // Mobile: fixed bottom sheet
+  // MOBILE: fixed bottom sheet
   if (isMobile) {
     return createPortal(
-      <StealthMouseGuard isActive={is_stealth_mode}>
+      <StealthMouseGuard isActive={isStealthMode}>
         <div
           ref={panelRef}
           className={cn(
             "fixed inset-x-0 bottom-0 z-overlay transition-all duration-200",
-            shouldShow ? "translate-y-0" : "translate-y-full",
+            shouldShow ? "translate-y-0" : "translate-y-full"
           )}
           style={{ pointerEvents: shouldShow ? "auto" : "none" }}
         >
           {overlayContent}
         </div>
       </StealthMouseGuard>,
-      overlayRoot,
+      overlayRoot
     );
   }
 
-  // Desktop: floating draggable window
+  // DESKTOP: floating draggable window
   return createPortal(
-    <StealthMouseGuard isActive={is_stealth_mode}>
+    <StealthMouseGuard isActive={isStealthMode}>
       <OverlayPositionManager
         ref={panelRef}
         position={position}
         onPositionChange={handlePositionChange}
-        isProctorSafe={is_proctor_safe}
-        overlayWidth={overlay_width}
-        overlayHeight={overlay_height}
+        isProctorSafe={isProctorSafe}
+        overlayWidth={overlayWidth}
+        overlayHeight={overlayHeight}
       >
         {overlayContent}
       </OverlayPositionManager>
     </StealthMouseGuard>,
-    overlayRoot,
+    overlayRoot
   );
 }
 
@@ -417,7 +527,7 @@ function FloatingAIButton({
         "text-white shadow-lg shadow-indigo-500/25 disabled:opacity-70 disabled:cursor-not-allowed",
         "border border-white/10 hover:border-white/20",
         isGenerating && "overlay-fab-glow",
-        compact ? "py-1.5 text-[11px]" : "py-2.5 text-[13px]",
+        compact ? "py-1.5 text-[11px]" : "py-2.5 text-[13px]"
       )}
       title="Get AI Answer (Ctrl+Shift+G)"
     >
@@ -471,57 +581,4 @@ function ScreenCaptureBanner({ isProctorSafe }: { isProctorSafe: boolean }) {
       </button>
     </div>
   );
-}
-import { useOverlayStore, type OverlayPosition } from "@/store/overlayStore";
-import { useSessionStore } from "@/store/sessionStore";
-import { useAudioStore } from "@/store/audioStore";
-import { useAuthStore } from "@/store/userStore";
-import { supabase } from "@/lib/supabase/client";
-import { useStealthMouse } from "@/hooks/useStealthMouse";
-import { OverlayHintPanel } from "./OverlayHintPanel";
-import { OverlayQuestionBar } from "./OverlayQuestionBar";
-import { OverlayNetworkBadge } from "./OverlayNetworkBadge";
-import { OverlayToolbar } from "./OverlayToolbar";
-import { OverlayTabBar } from "./OverlayTabBar";
-import { OverlayChatPanel } from "./OverlayChatPanel";
-import { OverlayAuditPanel } from "./OverlayAuditPanel";
-import { OverlayResumePanel } from "./OverlayResumePanel";
-import { OverlayQuickStart } from "./OverlayQuickStart";
-import { OverlayResizeHandles } from "./OverlayResizeHandles";
-import { StealthMouseGuard } from "./StealthMouseGuard";
-import { OverlayPositionManager } from "./OverlayPositionManager";
-import { LiveTranscriptStream } from "@/components/live/LiveTranscriptStream";
-import { OverlaySessionStats } from "./OverlaySessionStats";
-import { OverlayHotkeyHelp } from "./OverlayHotkeyHelp";
-import { OverlayAnswerTimer } from "./OverlayAnswerTimer";
-import { OverlayAudioBadge } from "./OverlayAudioBadge";
-import { OverlayQuestionPreview } from "./OverlayQuestionPreview";
-import { cn } from "@/lib/utils";
-import { Loader2, Sparkles } from "lucide-react";
-import type { LiveSessionConfig } from "@/types/session.types";
-import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
-import { useDocumentPiP } from "@/lib/overlay/useDocumentPiP";
-import { useIsMobile } from "@/hooks/use-mobile";
-
-// ─────────────────────────────────────────────────────────────────
-// Helpers
-// ─────────────────────────────────────────────────────────────────
-
-// FIX: must match the id used by screenCaptureBlocker.ts and triggerPanicKill()
-// so stealth panic-kill correctly hides the portal container in browser mode.
-const OVERLAY_ROOT_ID = "clarify-overlay-root";
-
-function ensureOverlayRoot(doc: Document): HTMLElement {
-  let el = doc.getElementById(OVERLAY_ROOT_ID);
-  if (!el) {
-    console.warn(
-      `[OverlayWindow] #${OVERLAY_ROOT_ID} not found in DOM — creating it dynamically.`,
-    );
-    el = doc.createElement("div");
-    el.id = OVERLAY_ROOT_ID;
-    el.style.cssText =
-      "position:fixed;inset:0;pointer-events:none;z-index:9998;isolation:isolate;";
-    doc.body.appendChild(el);
-  }
-  return el;
 }
