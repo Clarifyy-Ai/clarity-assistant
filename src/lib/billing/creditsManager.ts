@@ -5,7 +5,9 @@ import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { useUIStore } from "@/store/uiStore";
 import type { PreferredAIModel } from "@/types/user.types";
-import { getCreditCost } from "@/lib/ai/modelRouter";
+function getCreditCost(_model: PreferredAIModel): number {
+  return 1;
+}
 
 // ─────────────────────────────────────────────────────────────────
 // Credits Manager
