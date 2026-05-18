@@ -1,9 +1,15 @@
-// src/lib/ai/geminiClient.ts — FIXED
+// src/lib/ai/geminiClient.ts — PRODUCTION READY
 // SECURITY NOTE — all keys are server-side in Supabase Edge Functions.
+//
+// Fixes:
+// - Uses fetchEdge()/fetchEdgeJson() so EDGE_BASE works in all environments
+// - Sets correct Accept header for SSE
+// - Hardens SSE parsing (\r\n, partial chunks, ignores non-data lines safely)
+// - Keeps ALL existing features (retry, model selection, screenshot support, etc.)
 
-import { EDGE_BASE } from "@/lib/env";
 import type { CoachingContext } from "@/types/ai.types";
 import { retry } from "@/lib/utils";
+import { fetchEdge, fetchEdgeJson, getAuthHeaders } from "@/lib/network/fetchEdge";
 
 export type GeminiModel =
   | "gemini-2.5-flash"
@@ -60,7 +66,7 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
     model,
   } = opts;
 
-  const body = JSON.stringify({
+  const body = {
     question,
     model: model ?? "gemini-2.5-flash",
     interview_type: context.session_type ?? "behavioral",
@@ -69,32 +75,17 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
     resume_context: context.resume_experience_summary ?? null,
     simple_language: simpleLanguage ?? false,
     screenshot_base64: screenshotBase64 ?? null,
-  });
+  };
 
   try {
-    const { getAuthHeaders } = await import("@/lib/network/fetchEdge");
-    const authHeaders = await getAuthHeaders();
-
-    const response = await retry(
-      () =>
-        fetch(`${EDGE_BASE}/generate-hint`, {
-          method: "POST",
-          headers: authHeaders,
-          body,
-          signal,
-        }),
+    // Uses robust EDGE url handling + consistent auth headers
+    const data = await retry(
+      () => fetchEdgeJson<{ hints?: string; hint?: string }>("generate-hint", body, { signal }),
       2,
       300
     );
 
-    if (!response.ok) {
-      const errText = await response.text().catch(() => `HTTP ${response.status}`);
-      throw new Error(`generate-hint failed: ${response.status} — ${errText}`);
-    }
-
-    const data = (await response.json()) as { hints?: string; hint?: string };
     const hints = data.hints ?? data.hint ?? "";
-
     if (hints) onChunk(hints);
     onDone(hints);
   } catch (err) {
@@ -106,7 +97,7 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
 export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void> {
   const { question, context, simpleLanguage, onChunk, onDone, onError, signal, model } = opts;
 
-  const body = JSON.stringify({
+  const body = {
     question,
     model: model ?? "gemini-2.5-flash",
     interview_type: context.session_type ?? "behavioral",
@@ -114,17 +105,20 @@ export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void>
     transcript: context.last_transcript ?? null,
     resume_context: context.resume_experience_summary ?? null,
     simple_language: simpleLanguage ?? false,
-  });
+    session_id: opts.sessionId ?? null,
+  };
 
   try {
-    const { getAuthHeaders } = await import("@/lib/network/fetchEdge");
-    const authHeaders = await getAuthHeaders();
+    // Ensure correct headers for SSE
+    const headers = await getAuthHeaders({
+      Accept: "text/event-stream",
+    });
 
-    const response = await fetch(`${EDGE_BASE}/generate-answer`, {
+    const response = await fetchEdge("generate-answer", body, {
       method: "POST",
-      headers: authHeaders,
-      body,
+      headers,
       signal,
+      timeoutMs: 60_000, // full answers can legitimately exceed 30s
     });
 
     if (!response.ok) {
@@ -161,7 +155,7 @@ export async function consumeSSEStream(
   try {
     while (true) {
       if (signal?.aborted) {
-        reader.cancel();
+        try { await reader.cancel(); } catch { /* ignore */ }
         return;
       }
 
@@ -169,13 +163,19 @@ export async function consumeSSEStream(
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
+
+      // Normalize CRLF -> LF
+      buffer = buffer.replace(/\r/g, "");
+
       const lines = buffer.split("\n");
       buffer = lines.pop() ?? "";
 
       for (const line of lines) {
-        if (!line.startsWith("data: ")) continue;
+        // ignore empty lines and SSE fields other than data
+        if (!line || !line.startsWith("data:")) continue;
 
-        const data = line.slice(6).trim();
+        const data = line.slice(5).trim(); // after "data:"
+        if (!data) continue;
 
         if (data === "[DONE]") {
           onDone(fullText);
@@ -195,16 +195,17 @@ export async function consumeSSEStream(
             onChunk(chunk);
           }
         } catch {
-          // ignore
+          // ignore malformed json chunk
         }
       }
     }
 
+    // If server ended without [DONE], still resolve safely
     onDone(fullText);
   } catch (err) {
     onError(err instanceof Error ? err : new Error(String(err)));
   } finally {
-    reader.releaseLock();
+    try { reader.releaseLock(); } catch { /* ignore */ }
   }
 }
 
@@ -215,29 +216,16 @@ export async function callGemini(payload: {
   temperature?: number;
   session_id?: string;
 }): Promise<string> {
-  const { getAuthHeaders } = await import("@/lib/network/fetchEdge");
-  const authHeaders = await getAuthHeaders();
-
-  const response = await fetch(`${EDGE_BASE}/prep-tool`, {
-    method: "POST",
-    headers: authHeaders,
-    body: JSON.stringify({
-      tool_id: "raw_prompt",
-      input: payload.prompt,
-      model: payload.model ?? "gemini-2.5-flash",
-      max_tokens: payload.max_tokens,
-      temperature: payload.temperature,
-      session_id: payload.session_id,
-    }),
+  const response = await fetchEdgeJson<{ result?: string }>("prep-tool", {
+    tool_id: "raw_prompt",
+    input: payload.prompt,
+    model: payload.model ?? "gemini-2.5-flash",
+    max_tokens: payload.max_tokens,
+    temperature: payload.temperature,
+    session_id: payload.session_id,
   });
 
-  if (!response.ok) {
-    const errText = await response.text().catch(() => `HTTP ${response.status}`);
-    throw new Error(`callGemini failed: ${response.status} — ${errText}`);
-  }
-
-  const data = (await response.json()) as { result?: string };
-  return data.result ?? "";
+  return response.result ?? "";
 }
 
 export async function analyseScreenshotWithGemini(
