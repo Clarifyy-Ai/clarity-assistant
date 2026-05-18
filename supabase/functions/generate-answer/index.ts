@@ -1,8 +1,5 @@
 // supabase/functions/generate-answer/index.ts
-// Full STAR-format answer generator with SSE streaming via Gemini.
-// FIXED: modern default model, header auth, model override, safer refund.
-
-import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+// Full STARCors, getCorsHeaders } from "../_shared/cors.ts";// Full STAR-format answer generator with SSE streaming via Gemini.
 import { createServiceClient, deductCreditsAtomic } from "../_shared/supabase.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
@@ -20,6 +17,17 @@ Requirements:
 - Do NOT say "Situation:", "Task:", etc. — weave the structure naturally into the prose`;
 
 const COST = 2;
+
+// Allow only known-safe Gemini model name formats.
+function sanitizeModel(input: string, fallback: string): string {
+  const m = (input || "").trim();
+  if (!m) return fallback;
+
+  // Only allow "gemini-..." model identifiers
+  if (!/^gemini-[a-z0-9.\-]+$/i.test(m)) return fallback;
+
+  return m;
+}
 
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
@@ -54,17 +62,15 @@ Deno.serve(async (req: Request) => {
     }
 
     const question = String(body.question).slice(0, 500);
-    const transcript = String(body.transcript ?? "").slice(0, 800);
-    const resumeCtx = String(body.resume_context ?? "").slice(0, 500);
+    const transcript = String(body.transcript ?? "").slice(0, 1200);
+    const resumeCtx = String(body.resume_context ?? "").slice(0, 800);
     const interviewType = String(body.interview_type ?? "behavioral").slice(0, 50);
-    const company = String(body.target_company ?? "").slice(0, 50);
+    const company = String(body.target_company ?? "").slice(0, 80);
     const sessionId = body.session_id ?? null;
 
-    // Optional model override (frontend-controlled)
-    const requestedModel = String(body.model ?? "").trim();
-    const model = requestedModel || DEFAULT_MODEL;
+    const requestedModel = String(body.model ?? "");
+    const model = sanitizeModel(requestedModel, DEFAULT_MODEL);
 
-    // ── GEMINI CONFIG CHECK ──────────────────────────────────────
     if (!GEMINI_API_KEY) {
       return json(headers, 503, { error: "AI service not configured" });
     }
@@ -81,6 +87,26 @@ Deno.serve(async (req: Request) => {
       return json(headers, 402, { error: deduction.error ?? "Insufficient credits" });
     }
 
+    // Refund helper (only for pre-stream failures)
+    const refundCredits = async (reason: string) => {
+      try {
+        const attempt1 = await db.rpc("refund_credits", {
+          p_user_id: user.id,
+          p_cost: COST,
+          p_reason: reason,
+        } as any);
+
+        if (!attempt1?.error) return;
+
+        const attempt2 = await db.rpc("refund_credits", { p_cost: COST } as any);
+        if (!attempt2?.error) return;
+
+        console.error("[generate-answer] Refund RPC failed:", attempt1?.error ?? attempt2?.error);
+      } catch (e) {
+        console.error("[generate-answer] Refund failed:", e);
+      }
+    };
+
     // ── GEMINI PROMPT BUILD ──────────────────────────────────────
     const userPrompt = [
       `Interview type: ${interviewType}`,
@@ -93,34 +119,6 @@ Deno.serve(async (req: Request) => {
       "",
       "Generate a complete, natural STAR-format answer (150-200 words) for this interview question.",
     ].join("\n");
-
-    // ── REFUND HELPER (pre-stream failure) ───────────────────────
-    const refundCredits = async (reason: string) => {
-      try {
-        // Try newer signature first (if your RPC supports it)
-        const attempt1 = await db.rpc("refund_credits", {
-          p_user_id: user.id,
-          p_cost: COST,
-          p_reason: reason,
-        } as any);
-
-        if (!attempt1?.error) {
-          console.log(`[generate-answer] Refunded ${COST} credits (sig1): ${reason}`);
-          return;
-        }
-
-        // Fallback to older signature (p_cost only)
-        const attempt2 = await db.rpc("refund_credits", { p_cost: COST } as any);
-        if (!attempt2?.error) {
-          console.log(`[generate-answer] Refunded ${COST} credits (sig2): ${reason}`);
-          return;
-        }
-
-        console.error("[generate-answer] Refund RPC failed:", attempt1?.error ?? attempt2?.error);
-      } catch (e) {
-        console.error("[generate-answer] Refund failed:", e);
-      }
-    };
 
     // ── CALL GEMINI STREAMING API ────────────────────────────────
     const geminiUrl = `${GEMINI_BASE}/models/${model}:streamGenerateContent?alt=sse`;
@@ -164,8 +162,8 @@ Deno.serve(async (req: Request) => {
 
     // ── PROXY SSE STREAM TO CLIENT ───────────────────────────────
     const encoder = new TextEncoder();
-    const reader = geminiRes.body.getReader();
     const decoder = new TextDecoder();
+    const reader = geminiRes.body.getReader();
 
     const stream = new ReadableStream<Uint8Array>({
       async start(controller) {
@@ -214,7 +212,11 @@ Deno.serve(async (req: Request) => {
         }
       },
       cancel() {
-        reader.cancel();
+        try {
+          reader.cancel();
+        } catch {
+          // ignore
+        }
       },
     });
 
@@ -240,3 +242,9 @@ function json(headers: HeadersInit, status: number, body: unknown): Response {
     headers: { ...headers, "Content-Type": "application/json" },
   });
 }
+// Production fixes:
+// - model validation & safe default
+// - safer refund behavior on pre-stream failures
+// - stream cancel handling
+// - consistent JSON helper
+
