@@ -1,6 +1,6 @@
 // src/pages/app/mock/MockSession.tsx
 import { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useSessionOrchestrator } from "@/hooks/useSessionOrchestrator";
 import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
 import { useFillerWordDetection } from "@/hooks/useFillerWordDetection";

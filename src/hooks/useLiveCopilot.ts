@@ -477,7 +477,7 @@ export function useLiveCopilot({
 
         if (fullTranscript && userId && saveTranscript) {
           try {
-            await supabase.from("session_transcripts").insert({
+            await (supabase.from("session_transcripts") as any).insert({
               session_id: session.session_id,
               user_id: userId,
               transcript: fullTranscript,
