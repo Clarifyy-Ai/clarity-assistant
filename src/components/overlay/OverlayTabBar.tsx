@@ -23,9 +23,7 @@ export function OverlayTabBar() {
   const jds = useDocumentStore((s) => s.jds);
 
   const isSessionActive =
-    sessionStatus === "active" ||
-    sessionStatus === "paused" ||
-    sessionStatus === "warming_up";
+    sessionStatus === "active" || sessionStatus === "paused" || sessionStatus === "warming_up";
 
   const hasContext = !!activeResumeId || !!activeJdId;
 
@@ -38,7 +36,7 @@ export function OverlayTabBar() {
     return "Context";
   }, [resumes, jds, activeResumeId, activeJdId]);
 
-  // ✅ Fix: If session stops and resume tab was active, fall back safely.
+  // Fix: If session stops and resume tab was active, fall back safely.
   useEffect(() => {
     if (!isSessionActive && activeTab === "resume") {
       useOverlayStore.getState().setActiveTab("answer");
