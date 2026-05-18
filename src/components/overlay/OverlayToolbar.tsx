@@ -1,12 +1,20 @@
 // src/components/overlay/OverlayToolbar.tsx
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { toast } from "sonner";
+
 import { useOverlayStore } from "@/store/overlayStore";
 import { useAudioStore } from "@/store/audioStore";
 import { useSessionStore } from "@/store/sessionStore";
+
 import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
-import { PANIC_RESPONSE } from "@/types/session.types";
 import { captureAndAnalyseCodingProblem } from "@/lib/audio/screenshotCapture";
-import { toast } from "sonner";
+import { formatHotkeyLabel } from "@/lib/overlay/hotkeys";
+import { cn } from "@/lib/utils";
+
+import { PANIC_RESPONSE } from "@/types/session.types";
+import type { PreferredAIModel } from "@/types/user.types";
+import type { LucideIcon } from "lucide-react";
+
 import {
   Mic,
   MicOff,
@@ -25,16 +33,12 @@ import {
   Monitor,
   MoreHorizontal,
   Plus,
-  ChevronUp,
   Settings2,
   Sparkles,
   MessageSquare,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
-import { formatHotkeyLabel } from "@/lib/overlay/hotkeys";
+
 import { OverlayActivityTimer } from "./OverlayActivityTimer";
-import type { LucideIcon } from "lucide-react";
-import type { PreferredAIModel } from "@/types/user.types";
 
 const MODEL_OPTIONS: { id: PreferredAIModel; label: string; note?: string }[] = [
   { id: "gpt-4o", label: "GPT-4o", note: "via Gemini" },
@@ -85,61 +89,74 @@ export function OverlayToolbar({
   const hintState = useOverlayStore((s) => s.hint_state);
   const hintStyle = useOverlayStore((s) => s.hint_style);
   const activeModel = useOverlayStore((s) => s.active_model);
+
   const isMinimal = useOverlayStore((s) => s.is_minimal_mode);
   const simpleLanguage = useOverlayStore((s) => s.simple_language);
   const isScreenshotLoading = useOverlayStore((s) => s.is_screenshot_loading);
+
   const activeTab = useOverlayStore((s) => s.active_tab);
   const pinnedHints = useOverlayStore((s) => s.pinned_hints);
   const resumePoints = useOverlayStore((s) => s.resume_talking_points);
+
   const isPeekActive = useOverlayStore((s) => s.is_peek_active);
   const isVisible = useOverlayStore((s) => s.is_visible);
 
-  // ✅ Use session store meaningfully (avoids unused import + improves UX)
   const sessionStatus = useSessionStore((s) => s.status);
   const isSessionActive = sessionStatus === "active";
 
   const [showMoreMenu, setShowMoreMenu] = useState(false);
-  const [showModelMenu, setShowModelMenu] = useState(false);
   const [showHotkeyRef, setShowHotkeyRef] = useState(false);
   const [showPinnedMenu, setShowPinnedMenu] = useState(false);
   const [showResumeQuickPeek, setShowResumeQuickPeek] = useState(false);
 
   const moreMenuRef = useRef<HTMLDivElement>(null);
-  const modelMenuRef = useRef<HTMLDivElement>(null);
   const hotkeyRefRef = useRef<HTMLDivElement>(null);
   const pinnedMenuRef = useRef<HTMLDivElement>(null);
   const resumeQuickPeekRef = useRef<HTMLDivElement>(null);
 
   const isGenerating = hintState === "generating" || hintState === "streaming";
 
-  // ✅ Label for minimize/restore button
-  const minimizeLabel = useMemo(() => {
-    // When peek is active, overlay is "minimized"
+  // Title/tooltip for the pill toggle button
+  const pillToggleTitle = useMemo(() => {
     if (isPeekActive && !isVisible) return "Restore overlay";
-    return "Minimize overlay";
-  }, [isPeekActive, isVisible]);
+    return isMinimal ? "Expand panel" : "Minimize to pill";
+  }, [isPeekActive, isVisible, isMinimal]);
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (moreMenuRef.current && !moreMenuRef.current.contains(e.target as Node)) setShowMoreMenu(false);
-      if (modelMenuRef.current && !modelMenuRef.current.contains(e.target as Node)) setShowModelMenu(false);
-      if (hotkeyRefRef.current && !hotkeyRefRef.current.contains(e.target as Node)) setShowHotkeyRef(false);
-      if (pinnedMenuRef.current && !pinnedMenuRef.current.contains(e.target as Node)) setShowPinnedMenu(false);
-      if (resumeQuickPeekRef.current && !resumeQuickPeekRef.current.contains(e.target as Node))
+      const t = e.target as Node;
+      if (moreMenuRef.current && !moreMenuRef.current.contains(t)) setShowMoreMenu(false);
+      if (hotkeyRefRef.current && !hotkeyRefRef.current.contains(t)) setShowHotkeyRef(false);
+      if (pinnedMenuRef.current && !pinnedMenuRef.current.contains(t)) setShowPinnedMenu(false);
+      if (resumeQuickPeekRef.current && !resumeQuickPeekRef.current.contains(t)) {
         setShowResumeQuickPeek(false);
+      }
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Unified minimize/restore logic:
+  // - If the overlay is in peek-only minimized state => restore
+  // - Else toggle pill/minimal mode
+  const handlePillToggle = () => {
+    const store = useOverlayStore.getState();
+
+    if (isPeekActive && !isVisible && typeof store.toggleMinimize === "function") {
+      store.toggleMinimize(); // restore overlay visibility
+      return;
+    }
+
+    store.setMinimalMode(!isMinimal);
+  };
+
   return (
     <div className="flex items-center gap-1.5 px-2.5 py-2 border-b border-white/[0.07] bg-[#0c0c1a]/50 shrink-0">
-      {/* ── LEFT: Mic button ─────────────────────────────────────── */}
+      {/* LEFT: Mic */}
       <MicButton isMuted={isMuted} isCapturing={isCapturing} onClick={onToggleMic} />
 
-      {/* ── CENTER: Primary actions ───────────────────────────────── */}
+      {/* CENTER: primary actions */}
       <div className="flex items-center gap-1.5 flex-1 justify-center">
-        {/* AI Help — primary CTA */}
         <PrimaryButton
           icon={Sparkles}
           label="AI Help"
@@ -153,7 +170,6 @@ export function OverlayToolbar({
           }
         />
 
-        {/* Analyze Screen */}
         <PrimaryButton
           icon={Monitor}
           label="Screen"
@@ -180,7 +196,6 @@ export function OverlayToolbar({
           }
         />
 
-        {/* Chat */}
         <PrimaryButton
           icon={MessageSquare}
           label="Chat"
@@ -194,28 +209,35 @@ export function OverlayToolbar({
         />
       </div>
 
-      {/* ── RIGHT: Timer + actions ────────────────────────────────── */}
+      {/* RIGHT: timer + actions */}
       <div className="flex items-center gap-1 shrink-0">
-        {/* Session timer */}
         <div className="shrink-0">
           <OverlayActivityTimer />
         </div>
 
-        {/* ✅ Minimize / Expand (collapse to pill) — single consolidated button */}
+        {/* ✅ Pill / Expand / Restore */}
         <button
-          onClick={() => useOverlayStore.getState().setMinimalMode(!isMinimal)}
-          title={isMinimal ? "Expand panel" : "Minimize to pill"}
+          onClick={handlePillToggle}
+          title={pillToggleTitle}
           className={cn(
             "w-7 h-7 flex items-center justify-center rounded-lg transition-all",
-            isMinimal
-              ? "bg-amber-500/15 text-amber-400 border border-amber-500/20"
-              : "text-white/35 hover:text-white/80 hover:bg-white/8"
+            isPeekActive && !isVisible
+              ? "bg-indigo-500/15 text-indigo-300 border border-indigo-500/20"
+              : isMinimal
+                ? "bg-amber-500/15 text-amber-400 border border-amber-500/20"
+                : "text-white/35 hover:text-white/80 hover:bg-white/8"
           )}
         >
-          {isMinimal ? <Plus className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
+          {isPeekActive && !isVisible ? (
+            <Plus className="w-3.5 h-3.5" />
+          ) : isMinimal ? (
+            <Plus className="w-3.5 h-3.5" />
+          ) : (
+            <Minimize2 className="w-3.5 h-3.5" />
+          )}
         </button>
 
-        {/* ⋯ More menu */}
+        {/* More menu */}
         <div className="relative" ref={moreMenuRef}>
           <button
             onClick={() => setShowMoreMenu((p) => !p)}
@@ -230,7 +252,6 @@ export function OverlayToolbar({
 
           {showMoreMenu && (
             <div className="absolute top-full right-0 mt-2 w-60 bg-[#0f0f1e] border border-white/[0.1] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.04)] z-50 py-2 overflow-hidden animate-fade-in">
-              {/* Start / setup new session (optional) */}
               {onSetupNewSession && (
                 <MenuRow
                   icon={Plus}
@@ -243,7 +264,6 @@ export function OverlayToolbar({
                 />
               )}
 
-              {/* System Audio */}
               {onToggleSystemAudio && (
                 <MenuRow
                   icon={hasSystemAudio ? Volume2 : VolumeX}
@@ -295,9 +315,10 @@ export function OverlayToolbar({
 
               <div className="my-2 border-t border-white/[0.06] mx-2" />
 
-              {/* Hint Style */}
               <div className="px-3 py-2">
-                <p className="text-[10px] text-white/25 uppercase tracking-widest mb-2 font-semibold">Hint Style</p>
+                <p className="text-[10px] text-white/25 uppercase tracking-widest mb-2 font-semibold">
+                  Hint Style
+                </p>
                 <div className="flex gap-1 bg-white/5 p-1 rounded-xl">
                   {(["full_answer", "short_hints", "keywords_only"] as const).map((style) => (
                     <button
@@ -305,7 +326,9 @@ export function OverlayToolbar({
                       onClick={() => useOverlayStore.getState().setHintStyle(style)}
                       className={cn(
                         "flex-1 py-1 rounded-lg text-[11px] font-semibold transition-all",
-                        hintStyle === style ? "bg-indigo-600/40 text-indigo-200 shadow-sm" : "text-white/35 hover:text-white/60"
+                        hintStyle === style
+                          ? "bg-indigo-600/40 text-indigo-200 shadow-sm"
+                          : "text-white/35 hover:text-white/60"
                       )}
                     >
                       {HINT_STYLE_LABELS[style]}
@@ -316,9 +339,10 @@ export function OverlayToolbar({
 
               <div className="my-2 border-t border-white/[0.06] mx-2" />
 
-              {/* Model picker */}
               <div className="px-3 py-1.5">
-                <p className="text-[10px] text-white/25 uppercase tracking-widest mb-2 font-semibold">AI Model</p>
+                <p className="text-[10px] text-white/25 uppercase tracking-widest mb-2 font-semibold">
+                  AI Model
+                </p>
                 <div className="space-y-0.5">
                   {MODEL_OPTIONS.map((m) => (
                     <button
@@ -396,11 +420,7 @@ export function OverlayToolbar({
 
         {/* End session */}
         <button
-          onClick={() => {
-            // Safe guard
-            if (!onEndSession) return;
-            onEndSession();
-          }}
+          onClick={() => onEndSession?.()}
           disabled={!onEndSession || !isSessionActive}
           title={!isSessionActive ? "Session not active" : "End session"}
           className={cn(
@@ -415,13 +435,15 @@ export function OverlayToolbar({
         </button>
       </div>
 
-      {/* ── Floating: Resume snapshot ─────────────────────────────── */}
+      {/* Floating: Resume snapshot */}
       {showResumeQuickPeek && (
         <div
           ref={resumeQuickPeekRef}
           className="absolute top-12 right-2 w-64 bg-[#0f0f1e] border border-white/[0.1] rounded-2xl shadow-2xl z-50 p-3.5 space-y-2.5 animate-fade-in"
         >
-          <p className="text-[11px] font-bold text-brand-300/60 uppercase tracking-widest">Resume Snapshot</p>
+          <p className="text-[11px] font-bold text-brand-300/60 uppercase tracking-widest">
+            Resume Snapshot
+          </p>
           {!resumePoints ? (
             <p className="text-[12px] text-white/30 italic">No resume loaded for this session.</p>
           ) : (
@@ -429,6 +451,7 @@ export function OverlayToolbar({
               <p className="text-[12px] text-white/75 leading-snug">
                 {resumePoints.intro.length > 120 ? resumePoints.intro.slice(0, 119) + "…" : resumePoints.intro}
               </p>
+
               {resumePoints.skills_summary && (
                 <div className="flex flex-wrap gap-1">
                   {resumePoints.skills_summary.split(", ").slice(0, 4).map((skill, i) => (
@@ -441,6 +464,7 @@ export function OverlayToolbar({
                   ))}
                 </div>
               )}
+
               {resumePoints.experience_points.slice(0, 2).map((pt, i) => (
                 <div key={i} className="flex gap-2 text-[12px] text-white/55">
                   <span className="shrink-0 text-brand-400 mt-0.5">•</span>
@@ -452,14 +476,16 @@ export function OverlayToolbar({
         </div>
       )}
 
-      {/* ── Floating: Pinned Hints ────────────────────────────────── */}
+      {/* Floating: Pinned hints */}
       {showPinnedMenu && (
         <div
           ref={pinnedMenuRef}
           className="absolute top-12 right-2 w-64 bg-[#0f0f1e] border border-white/[0.1] rounded-2xl shadow-2xl z-50 overflow-hidden animate-fade-in"
         >
           <div className="flex items-center justify-between px-3 py-2.5 border-b border-white/[0.06]">
-            <p className="text-[11px] font-bold text-white/40 uppercase tracking-widest">Pinned Hints</p>
+            <p className="text-[11px] font-bold text-white/40 uppercase tracking-widest">
+              Pinned Hints
+            </p>
             {pinnedHints.length > 0 && (
               <button
                 onClick={() => useOverlayStore.getState().clearPinnedHints()}
@@ -469,53 +495,67 @@ export function OverlayToolbar({
               </button>
             )}
           </div>
+
           {pinnedHints.length === 0 ? (
             <div className="px-3 py-5 text-[12px] text-white/25 italic text-center">
               Pin hints using the Pin button in the answer panel
             </div>
           ) : (
             <div className="max-h-56 overflow-y-auto py-1">
-              {pinnedHints.slice(-6).reverse().map((pin) => (
-                <div
-                  key={pin.id}
-                  className="px-3 py-2.5 hover:bg-white/5 transition-colors border-b border-white/[0.04] last:border-0"
-                >
-                  <p className="text-[10px] text-white/25 truncate mb-1">{pin.question || "No question"}</p>
-                  <p className="text-[12px] text-white/65 line-clamp-2 leading-snug">{pin.hint}</p>
-                  <div className="flex items-center gap-3 mt-2">
-                    <button
-                      onClick={() => {
-                        useOverlayStore.getState().setHintState("ready");
-                        useOverlayStore.setState({ current_hint: pin.hint, current_question: pin.question });
-                        useOverlayStore.getState().setActiveTab("answer");
-                        setShowPinnedMenu(false);
-                      }}
-                      className="text-[11px] text-brand-300/60 hover:text-brand-300 transition-colors font-medium"
-                    >
-                      Jump to →
-                    </button>
-                    <button
-                      onClick={() => useOverlayStore.getState().togglePinHint(pin.hint, pin.question)}
-                      className="text-[11px] text-white/20 hover:text-red-400 transition-colors"
-                      title="Unpin"
-                    >
-                      <Pin className="w-3 h-3" />
-                    </button>
+              {pinnedHints
+                .slice(-6)
+                .reverse()
+                .map((pin) => (
+                  <div
+                    key={pin.id}
+                    className="px-3 py-2.5 hover:bg-white/5 transition-colors border-b border-white/[0.04] last:border-0"
+                  >
+                    <p className="text-[10px] text-white/25 truncate mb-1">
+                      {pin.question || "No question"}
+                    </p>
+                    <p className="text-[12px] text-white/65 line-clamp-2 leading-snug">
+                      {pin.hint}
+                    </p>
+
+                    <div className="flex items-center gap-3 mt-2">
+                      <button
+                        onClick={() => {
+                          useOverlayStore.getState().setHintState("ready");
+                          useOverlayStore.setState({
+                            current_hint: pin.hint,
+                            current_question: pin.question,
+                          });
+                          useOverlayStore.getState().setActiveTab("answer");
+                          setShowPinnedMenu(false);
+                        }}
+                        className="text-[11px] text-brand-300/60 hover:text-brand-300 transition-colors font-medium"
+                      >
+                        Jump to →
+                      </button>
+                      <button
+                        onClick={() => useOverlayStore.getState().togglePinHint(pin.hint, pin.question)}
+                        className="text-[11px] text-white/20 hover:text-red-400 transition-colors"
+                        title="Unpin"
+                      >
+                        <Pin className="w-3 h-3" />
+                      </button>
+                    </div>
                   </div>
-                </div>
-              ))}
+                ))}
             </div>
           )}
         </div>
       )}
 
-      {/* ── Floating: Keyboard Shortcuts ─────────────────────────── */}
+      {/* Floating: Keyboard shortcuts */}
       {showHotkeyRef && (
         <div
           ref={hotkeyRefRef}
           className="absolute top-12 right-2 w-56 bg-[#0f0f1e] border border-white/[0.1] rounded-2xl shadow-2xl z-50 p-3.5 animate-fade-in"
         >
-          <p className="text-[11px] font-bold text-white/35 uppercase tracking-widest mb-3">Shortcuts</p>
+          <p className="text-[11px] font-bold text-white/35 uppercase tracking-widest mb-3">
+            Shortcuts
+          </p>
           <div className="space-y-2">
             {HOTKEY_REFERENCE.map((hk) => (
               <div key={hk.label} className="flex items-center justify-between gap-2">
@@ -553,8 +593,8 @@ function MicButton({
         isActive
           ? "bg-red-500/15 border-red-500/25 text-red-400"
           : isMuted
-          ? "bg-white/5 border-white/10 text-white/35"
-          : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white/80"
+            ? "bg-white/5 border-white/10 text-white/35"
+            : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white/80"
       )}
     >
       {isMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
@@ -589,7 +629,7 @@ function PrimaryButton({
         "flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[12px] font-semibold border transition-all shrink-0 h-8",
         className,
         disabled && "opacity-60 cursor-not-allowed",
-        isActive && "shadow-[0_0_0_1px_rgba(255,255,255,0.06)]",
+        isActive && "shadow-[0_0_0_1px_rgba(255,255,255,0.06)]"
       )}
     >
       <Icon className="w-3.5 h-3.5 shrink-0" />
@@ -621,8 +661,8 @@ function MenuRow({
         danger
           ? "text-red-400/60 hover:text-red-400 hover:bg-red-500/10"
           : active
-          ? cn(activeColor, "bg-white/[0.04] font-semibold hover:bg-white/[0.07]")
-          : "text-white/45 hover:text-white/80 hover:bg-white/[0.04]"
+            ? cn(activeColor, "bg-white/[0.04] font-semibold hover:bg-white/[0.07]")
+            : "text-white/45 hover:text-white/80 hover:bg-white/[0.04]"
       )}
     >
       <Icon className="w-3.5 h-3.5 shrink-0" />
