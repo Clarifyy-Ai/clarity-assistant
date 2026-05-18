@@ -1,3 +1,4 @@
+// src/store/overlayStore.ts
 import { create } from "zustand";
 import { persist, subscribeWithSelector } from "zustand/middleware";
 import type { HintStyle, PreferredAIModel } from "@/types/user.types";
@@ -95,10 +96,10 @@ interface OverlayStore {
   // Stealth opacity (persisted, 20–100)
   stealth_opacity: number;
 
-  // Peek mode (used for minimized behavior)
+  // Peek mode (minimized behavior)
   is_peek_active: boolean;
 
-  // Minimal mode (persisted) — collapses body into pill (but still "visible")
+  // Minimal mode (persisted) — collapses body into pill (still visible)
   is_minimal_mode: boolean;
 
   // Hotkey help overlay
@@ -125,11 +126,7 @@ interface OverlayStore {
   setStealthMode: (enabled: boolean) => void;
   setProctorSafe: (enabled: boolean) => void;
 
-  /**
-   * ✅ Minimize behavior (NEW, does not break existing features)
-   * - Minimize: hides main overlay, keeps peek pill visible
-   * - Restore: shows overlay again
-   */
+  // Minimize/restore (peek)
   minimizeOverlay: () => void;
   restoreOverlay: () => void;
   toggleMinimize: () => void;
@@ -213,7 +210,7 @@ interface OverlayStore {
   setPipActive: (active: boolean) => void;
 }
 
-// Parakeet-style: pinned to the top-center of the viewport by default
+// Default position (top-center)
 const DEFAULT_POSITION: OverlayPosition = (() => {
   if (typeof window === "undefined") return { x: 0, y: 16 };
   const width = 560;
@@ -246,7 +243,7 @@ export const useOverlayStore = create<OverlayStore>()(
 
       hint_style: "short_hints",
       active_model: "gemini-flash",
-      answer_mode: "hint" as const,
+      answer_mode: "hint",
 
       position: DEFAULT_POSITION,
       overlay_width: DEFAULT_WIDTH,
@@ -255,9 +252,9 @@ export const useOverlayStore = create<OverlayStore>()(
       auto_generate: true,
       simple_language: false,
       save_transcript: true,
-      session_call_type: "interview" as const,
+      session_call_type: "interview",
       session_language: "English",
-      active_tab: "answer" as const,
+      active_tab: "answer",
 
       network_color: "green",
 
@@ -274,9 +271,16 @@ export const useOverlayStore = create<OverlayStore>()(
 
       session_start_time: null,
       activity_log: [],
+
       stealth_opacity: 90,
+
+      // Peek mode: minimized state, should still render a small pill UI
       is_peek_active: false,
-      is_minimal_mode: true,
+
+      // ✅ IMPORTANT: default must NOT hide the UI for first-run users.
+      // Persisted users will keep their saved preference via partialize.
+      is_minimal_mode: false,
+
       is_hotkey_help_visible: false,
       is_pip_active: false,
 
@@ -292,8 +296,7 @@ export const useOverlayStore = create<OverlayStore>()(
       showOverlay: () =>
         set((s) => ({
           is_visible: true,
-          // restore from minimized if needed
-          is_peek_active: false,
+          is_peek_active: false, // always exit peek on show
           session_start_time: s.session_start_time ?? Date.now(),
           activity_log: [...s.activity_log, { event: "overlay_shown", timestamp: Date.now() }],
         })),
@@ -327,14 +330,12 @@ export const useOverlayStore = create<OverlayStore>()(
       setStealthMode: (enabled) => set({ is_stealth_mode: enabled }),
       setProctorSafe: (enabled) => set({ is_proctor_safe: enabled }),
 
-      // ── ✅ Minimize (NEW) ───────────────────────────────────
+      // ── Minimize (peek) ────────────────────────────────────
       minimizeOverlay: () =>
         set((s) => ({
-          // keep a draggable “peek” pill visible
           is_visible: false,
           is_peek_active: true,
-          // ensure pill mode for minimized
-          is_minimal_mode: true,
+          is_minimal_mode: true, // minimized must be pill
           is_panic_visible: false,
           activity_log: [...s.activity_log, { event: "overlay_minimized", timestamp: Date.now() }],
         })),
@@ -349,7 +350,7 @@ export const useOverlayStore = create<OverlayStore>()(
 
       toggleMinimize: () =>
         set((s) => {
-          // If main overlay is visible, minimize; else if peek is active, restore.
+          // If overlay visible => minimize into peek
           if (s.is_visible) {
             return {
               is_visible: false,
@@ -359,6 +360,7 @@ export const useOverlayStore = create<OverlayStore>()(
               activity_log: [...s.activity_log, { event: "overlay_minimized", timestamp: Date.now() }],
             };
           }
+          // If peek active => restore
           if (s.is_peek_active) {
             return {
               is_visible: true,
@@ -367,7 +369,7 @@ export const useOverlayStore = create<OverlayStore>()(
               activity_log: [...s.activity_log, { event: "overlay_restored", timestamp: Date.now() }],
             };
           }
-          // If fully hidden, behave like show
+          // If fully hidden => show
           return {
             is_visible: true,
             is_peek_active: false,
@@ -380,7 +382,7 @@ export const useOverlayStore = create<OverlayStore>()(
       setCurrentQuestion: (current_question) =>
         set((s) => ({
           current_question,
-          hint_state: "listening" as const,
+          hint_state: "listening",
           current_hint: "",
           streaming_buffer: "",
           questions_detected:
@@ -403,11 +405,7 @@ export const useOverlayStore = create<OverlayStore>()(
         set((state) => {
           const newHistory = [
             ...state.hint_history,
-            {
-              question: state.current_question,
-              hint: state.streaming_buffer,
-              timestamp: Date.now(),
-            },
+            { question: state.current_question, hint: state.streaming_buffer, timestamp: Date.now() },
           ];
           return {
             current_hint: state.streaming_buffer,
@@ -459,13 +457,15 @@ export const useOverlayStore = create<OverlayStore>()(
             direction === "prev"
               ? Math.max(0, state.hint_history_index - 1)
               : Math.min(state.hint_history.length - 1, state.hint_history_index + 1);
+
           if (newIndex === state.hint_history_index) return {};
+
           const entry = state.hint_history[newIndex];
           return {
             hint_history_index: newIndex,
             current_hint: entry.hint,
             viewed_question: entry.question,
-            hint_state: "ready" as const,
+            hint_state: "ready",
             streaming_buffer: "",
           };
         }),
@@ -521,7 +521,13 @@ export const useOverlayStore = create<OverlayStore>()(
       setNetworkColor: (network_color) => set({ network_color }),
 
       // ── Panic ──────────────────────────────────────────────
-      showPanic: (panic_content) => set({ is_panic_visible: true, panic_content, is_visible: true, is_peek_active: false }),
+      showPanic: (panic_content) =>
+        set({
+          is_panic_visible: true,
+          panic_content,
+          is_visible: true,
+          is_peek_active: false,
+        }),
       hidePanic: () => set({ is_panic_visible: false }),
 
       // ── Session Lifecycle ──────────────────────────────────
@@ -529,29 +535,39 @@ export const useOverlayStore = create<OverlayStore>()(
         set({
           current_question: "",
           current_hint: "",
-          hint_state: "idle" as const,
+          hint_state: "idle",
           streaming_buffer: "",
           error_message: null,
+
           hint_history: [],
           hint_history_index: -1,
           questions_detected: 0,
           viewed_question: null,
+
           is_panic_visible: false,
           panic_content: null,
+
           screenshot_hint: null,
           is_screenshot_loading: false,
-          network_color: "green" as const,
-          active_tab: "answer" as const,
+
+          network_color: "green",
+          active_tab: "answer",
+
           session_start_time: null,
           activity_log: [],
+
           is_peek_active: false,
           is_hotkey_help_visible: false,
+
           chat_history: [],
           is_chat_generating: false,
+
           resume_context: null,
           resume_talking_points: null,
+
           pinned_hints: [],
-          session_call_type: "interview" as const,
+
+          session_call_type: "interview",
         }),
 
       // ── Coding ─────────────────────────────────────────────
@@ -582,9 +598,10 @@ export const useOverlayStore = create<OverlayStore>()(
       setMinimalMode: (is_minimal_mode) =>
         set((s) => ({
           is_minimal_mode,
+          // If user collapses to minimal, keep tab safe (answer/resume only)
           active_tab:
             is_minimal_mode && s.active_tab !== "answer" && s.active_tab !== "resume"
-              ? ("answer" as const)
+              ? "answer"
               : s.active_tab,
         })),
 
@@ -597,7 +614,6 @@ export const useOverlayStore = create<OverlayStore>()(
     })),
     {
       name: "clarify-overlay",
-      // Only persist position and hint_style — not content
       partialize: (state) => ({
         position: state.position,
         overlay_width: state.overlay_width,
