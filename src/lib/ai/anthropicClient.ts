@@ -107,4 +107,3 @@ function getScaleDescription(scale: string): string {
   };
   return map[scale] ?? "medium scale";
 }
-import type { CoachingContext } from "@/types/ai.types";
