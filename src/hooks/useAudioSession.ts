@@ -1,6 +1,21 @@
 // src/hooks/useAudioSession.ts
 import { useEffect, useRef, useCallback } from "react";
-importlib/audio/fillerDetector";import { useAudioStore } from "@/store/audioStore";
+import { FillerAccumulator, RealTimeFillerCounter } from "@/lib/audio/fillerDetector";
+import { useAudioStore } from "@/store/audioStore";
+import { useSessionStore } from "@/store/sessionStore";
+import {
+  captureMicrophone,
+  captureSystemAudio,
+  mergeAudioStreams,
+  createLevelAnalyser,
+  stopStream,
+  teardownAudioContext,
+  watchStreamEnded,
+  isSystemAudioSupported,
+} from "@/lib/audio/audioCapture";
+import { DeepgramStreamClient } from "@/lib/audio/deepgramStream";
+import { processUtteranceForDiarization } from "@/lib/audio/diarization";
+import { VADDetector, SilenceBoundaryDetector } from "@/lib/audio/vadDetector";
 import { WPMTracker } from "@/lib/audio/wpmTracker";
 import type { TranscriptUtterance } from "@/types/audio.types";
 
@@ -389,17 +404,3 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     streamError,
   };
 }
-import { useSessionStore } from "@/store/sessionStore";
-import {
-  captureMicrophone,
-  captureSystemAudio,
-  mergeAudioStreams,
-  createLevelAnalyser,
-  stopStream,
-  teardownAudioContext,
-  watchStreamEnded,
-  isSystemAudioSupported,
-} from "@/lib/audio/audioCapture";
-import { DeepgramStreamClient } from "@/lib/audio/deepgramStream";
-import { processUtteranceForDiarization } from "@/lib/audio/diarization";
-import { VADDetector, SilenceBoundaryDetector } from "@/lib/audio/vadDetector";

@@ -1,5 +1,7 @@
 // src/lib/ai/anthropicClient.ts — PRODUCTION READY
-import {import { fetchEdgeJson } from "@/lib/network/fetchEdge";import { retry } from "@/lib/utils";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { retry } from "@/lib/utils";
+import type { CoachingContext } from "@/types/ai.types";
 
 export interface ClaudeStreamOptions {
   question: string;
