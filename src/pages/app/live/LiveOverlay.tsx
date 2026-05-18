@@ -16,19 +16,17 @@ import { ClipboardCheck, AlertTriangle, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import type { LiveSessionConfig } from "@/types/session.types";
 
-// FIX BUG-5: removed `useNavigate` — it was imported but never called.
-
 const DEFAULT_CONFIG: LiveSessionConfig = {
-  company:             null,
-  role:                null,
-  hint_style:          "short_hints",
-  model:               "gemini-flash",
-  smart_routing:       false,
-  stealth_mode:        true,
-  resume_id:           null,
-  jd_id:               null,
-  interview_type:      "behavioral",
-  instructions:        "",
+  company: null,
+  role: null,
+  hint_style: "short_hints",
+  model: "gemini-flash",
+  smart_routing: false,
+  stealth_mode: true,
+  resume_id: null,
+  jd_id: null,
+  interview_type: "behavioral",
+  instructions: "",
   enable_system_audio: false,
 };
 
@@ -36,65 +34,73 @@ export default function LiveOverlay() {
   const profile = useAuthStore((s) => s.profile);
   const sessionStatus = useSessionStore((s) => s.status);
 
-  const [phase,         setPhase]         = useState<"setup" | "starting" | "active">("setup");
-  const [config,        setConfig]        = useState<LiveSessionConfig>(DEFAULT_CONFIG);
+  const [phase, setPhase] = useState<"setup" | "starting" | "active">("setup");
+  const [config, setConfig] = useState<LiveSessionConfig>(DEFAULT_CONFIG);
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
   const [preparedSessionId, setPreparedSessionId] = useState<string | null>(null);
 
   const hasStartedRef = useRef(false);
-  const didEndRef     = useRef(false);
+  const didEndRef = useRef(false);
   const isPreparingSessionRef = useRef(false);
 
-  const copilot   = useLiveCopilot({ config, sessionType: "live", existingSessionId: preparedSessionId });
-  const isActive  = sessionStatus === "active";
+  const copilot = useLiveCopilot({
+    config,
+    sessionType: "live",
+    existingSessionId: preparedSessionId,
+  });
 
-  // Stable ref to endLiveSession so the cleanup effect always calls the latest version
-  const endSessionRef     = useRef(copilot.endLiveSession);
-  endSessionRef.current   = copilot.endLiveSession;
+  const isActive = sessionStatus === "active";
 
-  // FIX BUG-4: streamError may be Error | { message: string } | string depending
-  // on the hook implementation. Normalise to a string for safe rendering.
+  // Stable ref for cleanup
+  const endSessionRef = useRef(copilot.endLiveSession);
+  endSessionRef.current = copilot.endLiveSession;
+
+  // Normalize stream error to a message
   const streamError = copilot.streamError;
   const streamErrorMessage: string | null = streamError
-    ? (typeof streamError === "string"
-        ? streamError
-        : (streamError as { message?: string }).message
-          ?? "Microphone stream error. Please check your audio settings.")
+    ? typeof streamError === "string"
+      ? streamError
+      : (streamError as { message?: string }).message ??
+        "Microphone stream error. Please check your audio settings."
     : null;
 
   // ── Setup ────────────────────────────────────────────────────────────────
-
   const handleSetup = useCallback((sessionConfig: LiveSessionConfig) => {
     useSessionStore.getState().resetSession();
     useOverlayStore.getState().resetSessionState();
+
+    // ✅ Fix: ensure both stealth + proctor-safe are updated from config
+    useOverlayStore.getState().setStealthMode(!!sessionConfig.stealth_mode);
+    useOverlayStore.getState().setProctorSafe(!!sessionConfig.stealth_mode);
+
     useOverlayStore.getState().setActiveModel(sessionConfig.model);
     useOverlayStore.getState().setHintStyle(sessionConfig.hint_style);
-    useOverlayStore.getState().setProctorSafe(sessionConfig.stealth_mode);
+
     hasStartedRef.current = false;
-    didEndRef.current     = false;
+    didEndRef.current = false;
     isPreparingSessionRef.current = false;
+
     setLastSessionId(null);
     setPreparedSessionId(null);
     setConfig(sessionConfig);
     setPhase("starting");
   }, []);
 
-  // ── Start session when phase becomes active ──────────────────────────────
-  // FIX BUG-2: copilot.startLiveSession may change reference on every render.
-  // hasStartedRef guards double-firing, but we also disable the exhaustive-deps
-  // lint rule intentionally — copilot.startLiveSession is pulled via getState()
-  // inside the hook and is always the latest reference.
+  // ── Prepare DB session then start live session ───────────────────────────
   useEffect(() => {
     if (phase !== "starting" || hasStartedRef.current) return;
+
     if (!profile?.id) {
       toast.error("Please sign in to start a live session.");
       setPhase("setup");
       return;
     }
 
+    // Prepare session record first
     if (!preparedSessionId) {
       if (isPreparingSessionRef.current) return;
       isPreparingSessionRef.current = true;
+
       getOrCreateSession({
         user_id: profile.id,
         type: "live",
@@ -102,38 +108,56 @@ export default function LiveOverlay() {
         document_id: config.resume_id ?? null,
         jd_id: config.jd_id ?? null,
         model_used: toDbModel(config.model) as any,
-      }).then(({ session, reused }) => {
-        setPreparedSessionId(session.id);
-        if (reused) toast.message("Resuming your in-progress live session");
-      }).catch((err: unknown) => {
-        const message = err instanceof Error ? err.message : "Failed to prepare live session";
-        toast.error(message);
-        setPhase("setup");
-      }).finally(() => {
-        isPreparingSessionRef.current = false;
-      });
+      })
+        .then(({ session, reused }) => {
+          setPreparedSessionId(session.id);
+          if (reused) toast.message("Resuming your in-progress live session");
+        })
+        .catch((err: unknown) => {
+          const message = err instanceof Error ? err.message : "Failed to prepare live session";
+          toast.error(message);
+          setPhase("setup");
+        })
+        .finally(() => {
+          isPreparingSessionRef.current = false;
+        });
+
       return;
     }
 
+    // Start live session
     hasStartedRef.current = true;
-    copilot.startLiveSession().then(() => {
-      setPhase("active");
-    }).catch((err: unknown) => {
-      const message = err instanceof Error ? err.message : "Failed to start live session";
-      toast.error(message);
-      hasStartedRef.current = false;
-      useSessionStore.getState().resetSession();
-      useOverlayStore.getState().hideOverlay();
-      setPhase("setup");
-    });
+    copilot
+      .startLiveSession()
+      .then(() => {
+        setPhase("active");
+      })
+      .catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : "Failed to start live session";
+        toast.error(message);
+        hasStartedRef.current = false;
+        useSessionStore.getState().resetSession();
+        useOverlayStore.getState().hideOverlay();
+        setPhase("setup");
+      });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, profile?.id, preparedSessionId, config, copilot]);
+
+  // ✅ Fix: Ensure overlay is visible in active phase by default
+  // (Otherwise OverlayWindow shows nothing because is_visible=false)
+  useEffect(() => {
+    if (phase !== "active") return;
+    useOverlayStore.getState().showOverlay();
+    return () => {
+      // Do not force hide on route changes while active? Keep existing behavior:
+      // on unmount we will hide/reset in cleanup effect below.
+    };
+  }, [phase]);
 
   // ── Cleanup on unmount ───────────────────────────────────────────────────
   useEffect(() => {
     return () => {
       if (hasStartedRef.current && !didEndRef.current) {
-        // FIX BUG-3: call via ref so we always invoke the latest endLiveSession
         endSessionRef.current();
       }
       useOverlayStore.getState().hideOverlay();
@@ -144,33 +168,32 @@ export default function LiveOverlay() {
   // ── Stop session ─────────────────────────────────────────────────────────
   const handleStop = useCallback(async () => {
     didEndRef.current = true;
+
     // Snapshot session_id BEFORE ending — endLiveSession may clear store state
     const sessionId = useSessionStore.getState().session_id;
+
     await copilot.endLiveSession();
     setLastSessionId(sessionId);
-    // FIX BUG-1: do NOT call showOverlay() here. The session is over — showing
-    // the overlay again is confusing and contradicts the "Session Ended" UI.
-    // The overlay should remain in its last state (hidden or visible).
-  }, [copilot.endLiveSession]);
+
+    // Keep overlay state as-is (your existing intent)
+  }, [copilot]);
 
   // ── Generate hint ─────────────────────────────────────────────────────────
   const handleGenerate = useCallback(() => {
     const question = useOverlayStore.getState().current_question;
     if (question) copilot.requestLiveHint(question);
-  }, [copilot.requestLiveHint]);
+  }, [copilot]);
 
-  const handleManualQuestion = useCallback((question: string) => {
-    copilot.submitManualQuestion(question);
-  }, [copilot.submitManualQuestion]);
+  const handleManualQuestion = useCallback(
+    (question: string) => {
+      copilot.submitManualQuestion(question);
+    },
+    [copilot]
+  );
 
   // ── Setup screen ─────────────────────────────────────────────────────────
   if (phase === "setup") {
-    return (
-      <PreSessionSetupWizard
-        onStart={handleSetup}
-        sessionType="live"
-      />
-    );
+    return <PreSessionSetupWizard onStart={handleSetup} sessionType="live" />;
   }
 
   if (phase === "starting") {
@@ -187,10 +210,9 @@ export default function LiveOverlay() {
     <>
       <ScreenCaptureBlocker isActive={isActive} />
       <LiveSessionController isActive={isActive} onAutoEnd={handleStop} />
-      <OverlayKeyboardHandler
-        enabled={isActive}
-        onToggleMute={copilot.toggleMute}
-      />
+
+      <OverlayKeyboardHandler enabled={isActive} onToggleMute={copilot.toggleMute} />
+
       <OverlayWindow
         onToggleMic={copilot.toggleMute}
         onToggleSystemAudio={copilot.toggleSystemAudio}
