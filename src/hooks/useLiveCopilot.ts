@@ -1,4 +1,10 @@
-// src/hooks/useLiveCopilot.ts — FIXED (full-answer passes model)
+// src/hooks/useLiveCopilot.ts — PRODUCTION FIXED// src/hooks/useLiveCopilot.ts — PRO// Fixes:
+// - Stable question detection callback (no stale closure issues)
+// - Fallback context if coachStore has not initialized (prevents silent no-op)
+// - Chat generation always clears "generating" state (try/finally)
+// - Chat path deductCredits consistency
+// - Full-answer path deductCredits consistency (same as hint path)
+// - Uses selected mic id from audioStore when available
 
 import { useCallback, useRef, useEffect } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
@@ -14,7 +20,7 @@ import { checkCredits, deductCredits } from "@/lib/billing/creditsManager";
 import {
   buildResumeContext,
   generateResumeTalkingPoints,
-  formatTalkingPointsAsHint
+  formatTalkingPointsAsHint,
 } from "@/lib/ai/resumeFallback";
 import { hotkeyManager } from "@/lib/overlay/hotkeys";
 import { createDragHandler } from "@/lib/overlay/stealthMouse";
@@ -36,9 +42,10 @@ export function useLiveCopilot({
   config,
   overlayRef,
   sessionType = "live",
-  existingSessionId
+  existingSessionId,
 }: UseLiveCopilotOptions) {
   const { profile } = useAuthStore();
+
   const sessionStatus = useSessionStore((s) => s.status);
   const elapsedSeconds = useSessionStore((s) => s.elapsed_seconds);
   const creditsConsumed = useSessionStore((s) => s.credits_consumed);
@@ -50,29 +57,49 @@ export function useLiveCopilot({
   const dragCleanupRef = useRef<(() => void) | null>(null);
   const sessionIdRef = useRef<string>(generateId());
 
-  const audio = useAudioSession({
-    enableSystemAudio: config.enable_system_audio ?? false,
-    micDeviceId: null,
-    onQuestionDetected: handleQuestionDetected,
-    onFillerDetected: (count: number) => {
-      useSessionStore.getState().setFillerCount(count);
-    },
-    onWPMUpdate: (wpm: number) => {
-      useSessionStore.getState().setCurrentWPM(wpm);
-    },
-  });
-
   const configRef = useRef(config);
   configRef.current = config;
+
   const existingSessionIdRef = useRef(existingSessionId ?? null);
   existingSessionIdRef.current = existingSessionId ?? null;
 
+  // ✅ Use selected mic if present (setup wizard / device selection)
+  const selectedMicId = useAudioStore((s) => s.setup?.selected_mic_id ?? null);
+
+  /**
+   * Fallback context builder — prevents silent failures when coach context isn't ready.
+   * We keep the shape loose (as any) because routeHint expects your internal context structure.
+   */
+  const getSafeContext = useCallback((): any => {
+    const cfg = configRef.current;
+    const overlay = useOverlayStore.getState();
+    const audioState = useAudioStore.getState();
+
+    const transcript = audioState.transcript?.full_transcript ?? "";
+    const lastTranscript = transcript.length > 2500 ? transcript.slice(-2500) : transcript;
+
+    return {
+      session_type: cfg.interview_type ?? "behavioral",
+      target_company: cfg.company ?? "",
+      target_role: cfg.role ?? (profile as any)?.target_role ?? "",
+      resume_summary: overlay.resume_context?.summary ?? "",
+      last_transcript: lastTranscript,
+      call_type: overlay.session_call_type,
+      language: overlay.session_language,
+    };
+  }, [profile]);
+
+  /**
+   * Initialize overlay/session stores based on selected config & documents.
+   */
   const initSessionFromConfig = useCallback(() => {
     if (!profile) return;
+
     const cfg = configRef.current;
 
     const { active_context } = useDocumentStore.getState();
     const parsed = (active_context?.resume as any)?.content ?? null;
+
     const resumeCtx = buildResumeContext(parsed);
     const talkingPoints = generateResumeTalkingPoints(parsed, {
       company: cfg.company,
@@ -110,27 +137,49 @@ export function useLiveCopilot({
 
     dragCleanupRef.current = createDragHandler(
       overlayRef.current,
-      (pos) => useOverlayStore.getState().setPosition(pos)
+      (pos) => useOverlayStore.getState().setPosition(pos),
     );
 
     return () => {
       dragCleanupRef.current?.();
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  function handleQuestionDetected(question: string): void {
+  /**
+   * NOTE: requestLiveHint is declared later; we keep a ref to always call latest.
+   */
+  const requestLiveHintRef = useRef<(q: string) => Promise<void> | void>(() => {});
+  const submitManualQuestionRef = useRef<(q: string) => Promise<void> | void>(() => {});
+
+  /**
+   * Stable question detected callback (used by audio pipeline).
+   */
+  const handleQuestionDetected = useCallback((question: string) => {
     if (question === lastQuestionRef.current) return;
     lastQuestionRef.current = question;
+
     useOverlayStore.getState().setCurrentQuestion(question);
+
     if (useOverlayStore.getState().auto_generate) {
-      requestLiveHint(question);
+      void requestLiveHintRef.current(question);
     }
-  }
+  }, []);
+
+  const audio = useAudioSession({
+    enableSystemAudio: config.enable_system_audio ?? false,
+    micDeviceId: selectedMicId,
+    onQuestionDetected: handleQuestionDetected,
+    onFillerDetected: (count: number) => {
+      useSessionStore.getState().setFillerCount(count);
+    },
+    onWPMUpdate: (wpm: number) => {
+      useSessionStore.getState().setCurrentWPM(wpm);
+    },
+  });
 
   function mapOverlayModelToGeminiModel(active: string): "gemini-2.5-flash" | "gemini-2.5-pro" {
-    // If user selects Gemini Pro => stronger reasoning
-    if (active === "gemini-pro") return "gemini-2.5-pro";
-    // Default to flash for speed
+    if (active === "gemini-pro" || active === "gemini-1-5-pro") return "gemini-2.5-pro";
     return "gemini-2.5-flash";
   }
 
@@ -144,27 +193,44 @@ export function useLiveCopilot({
     const context = {
       session_type: cfg.interview_type ?? "behavioral",
       target_company: cfg.company ?? "",
-      last_transcript: "",
+      last_transcript: (useAudioStore.getState().transcript?.full_transcript ?? "").slice(-2500),
       resume_experience_summary: resumeCtx?.summary ?? "",
       hint_style: "concise",
-      simple_language: false,
+      simple_language: overlay.simple_language ?? false,
     } as unknown as Parameters<typeof streamFullAnswer>[0]["context"];
+
+    const selectedModel = useOverlayStore.getState().active_model;
+    const creditCheck = checkCredits(selectedModel);
+
+    if (!creditCheck.canProceed) {
+      const tp = overlay.resume_talking_points;
+      if (tp) overlay.setOfflineFallback(formatTalkingPointsAsHint(tp));
+      else overlay.setError(creditCheck.reason ?? "Out of credits");
+      return;
+    }
 
     const activeModel = useOverlayStore.getState().active_model as any;
     const geminiModel = mapOverlayModelToGeminiModel(activeModel);
 
     let fullText = "";
+
     await streamFullAnswer({
       question,
       context,
       model: geminiModel,
-      simpleLanguage: false,
+      simpleLanguage: overlay.simple_language ?? false,
       onChunk: (chunk) => {
         fullText += chunk;
         useOverlayStore.getState().appendStreamChunk(chunk);
       },
-      onDone: () => {
+      onDone: async () => {
         if (fullText) useOverlayStore.getState().commitStreamedHint();
+
+        // ✅ Keep billing consistent (same as hint mode)
+        const result = await deductCredits(selectedModel, sessionIdRef.current);
+        if (result.success) {
+          useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
+        }
       },
       onError: (err) => {
         useOverlayStore.getState().setError(err.message || "Failed to generate full answer");
@@ -173,154 +239,177 @@ export function useLiveCopilot({
     });
   }
 
-  const requestLiveHint = useCallback(async (question: string) => {
-    if (!profile) return;
+  const requestLiveHint = useCallback(
+    async (question: string) => {
+      if (!profile) return;
 
-    const context = coachStore.getContext();
-    if (!context) return;
+      // Prefer coach context; fallback if not initialized
+      const context = coachStore.getContext?.() ?? getSafeContext();
+      if (!context) return;
 
-    const selectedModel = useOverlayStore.getState().active_model;
-    const creditCheck = checkCredits(selectedModel);
+      const selectedModel = useOverlayStore.getState().active_model;
+      const creditCheck = checkCredits(selectedModel);
 
-    if (!creditCheck.canProceed) {
+      if (!creditCheck.canProceed) {
+        const overlay = useOverlayStore.getState();
+        const tp = overlay.resume_talking_points;
+        if (tp) overlay.setOfflineFallback(formatTalkingPointsAsHint(tp));
+        else overlay.setError(creditCheck.reason ?? "Out of credits");
+        return;
+      }
+
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      const requestId = generateId();
       const overlay = useOverlayStore.getState();
-      const tp = overlay.resume_talking_points;
-      if (tp) overlay.setOfflineFallback(formatTalkingPointsAsHint(tp));
-      else overlay.setError(creditCheck.reason ?? "Out of credits");
-      return;
-    }
+      overlay.setCurrentQuestion(question);
+      overlay.setHintState("generating");
 
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
+      const answerMode = useOverlayStore.getState().answer_mode;
 
-    const requestId = generateId();
-    const overlay = useOverlayStore.getState();
-    overlay.setCurrentQuestion(question);
-    overlay.setHintState("generating");
-
-    const answerMode = useOverlayStore.getState().answer_mode;
-
-    if (answerMode === "full_answer") {
       try {
-        await requestFullAnswer(question, controller.signal);
-        useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
+        if (answerMode === "full_answer") {
+          await requestFullAnswer(question, controller.signal);
+          return;
+        }
+
+        await routeHint({
+          question,
+          context,
+          preferredModel: selectedModel,
+          interviewType: context.session_type,
+          isLive: true,
+          sessionId: sessionIdRef.current,
+          questionId: requestId,
+          simpleLanguage: useOverlayStore.getState().simple_language,
+          callType: useOverlayStore.getState().session_call_type,
+          language: useOverlayStore.getState().session_language,
+          answerMode: "hint",
+          onChunk: (chunk) => useOverlayStore.getState().appendStreamChunk(chunk),
+          onDone: async () => {
+            useOverlayStore.getState().commitStreamedHint();
+            const result = await deductCredits(selectedModel, sessionIdRef.current);
+            if (result.success) {
+              useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
+            }
+          },
+          onError: (error) => useOverlayStore.getState().setError(error.message),
+          signal: controller.signal,
+        });
       } catch (err) {
         if (!controller.signal.aborted) {
-          useOverlayStore.getState().setError(
-            err instanceof Error ? err.message : "Full answer generation failed"
-          );
+          useOverlayStore.getState().setError(err instanceof Error ? err.message : "Hint generation failed");
         }
       }
-    } else {
-      await routeHint({
-        question,
-        context,
-        preferredModel: selectedModel,
-        interviewType: context.session_type,
-        isLive: true,
-        sessionId: sessionIdRef.current,
-        questionId: requestId,
-        simpleLanguage: useOverlayStore.getState().simple_language,
-        callType: useOverlayStore.getState().session_call_type,
-        language: useOverlayStore.getState().session_language,
-        answerMode: "hint",
-        onChunk: (chunk) => useOverlayStore.getState().appendStreamChunk(chunk),
-        onDone: async () => {
-          useOverlayStore.getState().commitStreamedHint();
-          const result = await deductCredits(selectedModel, sessionIdRef.current);
-          if (result.success) {
-            useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
-          }
-        },
-        onError: (error) => useOverlayStore.getState().setError(error.message),
-        signal: controller.signal,
-      });
-    }
-  }, [profile, coachStore]); // eslint-disable-line react-hooks/exhaustive-deps
+    },
+    [profile, coachStore, getSafeContext],
+  ); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const submitManualQuestion = useCallback(async (question: string) => {
-    if (!profile) return;
+  // keep latest ref for audio callback usage
+  useEffect(() => {
+    requestLiveHintRef.current = requestLiveHint;
+  }, [requestLiveHint]);
 
-    const context = coachStore.getContext();
-    if (!context) return;
+  const submitManualQuestion = useCallback(
+    async (question: string) => {
+      if (!profile) return;
 
-    useOverlayStore.getState().addChatMessage({
-      role: "user",
-      text: question,
-      timestamp: Date.now(),
-    });
+      const context = coachStore.getContext?.() ?? getSafeContext();
+      if (!context) return;
 
-    const selectedModel = useOverlayStore.getState().active_model;
-    const creditCheck = checkCredits(selectedModel);
-
-    if (!creditCheck.canProceed) {
-      const overlay = useOverlayStore.getState();
-      const tp = overlay.resume_talking_points;
       useOverlayStore.getState().addChatMessage({
-        role: "assistant",
-        text: tp ? formatTalkingPointsAsHint(tp) : (creditCheck.reason ?? "Out of credits"),
+        role: "user",
+        text: question,
         timestamp: Date.now(),
       });
-      return;
-    }
 
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
+      const selectedModel = useOverlayStore.getState().active_model;
+      const creditCheck = checkCredits(selectedModel);
 
-    const requestId = generateId();
-    useOverlayStore.getState().setChatGenerating(true);
+      if (!creditCheck.canProceed) {
+        const overlay = useOverlayStore.getState();
+        const tp = overlay.resume_talking_points;
+        useOverlayStore.getState().addChatMessage({
+          role: "assistant",
+          text: tp ? formatTalkingPointsAsHint(tp) : creditCheck.reason ?? "Out of credits",
+          timestamp: Date.now(),
+        });
+        return;
+      }
 
-    let chatBuffer = "";
+      abortRef.current?.abort();
+      const controller = new AbortController();
+      abortRef.current = controller;
 
-    await routeHint({
-      question,
-      context,
-      preferredModel: selectedModel,
-      interviewType: context.session_type,
-      isLive: true,
-      sessionId: sessionIdRef.current,
-      questionId: requestId,
-      simpleLanguage: useOverlayStore.getState().simple_language,
-      callType: useOverlayStore.getState().session_call_type,
-      language: useOverlayStore.getState().session_language,
-      answerMode: "full_answer",
-      onChunk: (chunk) => { chatBuffer += chunk; },
-      onDone: async () => {
-        useOverlayStore.getState().setChatGenerating(false);
-        if (chatBuffer) {
+      const requestId = generateId();
+      useOverlayStore.getState().setChatGenerating(true);
+
+      let chatBuffer = "";
+
+      try {
+        await routeHint({
+          question,
+          context,
+          preferredModel: selectedModel,
+          interviewType: context.session_type,
+          isLive: true,
+          sessionId: sessionIdRef.current,
+          questionId: requestId,
+          simpleLanguage: useOverlayStore.getState().simple_language,
+          callType: useOverlayStore.getState().session_call_type,
+          language: useOverlayStore.getState().session_language,
+          answerMode: "full_answer",
+          onChunk: (chunk) => {
+            chatBuffer += chunk;
+          },
+          onDone: async () => {
+            // billing consistency
+            const result = await deductCredits(selectedModel, sessionIdRef.current);
+            if (result.success) {
+              useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
+            }
+          },
+          onError: (error) => {
+            throw error;
+          },
+          signal: controller.signal,
+        });
+
+        if (!controller.signal.aborted) {
           useOverlayStore.getState().addChatMessage({
             role: "assistant",
-            text: chatBuffer,
-            timestamp: Date.now(),
-          });
-        } else {
-          useOverlayStore.getState().addChatMessage({
-            role: "assistant",
-            text: "No response received. Please try again.",
+            text: chatBuffer || "No response received. Please try again.",
             timestamp: Date.now(),
           });
         }
-        useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
-      },
-      onError: (error) => {
+      } catch (err) {
+        if (!controller.signal.aborted) {
+          const msg = err instanceof Error ? err.message : "Chat generation failed";
+          useOverlayStore.getState().addChatMessage({
+            role: "assistant",
+            text: `Error: ${msg}`,
+            timestamp: Date.now(),
+          });
+        }
+      } finally {
         useOverlayStore.getState().setChatGenerating(false);
-        useOverlayStore.getState().addChatMessage({
-          role: "assistant",
-          text: `Error: ${error.message}`,
-          timestamp: Date.now(),
-        });
-      },
-      signal: controller.signal,
-    });
-  }, [profile, coachStore]); // eslint-disable-line react-hooks/exhaustive-deps
+      }
+    },
+    [profile, coachStore, getSafeContext],
+  ); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => {
+    submitManualQuestionRef.current = submitManualQuestion;
+  }, [submitManualQuestion]);
 
   const startLiveSession = useCallback(async () => {
     const userId = profile?.id;
     if (!userId) throw new Error("Please sign in to start a live session.");
 
     const cfg = configRef.current;
+
     try {
       const reusableSessionId = existingSessionIdRef.current;
       if (reusableSessionId) {
@@ -382,93 +471,11 @@ export function useLiveCopilot({
           hints_used: overlay.hint_history.length,
           answers_generated: overlay.hint_history.length,
           questions_asked: questionCount,
-          notes: (saveTranscript && fullTranscript) ? fullTranscript : null,
+          notes: saveTranscript && fullTranscript ? fullTranscript : null,
         });
 
         if (fullTranscript && userId && saveTranscript) {
           try {
             await supabase.from("session_transcripts").insert({
               session_id: session.session_id,
-              user_id: userId,
-              content: fullTranscript,
-              speaker: "combined",
-              is_final: true,
-            });
-          } catch {
-            // ignore
-          }
-        }
-
-        for (const hint of overlay.hint_history) {
-          try {
-            await (supabase.from("session_ai_interactions") as any).insert({
-              session_id: session.session_id,
-              user_id: userId,
-              type: "hint",
-              prompt: hint.question,
-              response: hint.hint,
-              model: dbModel,
-            });
-          } catch {
-            // ignore
-          }
-        }
-      } catch (err) {
-        console.error("[useLiveCopilot] Failed to persist session:", err);
-      }
-    }
-
-    useSessionStore.getState().setStatus("completed");
-    useOverlayStore.getState().hideOverlay();
-  }, [audio.stop, profile?.id]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  const toggleProctorSafe = useCallback(() => {
-    const { is_proctor_safe, setProctorSafe } = useOverlayStore.getState();
-    setProctorSafe(!is_proctor_safe);
-  }, []);
-
-  const toggleSystemAudio = useCallback(async () => {
-    await audio.toggleSystemAudio();
-  }, [audio.toggleSystemAudio]);
-
-  const pauseLiveSession = useCallback(() => {
-    const cur = useSessionStore.getState();
-    if (cur.status !== "active") return;
-    try { if (!audio.isMuted) audio.toggleMute(); } catch { /* ignore */ }
-    cur.setStatus("paused");
-  }, [audio.isMuted, audio.toggleMute]);
-
-  const resumeLiveSession = useCallback(() => {
-    const cur = useSessionStore.getState();
-    if (cur.status !== "paused") return;
-    try { if (audio.isMuted) audio.toggleMute(); } catch { /* ignore */ }
-    cur.setStatus("active");
-  }, [audio.isMuted, audio.toggleMute]);
-
-  return {
-    startLiveSession,
-    endLiveSession,
-    pauseLiveSession,
-    resumeLiveSession,
-    toggleMute: audio.toggleMute,
-    toggleSystemAudio,
-    reconnectAudio: audio.reconnect,
-    isCapturing: audio.isCapturing,
-    isMuted: audio.isMuted,
-    deepgramStatus: audio.deepgramStatus,
-    currentLevel: audio.currentLevel,
-    isSpeaking: audio.isSpeaking,
-    streamError: audio.streamError,
-    requestLiveHint,
-    submitManualQuestion,
-    abortHint: () => {
-      abortRef.current?.abort();
-      useOverlayStore.getState().clearHint();
-    },
-    toggleProctorSafe,
-    hotkeyHelp: hotkeyManager.getHelpItems(),
-    elapsedSeconds,
-    creditsConsumed,
-    status: sessionStatus,
-  };
-}
+             
