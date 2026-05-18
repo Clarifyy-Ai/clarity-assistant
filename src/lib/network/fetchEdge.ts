@@ -1,10 +1,5 @@
 // src/lib/network/fetchEdge.ts
-import { supabase } from "@/lib/supabase/client";
-import { useAuthStore } from "@/store/userStore";
-import { EDGE_BASE, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
-
-/**
- * Read the JWT from the in-memory authStore first (sync, zero IO).
+import { supabase } from "@/ IO).import { supabase } from "@/lib/supabase/client";
  * Only falls back to supabase.auth.getSession() when the store is empty.
  */
 async function readToken(): Promise<string | undefined> {
@@ -18,6 +13,10 @@ export async function getAuthHeaders(
   extraHeaders?: Record<string, string>
 ): Promise<Record<string, string>> {
   const token = await readToken();
+
+  // NOTE: We preserve your behavior:
+  // - If user token exists -> use it
+  // - Else -> use anon key as Bearer for Supabase gateway compatibility
   return {
     ...(token
       ? { Authorization: `Bearer ${token}` }
@@ -25,6 +24,26 @@ export async function getAuthHeaders(
     apikey: SUPABASE_PUBLISHABLE_KEY,
     ...extraHeaders,
   };
+}
+
+/**
+ * Supports EDGE_BASE values like:
+ * - https://xyz.supabase.co/functions/v1
+ * - https://xyz.supabase.co
+ * - custom edge proxy base
+ */
+function buildEdgeUrl(fnName: string): string {
+  const base = String(EDGE_BASE ?? "").replace(/\/+$/, "");
+
+  if (!base) throw new Error("EDGE_BASE is not configured");
+
+  if (base.endsWith("/functions/v1")) return `${base}/${fnName}`;
+  if (base.includes("/functions/v1/")) {
+    const normalized = base.replace(/\/functions\/v1\/.*/, "/functions/v1");
+    return `${normalized}/${fnName}`;
+  }
+
+  return `${base}/functions/v1/${fnName}`;
 }
 
 export async function fetchEdge(
@@ -41,12 +60,12 @@ export async function fetchEdge(
   const timeoutMs = options?.timeoutMs ?? 30_000;
   const isFormData = body instanceof FormData;
 
-  // Internal timeout controller — aborts if edge function hangs
-  const controller = new AbortController();
+  const timeoutController = new AbortController();
   const timeout =
-    timeoutMs > 0 ? setTimeout(() => controller.abort(), timeoutMs) : null;
+    timeoutMs > 0 ? setTimeout(() => timeoutController.abort(), timeoutMs) : null;
 
-  const signal = options?.signal ?? controller.signal;
+  // If caller provides a signal, we respect it. Otherwise we use internal timeout.
+  const signal = options?.signal ?? timeoutController.signal;
 
   const headers = await getAuthHeaders({
     ...(isFormData ? {} : { "Content-Type": "application/json" }),
@@ -54,27 +73,28 @@ export async function fetchEdge(
   });
 
   try {
-    const response = await fetch(`${EDGE_BASE}/${fnName}`, {
+    const url = buildEdgeUrl(fnName);
+
+    const response = await fetch(url, {
       method,
       headers,
       body:
         body === undefined
           ? undefined
           : isFormData
-          ? body
-          : JSON.stringify(body),
+            ? body
+            : JSON.stringify(body),
       signal,
     });
+
     return response;
   } catch (err: unknown) {
-    // Improve error message for CORS / network failures
     if (err instanceof Error && err.name === "AbortError") {
       throw new Error(`Edge Function "${fnName}" timed out after ${timeoutMs}ms`);
     }
     if (err instanceof TypeError) {
       throw new Error(
-        `Edge Function "${fnName}" is unreachable. ` +
-          `Check CORS configuration and that the function is deployed.`
+        `Edge Function "${fnName}" is unreachable. Check CORS configuration and deployment.`
       );
     }
     throw err;
@@ -103,7 +123,7 @@ export async function fetchEdgeJson<T>(
 ): Promise<T> {
   const response = await fetchEdge(fnName, body, options);
 
-  // ✅ FIX: read text first so we never lose the body (json() can consume it)
+  // read text first so we never lose the body
   const text = await response.text().catch(() => "");
   const payload = text ? safeJsonParse(text) ?? { error: text } : {};
 
@@ -117,3 +137,5 @@ export async function fetchEdgeJson<T>(
 
   return (payload?.data ?? payload) as T;
 }
+import { useAuthStore } from "@/store/userStore";
+import { EDGE_BASE, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
