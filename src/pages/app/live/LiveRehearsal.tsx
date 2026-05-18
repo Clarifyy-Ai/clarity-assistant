@@ -1,10 +1,4 @@
-// src/pages/app/live/LiveRehearsal.tsx
-// Overlay-only live session experience.
-// Previously this page rendered a 2-panel transcript/answer UI AND the floating
-// overlay simultaneously, which conflicted with the stealth product principle.
-// Now: setup wizard → overlay only (mirrors LiveOverlay.tsx pattern), with a
-// small centered hint and a guaranteed-visible "Show Overlay" recovery pill.
-
+// src/pages/app/live/LiveRehearsal.tsx — PRODUCTION READY
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useLiveCopilot } from "@/hooks/useLiveCopilot";
@@ -72,35 +66,40 @@ export default function LiveRehearsal() {
         "Microphone stream error. Please check your audio settings."
     : null;
 
-  // ── Setup ─────────────────────────────────────────────────────────────
   const handleSetup = useCallback((sessionConfig: LiveSessionConfig) => {
     useSessionStore.getState().resetSession();
     useOverlayStore.getState().resetSessionState();
+
     useOverlayStore.getState().setActiveModel(sessionConfig.model);
     useOverlayStore.getState().setHintStyle(sessionConfig.hint_style);
-    useOverlayStore.getState().setProctorSafe(sessionConfig.stealth_mode);
+
+    // ✅ FIX: set both flags from config
+    useOverlayStore.getState().setStealthMode(!!sessionConfig.stealth_mode);
+    useOverlayStore.getState().setProctorSafe(!!sessionConfig.stealth_mode);
+
     hasStartedRef.current = false;
     didEndRef.current = false;
+
     setLastSessionId(null);
     setConfig(sessionConfig);
+
     setPhase("restarting");
     requestAnimationFrame(() => setPhase("active"));
   }, []);
 
-  // Start session when phase becomes active
   useEffect(() => {
     if (phase !== "active" || hasStartedRef.current) return;
     hasStartedRef.current = true;
+
     useOverlayStore.getState().showOverlay();
+
     copilot.startLiveSession().catch((err: unknown) => {
-      const message =
-        err instanceof Error ? err.message : "Failed to start live session";
+      const message = err instanceof Error ? err.message : "Failed to start live session";
       toast.error(message);
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  // Cleanup on unmount
   useEffect(() => {
     return () => {
       if (hasStartedRef.current && !didEndRef.current) {
@@ -116,7 +115,7 @@ export default function LiveRehearsal() {
     const sessionId = useSessionStore.getState().session_id;
     await copilot.endLiveSession();
     setLastSessionId(sessionId);
-  }, [copilot.endLiveSession]);
+  }, [copilot]);
 
   const handleGenerate = useCallback(() => {
     const question = useOverlayStore.getState().current_question;
@@ -125,19 +124,17 @@ export default function LiveRehearsal() {
     } else {
       toast.info("Speak a question or type one in Chat first");
     }
-  }, [copilot.requestLiveHint]);
+  }, [copilot]);
 
   const handleManualQuestion = useCallback(
     (question: string) => copilot.submitManualQuestion(question),
-    [copilot.submitManualQuestion],
+    [copilot],
   );
 
-  // ── Setup screen ──────────────────────────────────────────────────────
   if (phase === "setup") {
     return <PreSessionSetupWizard onStart={handleSetup} sessionType="live" />;
   }
 
-  // ── Overlay-only experience ───────────────────────────────────────────
   return (
     <>
       <ScreenCaptureBlocker isActive={isActive} />
@@ -162,7 +159,6 @@ export default function LiveRehearsal() {
         </div>
       )}
 
-      {/* Recovery pill — always visible when overlay is hidden during an active session */}
       {(isActive || isPaused) && !isVisible && (
         <button
           onClick={() => useOverlayStore.getState().showOverlay()}
@@ -173,7 +169,6 @@ export default function LiveRehearsal() {
         </button>
       )}
 
-      {/* Centered status hint */}
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center space-y-3 max-w-md px-4">
           {isActive || isPaused ? (
@@ -185,9 +180,14 @@ export default function LiveRehearsal() {
                 {isPaused ? "Session Paused" : "Overlay Mode Active"}
               </p>
               <p className="text-sm text-muted-foreground">
-                {isPaused
-                  ? "Timer and audio are paused. Resume when you're ready."
-                  : (<>The overlay is floating on your screen. Use{" "}<kbd className="hotkey-badge">Ctrl+Shift+H</kbd> to toggle visibility.</>)}
+                {isPaused ? (
+                  "Timer and audio are paused. Resume when you're ready."
+                ) : (
+                  <>
+                    The overlay is floating on your screen. Use{" "}
+                    <kbd className="hotkey-badge">Ctrl+Shift+H</kbd> to toggle visibility.
+                  </>
+                )}
               </p>
               <div className="flex items-center justify-center gap-2 mt-2 flex-wrap">
                 {isPaused ? (
