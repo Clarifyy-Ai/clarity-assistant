@@ -86,13 +86,13 @@ export function selectModel(
 }
 
 function getFallbackModel(failed: PreferredAIModel): PreferredAIModel | null {
-  const chain: Record<PreferredAIModel, PreferredAIModel | null> = {
+  const chain: Partial<Record<PreferredAIModel, PreferredAIModel | null>> = {
     claude: "gpt-4o",
     "gpt-4o": "gemini-pro",
     "gemini-pro": "gemini-flash",
     "gemini-flash": null,
   };
-  return chain[failed];
+  return chain[failed] ?? null;
 }
 
 async function callModel(
@@ -166,7 +166,7 @@ export async function routeAnswerGeneration(opts: RouteAnswerGenerationOptions):
       question: opts.questionText,
       context: opts.context,
       model: geminiModelForAnswer,
-      simpleLanguage: opts.context.simple_language ?? false,
+      simpleLanguage: (opts.context as any).simple_language ?? false,
       onChunk: (chunk) => opts.onToken(chunk),
       onDone: (fullText) => {
         const elapsed = Date.now() - start;
