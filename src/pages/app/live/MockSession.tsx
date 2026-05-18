@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useAudioSession } from "@/hooks/useAudioSession";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import { Progress } from "@/components/ui/progress";
 import { Separator } from "@/components/ui/separator";
 import {
@@ -297,8 +297,8 @@ export default function MockSession() {
         if (current + 1 >= total) {
           setPhase("complete");
           setTimeout(() => {
-            const route = ROUTES.DEBRIEF
-              ? `${ROUTES.DEBRIEF}/${sessionId}`
+            const route = (ROUTES as any).DEBRIEF
+              ? `${(ROUTES as any).DEBRIEF}/${sessionId}`
               : `/app/debrief/${sessionId}`;
             navigate(route);
           }, 2000);
@@ -420,7 +420,7 @@ export default function MockSession() {
       // ignore
     }
     setShowEndDialog(false);
-    const route = ROUTES.DEBRIEF ? `${ROUTES.DEBRIEF}/${sessionId}` : `/app/debrief/${sessionId}`;
+    const route = (ROUTES as any).DEBRIEF ? `${(ROUTES as any).DEBRIEF}/${sessionId}` : `/app/debrief/${sessionId}`;
     navigate(route);
   }, [audio, navigate, sessionId]);
 

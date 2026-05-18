@@ -236,7 +236,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     fillerAccRef.current = null;
     fillerRTRef.current = null;
 
-    wpmRef.current?.stop?.();
+    wpmRef.current?.reset?.();
     wpmRef.current = null;
 
     cleanupMicRef.current?.();

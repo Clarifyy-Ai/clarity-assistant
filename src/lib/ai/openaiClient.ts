@@ -1,5 +1,6 @@
 // src/lib/ai/openaiClient.ts — PRODUCTION READY// src/lib/ai/openaiClient } from "@/types/ai.types";
 import { fetchEdgeJson, fetchEdge, getAuthHeaders } from "@/lib/network/fetchEdge";
+import type { CoachingContext } from "@/types/ai.types";
 
 export interface OpenAIStreamOptions {
   question: string;
