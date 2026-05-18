@@ -1,4 +1,5 @@
-// src/hooks/useLiveCopilot.ts — PRODUCTION FIXED// src/hooks/useLiveCopilot.ts — PRO// Fixes:
+// src/hooks/useLiveCopilot.ts — PRODUCTION FIXED
+// Fixes:
 // - Stable question detection callback (no stale closure issues)
 // - Fallback context if coachStore has not initialized (prevents silent no-op)
 // - Chat generation always clears "generating" state (try/finally)
@@ -476,6 +477,49 @@ export function useLiveCopilot({
 
         if (fullTranscript && userId && saveTranscript) {
           try {
-            await supabase.from("session_transcripts").insert({
+            await (supabase.from("session_transcripts") as any).insert({
               session_id: session.session_id,
-             
+              user_id: userId,
+              transcript: fullTranscript,
+              utterances: utterances as any,
+            });
+          } catch (err) {
+            console.error("[useLiveCopilot] Failed to save transcript:", err);
+          }
+        }
+      } catch (err) {
+        console.error("[useLiveCopilot] Failed to finalize session:", err);
+      }
+    }
+
+    useSessionStore.getState().setStatus("idle");
+    useOverlayStore.getState().hideOverlay();
+  }, [audio, profile?.id]);
+
+  const pauseLiveSession = useCallback(() => {
+    audio.stop();
+    useSessionStore.getState().setStatus("paused");
+  }, [audio]);
+
+  const resumeLiveSession = useCallback(async () => {
+    await audio.start();
+    useSessionStore.getState().setStatus("active");
+  }, [audio]);
+
+  return {
+    sessionStatus,
+    elapsedSeconds,
+    creditsConsumed,
+    streamError: audio.streamError,
+    isMuted: audio.isMuted,
+    toggleMute: audio.toggleMute,
+    toggleSystemAudio: audio.toggleSystemAudio,
+    requestLiveHint,
+    submitManualQuestion,
+    startLiveSession,
+    endLiveSession,
+    pauseLiveSession,
+    resumeLiveSession,
+  };
+}
+

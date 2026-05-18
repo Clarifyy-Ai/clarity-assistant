@@ -1,5 +1,6 @@
 // src/lib/audio/deepgramStream.ts// src/lib/audio/deepgramStream "@/store/audioStore";
 import { useAuthStore } from "@/store/authStore";
+import { useAudioStore } from "@/store/audioStore";
 import { FEATURE_FLAGS, FEATURE_PLAN_GATE } from "@/lib/constants/features";
 import { generateId } from "@/lib/utils";
 
