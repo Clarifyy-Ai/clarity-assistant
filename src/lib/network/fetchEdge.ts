@@ -1,5 +1,10 @@
 // src/lib/network/fetchEdge.ts
-import { supabase } from "@/ IO).import { supabase } from "@/lib/supabase/client";
+import { supabase } from "@/lib/supabase/client";
+import { useAuthStore } from "@/store/userStore";
+import { EDGE_BASE, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
+
+/**
+ * Read JWT from auth store first (fast path, no network).
  * Only falls back to supabase.auth.getSession() when the store is empty.
  */
 async function readToken(): Promise<string | undefined> {
@@ -137,7 +142,3 @@ export async function fetchEdgeJson<T>(
 
   return (payload?.data ?? payload) as T;
 }
-import { useAuthStore } from "@/store/userStore";
-import { EDGE_BASE, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
-
-/**
