@@ -1,141 +1,18 @@
-// src/lib/ai/modelRouter.ts — FIXED
-// - Updates Gemini model names to modern 2.5 series
-// - Ensures full-answer path passes a model
-
-// @ts-nocheck
-import type { PreferredAIModel } from "@/types/user.types";
-import type { CoachingContext } from "@/types/ai.types";
-import type { InterviewType } from "@/types/session.types";
-import { useNetworkStore } from "@/store/networkStore";
-import { useAuthStore } from "@/store/userStore";
-import { streamGeminiHint, streamFullAnswer } from "./geminiClient";
-import type { AnswerMode } from "./geminiClient";
-import { streamOpenAIHint } from "./openaiClient";
-import { streamClaudeHint } from "./anthropicClient";
-import { getOfflineTemplate } from "./offlineTemplates";
-import { formatTalkingPointsAsHint } from "./resumeFallback";
-import { useOverlayStore } from "@/store/overlayStore";
-
-export interface RouteHintOptions {
-  question: string;
-  context: CoachingContext;
-  preferredModel: PreferredAIModel;
-  interviewType: InterviewType;
-  isLive: boolean;
-  sessionId: string;
-  questionId: string;
-  screenshotBase64?: string | null;
-  simpleLanguage?: boolean;
-  callType?: "interview" | "regular_call";
-  language?: string;
-  answerMode?: AnswerMode;
-  onChunk: (chunk: string) => void;
-  onDone: (fullText: string) => void;
-  onError: (error: Error) => void;
-  signal?: AbortSignal;
-}
-
-export interface RouteAnswerGenerationOptions {
-  questionText: string;
-  questionTypeHint?: InterviewType;
-  modelHint?: PreferredAIModel | string;
-  context: CoachingContext;
-  onToken: (chunk: string) => void;
-  onDone: (fullText: string) => void;
-}
-
-export async function routeAnswerGeneration(
-  opts: RouteAnswerGenerationOptions
-): Promise<void> {
-  const networkStore = useNetworkStore.getState();
-  const overlayStore = useOverlayStore.getState();
-  const authStore = useAuthStore.getState();
-
-  const isOffline = networkStore.mode === "offline";
-  const isDegraded = networkStore.mode === "degraded";
-
-  if (isOffline) {
-    const fallback = getResumeFallbackOrTemplate(
-      (opts.questionTypeHint ?? "behavioural") as InterviewType,
-      opts.context.hint_style
-    );
-    overlayStore.setOfflineFallback(fallback);
-    networkStore.setQueuedHintRequest(true);
-    return;
-  }
-
-  const preferred =
-    (opts.modelHint as PreferredAIModel | undefined) ??
-    (authStore.profile?.preferred_model as PreferredAIModel | undefined) ??
-    ("gemini-flash" as PreferredAIModel);
-
-  const effectiveModel = selectModel(
-    preferred,
-    (opts.questionTypeHint ?? "behavioural") as InterviewType,
-    isDegraded
-  );
-
-  overlayStore.setNetworkColor(networkStore.getOverlayColor());
-
-  const start = Date.now();
-
-  // Map effective model -> Gemini model string for the full-answer EF
-  const geminiModelForAnswer =
-    effectiveModel === "gemini-pro" ? "gemini-2.5-pro" : "gemini-2.5-flash";
-
-  await streamFullAnswer({
-    question: opts.questionText,
-    context: opts.context,
-    model: geminiModelForAnswer,
-    simpleLanguage: opts.context.simple_language ?? false,
-    onChunk: (chunk) => opts.onToken(chunk),
-    onDone: (fullText) => {
-      const elapsed = Date.now() - start;
-      useNetworkStore.getState().recordAIResponseTime(elapsed);
-      opts.onDone(fullText);
-    },
-    onError: (err) => {
-      console.error("[ModelRouter] routeAnswerGeneration error:", err);
-    },
-  });
-}
-
-function getResumeFallbackOrTemplate(
-  interviewType: InterviewType,
-  hintStyle: import("@/types/user.types").HintStyle
-): string {
-  const overlayStore = useOverlayStore.getState();
-  const tp = overlayStore.resume_talking_points;
-  if (tp) return formatTalkingPointsAsHint(tp);
-  return getOfflineTemplate(interviewType, hintStyle);
-}
-
-export async function routeHint(opts: RouteHintOptions): Promise<void> {
-  if (opts.answerMode === "full_answer") {
-    try {
-      const overlayStore = useOverlayStore.getState();
-      overlayStore.setHintState("streaming");
-
-      await routeAnswerGeneration({
-        questionText: opts.question,
-        questionTypeHint: opts.interviewType,
-        modelHint: opts.preferredModel,
-        context: opts.context,
-        onToken: opts.onChunk,
-        onDone: opts.onDone,
+// src/lib/ai/modelRouter.ts — PRODUCTION FIXED
+// - => opts.onDone(fullText),// - Supports both "behavioral" and "behavioural"
+        onError: (e) => opts.onError(e),
+        signal: opts.signal,
       });
     } catch (err) {
-      console.error("[ModelRouter] Full answer failed:", err);
-      opts.onError(err instanceof Error ? err : new Error(String(err)));
+      const e = err instanceof Error ? err : new Error(String(err));
+      opts.onError(e);
     }
     return;
   }
 
-  const networkStore = useNetworkStore.getState();
-  const overlayStore = useOverlayStore.getState();
-
+  // Offline fallback
   if (networkStore.mode === "offline") {
-    const fallback = getResumeFallbackOrTemplate(opts.interviewType, opts.context.hint_style);
+    const fallback = getResumeFallbackOrTemplate(interviewType, opts.context.hint_style);
     overlayStore.setOfflineFallback(fallback);
     networkStore.setQueuedHintRequest(true);
     return;
@@ -143,29 +20,28 @@ export async function routeHint(opts: RouteHintOptions): Promise<void> {
 
   const model = selectModel(
     opts.preferredModel,
-    opts.interviewType,
+    interviewType,
     networkStore.mode === "degraded"
   );
 
   overlayStore.setNetworkColor(networkStore.getOverlayColor());
 
   try {
-    await callModel(model, opts);
+    await callModel(model, { ...opts, interviewType });
   } catch (primaryErr) {
     console.warn(`[ModelRouter] Primary model ${model} failed:`, primaryErr);
 
     const fallbackModel = getFallbackModel(model);
     if (fallbackModel) {
       try {
-        await callModel(fallbackModel, opts);
+        await callModel(fallbackModel, { ...opts, interviewType });
       } catch (fallbackErr) {
-        console.error(`[ModelRouter] Fallback model ${fallbackModel} also failed.`);
-        const fallback = getResumeFallbackOrTemplate(opts.interviewType, opts.context.hint_style);
+        const fallback = getResumeFallbackOrTemplate(interviewType, opts.context.hint_style);
         overlayStore.setOfflineFallback(fallback);
         opts.onError(fallbackErr instanceof Error ? fallbackErr : new Error(String(fallbackErr)));
       }
     } else {
-      const fallback = getResumeFallbackOrTemplate(opts.interviewType, opts.context.hint_style);
+      const fallback = getResumeFallbackOrTemplate(interviewType, opts.context.hint_style);
       overlayStore.setOfflineFallback(fallback);
       opts.onError(primaryErr instanceof Error ? primaryErr : new Error(String(primaryErr)));
     }
@@ -203,56 +79,153 @@ function getFallbackModel(failed: PreferredAIModel): PreferredAIModel | null {
   return chain[failed];
 }
 
-async function callModel(model: PreferredAIModel, opts: RouteHintOptions): Promise<void> {
+async function callModel(model: PreferredAIModel, opts: RouteHintOptions & { interviewType: InterviewType }): Promise<void> {
   const start = Date.now();
 
-  const wrappedOnDone = (text: string) => {
+  const wrappedOnDone = async (text: string) => {
     const elapsed = Date.now() - start;
-    useNetworkStore.getState().recordAIResponseTime(elapsed);
-    opts.onDone(text);
-  };
+    useNetwork
+// - Removes @ts-nocheck with safe typing
+// - Ensures full-answer path calls onError on failure
+// - Keeps routing, fallback, offline templates, resume fallback intact
 
-  switch (model) {
-    case "gemini-flash":
-      return streamGeminiHint({
-        ...opts,
-        model: "gemini-2.5-flash",
-        onDone: wrappedOnDone,
-      });
+import type { PreferredAIModel, HintStyle } from "@/types/user.types";
+import type { CoachingContext } from "@/types/ai.types";
+import type { InterviewType } from "@/types/session.types";
 
-    case "gemini-pro":
-      return streamGeminiHint({
-        ...opts,
-        model: "gemini-2.5-pro",
-        onDone: wrappedOnDone,
-      });
+import { useNetworkStore } from "@/store/networkStore";
+import { useAuthStore } from "@/store/userStore";
+import { useOverlayStore } from "@/store/overlayStore";
 
-    case "gpt-4o":
-      return streamOpenAIHint({ ...opts, onDone: wrappedOnDone });
+import { streamGeminiHint, streamFullAnswer } from "./geminiClient";
+import type { AnswerMode } from "./geminiClient";
+import { streamOpenAIHint } from "./openaiClient";
+import { streamClaudeHint } from "./anthropicClient";
 
-    case "claude":
-      return streamClaudeHint({ ...opts, onDone: wrappedOnDone });
+import { getOfflineTemplate } from "./offlineTemplates";
+import { formatTalkingPointsAsHint } from "./resumeFallback";
 
-    default:
-      throw new Error(`Unknown model: ${model}`);
+export interface RouteHintOptions {
+  question: string;
+  context: CoachingContext;
+  preferredModel: PreferredAIModel;
+  interviewType: InterviewType | string;
+  isLive: boolean;
+  sessionId: string;
+  questionId: string;
+  screenshotBase64?: string | null;
+  simpleLanguage?: boolean;
+  callType?: "interview" | "regular_call";
+  language?: string;
+  answerMode?: AnswerMode;
+  onChunk: (chunk: string) => void;
+  onDone: (fullText: string) => void | Promise<void>;
+  onError: (error: Error) => void;
+  signal?: AbortSignal;
+}
+
+export interface RouteAnswerGenerationOptions {
+  questionText: string;
+  questionTypeHint?: InterviewType | string;
+  modelHint?: PreferredAIModel | string;
+  context: CoachingContext;
+  onToken: (chunk: string) => void;
+  onDone: (fullText: string) => void;
+  onError?: (error: Error) => void;
+  signal?: AbortSignal;
+}
+
+/**
+ * Normalize interviewType so the router works even when parts of the app
+ * use "behavioral" and others use "behavioural".
+ */
+function normalizeInterviewType(input: InterviewType | string | undefined): InterviewType {
+  const raw = String(input ?? "").toLowerCase();
+
+  // Accept both spellings
+  if (raw === "behavioral") return "behavioural" as InterviewType;
+  if (raw === "behavioural") return "behavioural" as InterviewType;
+
+  // Pass through known ones
+  return (input as InterviewType) ?? ("behavioural" as InterviewType);
+}
+
+function getResumeFallbackOrTemplate(interviewType: InterviewType, hintStyle: HintStyle): string {
+  const overlayStore = useOverlayStore.getState();
+  const tp = overlayStore.resume_talking_points;
+  if (tp) return formatTalkingPointsAsHint(tp);
+  return getOfflineTemplate(interviewType, hintStyle);
+}
+
+export async function routeAnswerGeneration(opts: RouteAnswerGenerationOptions): Promise<void> {
+  const networkStore = useNetworkStore.getState();
+  const overlayStore = useOverlayStore.getState();
+  const authStore = useAuthStore.getState();
+
+  const isOffline = networkStore.mode === "offline";
+  const isDegraded = networkStore.mode === "degraded";
+
+  const interviewType = normalizeInterviewType(opts.questionTypeHint);
+
+  if (isOffline) {
+    const fallback = getResumeFallbackOrTemplate(interviewType, opts.context.hint_style);
+    overlayStore.setOfflineFallback(fallback);
+    networkStore.setQueuedHintRequest(true);
+    return;
+  }
+
+  const preferred =
+    (opts.modelHint as PreferredAIModel | undefined) ??
+    (authStore.profile?.preferred_model as PreferredAIModel | undefined) ??
+    ("gemini-flash" as PreferredAIModel);
+
+  const effectiveModel = selectModel(preferred, interviewType, isDegraded);
+
+  overlayStore.setNetworkColor(networkStore.getOverlayColor());
+
+  const start = Date.now();
+
+  // Full-answer is routed through Gemini full-answer streaming
+  const geminiModelForAnswer =
+    effectiveModel === "gemini-pro" ? "gemini-2.5-pro" : "gemini-2.5-flash";
+
+  try {
+    await streamFullAnswer({
+      question: opts.questionText,
+      context: opts.context,
+      model: geminiModelForAnswer,
+      simpleLanguage: opts.context.simple_language ?? false,
+      onChunk: (chunk) => opts.onToken(chunk),
+      onDone: (fullText) => {
+        const elapsed = Date.now() - start;
+        useNetworkStore.getState().recordAIResponseTime(elapsed);
+        opts.onDone(fullText);
+      },
+      onError: (err) => {
+        opts.onError?.(err);
+      },
+      signal: opts.signal,
+    });
+  } catch (err) {
+    const e = err instanceof Error ? err : new Error(String(err));
+    opts.onError?.(e);
   }
 }
 
-export function getCreditCost(model: PreferredAIModel): number {
-  const costs: Record<PreferredAIModel, number> = {
-    "gemini-flash": 1,
-    "gemini-pro": 2,
-    "gpt-4o": 3,
-    claude: 3,
-  };
-  return costs[model] ?? 1;
-}
+export async function routeHint(opts: RouteHintOptions): Promise<void> {
+  const overlayStore = useOverlayStore.getState();
+  const networkStore = useNetworkStore.getState();
 
-export function canAffordModel(
-  model: PreferredAIModel,
-  currentCredits: number,
-  isBYOKActive: boolean
-): boolean {
-  if (isBYOKActive) return true;
-  return currentCredits >= getCreditCost(model);
-}
+  const interviewType = normalizeInterviewType(opts.interviewType);
+
+  // Full answer path
+  if (opts.answerMode === "full_answer") {
+    try {
+      overlayStore.setHintState("streaming");
+
+      await routeAnswerGeneration({
+        questionText: opts.question,
+        questionTypeHint: interviewType,
+        modelHint: opts.preferredModel,
+        context: opts.context,
+        onToken: opts.onChunk,
