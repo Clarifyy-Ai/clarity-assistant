@@ -14,11 +14,10 @@ Deno.serve(async (req: Request) => {
       req.headers.get("Authorization") ??
       "";
 
+    const jsonHeaders = { ...getCorsHeaders(req), "Content-Type": "application/json" };
+
     if (!authHeader.toLowerCase().startsWith("bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: getCorsHeaders(req) }
-      );
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: jsonHeaders });
     }
 
     const token = authHeader.replace(/^bearer\s+/i, "");
@@ -26,10 +25,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: { user }, error: authErr } = await db.auth.getUser(token);
     if (authErr || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: getCorsHeaders(req) }
-      );
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: jsonHeaders });
     }
 
     /* ---------------------------
