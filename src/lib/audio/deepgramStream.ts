@@ -101,11 +101,8 @@ export class DeepgramStreamClient {
     try {
       await this.ensureFreshToken();
     } catch (err) {
-      this.callbacks.onError(
-        new Error(
-          "Failed to obtain Deepgram token. Check DEEPGRAM_PROJECT_ID / DEEPGRAM_API_KEY secrets and edge function logs.",
-        ),
-      );
+      const msg = err instanceof Error ? err.message : String(err);
+      this.callbacks.onError(new Error(`Deepgram token error: ${msg}`));
       this.callbacks.onStatusChange("error");
       return;
     }
