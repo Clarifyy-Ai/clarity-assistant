@@ -71,13 +71,11 @@ Deno.serve(async (req: Request) => {
     /* ---------------------------
        FETCH PROFILE (SAFE)
     --------------------------- */
-    const { data: profile, error: profileErr } = await db
+    const { data: profile } = await db
       .from("profiles")
       .select("streak_days, longest_streak, total_sessions, total_practice_minutes, xp, level")
       .eq("id", user.id)
-      .single();
-
-    if (profileErr) throw profileErr;
+      .maybeSingle();
 
     const sessionList = sessions ?? [];
     const scorecardList = scorecards ?? [];
