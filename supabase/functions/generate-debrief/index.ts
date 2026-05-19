@@ -87,11 +87,8 @@ Deno.serve(async (req) => {
       .eq("user_id", authenticatedUserId)
       .order("question_index");
 
-    if (aErr) {
-      return new Response(JSON.stringify({ error: "Failed to fetch answers" }), {
-        status: 500,
-        headers: getCorsHeaders(req) });
-    }
+    // Non-fatal: proceed with empty answers; debrief will use transcript fallback.
+    const answersList = answers ?? [];
 
     /* -----------------------------------------------------------
        5. DEDUCT CREDITS SAFELY (10 credits)
