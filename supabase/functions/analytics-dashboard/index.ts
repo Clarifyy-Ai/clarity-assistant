@@ -14,11 +14,10 @@ Deno.serve(async (req: Request) => {
       req.headers.get("Authorization") ??
       "";
 
+    const jsonHeaders = { ...getCorsHeaders(req), "Content-Type": "application/json" };
+
     if (!authHeader.toLowerCase().startsWith("bearer ")) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: getCorsHeaders(req) }
-      );
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: jsonHeaders });
     }
 
     const token = authHeader.replace(/^bearer\s+/i, "");
@@ -26,10 +25,7 @@ Deno.serve(async (req: Request) => {
 
     const { data: { user }, error: authErr } = await db.auth.getUser(token);
     if (authErr || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers: getCorsHeaders(req) }
-      );
+      return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers: jsonHeaders });
     }
 
     /* ---------------------------
@@ -75,13 +71,11 @@ Deno.serve(async (req: Request) => {
     /* ---------------------------
        FETCH PROFILE (SAFE)
     --------------------------- */
-    const { data: profile, error: profileErr } = await db
+    const { data: profile } = await db
       .from("profiles")
       .select("streak_days, longest_streak, total_sessions, total_practice_minutes, xp, level")
       .eq("id", user.id)
-      .single();
-
-    if (profileErr) throw profileErr;
+      .maybeSingle();
 
     const sessionList = sessions ?? [];
     const scorecardList = scorecards ?? [];
@@ -167,8 +161,8 @@ Deno.serve(async (req: Request) => {
       headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error("stats-dashboard error:", err);
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
+    console.error("analytics-dashboard error:", err);
+    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : "Internal server error" }), {
       status: 500,
       headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });

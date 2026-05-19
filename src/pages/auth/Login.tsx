@@ -23,13 +23,15 @@ export default function Login() {
   const location   = useLocation();
   const from       = (location.state as any)?.from?.pathname ?? "/app";
 
-  // Redirect if already authenticated
+  // Redirect if already authenticated — admins go to admin portal
   const authStatus = useAuthStore((s) => s.status);
+  const isAdmin = useAuthStore((s) => s.isAdmin);
+  const isProfileLoaded = useAuthStore((s) => s.isProfileLoaded);
   useEffect(() => {
-    if (authStatus === "authenticated") {
-      navigate(from, { replace: true });
-    }
-  }, [authStatus, from, navigate]);
+    if (authStatus !== "authenticated" || !isProfileLoaded) return;
+    const target = isAdmin ? "/app/admin" : from;
+    navigate(target, { replace: true });
+  }, [authStatus, isProfileLoaded, isAdmin, from, navigate]);
 
   const [email,     setEmail]     = useState("");
   const [password,  setPassword]  = useState("");
@@ -107,10 +109,10 @@ export default function Login() {
         setError(`${authError.message} (${remaining} attempt${remaining === 1 ? "" : "s"} remaining)`);
       }
     } else {
-      // Successful login → clear counters
+      // Successful login → clear counters; the auth-state effect above handles redirect
+      // (including admin → /app/admin routing once the profile + role are loaded).
       localStorage.removeItem(ATTEMPT_KEY);
       localStorage.removeItem(LOCK_KEY);
-      navigate(from, { replace: true });
     }
   }
 
