@@ -161,8 +161,8 @@ Deno.serve(async (req: Request) => {
       headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
   } catch (err) {
-    console.error("stats-dashboard error:", err);
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
+    console.error("analytics-dashboard error:", err);
+    return new Response(JSON.stringify({ error: err instanceof Error ? err.message : "Internal server error" }), {
       status: 500,
       headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
