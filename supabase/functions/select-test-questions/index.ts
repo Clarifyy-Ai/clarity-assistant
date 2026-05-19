@@ -366,6 +366,10 @@ Deno.serve(async (req: Request) => {
     const includeUserUploads = source_types.includes("USER_UPLOAD");
     const includeOnlyPYP    = source_types.includes("OFFICIAL_PYP") && !includeUserUploads;
 
+    // Source values used in the questions table vary: "OFFICIAL_PYP",
+    // "Previous Year Paper", "PYP", etc. Accept all common variants.
+    const PYP_SOURCES = ["OFFICIAL_PYP", "Previous Year Paper", "PYP", "previous_year"];
+
     if (includeUserUploads) {
       query = query.or(
         `and(source.eq.USER_UPLOAD,uploaded_by.eq.${userId}),and(is_public.eq.true)`,
@@ -373,7 +377,7 @@ Deno.serve(async (req: Request) => {
     } else if (includeOnlyPYP) {
       query = query
         .eq("is_public", true)
-        .eq("source", "OFFICIAL_PYP");
+        .in("source", PYP_SOURCES);
     } else {
       query = query.eq("is_public", true);
     }
