@@ -69,22 +69,22 @@ Deno.serve(async (req) => {
       .select("*")
       .eq("id", session_id)
       .eq("user_id", authenticatedUserId)
-      .single();
+      .maybeSingle();
 
     if (sErr || !session) {
       return new Response(JSON.stringify({ error: "Session not found" }), {
         status: 404,
-        headers: getCorsHeaders(req) });
+        headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
     }
 
     /* -----------------------------------------------------------
-       4. FETCH ANSWERS (ensure ownership)
+       4. FETCH ANSWERS (ensure ownership) — optional
     ----------------------------------------------------------- */
-    const { data: answers, error: aErr } = await db
+    const { data: answers } = await db
       .from("session_answers")
       .select("*")
       .eq("session_id", session_id)
-      .eq("user_id", authenticatedUserId) // VERY important
+      .eq("user_id", authenticatedUserId)
       .order("question_index");
 
     if (aErr) {
