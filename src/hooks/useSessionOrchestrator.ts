@@ -72,8 +72,16 @@ export function useSessionOrchestrator() {
     const session = store.getState();
     const resumeCtx = overlay.resume_context ?? "";
 
+    // Record the user's question in chat history so it actually shows up
+    overlay.addChatMessage({
+      role: "user",
+      text: questionText,
+      timestamp: Date.now(),
+    });
+
     try {
       overlay.setHintState("generating");
+      overlay.setChatGenerating?.(true);
 
       const { data, error } = await supabase.functions.invoke("generate-hint", {
         body: {
@@ -87,20 +95,37 @@ export function useSessionOrchestrator() {
       if (error) {
         console.error("[useSessionOrchestrator] generate-hint error:", error);
         overlay.setHintState("error");
-        overlay.setError("Failed to generate hint");
+        overlay.setError(error.message || "Failed to generate hint");
+        overlay.addChatMessage({
+          role: "assistant",
+          text: `Error: ${error.message || "Failed to generate hint"}`,
+          timestamp: Date.now(),
+        });
         return;
       }
 
       const hint = data?.hint ?? data?.answer ?? data?.text ?? "";
-      // Add to hint history and set as current hint
       overlay.setCurrentQuestion(questionText);
       overlay.appendStreamChunk(hint);
       overlay.commitStreamedHint();
       overlay.setHintState("ready");
+      overlay.addChatMessage({
+        role: "assistant",
+        text: hint,
+        timestamp: Date.now(),
+      });
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to generate hint";
       console.error("[useSessionOrchestrator] requestHint failed:", err);
       overlay.setHintState("error");
-      overlay.setError("Failed to generate hint");
+      overlay.setError(msg);
+      overlay.addChatMessage({
+        role: "assistant",
+        text: `Error: ${msg}`,
+        timestamp: Date.now(),
+      });
+    } finally {
+      overlay.setChatGenerating?.(false);
     }
   }, []);
 
