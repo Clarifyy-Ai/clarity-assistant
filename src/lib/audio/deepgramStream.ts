@@ -242,9 +242,15 @@ export class DeepgramStreamClient {
 
     if (this.destroyed) return;
 
-    // If we are restarting intentionally, do not trigger backoff loop here.
     if (this.restarting || event.code === RESTART_CLOSE_CODE) {
       return;
+    }
+
+    if (event.code !== 1000) {
+      // Surface non-normal closes (Deepgram returns code 4001/4008/etc on auth issues)
+      this.callbacks.onError(
+        new Error(`Deepgram WS closed: code=${event.code}${event.reason ? ` reason=${event.reason}` : ""}`),
+      );
     }
 
     if (event.code !== 1000 && this.reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
