@@ -1,228 +1,446 @@
+// src/hooks/useAuth.ts
+//
+// Auth helper hook.
+//
+// SECURITY / ARCHITECTURE PURPOSE:
+// - Exposes auth state from the single source of truth: authStore
+// - Avoids duplicate auth listeners
+// - Avoids duplicate login/signup/logout logic
+// - Keeps legacy helper methods for existing components
+// - Uses hardened authStore actions wherever possible
+
 import { useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { supabase } from "@/lib/supabase/client";
-import { useAuthStore } from "@/store/userStore";
-import type { UserProfile } from "@/types/user.types";
 import type { Provider } from "@supabase/supabase-js";
 
-// ─────────────────────────────────────────────────────────────────
-// useAuth
-// Provides auth action helpers for form components (Login, Signup,
-// etc.) and exposes the current auth state from the single source
-// of truth (authStore, via the userStore proxy).
-//
-// Auth state is managed centrally by authStore.initialize() which
-// is called once in App.tsx — this hook no longer sets up its own
-// duplicate listener.
-// ─────────────────────────────────────────────────────────────────
+import { supabase, STORAGE_BUCKETS, uploadFile } from "@/lib/supabase/client";
+import { useAuthStore } from "@/store/authStore";
+import { sanitizeFileName } from "@/lib/security";
+
+import type { AuthProvider, ProfileRow } from "@/types";
+import type { UserProfile } from "@/types/user.types";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
+
+type AuthResult = {
+  error: Error | null;
+};
+
+type SignupResult = {
+  error: Error | null;
+  user: unknown | null;
+};
+
+type AvatarUploadResult = {
+  url: string | null;
+  error: Error | null;
+};
+
+type SignupOptions = {
+  full_name?: string;
+  agreed_to_terms?: boolean;
+  marketing_consent?: boolean;
+};
+
+type FeatureKey =
+  | "live_copilot"
+  | "team_rooms"
+  | "advanced_analytics"
+  | "export_pdf"
+  | "byok";
+
+const SUPPORTED_OAUTH_PROVIDERS = new Set<string>([
+  "google",
+  "github",
+  "linkedin_oidc",
+  "azure",
+]);
+
+const FEATURE_PLAN_MAP: Record<FeatureKey, string[]> = {
+  live_copilot: ["pro", "elite", "enterprise"],
+  team_rooms: ["elite", "enterprise"],
+  advanced_analytics: ["pro", "elite", "enterprise"],
+  export_pdf: ["pro", "elite", "enterprise"],
+  byok: ["pro", "elite", "enterprise"],
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function toError(error: unknown, fallbackMessage = "Something went wrong."): Error {
+  if (error instanceof Error) {
+    return error;
+  }
+
+  if (typeof error === "string" && error.trim().length > 0) {
+    return new Error(error);
+  }
+
+  return new Error(fallbackMessage);
+}
+
+function normalizeOAuthProvider(provider: Provider | AuthProvider): AuthProvider {
+  const raw = String(provider);
+
+  if (!SUPPORTED_OAUTH_PROVIDERS.has(raw)) {
+    throw new Error("Unsupported OAuth provider.");
+  }
+
+  return raw as AuthProvider;
+}
+
+function getSafeAvatarPath(userId: string, file: File): string {
+  const rawExtension = file.name.split(".").pop() ?? "png";
+  const sanitizedExtension = sanitizeFileName(rawExtension)
+    .toLowerCase()
+    .replace(/[^a-z0-9]/g, "");
+
+  const extension = sanitizedExtension || "png";
+
+  return `${userId}/avatar.${extension}`;
+}
+
+function toProfilePatch(patch: Partial<UserProfile>): Partial<ProfileRow> {
+  return patch as unknown as Partial<ProfileRow>;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Hook
+// ─────────────────────────────────────────────────────────────────────────────
 
 export function useAuth() {
-  const navigate  = useNavigate();
-  const authStore = useAuthStore();
+  const navigate = useNavigate();
 
-  // ── Sign in with email/password ───────────────────────────────
+  // State
+  const user = useAuthStore((state) => state.user);
+  const profile = useAuthStore((state) => state.profile);
+  const session = useAuthStore((state) => state.session);
+  const isAuthenticated = useAuthStore((state) => state.isAuthenticated);
+  const isLoading = useAuthStore((state) => state.isLoading);
+  const isAdmin = useAuthStore((state) => state.isAdmin);
 
-  const signInWithEmail = useCallback(async (
-    email: string,
-    password: string
-  ): Promise<{ error: Error | null }> => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    return { error: error ?? null };
-  }, []);
+  // Store actions
+  const storeSignInWithEmail = useAuthStore((state) => state.signInWithEmail);
+  const storeSignUpWithEmail = useAuthStore((state) => state.signUpWithEmail);
+  const storeSignInWithOAuth = useAuthStore((state) => state.signInWithOAuth);
+  const storeSignOut = useAuthStore((state) => state.signOut);
+  const storeSendPasswordReset = useAuthStore((state) => state.sendPasswordReset);
+  const storeUpdatePassword = useAuthStore((state) => state.updatePassword);
+  const storeUpdateProfile = useAuthStore((state) => state.updateProfile);
+  const refreshCredits = useAuthStore((state) => state.refreshCredits);
 
-  // ── Sign up with email/password ───────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
+  // Email/password sign in
+  // ───────────────────────────────────────────────────────────────────────────
 
-  const signUpWithEmail = useCallback(async (
-    email: string,
-    password: string,
-    fullName: string
-  ): Promise<{ error: Error | null }> => {
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: fullName },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-    return { error: error ?? null };
-  }, []);
+  const signInWithEmail = useCallback(
+    async (email: string, password: string): Promise<AuthResult> => {
+      try {
+        await storeSignInWithEmail(email, password);
+        return { error: null };
+      } catch (error) {
+        return {
+          error: toError(error, "Failed to sign in."),
+        };
+      }
+    },
+    [storeSignInWithEmail]
+  );
 
-  // ── Signup alias (used by SignupForm with options object) ─────
+  // ───────────────────────────────────────────────────────────────────────────
+  // Email/password sign up
+  // ───────────────────────────────────────────────────────────────────────────
 
-  const signup = useCallback(async (
-    email: string,
-    password: string,
-    options: { full_name?: string; agreed_to_terms?: boolean; marketing_consent?: boolean }
-  ): Promise<{ error: Error | null; user: unknown | null }> => {
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { full_name: options.full_name ?? "" },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-    return { error: error ?? null, user: data?.user ?? null };
-  }, []);
+  const signUpWithEmail = useCallback(
+    async (
+      email: string,
+      password: string,
+      fullName: string
+    ): Promise<AuthResult> => {
+      try {
+        await storeSignUpWithEmail(email, password, fullName);
+        return { error: null };
+      } catch (error) {
+        return {
+          error: toError(error, "Failed to create account."),
+        };
+      }
+    },
+    [storeSignUpWithEmail]
+  );
 
-  // ── Verify email OTP ──────────────────────────────────────────
+  // Legacy signup alias used by older SignupForm components.
+  const signup = useCallback(
+    async (
+      email: string,
+      password: string,
+      options: SignupOptions
+    ): Promise<SignupResult> => {
+      try {
+        if (options.agreed_to_terms === false) {
+          return {
+            error: new Error("You must accept the terms and privacy policy."),
+            user: null,
+          };
+        }
 
-  const verifyEmail = useCallback(async (
-    email: string,
-    token: string
-  ): Promise<{ error: Error | null }> => {
-    const { error } = await supabase.auth.verifyOtp({
-      email,
-      token,
-      type: "email",
-    });
-    return { error: error ?? null };
-  }, []);
+        await storeSignUpWithEmail(email, password, options.full_name ?? "");
 
-  // ── Resend verification email ─────────────────────────────────
+        const currentUser = useAuthStore.getState().user;
 
-  const resendVerificationEmail = useCallback(async (
-    email: string
-  ): Promise<{ error: Error | null }> => {
-    const { error } = await supabase.auth.resend({
-      type:  "signup",
-      email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
-    });
-    return { error: error ?? null };
-  }, []);
+        return {
+          error: null,
+          user: currentUser,
+        };
+      } catch (error) {
+        return {
+          error: toError(error, "Failed to create account."),
+          user: null,
+        };
+      }
+    },
+    [storeSignUpWithEmail]
+  );
 
-  // ── OAuth sign in ─────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
+  // Email OTP / verification helpers
+  // These remain direct Supabase calls because authStore does not own OTP flows.
+  // ───────────────────────────────────────────────────────────────────────────
 
-  const signInWithOAuth = useCallback(async (
-    provider: Provider
-  ): Promise<{ error: Error | null }> => {
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
-        scopes:     provider === "google" ? "email profile" : undefined,
-      },
-    });
-    return { error: error ?? null };
-  }, []);
+  const verifyEmail = useCallback(
+    async (email: string, token: string): Promise<AuthResult> => {
+      try {
+        const { error } = await supabase.auth.verifyOtp({
+          email,
+          token,
+          type: "email",
+        });
 
-  // ── Sign out ──────────────────────────────────────────────────
+        return {
+          error: error ?? null,
+        };
+      } catch (error) {
+        return {
+          error: toError(error, "Failed to verify email."),
+        };
+      }
+    },
+    []
+  );
+
+  const resendVerificationEmail = useCallback(
+    async (email: string): Promise<AuthResult> => {
+      try {
+        const { error } = await supabase.auth.resend({
+          type: "signup",
+          email,
+          options: {
+            emailRedirectTo: `${window.location.origin}/auth/callback`,
+          },
+        });
+
+        return {
+          error: error ?? null,
+        };
+      } catch (error) {
+        return {
+          error: toError(error, "Failed to resend verification email."),
+        };
+      }
+    },
+    []
+  );
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // OAuth
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const signInWithOAuth = useCallback(
+    async (provider: Provider | AuthProvider): Promise<AuthResult> => {
+      try {
+        const normalizedProvider = normalizeOAuthProvider(provider);
+        await storeSignInWithOAuth(normalizedProvider);
+
+        return { error: null };
+      } catch (error) {
+        return {
+          error: toError(error, "Failed to start OAuth sign-in."),
+        };
+      }
+    },
+    [storeSignInWithOAuth]
+  );
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Sign out
+  // ───────────────────────────────────────────────────────────────────────────
 
   const signOut = useCallback(async (): Promise<void> => {
-    await supabase.auth.signOut();
-  }, []);
+    await storeSignOut();
+  }, [storeSignOut]);
 
-  // ── Password reset ────────────────────────────────────────────
+  // ───────────────────────────────────────────────────────────────────────────
+  // Password reset
+  // ───────────────────────────────────────────────────────────────────────────
 
-  const sendPasswordReset = useCallback(async (
-    email: string
-  ): Promise<{ error: Error | null }> => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
-    });
-    return { error: error ?? null };
-  }, []);
+  const sendPasswordReset = useCallback(
+    async (email: string): Promise<AuthResult> => {
+      try {
+        await storeSendPasswordReset(email);
 
-  const updatePassword = useCallback(async (
-    newPassword: string
-  ): Promise<{ error: Error | null }> => {
-    const { error } = await supabase.auth.updateUser({ password: newPassword });
-    return { error: error ?? null };
-  }, []);
+        return { error: null };
+      } catch (error) {
+        return {
+          error: toError(error, "Failed to send password reset email."),
+        };
+      }
+    },
+    [storeSendPasswordReset]
+  );
 
-  // ── Profile update ────────────────────────────────────────────
+  const updatePassword = useCallback(
+    async (newPassword: string): Promise<AuthResult> => {
+      try {
+        await storeUpdatePassword(newPassword);
 
-  const updateProfile = useCallback(async (
-    patch: Partial<UserProfile>
-  ): Promise<{ error: Error | null }> => {
-    const state = useAuthStore.getState();
-    const user  = state?.user;
-    if (!user) return { error: new Error("Not authenticated") };
+        return { error: null };
+      } catch (error) {
+        return {
+          error: toError(error, "Failed to update password."),
+        };
+      }
+    },
+    [storeUpdatePassword]
+  );
 
-    const { error } = await supabase
-      .from("profiles")
-      .update({ ...patch, updated_at: new Date().toISOString() } as any)
-      .eq("id", user.id);
+  // ───────────────────────────────────────────────────────────────────────────
+  // Profile update
+  // ───────────────────────────────────────────────────────────────────────────
 
-    if (!error) {
-      authStore.updateProfile(patch as any);
+  const updateProfile = useCallback(
+    async (patch: Partial<UserProfile>): Promise<AuthResult> => {
+      try {
+        if (!useAuthStore.getState().user) {
+          return {
+            error: new Error("Not authenticated."),
+          };
+        }
+
+        await storeUpdateProfile(toProfilePatch(patch));
+
+        return { error: null };
+      } catch (error) {
+        return {
+          error: toError(error, "Failed to update profile."),
+        };
+      }
+    },
+    [storeUpdateProfile]
+  );
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Avatar upload
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const uploadAvatar = useCallback(
+    async (file: File): Promise<AvatarUploadResult> => {
+      try {
+        const currentUser = useAuthStore.getState().user;
+
+        if (!currentUser) {
+          return {
+            url: null,
+            error: new Error("Not authenticated."),
+          };
+        }
+
+        const path = getSafeAvatarPath(currentUser.id, file);
+
+        const result = await uploadFile(
+          STORAGE_BUCKETS.AVATARS,
+          path,
+          file
+        );
+
+        if (!result?.url) {
+          return {
+            url: null,
+            error: new Error("Avatar upload failed."),
+          };
+        }
+
+        await storeUpdateProfile(
+          toProfilePatch({
+            avatar_url: result.url,
+          } as Partial<UserProfile>)
+        );
+
+        return {
+          url: result.url,
+          error: null,
+        };
+      } catch (error) {
+        return {
+          url: null,
+          error: toError(error, "Failed to upload avatar."),
+        };
+      }
+    },
+    [storeUpdateProfile]
+  );
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Complete onboarding
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const completeOnboarding = useCallback(
+    async (data: Partial<UserProfile>): Promise<void> => {
+      const result = await updateProfile({
+        ...data,
+        onboarding_completed: true,
+      });
+
+      if (result.error) {
+        throw result.error;
+      }
+
+      navigate("/app/dashboard", { replace: true });
+    },
+    [navigate, updateProfile]
+  );
+
+  // ───────────────────────────────────────────────────────────────────────────
+  // Feature helpers
+  // ───────────────────────────────────────────────────────────────────────────
+
+  const canAccessFeature = useCallback((feature: FeatureKey): boolean => {
+    const currentProfile = useAuthStore.getState().profile;
+
+    if (!currentProfile) {
+      return false;
     }
 
-    return { error: error ?? null };
-  }, [authStore]);
+    const plan = currentProfile.plan_id ?? "free";
 
-  // ── Avatar upload ─────────────────────────────────────────────
-
-  const uploadAvatar = useCallback(async (
-    file: File
-  ): Promise<{ url: string | null; error: Error | null }> => {
-    const state = useAuthStore.getState();
-    const user  = state?.user;
-    if (!user) return { url: null, error: new Error("Not authenticated") };
-
-    const ext  = file.name.split(".").pop();
-    const path = `${user.id}/avatar.${ext}`;
-
-    const { error: uploadError } = await supabase.storage
-      .from("avatars")
-      .upload(path, file, { upsert: true });
-
-    if (uploadError) return { url: null, error: uploadError };
-
-    const { data } = supabase.storage.from("avatars").getPublicUrl(path);
-    const url = data.publicUrl;
-
-    await updateProfile({ avatar_url: url });
-    return { url, error: null };
-  }, [updateProfile]);
-
-  // ── Complete onboarding ───────────────────────────────────────
-
-  const completeOnboarding = useCallback(async (
-    data: Partial<UserProfile>
-  ): Promise<void> => {
-    await updateProfile({ ...data, onboarding_completed: true });
-    navigate("/dashboard");
-  }, [updateProfile, navigate]);
-
-  // ── Role helpers ──────────────────────────────────────────────
-
-  const isAdmin      = authStore.profile?.is_admin === true;
-  const isSuperAdmin = authStore.profile?.is_admin === true;
-
-  const canAccessFeature = useCallback((
-    feature: "live_copilot" | "team_rooms" | "advanced_analytics" | "export_pdf" | "byok"
-  ): boolean => {
-    const profile = useAuthStore.getState()?.profile;
-    if (!profile) return false;
-
-    const plan = profile.plan_id;
-    const featureMap: Record<string, string[]> = {
-      live_copilot:        ["pro", "team", "enterprise"],
-      team_rooms:          ["team", "enterprise"],
-      advanced_analytics:  ["pro", "team", "enterprise"],
-      export_pdf:          ["pro", "team", "enterprise"],
-      byok:                ["pro", "team", "enterprise"],
-    };
-
-    return featureMap[feature]?.includes(plan) ?? false;
+    return FEATURE_PLAN_MAP[feature]?.includes(plan) ?? false;
   }, []);
 
   return {
     // State
-    user:             authStore.user,
-    profile:          authStore.profile,
-    session:          authStore.session,
-    isAuthenticated:  authStore.isAuthenticated,
-    isLoading:        authStore.isLoading,
+    user,
+    profile,
+    session,
+    isAuthenticated,
+    isLoading,
     isAdmin,
-    isSuperAdmin,
+    isSuperAdmin: isAdmin,
 
     // Actions
-    login:            signInWithEmail,      // alias used by LoginForm
-    signup,                                 // alias used by SignupForm
+    login: signInWithEmail,
+    signup,
     signInWithEmail,
     signUpWithEmail,
     signInWithOAuth,
@@ -235,5 +453,6 @@ export function useAuth() {
     canAccessFeature,
     verifyEmail,
     resendVerificationEmail,
+    refreshCredits,
   };
 }
