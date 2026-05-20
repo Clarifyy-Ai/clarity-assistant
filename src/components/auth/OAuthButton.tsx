@@ -1,103 +1,191 @@
 // src/components/auth/OAuthButton.tsx
+//
 // OAuth sign-in buttons with feature-flag gating and clear error states.
 //
 // IMPORTANT — Supabase OAuth flow note:
 // signInWithOAuth() initiates a browser redirect. The current page unloads
-// immediately on success, so onSuccess() and navigate() are NEVER called
-// from the success branch. They are kept only for popup-mode OAuth flows
-// (if/when Supabase adds that option). The actual post-auth redirect is
-// handled by the callback route configured in Supabase Dashboard.
+// immediately on success, so onSuccess() and navigate() are usually NOT called
+// from the success branch in redirect-mode OAuth.
+//
+// The actual post-auth redirect is handled by the callback route configured
+// in Supabase Dashboard.
 
-import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useState, type ReactNode } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Github, ShieldOff } from "lucide-react";
+import { toast } from "sonner";
+
 import { Button } from "@/components/ui/Button";
 import { Spinner } from "@/components/ui/Spinner";
-import { toast } from "sonner";
-import { useAuth } from "@/hooks/useAuth";
-import { Github, ShieldOff } from "lucide-react";
+import { useAuthStore } from "@/store/authStore";
+import { sanitizeText } from "@/lib/security";
 import { cn } from "@/lib/utils";
 
-/* ─── TYPES ─────────────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
 
-export type OAuthProviderName = "google" | "github" | "linkedin_oidc" | "azure";
+export type OAuthProviderName =
+  | "google"
+  | "github"
+  | "linkedin_oidc"
+  | "azure";
 
 export interface OAuthProvider {
-  name:  OAuthProviderName;
+  name: OAuthProviderName;
   label: string;
-  icon:  React.ReactNode;
+  icon: ReactNode;
 }
 
 interface OAuthButtonProps {
-  provider:          OAuthProvider;
-  /** When false, renders a disabled state with an explanatory message */
-  enabled?:          boolean;
-  /** Reason shown in the disabled tooltip / inline message */
-  disabledReason?:   string;
-  /** Called only in popup-mode OAuth (not redirect-mode — see file header) */
-  onSuccess?:        () => void;
-  className?:        string;
+  provider: OAuthProvider;
+  enabled?: boolean;
+  disabledReason?: string;
+  onSuccess?: () => void;
+  className?: string;
 }
 
-/* ─── KNOWN ERROR CODES → USER-FACING MESSAGES ──────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// Constants
+// ─────────────────────────────────────────────────────────────────────────────
+
+const REFERRAL_STORAGE_KEY = "clarify_ref";
+
+const ALLOWED_OAUTH_PROVIDERS = new Set<OAuthProviderName>([
+  "google",
+  "github",
+  "linkedin_oidc",
+  "azure",
+]);
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
-  // Supabase auth error codes
-  "provider_disabled":          "{provider} login is currently unavailable — please use email/password.",
-  "oauth_provider_not_found":   "{provider} login is not configured. Please use email/password.",
-  "redirect_uri_mismatch":      "{provider} login failed due to a configuration error. Please contact support.",
-  "access_denied":              "Access was denied by {provider}. You may have cancelled the sign-in.",
-  "server_error":               "{provider} login is temporarily unavailable. Please try again or use email/password.",
-  // Network / generic
-  "Failed to fetch":            "Network error — please check your connection and try again.",
+  provider_disabled:
+    "{provider} login is currently unavailable — please use email/password.",
+  oauth_provider_not_found:
+    "{provider} login is not configured. Please use email/password.",
+  redirect_uri_mismatch:
+    "{provider} login failed due to a configuration error. Please contact support.",
+  access_denied:
+    "Access was denied by {provider}. You may have cancelled the sign-in.",
+  server_error:
+    "{provider} login is temporarily unavailable. Please try again or use email/password.",
+  "failed to fetch":
+    "Network error — please check your connection and try again.",
 };
 
-function getOAuthErrorMessage(rawMessage: string, providerLabel: string): string {
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function getOAuthErrorMessage(
+  rawMessage: string,
+  providerLabel: string
+): string {
+  const normalizedRawMessage = rawMessage.toLowerCase();
+
   for (const [key, template] of Object.entries(OAUTH_ERROR_MESSAGES)) {
-    if (rawMessage.toLowerCase().includes(key.toLowerCase())) {
+    if (normalizedRawMessage.includes(key.toLowerCase())) {
       return template.replace("{provider}", providerLabel);
     }
   }
-  // Generic fallback — still actionable
+
   return `${providerLabel} login is currently unavailable — please use email/password instead.`;
 }
 
-/* ─── OAUTH BUTTON ───────────────────────────────────────────────────────── */
+function extractErrorDescription(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "message" in error &&
+    typeof (error as { message?: unknown }).message === "string"
+  ) {
+    return (error as { message: string }).message;
+  }
+
+  return "Unknown error";
+}
+
+function extractErrorCode(error: unknown): string | null {
+  if (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    typeof (error as { code?: unknown }).code === "string"
+  ) {
+    return (error as { code: string }).code;
+  }
+
+  return null;
+}
+
+function normalizeReferralCode(value: string | null): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const sanitized = sanitizeText(value)
+    .replace(/[^A-Za-z0-9_-]/g, "")
+    .slice(0, 100);
+
+  return sanitized.length > 0 ? sanitized : null;
+}
+
+function safeSetLocalStorageItem(key: string, value: string): void {
+  try {
+    window.localStorage.setItem(key, value);
+  } catch {
+    // Ignore storage failures. OAuth should still continue.
+  }
+}
+
+function assertAllowedProvider(provider: OAuthProviderName): boolean {
+  return ALLOWED_OAUTH_PROVIDERS.has(provider);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// OAuth Button
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const OAuthButton = ({
   provider,
-  enabled        = true,
+  enabled = true,
   disabledReason,
   onSuccess,
   className,
-}: OAuthButtonProps) => {
-  const navigate              = useNavigate();
-  const { signInWithOAuth }   = useAuth();
+}: OAuthButtonProps): JSX.Element => {
+  const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+
+  const signInWithOAuth = useAuthStore((state) => state.signInWithOAuth);
+
   const [isLoading, setIsLoading] = useState(false);
   const [lastError, setLastError] = useState<string | null>(null);
 
-  /* ── DISABLED STATE ────────────────────────────────────────────────────── */
-
   if (!enabled) {
     return (
-      <div
-        className={cn(
-          "w-full flex flex-col items-center gap-1.5",
-          className,
-        )}
-      >
+      <div className={cn("w-full flex flex-col items-center gap-1.5", className)}>
         <button
+          type="button"
           disabled
           aria-disabled="true"
-          title={disabledReason ?? `${provider.label} login is currently unavailable`}
+          title={
+            disabledReason ??
+            `${provider.label} login is currently unavailable`
+          }
           className={cn(
             "w-full flex items-center justify-center gap-2 py-2 px-4 rounded-lg",
             "border border-border bg-muted/30 text-muted-foreground/50",
-            "cursor-not-allowed opacity-60 select-none",
+            "cursor-not-allowed opacity-60 select-none"
           )}
         >
           <ShieldOff className="h-4 w-4 shrink-0" />
           Continue with {provider.label}
         </button>
+
         <p className="text-[11px] text-muted-foreground text-center px-2">
           {disabledReason ??
             `${provider.label} login is currently unavailable — please use email/password`}
@@ -106,64 +194,63 @@ export const OAuthButton = ({
     );
   }
 
-  /* ── CLICK HANDLER ─────────────────────────────────────────────────────── */
+  const handleOAuthLogin = async (): Promise<void> => {
+    if (isLoading) {
+      return;
+    }
 
-  const handleOAuthLogin = async () => {
     setIsLoading(true);
     setLastError(null);
 
     try {
-      const { error } = await signInWithOAuth(provider.name);
-
-      if (error) {
-        // FIX: use descriptive error → user-facing message mapping
-        const message = getOAuthErrorMessage(
-          error.message ?? "unknown",
-          provider.label,
-        );
-        setLastError(message);
-        toast.error(message, {
-          description: "Error code: " + ((error as unknown as Record<string, unknown>).code ?? error.message),
-          duration:    6000,
-        });
-        return;
+      if (!assertAllowedProvider(provider.name)) {
+        throw new Error("Unsupported OAuth provider.");
       }
 
-      // NOTE: In redirect-mode (default Supabase OAuth), the lines below are
-      // unreachable — the browser navigates away before they run.
-      // They only execute if you configure Supabase to use popup mode.
+      const refCode = normalizeReferralCode(searchParams.get("ref"));
+
+      if (refCode) {
+        safeSetLocalStorageItem(REFERRAL_STORAGE_KEY, refCode);
+      }
+
+      await signInWithOAuth(provider.name);
+
+      // Usually unreachable in Supabase redirect mode.
       if (onSuccess) {
         onSuccess();
       } else {
-        navigate("/app");
+        navigate("/app", { replace: true });
       }
     } catch (caughtError: unknown) {
-      // FIX: renamed from `error` to `caughtError` to avoid shadowing
-      const raw =
-        caughtError instanceof Error
-          ? caughtError.message
-          : "Unknown error";
+      const rawMessage = extractErrorDescription(caughtError);
+      const code = extractErrorCode(caughtError);
 
-      const message = getOAuthErrorMessage(raw, provider.label);
+      const message = getOAuthErrorMessage(rawMessage, provider.label);
+
       setLastError(message);
-      toast.error(message, { duration: 6000 });
+
+      toast.error(message, {
+        description: code ? `Error code: ${code}` : undefined,
+        duration: 6000,
+      });
     } finally {
       setIsLoading(false);
     }
   };
 
-  /* ── RENDER ────────────────────────────────────────────────────────────── */
-
   return (
     <div className={cn("w-full flex flex-col gap-1.5", className)}>
       <Button
-        onClick={() => void handleOAuthLogin()}
+        type="button"
+        onClick={() => {
+          void handleOAuthLogin();
+        }}
         disabled={isLoading}
         variant="outline"
         className={cn(
           "w-full flex items-center justify-center gap-2 py-2 rounded-lg",
           "border border-border hover:bg-secondary/60 transition-colors",
-          lastError && "border-red-500/40 bg-red-500/5",
+          lastError && "border-red-500/40 bg-red-500/5"
         )}
         aria-busy={isLoading}
       >
@@ -180,7 +267,6 @@ export const OAuthButton = ({
         )}
       </Button>
 
-      {/* Inline error message — more visible than a toast for auth failures */}
       {lastError && (
         <p
           role="alert"
@@ -193,14 +279,16 @@ export const OAuthButton = ({
   );
 };
 
-/* ─── PRESET BUTTONS ─────────────────────────────────────────────────────── */
+// ─────────────────────────────────────────────────────────────────────────────
+// Preset Buttons
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const GoogleOAuthButton = (
-  props: Omit<OAuthButtonProps, "provider">,
-) => (
+  props: Omit<OAuthButtonProps, "provider">
+): JSX.Element => (
   <OAuthButton
     provider={{
-      name:  "google",
+      name: "google",
       label: "Google",
       icon: (
         <svg
@@ -233,24 +321,24 @@ export const GoogleOAuthButton = (
 );
 
 export const GithubOAuthButton = (
-  props: Omit<OAuthButtonProps, "provider">,
-) => (
+  props: Omit<OAuthButtonProps, "provider">
+): JSX.Element => (
   <OAuthButton
     provider={{
-      name:  "github",
+      name: "github",
       label: "GitHub",
-      icon:  <Github className="h-4 w-4 shrink-0" aria-hidden="true" />,
+      icon: <Github className="h-4 w-4 shrink-0" aria-hidden="true" />,
     }}
     {...props}
   />
 );
 
 export const LinkedInOAuthButton = (
-  props: Omit<OAuthButtonProps, "provider">,
-) => (
+  props: Omit<OAuthButtonProps, "provider">
+): JSX.Element => (
   <OAuthButton
     provider={{
-      name:  "linkedin_oidc",
+      name: "linkedin_oidc",
       label: "LinkedIn",
       icon: (
         <svg
@@ -271,11 +359,11 @@ export const LinkedInOAuthButton = (
 );
 
 export const AzureOAuthButton = (
-  props: Omit<OAuthButtonProps, "provider">,
-) => (
+  props: Omit<OAuthButtonProps, "provider">
+): JSX.Element => (
   <OAuthButton
     provider={{
-      name:  "azure",
+      name: "azure",
       label: "Microsoft",
       icon: (
         <svg
