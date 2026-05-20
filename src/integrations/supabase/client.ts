@@ -1,28 +1,23 @@
-// src/integrations/supabase/client.ts
-//
-// Supabase browser client initialization.
-//
-// SECURITY PURPOSE:
-// - Use environment-provided Supabase URL and public client key only
-// - Reject missing/placeholder environment values at startup
-// - Use PKCE auth flow for SPA security
+// src/integrations/supabase/client.ts// src/in
 // - Keep client initialization centralized
 // - Avoid hardcoded Supabase credentials in source code
 //
 // IMPORTANT SECURITY NOTE:
 // Supabase public anon/publishable keys are browser-visible by design.
 // They are NOT secret keys.
+//
 // Real data protection must be enforced using:
-// - Row Level Security (RLS)
+// - Row Level Security
 // - strict policies
 // - backend authorization checks
-// - no service role key in frontend
+// - never exposing service-role keys in frontend code
 
 import { createClient } from "@supabase/supabase-js";
 
 import type { Database } from "./types";
 
 import {
+  ENV,
   SUPABASE_URL,
   SUPABASE_ANON_KEY,
   SUPABASE_PUBLISHABLE_KEY,
@@ -33,8 +28,9 @@ const URL_PLACEHOLDERS = [
   "your-project-ref",
   "your_project",
   "example.supabase.co",
-  "localhost",
-  "127.0.0.1",
+  "replace-me",
+  "changeme",
+  "placeholder",
 ];
 
 const KEY_PLACEHOLDERS = [
@@ -56,16 +52,64 @@ function isPlaceholder(value: string, placeholders: string[]): boolean {
   );
 }
 
-function isValidSupabaseUrl(value: string): boolean {
+function isValidHttpUrl(value: string): boolean {
   try {
-    const url = new URL(value);
+    const parsed = new URL(value);
+
+    return parsed.protocol === "https:" || parsed.protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+function isLocalSupabaseUrl(value: string): boolean {
+  try {
+    const parsed = new URL(value);
 
     return (
-      url.protocol === "https:" &&
-      url.hostname.endsWith(".supabase.co")
+      parsed.hostname === "localhost" ||
+      parsed.hostname === "127.0.0.1" ||
+      parsed.hostname.endsWith(".local")
     );
   } catch {
     return false;
+  }
+}
+
+function isValidSupabaseUrl(value: string): boolean {
+  if (!isValidHttpUrl(value)) {
+    return false;
+  }
+
+  try {
+    const parsed = new URL(value);
+
+    // Production Supabase cloud project.
+    if (parsed.protocol === "https:" && parsed.hostname.endsWith(".supabase.co")) {
+      return true;
+    }
+
+    // Local Supabase development.
+    if (parsed.protocol === "http:" && isLocalSupabaseUrl(value)) {
+      return true;
+    }
+
+    // Custom domain / self-hosted Supabase must use HTTPS.
+    if (parsed.protocol === "https:") {
+      return true;
+    }
+
+    return false;
+  } catch {
+    return false;
+  }
+}
+
+function assertValidPublicClientKey(name: string, value: string): void {
+  if (!value || isPlaceholder(value, KEY_PLACEHOLDERS)) {
+    throw new Error(
+      `[ClarifyAI] ${name} is missing or still a placeholder. Set it in your environment variables.`
+    );
   }
 }
 
@@ -78,27 +122,16 @@ function assertValidSupabaseConfig(): void {
 
   if (!isValidSupabaseUrl(SUPABASE_URL)) {
     throw new Error(
-      "[ClarifyAI] VITE_SUPABASE_URL must be a valid HTTPS Supabase project URL ending with .supabase.co."
+      "[ClarifyAI] VITE_SUPABASE_URL must be a valid Supabase URL. Use https://<project>.supabase.co, a secure custom HTTPS URL, or local Supabase during development."
     );
   }
 
-  if (
-    !SUPABASE_PUBLISHABLE_KEY ||
-    isPlaceholder(SUPABASE_PUBLISHABLE_KEY, KEY_PLACEHOLDERS)
-  ) {
-    throw new Error(
-      "[ClarifyAI] VITE_SUPABASE_PUBLISHABLE_KEY is missing or still a placeholder."
-    );
-  }
-
-  if (
-    !SUPABASE_ANON_KEY ||
-    isPlaceholder(SUPABASE_ANON_KEY, KEY_PLACEHOLDERS)
-  ) {
-    throw new Error(
-      "[ClarifyAI] VITE_SUPABASE_ANON_KEY is missing or still a placeholder."
-    );
-  }
+  // env.ts already allows fallback between anon/publishable keys.
+  assertValidPublicClientKey("VITE_SUPABASE_ANON_KEY", SUPABASE_ANON_KEY);
+  assertValidPublicClientKey(
+    "VITE_SUPABASE_PUBLISHABLE_KEY",
+    SUPABASE_PUBLISHABLE_KEY
+  );
 }
 
 function getBrowserStorage(): Storage | undefined {
@@ -111,6 +144,15 @@ function getBrowserStorage(): Storage | undefined {
   } catch {
     return undefined;
   }
+}
+
+function getAppVersion(): string {
+  const version =
+    typeof import.meta.env.VITE_APP_VERSION === "string"
+      ? import.meta.env.VITE_APP_VERSION.trim()
+      : "";
+
+  return version || "1.0.0";
 }
 
 assertValidSupabaseConfig();
@@ -129,13 +171,15 @@ export const supabase = createClient<Database>(
       // This is common for SPAs but can be exposed by XSS.
       //
       // Mitigations implemented elsewhere:
-      // - CSP in index.html
-      // - DOMPurify sanitization utilities
-      // - no dangerouslySetInnerHTML without sanitization
+      // - CSP
+      // - sanitizer utilities
+      // - no unsafe HTML rendering
       // - strict input validation
       persistSession: true,
 
       autoRefreshToken: true,
+
+      // Required for OAuth/magic-link callbacks.
       detectSessionInUrl: true,
 
       storage: getBrowserStorage(),
@@ -153,7 +197,8 @@ export const supabase = createClient<Database>(
     global: {
       headers: {
         "x-app-name": "clarify-ai",
-        "x-app-version": "1.0.0",
+        "x-app-version": getAppVersion(),
+        "x-app-env": ENV.APP_ENV,
       },
     },
 
@@ -179,10 +224,7 @@ export function realtimeChannel(name: string) {
 
 export async function checkSupabaseConnection(): Promise<boolean> {
   try {
-    const { error } = await supabase
-      .from("profiles")
-      .select("id")
-      .limit(1);
+    const { error } = await supabase.from("profiles").select("id").limit(1);
 
     return !error;
   } catch {
@@ -191,3 +233,9 @@ export async function checkSupabaseConnection(): Promise<boolean> {
 }
 
 export { SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_PUBLISHABLE_KEY };
+//
+// Supabase browser client initialization.
+//
+// SECURITY PURPOSE:
+// - Use environment-provided Supabase URL and public client key only
+// - Reject missing/placeholder environment values at startup
