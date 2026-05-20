@@ -1,55 +1,155 @@
-// @ts-nocheck
-import React, { useState, useEffect } from "react";
+import {
+  useEffect,
+  useState,
+  type ComponentType,
+  type SVGProps,
+} from "react";
 import { NavLink, useLocation } from "react-router-dom";
+import {
+  LayoutDashboard,
+  Mic,
+  ClipboardList,
+  FlaskConical,
+  BarChart2,
+  FileText,
+  BookOpen,
+  CalendarDays,
+  Building2,
+  Settings,
+  ChevronLeft,
+  ChevronRight,
+  LogOut,
+  Star,
+  Users,
+  Bell,
+  Briefcase,
+  ListTodo,
+  PenTool,
+  FolderOpen,
+  FileSpreadsheet,
+  BarChart3,
+  Calendar,
+  Building,
+  Inbox,
+  Wrench,
+  GraduationCap,
+  Upload,
+  LayoutGrid,
+  RotateCcw,
+  TrendingUp,
+  BookMarked,
+  ShieldAlert,
+  CreditCard,
+} from "lucide-react";
+
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store/uiStore";
-import { useAuthStore } from "@/store/userStore";
-import {
-  LayoutDashboard, Mic, ClipboardList, FlaskConical,
-  BarChart2, FileText, BookOpen, CalendarDays,
-  Building2, Settings, ChevronLeft, ChevronRight,
-  LogOut, Star, Users, Bell,
-  Briefcase, ListTodo, PenTool, FolderOpen,
-  FileSpreadsheet, BarChart3, Calendar, Building,
-  Inbox, Wrench, GraduationCap, Upload, LayoutGrid,
-  RotateCcw, TrendingUp, BookMarked, ShieldAlert,
-} from "lucide-react";
-import type { ProfileRow } from "@/types";
+import { useAuthStore } from "@/store/authStore";
 import { supabase } from "@/lib/supabase/client";
+
 import {
   STEALTH_NAV_LABELS,
   STEALTH_SECTION_LABELS,
   STEALTH_BRAND,
 } from "@/lib/stealth/stealthConfig";
 
-type NavItem = {
+import type { ProfileRow } from "@/types";
+
+type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
+
+type SubNavItem = {
   to: string;
-  icon: React.ElementType;
-  stealthIcon: React.ElementType;
+  icon: IconComponent;
   label: string;
-  exact?: boolean;
-  subItems?: Array<{ to: string; icon: React.ElementType; label: string }>;
 };
 
-const NAV_SECTIONS: Array<{ label: string; items: NavItem[] }> = [
+type NavItem = {
+  to: string;
+  icon: IconComponent;
+  stealthIcon: IconComponent;
+  label: string;
+  exact?: boolean;
+  subItems?: SubNavItem[];
+};
+
+type NavSection = {
+  label: string;
+  items: NavItem[];
+};
+
+type SidebarLinkProps = {
+  to: string;
+  icon: IconComponent;
+  label: string;
+  collapsed: boolean;
+  exact?: boolean;
+  stealth?: boolean;
+  onClick?: () => void;
+};
+
+interface AppSidebarProps {
+  onNavClick?: () => void;
+}
+
+const NAV_SECTIONS: NavSection[] = [
   {
     label: "Core",
     items: [
-      { to: "/app/dashboard", icon: LayoutDashboard, stealthIcon: Briefcase, label: "Dashboard" },
-      { to: "/app/live", icon: Mic, stealthIcon: ListTodo, label: "Live Co-Pilot" },
-      { to: "/app/mock", icon: ClipboardList, stealthIcon: PenTool, label: "Mock Interview" },
-      { to: "/app/prep", icon: FlaskConical, stealthIcon: FolderOpen, label: "Prep Lab" },
+      {
+        to: "/app/dashboard",
+        icon: LayoutDashboard,
+        stealthIcon: Briefcase,
+        label: "Dashboard",
+      },
+      {
+        to: "/app/live",
+        icon: Mic,
+        stealthIcon: ListTodo,
+        label: "Live Co-Pilot",
+      },
+      {
+        to: "/app/mock",
+        icon: ClipboardList,
+        stealthIcon: PenTool,
+        label: "Mock Interview",
+      },
+      {
+        to: "/app/prep",
+        icon: FlaskConical,
+        stealthIcon: FolderOpen,
+        label: "Prep Lab",
+      },
       {
         to: "/app/mock-test",
         icon: GraduationCap,
         stealthIcon: GraduationCap,
         label: "Mock Tests",
         subItems: [
-          { to: "/app/mock-test",              icon: LayoutGrid,  label: "Hub" },
-          { to: "/app/mock-test/my-questions", icon: BookOpen,    label: "Question Bank" },
-          { to: "/app/mock-test/upload",       icon: Upload,      label: "Import Questions" },
-          { to: "/app/mock-test/revision",     icon: RotateCcw,   label: "Revision List" },
-          { to: "/app/mock-test/analytics",    icon: TrendingUp,  label: "Analytics" },
+          {
+            to: "/app/mock-test",
+            icon: LayoutGrid,
+            label: "Hub",
+          },
+          {
+            to: "/app/mock-test/my-questions",
+            icon: BookOpen,
+            label: "Question Bank",
+          },
+          {
+            to: "/app/mock-test/upload",
+            icon: Upload,
+            label: "Import Questions",
+          },
+          {
+            to: "/app/mock-test/revision",
+            icon: RotateCcw,
+            label: "Revision List",
+          },
+          {
+            to: "/app/mock-test/analytics",
+            icon: TrendingUp,
+            label: "Analytics",
+          },
         ],
       },
     ],
@@ -57,110 +157,203 @@ const NAV_SECTIONS: Array<{ label: string; items: NavItem[] }> = [
   {
     label: "Growth",
     items: [
-      { to: "/app/sessions", icon: Star, stealthIcon: FileSpreadsheet, label: "Call Sessions" },
-      { to: "/app/analytics", icon: BarChart2, stealthIcon: BarChart3, label: "Analytics" },
-      { to: "/app/documents", icon: FileText, stealthIcon: FileText, label: "Documents" },
-      { to: "/app/answers", icon: BookOpen, stealthIcon: FolderOpen, label: "Answer Bank" },
+      {
+        to: "/app/sessions",
+        icon: Star,
+        stealthIcon: FileSpreadsheet,
+        label: "Call Sessions",
+      },
+      {
+        to: "/app/analytics",
+        icon: BarChart2,
+        stealthIcon: BarChart3,
+        label: "Analytics",
+      },
+      {
+        to: "/app/usage",
+        icon: CreditCard,
+        stealthIcon: BarChart3,
+        label: "Usage",
+      },
+      {
+        to: "/app/documents",
+        icon: FileText,
+        stealthIcon: FileText,
+        label: "Documents",
+      },
+      {
+        to: "/app/answers",
+        icon: BookOpen,
+        stealthIcon: FolderOpen,
+        label: "Answer Bank",
+      },
     ],
   },
   {
     label: "Planner",
     items: [
-      { to: "/app/interviews", icon: CalendarDays, stealthIcon: Calendar, label: "Interviews" },
-      { to: "/app/companies", icon: Building2, stealthIcon: Building, label: "Companies" },
-      { to: "/app/rooms", icon: Users, stealthIcon: Users, label: "Practice Rooms" },
+      {
+        to: "/app/interviews",
+        icon: CalendarDays,
+        stealthIcon: Calendar,
+        label: "Interviews",
+      },
+      {
+        to: "/app/companies",
+        icon: Building2,
+        stealthIcon: Building,
+        label: "Companies",
+      },
+      {
+        to: "/app/rooms",
+        icon: Users,
+        stealthIcon: Users,
+        label: "Practice Rooms",
+      },
     ],
   },
 ];
 
-interface AppSidebarProps {
-  onNavClick?: () => void;
+function getProfileInitial(profile: ProfileRow | null | undefined): string {
+  const fullNameInitial = profile?.full_name?.trim()?.charAt(0)?.toUpperCase();
+
+  if (fullNameInitial) {
+    return fullNameInitial;
+  }
+
+  const emailInitial = profile?.email?.trim()?.charAt(0)?.toUpperCase();
+
+  return emailInitial || "U";
 }
 
-export function AppSidebar({ onNavClick }: AppSidebarProps = {}) {
-  const uiStore = useUIStore();
-  const { profile, clearAuth } = useAuthStore();
-  const user = useAuthStore((s) => s.user);
+function getPlanLabel(profile: ProfileRow | null | undefined): string {
+  const planId = profile?.plan_id;
+
+  if (typeof planId === "string" && planId.trim().length > 0) {
+    return planId;
+  }
+
+  return "free";
+}
+
+function isPathActive(currentPath: string, itemPath: string): boolean {
+  return currentPath === itemPath || currentPath.startsWith(`${itemPath}/`);
+}
+
+export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
   const location = useLocation();
-  const stealth = uiStore.stealth_mode;
+
+  const sidebarCollapsed = useUIStore((state) => state.sidebar_collapsed);
+  const stealthMode = useUIStore((state) => state.stealth_mode);
+  const setSidebarCollapsed = useUIStore(
+    (state) => state.setSidebarCollapsed
+  );
+  const toggleSidebar = useUIStore((state) => state.toggleSidebar);
+
+  const profile = useAuthStore((state) => state.profile);
+  const user = useAuthStore((state) => state.user);
+  const signOut = useAuthStore((state) => state.signOut);
 
   const [questionCount, setQuestionCount] = useState<number | null>(null);
 
-  // Auto-collapse on tablet (md breakpoint, <1024px); restore on desktop
+  const collapsed = onNavClick ? false : sidebarCollapsed;
+  const isMockTestSection = location.pathname.startsWith("/app/mock-test");
+  const isAdmin = profile?.is_admin === true;
+  const initial = getProfileInitial(profile);
+  const planLabel = getPlanLabel(profile);
+
   useEffect(() => {
-    const mq = window.matchMedia("(min-width: 1024px)");
-    const handleChange = (e: MediaQueryListEvent | MediaQueryList) => {
-      // Only auto-set if not manually overridden at a larger size
-      if (!e.matches) {
-        uiStore.setSidebarCollapsed(true);
+    const mediaQuery = window.matchMedia("(min-width: 1024px)");
+
+    const handleChange = (event: MediaQueryListEvent | MediaQueryList) => {
+      if (!event.matches) {
+        setSidebarCollapsed(true);
       } else {
-        uiStore.setSidebarCollapsed(false);
+        setSidebarCollapsed(false);
       }
     };
-    handleChange(mq); // apply on mount
-    mq.addEventListener("change", handleChange);
-    return () => mq.removeEventListener("change", handleChange);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // When rendered as mobile drawer (onNavClick prop present), always show expanded
-  // so that labels and section text are visible despite sidebar_collapsed being true
-  const collapsed = onNavClick ? false : uiStore.sidebar_collapsed;
+    handleChange(mediaQuery);
 
-  // Fetch the user's question bank count for the badge
+    mediaQuery.addEventListener("change", handleChange);
+
+    return () => {
+      mediaQuery.removeEventListener("change", handleChange);
+    };
+  }, [setSidebarCollapsed]);
+
   useEffect(() => {
-    if (!user?.id) return;
-    (async () => {
-      const { count } = await supabase
-        .from("questions")
-        .select("id", { count: "exact", head: true })
-        .eq("uploaded_by", user.id);
-      setQuestionCount(count ?? 0);
-    })();
-  }, [user?.id, location.pathname]); // refresh when navigating (e.g. after upload)
+    if (!user?.id) {
+      setQuestionCount(null);
+      return;
+    }
 
-  async function handleLogout() {
+    let cancelled = false;
+
+    async function fetchQuestionCount(): Promise<void> {
+      const { count, error } = await supabase
+        .from("questions")
+        .select("id", {
+          count: "exact",
+          head: true,
+        })
+        .eq("uploaded_by", user.id);
+
+      if (cancelled) {
+        return;
+      }
+
+      if (error) {
+        setQuestionCount(0);
+        return;
+      }
+
+      setQuestionCount(count ?? 0);
+    }
+
+    void fetchQuestionCount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, location.pathname]);
+
+  async function handleLogout(): Promise<void> {
     try {
-      await supabase.auth.signOut();
-      clearAuth?.();
+      await signOut();
       window.location.href = "/login";
-    } catch (e) {
-      console.error("Sign out failed:", e);
+    } catch (error) {
+      console.error("[AppSidebar] Sign out failed:", error);
     }
   }
-
-  const isAdmin = !!(profile as ProfileRow | null)?.is_admin;
-
-  const initial =
-    profile?.full_name?.trim()?.charAt(0)?.toUpperCase() ??
-    profile?.email?.trim()?.charAt(0)?.toUpperCase() ??
-    "U";
-
-  const isMockTestSection = location.pathname.startsWith("/app/mock-test");
 
   return (
     <aside
       className={cn(
         "flex flex-col flex-shrink-0",
-        onNavClick ? "flex" : "hidden md:flex", // mobile drawer: always flex; desktop: hidden on mobile
+        onNavClick ? "flex" : "hidden md:flex",
         "h-screen bg-sidebar-background border-r border-sidebar-border",
         "transition-all duration-200 relative z-30",
-        onNavClick ? "w-56" : (collapsed ? "w-16" : "w-56") // drawer always expanded
+        onNavClick ? "w-56" : collapsed ? "w-16" : "w-56"
       )}
     >
       <div className="flex min-h-[56px] items-center gap-3 border-b border-sidebar-border px-4 py-4">
-        <div className={cn(
-          "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
-          stealth ? "bg-blue-600" : "bg-violet-600"
-        )}>
-          {stealth ? (
+        <div
+          className={cn(
+            "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
+            stealthMode ? "bg-blue-600" : "bg-violet-600"
+          )}
+        >
+          {stealthMode ? (
             <Briefcase className="h-5 w-5 text-white" />
           ) : (
             <Mic className="h-5 w-5 text-white" />
           )}
         </div>
+
         {!collapsed && (
           <span className="text-lg font-bold tracking-tight text-sidebar-foreground">
-            {stealth ? STEALTH_BRAND.name : "Clarify AI"}
+            {stealthMode ? STEALTH_BRAND.name : "Clarify AI"}
           </span>
         )}
       </div>
@@ -170,30 +363,39 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}) {
           <div key={section.label}>
             {!collapsed && (
               <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
-                {stealth ? (STEALTH_SECTION_LABELS[section.label] ?? section.label) : section.label}
+                {stealthMode
+                  ? STEALTH_SECTION_LABELS[section.label] ?? section.label
+                  : section.label}
               </p>
             )}
+
             {section.items.map((item) => {
-              const showSubs = !collapsed && isMockTestSection && !!item.subItems;
+              const isItemActive =
+                isPathActive(location.pathname, item.to) ||
+                Boolean(item.subItems && isMockTestSection);
+
+              const showSubItems =
+                !collapsed && isMockTestSection && Boolean(item.subItems);
+
+              const Icon = stealthMode ? item.stealthIcon : item.icon;
 
               return (
                 <div key={item.to}>
-                  {/* Main nav item */}
                   <NavLink
                     to={item.to}
-                    end={false}
+                    end={item.exact}
                     title={collapsed ? item.label : undefined}
                     onClick={onNavClick}
-                    className={({ isActive: navIsActive }) => {
-                      // Prevent /app/mock from matching /app/mock-test/* (raw prefix overlap)
-                      const isActive = navIsActive && (
-                        location.pathname === item.to ||
-                        location.pathname.startsWith(item.to + "/")
-                      );
+                    className={({ isActive }) => {
+                      const active =
+                        isActive &&
+                        (location.pathname === item.to ||
+                          location.pathname.startsWith(`${item.to}/`));
+
                       return cn(
                         "mx-1 flex items-center gap-3 rounded-xl px-3 py-2 text-sm font-medium transition-all",
-                        (isActive || (item.subItems && isMockTestSection))
-                          ? stealth
+                        active || isItemActive
+                          ? stealthMode
                             ? "border border-blue-500/20 bg-blue-600/15 text-blue-600 dark:text-blue-300"
                             : "border border-violet-500/20 bg-violet-600/15 text-violet-600 dark:text-violet-300"
                           : "text-muted-foreground hover:bg-accent/10 hover:text-foreground",
@@ -201,57 +403,62 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}) {
                       );
                     }}
                   >
-                    {React.createElement(stealth ? item.stealthIcon : item.icon, {
-                      className: "h-4 w-4 shrink-0",
-                    })}
+                    <Icon className="h-4 w-4 shrink-0" />
+
                     {!collapsed && (
                       <>
                         <span className="truncate flex-1">
-                          {stealth ? (STEALTH_NAV_LABELS[item.label] ?? item.label) : item.label}
+                          {stealthMode
+                            ? STEALTH_NAV_LABELS[item.label] ?? item.label
+                            : item.label}
                         </span>
-                        {/* Question count badge for Mock Tests */}
-                        {item.subItems && questionCount !== null && questionCount > 0 && (
-                          <span className={cn(
-                            "ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none",
-                            stealth
-                              ? "bg-blue-500/20 text-blue-600"
-                              : "bg-violet-500/20 text-violet-600"
-                          )}>
-                            {questionCount > 99 ? "99+" : questionCount}
-                          </span>
-                        )}
+
+                        {item.subItems &&
+                          questionCount !== null &&
+                          questionCount > 0 && (
+                            <span
+                              className={cn(
+                                "ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none",
+                                stealthMode
+                                  ? "bg-blue-500/20 text-blue-600"
+                                  : "bg-violet-500/20 text-violet-600"
+                              )}
+                            >
+                              {questionCount > 99 ? "99+" : questionCount}
+                            </span>
+                          )}
                       </>
                     )}
                   </NavLink>
 
-                  {/* Sub-items — shown when on any /app/mock-test/* route and sidebar is open */}
-                  {showSubs && (
+                  {showSubItems && item.subItems && (
                     <div className="ml-7 mt-0.5 space-y-0.5 border-l border-border pl-2">
-                      {item.subItems!.map((sub) => {
-                        const SubIcon = sub.icon;
+                      {item.subItems.map((subItem) => {
+                        const SubIcon = subItem.icon;
+
                         const subActive =
-                          (sub.to === "/app/mock-test" && location.pathname === "/app/mock-test") ||
-                          (sub.to !== "/app/mock-test" && (
-                            location.pathname === sub.to ||
-                            location.pathname.startsWith(sub.to + "/")
-                          ));
+                          (subItem.to === "/app/mock-test" &&
+                            location.pathname === "/app/mock-test") ||
+                          (subItem.to !== "/app/mock-test" &&
+                            isPathActive(location.pathname, subItem.to));
+
                         return (
                           <NavLink
-                            key={sub.to}
-                            to={sub.to}
-                            end={sub.to === "/app/mock-test"}
+                            key={subItem.to}
+                            to={subItem.to}
+                            end={subItem.to === "/app/mock-test"}
                             onClick={onNavClick}
                             className={cn(
                               "flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
                               subActive
-                                ? stealth
+                                ? stealthMode
                                   ? "text-blue-600 dark:text-blue-300 font-semibold"
                                   : "text-violet-600 dark:text-violet-300 font-semibold"
                                 : "text-muted-foreground hover:text-foreground"
                             )}
                           >
                             <SubIcon className="h-3.5 w-3.5 shrink-0" />
-                            <span className="truncate">{sub.label}</span>
+                            <span className="truncate">{subItem.label}</span>
                           </NavLink>
                         );
                       })}
@@ -270,63 +477,72 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}) {
           icon={BookMarked}
           label="Guide"
           collapsed={collapsed}
-          stealth={stealth}
+          stealth={stealthMode}
           onClick={onNavClick}
         />
+
         <SidebarLink
           to="/app/notifications"
-          icon={stealth ? Inbox : Bell}
-          label={stealth ? "Inbox" : "Notifications"}
+          icon={stealthMode ? Inbox : Bell}
+          label={stealthMode ? "Inbox" : "Notifications"}
           collapsed={collapsed}
-          stealth={stealth}
+          stealth={stealthMode}
           onClick={onNavClick}
         />
+
         <SidebarLink
           to="/app/settings"
-          icon={stealth ? Wrench : Settings}
-          label={stealth ? "Preferences" : "Settings"}
+          icon={stealthMode ? Wrench : Settings}
+          label={stealthMode ? "Preferences" : "Settings"}
           collapsed={collapsed}
-          stealth={stealth}
+          stealth={stealthMode}
           onClick={onNavClick}
         />
+
         {isAdmin && (
           <SidebarLink
             to="/app/admin"
             icon={ShieldAlert}
             label="Admin Panel"
             collapsed={collapsed}
-            stealth={stealth}
+            stealth={stealthMode}
             onClick={onNavClick}
           />
         )}
 
         <div
           className={cn(
-            "mx-1 flex cursor-pointer items-center gap-2 rounded-xl px-3 py-2 transition-all hover:bg-accent/10",
+            "mx-1 flex items-center gap-2 rounded-xl px-3 py-2 transition-all hover:bg-accent/10",
             collapsed && "justify-center"
           )}
         >
-          <div className={cn(
-            "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white",
-            stealth ? "bg-blue-600" : "bg-violet-700"
-          )}>
+          <div
+            className={cn(
+              "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white",
+              stealthMode ? "bg-blue-600" : "bg-violet-700"
+            )}
+          >
             {initial}
           </div>
+
           {!collapsed && (
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-medium text-sidebar-foreground">
                 {profile?.full_name ?? "User"}
               </p>
+
               <p className="text-[10px] capitalize text-muted-foreground">
-                {(profile as any)?.plan ?? "free"}
+                {planLabel}
               </p>
             </div>
           )}
+
           {!collapsed && (
             <button
               type="button"
-              onClick={handleLogout}
+              onClick={() => void handleLogout()}
               title="Sign out"
+              aria-label="Sign out"
               className="p-1 text-muted-foreground transition-colors hover:text-red-400"
             >
               <LogOut className="h-3.5 w-3.5" />
@@ -335,18 +551,20 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}) {
         </div>
       </div>
 
-      <button
-        type="button"
-        onClick={() => uiStore.toggleSidebar()}
-        className="absolute -right-3 top-20 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-sidebar-background text-muted-foreground transition-colors hover:text-foreground"
-        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-      >
-        {collapsed ? (
-          <ChevronRight className="h-3 w-3" />
-        ) : (
-          <ChevronLeft className="h-3 w-3" />
-        )}
-      </button>
+      {!onNavClick && (
+        <button
+          type="button"
+          onClick={toggleSidebar}
+          className="absolute -right-3 top-20 z-50 flex h-6 w-6 items-center justify-center rounded-full border border-border bg-sidebar-background text-muted-foreground transition-colors hover:text-foreground"
+          aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        >
+          {collapsed ? (
+            <ChevronRight className="h-3 w-3" />
+          ) : (
+            <ChevronLeft className="h-3 w-3" />
+          )}
+        </button>
+      )}
     </aside>
   );
 }
@@ -359,15 +577,7 @@ function SidebarLink({
   exact,
   stealth,
   onClick,
-}: {
-  to: string;
-  icon: React.ElementType;
-  label: string;
-  collapsed: boolean;
-  exact?: boolean;
-  stealth?: boolean;
-  onClick?: () => void;
-}) {
+}: SidebarLinkProps): JSX.Element {
   return (
     <NavLink
       to={to}
@@ -391,4 +601,3 @@ function SidebarLink({
     </NavLink>
   );
 }
-
