@@ -1,11 +1,67 @@
 <!DOCTYPE html>
-<!-- build refresh -->
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+
+    <!-- Browser compatibility -->
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+
+    <!-- Responsive viewport -->
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+
+    <!--
+      Security Policy:
+      This CSP is intentionally compatible with Vite + React + inline JSON-LD + theme bootstrap script.
+      For stronger production security, move inline scripts to external files or use nonce-based CSP at CDN/server level.
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="
+        default-src 'self';
+        base-uri 'self';
+        object-src 'none';
+        frame-ancestors 'none';
+        script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+        style-src 'self' 'unsafe-inline';
+        img-src 'self' data: blob: https:;
+        font-src 'self' data:;
+        connect-src 'self'
+          https://*.supabase.co
+          wss://*.supabase.co
+          https://api.openai.com
+          https://api.anthropic.com
+          https://generativelanguage.googleapis.com
+          https://api.deepgram.com
+          wss://api.deepgram.com
+          https://*.sentry.io
+          https://*.ingest.sentry.io
+          https://app.posthog.com
+          https://us.i.posthog.com
+          https://eu.i.posthog.com;
+        media-src 'self' blob: data:;
+        worker-src 'self' blob:;
+        manifest-src 'self';
+        form-action 'self';
+        upgrade-insecure-requests;
+      "
+    />
+
+    <!-- Referrer protection -->
+    <meta name="referrer" content="strict-origin-when-cross-origin" />
+
+    <!-- Permissions policy fallback for supporting browsers -->
+    <meta
+      http-equiv="Permissions-Policy"
+      content="camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)"
+    />
+
     <title>Clarify AI — AI-Powered Interview Preparation</title>
-    <meta name="description" content="Real-time AI coaching for live interviews, mock sessions with deep analytics, and a full prep lab. Start free today.">
+
+    <meta
+      name="description"
+      content="Real-time AI coaching for live interviews, mock sessions with deep analytics, and a full prep lab. Start free today."
+    />
+
     <link rel="canonical" href="https://clarify.ai.sltfinanceindia.com/" />
 
     <!-- PWA manifest -->
@@ -14,17 +70,34 @@
     <!-- Theme color for mobile browsers -->
     <meta name="theme-color" content="#09090b" />
 
-    <link rel="icon" type="image/png" href="/favicon.png">
-    <meta property="og:title" content="Clarify AI — AI-Powered Interview Preparation">
-    <meta name="twitter:title" content="Clarify AI — AI-Powered Interview Preparation">
-    <meta property="og:description" content="Real-time AI coaching for live interviews, mock sessions with deep analytics, and a full prep lab.">
-    <meta name="twitter:description" content="Real-time AI coaching for live interviews, mock sessions with deep analytics, and a full prep lab.">
+    <!-- Icons -->
+    <link rel="icon" type="image/png" href="/favicon.png" />
+
+    <!-- Open Graph -->
+    <meta property="og:title" content="Clarify AI — AI-Powered Interview Preparation" />
+    <meta
+      property="og:description"
+      content="Real-time AI coaching for live interviews, mock sessions with deep analytics, and a full prep lab."
+    />
     <meta property="og:url" content="https://clarify.ai.sltfinanceindia.com/" />
     <meta property="og:site_name" content="Clarify AI" />
-    <meta property="og:image" content="https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/cf9497ed-156a-43a7-a036-25f470f60edd/id-preview-3e0efc6d--ff2f1c32-d4fd-4bbf-914d-d72bd2dd40a7.lovable.app-1774022724389.png">
-    <meta name="twitter:image" content="https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/cf9497ed-156a-43a7-a036-25f470f60edd/id-preview-3e0efc6d--ff2f1c32-d4fd-4bbf-914d-d72bd2dd40a7.lovable.app-1774022724389.png">
-    <meta name="twitter:card" content="summary_large_image">
-    <meta property="og:type" content="website">
+    <meta property="og:type" content="website" />
+    <meta
+      property="og:image"
+      content="https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/cf9497ed-156a-43a7-a036-25f470f60edd/id-preview-3e0efc6d--ff2f1c32-d4fd-4bbf-914d-d72bd2dd40a7.lovable.app-1774022724389.png"
+    />
+
+    <!-- Twitter -->
+    <meta name="twitter:title" content="Clarify AI — AI-Powered Interview Preparation" />
+    <meta
+      name="twitter:description"
+      content="Real-time AI coaching for live interviews, mock sessions with deep analytics, and a full prep lab."
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta
+      name="twitter:image"
+      content="https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/cf9497ed-156a-43a7-a036-25f470f60edd/id-preview-3e0efc6d--ff2f1c32-d4fd-4bbf-914d-d72bd2dd40a7.lovable.app-1774022724389.png"
+    />
 
     <!-- Brand JSON-LD: WebSite + Organization for rich search results -->
     <script type="application/ld+json">
@@ -51,26 +124,33 @@
       }
     </script>
   </head>
+
   <body>
     <!--
-      Pre-hydration theme script: ensures light mode on first load.
-      New users get light; returning users get their saved preference.
-      Runs synchronously before React renders to prevent flash-of-wrong-theme.
+      Pre-hydration theme script:
+      Keeps theme consistent before React renders.
+      SECURITY NOTE:
+      This inline script requires 'unsafe-inline' in the current CSP.
+      Future hardening option: move this script to /theme-init.js or use nonce-based CSP from server/CDN.
     -->
     <script>
       (function () {
         try {
           var stored = localStorage.getItem("confideq-ui");
           var isDark = false;
+
           if (stored) {
-            var state    = JSON.parse(stored);
+            var state = JSON.parse(stored);
             var resolved = state.state && state.state.resolved_theme;
-            var theme    = state.state && state.state.theme;
-            isDark = (theme === "dark") || (theme === "system" && resolved === "dark");
+            var theme = state.state && state.state.theme;
+
+            isDark =
+              theme === "dark" ||
+              (theme === "system" && resolved === "dark");
           }
+
           document.documentElement.classList.toggle("dark", isDark);
         } catch (e) {
-          // On any parse error, default to light mode
           document.documentElement.classList.remove("dark");
         }
       })();
@@ -80,13 +160,12 @@
     <div id="root"></div>
 
     <!--
-      Overlay portal root — intentionally OUTSIDE #root so the overlay sits
-      on a separate compositor layer and is never clipped by #root's stacking
-      context. Styled inline so it works even before the CSS bundle loads.
+      Overlay portal root:
+      Intentionally outside #root so overlay UI is not clipped by React root stacking context.
 
-      pointer-events:none at this level so the element itself never intercepts
-      clicks; individual overlay panels set pointer-events:auto on their own
-      wrapper nodes.
+      SECURITY NOTE:
+      Keep this element inert by default with pointer-events:none.
+      Only trusted overlay components should enable pointer-events:auto on child panels.
     -->
     <div
       id="overlay-root"
@@ -94,10 +173,12 @@
     ></div>
 
     <!--
-      Stealth overlay portal root. The OverlayWindow component portals its
-      panel into this node. Kept separate from #overlay-root so panic-kill
-      and screen-capture-blocker can target it by id without affecting other
-      portals (toasts, command palette, etc.).
+      Stealth overlay portal root:
+      Kept separate from #overlay-root so panic-kill and screen-capture-blocker logic can target it safely.
+
+      SECURITY NOTE:
+      Do not inject unsanitized user-generated HTML into this root.
+      All dynamic content rendered into this portal must be React-escaped or DOMPurify-sanitized.
     -->
     <div
       id="clarify-overlay-root"
