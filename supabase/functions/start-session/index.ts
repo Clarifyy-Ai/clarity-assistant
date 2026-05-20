@@ -1,158 +1,547 @@
 // supabase/functions/start-session/index.ts
-// Initialize a mock session: validate config, create DB row, return session_id. [file:1][file:3]
+//
+// Initializes an interview session.
+// - strict request validation// Creates or reuses a recent active/pending session for the authenticated user.
+// - rate limiting
+// - safe DB writes
+// - abandoned-session cleanup
+// - audit logging
+// - safe JSON responses
 
-import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+
+import {
+  handleCors,
+  getCorsHeaders,
+  withCorsHeaders,
+} from "../_shared/cors.ts";
+
+import { authenticateRequest } from "../_shared/auth.ts";
+
+import {
+  checkRateLimit,
+  createRateLimitKey,
+  rateLimitResponse,
+  RATE_LIMIT_PRESETS,
+} from "../_shared/rateLimit.ts";
+
+import { parseJsonBody } from "../_shared/errors.ts";
+
+import {
+  logAuthFailure,
+  logAuditEventFromRequest,
+  logRateLimitBlocked,
+  logValidationFailure,
+} from "../_shared/audit.ts";
+
 import { createServiceClient } from "../_shared/supabase.ts";
 
-function toDbModel(model: unknown): string {
-  const value = String(model ?? "gemini-1-5-flash");
+const FUNCTION_NAME = "start-session";
+
+const SESSION_LOOKBACK_HOURS = 24;
+
+const allowedSessionTypes = ["mock", "live"] as const;
+
+const allowedInterviewTypes = [
+  "behavioral",
+  "behavioural",
+  "technical",
+  "case_study",
+  "system_design",
+  "hr",
+  "mixed",
+  "custom",
+] as const;
+
+const allowedPersonalityTypes = [
+  "strict",
+  "friendly",
+  "neutral",
+  "panel",
+] as const;
+
+const allowedHintStyles = [
+  "minimal",
+  "balanced",
+  "detailed",
+] as const;
+
+const startSessionSchema = z.object({
+  session_type: z
+    .enum(allowedSessionTypes)
+    .optional(),
+
+  type: z
+    .enum(allowedSessionTypes)
+    .optional(),
+
+  interview_type: z
+    .enum(allowedInterviewTypes)
+    .optional()
+    .default("behavioral"),
+
+  company: z
+    .string()
+    .trim()
+    .max(120, "Company name is too long.")
+    .nullable()
+    .optional(),
+
+  role: z
+    .string()
+    .trim()
+    .max(120, "Role is too long.")
+    .nullable()
+    .optional(),
+
+  resume_id: z
+    .string()
+    .uuid("Invalid resume ID.")
+    .nullable()
+    .optional(),
+
+  jd_id: z
+    .string()
+    .uuid("Invalid job description ID.")
+    .nullable()
+    .optional(),
+
+  duration_minutes: z
+    .number()
+    .int()
+    .min(15)
+    .max(45)
+    .optional()
+    .default(30),
+
+  question_count: z
+    .number()
+    .int()
+    .min(5)
+    .max(20)
+    .optional()
+    .default(10),
+
+  personality_type: z
+    .enum(allowedPersonalityTypes)
+    .optional()
+    .default("neutral"),
+
+  enable_recording: z
+    .boolean()
+    .optional()
+    .default(false),
+
+  enable_transcription: z
+    .boolean()
+    .optional()
+    .default(true),
+
+  enable_metrics: z
+    .boolean()
+    .optional()
+    .default(true),
+
+  model: z
+    .string()
+    .trim()
+    .max(100, "Model name is too long.")
+    .optional()
+    .default("gemini-1-5-flash"),
+
+  hint_style: z
+    .enum(allowedHintStyles)
+    .optional()
+    .default("balanced"),
+
+  focus_areas: z
+    .array(
+      z
+        .string()
+        .trim()
+        .min(1)
+        .max(80)
+    )
+    .max(20, "Too many focus areas.")
+    .optional()
+    .default([]),
+});
+
+type StartSessionRequest = z.infer<typeof startSessionSchema>;
+
+type SessionType = (typeof allowedSessionTypes)[number];
+
+type ExistingSessionRow = {
+  id: string;
+  created_at: string;
+  status: string;
+};
+
+type CreatedSessionRow = {
+  id: string;
+};
+
+function json(
+  corsHeaders: HeadersInit,
+  status: number,
+  body: unknown
+): Response {
+  const headers = new Headers(corsHeaders);
+  headers.set("Content-Type", "application/json");
+  headers.set("Cache-Control", "no-store");
+
+  return new Response(JSON.stringify(body), {
+    status,
+    headers,
+  });
+}
+
+function zodErrors(error: z.ZodError): Record<string, string[]> {
+  const fieldErrors: Record<string, string[]> = {};
+
+  for (const issue of error.issues) {
+    const key =
+      issue.path.length > 0 ? issue.path.map(String).join(".") : "_form";
+
+    if (!fieldErrors[key]) {
+      fieldErrors[key] = [];
+    }
+
+    fieldErrors[key].push(issue.message);
+  }
+
+  return fieldErrors;
+}
+
+function sanitizeShortText(value: string | null | undefined): string | null {
+  if (!value) {
+    return null;
+  }
+
+  const cleaned = value
+    .replace(/<[^>]*>/g, "")
+    .replace(/[\u0000-\u001F\u007F]/g, "")
+    .trim()
+    .slice(0, 120);
+
+  return cleaned.length > 0 ? cleaned : null;
+}
+
+function normalizeInterviewType(value: string): string {
+  if (value === "behavioural") {
+    return "behavioral";
+  }
+
+  return value;
+}
+
+function toSessionType(body: StartSessionRequest): SessionType {
+  return body.session_type ?? body.type ?? "mock";
+}
+
+function toDbModel(model: string): string {
+  const value = model.trim();
+
   const map: Record<string, string> = {
     "gemini-flash": "gemini-1-5-flash",
     "gemini-pro": "gemini-1-5-pro",
     "gpt_4o": "gpt-4o",
   };
-  return map[value] ?? value;
+
+  const mapped = map[value] ?? value;
+
+  if (/^gemini-[a-z0-9.-]+$/i.test(mapped)) {
+    return mapped;
+  }
+
+  if (/^gpt-[a-z0-9.-]+$/i.test(mapped)) {
+    return mapped;
+  }
+
+  return "gemini-1-5-flash";
+}
+
+function buildSessionTitle(options: {
+  sessionType: SessionType;
+  company: string | null;
+}): string {
+  const label = options.sessionType === "live" ? "Live" : "Mock";
+
+  if (options.company) {
+    return `${label} — ${options.company}`;
+  }
+
+  return options.sessionType === "live"
+    ? "Live co-pilot"
+    : "Mock interview";
+}
+
+async function parseAndValidateRequest(
+  req: Request,
+  corsHeaders: HeadersInit
+): Promise<
+  | {
+      ok: true;
+      data: StartSessionRequest;
+    }
+  | {
+      ok: false;
+      response: Response;
+      details?: unknown;
+    }
+> {
+  let rawBody: unknown;
+
+  try {
+    rawBody = await parseJsonBody(req);
+  } catch {
+    return {
+      ok: false,
+      response: json(corsHeaders, 400, {
+        error: "Invalid JSON payload.",
+        code: "BAD_REQUEST",
+      }),
+    };
+  }
+
+  const validationResult = startSessionSchema.safeParse(rawBody);
+
+  if (!validationResult.success) {
+    return {
+      ok: false,
+      details: zodErrors(validationResult.error),
+      response: json(corsHeaders, 422, {
+        error: "Validation failed.",
+        code: "VALIDATION_ERROR",
+        details: {
+          fieldErrors: zodErrors(validationResult.error),
+        },
+      }),
+    };
+  }
+
+  return {
+    ok: true,
+    data: validationResult.data,
+  };
+}
+
+function buildConfig(input: {
+  body: StartSessionRequest;
+  sessionType: SessionType;
+  durationMinutes: number;
+  questionCount: number;
+  company: string | null;
+  role: string | null;
+}) {
+  return {
+    company: input.company,
+    role: input.role,
+    interview_type: normalizeInterviewType(input.body.interview_type),
+    question_count: input.questionCount,
+    time_per_question_seconds: Math.round(
+      (input.durationMinutes * 60) / input.questionCount
+    ),
+    model: toDbModel(input.body.model),
+    hint_style: input.body.hint_style,
+    include_warmup: false,
+    resume_id: input.body.resume_id ?? null,
+    jd_id: input.body.jd_id ?? null,
+    focus_areas: input.body.focus_areas,
+    duration_minutes: input.durationMinutes,
+    personality_type: input.body.personality_type,
+    enable_recording: input.body.enable_recording,
+    enable_transcription: input.body.enable_transcription,
+    enable_metrics: input.body.enable_metrics,
+    session_type: input.sessionType,
+  };
 }
 
 Deno.serve(async (req: Request) => {
-  const cors = handleCors(req);
-  if (cors) return cors;
+  const corsResponse = handleCors(req);
 
-  const headers = getCorsHeaders(req);
+  if (corsResponse) {
+    return corsResponse;
+  }
+
+  const corsHeaders = getCorsHeaders(req);
+
+  if (req.method !== "POST") {
+    return json(corsHeaders, 405, {
+      error: "Method not allowed.",
+      code: "METHOD_NOT_ALLOWED",
+    });
+  }
+
+  const auth = await authenticateRequest(req);
+
+  if (auth.error) {
+    await logAuthFailure({
+      req,
+      functionName: FUNCTION_NAME,
+      reason: "Missing or invalid access token.",
+    });
+
+    return withCorsHeaders(req, auth.error);
+  }
+
+  const { user } = auth.context;
+
+  const rateLimitResult = checkRateLimit({
+    key: createRateLimitKey(FUNCTION_NAME, user.id),
+    ...RATE_LIMIT_PRESETS.SESSION_ACTION,
+  });
+
+  if (!rateLimitResult.allowed) {
+    await logRateLimitBlocked({
+      req,
+      userId: user.id,
+      functionName: FUNCTION_NAME,
+      limit: rateLimitResult.limit,
+      retryAfterSeconds: rateLimitResult.retryAfterSeconds,
+    });
+
+    return withCorsHeaders(req, rateLimitResponse(rateLimitResult));
+  }
+
+  const validation = await parseAndValidateRequest(req, corsHeaders);
+
+  if (!validation.ok) {
+    await logValidationFailure({
+      req,
+      userId: user.id,
+      functionName: FUNCTION_NAME,
+      details: validation.details,
+    });
+
+    return validation.response;
+  }
+
+  const body = validation.data;
   const db = createServiceClient();
 
+  const sessionType = toSessionType(body);
+  const company = sanitizeShortText(body.company);
+  const role = sanitizeShortText(body.role);
+  const durationMinutes = body.duration_minutes;
+  const questionCount = body.question_count;
+
+  const nowIso = new Date().toISOString();
+  const sinceIso = new Date(
+    Date.now() - SESSION_LOOKBACK_HOURS * 60 * 60 * 1000
+  ).toISOString();
+
+  const config = buildConfig({
+    body,
+    sessionType,
+    durationMinutes,
+    questionCount,
+    company,
+    role,
+  });
+
   try {
-    // ── AUTH ─────────────────────────────────────────────────────
-    const authHeader =
-      req.headers.get("authorization") ?? req.headers.get("Authorization") ?? "";
-
-    if (!/^bearer\s+/i.test(authHeader)) {
-      return json(headers, 401, { error: "Unauthorized" });
-    }
-
-    const token = authHeader.replace(/^bearer\s+/i, "");
-    const {
-      data: { user },
-      error: authErr,
-    } = await db.auth.getUser(token);
-
-    if (authErr || !user) {
-      return json(headers, 401, { error: "Unauthorized" });
-    }
-
-    // ── BODY PARSE & VALIDATION ──────────────────────────────────
-    const body = await req.json().catch(() => null);
-    if (!body) {
-      return json(headers, 400, { error: "Invalid JSON body" });
-    }
-
-    const rawType = String(body.session_type ?? body.type ?? "mock");
-    const sessionType = rawType === "live" ? "live" : "mock";
-    const interviewType: string = body.interview_type ?? "behavioural";
-    const company: string | null = body.company ?? null;
-    const role: string | null = body.role ?? null;
-    const resumeId: string | null = body.resume_id ?? null;
-    const jdId: string | null = body.jd_id ?? null;
-
-    const durationMinutes: number = clampNumber(
-      body.duration_minutes ?? 30,
-      15,
-      45,
-    );
-    const questionCount: number = clampNumber(
-      body.question_count ?? 10,
-      5,
-      20,
-    );
-
-    const personalityType: string =
-      body.personality_type ?? "neutral"; // strict | friendly | neutral | panel [file:1]
-
-    if (
-      !["strict", "friendly", "neutral", "panel"].includes(personalityType)
-    ) {
-      return json(headers, 400, { error: "Invalid personality_type" });
-    }
-
-    const enableRecording: boolean = !!body.enable_recording;
-    const enableTranscription: boolean = body.enable_transcription ?? true;
-    const enableMetrics: boolean = body.enable_metrics ?? true;
-
-    // ── INSERT SESSION ROW ───────────────────────────────────────
-    const nowIso = new Date().toISOString();
-
-    const config = {
-      company,
-      role,
-      interview_type: interviewType,
-      question_count: questionCount,
-      time_per_question_seconds: Math.round(
-        (durationMinutes * 60) / questionCount,
-      ),
-      model: body.model ?? "gemini-1-5-flash",
-      hint_style: body.hint_style ?? "balanced",
-      include_warmup: false,
-      resume_id: resumeId,
-      jd_id: jdId,
-      focus_areas: body.focus_areas ?? [],
-      duration_minutes: durationMinutes,
-      personality_type: personalityType,
-      enable_recording: enableRecording,
-      enable_transcription: enableTranscription,
-      enable_metrics: enableMetrics,
-    };
-
-    const sinceIso = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
-
     await db
       .from("sessions")
-      .update({ status: "abandoned", ended_at: nowIso })
+      .update({
+        status: "abandoned",
+        ended_at: nowIso,
+      })
       .eq("user_id", user.id)
       .eq("type", sessionType)
       .in("status", ["pending", "active"])
       .lt("created_at", sinceIso);
 
-    const { data: existing, error: lookupError } = await db
+    const { data: existingData, error: lookupError } = await db
       .from("sessions")
       .select("id, created_at, status")
       .eq("user_id", user.id)
       .eq("type", sessionType)
       .in("status", ["pending", "active"])
       .gte("created_at", sinceIso)
-      .order("created_at", { ascending: false })
+      .order("created_at", {
+        ascending: false,
+      })
       .limit(1)
       .maybeSingle();
 
     if (lookupError) {
       console.error("[start-session] Lookup error:", lookupError.message);
-      return json(headers, 500, { error: "Could not start session" });
+
+      return json(corsHeaders, 500, {
+        error: "Could not start session.",
+        code: "SESSION_LOOKUP_FAILED",
+      });
     }
+
+    const existing = existingData as ExistingSessionRow | null;
 
     if (existing?.id) {
-      const activePatch = existing.status === "active"
-        ? { status: "active" }
-        : { status: "active", started_at: nowIso };
-      const { error: activeError } = await db
+      const activePatch =
+        existing.status === "active"
+          ? {
+              status: "active",
+            }
+          : {
+              status: "active",
+              started_at: nowIso,
+            };
+
+      const { error: activationError } = await db
         .from("sessions")
         .update(activePatch)
-        .eq("id", existing.id);
-      if (activeError) {
-        console.error("[start-session] Reuse activation error:", activeError.message);
-        return json(headers, 500, { error: "Could not start session" });
+        .eq("id", existing.id)
+        .eq("user_id", user.id);
+
+      if (activationError) {
+        console.error(
+          "[start-session] Reuse activation error:",
+          activationError.message
+        );
+
+        return json(corsHeaders, 500, {
+          error: "Could not start session.",
+          code: "SESSION_ACTIVATION_FAILED",
+        });
       }
-      return json(headers, 200, { session_id: existing.id, config, started_at: nowIso, reused: true });
+
+      await logAuditEventFromRequest({
+        req,
+        userId: user.id,
+        action: "SESSION_START",
+        resourceType: "session",
+        resourceId: existing.id,
+        status: "success",
+        metadata: {
+          reused: true,
+          sessionType,
+          interviewType: config.interview_type,
+          questionCount,
+          durationMinutes,
+        },
+      });
+
+      return json(corsHeaders, 200, {
+        session_id: existing.id,
+        config,
+        started_at: nowIso,
+        reused: true,
+      });
     }
 
-    const { data, error } = await db
+    const { data: createdData, error: insertError } = await db
       .from("sessions")
       .insert({
         user_id: user.id,
         type: sessionType,
         status: "active",
-        model_used: toDbModel(config.model),
-        title: company ? `${sessionType === "live" ? "Live" : "Mock"} — ${company}` : `${sessionType === "live" ? "Live co-pilot" : "Mock interview"}`,
-        document_id: resumeId,
-        jd_id: jdId,
+        model_used: config.model,
+        title: buildSessionTitle({
+          sessionType,
+          company,
+        }),
+        document_id: body.resume_id ?? null,
+        jd_id: body.jd_id ?? null,
         duration_seconds: durationMinutes * 60,
         started_at: nowIso,
         ended_at: null,
@@ -160,32 +549,66 @@ Deno.serve(async (req: Request) => {
       .select("id")
       .single();
 
-    if (error || !data) {
-      console.error("[start-session] Insert error:", error?.message);
-      return json(headers, 500, { error: "Could not create session" });
+    if (insertError || !createdData) {
+      console.error("[start-session] Insert error:", insertError?.message);
+
+      return json(corsHeaders, 500, {
+        error: "Could not create session.",
+        code: "SESSION_CREATE_FAILED",
+      });
     }
 
-    return json(headers, 200, {
-      session_id: data.id,
+    const created = createdData as CreatedSessionRow;
+
+    await logAuditEventFromRequest({
+      req,
+      userId: user.id,
+      action: "SESSION_START",
+      resourceType: "session",
+      resourceId: created.id,
+      status: "success",
+      metadata: {
+        reused: false,
+        sessionType,
+        interviewType: config.interview_type,
+        questionCount,
+        durationMinutes,
+      },
+    });
+
+    return json(corsHeaders, 200, {
+      session_id: created.id,
       config,
       started_at: nowIso,
+      reused: false,
     });
-  } catch (err) {
-    console.error("[start-session] Unhandled error:", err);
-    return json(headers, 500, { error: "Internal server error" });
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Unexpected start-session error.";
+
+    console.error("[start-session] Unhandled error:", message);
+
+    await logAuditEventFromRequest({
+      req,
+      userId: user.id,
+      action: "SESSION_START",
+      resourceType: "session",
+      resourceId: null,
+      status: "failure",
+      metadata: {
+        reason: message,
+        sessionType,
+      },
+    });
+
+    return json(corsHeaders, 500, {
+      error: "Internal server error.",
+      code: "INTERNAL_ERROR",
+    });
   }
 });
-
-/* ──────────────────────────────────────────────────────────────── */
-
-function json(headers: HeadersInit, status: number, body: unknown): Response {
-  return new Response(JSON.stringify(body), {
-    status,
-    headers: { ...headers, "Content-Type": "application/json" },
-  });
-}
-
-function clampNumber(value: number, min: number, max: number): number {
-  if (!Number.isFinite(value)) return min;
-  return Math.min(max, Math.max(min, Math.floor(value)));
-}
+//
+// Production hardening included:
+// - CORS handling
+// - POST-only method enforcement
+// - centralized JWT authentication
