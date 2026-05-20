@@ -1,12 +1,18 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// priceCalculator.ts — Pricing math, discount logic, and cost estimation
-// Handles yearly savings, credit top-up pricing, and per-feature cost calc.
-// ─────────────────────────────────────────────────────────────────────────────
+// src/lib/billing/priceCalculator.ts// src/lib/b Source Stripe price IDs only from ENV
+// - Keep credit-cost estimates aligned with backend credit actions
+// - Provide safe formatting and recommendation helpers
 
-import { PLANS, PLAN_ORDER, type PlanId, type BillingInterval } from "./subscriptionManager";
+import {
+  PLANS,
+  PLAN_ORDER,
+  type PlanId,
+  type BillingInterval,
+} from "@/lib/billing/subscriptionManager";
 import { ENV } from "@/lib/env";
 
-// ─── Credit Top-Up Packs ──────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Credit Top-Up Packs
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface CreditPack {
   id: string;
@@ -28,7 +34,7 @@ export const CREDIT_PACKS: CreditPack[] = [
   {
     id: "pack_150",
     credits: 150,
-    priceUsdCents: 1299,
+    priceUsdCents: 1_299,
     label: "150 Credits",
     badge: "Most Popular",
     stripePriceId: ENV.STRIPE_PRICE_CREDITS_150,
@@ -36,75 +42,112 @@ export const CREDIT_PACKS: CreditPack[] = [
   {
     id: "pack_500",
     credits: 500,
-    priceUsdCents: 3999,
+    priceUsdCents: 3_999,
     label: "500 Credits",
     badge: "Best Value",
     stripePriceId: ENV.STRIPE_PRICE_CREDITS_500,
   },
 ];
 
-// ─── Per-Feature Credit Costs ─────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Per-Feature Credit Costs
+// Keep these aligned with Supabase Edge Function costs.
+// ─────────────────────────────────────────────────────────────────────────────
 
 export const CREDIT_COSTS: Record<string, number> = {
-  live_answer:         3,   // generate one live answer
-  live_hint:           1,   // generate one hint
-  live_feedback:       2,   // post-answer feedback
-  star_builder:        2,   // build one STAR answer
-  rephraser:           1,   // rephrase an answer
-  company_research:    5,   // research one company
-  coding_hint:         2,   // coding problem hint
-  system_design:       5,   // system design guide
-  session_debrief:     8,   // full session debrief
-  mock_session:        10,  // full mock interview session
-  ai_coach_message:    2,   // one coach chat message
-  resume_analysis:     5,   // analyze resume vs JD
-  screenshot_capture:  1,   // capture screen context
+  // Live / AI
+  live_answer: 2,
+  live_hint: 1,
+  live_feedback: 2,
+
+  // Question generation / debrief / coach
+  generate_questions: 3,
+  session_debrief: 10,
+  ai_coach_message: 1,
+
+  // Prep tools
+  star_builder: 2,
+  rephraser: 1,
+  company_research: 5,
+  coding_hint: 2,
+  system_design: 5,
+
+  // Sessions / documents
+  mock_session: 10,
+  resume_analysis: 5,
+  screenshot_capture: 1,
 };
 
-// ─── Price Formatting ─────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Price Formatting
+// ─────────────────────────────────────────────────────────────────────────────
+
+function normalizeCents(cents: number): number {
+  if (!Number.isFinite(cents)) {
+    return 0;
+  }
+
+  return Math.max(0, Math.round(cents));
+}
 
 /**
- * Format USD cents to a display string.
- * @example formatPrice(1900) → "$19.00"
- * @example formatPrice(1900, true) → "$19"
+ * Format USD cents to display string.
+ *
+ * @example
+ * formatPrice(1900) => "$19.00"
+ * formatPrice(1900, true) => "$19"
  */
 export function formatPrice(
   cents: number,
   hideDecimals = false,
   currency = "USD"
 ): string {
-  if (cents === 0) return "Free";
+  const safeCents = normalizeCents(cents);
 
-  const amount = cents / 100;
-  const formatted = new Intl.NumberFormat("en-US", {
+  if (safeCents === 0) {
+    return "Free";
+  }
+
+  const amount = safeCents / 100;
+
+  return new Intl.NumberFormat("en-US", {
     style: "currency",
     currency,
     minimumFractionDigits: hideDecimals ? 0 : 2,
     maximumFractionDigits: hideDecimals ? 0 : 2,
   }).format(amount);
-
-  return formatted;
 }
 
 /**
  * Format a price with billing interval suffix.
- * @example formatPriceWithInterval(3900, "monthly") → "$39/mo"
+ *
+ * Note:
+ * yearlyPrice in PLANS is stored as effective monthly price
+ * when billed annually.
  */
 export function formatPriceWithInterval(
   cents: number,
   interval: BillingInterval
 ): string {
-  if (cents === 0) return "Free";
-  const base = formatPrice(cents, true);
-  return `${base}/${interval === "monthly" ? "mo" : "mo"}`;
+  const safeCents = normalizeCents(cents);
+
+  if (safeCents === 0) {
+    return "Free";
+  }
+
+  const base = formatPrice(safeCents, true);
+
+  if (interval === "yearly") {
+    return `${base}/mo billed yearly`;
+  }
+
+  return `${base}/mo`;
 }
 
-// ─── Savings Calculator ───────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Savings Calculator
+// ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Calculate how much a user saves by choosing yearly over monthly.
- * Returns both the absolute saving in cents and the percentage.
- */
 export function calculateYearlySavings(planId: PlanId): {
   savedCents: number;
   savedPercent: number;
@@ -114,107 +157,182 @@ export function calculateYearlySavings(planId: PlanId): {
   const plan = PLANS[planId];
 
   if (!plan || plan.monthlyPrice === 0) {
-    return { savedCents: 0, savedPercent: 0, monthlyTotal: 0, yearlyTotal: 0 };
+    return {
+      savedCents: 0,
+      savedPercent: 0,
+      monthlyTotal: 0,
+      yearlyTotal: 0,
+    };
   }
 
-  const monthlyTotal = plan.monthlyPrice * 12;
-  const yearlyTotal  = plan.yearlyPrice * 12;
-  const savedCents   = monthlyTotal - yearlyTotal;
-  const savedPercent = Math.round((savedCents / monthlyTotal) * 100);
+  const monthlyTotal = normalizeCents(plan.monthlyPrice) * 12;
+  const yearlyTotal = normalizeCents(plan.yearlyPrice) * 12;
+  const savedCents = Math.max(0, monthlyTotal - yearlyTotal);
 
-  return { savedCents, savedPercent, monthlyTotal, yearlyTotal };
+  const savedPercent =
+    monthlyTotal > 0 ? Math.round((savedCents / monthlyTotal) * 100) : 0;
+
+  return {
+    savedCents,
+    savedPercent,
+    monthlyTotal,
+    yearlyTotal,
+  };
 }
 
 /**
- * Get the effective monthly price for a given plan and interval.
+ * Get effective monthly price for given plan and interval.
  */
 export function getEffectiveMonthlyPrice(
   planId: PlanId,
   interval: BillingInterval
 ): number {
   const plan = PLANS[planId];
-  if (!plan) return 0;
-  return interval === "yearly" ? plan.yearlyPrice : plan.monthlyPrice;
+
+  if (!plan) {
+    return 0;
+  }
+
+  return interval === "yearly"
+    ? normalizeCents(plan.yearlyPrice)
+    : normalizeCents(plan.monthlyPrice);
 }
 
 /**
- * Get the total charge amount for a billing period.
+ * Get total charge amount for billing period.
  */
 export function getBillingAmount(
   planId: PlanId,
   interval: BillingInterval
 ): number {
   const plan = PLANS[planId];
-  if (!plan) return 0;
 
-  if (interval === "yearly") return plan.yearlyPrice * 12;
-  return plan.monthlyPrice;
+  if (!plan) {
+    return 0;
+  }
+
+  if (interval === "yearly") {
+    return normalizeCents(plan.yearlyPrice) * 12;
+  }
+
+  return normalizeCents(plan.monthlyPrice);
 }
 
-// ─── Upgrade Cost Estimator ───────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Upgrade Cost Estimator
+// ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Estimate proration cost when upgrading mid-cycle.
- * Returns how much will be charged immediately.
- *
- * @param currentPlanCents  - monthly price of current plan in cents
- * @param newPlanCents      - monthly price of new plan in cents
- * @param daysRemainingInCycle - days left in billing cycle
- * @param totalDaysInCycle  - total days in billing cycle (usually 30)
- */
 export function estimateUpgradeProration(
   currentPlanCents: number,
   newPlanCents: number,
   daysRemainingInCycle: number,
   totalDaysInCycle = 30
 ): number {
-  if (newPlanCents <= currentPlanCents) return 0;
+  const current = normalizeCents(currentPlanCents);
+  const next = normalizeCents(newPlanCents);
 
-  const dailyDiff = (newPlanCents - currentPlanCents) / totalDaysInCycle;
-  const prorationCents = Math.round(dailyDiff * daysRemainingInCycle);
+  if (next <= current) {
+    return 0;
+  }
+
+  if (
+    !Number.isFinite(daysRemainingInCycle) ||
+    !Number.isFinite(totalDaysInCycle) ||
+    daysRemainingInCycle <= 0 ||
+    totalDaysInCycle <= 0
+  ) {
+    return 0;
+  }
+
+  const cappedDaysRemaining = Math.min(
+    Math.max(0, daysRemainingInCycle),
+    totalDaysInCycle
+  );
+
+  const dailyDifference = (next - current) / totalDaysInCycle;
+  const prorationCents = Math.round(dailyDifference * cappedDaysRemaining);
+
   return Math.max(0, prorationCents);
 }
 
-// ─── Credit Value Calculator ──────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Credit Value Calculator
+// ─────────────────────────────────────────────────────────────────────────────
 
-/**
- * Calculate the cost per credit for a given pack.
- * @example getCostPerCredit(CREDIT_PACKS[1]) → 8.66 cents/credit
- */
 export function getCostPerCredit(pack: CreditPack): number {
-  return pack.priceUsdCents / pack.credits;
+  if (!pack.credits || pack.credits <= 0) {
+    return 0;
+  }
+
+  return normalizeCents(pack.priceUsdCents) / pack.credits;
 }
 
-/**
- * Find the best value credit pack (lowest cost per credit).
- */
 export function getBestValueCreditPack(): CreditPack {
   return [...CREDIT_PACKS].sort(
-    (a, b) => getCostPerCredit(a) - getCostPerCredit(b)
+    (left, right) => getCostPerCredit(left) - getCostPerCredit(right)
   )[0];
 }
 
-/**
- * Estimate how many credits a user needs per month based on usage pattern.
- */
+export function getEnabledCreditPacks(): CreditPack[] {
+  return CREDIT_PACKS.filter(
+    (pack) =>
+      typeof pack.stripePriceId === "string" &&
+      pack.stripePriceId.trim().length > 0
+  );
+}
+
+export function getCreditPackById(packId: string): CreditPack | null {
+  return CREDIT_PACKS.find((pack) => pack.id === packId) ?? null;
+}
+
+export function getCreditPackByStripePriceId(
+  stripePriceId: string
+): CreditPack | null {
+  return (
+    CREDIT_PACKS.find((pack) => pack.stripePriceId === stripePriceId) ?? null
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Monthly Usage Estimator
+// ─────────────────────────────────────────────────────────────────────────────
+
 export function estimateMonthlyCredits(usagePattern: {
   liveSessionsPerMonth: number;
   mockSessionsPerMonth: number;
   prepToolUsesPerMonth: number;
   coachMessagesPerMonth: number;
 }): number {
-  const {
-    liveSessionsPerMonth,
-    mockSessionsPerMonth,
-    prepToolUsesPerMonth,
-    coachMessagesPerMonth,
-  } = usagePattern;
+  const liveSessionsPerMonth = Math.max(
+    0,
+    Math.floor(usagePattern.liveSessionsPerMonth || 0)
+  );
 
-  // Estimate credits per session/use
-  const liveCredits  = liveSessionsPerMonth  * (CREDIT_COSTS.live_answer * 10 + CREDIT_COSTS.live_hint * 5);
-  const mockCredits  = mockSessionsPerMonth  * CREDIT_COSTS.mock_session;
-  const prepCredits  = prepToolUsesPerMonth  * CREDIT_COSTS.star_builder;
-  const coachCredits = coachMessagesPerMonth * CREDIT_COSTS.ai_coach_message;
+  const mockSessionsPerMonth = Math.max(
+    0,
+    Math.floor(usagePattern.mockSessionsPerMonth || 0)
+  );
+
+  const prepToolUsesPerMonth = Math.max(
+    0,
+    Math.floor(usagePattern.prepToolUsesPerMonth || 0)
+  );
+
+  const coachMessagesPerMonth = Math.max(
+    0,
+    Math.floor(usagePattern.coachMessagesPerMonth || 0)
+  );
+
+  const liveCredits =
+    liveSessionsPerMonth *
+    (CREDIT_COSTS.live_answer * 10 + CREDIT_COSTS.live_hint * 5);
+
+  const mockCredits = mockSessionsPerMonth * CREDIT_COSTS.mock_session;
+
+  const prepCredits = prepToolUsesPerMonth * CREDIT_COSTS.star_builder;
+
+  const coachCredits =
+    coachMessagesPerMonth * CREDIT_COSTS.ai_coach_message;
 
   return Math.ceil(liveCredits + mockCredits + prepCredits + coachCredits);
 }
@@ -223,15 +341,26 @@ export function estimateMonthlyCredits(usagePattern: {
  * Recommend a plan based on estimated monthly credit needs.
  */
 export function recommendPlan(estimatedMonthlyCredits: number): PlanId {
+  const requiredCredits = Math.max(0, Math.ceil(estimatedMonthlyCredits || 0));
+
   for (const planId of PLAN_ORDER) {
     const plan = PLANS[planId];
-    if (plan.creditsPerMonth === -1) return planId; // unlimited
-    if (plan.creditsPerMonth >= estimatedMonthlyCredits) return planId;
+
+    if (plan.creditsPerMonth === -1) {
+      return planId;
+    }
+
+    if (plan.creditsPerMonth >= requiredCredits) {
+      return planId;
+    }
   }
+
   return "elite";
 }
 
-// ─── Comparison Helpers ───────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Comparison Helpers
+// ─────────────────────────────────────────────────────────────────────────────
 
 export interface PlanComparison {
   planId: PlanId;
@@ -243,25 +372,29 @@ export interface PlanComparison {
   isRecommended: boolean;
 }
 
-/**
- * Build a comparison table row for a plan.
- */
 export function buildPlanComparison(
   planId: PlanId,
   estimatedCreditsNeeded = 0
 ): PlanComparison {
   const plan = PLANS[planId];
-  const { savedPercent, yearlyTotal } = calculateYearlySavings(planId);
+  const { savedPercent } = calculateYearlySavings(planId);
 
   return {
     planId,
-    monthlyPrice:         formatPriceWithInterval(plan.monthlyPrice, "monthly"),
-    yearlyPrice:          formatPriceWithInterval(plan.yearlyPrice, "yearly"),
-    yearlySaving:         savedPercent > 0 ? `Save ${savedPercent}%` : "",
-    yearlySavingPercent:  savedPercent,
-    creditsPerMonth:      plan.creditsPerMonth === -1
-                            ? "Unlimited"
-                            : `${plan.creditsPerMonth} credits/mo`,
-    isRecommended:        recommendPlan(estimatedCreditsNeeded) === planId,
+    monthlyPrice: formatPriceWithInterval(plan.monthlyPrice, "monthly"),
+    yearlyPrice: formatPriceWithInterval(plan.yearlyPrice, "yearly"),
+    yearlySaving: savedPercent > 0 ? `Save ${savedPercent}%` : "",
+    yearlySavingPercent: savedPercent,
+    creditsPerMonth:
+      plan.creditsPerMonth === -1
+        ? "Unlimited"
+        : `${plan.creditsPerMonth} credits/mo`,
+    isRecommended: recommendPlan(estimatedCreditsNeeded) === planId,
   };
 }
+//
+// Pricing math, discount logic, credit-pack pricing, and cost estimation.
+//
+// SECURITY / ARCHITECTURE PURPOSE:
+// - Keep frontend pricing display centralized
+// - Never hardcode Stripe price IDs directly in UI components
