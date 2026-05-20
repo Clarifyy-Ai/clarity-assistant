@@ -1,44 +1,43 @@
-# Fix Plan — 7 Issues
+# Production Hardening — 10 Sequential Passes
 
-Guardrail: changes are scoped to the listed areas. Working features (auth hydration, RLS, session orchestration) are not touched.
+Per your user-memory rule (component-by-component, guardrails, don't break working features), I'll execute these as **10 separate approval gates**, not a single mega-change. Each pass is scoped, verifiable, and reversible.
 
-## 1. Unified overlay (Mock layout reused by Live)
-- `src/pages/app/live/LiveOverlay.tsx`: replace its bespoke `<OverlayWindow>` children/props block with the same composition `MockSession.tsx` uses (same tabs, header, toolbar, chat panel, hint panel, question bar).
-- Keep live-only wiring: panic button, system-audio capture status, `LiveNetworkMonitor`, mic mute — slot them into the Mock layout's existing toolbar/badge area (no new screens).
-- Delete duplicate stealth/proctor blocks already handled inside `OverlayWindow` to avoid double mounts.
-- `LiveRehearsal.tsx`: same overlay composition for consistency.
+## Guardrails (apply to all passes)
+- Do NOT modify auth flows, RLS, or edge functions outside the pass's scope.
+- Do NOT touch `src/integrations/supabase/types.ts` (auto-generated).
+- Every DB change goes through `supabase--migration` (your approval required).
+- Every edge function change is deployed + smoke-tested before moving on.
+- No `@ts-nocheck` additions; existing ones removed only when underlying types are fixed.
 
-## 2. Deepgram — surface real errors
-- `supabase/functions/deepgram-token/index.ts`: return `{ error, code, hint }` JSON with the upstream Deepgram status text instead of generic 500.
-- `src/lib/audio/deepgramStream.ts`: when token fetch fails, propagate the JSON `error` + `hint` to `onError` (today it swallows into a generic "No Deepgram token available").
-- On WS `close` with non-1000 code, emit `onError(new Error(`Deepgram WS ${code}: ${reason}`))` and toast via the live controller.
+## Pass order & scope
 
-## 3. Chat history + input
-- `OverlayChatInput.tsx`: confirm submit handler calls `addChatMessage` and resets input; fix the disabled-state guard (`is_chat_generating` blocks typing — should only block send).
-- Persist `chat_history` by adding it to the existing `persist` partialize in `overlayStore.ts` (keyed per `session_id`) so history survives panel toggles/refresh during a session.
-- `OverlayChatPanel.tsx`: stop clearing history on tab switch (the reset is currently triggered by an effect on tab change — remove it).
+| # | Pass | Scope | Risk |
+|---|------|-------|------|
+| 1 | **RLS: `profiles_own_update`** | 1 migration + audit ~5 frontend files that update profiles | Medium — wrong column whitelist breaks settings |
+| 2 | **Admin auth race + Admin.tsx** | `authStore`, `ProtectedRoute`, `Login.tsx`, `AdminLayout.tsx`, `Admin.tsx` | Medium — could lock users out |
+| 3 | **Stripe webhook dedupe** | Pick canonical, delete other, update Stripe dashboard URL note | Low — but irreversible delete |
+| 4 | **Edge function audit (38 fns)** | Apply standard auth+CORS+validation pattern; add rate-limit to AI fns | High — biggest blast radius |
+| 5 | **Mock test creation flow** | `create-test`, `select-test-questions`, `generate-practice-questions`, `TestConfigure.tsx` | Medium |
+| 6 | **Deepgram token + retry** | `deepgram-token` EF, `deepgramStream.ts`, `useAudioSession.ts` toast surface | Medium |
+| 7 | **Overlay minimize/restore/chat** | `overlayStore`, `OverlayWindow`, toolbar, chat panel, settings | Low — UI only |
+| 8 | **Settings forms + remove @ts-nocheck + mock data** | ~13 hook files, `AdminModelCosts`, `CodingHints`, settings pages | Medium — type fixes can cascade |
+| 9 | **Router v7 flags, lazy routes, ErrorBoundary, testids, smoke tests** | `App.tsx`, `main.tsx`, add `e2e/smoke.spec.ts` | Low |
+| 10 | **Sentry + structured logs + `model_usage_logs` table + robots.txt** | New migration, `_shared/utils.ts`, `main.tsx`, `robots.txt` | Low |
 
-## 4. Admin login routing
-- `src/pages/auth/Login.tsx`: after `signIn`, await `authStore.loadProfile()` (already triggered) and then branch:
-  - `if (isAdmin) navigate('/app/admin')` else `navigate(from || '/app/dashboard')`.
-- `ProtectedRoute`/`AdminLayout` already use `has_role()` via `user_roles` — no DB change.
-- Verify the logged-in admin actually has a row in `public.user_roles` (`role='admin'`). If missing, surface a one-time SQL snippet to the user.
+## Per-pass workflow
 
-## 5. Mock test creation
-- `supabase/functions/create-test/index.ts`: current code rejects with 400 when `question_ids` is empty. Wizard sends a config without ids and expects server to select via `select-test-questions`. Fix by: if `question_ids` empty, call `select-test-questions` logic inline (or invoke it) using `config.subjects + difficulty_distribution + count` to populate `question_ids` before insert.
-- Frontend `TestConfigure.tsx`: ensure it sends `config.count` and `config.subjects`; show edge-function error body in toast instead of generic "failed".
+For each pass I will:
+1. Read all affected files (parallel).
+2. Make the minimum changes specified.
+3. Deploy any touched edge functions; smoke-test via `curl_edge_functions`.
+4. Report what changed, what was verified, and what's still risky.
+5. **Stop and wait for your "next pass" confirmation** before starting the next one.
 
-## 6. Debrief
-- `generate-debrief`: works only when `session_answers` exist. Add a fallback: if no answers but `sessions.transcript` is present, build prompt from transcript so debrief still generates.
-- Frontend `Debrief.tsx`: pass `session_id` (UUID), surface server error text.
-- Verify `session_debriefs` insert columns match parsed schema (drop unknown keys to avoid PG error).
+## Open decisions before I start
 
-## 7. Analytics page
-- `src/pages/app/Analytics.tsx` + `analytics-dashboard` edge function: ensure function returns 200 with zeroed payload when user has no sessions (current code likely throws on empty aggregates). Add `coalesce` defaults server-side and a friendly EmptyState client-side.
+1. **Pass 4 scope** — auditing 38 edge functions in one pass is huge. I recommend splitting it into 4a (auth-critical: deduct-credits, deepgram-token, create-checkout, delete-account, export-user-data, AI generators) and 4b (the rest). OK to split?
+2. **Pass 10 Sentry** — requires you to add `VITE_SENTRY_DSN` secret/env. Provide DSN, or skip Sentry and keep only structured logs + robots.txt?
+3. **Pass 3 Stripe** — I'll pick `stripe-webhook` (shorter path, Stripe convention) as canonical and delete `process-stripe-webhook`. If `process-stripe-webhook` is the one currently wired in your Stripe Dashboard, deleting it breaks live payments. **Confirm which URL is wired in Stripe Dashboard today** before I proceed with Pass 3.
+4. **Start point** — begin with Pass 1 (RLS) now, or reorder?
 
-## Verification
-- After edits: deploy edge functions, run `supabase--curl_edge_functions` against `create-test`, `generate-debrief`, `analytics-dashboard`, `deepgram-token` with the preview session token.
-- Manual: login as admin → expect `/app/admin`; open Live overlay → expect Mock layout; send chat → message persists; create mock test with no manual ids → succeeds.
-
-## Out of scope
-No schema migrations, no auth flow changes, no styling redesign beyond reusing the existing Mock overlay composition.
+Reply with answers + "start Pass 1" and I'll begin.
