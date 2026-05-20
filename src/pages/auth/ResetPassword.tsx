@@ -1,25 +1,41 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// ResetPassword.tsx — Two-phase password reset page.
-// Phase 1 (/forgot-password): user enters email → sends reset link.
-// Phase 2 (/reset-password):  user arrives via email link → sets new password.
-// Supabase handles the token via the URL hash (#access_token=...).
-// ─────────────────────────────────────────────────────────────────────────────
+// src/pages/auth/ResetPassword.tsx
+//
+// Two-phase password reset page.
+//
+// Phase 1:
+// /forgot-password
+// User enters email → sends reset link.
+//
+// Phase 2:
+// /reset-password
+// User arrives via recovery link → sets new password.
+//
+// Supabase handles the recovery token through URL hash/search parameters.
+// This page validates forms using FormWrapper + Zod schemas.
 
-import { useState, useEffect, type ChangeEvent, type FormEvent }  from "react";
-import { useNavigate, Link }    from "react-router-dom";
+import { useEffect, useMemo, useState } from "react";
+import { Link, useNavigate } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
-
-import { supabase }             from "@/lib/supabase/client";
-import { ROUTES }               from "@/lib/constants";
 import {
-  validateEmail,
-  validatePassword,
-  getPasswordStrength,
-} from "@/lib/validators";
+  Mail,
+  Lock,
+  Eye,
+  EyeOff,
+  ArrowLeft,
+  CheckCircle2,
+  AlertCircle,
+  Loader2,
+  KeyRound,
+} from "lucide-react";
 
-import { Button }               from "@/components/ui/Button";
-import { Input }                from "@/components/ui/Input";
-import { Label }                from "@/components/ui/label";
+import { supabase } from "@/lib/supabase/client";
+import { ROUTES } from "@/lib/constants";
+import { useAuthStore } from "@/store/authStore";
+
+import { FormWrapper } from "@/components/common/FormWrapper";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
+import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -27,46 +43,162 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-}                               from "@/components/ui/Card";
+} from "@/components/ui/Card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { cn }                   from "@/lib/utils";
 
 import {
-  Mail, Lock, Eye, EyeOff,
-  ArrowLeft, CheckCircle2,
-  AlertCircle, Loader2, KeyRound,
-}                               from "lucide-react";
+  resetPasswordSchema,
+  updatePasswordSchema,
+  type ResetPasswordInput,
+  type UpdatePasswordInput,
+} from "@/lib/validators";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
+import { cn } from "@/lib/utils";
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Types
+// ─────────────────────────────────────────────────────────────────────────────
 
 type PageMode = "request" | "reset" | "success-request" | "success-reset";
 
-interface FormState {
-  email:           string;
-  password:        string;
-  confirmPassword: string;
+type PasswordStrength = {
+  score: number;
+  label: string;
+  color: "red" | "orange" | "yellow" | "blue" | "green";
+  feedback: string[];
+  isAcceptable: boolean;
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+
+function isRecoveryUrl(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const pathname = window.location.pathname;
+  const hash = window.location.hash;
+  const search = window.location.search;
+
+  return (
+    pathname.includes("reset-password") &&
+    (hash.includes("access_token") ||
+      hash.includes("type=recovery") ||
+      search.includes("type=recovery"))
+  );
 }
 
-interface FormErrors {
-  email?:          string;
-  password?:       string;
-  confirmPassword?: string;
-  general?:        string;
+function getPasswordStrength(password: string): PasswordStrength {
+  const feedback: string[] = [];
+
+  if (!password) {
+    return {
+      score: 0,
+      label: "",
+      color: "red",
+      feedback: [],
+      isAcceptable: false,
+    };
+  }
+
+  let score = 0;
+
+  if (password.length >= 8) {
+    score += 1;
+  } else {
+    feedback.push("Use at least 8 characters.");
+  }
+
+  if (password.length >= 12) {
+    score += 1;
+  }
+
+  if (/[A-Z]/.test(password)) {
+    score += 1;
+  } else {
+    feedback.push("Add an uppercase letter.");
+  }
+
+  if (/[0-9]/.test(password)) {
+    score += 1;
+  } else {
+    feedback.push("Add a number.");
+  }
+
+  if (/[^A-Za-z0-9]/.test(password)) {
+    score += 1;
+  } else {
+    feedback.push("Add a special character.");
+  }
+
+  if (score <= 1) {
+    return {
+      score: 1,
+      label: "Weak",
+      color: "red",
+      feedback,
+      isAcceptable: false,
+    };
+  }
+
+  if (score <= 2) {
+    return {
+      score: 2,
+      label: "Fair",
+      color: "orange",
+      feedback,
+      isAcceptable: false,
+    };
+  }
+
+  if (score <= 3) {
+    return {
+      score: 3,
+      label: "Good",
+      color: "yellow",
+      feedback,
+      isAcceptable: password.length >= 8,
+    };
+  }
+
+  if (score <= 4) {
+    return {
+      score: 4,
+      label: "Strong",
+      color: "blue",
+      feedback,
+      isAcceptable: true,
+    };
+  }
+
+  return {
+    score: 5,
+    label: "Excellent",
+    color: "green",
+    feedback,
+    isAcceptable: true,
+  };
 }
 
-// ─── Password Strength Bar ────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Password Strength Bar
+// ─────────────────────────────────────────────────────────────────────────────
 
-function PasswordStrengthBar({ password }: { password: string }) {
+function PasswordStrengthBar({ password }: { password: string }): JSX.Element | null {
   const strength = getPasswordStrength(password);
 
-  if (!password) return null;
+  if (!password) {
+    return null;
+  }
 
-  const colorMap = {
-    red:    "bg-red-500",
+  const colorMap: Record<PasswordStrength["color"], string> = {
+    red: "bg-red-500",
     orange: "bg-orange-500",
     yellow: "bg-yellow-500",
-    blue:   "bg-blue-500",
-    green:  "bg-green-500",
+    blue: "bg-blue-500",
+    green: "bg-green-500",
   };
 
   return (
@@ -76,29 +208,28 @@ function PasswordStrengthBar({ password }: { password: string }) {
       exit={{ opacity: 0, height: 0 }}
       className="space-y-1.5"
     >
-      {/* Segmented bar */}
       <div className="flex gap-1">
-        {[0, 1, 2, 3, 4].map((i) => (
+        {[0, 1, 2, 3, 4].map((index) => (
           <div
-            key={i}
+            key={index}
             className={cn(
               "h-1.5 flex-1 rounded-full transition-all duration-300",
-              i <= strength.score
-                ? colorMap[strength.color]
-                : "bg-muted"
+              index < strength.score ? colorMap[strength.color] : "bg-muted"
             )}
           />
         ))}
       </div>
 
       <div className="flex items-center justify-between">
-        <span className={cn("text-xs font-medium", {
-          "text-red-500":    strength.color === "red",
-          "text-orange-500": strength.color === "orange",
-          "text-yellow-600": strength.color === "yellow",
-          "text-blue-500":   strength.color === "blue",
-          "text-green-500":  strength.color === "green",
-        })}>
+        <span
+          className={cn("text-xs font-medium", {
+            "text-red-500": strength.color === "red",
+            "text-orange-500": strength.color === "orange",
+            "text-yellow-600": strength.color === "yellow",
+            "text-blue-500": strength.color === "blue",
+            "text-green-500": strength.color === "green",
+          })}
+        >
           {strength.label}
         </span>
 
@@ -112,139 +243,122 @@ function PasswordStrengthBar({ password }: { password: string }) {
   );
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Component
+// ─────────────────────────────────────────────────────────────────────────────
 
-export default function ResetPassword() {
+export default function ResetPassword(): JSX.Element {
   const navigate = useNavigate();
 
-  // Determine mode from URL
-  const isResetMode = window.location.pathname.includes("reset-password") &&
-                      (window.location.hash.includes("access_token") ||
-                       window.location.search.includes("type=recovery"));
+  const sendPasswordReset = useAuthStore((state) => state.sendPasswordReset);
+  const updatePassword = useAuthStore((state) => state.updatePassword);
 
-  const [mode,         setMode]         = useState<PageMode>(isResetMode ? "reset" : "request");
-  const [form,         setForm]         = useState<FormState>({
-    email: "", password: "", confirmPassword: "",
-  });
-  const [errors,       setErrors]       = useState<FormErrors>({});
+  const initialMode = useMemo<PageMode>(
+    () => (isRecoveryUrl() ? "reset" : "request"),
+    []
+  );
+
+  const [mode, setMode] = useState<PageMode>(initialMode);
+  const [generalError, setGeneralError] = useState<string | null>(null);
+  const [submittedEmail, setSubmittedEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [showConfirm,  setShowConfirm]  = useState(false);
-  const [isLoading,    setIsLoading]    = useState(false);
+  const [showConfirm, setShowConfirm] = useState(false);
 
-  // Supabase uses hash params for recovery tokens — exchange them on mount
+  const strength = useMemo(() => getPasswordStrength(password), [password]);
+
   useEffect(() => {
-    if (!isResetMode) return;
+    if (mode !== "reset") {
+      return;
+    }
 
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (!session) {
-        // Token expired or invalid — go back to request
-        setMode("request");
-        setErrors({ general: "This reset link has expired. Please request a new one." });
+    let cancelled = false;
+
+    async function verifyRecoverySession(): Promise<void> {
+      try {
+        const {
+          data: { session },
+          error,
+        } = await supabase.auth.getSession();
+
+        if (cancelled) {
+          return;
+        }
+
+        if (error || !session) {
+          setMode("request");
+          setGeneralError(
+            "This reset link has expired. Please request a new one."
+          );
+        }
+      } catch {
+        if (!cancelled) {
+          setMode("request");
+          setGeneralError(
+            "This reset link could not be verified. Please request a new one."
+          );
+        }
       }
-    });
-  }, [isResetMode]);
+    }
 
-  // ── Field helpers ────────────────────────────────────────────────────────────
+    void verifyRecoverySession();
 
-  const setField = (field: keyof FormState) =>
-    (e: ChangeEvent<HTMLInputElement>) => {
-      setForm((prev) => ({ ...prev, [field]: e.target.value }));
-      if (errors[field as keyof FormErrors]) {
-        setErrors((prev) => ({ ...prev, [field]: undefined }));
-      }
+    return () => {
+      cancelled = true;
     };
+  }, [mode]);
 
-  // ── Phase 1: Request reset email ─────────────────────────────────────────────
-
-  const handleRequestReset = async (e: FormEvent) => {
-    e.preventDefault();
-
-    const emailResult = validateEmail(form.email);
-    if (!emailResult.valid) {
-      setErrors({ email: emailResult.error });
+  useEffect(() => {
+    if (mode !== "success-reset") {
       return;
     }
 
-    setIsLoading(true);
-    setErrors({});
+    const timeoutId = window.setTimeout(() => {
+      navigate(ROUTES.DASHBOARD);
+    }, 3000);
+
+    return () => {
+      window.clearTimeout(timeoutId);
+    };
+  }, [mode, navigate]);
+
+  async function handleRequestReset(data: ResetPasswordInput): Promise<void> {
+    setGeneralError(null);
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(form.email, {
-        redirectTo: `${window.location.origin}${ROUTES.RESET_PASSWORD}`,
-      });
-
-      if (error) throw error;
-
+      await sendPasswordReset(data.email);
+      setSubmittedEmail(data.email);
       setMode("success-request");
-    } catch (err) {
-      setErrors({
-        general: (err as Error).message ?? "Failed to send reset email. Please try again.",
-      });
-    } finally {
-      setIsLoading(false);
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to send reset email. Please try again.";
+
+      setGeneralError(message);
     }
-  };
+  }
 
-  // ── Phase 2: Set new password ────────────────────────────────────────────────
-
-  const handleSetPassword = async (e: FormEvent) => {
-    e.preventDefault();
-
-    const newErrors: FormErrors = {};
-
-    const passwordResult = validatePassword(form.password);
-    if (!passwordResult.valid) newErrors.password = passwordResult.error;
-
-    if (!form.confirmPassword) {
-      newErrors.confirmPassword = "Please confirm your new password.";
-    } else if (form.password !== form.confirmPassword) {
-      newErrors.confirmPassword = "Passwords do not match.";
-    }
-
-    const strength = getPasswordStrength(form.password);
-    if (strength.isAcceptable === false && !newErrors.password) {
-      newErrors.password = "Password is too weak. Add uppercase letters, numbers, or symbols.";
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
-      return;
-    }
-
-    setIsLoading(true);
-    setErrors({});
+  async function handleSetPassword(data: UpdatePasswordInput): Promise<void> {
+    setGeneralError(null);
 
     try {
-      const { error } = await supabase.auth.updateUser({
-        password: form.password,
-      });
-
-      if (error) throw error;
-
+      await updatePassword(data.password);
       setMode("success-reset");
+    } catch (error) {
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Failed to update password. The link may have expired.";
 
-      // Auto-redirect to dashboard after 3 s
-      setTimeout(() => navigate(ROUTES.DASHBOARD), 3000);
-    } catch (err) {
-      setErrors({
-        general: (err as Error).message ?? "Failed to update password. The link may have expired.",
-      });
-    } finally {
-      setIsLoading(false);
+      setGeneralError(message);
     }
-  };
-
-  // ── Render helpers ────────────────────────────────────────────────────────────
-
-  const strength = getPasswordStrength(form.password);
-
-  // ─────────────────────────────────────────────────────────────────────────────
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/30 to-background px-4 py-12">
       <AnimatePresence mode="wait">
-
-        {/* ── Phase 1: Request Reset ────────────────────────────────────── */}
+        {/* Phase 1: Request reset link */}
         {mode === "request" && (
           <motion.div
             key="request"
@@ -259,16 +373,19 @@ export default function ResetPassword() {
                 <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/20">
                   <KeyRound className="h-7 w-7 text-primary" />
                 </div>
-                <CardTitle className="text-2xl font-bold">Forgot your password?</CardTitle>
+
+                <CardTitle className="text-2xl font-bold">
+                  Forgot your password?
+                </CardTitle>
+
                 <CardDescription>
-                  Enter your email and we'll send you a reset link.
+                  Enter your email and we&apos;ll send you a reset link.
                 </CardDescription>
               </CardHeader>
 
               <CardContent className="pt-4">
-                {/* General error */}
                 <AnimatePresence>
-                  {errors.general && (
+                  {generalError && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
@@ -277,55 +394,82 @@ export default function ResetPassword() {
                     >
                       <Alert variant="destructive">
                         <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>{errors.general}</AlertDescription>
+                        <AlertDescription>{generalError}</AlertDescription>
                       </Alert>
                     </motion.div>
                   )}
                 </AnimatePresence>
 
-                <form onSubmit={handleRequestReset} className="space-y-4" noValidate>
-                  {/* Email */}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="email">Email address</Label>
-                    <div className="relative">
-                      <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                      <Input
-                        id="email"
-                        type="email"
-                        placeholder="you@example.com"
-                        value={form.email}
-                        onChange={setField("email")}
-                        autoComplete="email"
-                        autoFocus
-                        disabled={isLoading}
-                        className={cn(
-                          "pl-9",
-                          errors.email && "border-destructive focus-visible:ring-destructive"
-                        )}
-                        aria-invalid={Boolean(errors.email)}
-                        aria-describedby={errors.email ? "email-error" : undefined}
-                      />
-                    </div>
-                    {errors.email && (
-                      <p id="email-error" className="text-xs text-destructive flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" /> {errors.email}
-                      </p>
-                    )}
-                  </div>
+                <FormWrapper<ResetPasswordInput>
+                  schema={resetPasswordSchema}
+                  onSubmit={handleRequestReset}
+                  className="space-y-4"
+                  validateCsrf
+                >
+                  {({ fieldErrors, formError, isSubmitting }) => (
+                    <>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="email">Email address</Label>
 
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={isLoading}
-                    size="lg"
-                  >
-                    {isLoading ? (
-                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Sending…</>
-                    ) : (
-                      "Send reset link"
-                    )}
-                  </Button>
-                </form>
+                        <div className="relative">
+                          <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+
+                          <Input
+                            id="email"
+                            name="email"
+                            type="email"
+                            placeholder="you@example.com"
+                            autoComplete="email"
+                            autoFocus
+                            disabled={isSubmitting}
+                            className={cn(
+                              "pl-9",
+                              fieldErrors.email?.[0] &&
+                                "border-destructive focus-visible:ring-destructive"
+                            )}
+                            aria-invalid={Boolean(fieldErrors.email?.[0])}
+                            aria-describedby={
+                              fieldErrors.email?.[0] ? "email-error" : undefined
+                            }
+                          />
+                        </div>
+
+                        {fieldErrors.email?.[0] && (
+                          <p
+                            id="email-error"
+                            className="text-xs text-destructive flex items-center gap-1"
+                          >
+                            <AlertCircle className="h-3 w-3" />
+                            {fieldErrors.email[0]}
+                          </p>
+                        )}
+                      </div>
+
+                      {formError && (
+                        <Alert variant="destructive">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>{formError}</AlertDescription>
+                        </Alert>
+                      )}
+
+                      <Button
+                        type="submit"
+                        className="w-full"
+                        disabled={isSubmitting}
+                        size="lg"
+                      >
+                        {isSubmitting ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Sending…
+                          </>
+                        ) : (
+                          "Send reset link"
+                        )}
+                      </Button>
+                    </>
+                  )}
+                </FormWrapper>
               </CardContent>
 
               <CardFooter className="justify-center">
@@ -341,7 +485,7 @@ export default function ResetPassword() {
           </motion.div>
         )}
 
-        {/* ── Success: Email Sent ───────────────────────────────────────── */}
+        {/* Success: Email sent */}
         {mode === "success-request" && (
           <motion.div
             key="success-request"
@@ -356,25 +500,39 @@ export default function ResetPassword() {
                 <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
-                  transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.1 }}
+                  transition={{
+                    type: "spring",
+                    stiffness: 200,
+                    damping: 15,
+                    delay: 0.1,
+                  }}
                   className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30"
                 >
                   <CheckCircle2 className="h-9 w-9 text-green-600 dark:text-green-400" />
                 </motion.div>
-                <CardTitle className="text-xl font-bold">Check your inbox</CardTitle>
+
+                <CardTitle className="text-xl font-bold">
+                  Check your inbox
+                </CardTitle>
+
                 <CardDescription className="text-base">
                   We sent a password reset link to{" "}
-                  <span className="font-medium text-foreground">{form.email}</span>.
-                  The link expires in 24 hours.
+                  <span className="font-medium text-foreground">
+                    {submittedEmail}
+                  </span>
+                  . The link expires in 24 hours.
                 </CardDescription>
               </CardHeader>
 
               <CardContent className="space-y-3">
                 <p className="text-sm text-muted-foreground">
-                  Didn't receive it? Check your spam folder, or{" "}
+                  Didn&apos;t receive it? Check your spam folder, or{" "}
                   <button
                     type="button"
-                    onClick={() => setMode("request")}
+                    onClick={() => {
+                      setMode("request");
+                      setGeneralError(null);
+                    }}
                     className="font-medium text-primary underline underline-offset-4 hover:no-underline"
                   >
                     try a different email
@@ -396,7 +554,7 @@ export default function ResetPassword() {
           </motion.div>
         )}
 
-        {/* ── Phase 2: Set New Password ─────────────────────────────────── */}
+        {/* Phase 2: Set new password */}
         {mode === "reset" && (
           <motion.div
             key="reset"
@@ -411,16 +569,20 @@ export default function ResetPassword() {
                 <div className="mx-auto mb-2 flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 ring-1 ring-primary/20">
                   <Lock className="h-7 w-7 text-primary" />
                 </div>
-                <CardTitle className="text-2xl font-bold">Set new password</CardTitle>
+
+                <CardTitle className="text-2xl font-bold">
+                  Set new password
+                </CardTitle>
+
                 <CardDescription>
-                  Choose a strong password. You'll use it next time you sign in.
+                  Choose a strong password. You&apos;ll use it next time you
+                  sign in.
                 </CardDescription>
               </CardHeader>
 
               <CardContent className="pt-4">
-                {/* General error */}
                 <AnimatePresence>
-                  {errors.general && (
+                  {generalError && (
                     <motion.div
                       initial={{ opacity: 0, height: 0 }}
                       animate={{ opacity: 1, height: "auto" }}
@@ -429,127 +591,165 @@ export default function ResetPassword() {
                     >
                       <Alert variant="destructive">
                         <AlertCircle className="h-4 w-4" />
-                        <AlertDescription>{errors.general}</AlertDescription>
+                        <AlertDescription>{generalError}</AlertDescription>
                       </Alert>
                     </motion.div>
                   )}
                 </AnimatePresence>
 
-                <form onSubmit={handleSetPassword} className="space-y-4" noValidate>
-                  {/* New Password */}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="password">New password</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                      <Input
-                        id="password"
-                        type={showPassword ? "text" : "password"}
-                        placeholder="Minimum 8 characters"
-                        value={form.password}
-                        onChange={setField("password")}
-                        autoComplete="new-password"
-                        autoFocus
-                        disabled={isLoading}
-                        className={cn(
-                          "pl-9 pr-10",
-                          errors.password && "border-destructive focus-visible:ring-destructive"
+                <FormWrapper<UpdatePasswordInput>
+                  schema={updatePasswordSchema}
+                  onSubmit={handleSetPassword}
+                  className="space-y-4"
+                  validateCsrf
+                >
+                  {({ fieldErrors, formError, isSubmitting }) => (
+                    <>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="password">New password</Label>
+
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+
+                          <Input
+                            id="password"
+                            name="password"
+                            type={showPassword ? "text" : "password"}
+                            placeholder="Minimum 8 characters"
+                            autoComplete="new-password"
+                            autoFocus
+                            disabled={isSubmitting}
+                            onChange={(event) => setPassword(event.target.value)}
+                            className={cn(
+                              "pl-9 pr-10",
+                              fieldErrors.password?.[0] &&
+                                "border-destructive focus-visible:ring-destructive"
+                            )}
+                            aria-invalid={Boolean(fieldErrors.password?.[0])}
+                            aria-describedby={
+                              fieldErrors.password?.[0]
+                                ? "password-error"
+                                : undefined
+                            }
+                          />
+
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setShowPassword((value) => !value)
+                            }
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                            aria-label={
+                              showPassword ? "Hide password" : "Show password"
+                            }
+                          >
+                            {showPassword ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+
+                        <AnimatePresence>
+                          {password && (
+                            <PasswordStrengthBar password={password} />
+                          )}
+                        </AnimatePresence>
+
+                        {fieldErrors.password?.[0] && (
+                          <p
+                            id="password-error"
+                            className="text-xs text-destructive flex items-center gap-1"
+                          >
+                            <AlertCircle className="h-3 w-3" />
+                            {fieldErrors.password[0]}
+                          </p>
                         )}
-                        aria-invalid={Boolean(errors.password)}
-                        aria-describedby={errors.password ? "password-error" : undefined}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((v) => !v)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                        aria-label={showPassword ? "Hide password" : "Show password"}
-                      >
-                        {showPassword
-                          ? <EyeOff className="h-4 w-4" />
-                          : <Eye className="h-4 w-4" />
-                        }
-                      </button>
-                    </div>
+                      </div>
 
-                    {/* Strength bar */}
-                    <AnimatePresence>
-                      {form.password && <PasswordStrengthBar password={form.password} />}
-                    </AnimatePresence>
+                      <div className="space-y-1.5">
+                        <Label htmlFor="confirm-password">
+                          Confirm new password
+                        </Label>
 
-                    {errors.password && (
-                      <p id="password-error" className="text-xs text-destructive flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" /> {errors.password}
-                      </p>
-                    )}
-                  </div>
+                        <div className="relative">
+                          <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
 
-                  {/* Confirm Password */}
-                  <div className="space-y-1.5">
-                    <Label htmlFor="confirm-password">Confirm new password</Label>
-                    <div className="relative">
-                      <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
-                      <Input
-                        id="confirm-password"
-                        type={showConfirm ? "text" : "password"}
-                        placeholder="Repeat your password"
-                        value={form.confirmPassword}
-                        onChange={setField("confirmPassword")}
-                        autoComplete="new-password"
-                        disabled={isLoading}
-                        className={cn(
-                          "pl-9 pr-10",
-                          errors.confirmPassword && "border-destructive focus-visible:ring-destructive",
-                          form.confirmPassword && form.password === form.confirmPassword &&
-                            "border-green-500 focus-visible:ring-green-500"
+                          <Input
+                            id="confirm-password"
+                            name="confirmPassword"
+                            type={showConfirm ? "text" : "password"}
+                            placeholder="Repeat your password"
+                            autoComplete="new-password"
+                            disabled={isSubmitting}
+                            className={cn(
+                              "pl-9 pr-10",
+                              fieldErrors.confirmPassword?.[0] &&
+                                "border-destructive focus-visible:ring-destructive"
+                            )}
+                            aria-invalid={Boolean(
+                              fieldErrors.confirmPassword?.[0]
+                            )}
+                            aria-describedby={
+                              fieldErrors.confirmPassword?.[0]
+                                ? "confirm-error"
+                                : undefined
+                            }
+                          />
+
+                          <button
+                            type="button"
+                            onClick={() => setShowConfirm((value) => !value)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+                            aria-label={
+                              showConfirm ? "Hide password" : "Show password"
+                            }
+                          >
+                            {showConfirm ? (
+                              <EyeOff className="h-4 w-4" />
+                            ) : (
+                              <Eye className="h-4 w-4" />
+                            )}
+                          </button>
+                        </div>
+
+                        {fieldErrors.confirmPassword?.[0] && (
+                          <p
+                            id="confirm-error"
+                            className="text-xs text-destructive flex items-center gap-1"
+                          >
+                            <AlertCircle className="h-3 w-3" />
+                            {fieldErrors.confirmPassword[0]}
+                          </p>
                         )}
-                        aria-invalid={Boolean(errors.confirmPassword)}
-                        aria-describedby={errors.confirmPassword ? "confirm-error" : undefined}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowConfirm((v) => !v)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
-                        aria-label={showConfirm ? "Hide password" : "Show password"}
-                      >
-                        {showConfirm
-                          ? <EyeOff className="h-4 w-4" />
-                          : <Eye className="h-4 w-4" />
-                        }
-                      </button>
-                    </div>
+                      </div>
 
-                    {/* Match indicator */}
-                    <AnimatePresence>
-                      {form.confirmPassword && form.password === form.confirmPassword && (
-                        <motion.p
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          className="text-xs text-green-600 dark:text-green-400 flex items-center gap-1"
-                        >
-                          <CheckCircle2 className="h-3 w-3" /> Passwords match
-                        </motion.p>
+                      {formError && (
+                        <Alert variant="destructive">
+                          <AlertCircle className="h-4 w-4" />
+                          <AlertDescription>{formError}</AlertDescription>
+                        </Alert>
                       )}
-                    </AnimatePresence>
 
-                    {errors.confirmPassword && (
-                      <p id="confirm-error" className="text-xs text-destructive flex items-center gap-1">
-                        <AlertCircle className="h-3 w-3" /> {errors.confirmPassword}
-                      </p>
-                    )}
-                  </div>
-
-                  <Button
-                    type="submit"
-                    className="w-full"
-                    disabled={isLoading || !strength.isAcceptable}
-                    size="lg"
-                  >
-                    {isLoading ? (
-                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Updating…</>
-                    ) : (
-                      "Update password"
-                    )}
-                  </Button>
-                </form>
+                      <Button
+                        type="submit"
+                        className="w-full"
+                        disabled={isSubmitting || !strength.isAcceptable}
+                        size="lg"
+                      >
+                        {isSubmitting ? (
+                          <>
+                            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                            Updating…
+                          </>
+                        ) : (
+                          "Update password"
+                        )}
+                      </Button>
+                    </>
+                  )}
+                </FormWrapper>
               </CardContent>
 
               <CardFooter className="justify-center">
@@ -565,7 +765,7 @@ export default function ResetPassword() {
           </motion.div>
         )}
 
-        {/* ── Success: Password Updated ─────────────────────────────────── */}
+        {/* Success: Password updated */}
         {mode === "success-reset" && (
           <motion.div
             key="success-reset"
@@ -580,26 +780,35 @@ export default function ResetPassword() {
                 <motion.div
                   initial={{ scale: 0 }}
                   animate={{ scale: 1 }}
-                  transition={{ type: "spring", stiffness: 200, damping: 15, delay: 0.1 }}
+                  transition={{
+                    type: "spring",
+                    stiffness: 200,
+                    damping: 15,
+                    delay: 0.1,
+                  }}
                   className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30"
                 >
                   <CheckCircle2 className="h-9 w-9 text-green-600 dark:text-green-400" />
                 </motion.div>
-                <CardTitle className="text-xl font-bold">Password updated!</CardTitle>
+
+                <CardTitle className="text-xl font-bold">
+                  Password updated!
+                </CardTitle>
+
                 <CardDescription className="text-base">
-                  Your password has been changed successfully.
-                  Redirecting you to the dashboard…
+                  Your password has been changed successfully. Redirecting you
+                  to the dashboard…
                 </CardDescription>
               </CardHeader>
 
               <CardContent>
-                {/* Auto-redirect progress bar */}
                 <motion.div
                   className="h-1 w-full rounded-full bg-primary"
                   initial={{ scaleX: 0, originX: 0 }}
                   animate={{ scaleX: 1 }}
                   transition={{ duration: 3, ease: "linear" }}
                 />
+
                 <p className="mt-3 text-xs text-muted-foreground">
                   Redirecting in 3 seconds…
                 </p>
@@ -617,7 +826,6 @@ export default function ResetPassword() {
             </Card>
           </motion.div>
         )}
-
       </AnimatePresence>
     </div>
   );
