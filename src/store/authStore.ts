@@ -1,25 +1,31 @@
-// ─────────────────────────────────────────────────────────────────────────────
-// authStore.ts  — Single source of truth for auth state.
+// src/store/authStore.ts
 //
-// All components that previously imported useAuthStore from userStore.ts now
-// work correctly because userStore.ts re-exports this store directly.
+// Single source of truth for auth state.
 //
-// Compatibility fields added so every import pattern keeps working:
-//   isLoading        – boolean, derived from status via dset()
-//   isAuthenticated  – boolean, derived from status via dset()
-//   clearAuth()      – alias for signOut()
-//   setProfile()     – direct profile state patch (local-only)
-//   setUser()        – direct user state patch (local-only)
-//   setIsLoading()   – no-op (status is the source of truth)
-//   updateProfile()  – local-only patch for UI-level updates
-// ─────────────────────────────────────────────────────────────────────────────
+// SECURITY PURPOSE:
+// - Centralize auth/session/profile state
+// - Avoid duplicate auth listeners
+// - Avoid persisting JWT/session/user data in Zustand storage
+// - Keep role/plan/credits DB-derived, not localStorage-derived
+// - Keep BYOK keys encrypted in browser vault and in-memory only
+//
+// Compatibility fields:
+// - isLoading
+// - isAuthenticated
+// - clearAuth()
+// - setProfile()
+// - setUser()
+// - setIsLoading()
+// - updateProfile()
 
-import { create }            from "zustand";
+import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
-import { immer }             from "zustand/middleware/immer";
-import posthog               from "posthog-js";
-import { supabase }          from "@/lib/supabase/client";
-import { useOverlayStore }   from "@/store/overlayStore";
+import { immer } from "zustand/middleware/immer";
+import posthog from "posthog-js";
+
+import { supabase } from "@/lib/supabase/client";
+import { useOverlayStore } from "@/store/overlayStore";
+
 import {
   loadBYOKVault,
   saveBYOKVault,
@@ -33,8 +39,6 @@ import type {
   AuthProvider,
 } from "@/types";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 export type AuthStatus =
   | "idle"
   | "loading"
@@ -43,263 +47,433 @@ export type AuthStatus =
   | "error";
 
 export interface BYOKKeys {
-  openai?:    string;
+  openai?: string;
   anthropic?: string;
-  gemini?:    string;
+  gemini?: string;
 }
 
 export interface AuthState {
-  // Core
-  status:          AuthStatus;
-  session:         SupabaseSession | null;
-  user:            SupabaseUser    | null;
-  profile:         ProfileRow      | null;
+  status: AuthStatus;
+  session: SupabaseSession | null;
+  user: SupabaseUser | null;
+  profile: ProfileRow | null;
   isProfileLoaded: boolean;
-  byokKeys:        BYOKKeys;
-  error:           string | null;
-  isAdmin:         boolean;
-  isOnboarded:     boolean;
-  planId:          string;
-  credits:         number;
+  byokKeys: BYOKKeys;
+  error: string | null;
+  isAdmin: boolean;
+  isOnboarded: boolean;
+  planId: string;
+  credits: number;
 
-  // Derived (auto-synced with status via dset)
-  isLoading:       boolean;
+  // Derived and synced through dset()
+  isLoading: boolean;
   isAuthenticated: boolean;
 }
 
 export interface AuthActions {
-  // Lifecycle
-  initialize:        () => Promise<void>;
+  initialize: () => Promise<void>;
 
-  // Auth actions
-  signInWithEmail:   (email: string, password: string) => Promise<void>;
-  signUpWithEmail:   (email: string, password: string, fullName: string) => Promise<void>;
-  signInWithOAuth:   (provider: AuthProvider) => Promise<void>;
-  signOut:           () => Promise<void>;
-  clearAuth:         () => Promise<void>;      // alias for signOut
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (
+    email: string,
+    password: string,
+    fullName: string
+  ) => Promise<void>;
+  signInWithOAuth: (provider: AuthProvider) => Promise<void>;
+  signOut: () => Promise<void>;
+  clearAuth: () => Promise<void>;
+
   sendPasswordReset: (email: string) => Promise<void>;
-  updatePassword:    (newPassword: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
 
-  // Profile
-  loadProfile:    () => Promise<void>;
-  updateProfile:  (updates: Partial<ProfileRow>) => Promise<void>;
-  setProfile:     (profile: ProfileRow | null) => void;
+  loadProfile: () => Promise<void>;
+  updateProfile: (updates: Partial<ProfileRow>) => Promise<void>;
+  setProfile: (profile: ProfileRow | null) => void;
   refreshCredits: () => Promise<void>;
 
-  // BYOK
-  setBYOKKey:  (provider: keyof BYOKKeys, key: string) => void;
-  clearBYOKKey:(provider: keyof BYOKKeys) => void;
+  setBYOKKey: (provider: keyof BYOKKeys, key: string) => void;
+  clearBYOKKey: (provider: keyof BYOKKeys) => void;
 
-  // Internal setters (used by compatibility layer / hooks)
-  setUser:      (user: SupabaseUser | null) => void;
-  setSession:   (session: SupabaseSession | null) => void;
-  setError:     (error: string | null) => void;
-  setIsLoading: (loading: boolean) => void;  // no-op – status is source of truth
-  reset:        () => void;
+  setUser: (user: SupabaseUser | null) => void;
+  setSession: (session: SupabaseSession | null) => void;
+  setError: (error: string | null) => void;
+  setIsLoading: (loading: boolean) => void;
+  reset: () => void;
 }
 
 export type AuthStore = AuthState & AuthActions;
 
-// ─── Initial State ────────────────────────────────────────────────────────────
-
 const INITIAL_STATE: AuthState = {
-  status:          "idle",
-  session:         null,
-  user:            null,
-  profile:         null,
+  status: "idle",
+  session: null,
+  user: null,
+  profile: null,
   isProfileLoaded: false,
-  byokKeys:        {},
-  error:           null,
-  isAdmin:         false,
-  isOnboarded:     false,
-  planId:          "free",
-  credits:         0,
-  // Derived
-  isLoading:       true,   // "idle" counts as loading
+  byokKeys: {},
+  error: null,
+  isAdmin: false,
+  isOnboarded: false,
+  planId: "free",
+  credits: 0,
+
+  isLoading: true,
   isAuthenticated: false,
 };
 
-// ─── Prevents listener leaks & React StrictMode doubles ──────────────────────
-let _unsubAuthListener: (() => void) | null = null;
+let unsubAuthListener: (() => void) | null = null;
 
-// ─── Store ────────────────────────────────────────────────────────────────────
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error;
+  }
+
+  return "Something went wrong.";
+}
+
+function isPostHogEnabled(): boolean {
+  return Boolean(import.meta.env.VITE_POSTHOG_KEY);
+}
+
+function identifyPostHogUser(user: SupabaseUser): void {
+  if (!isPostHogEnabled()) {
+    return;
+  }
+
+  try {
+    posthog.identify(user.id, {
+      email: user.email,
+    });
+  } catch {
+    // PostHog may be unavailable in development or blocked by browser privacy tools.
+  }
+}
+
+function resetPostHog(): void {
+  if (!isPostHogEnabled()) {
+    return;
+  }
+
+  try {
+    posthog.reset();
+  } catch {
+    // Ignore PostHog reset failures.
+  }
+}
+
+function getProfileBoolean(
+  row: Record<string, unknown>,
+  key: string,
+  fallback = false
+): boolean {
+  const value = row[key];
+
+  return typeof value === "boolean" ? value : fallback;
+}
+
+function getProfileString(
+  row: Record<string, unknown>,
+  key: string,
+  fallback: string
+): string {
+  const value = row[key];
+
+  return typeof value === "string" && value.trim().length > 0
+    ? value
+    : fallback;
+}
+
+function getProfileNumber(
+  row: Record<string, unknown>,
+  key: string,
+  fallback: number
+): number {
+  const value = row[key];
+
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : fallback;
+}
+
+function syncOverlayFromProfile(row: Record<string, unknown>): void {
+  try {
+    const overlay = useOverlayStore.getState();
+
+    const opacity = row.overlay_opacity;
+
+    if (typeof opacity === "number" && Number.isFinite(opacity)) {
+      overlay.setStealthOpacity(opacity);
+    }
+
+    const position = row.overlay_position;
+
+    if (typeof position === "string" && position.trim().length > 0) {
+      const parsed = JSON.parse(position) as {
+        x?: unknown;
+        y?: unknown;
+      };
+
+      if (
+        typeof parsed.x === "number" &&
+        Number.isFinite(parsed.x) &&
+        typeof parsed.y === "number" &&
+        Number.isFinite(parsed.y)
+      ) {
+        overlay.setPosition({
+          x: parsed.x,
+          y: parsed.y,
+        });
+      }
+    }
+  } catch {
+    // Overlay store or saved position may be unavailable/invalid.
+  }
+}
+
+function sanitizeBYOKKey(key: string): string {
+  return key.trim();
+}
 
 export const useAuthStore = create<AuthStore>()(
   devtools(
     persist(
-      immer((_set, get) => {
-        // ── dset: wraps every mutation to auto-derive isLoading / isAuthenticated ──
-        //    This is the key fix: derived booleans live in actual Zustand state, so
-        //    components reading them never trigger a new-object comparison loop.
-        const dset = (recipe: (draft: AuthStore) => void) =>
-          _set((draft) => {
+      immer((set, get) => {
+        const dset = (recipe: (draft: AuthStore) => void) => {
+          set((draft) => {
             recipe(draft);
-            draft.isLoading       = draft.status === "idle" || draft.status === "loading";
+
+            draft.isLoading =
+              draft.status === "idle" || draft.status === "loading";
             draft.isAuthenticated = draft.status === "authenticated";
           });
+        };
 
         return {
           ...INITIAL_STATE,
 
-          // ── Session Init ──────────────────────────────────────────────────
-
           initialize: async () => {
-            if (_unsubAuthListener) {
-              _unsubAuthListener();
-              _unsubAuthListener = null;
+            if (unsubAuthListener) {
+              unsubAuthListener();
+              unsubAuthListener = null;
             }
 
-            dset((s) => { s.status = "loading"; });
+            dset((state) => {
+              state.status = "loading";
+              state.error = null;
+            });
 
-            // Hydrate BYOK keys from encrypted local vault (WebCrypto).
-            // These never touch the server / DB; they're attached per-request
-            // by apiClient as x-byok-* headers.
             try {
               const vault = await loadBYOKVault();
+
               if (Object.keys(vault).length > 0) {
-                _set((s) => { s.byokKeys = vault; });
+                set((state) => {
+                  state.byokKeys = vault;
+                });
               }
-            } catch (e) {
-              console.warn("[authStore] BYOK vault hydration failed:", e);
+            } catch (error) {
+              console.warn("[authStore] BYOK vault hydration failed:", error);
             }
 
             try {
-              const { data: { session }, error } = await supabase.auth.getSession();
-              if (error) throw error;
+              const {
+                data: { session },
+                error,
+              } = await supabase.auth.getSession();
+
+              if (error) {
+                throw error;
+              }
 
               if (session) {
-                dset((s) => {
-                  s.session = session as unknown as SupabaseSession;
-                  s.user    = session.user as unknown as SupabaseUser;
+                dset((state) => {
+                  state.session = session as unknown as SupabaseSession;
+                  state.user = session.user as unknown as SupabaseUser;
                 });
-                await get().loadProfile();
-                dset((s) => { s.status = "authenticated"; });
 
-                // Identify returning user with PostHog (was only fired on SIGNED_IN
-                // event, which never runs for users restored from an existing session).
-                if (import.meta.env.VITE_POSTHOG_KEY) {
-                  try {
-                    posthog.identify(session.user.id, { email: session.user.email });
-                  } catch { /* posthog not loaded — safe to skip */ }
-                }
+                await get().loadProfile();
+
+                dset((state) => {
+                  state.status = "authenticated";
+                });
+
+                identifyPostHogUser(session.user as unknown as SupabaseUser);
               } else {
-                dset((s) => { s.status = "unauthenticated"; });
+                dset((state) => {
+                  state.status = "unauthenticated";
+                });
               }
-            } catch (err) {
-              dset((s) => {
-                s.status = "error";
-                s.error  = (err as Error).message;
+            } catch (error) {
+              dset((state) => {
+                state.status = "error";
+                state.error = getErrorMessage(error);
               });
             }
 
-            // Single listener — owned by this store
-            const { data } = supabase.auth.onAuthStateChange(async (event, session) => {
-              if (event === "SIGNED_IN" && session) {
-                dset((s) => {
-                  s.session = session as unknown as SupabaseSession;
-                  s.user    = session.user as unknown as SupabaseUser;
-                });
-                await get().loadProfile();
-                dset((s) => { s.status = "authenticated"; });
+            const { data } = supabase.auth.onAuthStateChange(
+              async (event, session) => {
+                if (event === "SIGNED_IN" && session) {
+                  dset((state) => {
+                    state.session = session as unknown as SupabaseSession;
+                    state.user = session.user as unknown as SupabaseUser;
+                  });
 
-                if (import.meta.env.VITE_POSTHOG_KEY) {
-                  posthog.identify(session.user.id, { email: session.user.email });
+                  await get().loadProfile();
+
+                  dset((state) => {
+                    state.status = "authenticated";
+                  });
+
+                  identifyPostHogUser(
+                    session.user as unknown as SupabaseUser
+                  );
+                }
+
+                if (event === "SIGNED_OUT") {
+                  resetPostHog();
+                  get().reset();
+                }
+
+                if (event === "TOKEN_REFRESHED" && session) {
+                  dset((state) => {
+                    state.session = session as unknown as SupabaseSession;
+                  });
+                }
+
+                if (event === "USER_UPDATED" && session) {
+                  dset((state) => {
+                    state.session = session as unknown as SupabaseSession;
+                    state.user = session.user as unknown as SupabaseUser;
+                  });
+
+                  await get().loadProfile();
+                }
+
+                if (event === "PASSWORD_RECOVERY" && session) {
+                  dset((state) => {
+                    state.session = session as unknown as SupabaseSession;
+                    state.user = session.user as unknown as SupabaseUser;
+                    state.status = "authenticated";
+                  });
                 }
               }
+            );
 
-              if (event === "SIGNED_OUT") {
-                if (import.meta.env.VITE_POSTHOG_KEY) posthog.reset();
-                get().reset();
-              }
-
-              if (event === "TOKEN_REFRESHED" && session) {
-                dset((s) => { s.session = session as unknown as SupabaseSession; });
-              }
-
-              if (event === "USER_UPDATED" && session) {
-                await get().loadProfile();
-              }
-
-              if (event === "PASSWORD_RECOVERY") {
-                dset((s) => { s.status = "authenticated"; });
-              }
-            });
-
-            _unsubAuthListener = () => data.subscription.unsubscribe();
+            unsubAuthListener = () => {
+              data.subscription.unsubscribe();
+            };
           },
 
-          // ── Sign In ───────────────────────────────────────────────────────
-
           signInWithEmail: async (email, password) => {
-            dset((s) => { s.status = "loading"; s.error = null; });
+            dset((state) => {
+              state.status = "loading";
+              state.error = null;
+            });
 
-            const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+            const { data, error } = await supabase.auth.signInWithPassword({
+              email: email.trim(),
+              password,
+            });
 
             if (error) {
-              dset((s) => { s.status = "error"; s.error = error.message; });
+              dset((state) => {
+                state.status = "error";
+                state.error = error.message;
+              });
+
               throw error;
             }
 
-            dset((s) => {
-              s.session = data.session as unknown as SupabaseSession;
-              s.user    = data.user    as unknown as SupabaseUser;
-              s.status  = "authenticated";
+            dset((state) => {
+              state.session = data.session as unknown as SupabaseSession;
+              state.user = data.user as unknown as SupabaseUser;
+              state.status = "authenticated";
             });
 
             await get().loadProfile();
           },
 
-          // ── Sign Up ───────────────────────────────────────────────────────
-
           signUpWithEmail: async (email, password, fullName) => {
-            dset((s) => { s.status = "loading"; s.error = null; });
+            dset((state) => {
+              state.status = "loading";
+              state.error = null;
+            });
 
             const { data, error } = await supabase.auth.signUp({
-              email,
+              email: email.trim(),
               password,
-              options: { data: { full_name: fullName } },
+              options: {
+                data: {
+                  full_name: fullName.trim(),
+                },
+                emailRedirectTo: `${window.location.origin}/auth/callback`,
+              },
             });
 
             if (error) {
-              dset((s) => { s.status = "error"; s.error = error.message; });
+              dset((state) => {
+                state.status = "error";
+                state.error = error.message;
+              });
+
               throw error;
             }
 
             if (data.session) {
-              dset((s) => {
-                s.session = data.session as unknown as SupabaseSession;
-                s.user    = data.user    as unknown as SupabaseUser;
-                s.status  = "authenticated";
+              dset((state) => {
+                state.session = data.session as unknown as SupabaseSession;
+                state.user = data.user as unknown as SupabaseUser;
+                state.status = "authenticated";
               });
+
               await get().loadProfile();
             } else {
-              dset((s) => { s.status = "unauthenticated"; });
+              dset((state) => {
+                state.status = "unauthenticated";
+              });
             }
           },
 
-          // ── OAuth ─────────────────────────────────────────────────────────
-
           signInWithOAuth: async (provider) => {
-            dset((s) => { s.status = "loading"; s.error = null; });
+            dset((state) => {
+              state.status = "loading";
+              state.error = null;
+            });
 
             const { error } = await supabase.auth.signInWithOAuth({
-              provider: provider as "google" | "github" | "linkedin_oidc" | "azure",
-              options: { redirectTo: `${window.location.origin}/auth/callback` },
+              provider,
+              options: {
+                redirectTo: `${window.location.origin}/auth/callback`,
+                scopes: provider === "google" ? "email profile" : undefined,
+              },
             });
 
             if (error) {
-              dset((s) => { s.status = "error"; s.error = error.message; });
+              dset((state) => {
+                state.status = "error";
+                state.error = error.message;
+              });
+
               throw error;
             }
           },
 
-          // ── Sign Out ──────────────────────────────────────────────────────
-
           signOut: async () => {
-            dset((s) => { s.status = "loading"; });
+            dset((state) => {
+              state.status = "loading";
+              state.error = null;
+            });
+
             await supabase.auth.signOut();
-            // Wipe BYOK vault on sign-out — protects shared devices.
-            try { clearBYOKVault(); } catch { /* localStorage unavailable */ }
+
+            try {
+              clearBYOKVault();
+            } catch {
+              // Ignore local vault clearing failure.
+            }
+
             get().reset();
           },
 
@@ -307,199 +481,310 @@ export const useAuthStore = create<AuthStore>()(
             await get().signOut();
           },
 
-          // ── Password ──────────────────────────────────────────────────────
-
           sendPasswordReset: async (email) => {
-            const { error } = await supabase.auth.resetPasswordForEmail(email, {
-              redirectTo: `${window.location.origin}/reset-password`,
-            });
-            if (error) throw error;
+            const { error } = await supabase.auth.resetPasswordForEmail(
+              email.trim(),
+              {
+                redirectTo: `${window.location.origin}/reset-password`,
+              }
+            );
+
+            if (error) {
+              throw error;
+            }
           },
 
           updatePassword: async (newPassword) => {
-            const { error } = await supabase.auth.updateUser({ password: newPassword });
-            if (error) throw error;
-          },
+            const { error } = await supabase.auth.updateUser({
+              password: newPassword,
+            });
 
-          // ── Profile ───────────────────────────────────────────────────────
+            if (error) {
+              throw error;
+            }
+          },
 
           loadProfile: async () => {
             const userId = get().user?.id;
-            if (!userId) return;
 
-            const [profileRes, roleRes] = await Promise.all([
-              supabase.from("profiles").select("*").eq("id", userId).single(),
-              supabase.from("user_roles").select("role").eq("user_id", userId).eq("role", "admin").maybeSingle(),
-            ]);
-
-            if (profileRes.error || !profileRes.data) {
-              console.error("[authStore] Failed to load profile:", profileRes.error?.message);
+            if (!userId) {
               return;
             }
 
-            const row = profileRes.data as Record<string, unknown>;
-            const hasAdminRole = !!roleRes.data;
+            const [profileResult, roleResult] = await Promise.all([
+              supabase.from("profiles").select("*").eq("id", userId).single(),
+              supabase
+                .from("user_roles")
+                .select("role")
+                .eq("user_id", userId)
+                .eq("role", "admin")
+                .maybeSingle(),
+            ]);
 
-            _set((s) => {
-              s.profile         = profileRes.data as unknown as ProfileRow;
-              s.isProfileLoaded = true;
-              s.isAdmin         = hasAdminRole;
-              s.isOnboarded     = (row.onboarding_completed as boolean) ?? false;
-              s.planId          = (row.plan_id              as string)  ?? "free";
-              s.credits         = (row.credits              as number)  ?? 0;
+            if (profileResult.error || !profileResult.data) {
+              console.error(
+                "[authStore] Failed to load profile:",
+                profileResult.error?.message
+              );
+
+              set((state) => {
+                state.isProfileLoaded = false;
+              });
+
+              return;
+            }
+
+            const row = profileResult.data as Record<string, unknown>;
+            const hasAdminRole = Boolean(roleResult.data);
+
+            set((state) => {
+              state.profile = profileResult.data as unknown as ProfileRow;
+              state.isProfileLoaded = true;
+              state.isAdmin = hasAdminRole;
+              state.isOnboarded = getProfileBoolean(
+                row,
+                "onboarding_completed",
+                false
+              );
+              state.planId = getProfileString(row, "plan_id", "free");
+              state.credits = getProfileNumber(row, "credits", 0);
             });
 
-            // FIX Issue 3: seed overlay store from profile settings
-            try {
-              const overlay = useOverlayStore.getState();
-              const opacity = row.overlay_opacity as number | undefined;
-              if (opacity != null) overlay.setStealthOpacity(opacity);
-              const pos = row.overlay_position as string | undefined;
-              if (pos) {
-                const parsed = JSON.parse(pos);
-                if (Number.isFinite(parsed?.x) && Number.isFinite(parsed?.y)) {
-                  overlay.setPosition({ x: parsed.x, y: parsed.y });
-                }
-              }
-            } catch { /* overlay store not ready yet — safe to skip */ }
+            syncOverlayFromProfile(row);
           },
 
           updateProfile: async (updates) => {
             const userId = get().user?.id;
-            if (!userId) throw new Error("Not authenticated.");
+
+            if (!userId) {
+              throw new Error("Not authenticated.");
+            }
+
+            const payload: Partial<ProfileRow> & {
+              updated_at: string;
+            } = {
+              ...updates,
+              updated_at: new Date().toISOString(),
+            };
 
             const { data, error } = await supabase
               .from("profiles")
-              .update({ ...updates, updated_at: new Date().toISOString() } as any)
+              .update(payload)
               .eq("id", userId)
               .select()
               .single();
 
-            if (error) throw error;
+            if (error) {
+              throw error;
+            }
 
-            _set((s) => {
-              s.profile = data as unknown as ProfileRow;
-              if ("plan_id" in updates) s.planId  = (updates as any).plan_id as string;
-              if ("credits" in updates) s.credits = updates.credits as number;
+            const row = data as unknown as ProfileRow;
+            const rowRecord = data as Record<string, unknown>;
+
+            set((state) => {
+              state.profile = row;
+              state.isOnboarded = getProfileBoolean(
+                rowRecord,
+                "onboarding_completed",
+                state.isOnboarded
+              );
+              state.planId = getProfileString(
+                rowRecord,
+                "plan_id",
+                state.planId
+              );
+              state.credits = getProfileNumber(
+                rowRecord,
+                "credits",
+                state.credits
+              );
             });
           },
 
           setProfile: (profile) => {
-            _set((s) => { s.profile = profile; });
+            set((state) => {
+              state.profile = profile;
+
+              if (profile) {
+                const row = profile as unknown as Record<string, unknown>;
+
+                state.isOnboarded = getProfileBoolean(
+                  row,
+                  "onboarding_completed",
+                  state.isOnboarded
+                );
+                state.planId = getProfileString(row, "plan_id", state.planId);
+                state.credits = getProfileNumber(
+                  row,
+                  "credits",
+                  state.credits
+                );
+              }
+            });
           },
 
           refreshCredits: async () => {
             const userId = get().user?.id;
-            if (!userId) return;
 
-            const { data } = await supabase
+            if (!userId) {
+              return;
+            }
+
+            const { data, error } = await supabase
               .from("profiles")
               .select("credits")
               .eq("id", userId)
               .single();
 
-            if (data) {
-              _set((s) => {
-                s.credits = (data as Record<string, unknown>).credits as number ?? s.credits;
-                if (s.profile) s.profile.credits = s.credits;
-              });
+            if (error || !data) {
+              return;
             }
-          },
 
-          // ── BYOK ──────────────────────────────────────────────────────────
-          // Keys live in encrypted localStorage (WebCrypto AES-GCM).
-          // The device key never leaves the browser. Edge functions receive
-          // them as `x-byok-*` headers per request and prefer them over
-          // server-side fallback keys.
-
-          setBYOKKey: (provider, key) => {
-            _set((s) => { s.byokKeys[provider] = key; });
-            // Fire-and-forget persist; UI surfaces failures via toast in SettingsBYOK
-            void saveBYOKVault({ ...get().byokKeys, [provider]: key }).catch((e) =>
-              console.error("[authStore] BYOK persist failed:", e),
+            const row = data as Record<string, unknown>;
+            const nextCredits = getProfileNumber(
+              row,
+              "credits",
+              get().credits
             );
-          },
 
-          clearBYOKKey: (provider) => {
-            _set((s) => { delete s.byokKeys[provider]; });
-            const next = { ...get().byokKeys };
-            delete next[provider];
-            void saveBYOKVault(next).catch((e) =>
-              console.error("[authStore] BYOK clear failed:", e),
-            );
-          },
+            set((state) => {
+              state.credits = nextCredits;
 
-          // ── Internal setters ──────────────────────────────────────────────
-
-          setUser: (user) => {
-            _set((s) => { s.user = user; });
-          },
-
-          setSession: (session) => {
-            dset((s) => {
-              s.session = session;
-              s.user    = session?.user as unknown as SupabaseUser ?? null;
-              s.status  = session ? "authenticated" : "unauthenticated";
+              if (state.profile) {
+                state.profile = {
+                  ...state.profile,
+                  credits: nextCredits,
+                };
+              }
             });
           },
 
-          setError: (error) => { _set((s) => { s.error = error; }); },
+          setBYOKKey: (provider, key) => {
+            const sanitizedKey = sanitizeBYOKKey(key);
 
-          setIsLoading: (_loading) => { /* no-op — status is the source of truth */ },
+            set((state) => {
+              state.byokKeys[provider] = sanitizedKey;
+            });
+
+            void saveBYOKVault({
+              ...get().byokKeys,
+              [provider]: sanitizedKey,
+            }).catch((error) => {
+              console.error("[authStore] BYOK persist failed:", error);
+            });
+          },
+
+          clearBYOKKey: (provider) => {
+            set((state) => {
+              delete state.byokKeys[provider];
+            });
+
+            const nextKeys = {
+              ...get().byokKeys,
+            };
+
+            delete nextKeys[provider];
+
+            void saveBYOKVault(nextKeys).catch((error) => {
+              console.error("[authStore] BYOK clear failed:", error);
+            });
+          },
+
+          setUser: (user) => {
+            set((state) => {
+              state.user = user;
+            });
+          },
+
+          setSession: (session) => {
+            dset((state) => {
+              state.session = session;
+              state.user =
+                (session?.user as unknown as SupabaseUser | undefined) ?? null;
+              state.status = session ? "authenticated" : "unauthenticated";
+            });
+          },
+
+          setError: (error) => {
+            set((state) => {
+              state.error = error;
+            });
+          },
+
+          setIsLoading: () => {
+            // no-op: status is the source of truth
+          },
 
           reset: () => {
-            dset((s) => {
-              Object.assign(s, INITIAL_STATE);
-              s.status        = "unauthenticated";
-              s.isLoading     = false;
-              s.isAuthenticated = false;
-              s.byokKeys      = {};
+            dset((state) => {
+              Object.assign(state, INITIAL_STATE);
+
+              state.status = "unauthenticated";
+              state.isLoading = false;
+              state.isAuthenticated = false;
+              state.byokKeys = {};
             });
           },
         };
       }),
       {
         name: "clarify-auth-v1",
-        // ─────────────────────────────────────────────────────────────────
-        // SECURITY: Persist ONLY non-privileged UI hint flags.
-        //
-        // Never persist:
-        //   • session / user / access tokens  (Supabase manages its own
-        //     httpOnly-equivalent storage — we MUST NOT duplicate JWTs)
-        //   • isAdmin   — privilege escalation risk if attacker edits
-        //                 localStorage. Always re-derived on loadProfile()
-        //                 from the user_roles table via has_role().
-        //   • planId    — billing privilege; must be re-fetched from DB
-        //                 on every load to prevent feature-gate spoofing.
-        //   • byokKeys  — user API keys; never written to plaintext storage.
-        //                 Kept in-memory only for the active tab session.
-        //
-        // isOnboarded is the only persisted hint — it's purely cosmetic
-        // (skips an onboarding redirect flash) and is re-validated against
-        // profiles.onboarding_completed on every loadProfile() call.
-        // ─────────────────────────────────────────────────────────────────
-        // Persist ONLY isOnboarded. byokKeys MUST stay in-memory (security).
-        partialize: (s) => ({
-          isOnboarded: s.isOnboarded,
+
+        /**
+         * SECURITY:
+         * Persist ONLY non-privileged UI hints.
+         *
+         * Do not persist:
+         * - session
+         * - user
+         * - JWT/access token
+         * - isAdmin
+         * - planId
+         * - credits
+         * - byokKeys
+         */
+        partialize: (state) => ({
+          isOnboarded: state.isOnboarded,
         }),
       }
     ),
-    { name: "AuthStore" }
+    {
+      name: "AuthStore",
+    }
   )
 );
 
-// ─── Selectors ────────────────────────────────────────────────────────────────
+// ─────────────────────────────────────────────────────────────────────────────
+// Selectors
+// ─────────────────────────────────────────────────────────────────────────────
 
-export const selectIsAuthenticated    = (s: AuthStore) => s.isAuthenticated;
-export const selectIsLoading          = (s: AuthStore) => s.isLoading;
-export const selectUser               = (s: AuthStore) => s.user;
-export const selectProfile            = (s: AuthStore) => s.profile;
-export const selectPlanId             = (s: AuthStore) => s.planId;
-export const selectCredits            = (s: AuthStore) => s.credits;
-export const selectIsAdmin            = (s: AuthStore) => s.isAdmin;
-export const selectHasByok            = (s: AuthStore) => Boolean(s.byokKeys.openai || s.byokKeys.anthropic || s.byokKeys.gemini);
-export const selectPreferredModel     = (s: AuthStore) => s.profile?.preferred_model ?? "gpt-4o";
-export const selectSubscriptionActive = (s: AuthStore) => {
-  const status = s.profile?.subscription_status;
+export const selectIsAuthenticated = (state: AuthStore) =>
+  state.isAuthenticated;
+
+export const selectIsLoading = (state: AuthStore) => state.isLoading;
+
+export const selectUser = (state: AuthStore) => state.user;
+
+export const selectProfile = (state: AuthStore) => state.profile;
+
+export const selectPlanId = (state: AuthStore) => state.planId;
+
+export const selectCredits = (state: AuthStore) => state.credits;
+
+export const selectIsAdmin = (state: AuthStore) => state.isAdmin;
+
+export const selectHasByok = (state: AuthStore) =>
+  Boolean(
+    state.byokKeys.openai ||
+      state.byokKeys.anthropic ||
+      state.byokKeys.gemini
+  );
+
+export const selectPreferredModel = (state: AuthStore) =>
+  state.profile?.preferred_model ?? "gpt-4o";
+
+export const selectSubscriptionActive = (state: AuthStore) => {
+  const status = state.profile?.subscription_status;
+
   return status === "active" || status === "trialing";
 };
