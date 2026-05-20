@@ -121,15 +121,33 @@ Deno.serve(async (req) => {
         .replace(/\u0000/g, "")
         .slice(0, 400);
 
-    const answerSummary = (answers ?? [])
+    let answerSummary = answersList
       .map((a: any, i: number) => {
         return `
-Q${i + 1}: ${safe(a.question_text)}
-Answer: ${safeTranscript(a.transcript)}
+Q${i + 1}: ${safe(a.question_text ?? a.question)}
+Answer: ${safeTranscript(a.transcript ?? a.answer)}
 Score: ${a.score ?? "N/A"}
       `.trim();
       })
       .join("\n\n");
+
+    // Fallback: if no answers, pull transcript text from session_transcripts
+    if (!answerSummary) {
+      const { data: transcripts } = await db
+        .from("session_transcripts")
+        .select("content")
+        .eq("session_id", session_id)
+        .eq("user_id", authenticatedUserId)
+        .order("created_at", { ascending: true })
+        .limit(20);
+      const joined = (transcripts ?? [])
+        .map((t: any) => safeTranscript(t.content))
+        .filter(Boolean)
+        .join("\n");
+      answerSummary = joined
+        ? `Full session transcript (no per-question answers recorded):\n${joined}`
+        : "No transcript or answers were recorded. Provide general guidance based on session metadata only.";
+    }
 
     const prompt = `
 Analyze this full interview session and produce a JSON debrief.
