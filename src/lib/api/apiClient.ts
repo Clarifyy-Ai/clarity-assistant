@@ -6,7 +6,7 @@
 // - Centralize fetch usage
 // - Attach Supabase bearer token when available
 // - Attach CSRF header for state-changing requests
-// - Attach encrypted BYOK provider keys as request headers when available
+// - Attach BYOK provider keys as request headers when available
 // - Add request timeout support
 // - Add safe retry support for transient failures
 // - Normalize API errors into a consistent shape
@@ -54,6 +54,7 @@ export class ApiClientError extends Error {
     details?: unknown;
   }) {
     super(options.message);
+
     this.name = "ApiClientError";
     this.status = options.status;
     this.code = options.code ?? "API_ERROR";
@@ -66,7 +67,15 @@ const DEFAULT_TIMEOUT_MS = 30_000;
 const DEFAULT_RETRIES = 0;
 const DEFAULT_RETRY_DELAY_MS = 500;
 
-const RETRYABLE_STATUS_CODES = new Set([408, 425, 429, 500, 502, 503, 504]);
+const RETRYABLE_STATUS_CODES = new Set([
+  408,
+  425,
+  429,
+  500,
+  502,
+  503,
+  504,
+]);
 
 const STATE_CHANGING_METHODS = new Set<HttpMethod>([
   "POST",
@@ -76,7 +85,9 @@ const STATE_CHANGING_METHODS = new Set<HttpMethod>([
 ]);
 
 function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => window.setTimeout(resolve, ms));
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, ms);
+  });
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
@@ -101,7 +112,10 @@ function createAbortSignal(
   externalSignal?: AbortSignal
 ): AbortSignal {
   const controller = new AbortController();
-  const timeout = window.setTimeout(() => controller.abort(), timeoutMs);
+
+  const timeout = window.setTimeout(() => {
+    controller.abort();
+  }, timeoutMs);
 
   if (externalSignal) {
     if (externalSignal.aborted) {
@@ -114,7 +128,9 @@ function createAbortSignal(
           window.clearTimeout(timeout);
           controller.abort();
         },
-        { once: true }
+        {
+          once: true,
+        }
       );
     }
   }
@@ -124,7 +140,9 @@ function createAbortSignal(
     () => {
       window.clearTimeout(timeout);
     },
-    { once: true }
+    {
+      once: true,
+    }
   );
 
   return controller.signal;
@@ -207,26 +225,36 @@ function buildHeaders(
 }
 
 async function parseResponseBody(response: Response): Promise<unknown> {
-  const contentType = response.headers.get("Content-Type") ?? "";
-
   if (response.status === 204) {
     return null;
   }
 
+  const contentType = response.headers.get("Content-Type") ?? "";
+
   if (contentType.includes("application/json")) {
-    return response.json();
+    try {
+      return await response.json();
+    } catch {
+      return null;
+    }
   }
 
-  return response.text();
+  try {
+    return await response.text();
+  } catch {
+    return null;
+  }
 }
 
 function normalizeErrorPayload(payload: unknown): ApiErrorPayload {
   if (isPlainObject(payload)) {
     return {
       error: typeof payload.error === "string" ? payload.error : undefined,
-      message: typeof payload.message === "string" ? payload.message : undefined,
+      message:
+        typeof payload.message === "string" ? payload.message : undefined,
       code: typeof payload.code === "string" ? payload.code : undefined,
-      errorId: typeof payload.errorId === "string" ? payload.errorId : undefined,
+      errorId:
+        typeof payload.errorId === "string" ? payload.errorId : undefined,
       details: payload.details,
     };
   }
@@ -238,6 +266,43 @@ function normalizeErrorPayload(payload: unknown): ApiErrorPayload {
   }
 
   return {};
+}
+
+function normalizeUnknownError(error: unknown): ApiClientError {
+  if (error instanceof ApiClientError) {
+    return error;
+  }
+
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return new ApiClientError({
+      message: "Request timed out or was cancelled.",
+      status: 408,
+      code: "REQUEST_ABORTED",
+    });
+  }
+
+  if (error instanceof TypeError) {
+    return new ApiClientError({
+      message: "Network request failed. Please check your connection.",
+      status: 0,
+      code: "NETWORK_ERROR",
+      details: error.message,
+    });
+  }
+
+  if (error instanceof Error) {
+    return new ApiClientError({
+      message: error.message,
+      status: 0,
+      code: "UNKNOWN_CLIENT_ERROR",
+    });
+  }
+
+  return new ApiClientError({
+    message: "Unexpected network error.",
+    status: 0,
+    code: "UNKNOWN_CLIENT_ERROR",
+  });
 }
 
 function shouldRetry(
@@ -257,6 +322,10 @@ function shouldRetry(
     return false;
   }
 
+  if (error instanceof TypeError) {
+    return true;
+  }
+
   return true;
 }
 
@@ -273,6 +342,7 @@ async function executeRequest<T>(
 ): Promise<T> {
   const method = options.method ?? "GET";
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+
   const hasBody = options.body !== undefined && method !== "GET";
 
   const signal = createAbortSignal(timeoutMs, options.signal);
@@ -286,13 +356,19 @@ async function executeRequest<T>(
     hasBody,
   });
 
-  const response = await fetch(url, {
-    method,
-    headers,
-    signal,
-    credentials: "omit",
-    body: hasBody ? JSON.stringify(options.body) : undefined,
-  });
+  let response: Response;
+
+  try {
+    response = await fetch(url, {
+      method,
+      headers,
+      signal,
+      credentials: "omit",
+      body: hasBody ? JSON.stringify(options.body) : undefined,
+    });
+  } catch (error) {
+    throw normalizeUnknownError(error);
+  }
 
   const parsedBody = await parseResponseBody(response);
 
@@ -307,10 +383,17 @@ async function executeRequest<T>(
       status: response.status,
       code: errorPayload.code,
       errorId: errorPayload.errorId,
-      details: errorPayload.details,
+      details: errorPayload.details ?? parsedBody,
     });
   }
 
+  /**
+   * Support Supabase-like envelopes:
+   * { data, error }
+   *
+   * Most of our Edge Functions return direct JSON, so this only unwraps
+   * when both keys exist.
+   */
   if (isPlainObject(parsedBody) && "data" in parsedBody && "error" in parsedBody) {
     return parsedBody.data as T;
   }
@@ -323,6 +406,7 @@ export async function apiRequest<T>(
   options: ApiClientOptions = {}
 ): Promise<T> {
   const url = joinUrl(EDGE_BASE, path);
+
   const retries = options.retries ?? DEFAULT_RETRIES;
   const retryDelayMs = options.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS;
 
@@ -335,14 +419,14 @@ export async function apiRequest<T>(
       lastError = error;
 
       if (!shouldRetry(error, attempt, retries)) {
-        throw error;
+        throw normalizeUnknownError(error);
       }
 
       await sleep(calculateRetryDelay(retryDelayMs, attempt));
     }
   }
 
-  throw lastError;
+  throw normalizeUnknownError(lastError);
 }
 
 export const apiClient = {
