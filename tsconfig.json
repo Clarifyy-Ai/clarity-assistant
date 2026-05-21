@@ -5,23 +5,22 @@
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "isolatedModules": true,
-
     "jsx": "react-jsx",
-
-    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "lib": [
+      "ES2020",
+      "DOM",
+      "DOM.Iterable"
+    ],
     "target": "ES2020",
     "module": "ESNext",
     "moduleResolution": "Bundler",
-
-    "baseUrl": "./",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": [
+        "./src/*"
+      ]
     },
-
     "resolveJsonModule": true,
     "skipLibCheck": true,
-
-    // 🔐 ✅ STRICT MODE (CRITICAL)
     "strict": true,
     "noImplicitAny": true,
     "strictNullChecks": true,
@@ -30,18 +29,13 @@
     "strictPropertyInitialization": true,
     "noImplicitThis": true,
     "alwaysStrict": true,
-
-    // ✅ CODE QUALITY
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "noUncheckedIndexedAccess": true,
     "noImplicitReturns": true,
-
-    // ✅ SAFETY
     "useUnknownInCatchVariables": true
   },
-
   "exclude": [
     "node_modules",
     "dist",
