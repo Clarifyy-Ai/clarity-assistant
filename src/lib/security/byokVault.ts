@@ -157,7 +157,7 @@ async function getOrCreateDeviceKey(): Promise<CryptoKey> {
 
   return crypto.subtle.importKey(
     "raw",
-    keyBytes,
+    keyBytes as unknown as BufferSource,
     {
       name: "AES-GCM",
       length: 256,
