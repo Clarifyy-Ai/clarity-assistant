@@ -201,10 +201,10 @@ async function decryptJSON<T>(blob: EncryptedBlob): Promise<T> {
   const plaintext = await crypto.subtle.decrypt(
     {
       name: "AES-GCM",
-      iv,
+      iv: iv as unknown as BufferSource,
     },
     key,
-    ciphertext
+    ciphertext as unknown as BufferSource
   );
 
   const decoded = new TextDecoder().decode(plaintext);
