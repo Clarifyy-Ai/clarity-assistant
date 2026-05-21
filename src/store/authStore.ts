@@ -569,7 +569,7 @@ export const useAuthStore = create<AuthStore>()(
 
             const { data, error } = await supabase
               .from("profiles")
-              .update(payload)
+              .update(payload as any)
               .eq("id", userId)
               .select()
               .single();
