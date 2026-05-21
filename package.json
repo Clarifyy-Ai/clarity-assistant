@@ -27,7 +27,6 @@
 
     "format": "prettier --write .",
 
-    // ✅ Security + DevOps
     "audit": "npm audit --production",
     "audit:fix": "npm audit fix",
     "validate-env": "node scripts/validate-env.js",
