@@ -443,7 +443,7 @@ export const useAuthStore = create<AuthStore>()(
             });
 
             const { error } = await supabase.auth.signInWithOAuth({
-              provider,
+              provider: provider as any,
               options: {
                 redirectTo: `${window.location.origin}/auth/callback`,
                 scopes: provider === "google" ? "email profile" : undefined,
