@@ -14,6 +14,10 @@ export default tseslint.config(
     languageOptions: {
       ecmaVersion: 2020,
       globals: globals.browser,
+      parserOptions: {
+        projectService: true,
+        tsconfigRootDir: import.meta.dirname,
+      },
     },
 
     plugins: {
@@ -43,7 +47,7 @@ export default tseslint.config(
       "@typescript-eslint/no-floating-promises": "error",
 
       // ✅ Force explicit return types (better maintainability)
-      "@typescript-eslint/explicit-function-return-types": "warn",
+      "@typescript-eslint/explicit-function-return-type": "warn",
 
       // ✅ Better safety
       "@typescript-eslint/ban-ts-comment": [
