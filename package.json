@@ -27,7 +27,6 @@
 
     "format": "prettier --write .",
 
-    // ✅ Security + DevOps
     "audit": "npm audit --production",
     "audit:fix": "npm audit fix",
     "validate-env": "node scripts/validate-env.js",
@@ -173,7 +172,6 @@
 
     "zustand": "^5.0.0",
 
-    // 🔐 SECURITY (CRITICAL)
     "dompurify": "^3.1.6"
   },
 
