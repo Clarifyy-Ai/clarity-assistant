@@ -129,7 +129,7 @@ function normalizeReferralCode(value: string | null): string | null {
  * This local schema keeps the central signupSchema behavior while making
  * browser FormData checkbox submission compatible.
  */
-const signupFormSchema = signupSchema.extend({
+const signupFormSchema = (signupSchema as any).extend({
   acceptTerms: z.preprocess(
     (value) => value === true || value === "true" || value === "on",
     z.boolean().refine((accepted) => accepted === true, {
