@@ -295,7 +295,7 @@ export default function UsageDashboard(): JSX.Element {
       }
 
       setTransactions((transactionsResult.data ?? []) as CreditTransaction[]);
-      setSessions((sessionsResult.data ?? []) as SessionSummary[]);
+      setSessions((sessionsResult.data ?? []) as unknown as SessionSummary[]);
 
       await refreshCredits();
     } catch (loadError) {
