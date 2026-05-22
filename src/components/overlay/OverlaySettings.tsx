@@ -1,9 +1,17 @@
 // src/components/overlay/OverlaySettings.tsx
-import { useState } from 'react';
-import { useOverlayStore } from '@/store/overlayStore';
-import { setAppStealthMode } from '@/lib/stealth/stealthActions';
-import { Settings, X, Eye, EyeOff, Shield, AlertCircle, RefreshCw } from 'lucide-react';
-import { cn } from '@/lib/utils';
+import { useMemo, useState } from "react";
+import { useOverlayStore } from "@/store/overlayStore";
+import { setAppStealthMode } from "@/lib/stealth/stealthActions";
+import {
+  Settings,
+  X,
+  Eye,
+  EyeOff,
+  Shield,
+  AlertCircle,
+  RefreshCw,
+} from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface OverlaySettingsProps {
   isOpen?: boolean;
@@ -11,70 +19,148 @@ interface OverlaySettingsProps {
   className?: string;
 }
 
+type LocalOnlySettings = {
+  autoHide: boolean;
+  hotkeysEnabled: boolean;
+  screenCaptureDetection: boolean;
+  windowVisibilityTracking: boolean;
+};
+
+const DEFAULT_LOCAL_SETTINGS: LocalOnlySettings = {
+  autoHide: true,
+  hotkeysEnabled: true,
+  screenCaptureDetection: true,
+  windowVisibilityTracking: true,
+};
+
+const HINT_STYLE_OPTIONS = [
+  { v: "short_hints", l: "Hints" },
+  { v: "full_answer", l: "Full" },
+  { v: "outline", l: "Outline" },
+  { v: "keywords_only", l: "Keys" },
+] as const;
+
 export function OverlaySettings({
   isOpen = false,
   onClose,
   className,
 }: OverlaySettingsProps) {
-  const is_stealth_mode  = useOverlayStore((s) => s.is_stealth_mode);
-  const is_proctor_safe  = useOverlayStore((s) => s.is_proctor_safe);
-  const hint_style       = useOverlayStore((s) => s.hint_style);
-  const simple_language  = useOverlayStore((s) => s.simple_language);
-  const auto_generate    = useOverlayStore((s) => s.auto_generate);
-  const stealth_opacity  = useOverlayStore((s) => s.stealth_opacity);
-  const is_minimal_mode  = useOverlayStore((s) => s.is_minimal_mode);
+  const isStealthMode = useOverlayStore((s) => s.is_stealth_mode);
+  const isProctorSafe = useOverlayStore((s) => s.is_proctor_safe);
+  const hintStyle = useOverlayStore((s) => s.hint_style);
+  const simpleLanguage = useOverlayStore((s) => s.simple_language);
+  const autoGenerate = useOverlayStore((s) => s.auto_generate);
+  const stealthOpacity = useOverlayStore((s) => s.stealth_opacity);
+  const isMinimalMode = useOverlayStore((s) => s.is_minimal_mode);
 
-  const [settings, setSettings] = useState({
-    stealthMode: is_stealth_mode,
-    proctorSafe: is_proctor_safe,
-    opacity: stealth_opacity,
-    hintStyle: hint_style,
-    autoHide: true,
-    hotkeysEnabled: true,
-    screenCaptureDetection: true,
-    windowVisibilityTracking: true,
-  });
-
+  const [localSettings, setLocalSettings] =
+    useState<LocalOnlySettings>(DEFAULT_LOCAL_SETTINGS);
   const [showWarnings, setShowWarnings] = useState(true);
 
-  const handleSettingChange = (key: string, value: any) => {
-    setSettings((prev) => ({ ...prev, [key]: value }));
+  const currentSettings = useMemo(
+    () => ({
+      stealthMode: isStealthMode,
+      proctorSafe: isProctorSafe,
+      opacity: stealthOpacity,
+      hintStyle,
+      simpleLanguage,
+      autoGenerate,
+      minimalMode: isMinimalMode,
+      ...localSettings,
+    }),
+    [
+      isStealthMode,
+      isProctorSafe,
+      stealthOpacity,
+      hintStyle,
+      simpleLanguage,
+      autoGenerate,
+      isMinimalMode,
+      localSettings,
+    ]
+  );
+
+  const handleStoreSettingChange = (key: string, value: unknown) => {
     const os = useOverlayStore.getState();
+
     switch (key) {
-      case 'stealthMode':     setAppStealthMode(value); break;
-      case 'proctorSafe':     os.setProctorSafe?.(value); break;
-      case 'hintStyle':       os.setHintStyle?.(value); break;
-      case 'opacity':         os.setStealthOpacity(value); break;
+      case "stealthMode":
+        setAppStealthMode(Boolean(value));
+        break;
+      case "proctorSafe":
+        os.setProctorSafe?.(Boolean(value));
+        break;
+      case "hintStyle":
+        os.setHintStyle?.(value as typeof hintStyle);
+        break;
+      case "opacity":
+        os.setStealthOpacity(Number(value));
+        break;
+      case "simpleLanguage":
+        os.setSimpleLanguage?.(Boolean(value));
+        break;
+      case "autoGenerate":
+        os.setAutoGenerate?.(Boolean(value));
+        break;
+      case "minimalMode":
+        os.setMinimalMode?.(Boolean(value));
+        break;
     }
+  };
+
+  const handleLocalSettingChange = (
+    key: keyof LocalOnlySettings,
+    value: boolean
+  ) => {
+    setLocalSettings((prev) => ({ ...prev, [key]: value }));
+  };
+
+  const resetToDefaults = () => {
+    const os = useOverlayStore.getState();
+
+    setAppStealthMode(false);
+    os.setProctorSafe?.(true);
+    os.setStealthOpacity(90);
+    os.setHintStyle?.("short_hints");
+    os.setSimpleLanguage?.(false);
+    os.setAutoGenerate?.(false);
+    os.setMinimalMode?.(false);
+
+    setLocalSettings(DEFAULT_LOCAL_SETTINGS);
   };
 
   if (!isOpen) return null;
 
   return (
-    <div className={cn(
-      'rounded-2xl overflow-hidden border border-white/[0.1] bg-[#0d0d1e] shadow-2xl max-w-sm',
-      className
-    )}>
-      {/* Header */}
+    <div
+      className={cn(
+        "rounded-2xl overflow-hidden border border-white/[0.1] bg-[#0d0d1e] shadow-2xl max-w-sm",
+        className
+      )}
+      role="dialog"
+      aria-modal="true"
+      aria-label="Overlay settings"
+    >
       <div className="flex items-center justify-between border-b border-white/[0.07] px-4 py-3">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-lg bg-indigo-500/15 border border-indigo-500/20 flex items-center justify-center">
-            <Settings className="h-3.5 w-3.5 text-indigo-400" />
+            <Settings className="h-3.5 w-3.5 text-indigo-400" aria-hidden="true" />
           </div>
           <h2 className="text-[13px] font-bold text-white/80">Overlay Settings</h2>
         </div>
         <button
+          type="button"
           onClick={onClose}
+          aria-label="Close overlay settings"
           className="w-6 h-6 flex items-center justify-center rounded-md text-white/30 hover:text-white/70 hover:bg-white/8 transition-all"
         >
-          <X className="h-3.5 w-3.5" />
+          <X className="h-3.5 w-3.5" aria-hidden="true" />
         </button>
       </div>
 
-      {/* Warning Banner */}
       {showWarnings && (
         <div className="flex gap-2 p-3 bg-amber-500/8 border-b border-amber-500/12">
-          <AlertCircle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+          <AlertCircle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" aria-hidden="true" />
           <div className="text-[12px] text-amber-400/80 flex-1">
             <p className="font-bold mb-0.5">Safety Reminder</p>
             <p className="text-amber-400/60 leading-snug">
@@ -82,96 +168,98 @@ export function OverlaySettings({
             </p>
           </div>
           <button
+            type="button"
             onClick={() => setShowWarnings(false)}
+            aria-label="Dismiss safety reminder"
             className="text-amber-400/30 hover:text-amber-400 transition-colors shrink-0"
           >
-            <X className="h-3 w-3" />
+            <X className="h-3 w-3" aria-hidden="true" />
           </button>
         </div>
       )}
 
-      {/* Content */}
       <div className="p-3 space-y-1.5 max-h-96 overflow-y-auto">
-
-        {/* Simple Language */}
         <SettingRow
           label="Simple Language"
           description="Plain, jargon-free AI responses"
         >
           <Toggle
-            checked={simple_language}
-            onChange={(v) => useOverlayStore.getState().setSimpleLanguage(v)}
+            checked={currentSettings.simpleLanguage}
+            onChange={(v) => handleStoreSettingChange("simpleLanguage", v)}
+            ariaLabel="Toggle simple language"
           />
         </SettingRow>
 
-        {/* Auto-Generate */}
         <SettingRow
           label="Auto-Generate"
           description="Automatically generate on question detection"
         >
           <Toggle
-            checked={auto_generate}
-            onChange={(v) => useOverlayStore.getState().setAutoGenerate(v)}
+            checked={currentSettings.autoGenerate}
+            onChange={(v) => handleStoreSettingChange("autoGenerate", v)}
+            ariaLabel="Toggle auto-generate"
           />
         </SettingRow>
 
-        {/* Minimal Mode */}
         <SettingRow
           label="Minimal Mode"
           description="Hides toolbar, tabs, chat for compact view"
         >
           <Toggle
-            checked={is_minimal_mode}
-            onChange={(v) => useOverlayStore.getState().setMinimalMode(v)}
+            checked={currentSettings.minimalMode}
+            onChange={(v) => handleStoreSettingChange("minimalMode", v)}
+            ariaLabel="Toggle minimal mode"
           />
         </SettingRow>
 
         <div className="my-2 border-t border-white/[0.06]" />
 
-        {/* Stealth Mode */}
         <SettingRow
           label="Stealth Mode"
           description="Hide cursor and pointer events"
-          icon={settings.stealthMode ? <EyeOff className="h-3.5 w-3.5 text-violet-400" /> : <Eye className="h-3.5 w-3.5 text-white/30" />}
+          icon={
+            currentSettings.stealthMode ? (
+              <EyeOff className="h-3.5 w-3.5 text-violet-400" aria-hidden="true" />
+            ) : (
+              <Eye className="h-3.5 w-3.5 text-white/30" aria-hidden="true" />
+            )
+          }
         >
           <Toggle
-            checked={settings.stealthMode}
-            onChange={(v) => handleSettingChange('stealthMode', v)}
+            checked={currentSettings.stealthMode}
+            onChange={(v) => handleStoreSettingChange("stealthMode", v)}
             color="bg-violet-500"
+            ariaLabel="Toggle stealth mode"
           />
         </SettingRow>
 
-        {/* Proctor Safe */}
         <SettingRow
           label="Proctor Safe Position"
           description="Enforce safe position away from detection zones"
-          icon={<Shield className="h-3.5 w-3.5 text-emerald-400" />}
+          icon={<Shield className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />}
         >
           <Toggle
-            checked={settings.proctorSafe}
-            onChange={(v) => handleSettingChange('proctorSafe', v)}
+            checked={currentSettings.proctorSafe}
+            onChange={(v) => handleStoreSettingChange("proctorSafe", v)}
             color="bg-emerald-500"
+            ariaLabel="Toggle proctor safe position"
           />
         </SettingRow>
 
         <div className="my-2 border-t border-white/[0.06]" />
 
-        {/* Hint Style */}
         <div className="px-3 py-2 rounded-xl bg-white/[0.03] border border-white/[0.06]">
           <p className="text-[12px] font-semibold text-white/60 mb-2">Hint Style</p>
           <div className="flex gap-1 bg-black/20 p-1 rounded-xl">
-            {[
-              { v: 'hints',       l: 'Hints' },
-              { v: 'full_answer', l: 'Full' },
-              { v: 'outline',     l: 'Outline' },
-              { v: 'keywords',    l: 'Keys' },
-            ].map(({ v, l }) => (
+            {HINT_STYLE_OPTIONS.map(({ v, l }) => (
               <button
                 key={v}
-                onClick={() => handleSettingChange('hintStyle', v)}
+                type="button"
+                onClick={() => handleStoreSettingChange("hintStyle", v)}
+                aria-pressed={currentSettings.hintStyle === v}
                 className={cn(
                   "flex-1 py-1 rounded-lg text-[11px] font-bold transition-all",
-                  settings.hintStyle === v
+                  currentSettings.hintStyle === v
                     ? "bg-indigo-600/40 text-indigo-200"
                     : "text-white/30 hover:text-white/55"
                 )}
@@ -182,49 +270,66 @@ export function OverlaySettings({
           </div>
         </div>
 
-        {/* Opacity */}
         <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
           <div className="flex items-center justify-between mb-2">
             <p className="text-[12px] font-semibold text-white/60">Opacity</p>
-            <span className="text-[12px] font-mono text-white/40">{settings.opacity}%</span>
+            <span className="text-[12px] font-mono text-white/40">
+              {currentSettings.opacity}%
+            </span>
           </div>
           <input
             type="range"
             min="20"
             max="100"
             step="10"
-            value={settings.opacity}
-            onChange={(e) => handleSettingChange('opacity', parseInt(e.target.value))}
+            value={currentSettings.opacity}
+            onChange={(e) =>
+              handleStoreSettingChange("opacity", parseInt(e.target.value, 10))
+            }
+            aria-label="Overlay opacity"
             className="w-full accent-indigo-500 h-1.5 rounded-full bg-white/10 appearance-none cursor-pointer"
           />
         </div>
 
         <div className="my-2 border-t border-white/[0.06]" />
 
-        <SettingRow label="Auto-Hide on Tab Blur" description="Hide when switching tabs">
+        <SettingRow
+          label="Auto-Hide on Tab Blur"
+          description="Hide when switching tabs"
+        >
           <Toggle
-            checked={settings.autoHide}
-            onChange={(v) => handleSettingChange('autoHide', v)}
+            checked={currentSettings.autoHide}
+            onChange={(v) => handleLocalSettingChange("autoHide", v)}
+            ariaLabel="Toggle auto-hide on tab blur"
           />
         </SettingRow>
 
-        <SettingRow label="Screen Capture Detection" description="Detect when screen is being recorded">
+        <SettingRow
+          label="Screen Capture Detection"
+          description="Detect when screen is being recorded"
+        >
           <Toggle
-            checked={settings.screenCaptureDetection}
-            onChange={(v) => handleSettingChange('screenCaptureDetection', v)}
+            checked={currentSettings.screenCaptureDetection}
+            onChange={(v) => handleLocalSettingChange("screenCaptureDetection", v)}
+            ariaLabel="Toggle screen capture detection"
           />
         </SettingRow>
 
-        <SettingRow label="Track Window Visibility" description="Monitor for unfocused window/tab">
+        <SettingRow
+          label="Track Window Visibility"
+          description="Monitor for unfocused window or tab"
+        >
           <Toggle
-            checked={settings.windowVisibilityTracking}
-            onChange={(v) => handleSettingChange('windowVisibilityTracking', v)}
+            checked={currentSettings.windowVisibilityTracking}
+            onChange={(v) => handleLocalSettingChange("windowVisibilityTracking", v)}
+            ariaLabel="Toggle window visibility tracking"
           />
         </SettingRow>
 
-        {/* Hotkeys reference */}
         <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-          <p className="text-[11px] font-bold text-white/30 uppercase tracking-widest mb-2">Shortcuts</p>
+          <p className="text-[11px] font-bold text-white/30 uppercase tracking-widest mb-2">
+            Shortcuts
+          </p>
           <div className="space-y-1 text-[11px] font-mono text-white/25">
             <p>Ctrl+Shift+H — Toggle Overlay</p>
             <p>Ctrl+Shift+S — Stealth Mode</p>
@@ -235,31 +340,20 @@ export function OverlaySettings({
         </div>
       </div>
 
-      {/* Footer */}
       <div className="border-t border-white/[0.07] p-3 space-y-2">
         <button
+          type="button"
           onClick={onClose}
           className="w-full px-4 py-2 bg-indigo-600/25 hover:bg-indigo-600/35 border border-indigo-500/25 text-indigo-300 text-[12px] font-bold rounded-xl transition-all"
         >
           Save & Close
         </button>
         <button
-          onClick={() => {
-            setSettings({
-              stealthMode: false,
-              proctorSafe: true,
-              opacity: 90,
-              hintStyle: 'short_hints',
-              autoHide: true,
-              hotkeysEnabled: true,
-              screenCaptureDetection: true,
-              windowVisibilityTracking: true,
-            });
-            useOverlayStore.getState().setStealthOpacity(90);
-          }}
+          type="button"
+          onClick={resetToDefaults}
           className="w-full flex items-center justify-center gap-1.5 px-4 py-2 bg-white/[0.03] hover:bg-white/[0.07] border border-white/[0.07] text-white/35 hover:text-white/60 text-[12px] font-medium rounded-xl transition-all"
         >
-          <RefreshCw className="w-3 h-3" />
+          <RefreshCw className="w-3 h-3" aria-hidden="true" />
           Reset to Defaults
         </button>
       </div>
@@ -284,7 +378,11 @@ function SettingRow({
         {icon && <span className="shrink-0">{icon}</span>}
         <div className="min-w-0">
           <p className="text-[12px] font-semibold text-white/55 truncate">{label}</p>
-          {description && <p className="text-[11px] text-white/25 mt-0.5 leading-snug">{description}</p>}
+          {description && (
+            <p className="text-[11px] text-white/25 mt-0.5 leading-snug">
+              {description}
+            </p>
+          )}
         </div>
       </div>
       <div className="shrink-0">{children}</div>
@@ -296,13 +394,19 @@ function Toggle({
   checked,
   onChange,
   color = "bg-indigo-500",
+  ariaLabel,
 }: {
   checked: boolean;
   onChange: (v: boolean) => void;
   color?: string;
+  ariaLabel: string;
 }) {
   return (
     <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={ariaLabel}
       onClick={() => onChange(!checked)}
       className={cn(
         "relative inline-flex h-5 w-9 items-center rounded-full transition-all border",
@@ -311,10 +415,13 @@ function Toggle({
           : "bg-white/8 border-white/10"
       )}
     >
-      <span className={cn(
-        "inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform",
-        checked ? "translate-x-[18px]" : "translate-x-0.5"
-      )} />
+      <span
+        aria-hidden="true"
+        className={cn(
+          "inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform",
+          checked ? "translate-x-[18px]" : "translate-x-0.5"
+        )}
+      />
     </button>
   );
 }
