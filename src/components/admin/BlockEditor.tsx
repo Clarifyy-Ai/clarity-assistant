@@ -150,7 +150,6 @@ export default function BlockEditor({ value, onChange, uploadFolder, compact }: 
               {block.type === "image" && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-center bg-muted/30 rounded-lg p-2">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={block.url}
                       alt={block.alt}
