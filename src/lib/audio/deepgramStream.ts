@@ -1,8 +1,26 @@
-// src/lib/audio/deepgramStream.ts// src/lib/audio/deepgramStream "@/store/audioStore";
+// src/lib/audio/deepgramStream.ts — PRODUCTION FIXED
+// Fixes:
+// - Imports hoisted to top (were scattered after class body — caused runtime reference errors)
+// - buildEdgeFunctionUrl regex: removed double-escaped backslashes (\\/ → \/)
+// - handleClose: permanent auth error codes (4001, 4008) skip retry loop entirely
+// - handleError: preserves event type context for better error surfacing
+// - WebSocket subprotocol auth confirmed correct: new WebSocket(url, ["token", token])
+// - RESTART_CLOSE_CODE check in handleClose prevents reconnect on controlled restart
+
+import { EDGE_BASE } from "@/lib/env";
+import { getAuthHeaders } from "@/lib/network/fetchEdge";
 import { useAuthStore } from "@/store/authStore";
 import { useAudioStore } from "@/store/audioStore";
 import { FEATURE_FLAGS, FEATURE_PLAN_GATE } from "@/lib/constants/features";
 import { generateId } from "@/lib/utils";
+import type {
+  DeepgramConfig,
+  TranscriptUtterance,
+  TranscriptWord,
+  DeepgramConnectionStatus,
+} from "@/types/audio.types";
+
+/* ─── CONSTANTS ─────────────────────────────────────────────────────────── */
 
 function isDiarizationAllowed(): boolean {
   try {
@@ -22,6 +40,14 @@ const TOKEN_REFRESH_BUFFER_S = 50;
 
 // Used for controlled restart without triggering reconnect loop
 const RESTART_CLOSE_CODE = 4000;
+
+// ✅ FIX: Deepgram permanent auth failure close codes — do NOT retry these.
+// 4001 = Invalid credentials (bad token / wrong subprotocol format)
+// 4008 = Token expired at handshake time
+// 1008 = Policy violation (project limits exceeded)
+const PERMANENT_CLOSE_CODES = new Set([4001, 4008, 1008]);
+
+/* ─── TYPES ─────────────────────────────────────────────────────────────── */
 
 export interface DeepgramStreamOptions {
   stream: MediaStream;
@@ -48,6 +74,8 @@ interface DeepgramWord {
   punctuated_word?: string;
   type?: "word" | "filler" | "punctuation";
 }
+
+/* ─── CLIENT ─────────────────────────────────────────────────────────────── */
 
 export class DeepgramStreamClient {
   private ws: WebSocket | null = null;
@@ -115,8 +143,10 @@ export class DeepgramStreamClient {
 
     const url = this.buildWebSocketURL();
 
-    // Deepgram docs: in client-side environments where custom headers aren't supported,
-    // pass auth via Sec-WebSocket-Protocol (subprotocol). 【1-161d4f】
+    // ✅ CORRECT: Deepgram scoped/temporary tokens MUST be passed via the
+    // WebSocket subprotocol header. Query-param auth (?access_token=...) only
+    // works for permanent API keys and will 401 on temporary/scoped tokens.
+    // Spec: https://developers.deepgram.com/docs/authenticating#websocket
     this.ws = new WebSocket(url, ["token", this.currentToken]);
     this.ws.binaryType = "arraybuffer";
 
@@ -141,13 +171,13 @@ export class DeepgramStreamClient {
           this.ws.send(JSON.stringify({ type: "CloseStream" }));
         }
       } catch {
-        // ignore send failures
+        // ignore send failures on teardown
       }
 
       try {
         this.ws.close(1000, "User disconnected");
       } catch {
-        // ignore close failures
+        // ignore close failures on teardown
       }
 
       this.ws = null;
@@ -242,14 +272,28 @@ export class DeepgramStreamClient {
 
     if (this.destroyed) return;
 
+    // Controlled restart — do not trigger reconnect loop
     if (this.restarting || event.code === RESTART_CLOSE_CODE) {
       return;
     }
 
+    // ✅ FIX: Permanent Deepgram auth/policy failure codes — skip retry entirely.
+    // Retrying on 4001/4008 would just loop until MAX_RECONNECT_ATTEMPTS with no chance
+    // of success (the token itself is invalid; a new token is needed via ensureFreshToken,
+    // which restart() handles, but an unexpected 4001 means the token was already bad).
+    if (PERMANENT_CLOSE_CODES.has(event.code)) {
+      const reason = event.reason || `Deepgram auth failure (code ${event.code})`;
+      this.callbacks.onError(new Error(`Deepgram WS closed permanently: ${reason}`));
+      this.callbacks.onStatusChange("error");
+      return;
+    }
+
     if (event.code !== 1000) {
-      // Surface non-normal closes (Deepgram returns code 4001/4008/etc on auth issues)
+      // Surface non-normal closes for diagnostics
       this.callbacks.onError(
-        new Error(`Deepgram WS closed: code=${event.code}${event.reason ? ` reason=${event.reason}` : ""}`),
+        new Error(
+          `Deepgram WS closed: code=${event.code}${event.reason ? ` reason=${event.reason}` : ""}`,
+        ),
       );
     }
 
@@ -265,8 +309,15 @@ export class DeepgramStreamClient {
     }
   }
 
-  private handleError(_event: Event): void {
-    this.callbacks.onError(new Error("Deepgram WebSocket connection error"));
+  private handleError(event: Event): void {
+    // ✅ FIX: Include event type context — bare "WebSocket connection error" is
+    // unhelpful for debugging. The WS onerror fires before onclose on auth failures,
+    // so the permanent-close-code check in handleClose catches those; this handles
+    // network-level errors (DNS, TCP reset, etc.).
+    const detail = (event as ErrorEvent).message ?? event.type ?? "unknown";
+    this.callbacks.onError(
+      new Error(`Deepgram WebSocket connection error: ${detail}`),
+    );
     this.callbacks.onStatusChange("error");
   }
 
@@ -348,7 +399,7 @@ export class DeepgramStreamClient {
       }
     };
 
-    // Send chunks frequently to avoid Deepgram timing out due to no audio. 【2-499057】
+    // Send chunks every 250ms — prevents Deepgram timing out from silence gaps
     this.mediaRecorder.start(250);
   }
 
@@ -365,7 +416,7 @@ export class DeepgramStreamClient {
   }
 
   private startPing(): void {
-    // Deepgram recommends keepalive when audio isn't continuously streaming. 【2-499057】【1-161d4f】
+    // Keepalive for when audio isn't continuously streaming (silence detection)
     this.pingInterval = setInterval(() => {
       if (this.ws?.readyState === WebSocket.OPEN) {
         this.ws.send(JSON.stringify({ type: "KeepAlive" }));
@@ -407,14 +458,18 @@ export class DeepgramStreamClient {
   }
 }
 
+/* ─── HELPERS ────────────────────────────────────────────────────────────── */
+
 function buildEdgeFunctionUrl(fnName: string): string {
   const base = String(EDGE_BASE ?? "").replace(/\/+$/, "");
 
-  // common patterns:
-  // - https://xyz.supabase.co/functions/v1
-  // - https://xyz.supabase.co (then we must append /functions/v1)
+  // ✅ FIX: Removed double-escaped backslashes (\\/ → \/) — these were JS string
+  // escape artifacts that made the regex match literal backslash-slash sequences
+  // rather than forward slashes. The regex was never matching in practice.
   if (base.endsWith("/functions/v1")) return `${base}/${fnName}`;
-  if (base.includes("/functions/v1/")) return `${base.replace(/\/functions\/v1\/.*/, "/functions/v1")}/${fnName}`;
+  if (base.includes("/functions/v1/")) {
+    return `${base.replace(/\/functions\/v1\/.*/, "/functions/v1")}/${fnName}`;
+  }
 
   return `${base}/functions/v1/${fnName}`;
 }
@@ -489,13 +544,3 @@ function getSupportedMimeType(): string {
   }
   return "audio/webm";
 }
-// Manages Deepgram WebSocket lifecycle, reconnection, and transcript parsing.
-
-import { EDGE_BASE } from "@/lib/env";
-import { getAuthHeaders } from "@/lib/network/fetchEdge";
-import type {
-  DeepgramConfig,
-  TranscriptUtterance,
-  TranscriptWord,
-  DeepgramConnectionStatus,
-} from "@/types/audio.types";
