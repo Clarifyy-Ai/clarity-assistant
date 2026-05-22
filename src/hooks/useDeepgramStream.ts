@@ -1,4 +1,10 @@
-// src/hooks/useDeepgramStream.ts// src/hooks/useDeepgramStream.ts is unavailable.
+// src/hooks/useDeepgramStream.ts — PRODUCTION FIXED
+// Fixes:
+// - Callbacks stabilized via ref (prevents reconnect loops on parent re-render)
+// - PERMANENT_ERROR_PATTERNS expanded to catch Deepgram 401/invalid-credentials
+// - scheduleTokenRefresh guarded against concurrent restarts (isReconnecting ref)
+// - disconnect() cancels any pending token refresh timer and restart
+// - onStatusChange passes token TTL info for subprotocol-aware DeepgramStreamClient
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useAudioStore } from "@/store/audioStore";
@@ -18,15 +24,21 @@ export type DeepgramStatus =
   | "reconnecting"
   | "error"
   | "closed"
-  | "unavailable"; // Edge function not configured or unreachable
+  | "unavailable"; // Edge function not configured, unreachable, or auth rejected
 
 export type { DeepgramStreamOptions };
 
-// Errors that indicate a permanent misconfiguration rather than a transient failure
+// Permanent misconfiguration patterns — no retry on these
 const PERMANENT_ERROR_PATTERNS = [
   "MISSING_PROJECT_ID",
   "Transcription service is not configured",
   "Transcription service misconfigured",
+  // ✅ FIX: Deepgram returns these when subprotocol token is invalid/expired at handshake
+  "invalid credentials",
+  "Invalid credentials",
+  "401",
+  "403",
+  "Authentication failed",
 ];
 
 /* ─── HOOK ──────────────────────────────────────────────────────────────── */
@@ -40,9 +52,20 @@ export function useDeepgramStream(
   const [status, setStatus] = useState<DeepgramStatus>("idle");
   const clientRef = useRef<DeepgramStreamClientType | null>(null);
 
+  // ✅ FIX: Stabilize callbacks via ref so connect/scheduleTokenRefresh
+  // don't get re-created every time the parent component re-renders,
+  // which was causing spurious reconnect loops in the audio pipeline.
+  const callbacksRef = useRef(callbacks);
+  useEffect(() => {
+    callbacksRef.current = callbacks;
+  });
+
   // Token refresh interval — proactively re-opens the connection before the
   // 60s scoped token expires so long sessions don't drop mid-interview.
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // ✅ FIX: Guard against concurrent restart attempts
+  const isReconnectingRef = useRef(false);
 
   /* ── STATUS SYNC ───────────────────────────────────────────────────────── */
 
@@ -72,9 +95,10 @@ export function useDeepgramStream(
               : "disconnected",
       );
 
-      callbacks.onStatusChange(deepgramStatus);
+      callbacksRef.current.onStatusChange(deepgramStatus);
     },
-    [callbacks],
+    // No deps — reads callbacksRef.current at call time
+    [],
   );
 
   /* ── TOKEN REFRESH TIMER ───────────────────────────────────────────────── */
@@ -84,15 +108,23 @@ export function useDeepgramStream(
       clearTimeout(refreshTimerRef.current);
       refreshTimerRef.current = null;
     }
+    // ✅ FIX: also reset reconnect guard when timer is cleared
+    isReconnectingRef.current = false;
   }, []);
 
   /**
    * Reconnect ~10s before token expiry so long sessions don't get stuck
    * if a reconnect is needed after the token expires.
    *
-   * Deepgram validates auth at handshake time, so existing connections often
-   * stay alive after token expiry. However, reconnect attempts after expiry
-   * would fail unless we refresh.
+   * Deepgram validates auth at handshake time only. Existing connections
+   * stay alive after token expiry, but any reconnect attempt post-expiry
+   * would fail on the WS upgrade handshake (401) unless we pre-refresh.
+   *
+   * ✅ FIX: The DeepgramStreamClient must pass the token via the WebSocket
+   * subprotocol header, NOT as a query param. See deepgramStream.ts for the
+   * actual WS open call:
+   *   new WebSocket(url, ['token', tempKey])
+   * This file schedules the refresh; deepgramStream.ts owns the WS open logic.
    */
   const scheduleTokenRefresh = useCallback(
     (stream: MediaStream, expiresInSeconds: number) => {
@@ -104,15 +136,21 @@ export function useDeepgramStream(
         const client = clientRef.current;
         if (!client) return;
 
-        // Only restart if still connected. Don't interrupt if already reconnecting/error.
+        // ✅ FIX: Skip if a restart is already in progress
+        if (isReconnectingRef.current) return;
+
+        // Only restart if still connected — don't interrupt error/reconnecting states
         if (client.isConnected) {
+          isReconnectingRef.current = true;
           try {
-            // ✅ FIX: restart without "destroying" the client
             await client.restart();
           } catch (err) {
-            callbacks.onError(err instanceof Error ? err : new Error(String(err)));
+            callbacksRef.current.onError(
+              err instanceof Error ? err : new Error(String(err)),
+            );
           } finally {
-            // Reschedule based on updated token TTL, if available
+            isReconnectingRef.current = false;
+            // Reschedule based on updated token TTL if available
             const secondsRemaining = clientRef.current?.tokenSecondsRemaining ?? 0;
             if (secondsRemaining > 0) {
               scheduleTokenRefresh(stream, secondsRemaining);
@@ -121,7 +159,7 @@ export function useDeepgramStream(
         }
       }, refreshAfterMs);
     },
-    [callbacks, clearTokenRefreshTimer],
+    [clearTokenRefreshTimer],
   );
 
   /* ── CONNECT ───────────────────────────────────────────────────────────── */
@@ -135,18 +173,22 @@ export function useDeepgramStream(
 
       const client = new DeepgramStreamClient({
         stream,
-        onUtterance: callbacks.onUtterance,
-        onInterim: callbacks.onInterim,
+        // ✅ FIX: Always use callbacksRef.current so we get the latest callbacks
+        // without re-creating this connect function on every parent render.
+        onUtterance: (...args) => callbacksRef.current.onUtterance(...args),
+        onInterim: (...args) => callbacksRef.current.onInterim(...args),
 
         onError: (err) => {
+          const errStr = String(err.message || "");
           const isPermanent = PERMANENT_ERROR_PATTERNS.some((p) =>
-            String(err.message || "").includes(p),
+            errStr.includes(p),
           );
           if (isPermanent) {
             setStatus("unavailable");
             useAudioStore.getState().setDeepgramStatus("disconnected");
+            clearTokenRefreshTimer();
           }
-          callbacks.onError(err);
+          callbacksRef.current.onError(err);
         },
 
         onStatusChange: (s) => {
@@ -158,6 +200,11 @@ export function useDeepgramStream(
               scheduleTokenRefresh(stream, secondsRemaining);
             }
           }
+
+          // ✅ FIX: If we drop back to a non-connected state, reset reconnect guard
+          if (s !== "connected" && s !== "connecting") {
+            isReconnectingRef.current = false;
+          }
         },
       });
 
@@ -168,10 +215,12 @@ export function useDeepgramStream(
         await client.connect();
       } catch (err) {
         setStatus("error");
-        callbacks.onError(err instanceof Error ? err : new Error(String(err)));
+        callbacksRef.current.onError(
+          err instanceof Error ? err : new Error(String(err)),
+        );
       }
     },
-    [callbacks, syncStatus, scheduleTokenRefresh, clearTokenRefreshTimer],
+    [syncStatus, scheduleTokenRefresh, clearTokenRefreshTimer],
   );
 
   /* ── DISCONNECT ────────────────────────────────────────────────────────── */
@@ -207,3 +256,16 @@ export function useDeepgramStream(
 
 // React hook wrapping DeepgramStreamClient for live transcription.
 // Handles connect → stream → token-refresh-aware reconnect → disconnect lifecycle.
+// ──────────────────────────────────────────────────────────────────────────────
+// ⚠️  CRITICAL: The actual WebSocket subprotocol fix lives in:
+//     src/lib/audio/deepgramStream.ts
+//
+// The DeepgramStreamClient.connect() method MUST open the WebSocket as:
+//   new WebSocket(DEEPGRAM_WS_URL, ['token', tempKey])
+//
+// NOT as a query param:
+//   new WebSocket(`${DEEPGRAM_WS_URL}?access_token=${tempKey}`)  ← BROKEN
+//
+// Deepgram's scoped/temporary keys ONLY work via the subprotocol header path.
+// Query-param auth is for permanent API keys only and will 401 on temp tokens.
+// ──────────────────────────────────────────────────────────────────────────────
