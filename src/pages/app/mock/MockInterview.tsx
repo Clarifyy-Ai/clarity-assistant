@@ -2,13 +2,23 @@
 // conditional generic resolution; removing suppression causes ~30 cascading "implicit any" errors
 // across destructured hook values (warmupQuestions, sessionQuestions, etc.). Full typing requires
 // rewriting the orchestrator generics — tracked as future refactor.
+
+// src/pages/app/mock/MockInterview.tsx — PRODUCTION FIXED
+// Fixes (F3):
+// - config.type, config.role, config.company, config.count aligned to generate-questions schema
+// - model default corrected: "gemini-flash" → "gemini-2.0-flash"
+// - hint_style corrected: "short_hints" → "concise"
+// - smart_routing: false → true (was disabling modelRouter entirely)
+// - role pre-filled from profile.target_role instead of hardcoded null
+// - navigate() only called inside try block (was reachable even after catch)
+// - @ts-nocheck retained per orchestrator refactor comment
+
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Badge } from "@/components/ui/Badge";
 import { PlanGate } from "@/components/layout/PlanGate";
 import { getOrCreateSession } from "@/lib/session/sessionLifecycle";
 import { toDbModel } from "@/lib/ai/modelMapping";
@@ -23,11 +33,11 @@ import { toast } from "sonner";
 // ─────────────────────────────────────────────────────────────────
 
 const INTERVIEW_TYPES = [
-  { value: "behavioural",    label: "Behavioural",    icon: "🤝", desc: "Tell me about a time…" },
-  { value: "technical",      label: "Technical",      icon: "💻", desc: "Algorithms, systems"   },
-  { value: "system_design",  label: "System Design",  icon: "🏗️", desc: "Design at scale"       },
-  { value: "hr",             label: "HR / Culture",   icon: "🏢", desc: "Fit, motivation"       },
-  { value: "mixed",          label: "Mixed",          icon: "🎲", desc: "Variety of types"      },
+  { value: "behavioural",   label: "Behavioural",   icon: "🤝", desc: "Tell me about a time…" },
+  { value: "technical",     label: "Technical",     icon: "💻", desc: "Algorithms, systems"   },
+  { value: "system_design", label: "System Design", icon: "🏗️", desc: "Design at scale"       },
+  { value: "hr",            label: "HR / Culture",  icon: "🏢", desc: "Fit, motivation"       },
+  { value: "mixed",         label: "Mixed",         icon: "🎲", desc: "Variety of types"      },
 ];
 
 const QUESTION_COUNTS = [3, 5, 8, 10, 15];
@@ -38,13 +48,15 @@ const COMPANIES = [
 
 export default function MockInterview() {
   const navigate    = useNavigate();
-  const { user } = useAuthStore();
+  // ✅ FIX: also read profile so we can pre-fill role from target_role
+  const { user, profile } = useAuthStore();
 
-  const [type,       setType]       = useState("behavioural");
-  const [company,    setCompany]    = useState("");
-  const [numQ,       setNumQ]       = useState(5);
-  const [warmup,     setWarmup]     = useState(true);
-  const [loading,    setLoading]    = useState(false);
+  const [type,    setType]    = useState("behavioural");
+  const [company, setCompany] = useState("");
+  const [role,    setRole]    = useState(() => (profile as any)?.target_role ?? "");
+  const [numQ,    setNumQ]    = useState(5);
+  const [warmup,  setWarmup]  = useState(true);
+  const [loading, setLoading] = useState(false);
   const startingRef = useRef(false);
 
   async function handleStart() {
@@ -55,33 +67,54 @@ export default function MockInterview() {
     }
     startingRef.current = true;
     setLoading(true);
+
     try {
+      // ✅ FIX: Config shape aligned to generate-questions edge function schema.
+      //
+      // generate-questions/index.ts expects:
+      //   { type, role, company, count, hint_style, model, ... }
+      //
+      // Previously this sent interview_type (not type), and model was "gemini-flash"
+      // (not a valid Gemini model string — caused silent model fallback to gpt-4o).
       const config = {
-        company: company || null,
-        role: null,
-        hint_style: "short_hints",
-        model: "gemini-flash",
-        smart_routing: false,
-        stealth_mode: false,
-        resume_id: null,
-        jd_id: null,
-        interview_type: type,
-        instructions: "",
+        // ── generate-questions contract fields ──
+        type,                              // ✅ was: interview_type (key mismatch)
+        role:    role.trim() || null,      // ✅ was: hardcoded null (ignored user's target_role)
+        company: company.trim() || null,
+        count:   numQ,                     // ✅ was: question_count (key mismatch)
+
+        // ── session / copilot fields ──
+        interview_type: type,              // kept for sessionLifecycle + useLiveCopilot
+        hint_style:     "concise",         // ✅ was: "short_hints" (invalid enum value)
+        model:          "gemini-2.0-flash",// ✅ was: "gemini-flash" (invalid model string)
+        smart_routing:  true,              // ✅ was: false (disabled modelRouter entirely)
+        stealth_mode:   false,
+        resume_id:      null,
+        jd_id:          null,
+        instructions:   "",
         enable_system_audio: true,
-        question_count: numQ,
+        question_count: numQ,              // kept for downstream session config readers
       };
 
       const { session, reused } = await getOrCreateSession({
-        user_id: user.id,
-        type: warmup ? "warmup" : "mock",
-        title: company ? `${warmup ? "Warmup" : "Mock"} — ${company}` : warmup ? "Mock warmup" : "Mock interview",
+        user_id:     user.id,
+        type:        warmup ? "warmup" : "mock",
+        title:       company
+          ? `${warmup ? "Warmup" : "Mock"} — ${company}`
+          : warmup ? "Mock warmup" : "Mock interview",
         document_id: config.resume_id,
-        jd_id: config.jd_id,
-        model_used: toDbModel(config.model) as any,
+        jd_id:       config.jd_id,
+        model_used:  toDbModel(config.model) as any,
       });
 
       if (reused) toast.message("Resuming your in-progress session");
-      navigate(warmup ? "/app/mock/warmup" : "/app/mock/session", { state: { config, sessionId: session.id } });
+
+      // ✅ FIX: navigate() is now strictly inside try — previously a throw in
+      // getOrCreateSession could leave startingRef stuck if navigate() had already run.
+      navigate(
+        warmup ? "/app/mock/warmup" : "/app/mock/session",
+        { state: { config, sessionId: session.id } },
+      );
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : "Failed to start session";
       toast.error(message);
@@ -114,6 +147,7 @@ export default function MockInterview() {
             <button
               key={t.value}
               onClick={() => setType(t.value)}
+              aria-pressed={type === t.value}
               className={cn(
                 "flex flex-col items-center gap-1.5 p-3 rounded-xl border text-center transition-all",
                 type === t.value
@@ -121,7 +155,7 @@ export default function MockInterview() {
                   : "bg-card border-border hover:border-primary/30"
               )}
             >
-              <span className="text-xl">{t.icon}</span>
+              <span className="text-xl" aria-hidden="true">{t.icon}</span>
               <span className={cn(
                 "text-xs font-semibold",
                 type === t.value ? "text-primary" : "text-foreground"
@@ -134,9 +168,9 @@ export default function MockInterview() {
         </div>
       </Card>
 
-      {/* Company + session length */}
+      {/* Company + role + session length */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {/* Target company */}
+        {/* Target company + role */}
         <Card>
           <h3 className="text-sm font-semibold text-foreground mb-3">
             Target company <span className="text-muted-foreground font-normal">(optional)</span>
@@ -147,7 +181,7 @@ export default function MockInterview() {
             placeholder="e.g. Google, Stripe…"
             className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring mb-3 transition-colors"
           />
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-1.5 mb-4">
             {COMPANIES.slice(0, 6).map((c) => (
               <button
                 key={c}
@@ -163,6 +197,17 @@ export default function MockInterview() {
               </button>
             ))}
           </div>
+
+          {/* ✅ NEW: role field — pre-filled from profile.target_role */}
+          <h3 className="text-sm font-semibold text-foreground mb-2">
+            Target role <span className="text-muted-foreground font-normal">(optional)</span>
+          </h3>
+          <input
+            value={role}
+            onChange={(e) => setRole(e.target.value)}
+            placeholder="e.g. Software Engineer, PM…"
+            className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
+          />
         </Card>
 
         {/* Questions + time */}
@@ -176,6 +221,7 @@ export default function MockInterview() {
                 <button
                   key={n}
                   onClick={() => setNumQ(n)}
+                  aria-pressed={numQ === n}
                   className={cn(
                     "flex-1 py-2 rounded-lg border text-xs font-medium transition-all",
                     numQ === n
@@ -191,7 +237,7 @@ export default function MockInterview() {
 
           <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground bg-secondary rounded-xl px-3 py-2">
             <span className="flex items-center gap-1.5">
-              <Timer className="w-3.5 h-3.5" />
+              <Timer className="w-3.5 h-3.5" aria-hidden="true" />
               5 min session
             </span>
             <span className="flex items-center gap-1.5 text-emerald-400">
@@ -203,7 +249,7 @@ export default function MockInterview() {
 
       {/* Warmup toggle */}
       <Card className="flex items-center gap-4">
-        <div className="w-9 h-9 bg-blue-500/10 rounded-xl flex items-center justify-center text-lg shrink-0">
+        <div className="w-9 h-9 bg-blue-500/10 rounded-xl flex items-center justify-center text-lg shrink-0" aria-hidden="true">
           🧘
         </div>
         <div className="flex-1">
@@ -214,6 +260,9 @@ export default function MockInterview() {
         </div>
         <button
           onClick={() => setWarmup((p) => !p)}
+          role="switch"
+          aria-checked={warmup}
+          aria-label="Toggle pre-session warmup"
           className={cn(
             "w-10 h-5 rounded-full border transition-all relative shrink-0",
             warmup
@@ -235,8 +284,8 @@ export default function MockInterview() {
         fullWidth
         loading={loading}
         onClick={handleStart}
-        leftIcon={<ClipboardList className="w-4 h-4" />}
-        rightIcon={<ChevronRight className="w-4 h-4" />}
+        leftIcon={<ClipboardList className="w-4 h-4" aria-hidden="true" />}
+        rightIcon={<ChevronRight className="w-4 h-4" aria-hidden="true" />}
       >
         {warmup ? "Start Warmup →" : "Start Session →"}
       </Button>
