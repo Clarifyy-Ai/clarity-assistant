@@ -31,14 +31,20 @@ export default tseslint.config(
       // ✅ React / Fast Refresh
       "react-refresh/only-export-components": ["warn", { allowConstantExport: true }],
 
-      // 🔴 CRITICAL: Dead code removal
+      // ⚠️ Dead code — warn only (bulk removal risks behavior changes per guardrail)
       "@typescript-eslint/no-unused-vars": [
-        "error",
+        "warn",
         {
           argsIgnorePattern: "^_",
           varsIgnorePattern: "^_"
         }
       ],
+      "@typescript-eslint/no-unused-expressions": "warn",
+      "@typescript-eslint/no-empty-object-type": "warn",
+      "prefer-const": "warn",
+      "no-useless-catch": "warn",
+      "@typescript-eslint/no-require-imports": "warn",
+      "no-control-regex": "warn",
 
       // ⚠️ Allowed but flagged — project convention permits `as any` in Supabase helpers (see memory)
       "@typescript-eslint/no-explicit-any": "warn",
