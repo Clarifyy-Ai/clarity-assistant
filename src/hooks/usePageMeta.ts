@@ -14,7 +14,7 @@ export function usePageMeta({ title, description }: PageMetaOptions) {
     const prevTitle = document.title;
     if (title) document.title = title;
 
-    let metaDesc = document.querySelector('meta[name="description"]') as HTMLMetaElement | null;
+    const metaDesc = document.querySelector('meta[name="description"]') as HTMLMetaElement | null;
     const prevDesc = metaDesc?.content ?? "";
     if (description && metaDesc) {
       metaDesc.content = description;

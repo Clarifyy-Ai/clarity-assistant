@@ -82,7 +82,7 @@ export function LiveSessionController({ isActive, onAutoEnd }: LiveSessionContro
       document.removeEventListener("visibilitychange", onVisibility);
       clearTimer();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [isActive, status]);
 
   // Reset auto-end + warnings when a brand-new session begins (idle/warming_up).
@@ -100,7 +100,7 @@ export function LiveSessionController({ isActive, onAutoEnd }: LiveSessionContro
 
   useEffect(() => {
     return () => { clearTimer(); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, []);
 
   return null;

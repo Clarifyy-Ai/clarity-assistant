@@ -118,7 +118,7 @@ export default function AdminModelCosts() {
     }
   };
 
-  useEffect(() => { fetchData(); }, [dateRange]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchData(); }, [dateRange]);  
 
   const handleCreditChange = (feature: string, value: string) => {
     const num = parseInt(value, 10);

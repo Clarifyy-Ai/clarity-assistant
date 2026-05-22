@@ -466,7 +466,7 @@ export default function TestSession() {
         return;
       }
 
-      let startedAt = loadedTest.started_at ?? null;
+      const startedAt = loadedTest.started_at ?? null;
 
       // FIX: do NOT auto-promote DRAFT → IN_PROGRESS on page load. The user
       // must explicitly click "Start Test" so the timer doesn't silently begin

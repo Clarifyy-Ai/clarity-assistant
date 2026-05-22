@@ -199,7 +199,7 @@ export default function AdminRevenue() {
     }
   };
 
-  useEffect(() => { fetchData(); }, [dateRange]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { fetchData(); }, [dateRange]);  
 
   const exportCSV = () => {
     const rows = [
