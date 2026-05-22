@@ -116,7 +116,6 @@ export function OverlayToolbar({
 
   const isGenerating = hintState === "generating" || hintState === "streaming";
 
-  // Title/tooltip for the pill toggle button
   const pillToggleTitle = useMemo(() => {
     if (isPeekActive && !isVisible) return "Restore overlay";
     return isMinimal ? "Expand panel" : "Minimize to pill";
@@ -136,14 +135,11 @@ export function OverlayToolbar({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Unified minimize/restore logic:
-  // - If the overlay is in peek-only minimized state => restore
-  // - Else toggle pill/minimal mode
   const handlePillToggle = () => {
     const store = useOverlayStore.getState();
 
     if (isPeekActive && !isVisible && typeof store.toggleMinimize === "function") {
-      store.toggleMinimize(); // restore overlay visibility
+      store.toggleMinimize();
       return;
     }
 
@@ -151,11 +147,13 @@ export function OverlayToolbar({
   };
 
   return (
-    <div className="flex items-center gap-1.5 px-2.5 py-2 border-b border-white/[0.07] bg-[#0c0c1a]/50 shrink-0">
-      {/* LEFT: Mic */}
+    <div
+      className="flex items-center gap-1.5 px-2.5 py-2 border-b border-white/[0.07] bg-[#0c0c1a]/50 shrink-0"
+      role="toolbar"
+      aria-label="Overlay controls"
+    >
       <MicButton isMuted={isMuted} isCapturing={isCapturing} onClick={onToggleMic} />
 
-      {/* CENTER: primary actions */}
       <div className="flex items-center gap-1.5 flex-1 justify-center">
         <PrimaryButton
           icon={Sparkles}
@@ -209,16 +207,17 @@ export function OverlayToolbar({
         />
       </div>
 
-      {/* RIGHT: timer + actions */}
       <div className="flex items-center gap-1 shrink-0">
         <div className="shrink-0">
           <OverlayActivityTimer />
         </div>
 
-        {/* ✅ Pill / Expand / Restore */}
         <button
+          type="button"
           onClick={handlePillToggle}
           title={pillToggleTitle}
+          aria-label={pillToggleTitle}
+          aria-pressed={isMinimal || (isPeekActive && !isVisible)}
           className={cn(
             "w-7 h-7 flex items-center justify-center rounded-lg transition-all",
             isPeekActive && !isVisible
@@ -229,25 +228,28 @@ export function OverlayToolbar({
           )}
         >
           {isPeekActive && !isVisible ? (
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
           ) : isMinimal ? (
-            <Plus className="w-3.5 h-3.5" />
+            <Plus className="w-3.5 h-3.5" aria-hidden="true" />
           ) : (
-            <Minimize2 className="w-3.5 h-3.5" />
+            <Minimize2 className="w-3.5 h-3.5" aria-hidden="true" />
           )}
         </button>
 
-        {/* More menu */}
         <div className="relative" ref={moreMenuRef}>
           <button
+            type="button"
             onClick={() => setShowMoreMenu((p) => !p)}
             title="More options"
+            aria-label="More options"
+            aria-expanded={showMoreMenu}
+            aria-haspopup="menu"
             className={cn(
               "w-7 h-7 flex items-center justify-center rounded-lg transition-all",
               showMoreMenu ? "bg-white/12 text-white" : "text-white/40 hover:text-white/80 hover:bg-white/8"
             )}
           >
-            <MoreHorizontal className="w-3.5 h-3.5" />
+            <MoreHorizontal className="w-3.5 h-3.5" aria-hidden="true" />
           </button>
 
           {showMoreMenu && (
@@ -323,7 +325,9 @@ export function OverlayToolbar({
                   {(["full_answer", "short_hints", "keywords_only"] as const).map((style) => (
                     <button
                       key={style}
+                      type="button"
                       onClick={() => useOverlayStore.getState().setHintStyle(style)}
+                      aria-pressed={hintStyle === style}
                       className={cn(
                         "flex-1 py-1 rounded-lg text-[11px] font-semibold transition-all",
                         hintStyle === style
@@ -347,10 +351,12 @@ export function OverlayToolbar({
                   {MODEL_OPTIONS.map((m) => (
                     <button
                       key={m.id}
+                      type="button"
                       onClick={() => {
                         useOverlayStore.getState().setActiveModel(m.id);
                         setShowMoreMenu(false);
                       }}
+                      aria-pressed={activeModel === m.id}
                       className={cn(
                         "w-full text-left px-2.5 py-1.5 rounded-lg text-[12px] transition-all flex items-center justify-between",
                         activeModel === m.id
@@ -418,11 +424,12 @@ export function OverlayToolbar({
           )}
         </div>
 
-        {/* End session */}
         <button
+          type="button"
           onClick={() => onEndSession?.()}
           disabled={!onEndSession || !isSessionActive}
           title={!isSessionActive ? "Session not active" : "End session"}
+          aria-label={!isSessionActive ? "Session not active" : "End session"}
           className={cn(
             "flex items-center gap-1 px-2 py-1 h-7 border text-[11px] font-bold rounded-lg transition-all shrink-0",
             !onEndSession || !isSessionActive
@@ -430,12 +437,11 @@ export function OverlayToolbar({
               : "bg-red-600/15 hover:bg-red-600/30 border-red-500/20 hover:border-red-500/35 text-red-400 hover:text-red-300"
           )}
         >
-          <Square className="w-2.5 h-2.5 fill-current" />
+          <Square className="w-2.5 h-2.5 fill-current" aria-hidden="true" />
           <span>End</span>
         </button>
       </div>
 
-      {/* Floating: Resume snapshot */}
       {showResumeQuickPeek && (
         <div
           ref={resumeQuickPeekRef}
@@ -476,7 +482,6 @@ export function OverlayToolbar({
         </div>
       )}
 
-      {/* Floating: Pinned hints */}
       {showPinnedMenu && (
         <div
           ref={pinnedMenuRef}
@@ -488,7 +493,9 @@ export function OverlayToolbar({
             </p>
             {pinnedHints.length > 0 && (
               <button
+                type="button"
                 onClick={() => useOverlayStore.getState().clearPinnedHints()}
+                aria-label="Clear all pinned hints"
                 className="text-[11px] text-white/25 hover:text-red-400 transition-colors"
               >
                 clear all
@@ -519,6 +526,7 @@ export function OverlayToolbar({
 
                     <div className="flex items-center gap-3 mt-2">
                       <button
+                        type="button"
                         onClick={() => {
                           useOverlayStore.getState().setHintState("ready");
                           useOverlayStore.setState({
@@ -533,11 +541,13 @@ export function OverlayToolbar({
                         Jump to →
                       </button>
                       <button
+                        type="button"
                         onClick={() => useOverlayStore.getState().togglePinHint(pin.hint, pin.question)}
-                        className="text-[11px] text-white/20 hover:text-red-400 transition-colors"
                         title="Unpin"
+                        aria-label="Unpin hint"
+                        className="text-[11px] text-white/20 hover:text-red-400 transition-colors"
                       >
-                        <Pin className="w-3 h-3" />
+                        <Pin className="w-3 h-3" aria-hidden="true" />
                       </button>
                     </div>
                   </div>
@@ -547,7 +557,6 @@ export function OverlayToolbar({
         </div>
       )}
 
-      {/* Floating: Keyboard shortcuts */}
       {showHotkeyRef && (
         <div
           ref={hotkeyRefRef}
@@ -572,8 +581,6 @@ export function OverlayToolbar({
   );
 }
 
-// ── Sub-components ──────────────────────────────────────────────────────────
-
 function MicButton({
   isMuted,
   isCapturing,
@@ -586,8 +593,11 @@ function MicButton({
   const isActive = isCapturing && !isMuted;
   return (
     <button
+      type="button"
       onClick={onClick}
       title={isMuted ? "Unmute mic" : "Mute mic"}
+      aria-label={isMuted ? "Unmute microphone" : "Mute microphone"}
+      aria-pressed={!isMuted}
       className={cn(
         "w-8 h-8 flex items-center justify-center rounded-xl border transition-all shrink-0 relative",
         isActive
@@ -597,7 +607,11 @@ function MicButton({
             : "bg-white/5 border-white/10 text-white/50 hover:bg-white/10 hover:text-white/80"
       )}
     >
-      {isMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+      {isMuted ? (
+        <MicOff className="w-3.5 h-3.5" aria-hidden="true" />
+      ) : (
+        <Mic className="w-3.5 h-3.5" aria-hidden="true" />
+      )}
       {isActive && (
         <span className="absolute -top-0.5 -right-0.5 w-2 h-2 rounded-full bg-red-500 border border-[#0a0a14] animate-pulse" />
       )}
@@ -622,9 +636,12 @@ function PrimaryButton({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
       disabled={disabled}
       title={label}
+      aria-label={label}
+      aria-pressed={isActive}
       className={cn(
         "flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[12px] font-semibold border transition-all shrink-0 h-8",
         className,
@@ -632,7 +649,7 @@ function PrimaryButton({
         isActive && "shadow-[0_0_0_1px_rgba(255,255,255,0.06)]"
       )}
     >
-      <Icon className="w-3.5 h-3.5 shrink-0" />
+      <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
       <span>{label}</span>
     </button>
   );
@@ -655,7 +672,10 @@ function MenuRow({
 }) {
   return (
     <button
+      type="button"
       onClick={onClick}
+      aria-label={label}
+      aria-pressed={danger ? undefined : active}
       className={cn(
         "w-full flex items-center gap-2.5 px-3 py-2 text-[12px] transition-all",
         danger
@@ -665,7 +685,7 @@ function MenuRow({
             : "text-white/45 hover:text-white/80 hover:bg-white/[0.04]"
       )}
     >
-      <Icon className="w-3.5 h-3.5 shrink-0" />
+      <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
       <span className="flex-1 text-left">{label}</span>
       {active && !danger && <span className="w-1.5 h-1.5 rounded-full bg-current opacity-60" />}
     </button>
