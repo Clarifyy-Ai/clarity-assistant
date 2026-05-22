@@ -46,8 +46,8 @@ export default tseslint.config(
       // ✅ Ensure proper async handling
       "@typescript-eslint/no-floating-promises": "error",
 
-      // ✅ Force explicit return types (better maintainability)
-      "@typescript-eslint/explicit-function-return-type": "warn",
+      // ⛔ Disabled — project convention is inferred return types
+      "@typescript-eslint/explicit-function-return-type": "off",
 
       // ✅ Better safety
       "@typescript-eslint/ban-ts-comment": [
