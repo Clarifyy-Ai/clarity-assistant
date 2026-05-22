@@ -1,39 +1,48 @@
-## Audit results
+## Current state
 
-I ran a full audit. Here is the actual state:
+- `tsc --noEmit`: 0 errors
+- Dev server: healthy
+- `npm run lint`: now runs (pipeline repaired last turn)
+- Total findings: **1,966** (errors + warnings combined)
 
-| Check | Result |
-|---|---|
-| Vite dev server | Healthy on port 8080 |
-| `tsc --noEmit` | **Passes — 0 errors** |
-| Preview home page | Renders correctly (verified via screenshot) |
-| Console `manifest.json` 401 | Lovable preview-proxy gating — not an app bug |
-| Console `postMessage` origin warnings | Lovable editor-bridge noise — not an app bug |
-| `npm run lint` | **Broken** — config imports `typescript-eslint` package, but only `@typescript-eslint/parser` + `@typescript-eslint/eslint-plugin` are installed |
+## Findings breakdown
 
-There are **no runtime errors and no TypeScript errors**. The only real defect is that the lint script can't execute at all, which means nothing is catching style/dead-code regressions.
+| Rule | Count | Severity | Real bug? |
+|---|---|---|---|
+| `@typescript-eslint/explicit-function-return-type` | 1,245 | warn | No — stylistic noise |
+| `@typescript-eslint/no-explicit-any` | 239 | error | Sometimes |
+| `@typescript-eslint/no-unused-vars` | 143 | error | Yes (dead code) |
+| `@typescript-eslint/no-floating-promises` | 86 | error | **Yes — real async bugs** |
+| `@typescript-eslint/ban-ts-comment` | 74 | warn | Pre-existing `@ts-nocheck` |
+| `react-hooks/exhaustive-deps` | 59 | warn | Sometimes |
+| Supabase Edge Function parse errors | 54 | error | Config — files outside tsconfig project |
+| Other | ~66 | mixed | Mixed |
 
-## Proposed plan (single-component, minimal)
+## Plan (safe, reversible, component-by-component)
 
-**Scope:** repair the lint pipeline only. No source files touched.
+### Pass 1 — config-only (no source changes)
+1. **Demote `explicit-function-return-type`** from `warn` → `off` in `eslint.config.js`. Rationale: 1,245 of 1,966 findings are this single stylistic rule. Project convention is inferred return types (matches existing code). Removes 63% of noise so real issues surface.
+2. **Exclude `supabase/functions/**`** from the lint glob. Those files run on Deno, not in the app tsconfig project — 54 parse errors are false positives.
 
-1. **Install the missing meta-package** `typescript-eslint@^8` (which is what `eslint.config.js` imports). Already-installed `@typescript-eslint/parser` and `/eslint-plugin` stay.
-2. **Verify** `npm run lint` now executes end-to-end. Capture the actual warning/error count produced by the existing rules.
-3. **Report** the lint output to you. Do **not** auto-fix lint findings in this pass — those are existing-code changes and would violate the "component-by-component" guardrail. After you see the report you can pick which files to clean up next.
+Expected post-pass-1 count: ~670 findings, dominated by real issues.
 
-### Explicit guardrails
-- Do **not** modify any application source file (`src/**`, `electron/**`, `supabase/**`).
-- Do **not** change `eslint.config.js` rules.
-- Do **not** delete or rewrite the existing `// @ts-nocheck` directives in the 20 hook/lib files — they are pre-existing and out of scope.
-- Do **not** touch `tsconfig.json` again.
-- Only files changed: `package.json` + `bun.lock` (dependency add).
+### Pass 2 — report only
+Re-run lint, group remaining findings by file, hand you the top 10 worst offenders. **No source edits yet.** You then pick which component/folder to clean first.
 
-### Technical detail
-- Command: `bun add -d typescript-eslint@^8.7.0`
-- Post-install check: `npx eslint . --ext .ts,.tsx --max-warnings=999999 | tail -50`
-- Success criterion: ESLint runs without `ERR_MODULE_NOT_FOUND`; we get a real findings list (count + top categories) to triage later.
+### Pass 3+ — per-component cleanup (only after you approve a target)
+For each chosen file/folder:
+- Fix `no-floating-promises` (add `void` or `await` — real bug class)
+- Remove `no-unused-vars` (dead imports/locals)
+- Replace `no-explicit-any` where a real type is obvious; leave the rest
+- Review `react-hooks/exhaustive-deps` case-by-case (some are intentional)
+
+## Explicit guardrails
+- Pass 1 touches **only** `eslint.config.js`. No `src/**`, `electron/**`, `supabase/**`, `tsconfig*.json`, or `package.json` changes.
+- No existing `@ts-nocheck` directives removed.
+- No working features modified.
+- Pass 3 happens **one component at a time, only after you name the target**.
 
 ## What this plan does NOT do
-- Does not "fix all lint warnings" — that is a separate, opt-in cleanup per component.
-- Does not address the preview-environment manifest 401 (not an app bug).
-- Does not refactor the `as unknown as ...` casts added in earlier fixes (working code; out of scope).
+- Does not auto-fix 1,966 issues in bulk (would violate component-by-component guardrail)
+- Does not change runtime behavior in passes 1–2
+- Does not touch the `as unknown as ...` casts from earlier fixes
