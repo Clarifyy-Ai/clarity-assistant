@@ -35,7 +35,7 @@ export function LiveCodingProblemCapture({
           : "Could not capture the screen. Please allow screen capture and try again.";
       // Use .getState() to call action inside callback — avoids stale closure
       useOverlayStore.getState().setError(message);
-      // eslint-disable-next-line no-console
+       
       console.error("[CaptureCodingProblem] failed:", err);
     }
   }, [disabled, is_screenshot_loading]);

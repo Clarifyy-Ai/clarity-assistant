@@ -49,7 +49,7 @@ interface QuestionRow {
 
 export default function AdminQuestionEditor() {
   const { id } = useParams<{ id?: string }>();
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+   
   const _user = useAuthStore((s) => s.user);
 
   return id === "new" || id ? <EditorView id={id} /> : <ListView />;

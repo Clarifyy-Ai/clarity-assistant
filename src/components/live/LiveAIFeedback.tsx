@@ -178,7 +178,7 @@ export function LiveAIFeedback({
     // ── Confidence heuristic ───────────────────────────────────
     const hedgeKw = ["maybe", "perhaps", "possibly", "i think", "sort of", "kind of", "not sure", "i guess"];
     const hedgeCount  = hedgeKw.filter((h) => text.includes(h)).length;
-    let confidenceScore = Math.max(30, Math.min(95,
+    const confidenceScore = Math.max(30, Math.min(95,
       75 - hedgeCount * 6 -
       (fillerPct > FILLER_THRESHOLD ? 10 : 0) -
       (paceQuality !== "good" ? 5 : 0),

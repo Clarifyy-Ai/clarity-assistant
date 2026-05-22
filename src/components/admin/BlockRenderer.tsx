@@ -22,7 +22,6 @@ export default function BlockRenderer({ blocks }: { blocks: Block[] }) {
         if (b.type === "image") {
           return (
             <div key={b.id} className="flex justify-center">
-              {/* eslint-disable-next-line jsx-a11y/alt-text */}
               <img
                 src={b.url}
                 alt={b.alt ?? ""}

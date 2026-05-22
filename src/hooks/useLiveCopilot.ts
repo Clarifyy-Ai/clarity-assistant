@@ -306,7 +306,7 @@ export function useLiveCopilot({
       }
     },
     [profile, coachStore, getSafeContext],
-  ); // eslint-disable-line react-hooks/exhaustive-deps
+  );  
 
   // keep latest ref for audio callback usage
   useEffect(() => {
@@ -399,7 +399,7 @@ export function useLiveCopilot({
       }
     },
     [profile, coachStore, getSafeContext],
-  ); // eslint-disable-line react-hooks/exhaustive-deps
+  );  
 
   useEffect(() => {
     submitManualQuestionRef.current = submitManualQuestion;

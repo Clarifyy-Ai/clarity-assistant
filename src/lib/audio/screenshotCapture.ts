@@ -47,7 +47,7 @@ async function grabFrameFromStream(stream: MediaStream): Promise<ImageBitmap> {
       return bmp;
     } catch (e) {
       // Fall through to video-based capture
-      // eslint-disable-next-line no-console
+       
       console.warn("[screenshotCapture] ImageCapture.grabFrame failed, falling back to <video> method:", e);
     }
   }
@@ -270,7 +270,7 @@ export async function captureAndAnalyseCodingProblem(): Promise<void> {
     const message =
       err instanceof Error ? err.message : "Screenshot capture failed. Please allow screen capture and try again.";
     overlayStore.setError?.(message);
-    // eslint-disable-next-line no-console
+     
     console.error("[captureAndAnalyseCodingProblem] error:", err);
   } finally {
     overlayStore.setScreenshotLoading?.(false);
