@@ -9,8 +9,8 @@ import type { ResumeTalkingPoints, ResumeContext } from "@/lib/ai/resumeFallback
 // ─────────────────────────────────────────────────────────────────
 
 export interface OverlayPosition {
-  x: number; // px from left
-  y: number; // px from top
+  x: number;
+  y: number;
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -42,29 +42,24 @@ export interface ChatMessage {
 }
 
 interface OverlayStore {
-  // Visibility
   is_visible: boolean;
   is_stealth_mode: boolean;
   is_proctor_safe: boolean;
 
-  // Content
   current_question: string;
   current_hint: string;
   hint_state: HintState;
   streaming_buffer: string;
   error_message: string | null;
 
-  // Settings (per-session overrides)
   hint_style: HintStyle;
   active_model: PreferredAIModel;
   answer_mode: "hint" | "full_answer";
 
-  // Position & size (persisted)
   position: OverlayPosition;
   overlay_width: number;
   overlay_height: number;
 
-  // Session controls
   auto_generate: boolean;
   simple_language: boolean;
   save_transcript: boolean;
@@ -72,66 +67,47 @@ interface OverlayStore {
   session_language: string;
   active_tab: "answer" | "chat" | "transcript" | "audit" | "resume";
 
-  // Network indicator shown in overlay
   network_color: "green" | "yellow" | "red";
 
-  // Panic
   is_panic_visible: boolean;
   panic_content: { step_1: string; step_2: string; step_3: string } | null;
 
-  // Hint history for session persistence
   hint_history: Array<{ question: string; hint: string; timestamp: number }>;
   hint_history_index: number;
   questions_detected: number;
   viewed_question: string | null;
 
-  // Coding problem capture
   is_screenshot_loading: boolean;
   screenshot_hint: string | null;
 
-  // Activity timer
   session_start_time: number | null;
   activity_log: ActivityLogEntry[];
 
-  // Stealth opacity (persisted, 20–100)
   stealth_opacity: number;
 
-  // Peek mode (minimized behavior)
   is_peek_active: boolean;
-
-  // Minimal mode (persisted) — collapses body into pill (still visible)
   is_minimal_mode: boolean;
-
-  // Hotkey help overlay
   is_hotkey_help_visible: boolean;
-
-  // Document Picture-in-Picture state (runtime only — not persisted)
   is_pip_active: boolean;
 
-  // Chat history (not persisted)
   chat_history: ChatMessage[];
   is_chat_generating: boolean;
 
-  // Resume context (not persisted)
   resume_context: ResumeContext | null;
   resume_talking_points: ResumeTalkingPoints | null;
 
-  // Pinned hints (not persisted)
   pinned_hints: Array<{ id: string; question: string; hint: string; timestamp: number }>;
 
-  // Actions — visibility
   showOverlay: () => void;
   hideOverlay: () => void;
   toggleOverlay: () => void;
   setStealthMode: (enabled: boolean) => void;
   setProctorSafe: (enabled: boolean) => void;
 
-  // Minimize/restore (peek)
   minimizeOverlay: () => void;
   restoreOverlay: () => void;
   toggleMinimize: () => void;
 
-  // Actions — content
   setCurrentQuestion: (question: string) => void;
   setHintState: (state: HintState) => void;
   appendStreamChunk: (chunk: string) => void;
@@ -140,21 +116,17 @@ interface OverlayStore {
   setError: (message: string | null) => void;
   setOfflineFallback: (hint: string) => void;
 
-  // Actions — settings
   setHintStyle: (style: HintStyle) => void;
   cycleHintStyle: () => void;
   setActiveModel: (model: PreferredAIModel) => void;
   setAnswerMode: (mode: "hint" | "full_answer") => void;
 
-  // Actions — hint history navigation
   navigateHintHistory: (direction: "prev" | "next") => void;
 
-  // Actions — position & size
   setPosition: (position: OverlayPosition) => void;
   resetPosition: () => void;
   setOverlaySize: (width: number, height: number) => void;
 
-  // Actions — session controls
   setAutoGenerate: (enabled: boolean) => void;
   setSimpleLanguage: (enabled: boolean) => void;
   setSaveTranscript: (enabled: boolean) => void;
@@ -162,55 +134,41 @@ interface OverlayStore {
   setSessionLanguage: (language: string) => void;
   setActiveTab: (tab: "answer" | "chat" | "transcript" | "audit" | "resume") => void;
 
-  // Actions — chat history
   addChatMessage: (msg: ChatMessage) => void;
   clearChatHistory: () => void;
   setChatGenerating: (generating: boolean) => void;
 
-  // Actions — resume context
   setResumeContext: (ctx: ResumeContext | null) => void;
   setResumeTalkingPoints: (points: ResumeTalkingPoints | null) => void;
 
-  // Actions — pinned hints
   togglePinHint: (hint: string, question: string) => void;
   clearPinnedHints: () => void;
 
-  // Actions — network
   setNetworkColor: (color: "green" | "yellow" | "red") => void;
 
-  // Actions — panic
   showPanic: (content: { step_1: string; step_2: string; step_3: string }) => void;
   hidePanic: () => void;
 
-  // Actions — session lifecycle
   resetSessionState: () => void;
 
-  // Actions — coding
   setScreenshotLoading: (loading: boolean) => void;
   setScreenshotHint: (hint: string | null) => void;
 
-  // Actions — activity timer
   startActivityTimer: () => void;
   logActivity: (event: string) => void;
 
-  // Actions — stealth opacity
   setStealthOpacity: (opacity: number) => void;
 
-  // Actions — peek mode
   setPeekActive: (active: boolean) => void;
 
-  // Actions — minimal mode
   setMinimalMode: (enabled: boolean) => void;
 
-  // Actions — hotkey help
   setHotkeyHelpVisible: (visible: boolean) => void;
   toggleHotkeyHelp: () => void;
 
-  // Actions — PiP
   setPipActive: (active: boolean) => void;
 }
 
-// Default position (top-center)
 const DEFAULT_POSITION: OverlayPosition = (() => {
   if (typeof window === "undefined") return { x: 0, y: 16 };
   const width = 560;
@@ -225,12 +183,15 @@ const MIN_HEIGHT = 280;
 const MAX_WIDTH = 800;
 const MAX_HEIGHT = 900;
 
-const HINT_STYLE_CYCLE: HintStyle[] = ["full_answer", "short_hints", "keywords_only"];
+const HINT_STYLE_CYCLE: HintStyle[] = [
+  "full_answer",
+  "short_hints",
+  "keywords_only",
+];
 
 export const useOverlayStore = create<OverlayStore>()(
   persist(
-    subscribeWithSelector((set, get) => ({
-      // ── Initial State ──────────────────────────────────────
+    subscribeWithSelector((set) => ({
       is_visible: false,
       is_stealth_mode: false,
       is_proctor_safe: false,
@@ -274,11 +235,7 @@ export const useOverlayStore = create<OverlayStore>()(
 
       stealth_opacity: 90,
 
-      // Peek mode: minimized state, should still render a small pill UI
       is_peek_active: false,
-
-      // ✅ IMPORTANT: default must NOT hide the UI for first-run users.
-      // Persisted users will keep their saved preference via partialize.
       is_minimal_mode: false,
 
       is_hotkey_help_visible: false,
@@ -292,13 +249,15 @@ export const useOverlayStore = create<OverlayStore>()(
 
       pinned_hints: [],
 
-      // ── Visibility ─────────────────────────────────────────
       showOverlay: () =>
         set((s) => ({
           is_visible: true,
-          is_peek_active: false, // always exit peek on show
+          is_peek_active: false,
           session_start_time: s.session_start_time ?? Date.now(),
-          activity_log: [...s.activity_log, { event: "overlay_shown", timestamp: Date.now() }],
+          activity_log: [
+            ...s.activity_log,
+            { event: "overlay_shown", timestamp: Date.now() },
+          ],
         })),
 
       hideOverlay: () =>
@@ -306,7 +265,10 @@ export const useOverlayStore = create<OverlayStore>()(
           is_visible: false,
           is_panic_visible: false,
           is_peek_active: false,
-          activity_log: [...s.activity_log, { event: "overlay_hidden", timestamp: Date.now() }],
+          activity_log: [
+            ...s.activity_log,
+            { event: "overlay_hidden", timestamp: Date.now() },
+          ],
         })),
 
       toggleOverlay: () =>
@@ -316,28 +278,36 @@ export const useOverlayStore = create<OverlayStore>()(
             is_visible: willShow,
             activity_log: [
               ...s.activity_log,
-              { event: willShow ? "overlay_shown" : "overlay_hidden", timestamp: Date.now() },
+              {
+                event: willShow ? "overlay_shown" : "overlay_hidden",
+                timestamp: Date.now(),
+              },
             ],
             ...(willShow
               ? {
                   session_start_time: s.session_start_time ?? Date.now(),
                   is_peek_active: false,
                 }
-              : { is_panic_visible: false, is_peek_active: false }),
+              : {
+                  is_panic_visible: false,
+                  is_peek_active: false,
+                }),
           };
         }),
 
       setStealthMode: (enabled) => set({ is_stealth_mode: enabled }),
       setProctorSafe: (enabled) => set({ is_proctor_safe: enabled }),
 
-      // ── Minimize (peek) ────────────────────────────────────
       minimizeOverlay: () =>
         set((s) => ({
           is_visible: false,
           is_peek_active: true,
-          is_minimal_mode: true, // minimized must be pill
+          is_minimal_mode: true,
           is_panic_visible: false,
-          activity_log: [...s.activity_log, { event: "overlay_minimized", timestamp: Date.now() }],
+          activity_log: [
+            ...s.activity_log,
+            { event: "overlay_minimized", timestamp: Date.now() },
+          ],
         })),
 
       restoreOverlay: () =>
@@ -345,40 +315,50 @@ export const useOverlayStore = create<OverlayStore>()(
           is_visible: true,
           is_peek_active: false,
           session_start_time: s.session_start_time ?? Date.now(),
-          activity_log: [...s.activity_log, { event: "overlay_restored", timestamp: Date.now() }],
+          activity_log: [
+            ...s.activity_log,
+            { event: "overlay_restored", timestamp: Date.now() },
+          ],
         })),
 
       toggleMinimize: () =>
         set((s) => {
-          // If overlay visible => minimize into peek
           if (s.is_visible) {
             return {
               is_visible: false,
               is_peek_active: true,
               is_minimal_mode: true,
               is_panic_visible: false,
-              activity_log: [...s.activity_log, { event: "overlay_minimized", timestamp: Date.now() }],
+              activity_log: [
+                ...s.activity_log,
+                { event: "overlay_minimized", timestamp: Date.now() },
+              ],
             };
           }
-          // If peek active => restore
+
           if (s.is_peek_active) {
             return {
               is_visible: true,
               is_peek_active: false,
               session_start_time: s.session_start_time ?? Date.now(),
-              activity_log: [...s.activity_log, { event: "overlay_restored", timestamp: Date.now() }],
+              activity_log: [
+                ...s.activity_log,
+                { event: "overlay_restored", timestamp: Date.now() },
+              ],
             };
           }
-          // If fully hidden => show
+
           return {
             is_visible: true,
             is_peek_active: false,
             session_start_time: s.session_start_time ?? Date.now(),
-            activity_log: [...s.activity_log, { event: "overlay_shown", timestamp: Date.now() }],
+            activity_log: [
+              ...s.activity_log,
+              { event: "overlay_shown", timestamp: Date.now() },
+            ],
           };
         }),
 
-      // ── Content ────────────────────────────────────────────
       setCurrentQuestion: (current_question) =>
         set((s) => ({
           current_question,
@@ -386,10 +366,15 @@ export const useOverlayStore = create<OverlayStore>()(
           current_hint: "",
           streaming_buffer: "",
           questions_detected:
-            current_question !== s.current_question ? s.questions_detected + 1 : s.questions_detected,
+            current_question !== s.current_question
+              ? s.questions_detected + 1
+              : s.questions_detected,
           activity_log:
             current_question !== s.current_question
-              ? [...s.activity_log, { event: "question_detected", timestamp: Date.now() }]
+              ? [
+                  ...s.activity_log,
+                  { event: "question_detected", timestamp: Date.now() },
+                ]
               : s.activity_log,
         })),
 
@@ -403,17 +388,33 @@ export const useOverlayStore = create<OverlayStore>()(
 
       commitStreamedHint: () =>
         set((state) => {
+          const text = state.streaming_buffer.trim();
+          if (!text) {
+            return {
+              streaming_buffer: "",
+              hint_state: "idle" as HintState,
+            };
+          }
+
           const newHistory = [
             ...state.hint_history,
-            { question: state.current_question, hint: state.streaming_buffer, timestamp: Date.now() },
+            {
+              question: state.current_question,
+              hint: text,
+              timestamp: Date.now(),
+            },
           ];
+
           return {
-            current_hint: state.streaming_buffer,
+            current_hint: text,
             streaming_buffer: "",
-            hint_state: "ready",
+            hint_state: "ready" as HintState,
             hint_history: newHistory,
             hint_history_index: newHistory.length - 1,
-            activity_log: [...state.activity_log, { event: "hint_generated", timestamp: Date.now() }],
+            activity_log: [
+              ...state.activity_log,
+              { event: "hint_generated", timestamp: Date.now() },
+            ],
           };
         }),
 
@@ -426,7 +427,8 @@ export const useOverlayStore = create<OverlayStore>()(
           screenshot_hint: null,
         }),
 
-      setError: (error_message) => set({ error_message, hint_state: "error" }),
+      setError: (error_message) =>
+        set({ error_message, hint_state: "error" }),
 
       setOfflineFallback: (hint) =>
         set({
@@ -436,7 +438,6 @@ export const useOverlayStore = create<OverlayStore>()(
           error_message: null,
         }),
 
-      // ── Settings ───────────────────────────────────────────
       setHintStyle: (hint_style) => set({ hint_style }),
 
       cycleHintStyle: () =>
@@ -449,14 +450,19 @@ export const useOverlayStore = create<OverlayStore>()(
       setActiveModel: (active_model) => set({ active_model }),
       setAnswerMode: (answer_mode) => set({ answer_mode }),
 
-      // ── Hint History Navigation ─────────────────────────────
       navigateHintHistory: (direction) =>
         set((state) => {
           if (state.hint_history.length === 0) return {};
+
+          const baseIndex =
+            state.hint_history_index < 0
+              ? state.hint_history.length
+              : state.hint_history_index;
+
           const newIndex =
             direction === "prev"
-              ? Math.max(0, state.hint_history_index - 1)
-              : Math.min(state.hint_history.length - 1, state.hint_history_index + 1);
+              ? Math.max(0, baseIndex - 1)
+              : Math.min(state.hint_history.length - 1, baseIndex + 1);
 
           if (newIndex === state.hint_history_index) return {};
 
@@ -465,12 +471,11 @@ export const useOverlayStore = create<OverlayStore>()(
             hint_history_index: newIndex,
             current_hint: entry.hint,
             viewed_question: entry.question,
-            hint_state: "ready",
+            hint_state: "ready" as HintState,
             streaming_buffer: "",
           };
         }),
 
-      // ── Position & Size ────────────────────────────────────
       setPosition: (position) => set({ position }),
       resetPosition: () => set({ position: DEFAULT_POSITION }),
       setOverlaySize: (width, height) =>
@@ -479,7 +484,6 @@ export const useOverlayStore = create<OverlayStore>()(
           overlay_height: Math.max(MIN_HEIGHT, Math.min(MAX_HEIGHT, height)),
         }),
 
-      // ── Session Controls ─────────────────────────────────
       setAutoGenerate: (auto_generate) => set({ auto_generate }),
       setSimpleLanguage: (simple_language) => set({ simple_language }),
       setSaveTranscript: (save_transcript) => set({ save_transcript }),
@@ -487,25 +491,26 @@ export const useOverlayStore = create<OverlayStore>()(
       setSessionLanguage: (session_language) => set({ session_language }),
       setActiveTab: (active_tab) => set({ active_tab }),
 
-      // ── Chat History ────────────────────────────────────────
       addChatMessage: (msg) =>
         set((s) => ({
           chat_history: [...s.chat_history, msg],
           is_chat_generating: false,
         })),
-      clearChatHistory: () => set({ chat_history: [], is_chat_generating: false }),
+      clearChatHistory: () =>
+        set({ chat_history: [], is_chat_generating: false }),
       setChatGenerating: (is_chat_generating) => set({ is_chat_generating }),
 
-      // ── Resume Context ──────────────────────────────────────
       setResumeContext: (resume_context) => set({ resume_context }),
-      setResumeTalkingPoints: (resume_talking_points) => set({ resume_talking_points }),
+      setResumeTalkingPoints: (resume_talking_points) =>
+        set({ resume_talking_points }),
 
-      // ── Pinned Hints ────────────────────────────────────────
       togglePinHint: (hint, question) =>
         set((s) => {
           const alreadyPinned = s.pinned_hints.some((p) => p.hint === hint);
           if (alreadyPinned) {
-            return { pinned_hints: s.pinned_hints.filter((p) => p.hint !== hint) };
+            return {
+              pinned_hints: s.pinned_hints.filter((p) => p.hint !== hint),
+            };
           }
           const newPin = {
             id: `pin-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
@@ -517,10 +522,8 @@ export const useOverlayStore = create<OverlayStore>()(
         }),
       clearPinnedHints: () => set({ pinned_hints: [] }),
 
-      // ── Network ────────────────────────────────────────────
       setNetworkColor: (network_color) => set({ network_color }),
 
-      // ── Panic ──────────────────────────────────────────────
       showPanic: (panic_content) =>
         set({
           is_panic_visible: true,
@@ -530,7 +533,6 @@ export const useOverlayStore = create<OverlayStore>()(
         }),
       hidePanic: () => set({ is_panic_visible: false }),
 
-      // ── Session Lifecycle ──────────────────────────────────
       resetSessionState: () =>
         set({
           current_question: "",
@@ -570,11 +572,11 @@ export const useOverlayStore = create<OverlayStore>()(
           session_call_type: "interview",
         }),
 
-      // ── Coding ─────────────────────────────────────────────
-      setScreenshotLoading: (is_screenshot_loading) => set({ is_screenshot_loading }),
-      setScreenshotHint: (screenshot_hint) => set({ screenshot_hint, is_screenshot_loading: false }),
+      setScreenshotLoading: (is_screenshot_loading) =>
+        set({ is_screenshot_loading }),
+      setScreenshotHint: (screenshot_hint) =>
+        set({ screenshot_hint, is_screenshot_loading: false }),
 
-      // ── Activity Timer ──────────────────────────────────────
       startActivityTimer: () =>
         set({
           session_start_time: Date.now(),
@@ -585,31 +587,35 @@ export const useOverlayStore = create<OverlayStore>()(
           activity_log: [...s.activity_log, { event, timestamp: Date.now() }],
         })),
 
-      // ── Stealth Opacity ─────────────────────────────────────
       setStealthOpacity: (opacity) =>
         set({
           stealth_opacity: Math.max(20, Math.min(100, opacity)),
         }),
 
-      // ── Peek Mode ───────────────────────────────────────────
-      setPeekActive: (is_peek_active) => set({ is_peek_active }),
+      setPeekActive: (is_peek_active) =>
+        set((s) => ({
+          is_peek_active,
+          is_visible: is_peek_active ? false : s.is_visible,
+          is_panic_visible: is_peek_active ? false : s.is_panic_visible,
+          is_minimal_mode: is_peek_active ? true : s.is_minimal_mode,
+        })),
 
-      // ── Minimal Mode ────────────────────────────────────────
       setMinimalMode: (is_minimal_mode) =>
         set((s) => ({
           is_minimal_mode,
-          // If user collapses to minimal, keep tab safe (answer/resume only)
           active_tab:
-            is_minimal_mode && s.active_tab !== "answer" && s.active_tab !== "resume"
+            is_minimal_mode &&
+            s.active_tab !== "answer" &&
+            s.active_tab !== "resume"
               ? "answer"
               : s.active_tab,
         })),
 
-      // ── Hotkey Help ─────────────────────────────────────────
-      setHotkeyHelpVisible: (is_hotkey_help_visible) => set({ is_hotkey_help_visible }),
-      toggleHotkeyHelp: () => set((s) => ({ is_hotkey_help_visible: !s.is_hotkey_help_visible })),
+      setHotkeyHelpVisible: (is_hotkey_help_visible) =>
+        set({ is_hotkey_help_visible }),
+      toggleHotkeyHelp: () =>
+        set((s) => ({ is_hotkey_help_visible: !s.is_hotkey_help_visible })),
 
-      // ── PiP ─────────────────────────────────────────────────
       setPipActive: (is_pip_active) => set({ is_pip_active }),
     })),
     {
