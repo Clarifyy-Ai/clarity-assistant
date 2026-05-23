@@ -119,39 +119,8 @@ const NAV_SECTIONS: NavSection[] = [
         stealthIcon: FolderOpen,
         label: "Prep Lab",
       },
-      {
-        to: "/app/mock-test",
-        icon: GraduationCap,
-        stealthIcon: GraduationCap,
-        label: "Mock Tests",
-        subItems: [
-          {
-            to: "/app/mock-test",
-            icon: LayoutGrid,
-            label: "Hub",
-          },
-          {
-            to: "/app/mock-test/my-questions",
-            icon: BookOpen,
-            label: "Question Bank",
-          },
-          {
-            to: "/app/mock-test/upload",
-            icon: Upload,
-            label: "Import Questions",
-          },
-          {
-            to: "/app/mock-test/revision",
-            icon: RotateCcw,
-            label: "Revision List",
-          },
-          {
-            to: "/app/mock-test/analytics",
-            icon: TrendingUp,
-            label: "Analytics",
-          },
-        ],
-      },
+      // Mock Tests (JEE/NEET MCQ engine) de-scoped at launch per product alignment.
+      // Sidebar entry removed; routes redirect to dashboard.
     ],
   },
   {

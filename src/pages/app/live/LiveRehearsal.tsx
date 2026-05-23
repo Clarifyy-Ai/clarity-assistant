@@ -132,7 +132,22 @@ export default function LiveRehearsal() {
   );
 
   if (phase === "setup") {
-    return <PreSessionSetupWizard onStart={handleSetup} sessionType="live" />;
+    return (
+      <>
+        <div
+          role="note"
+          className="mx-auto max-w-2xl mt-4 mb-2 flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300"
+        >
+          <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
+          <span>
+            <strong>Practice only.</strong> Live Co-Pilot is designed for interview rehearsal with an
+            AI coach. Do not use during real interviews — covert AI assistance violates most
+            employer and assessment policies.
+          </span>
+        </div>
+        <PreSessionSetupWizard onStart={handleSetup} sessionType="live" />
+      </>
+    );
   }
 
   return (
