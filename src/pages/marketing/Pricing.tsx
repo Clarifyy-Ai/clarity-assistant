@@ -7,13 +7,11 @@ import { cn } from "@/lib/utils";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { usePageMeta } from "@/hooks/usePageMeta";
 
-const CREDIT_PACKS = [
-  { credits: 50, price: 499, label: "50 credits" },
-  { credits: 150, price: 1199, label: "150 credits" },
-  { credits: 500, price: 2999, label: "500 credits" },
-];
+import { LAUNCH_PLANS } from "@/lib/constants/pricing";
 
-const DISPLAY_PLANS: PlanId[] = ["free", "starter", "pro", "elite"];
+// Per production audit (Path A): launch sells only Free / Pro / Enterprise.
+// Per-credit packs removed — manual sells subscriptions, not à-la-carte credits.
+const DISPLAY_PLANS: PlanId[] = LAUNCH_PLANS;
 
 const PLAN_COLORS: Record<string, string> = {
   slate: "from-gray-500 to-gray-600",
