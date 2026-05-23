@@ -15,3 +15,22 @@ export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABL
     autoRefreshToken: true,
   }
 });
+
+export const auth = supabase.auth;
+
+export const table = (tableName: keyof Database["public"]["Tables"]) =>
+  supabase.from(tableName as any);
+
+export const bucket = (bucketName: string) => supabase.storage.from(bucketName);
+
+export const realtimeChannel = (channelName: string) =>
+  supabase.channel(channelName);
+
+export async function checkSupabaseConnection(): Promise<boolean> {
+  try {
+    const { error } = await supabase.auth.getSession();
+    return !error;
+  } catch {
+    return false;
+  }
+}
