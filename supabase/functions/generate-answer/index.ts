@@ -50,7 +50,7 @@ const SERVER_GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const GEMINI_API_VERSION = Deno.env.get("GEMINI_API_VERSION") ?? "v1beta";
 const GEMINI_BASE = `https://generativelanguage.googleapis.com/${GEMINI_API_VERSION}`;
 const DEFAULT_MODEL =
-  Deno.env.get("GEMINI_MODEL_DEFAULT") ?? "gemini-2.5-flash";
+  Deno.env.get("GEMINI_MODEL_DEFAULT") ?? "gemini-2.0-flash";
 
 const FUNCTION_NAME = "generate-answer";
 const COST = 2;
