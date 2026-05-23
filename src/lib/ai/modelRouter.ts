@@ -66,38 +66,21 @@ function getResumeFallbackOrTemplate(interviewType: InterviewType, hintStyle: Hi
 }
 
 export function selectModel(
-  preferred: PreferredAIModel,
-  interviewType: InterviewType,
-  isDegraded: boolean
+  _preferred: PreferredAIModel,
+  _interviewType: InterviewType,
+  _isDegraded: boolean
 ): PreferredAIModel {
-  if (isDegraded) return "gemini-flash";
-  if (preferred !== "gemini-flash") return preferred;
-
-  const typeModelMap: Partial<Record<InterviewType, PreferredAIModel>> = {
-    system_design: "claude",
-    leadership: "claude",
-    product: "gpt-4o",
-    behavioural: "gpt-4o",
-    technical: "gemini-pro",
-    hr: "gemini-flash",
-    mixed: "gemini-pro",
-  };
-
-  return typeModelMap[interviewType] ?? "gemini-flash";
+  // P0-4: launch ships Gemini-only. All routing collapses to gemini-flash.
+  return "gemini-flash";
 }
 
-function getFallbackModel(failed: PreferredAIModel): PreferredAIModel | null {
-  const chain: Partial<Record<PreferredAIModel, PreferredAIModel | null>> = {
-    claude: "gpt-4o",
-    "gpt-4o": "gemini-pro",
-    "gemini-pro": "gemini-flash",
-    "gemini-flash": null,
-  };
-  return chain[failed] ?? null;
+function getFallbackModel(_failed: PreferredAIModel): PreferredAIModel | null {
+  // P0-4: no cross-provider fallback at launch.
+  return null;
 }
 
 async function callModel(
-  model: PreferredAIModel,
+  _model: PreferredAIModel,
   opts: RouteHintOptions & { interviewType: InterviewType }
 ): Promise<void> {
   const start = Date.now();
@@ -108,7 +91,8 @@ async function callModel(
     await opts.onDone(text);
   };
 
-  const common = {
+  // P0-4: always Gemini.
+  return streamGeminiHint({
     question: opts.question,
     context: opts.context,
     interviewType: opts.interviewType,
@@ -123,14 +107,8 @@ async function callModel(
     onDone: wrappedOnDone,
     onError: opts.onError,
     signal: opts.signal,
-  } as any;
-
-  if (model === "claude") return streamClaudeHint(common);
-  if (model === "gpt-4o") return streamOpenAIHint(common);
-  return streamGeminiHint({
-    ...common,
-    model: model === "gemini-pro" ? "gemini-2.5-pro" : "gemini-2.5-flash",
-  });
+    model: "gemini-2.5-flash",
+  } as any);
 }
 
 export async function routeAnswerGeneration(opts: RouteAnswerGenerationOptions): Promise<void> {
