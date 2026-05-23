@@ -85,8 +85,16 @@ const MockInterview = lazy(() => import("@/pages/app/mock/MockInterview"));
 const MockSession = lazy(() => import("@/pages/app/mock/MockSession"));
 const MockWarmup = lazy(() => import("@/pages/app/mock/MockWarmup"));
 
-// Mock Test Engine (JEE/NEET MCQ) — de-scoped at launch.
-// Routes redirect to /app/dashboard; lazy imports removed to drop dead chunks.
+// Mock Test Engine (JEE/NEET MCQ) — restored.
+const MockTestHub = lazy(() => import("@/pages/app/mock-test/MockTestHub"));
+const MockTestConfigure = lazy(() => import("@/pages/app/mock-test/TestConfigure"));
+const MockTestSession = lazy(() => import("@/pages/app/mock-test/TestSession"));
+const MockTestResults = lazy(() => import("@/pages/app/mock-test/TestResults"));
+const MockTestMyQuestions = lazy(() => import("@/pages/app/mock-test/MyQuestions"));
+const MockTestUpload = lazy(() => import("@/pages/app/mock-test/UploadQuestions"));
+const MockTestRevision = lazy(() => import("@/pages/app/mock-test/TestRevision"));
+const MockTestAnalytics = lazy(() => import("@/pages/app/mock-test/TestAnalytics"));
+const MockTestPapers = lazy(() => import("@/pages/app/mock-test/ExamPapers"));
 
 // Prep
 const PrepLab = lazy(() => import("@/pages/app/prep/PrepLab"));
