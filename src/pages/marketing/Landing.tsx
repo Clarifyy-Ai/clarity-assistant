@@ -203,16 +203,16 @@ const FAQS = [
     a: "The stealth overlay is designed to be invisible to screen-sharing and screen-capture software. It uses OS-level compositor separation so capture APIs never see the overlay window. We maintain a 98% undetection rate across the major video platforms.",
   },
   {
-    q: "Which AI models does Clarify use?",
-    a: "Clarify AI auto-routes between GPT-4o, Claude 3.5 Sonnet, and Gemini 1.5 Pro based on speed and question type. Pro and Elite subscribers can also bring their own API key (BYOK) to use personal model quotas.",
+    q: "Which AI model does Clarify use?",
+    a: "Clarify AI uses Google Gemini 2.0 Flash for all answer generation and analysis at launch. Additional models may be added based on user feedback.",
   },
   {
     q: "How much does Clarify AI cost?",
-    a: "There is a free plan that includes 20 credits per month — enough for several mock sessions. Paid plans start at $19/month (Starter) and go up to $79/month (Elite). Annual billing saves 20%. See the full pricing page for details.",
+    a: "There is a free plan that includes 200 credits per month. Pro is $29/month with 2,000 credits, and Enterprise is $79/month with unlimited credits. See the pricing page for full details.",
   },
   {
     q: "What is included in the free plan?",
-    a: "The free plan gives you 20 credits per month, access to the mock engine, prep lab tools, and basic analytics. The stealth overlay is available on Starter and above.",
+    a: "The free plan gives you 200 credits per month, access to the mock engine, prep lab tools, and basic analytics.",
   },
   {
     q: "Can I bring my own API key (BYOK)?",
