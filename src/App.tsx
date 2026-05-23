@@ -85,8 +85,16 @@ const MockInterview = lazy(() => import("@/pages/app/mock/MockInterview"));
 const MockSession = lazy(() => import("@/pages/app/mock/MockSession"));
 const MockWarmup = lazy(() => import("@/pages/app/mock/MockWarmup"));
 
-// Mock Test Engine (JEE/NEET MCQ) — de-scoped at launch.
-// Routes redirect to /app/dashboard; lazy imports removed to drop dead chunks.
+// Mock Test Engine (JEE/NEET MCQ) — restored.
+const MockTestHub = lazy(() => import("@/pages/app/mock-test/MockTestHub"));
+const MockTestConfigure = lazy(() => import("@/pages/app/mock-test/TestConfigure"));
+const MockTestSession = lazy(() => import("@/pages/app/mock-test/TestSession"));
+const MockTestResults = lazy(() => import("@/pages/app/mock-test/TestResults"));
+const MockTestMyQuestions = lazy(() => import("@/pages/app/mock-test/MyQuestions"));
+const MockTestUpload = lazy(() => import("@/pages/app/mock-test/UploadQuestions"));
+const MockTestRevision = lazy(() => import("@/pages/app/mock-test/TestRevision"));
+const MockTestAnalytics = lazy(() => import("@/pages/app/mock-test/TestAnalytics"));
+const MockTestPapers = lazy(() => import("@/pages/app/mock-test/ExamPapers"));
 
 // Prep
 const PrepLab = lazy(() => import("@/pages/app/prep/PrepLab"));
@@ -465,7 +473,7 @@ const routes = [
       },
       {
         path: "/app/mock-test/session/:testId",
-        element: <Navigate to="/app/dashboard" replace />,
+        element: <Page component={MockTestSession} />,
       },
     ],
   },
@@ -493,16 +501,15 @@ const routes = [
           { path: "mock/warmup", element: <Page component={MockWarmup} /> },
           { path: "mock/session", element: <Page component={MockSession} /> },
 
-          // Mock Test (JEE/NEET MCQ) de-scoped at launch — routes redirect to dashboard.
-          // Source pages and DB tables preserved for future re-introduction.
-          { path: "mock-test", element: <Navigate to="/app/dashboard" replace /> },
-          { path: "mock-test/configure", element: <Navigate to="/app/dashboard" replace /> },
-          { path: "mock-test/results/:testId", element: <Navigate to="/app/dashboard" replace /> },
-          { path: "mock-test/my-questions", element: <Navigate to="/app/dashboard" replace /> },
-          { path: "mock-test/upload", element: <Navigate to="/app/dashboard" replace /> },
-          { path: "mock-test/revision", element: <Navigate to="/app/dashboard" replace /> },
-          { path: "mock-test/analytics", element: <Navigate to="/app/dashboard" replace /> },
-          { path: "mock-test/papers/:examType", element: <Navigate to="/app/dashboard" replace /> },
+          // Mock Test (JEE/NEET MCQ)
+          { path: "mock-test", element: <Page component={MockTestHub} /> },
+          { path: "mock-test/configure", element: <Page component={MockTestConfigure} /> },
+          { path: "mock-test/results/:testId", element: <Page component={MockTestResults} /> },
+          { path: "mock-test/my-questions", element: <Page component={MockTestMyQuestions} /> },
+          { path: "mock-test/upload", element: <Page component={MockTestUpload} /> },
+          { path: "mock-test/revision", element: <Page component={MockTestRevision} /> },
+          { path: "mock-test/analytics", element: <Page component={MockTestAnalytics} /> },
+          { path: "mock-test/papers/:examType", element: <Page component={MockTestPapers} /> },
 
           { path: "prep", element: <Page component={PrepLab} /> },
           {
