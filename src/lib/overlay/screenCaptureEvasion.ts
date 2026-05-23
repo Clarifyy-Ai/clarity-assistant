@@ -20,6 +20,8 @@ export interface ScreenCaptureSupportInfo {
   hasContentProtection: boolean;
   hasGetDisplayMedia: boolean;
   notes: string[];
+  reason: string;
+  misses: string[];
 }
 
 export interface ScreenCaptureEvasionOptions {
