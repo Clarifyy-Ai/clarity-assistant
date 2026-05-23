@@ -141,16 +141,15 @@ app.whenReady().then(() => {
 
 // ── Global shortcuts (system-wide, work even when app is not focused) ──
 function registerGlobalShortcuts() {
-  // Toggle overlay visibility — primary stealth hotkey
+  // Toggle overlay visibility — convenience hotkey.
+  // Renamed from "primary stealth hotkey" in P0-2; behaviour unchanged.
   globalShortcut.register("CommandOrControl+Shift+H", () => {
     if (!overlayWindow) return;
     if (overlayWindow.isVisible()) overlayWindow.hide();
     else { overlayWindow.show(); overlayWindow.focus(); }
   });
-  // Panic — instantly hide overlay
-  globalShortcut.register("CommandOrControl+Shift+P", () => {
-    overlayWindow?.hide();
-  });
+  // NOTE: Ctrl+Shift+P "panic hide" removed in P0-2 — it existed only to let a
+  // user instantly conceal the overlay from an on-screen interviewer.
   // Forward Ctrl+Shift+A to renderer (request AI answer)
   globalShortcut.register("CommandOrControl+Shift+A", () => {
     overlayWindow?.webContents.send("global-shortcut", "request-ai-answer");
