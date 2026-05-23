@@ -161,22 +161,7 @@ export default function Pricing() {
         </div>
       </section>
 
-      <section className="pb-16 sm:pb-24 px-4 sm:px-6">
-        <div className="max-w-4xl mx-auto text-center">
-          <h2 className="text-xl sm:text-2xl font-bold mb-6">Need more credits?</h2>
-          <p className="text-muted-foreground text-sm mb-8">Buy credit packs anytime, no subscription change required.</p>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-            {CREDIT_PACKS.map((pack) => (
-              <div key={pack.credits} className="rounded-xl border border-border bg-card p-5 text-center">
-                <p className="text-2xl font-bold">{pack.credits}</p>
-                <p className="text-xs text-muted-foreground mt-1">credits</p>
-                <p className="text-lg font-semibold mt-3">${(pack.price / 100).toFixed(2)}</p>
-                <p className="text-[10px] text-muted-foreground/70">${((pack.price / 100) / pack.credits).toFixed(2)}/credit</p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* Credit packs section removed at launch — pricing is subscription-only. */}
     </MarketingLayout>
   );
 }
