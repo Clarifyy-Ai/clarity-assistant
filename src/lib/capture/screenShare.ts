@@ -51,9 +51,11 @@ function getDisplayMediaConstraints(): DisplayMediaStreamOptions {
       displaySurface: "browser",
     },
     audio: false,
-    // @ts-ignore — Chrome screen-sharing privacy controls (M107+)
-    selfBrowserSurface:    "exclude",
-    monitorTypeSurfaces:   "exclude",
+    // P0-2: `selfBrowserSurface: "exclude"` removed. It was hiding our own
+    // window from the user's screen-share picker — a covert-assistance pattern.
+    // Element/Region Capture below remains because the user explicitly chooses
+    // what to share; it's the picker exclusion that was the policy issue.
+    monitorTypeSurfaces:   "include",
     surfaceSwitching:      "include",
     systemAudio:           "exclude",
   } as any;

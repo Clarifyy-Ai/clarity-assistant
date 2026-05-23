@@ -38,29 +38,29 @@ function createOverlay() {
     transparent:     true,
     frame:           false,
     alwaysOnTop:     true,
-    skipTaskbar:     true,
-    hasShadow:       false,
+    // Per production audit (P0-2): overlay must behave as a normal floating
+    // window. Do NOT hide it from screen capture, taskbar, or OS UI.
+    skipTaskbar:     false,
+    hasShadow:       true,
     resizable:       true,
-    // ★ "panel" on macOS = excluded from screen capture
-    type:            process.platform === "darwin" ? "panel" : "toolbar",
     webPreferences: {
       preload:          path.join(__dirname, "preload.cjs"),
       nodeIntegration:  false,
       contextIsolation: true,
-      // ★ Sandbox enabled: Chromium's renderer sandbox prevents OS-level escape
-      //   if the renderer is ever compromised (XSS / V8 RCE). Safe with
-      //   contextIsolation: true — IPC bridge in preload.cjs continues to work.
       sandbox:          true,
     },
   });
 
-  // ★ Screen share protection — MUST be before show()
-  overlayWindow.setContentProtection(true);
+  // NOTE: setContentProtection(true) and "panel"/"toolbar" window types were
+  // removed in P0-2 — they hid the overlay from screen sharing / recording,
+  // which enabled covert interview assistance. Overlay must be visible in
+  // any Zoom / Meet / Teams "share screen" so candidates cannot conceal it.
 
-  // ★ Visible on all desktops/fullscreen apps
+  // Visible on all desktops/fullscreen apps — legitimate UX, not stealth.
   overlayWindow.setVisibleOnAllWorkspaces(true, {
     visibleOnFullScreen: true,
   });
+
 
   // Load app
   if (isDev) {
@@ -141,16 +141,15 @@ app.whenReady().then(() => {
 
 // ── Global shortcuts (system-wide, work even when app is not focused) ──
 function registerGlobalShortcuts() {
-  // Toggle overlay visibility — primary stealth hotkey
+  // Toggle overlay visibility — convenience hotkey.
+  // Renamed from "primary stealth hotkey" in P0-2; behaviour unchanged.
   globalShortcut.register("CommandOrControl+Shift+H", () => {
     if (!overlayWindow) return;
     if (overlayWindow.isVisible()) overlayWindow.hide();
     else { overlayWindow.show(); overlayWindow.focus(); }
   });
-  // Panic — instantly hide overlay
-  globalShortcut.register("CommandOrControl+Shift+P", () => {
-    overlayWindow?.hide();
-  });
+  // NOTE: Ctrl+Shift+P "panic hide" removed in P0-2 — it existed only to let a
+  // user instantly conceal the overlay from an on-screen interviewer.
   // Forward Ctrl+Shift+A to renderer (request AI answer)
   globalShortcut.register("CommandOrControl+Shift+A", () => {
     overlayWindow?.webContents.send("global-shortcut", "request-ai-answer");
