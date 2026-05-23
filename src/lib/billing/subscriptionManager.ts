@@ -339,8 +339,8 @@ export const PLANS: Record<PlanId, Plan> = {
     id: "enterprise",
     name: "Enterprise",
     tagline: "For teams and bootcamps",
-    monthlyPrice: 0,
-    yearlyPrice: 0,
+    monthlyPrice: 7_900,
+    yearlyPrice: 6_583, // $79,000/yr ÷ 12 — display only
     creditsPerMonth: -1,
     color: "emerald",
     features: [
