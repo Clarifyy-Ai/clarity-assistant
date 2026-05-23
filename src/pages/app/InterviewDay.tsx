@@ -340,10 +340,10 @@ export default function InterviewDay() {
           rightIcon={<ChevronRight className="w-5 h-5" />}
           className="py-4 text-base"
         >
-          Launch Live Co-Pilot
+          Launch Live Practice Coach
         </Button>
         <p className="text-center text-xs text-muted-foreground">
-          The overlay is invisible to your interviewer even when screen sharing
+          For interview rehearsal only — not for use during real interviews.
         </p>
       </div>
     </div>
