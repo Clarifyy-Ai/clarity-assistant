@@ -302,13 +302,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
             )}
 
             {section.items.map((item) => {
-              const isItemActive =
-                isPathActive(location.pathname, item.to) ||
-                Boolean(item.subItems && isMockTestSection);
-
-              const showSubItems =
-                !collapsed && isMockTestSection && Boolean(item.subItems);
-
+              const isItemActive = isPathActive(location.pathname, item.to);
               const Icon = stealthMode ? item.stealthIcon : item.icon;
 
               return (
@@ -338,64 +332,13 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
                     <Icon className="h-4 w-4 shrink-0" />
 
                     {!collapsed && (
-                      <>
-                        <span className="truncate flex-1">
-                          {stealthMode
-                            ? STEALTH_NAV_LABELS[item.label] ?? item.label
-                            : item.label}
-                        </span>
-
-                        {item.subItems &&
-                          questionCount !== null &&
-                          questionCount > 0 && (
-                            <span
-                              className={cn(
-                                "ml-auto shrink-0 rounded-full px-1.5 py-0.5 text-[10px] font-bold leading-none",
-                                stealthMode
-                                  ? "bg-blue-500/20 text-blue-600"
-                                  : "bg-violet-500/20 text-violet-600"
-                              )}
-                            >
-                              {questionCount > 99 ? "99+" : questionCount}
-                            </span>
-                          )}
-                      </>
+                      <span className="truncate flex-1">
+                        {stealthMode
+                          ? STEALTH_NAV_LABELS[item.label] ?? item.label
+                          : item.label}
+                      </span>
                     )}
                   </NavLink>
-
-                  {showSubItems && item.subItems && (
-                    <div className="ml-7 mt-0.5 space-y-0.5 border-l border-border pl-2">
-                      {item.subItems.map((subItem) => {
-                        const SubIcon = subItem.icon;
-
-                        const subActive =
-                          (subItem.to === "/app/mock-test" &&
-                            location.pathname === "/app/mock-test") ||
-                          (subItem.to !== "/app/mock-test" &&
-                            isPathActive(location.pathname, subItem.to));
-
-                        return (
-                          <NavLink
-                            key={subItem.to}
-                            to={subItem.to}
-                            end={subItem.to === "/app/mock-test"}
-                            onClick={onNavClick}
-                            className={cn(
-                              "flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs font-medium transition-colors",
-                              subActive
-                                ? stealthMode
-                                  ? "text-blue-600 dark:text-blue-300 font-semibold"
-                                  : "text-violet-600 dark:text-violet-300 font-semibold"
-                                : "text-muted-foreground hover:text-foreground"
-                            )}
-                          >
-                            <SubIcon className="h-3.5 w-3.5 shrink-0" />
-                            <span className="truncate">{subItem.label}</span>
-                          </NavLink>
-                        );
-                      })}
-                    </div>
-                  )}
                 </div>
               );
             })}
