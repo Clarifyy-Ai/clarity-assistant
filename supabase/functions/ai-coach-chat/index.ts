@@ -27,7 +27,7 @@ const FUNCTION_NAME = "ai-coach-chat";
 const CREDIT_COST = 1;
 
 const DEFAULT_MODEL =
-  Deno.env.get("GEMINI_MODEL_DEFAULT") ?? "gemini-2.5-flash";
+  Deno.env.get("GEMINI_MODEL_DEFAULT") ?? "gemini-2.0-flash";
 
 const SYSTEM_PROMPT = `You are an expert, empathetic interview coach.
 

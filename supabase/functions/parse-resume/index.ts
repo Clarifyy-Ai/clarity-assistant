@@ -99,6 +99,59 @@ async function ocrExtract(pdfBase64: string): Promise<string | null> {
     return (json?.ParsedResults?.[0]?.ParsedText ?? "").replace(/[^\x20-\x7E\n]/g, "").replace(/\s{2,}/g, " ").trim();
   } catch { return null; }
 }
+/**
+ * Fan parsed resume out to documents (primary resume row) and backfill
+ * profiles.target_role / headline when empty. All writes are best-effort —
+ * a failure here must NOT fail the overall parse call.
+ */
+async function fanOutResume(db: any, userId: string, parsed: any): Promise<void> {
+  try {
+    const skills = Array.isArray(parsed?.skills) ? parsed.skills.map((s: any) => String(s)).slice(0, 100) : [];
+    const experience = Array.isArray(parsed?.experience) ? parsed.experience : [];
+    const education = Array.isArray(parsed?.education) ? parsed.education : [];
+    const summary = typeof parsed?.summary === "string" ? parsed.summary.slice(0, 4000) : null;
+    const headline =
+      typeof parsed?.headline === "string"
+        ? parsed.headline
+        : (experience[0]?.title ? String(experience[0].title) : null);
+
+    // Upsert into the user's primary resume document
+    const { data: existingDoc } = await db
+      .from("documents")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("type", "resume")
+      .eq("is_primary", true)
+      .maybeSingle();
+
+    if (existingDoc?.id) {
+      await db.from("documents").update({
+        parsed_skills: skills,
+        parsed_experience: experience,
+        parsed_education: education,
+        parsed_summary: summary,
+        updated_at: new Date().toISOString(),
+      }).eq("id", existingDoc.id);
+    }
+
+    // Backfill profile fields only when currently empty (never overwrite user input)
+    const { data: profile } = await db
+      .from("profiles")
+      .select("target_role, headline")
+      .eq("id", userId)
+      .maybeSingle();
+
+    const patch: Record<string, any> = {};
+    if (profile && !profile.target_role && headline) patch.target_role = String(headline).slice(0, 120);
+    if (profile && !profile.headline && headline) patch.headline = String(headline).slice(0, 200);
+    if (Object.keys(patch).length > 0) {
+      patch.updated_at = new Date().toISOString();
+      await db.from("profiles").update(patch).eq("id", userId);
+    }
+  } catch (err) {
+    console.error("[parse-resume] fanOutResume failed (non-fatal):", err);
+  }
+}
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
@@ -166,11 +219,11 @@ Deno.serve(async (req) => {
     if (geminiRaw) {
       const parsed = parseJSON(sanitizeAI(geminiRaw), null);
       if (parsed && isValidResumeSchema(parsed)) {
-        // Save parsed content to resumes.content as summary text
         await db.from("resumes").update({ content: JSON.stringify(parsed) }).eq("id", resume_id);
         if (effectiveVersionId) {
           await db.from("resume_versions").update({ parsed_data: parsed, parse_status: "ready", parse_error: null }).eq("id", effectiveVersionId);
         }
+        await fanOutResume(db, userId, parsed);
         return new Response(JSON.stringify({ success: true, source: "gemini", parsed }), { headers: getCorsHeaders(req) });
       }
     }
@@ -184,6 +237,7 @@ Deno.serve(async (req) => {
         if (effectiveVersionId) {
           await db.from("resume_versions").update({ parsed_data: parsed, parse_status: "ready", parse_error: null }).eq("id", effectiveVersionId);
         }
+        await fanOutResume(db, userId, parsed);
         return new Response(JSON.stringify({ success: true, source: "claude", parsed }), { headers: getCorsHeaders(req) });
       }
     }
@@ -199,6 +253,7 @@ Deno.serve(async (req) => {
           if (effectiveVersionId) {
             await db.from("resume_versions").update({ parsed_data: parsed, parse_status: "ready", parse_error: null }).eq("id", effectiveVersionId);
           }
+          await fanOutResume(db, userId, parsed);
           return new Response(JSON.stringify({ success: true, source: "ocr", parsed }), { headers: getCorsHeaders(req) });
         }
       }
