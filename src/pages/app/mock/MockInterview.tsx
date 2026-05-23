@@ -102,7 +102,7 @@ export default function MockInterview() {
         title:       company
           ? `${warmup ? "Warmup" : "Mock"} — ${company}`
           : warmup ? "Mock warmup" : "Mock interview",
-        document_id: config.resume_id,
+        document_id: null,
         jd_id:       config.jd_id,
         model_used:  toDbModel(config.model) as any,
       });

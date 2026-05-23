@@ -1,0 +1,1 @@
+ALTER TYPE public.ai_model ADD VALUE IF NOT EXISTS 'gemini-2.0-flash';

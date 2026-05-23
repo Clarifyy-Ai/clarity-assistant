@@ -112,7 +112,7 @@ export default function LiveOverlay() {
         user_id: profile.id,
         type: "live",
         title: config.company ? `Live — ${config.company}` : "Live co-pilot",
-        document_id: config.resume_id ?? null,
+        document_id: null,
         jd_id: config.jd_id ?? null,
         model_used: toDbModel(config.model) as any,
       })

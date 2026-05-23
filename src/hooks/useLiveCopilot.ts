@@ -427,7 +427,7 @@ export function useLiveCopilot({
               : sessionType === "warmup"
                 ? "Mock warmup"
                 : "Live co-pilot",
-          document_id: cfg.resume_id ?? null,
+          document_id: null,
           jd_id: cfg.jd_id ?? null,
           model_used: toDbModel(useOverlayStore.getState().active_model) as any,
         });
