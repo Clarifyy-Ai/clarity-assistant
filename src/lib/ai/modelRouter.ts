@@ -14,8 +14,9 @@ import { useOverlayStore } from "@/store/overlayStore";
 
 import { streamGeminiHint, streamFullAnswer } from "./geminiClient";
 import type { AnswerMode } from "./geminiClient";
-import { streamOpenAIHint } from "./openaiClient";
-import { streamClaudeHint } from "./anthropicClient";
+// P0-4: OpenAI / Anthropic clients are intentionally NOT imported here.
+// Launch ships Gemini-only; other providers stay in the codebase as
+// dead code for a future re-enable but must not be reachable from routing.
 
 import { getOfflineTemplate } from "./offlineTemplates";
 import { formatTalkingPointsAsHint } from "./resumeFallback";
