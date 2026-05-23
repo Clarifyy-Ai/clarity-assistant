@@ -155,12 +155,12 @@ export function useXPSystem() {
 
       // Persist badge to DB (fire-and-forget)
       supabase
-        .from("user_badges")
+        .from("user_badges" as any)
         .insert({
           user_id:     user.id,
           badge_id:    badgeId,
           unlocked_at: new Date().toISOString(),
-        })
+        } as any)
         .then(({ error: badgeErr }) => {
           if (badgeErr) {
             console.error("[useXPSystem] Badge insert failed:", badgeErr.message);

@@ -202,7 +202,7 @@ export default function TestRevision() {
     try {
       const { error } = await supabase
         .from("revision_list")
-        .update(payload)
+        .update(payload as any)
         .eq("id", item.id);
 
       if (error) {

@@ -10,11 +10,8 @@
 // - Provide consistent helper functions for signed URLs, uploads, deletes,
 //   realtime subscriptions, fetch, and upsert operations
 
-import {
-  supabase,
-  SUPABASE_URL,
-  SUPABASE_ANON_KEY,
-} from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/client";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/env";
 
 import { sanitizeFileName, stripControlCharacters } from "@/lib/security";
 
