@@ -31,8 +31,6 @@ import {
   Building,
   Inbox,
   Wrench,
-  Inbox,
-  Wrench,
   BookMarked,
   ShieldAlert,
   CreditCard,
