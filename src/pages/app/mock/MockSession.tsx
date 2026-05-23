@@ -248,7 +248,7 @@ export default function MockSession() {
         user_id: userId,
         type: "mock",
         title: config.company ? `Mock — ${config.company}` : "Mock interview",
-        document_id: config.resume_id ?? null,
+        document_id: null,
         jd_id: config.jd_id ?? null,
         model_used: toDbModel(config.model) as any,
       });
