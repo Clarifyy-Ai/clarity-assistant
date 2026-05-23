@@ -1,8 +1,7 @@
 import {
-  useEffect,
-  useState,
   type ComponentType,
   type SVGProps,
+  useEffect,
 } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
@@ -45,7 +44,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store/uiStore";
 import { useAuthStore } from "@/store/authStore";
-import { supabase } from "@/lib/supabase/client";
+
 
 import {
   STEALTH_NAV_LABELS,
@@ -57,19 +56,12 @@ import type { ProfileRow } from "@/types";
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 
-type SubNavItem = {
-  to: string;
-  icon: IconComponent;
-  label: string;
-};
-
 type NavItem = {
   to: string;
   icon: IconComponent;
   stealthIcon: IconComponent;
   label: string;
   exact?: boolean;
-  subItems?: SubNavItem[];
 };
 
 type NavSection = {
