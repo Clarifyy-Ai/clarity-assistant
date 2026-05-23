@@ -19,7 +19,7 @@ import { Link } from "react-router-dom";
 // SettingsSubscription — uses the same PLANS from subscriptionManager
 // ─────────────────────────────────────────────────────────────────
 
-const DISPLAY_PLANS: PlanId[] = ["free", "starter", "pro", "elite"];
+const DISPLAY_PLANS: PlanId[] = ["free", "pro", "enterprise"];
 
 const PLAN_COLORS: Record<string, string> = {
   slate: "from-gray-500 to-gray-600",
