@@ -501,16 +501,15 @@ const routes = [
           { path: "mock/warmup", element: <Page component={MockWarmup} /> },
           { path: "mock/session", element: <Page component={MockSession} /> },
 
-          // Mock Test (JEE/NEET MCQ) de-scoped at launch — routes redirect to dashboard.
-          // Source pages and DB tables preserved for future re-introduction.
-          { path: "mock-test", element: <Navigate to="/app/dashboard" replace /> },
-          { path: "mock-test/configure", element: <Navigate to="/app/dashboard" replace /> },
-          { path: "mock-test/results/:testId", element: <Navigate to="/app/dashboard" replace /> },
-          { path: "mock-test/my-questions", element: <Navigate to="/app/dashboard" replace /> },
-          { path: "mock-test/upload", element: <Navigate to="/app/dashboard" replace /> },
-          { path: "mock-test/revision", element: <Navigate to="/app/dashboard" replace /> },
-          { path: "mock-test/analytics", element: <Navigate to="/app/dashboard" replace /> },
-          { path: "mock-test/papers/:examType", element: <Navigate to="/app/dashboard" replace /> },
+          // Mock Test (JEE/NEET MCQ)
+          { path: "mock-test", element: <Page component={MockTestHub} /> },
+          { path: "mock-test/configure", element: <Page component={MockTestConfigure} /> },
+          { path: "mock-test/results/:testId", element: <Page component={MockTestResults} /> },
+          { path: "mock-test/my-questions", element: <Page component={MockTestMyQuestions} /> },
+          { path: "mock-test/upload", element: <Page component={MockTestUpload} /> },
+          { path: "mock-test/revision", element: <Page component={MockTestRevision} /> },
+          { path: "mock-test/analytics", element: <Page component={MockTestAnalytics} /> },
+          { path: "mock-test/papers/:examType", element: <Page component={MockTestPapers} /> },
 
           { path: "prep", element: <Page component={PrepLab} /> },
           {
