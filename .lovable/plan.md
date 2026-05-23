@@ -1,506 +1,399 @@
 
-# Clarify AI — Manual-Driven Production Audit
+# Clarify AI — Production Readiness Fix Execution Plan
 
-> Source of truth: **Clarify AI Complete User Manual v1.0 (2025 Edition, 28 pages, 12 chapters)** uploaded this turn. All findings anchored to actual files in this repo as of commit-state at audit time.
-
----
-
-## 1. Executive Summary
-
-The product is **NOT production-ready against the manual**. The codebase covers ~70% of the manual's surface area but contains four launch-blocking categories of issues:
-
-1. **Compliance / Policy Risk (BLOCKER):** The entire flagship feature line — Stealth Overlay (Ch. 6), Live AI Co-Pilot real-time interview assistance (Ch. 8), Screen Capture Blocker, Panic Button, "invisible to Zoom/Teams" claims — is implemented and wired (Electron bridge in `electron/main.cjs`, `src/lib/stealth/*`, `src/lib/overlay/screenCaptureEvasion.ts`). Shipping this materially exposes the company to fraud-facilitation, ToS-violation, and CFAA-adjacent liability. **Recommendation: gate behind enterprise-only legitimate-use contracts OR remove from production scope.**
-2. **Manual-vs-Implementation contract drift (BLOCKER):** Pricing, plan limits, credit defaults, multi-model routing, OAuth providers, retention defaults, and scoring weights diverge from the manual's contractual numbers.
-3. **Feature-claim gap (HIGH):** Several manual-promised features have UI shells but no working backend (BYOK key validation, Private Mode network severance, vocabulary boost, 2 fps screenshot capture, panel-mode diarization, weekly email digest, Google Calendar OAuth).
-4. **Schema / domain drift (HIGH):** Mock-test surface area is built for **competitive-exam (JEE/NEET) MCQs**, not interview Q&A as the manual describes — a fundamental product-scope mismatch.
-
-**Verdict: DO NOT LAUNCH** as described in the manual until §15 P0 items are resolved or the manual is rewritten to match the actual product.
+Source inputs: completed manual-driven audit (`.lovable/plan.md`), current repo, Clarify AI Complete Manual. Assumes **Path A** (remove covert/stealth, reposition as practice + post-interview analytics). All risky covert features are REMOVE/DISABLE — never improved.
 
 ---
 
-## 2. Manual Coverage Summary
+## 1. Executive Production Readiness Fix Summary
 
-| Chapter | Manual Sections | Fully Working | Partial / Broken | Missing | Compliance Risk |
-|---|---|---|---|---|---|
-| 1 Setup & Onboarding | 4 | 3 | 1 | 0 | 0 |
-| 2 Dashboard | 3 | 2 | 1 | 0 | 0 |
-| 3 Documents | 3 | 2 | 1 | 0 | 0 |
-| 4 Prep Tools | 4 | 3 | 1 | 0 | 0 |
-| 5 Mock Tests | 4 | 1 | 2 | 1 | 0 |
-| 6 Stealth Overlay | 3 | 0 | 0 | 0 | **3** |
-| 7 Audio & Transcription | 3 | 2 | 1 | 0 | 0 |
-| 8 Live AI Co-Pilot | 3 | 0 | 1 | 0 | **2** |
-| 9 Analytics & Debriefs | 3 | 2 | 1 | 0 | 0 |
-| 10 Billing & Subscriptions | 3 | 1 | 2 | 0 | 0 |
-| 11 Settings | 4 | 1 | 3 | 0 | 0 |
-| 12 Troubleshooting & Security | 4 | 1 | 2 | 1 | 0 |
-| **Totals (41)** | | **18** | **16** | **2** | **5** |
+Verdict today: **RED — not launchable**. Five blocker classes:
 
-Coverage rate (Fully Working ÷ Total) = **44%**. Manual makes claims the code does not currently satisfy.
+1. **Compliance** — stealth/evasion/covert-assistance code shipped (electron flags, screen-capture blocker, panic concealment, hide-from-Alt-Tab). Fraud-facilitation liability. **MUST be removed before any launch.**
+2. **Billing truth drift** — DB defaults 50 credits, manual says 200/2000/∞; Pricing page sells $29.99 packs, manual sells $29/$79 subscriptions. Three sources of truth disagree.
+3. **Model routing fiction** — manual promises Claude / GPT-4o / smart routing; code hardcodes Gemini 2.0 Flash everywhere. Either build it or rewrite manual.
+4. **BYOK security fiction** — manual claims AES-256 server-side; code stores keys in `localStorage`. Must remove claim or build it.
+5. **Domain mismatch** — `/app/mock-test` is JEE/NEET MCQ engine; manual sells interview Q&A practice. Pick canonical product.
+
+After P0 fixes (≈ 1 sprint), product is launchable as **"AI interview practice + post-interview analytics, Gemini-only, $29 Pro / $79 Enterprise"**.
 
 ---
 
-## 3. Feature Checklist Matrix
+## 2. P0 / P1 / P2 / P3 Fix Matrix
 
-> Columns abbreviated for readability. Severity: S0 launch-blocker · S1 high · S2 medium · S3 low.
+### P0 — Launch blockers (must ship before public release)
 
-### Chapter 1 — Setup & Onboarding
+| # | Issue | Manual ch. | Fix type | Files / DB | Effort | Regression risk | Verify |
+|---|---|---|---|---|---|---|---|
+| P0-1 | **Remove all stealth/covert/evasion code** | 6, 8.1, 8.3 | feature removal + manual rewrite | `electron/main.cjs`, `electron/preload.{cjs,ts}`, `src/lib/stealth/*`, `src/lib/overlay/screenCaptureEvasion.ts`, `src/lib/overlay/stealthMouse.ts`, `src/hooks/useStealthMouse.ts`, `src/hooks/usePrivateMode.ts` (audit), `src/lib/capture/screenShare.ts` (drop `selfBrowserSurface:"exclude"`), `src/store/overlayStore.ts` (`stealth_mode`), `profiles.stealth_mode` column default→false, `docs/STEALTH_FEATURES.md` delete | M (1–2d) | Medium — overlay still renders as normal window | Build runs; overlay visible in screen share; no `setContentProtection`, `skipTaskbar`, `WDA_EXCLUDEFROMCAPTURE`. Grep `stealth\|evasion\|skipTaskbar\|content[-_]?protection` returns 0 hits in app code. |
+| P0-2 | **Credit defaults align with chosen pricing** | 11 | migration + code | `handle_new_user()` (200 free), `subscriptions.monthly_credits` default, `src/lib/billing/priceCalculator.ts`, `src/components/billing/PricingCard.tsx`, `src/pages/marketing/Pricing.tsx`, central `src/lib/constants/pricing.ts` (new) | S (½d) | Low — only affects new users | New signup row has 200 credits; pricing page, settings, manual all show same numbers. |
+| P0-3 | **Pricing page vs Stripe vs manual unified** | 11 | code + docs rewrite | `src/pages/marketing/Pricing.tsx`, `src/components/billing/*`, Stripe products (manual op), `docs/QA_MANUAL.md`, manual ch.11 | S | Low | Single `PRICING` constant imported everywhere; Stripe price IDs match. |
+| P0-4 | **Model routing claim vs reality** | 8.2 | manual rewrite (Path A) — keep Gemini-only | `src/lib/ai/modelRouter.ts` (collapse to gemini), `src/lib/ai/modelMapping.ts`, `src/store/overlayStore.ts` `active_model`, settings model picker, manual ch.8.2, marketing | S | Low | Settings shows only "Gemini 2.0 Flash"; no UI mention of Claude/GPT-4o. |
+| P0-5 | **BYOK security fiction** | 8.5, 13 | feature removal for launch | `src/lib/security/byokVault.ts` delete, `src/pages/app/settings/SettingsBYOK.tsx` remove route, `profiles.byok_*_hint` keep nullable but hidden; manual ch.8.5 rewrite "BYOK coming soon" | S | Low — feature not used in prod paths | `/app/settings/byok` 404; no `localStorage` writes for API keys. |
+| P0-6 | **Mock test domain mismatch — pick canonical** | 4 | de-scope | If canonical = interview practice: gate `/app/mock-test` JEE/NEET behind admin flag or delete pages `src/pages/app/mock-test/*`, drop nav entry in `AppSidebar.tsx`. Keep DB tables (mock_tests, questions) for future. | M (1d) | Medium — large surface | Route not in nav; sidebar clean; `npm run build` passes. |
+| P0-7 | **Re-enable screen-capture exclusion removal** ⇒ verify overlay appears in Zoom/Meet test share | 6 | manual QA | n/a | S | n/a | Live test on macOS + Windows: overlay visible in Zoom "share screen". |
+| P0-8 | **CORS wildcard → whitelist** | 13 | edge function | `supabase/functions/_shared/cors.ts` set origin allowlist (`clarify-aii.lovable.app`, custom domain, localhost dev) | S | Low | curl from unlisted origin returns CORS error. |
+| P0-9 | **Remove deceptive privacy/security claims** | 13 | docs rewrite | `src/pages/marketing/Privacy.tsx`, `Terms.tsx`, `docs/STEALTH_FEATURES.md` delete, manual ch.13 | S | None | Privacy page matches reality (Gemini processor, 90d retention, no AES-256 BYOK claim). |
+| P0-10 | **Live Co-Pilot covert use case rewrite** | 8.1 | manual + UI copy | `src/pages/app/live/*`, `src/components/live/*` — reframe as "Practice with live AI coach", add warning banner "Do not use during real interviews — violates most employer policies." | S | Low | UI shows banner; manual rewritten. |
 
-| Manual feature | Status | Files | Backend | Evidence / Gap | Sev |
-|---|---|---|---|---|---|
-| 1.2 Email/password signup | FULLY WORKING | `src/pages/auth/Signup.tsx`, `Login.tsx` | Supabase Auth, `handle_new_user()` trigger | Profile + free subscription auto-created | — |
-| 1.2 OAuth: Google | FULLY WORKING (assumed configured) | `Login.tsx` | Supabase Auth provider | Code path exists | S2 |
-| 1.2 OAuth: GitHub | PARTIALLY WORKING | `Login.tsx` | Supabase Auth | UI button only if provider enabled; **manual promises** GitHub | S2 |
-| 1.2 OAuth: LinkedIn | MISSING | n/a | n/a | Manual promises LinkedIn — **not in code** | S2 |
-| 1.2 OAuth: Azure AD | MISSING | n/a | n/a | Manual promises Azure AD — **not in code** | S2 |
-| 1.2 Email verification | FULLY WORKING | `VerifyEmail.tsx`, `AuthCallback.tsx` | Supabase Auth | Standard flow | — |
-| 1.3 5-step onboarding wizard | FULLY WORKING | `src/pages/onboarding/OnboardingStep1Role.tsx`…`Step5ResumeUpload.tsx`, `OnboardingIndex.tsx` | `profiles.onboarding_step`, `target_role`, `experience_years` | All 5 steps match manual order (Role/Seniority/Preferences/Audio/Resume) | — |
-| 1.3 Onboarding data feeds AI personalization | PARTIALLY WORKING | `parse-resume`, `generate-answer/index.ts` | `profiles.target_role`, `documents.parsed_*` | Resume fanout fixed last turn; **`role_type`/`experience_years` not injected into prompts** — verify | S1 |
-| Reset onboarding from Settings | PARTIALLY WORKING | `SettingsProfile.tsx` | `profiles.onboarding_completed=false` | Need to confirm UI button exists | S2 |
-| 1.4 Browser compat (Chrome 110+/Firefox/Edge) | NOT TESTABLE FROM CODE | — | — | No client-side gate; manual claims browser-min only | S3 |
+### P1 — Required for quality launch (week 2)
 
-### Chapter 2 — Dashboard
-
-| Manual feature | Status | Files | Evidence / Gap | Sev |
+| # | Issue | Fix type | Files | Effort |
 |---|---|---|---|---|
-| Readiness Score (0–100 composite) | PARTIALLY WORKING | `src/pages/app/Dashboard.tsx` | Card renders but **composite formula vs manual unverified**; likely placeholder | S1 |
-| Upcoming Interviews widget | FULLY WORKING | `Dashboard.tsx`, `useInterviewScheduler.ts` → `scheduled_interviews` | Real data | — |
-| Recent Activity feed | PARTIALLY WORKING | `Dashboard.tsx` | Pulls from `analytics`/`sessions`; **no unified activity stream** as manual promises | S2 |
-| Quick-Launch bar | FULLY WORKING | `Dashboard.tsx` | Visible | — |
-| XP Progress Ring | FULLY WORKING | `Dashboard.tsx`, `profiles.xp`/`level` | Real | — |
-| Credit Balance in top bar | FULLY WORKING | `AppLayout`, `profiles.credits` | Real-time via store | — |
-| Streak Counter (flame) | FULLY WORKING | `profiles.streak_days`, `update_user_streak()` trigger | Real | — |
-| Notifications bell | FULLY WORKING | `Notifications.tsx`, `notifications` table | Real | — |
-| Real-time updates without refresh | PARTIALLY WORKING | various | Most via React Query refetch; **no Supabase realtime subscriptions** on dashboard widgets — manual claim of "live view" is overstated | S2 |
-| Low-credit warning <50 | DISCONNECTED | `useCreditWarning` (if exists) | Threshold logic not consistently wired to a UI banner | S2 |
-| Enterprise ∞ indicator | MISSING | — | No render path for unlimited symbol; `plan_tier` enum exists | S2 |
+| P1-1 | Real readiness score logic (currently placeholder) | code | `src/hooks/useConfidenceScore.ts`, `src/pages/app/Dashboard.tsx`, new SQL view `v_user_readiness` | M |
+| P1-2 | Low-credit warning wired to balance | code | `src/components/billing/CreditBalance.tsx`, `src/hooks/useCredits.ts`, toast on <20 | S |
+| P1-3 | Enterprise unlimited rendering | code | PricingCard, CreditBalance show "∞" when `plan_id='enterprise'` | S |
+| P1-4 | Retention enforcement actually runs | edge function + cron | deploy `delete_expired_session_data()` via pg_cron daily; expose admin panel button | S |
+| P1-5 | Notification toggles wired to sender | code + edge | `src/hooks/useNotifications.ts`, new `send-digest` cron edge fn | M |
+| P1-6 | Onboarding fields propagate to prompts | code | `src/lib/ai/contextEnvelopeBuilder.ts` consume `role_type`, `experience_years`, `target_role` | S |
+| P1-7 | Resume/JD parsed data feeds prompts & gap analysis | code | `useResumeContext.ts`, `contextEnvelopeBuilder.ts`, prep tools | M |
+| P1-8 | STAR Builder / Rephraser save to Answer Bank | code | `src/hooks/useSTARBuilder.ts`, `src/store/answerBankStore.ts` | S |
+| P1-9 | Debrief uses real stored transcript + scoring | edge fn | `supabase/functions/generate-debrief/index.ts` | M |
+| P1-10 | Account deletion cascades + storage cleanup | edge fn + migration | new `delete-account` edge fn; storage object purge | M |
+| P1-11 | Rate limiting on AI edge functions | edge fn | `_shared/rateLimit.ts` (token bucket per user_id, 60/min) | S |
+| P1-12 | Export flows (transcript CSV, analytics CSV) | edge fn | `supabase/functions/export-*` deploy & wire | M |
 
-### Chapter 3 — Documents
+### P2 — Polish & manual alignment (week 3)
 
-| Manual feature | Status | Files | Evidence / Gap | Sev |
-|---|---|---|---|---|
-| Document hub `/app/documents` | FULLY WORKING | `Documents.tsx`, `ResumeDetail.tsx`, `JDDetail.tsx` | All present | — |
-| Resume upload (PDF/DOCX/TXT, 10 MB) | FULLY WORKING | `Documents.tsx` → `resumes` bucket + `parse-resume` | Multi-layer fallback Gemini→Claude→OCR per memory | — |
-| JD upload (PDF/DOCX/TXT + URL paste, 5 MB) | PARTIALLY WORKING | `Documents.tsx`, `job_descriptions` table | File upload OK; **URL-paste-and-fetch path** not verified in `parse-resume`-equivalent | S2 |
-| Cover Letter (5 MB) | MISSING | — | `documents.type` enum likely lacks COVER_LETTER value; no dedicated upload tile | S2 |
-| Portfolio / Projects (15 MB, URL links) | PARTIALLY WORKING | `prep/ProjectBuilder.tsx` | Lives only in Prep Lab, not in Document hub as manual states | S3 |
-| Resume↔JD semantic gap analysis | FULLY WORKING | `gap-analysis` edge function | Implemented | — |
-| Cloud storage AES-256 / TLS 1.3 | FULLY WORKING (by Supabase default) | `resumes`/`documents` buckets (private) | Supabase Storage default | — |
-| Per-user bucket isolation | FULLY WORKING | RLS on `resumes`/`documents` | Verified `resumes_own`, `documents_own` policies | — |
-| Retention 0–90 days | PARTIALLY WORKING | `delete_expired_session_data()` cron | Function exists for **sessions**, not for documents; `profiles.data_retention_days` exists but **document cleanup not wired** | S1 |
-| Access logging | MISSING | — | No `document_access_log` table; manual promises audit log | S1 |
-
-### Chapter 4 — Interview Prep Tools
-
-| Manual feature | Status | Files | Evidence / Gap | Sev |
-|---|---|---|---|---|
-| Prep Lab landing | FULLY WORKING | `prep/PrepLab.tsx` | All 5 tools listed | — |
-| STAR Method Builder + Save to Answer Bank | FULLY WORKING | `prep/StarBuilder.tsx`, `generate-star-answer`, `polish-star-section`, `save-answer` → `answers` table | End-to-end | — |
-| Coding Hints (Py/JS/Java/C++/Go/Rust/SQL) | FULLY WORKING | `prep/CodingHints.tsx`, `generate-hint` | Languages enumerated | — |
-| Hint depth (surface/medium/walkthrough) | PARTIALLY WORKING | `generate-hint/index.ts` | Verify `depth` parameter actually shapes the prompt | S2 |
-| System Design 50+ scenarios | PARTIALLY WORKING | `prep/SystemDesign.tsx` | Scenario library size **not verified to be ≥50**; likely seeded smaller | S2 |
-| Rephraser (3 polished alternatives) | FULLY WORKING | `prep/Rephraser.tsx`, `prep-tool` edge function | Returns 3 variations | — |
-| Project Builder (GitHub URL → talking points) | PARTIALLY WORKING | `prep/ProjectBuilder.tsx` | Confirm GitHub API/fetch path; if pure LLM hallucination from URL only → BROKEN | S1 |
-| Company Research Engine (5 categories) | FULLY WORKING | `company-research` edge fn, `company-research/CompanyResearch.tsx`, `company_research.raw_data` | Wired | — |
-
-### Chapter 5 — Mock Tests & Practice Sessions
-
-| Manual feature | Status | Files | Evidence / Gap | Sev |
-|---|---|---|---|---|
-| 5.1 Schedule real interview | FULLY WORKING | `interviews/NewInterview.tsx`, `useInterviewScheduler.ts` → `scheduled_interviews`+`interview_rounds` | After prev-turn cleanup | — |
-| Google Calendar 2-way OAuth sync | PARTIALLY WORKING | `sync-calendar` edge fn, `calendar_integrations` table | Edge function exists; **`disconnect-calendar` and OAuth init flow** in `SettingsIntegrations.tsx` need end-to-end verification with real Google client secret | S1 |
-| Email + in-app 24h/1h reminders | MISSING | `send-email` exists; no cron job sending reminders | No cron-scheduled reminder job found | S1 |
-| 5.2 CSV/Excel custom question upload | PARTIALLY WORKING | `mock-test/UploadQuestions.tsx`, `ExcelImportTab.tsx`, `parse-question-pdf` | Excel-first per memory; **CSV columns expected by manual** (`question,category,difficulty,tags,expected_duration_min`) differ from Excel-import column requirements | S1 |
-| 5.3 Practice Session 15–45 min, 5–20 Qs | DISCONNECTED | `mock/MockSession.tsx` **and** `mock-test/TestSession.tsx` | **Two parallel mock flows exist** — `/app/mock` (interview practice) and `/app/mock-test` (JEE/NEET-style MCQ engine). Manual describes only the former. | S0 |
-| 5.3 5-Minute Warmup | PARTIALLY WORKING | `mock/MockWarmup.tsx` | Page exists; verify 5-min hard timer + +40 XP grant | S2 |
-| AI Interviewer personality (strict/friendly/panel) | PARTIALLY WORKING | `start-session`, `generate-questions` | Verify `personality` field threaded through prompt | S2 |
-| Encrypted session recording | MISSING | — | No audio-blob upload to storage; only transcript persisted (`session_transcripts` per memory) — manual promises full audio recording | S1 |
-| XP +150 mock / +40 warmup | PARTIALLY WORKING | `update_user_streak()` trigger | Trigger awards only 10/15 XP, not 150/40 — **direct contradiction to manual numbers** | S1 |
-| 5.4 Confidence/Content/Clarity score + Model Answer | FULLY WORKING | `generate-debrief`, `debriefs` table | Schema rich, includes `overall_score`, `clarity_score`, `summary` | — |
-
-### Chapter 6 — Stealth Overlay System — **COMPLIANCE / POLICY RISK**
-
-> All items below classified as **COMPLIANCE / POLICY RISK** per your direction. Files mapped; **no improvement recommendations made**.
-
-| Manual feature | Status | Files | Risk note |
+| # | Issue | Fix type | Effort |
 |---|---|---|---|
-| 6.1 Activate `/app/live/overlay`, Ctrl+Shift+H toggle | COMPLIANCE / POLICY RISK | `pages/app/live/LiveOverlay.tsx`, `components/overlay/OverlayWindow.tsx`, `lib/overlay/hotkeys.ts` | Active wiring exists |
-| 6.2 Screen Capture Blocker (SetWindowDisplayAffinity / CGWindowLevel) | COMPLIANCE / POLICY RISK | `lib/stealth/screenCaptureBlocker.ts`, `lib/stealth/electronBridge.ts`, `electron/main.cjs` (Electron 32), `lib/overlay/screenCaptureEvasion.ts` | OS-level evasion explicitly aimed at defeating Zoom/Teams capture. **Recommend removal from launch scope.** |
-| 6.2 Opacity Auto-Fade to 15% on mouse-leave | COMPLIANCE / POLICY RISK | `components/overlay/StealthMouseGuard.tsx`, `lib/stealth/screenCaptureBlocker.ts` | Concealment behavior |
-| 6.2 Auto-Hide on Focus Loss | COMPLIANCE / POLICY RISK | `screenCaptureBlocker.ts`, `WindowVisibilityManager.tsx` | Concealment behavior |
-| 6.2 Panic Button (instant kill) | COMPLIANCE / POLICY RISK | `lib/stealth/stealthActions.ts`, `OverlayKeyboardHandler.tsx` | "Emergency concealment" — explicit deception intent |
-| 6.2 No Taskbar Entry / hidden from Alt+Tab | COMPLIANCE / POLICY RISK | `electron/main.cjs` (BrowserWindow `skipTaskbar`) | Concealment behavior |
-| 6.3 Hotkeys Ctrl+Shift+H/M/N/F/S/R + Escape + Panic | FUNCTIONALLY WIRED — **risk-classified** | `lib/overlay/hotkeys.ts`, `lib/constants/hotkeys.ts` | Wired |
+| P2-1 | Consolidate duplicate Settings pages | code | S |
+| P2-2 | Provider mismatch — manual says Google/GitHub/LinkedIn/Azure; ship Google only, rewrite manual | docs | S |
+| P2-3 | XP/streak triggers verified end-to-end | code+SQL | S |
+| P2-4 | Diarization rendering polish | code | S |
+| P2-5 | Warmup calibration persistence | code | S |
+| P2-6 | Per-action credit cost central table | migration + code | S |
+| P2-7 | Admin audit log surface in admin panel | code | S |
 
-**Recommended posture (you already chose this):** Remove stealth/evasion from launch. Keep the overlay only as a *visible* practice-mode companion behind a feature flag; rewrite manual Chapter 6.
+### P3 — Post-launch backlog
 
-### Chapter 7 — Audio & Transcription
-
-| Manual feature | Status | Files | Evidence / Gap | Sev |
-|---|---|---|---|---|
-| 16 kHz mono Opus capture | FULLY WORKING | `lib/audio/tabAudioCapture.ts`, `audioStore.ts` | Per memory | — |
-| Encrypted WebSocket to Deepgram | FULLY WORKING | `deepgram-token` edge fn (60s TTL temp key per memory) | Secure | — |
-| Deepgram **Nova-3** | PARTIALLY WORKING | `profiles.deepgram_model` defaults to `nova-2` | **Manual says Nova-3** — drift | S2 |
-| Speaker diarization (candidate vs interviewer color lanes) | PARTIALLY WORKING | `LiveOverlay.tsx`, transcript UI | Verify per-speaker color rendering | S2 |
-| Panel mode multi-speaker colors | MISSING | — | No multi-speaker palette logic | S2 |
-| Auto-punctuation | FULLY WORKING | Deepgram default | — | — |
-| Custom vocabulary boost | MISSING | — | No UI to upload vocabulary, no Deepgram `keywords` param threaded | S2 |
-| WPM / Filler / Silence / Volume metrics | FULLY WORKING | `lib/audio/speechMetrics.ts` (or similar), `coachStore.ts` | Per memory | — |
-| Speaking ratio metric | PARTIALLY WORKING | unclear | Verify metric is computed and surfaced | S2 |
-| Warmup calibrates baseline | PARTIALLY WORKING | `MockWarmup.tsx` | Verify baseline values are persisted and reused | S2 |
-| Audio never permanently stored | FULLY WORKING (by design) | n/a | Only transcripts persisted | — |
-| Mute/unmute hotkey Ctrl+Shift+M | FULLY WORKING | `lib/constants/hotkeys.ts` | — | — |
-
-### Chapter 8 — Live AI Co-Pilot — **PARTIAL COMPLIANCE RISK**
-
-| Manual feature | Status | Files | Evidence / Gap |
-|---|---|---|---|
-| 8.1 Auto-detect end-of-question + 2–4 s answer | **COMPLIANCE / POLICY RISK** | `hooks/useLiveCopilot.ts`, `generate-answer` | This is "hidden real-time interview assistance" by manual definition. Same risk as Ch. 6. |
-| 8.1 Resume/JD/Answer Bank context injection | FULLY WORKING | `generate-answer/index.ts` | Plumbed |
-| 8.1 Streaming display | FULLY WORKING | Streaming response | — |
-| Ctrl+Shift+S Save / Ctrl+Shift+R Regen | FULLY WORKING | `save-answer`, hotkeys | — |
-| 8.2 Multi-model routing **Claude 3.5 Sonnet / GPT-4o / Gemini Flash 2.0 / BYOK** | BROKEN — MANUAL CONTRADICTION | `generate-answer/index.ts`, `_shared/gemini.ts` | `DEFAULT_MODEL = "gemini-2.0-flash"`. **No Anthropic or OpenAI SDK path exists in any edge function.** Manual promises model routing that is not implemented. |
-| 8.3 Screenshot capture @ 2 fps (Pro/Enterprise opt-in) | **COMPLIANCE / POLICY RISK + MISSING** | No `screen-parse` edge fn, no `getDisplayMedia` capture loop | Even the wiring is absent — recommend leaving it out |
-
-### Chapter 9 — Analytics & Debriefs
-
-| Manual feature | Status | Files | Evidence / Gap | Sev |
-|---|---|---|---|---|
-| Debrief auto-generated in 30–60 s | FULLY WORKING | `generate-debrief` edge fn, `debrief/Debrief.tsx` | Async pipeline | — |
-| Encrypted transcript view | FULLY WORKING | `session_transcripts` + `debrief/DebriefDetail.tsx` | — | — |
-| Question-by-question analysis | FULLY WORKING | `debriefs.recommendations`, `key_moments` jsonb | — | — |
-| Missed Keywords Report | PARTIALLY WORKING | `gap-analysis` | Confirm surfaced in Debrief UI, not orphan | S2 |
-| Vocal Analytics time-series chart | PARTIALLY WORKING | `Analytics.tsx`, recharts | Verify pace/volume/pause time series | S2 |
-| AI Model Answer Library on debrief | PARTIALLY WORKING | `debriefs.summary` | Per-question model answer storage not clearly separated | S2 |
-| Global Analytics: readiness trend / WPM histogram / filler reduction / topic heat map / XP progression | PARTIALLY WORKING | `Analytics.tsx`, `analytics-dashboard` edge fn | Some charts exist; verify all 5 are real not mock | S1 |
-| Confidence Score formula (25/25/20/15/15) | NOT TESTABLE FROM CURRENT CODE | `generate-debrief` | Verify the weights in code match manual | S1 |
-
-### Chapter 10 — Billing, Credits & Subscriptions
-
-| Manual feature | Status | Files | Evidence / Gap | Sev |
-|---|---|---|---|---|
-| Per-action credit costs (5/12/8/10/15/20/6/10/3) | PARTIALLY WORKING | various edge fns calling `deduct_credits` | Costs are hard-coded per call site; **inconsistent** — needs central cost table to match manual numbers exactly | S1 |
-| Free 200 / Pro 2,000 / Enterprise ∞ monthly credits | BROKEN — MANUAL CONTRADICTION | `handle_new_user()` grants **50 credits**, `subscriptions.monthly_credits = 50` | Manual says 200; current code says 50 | S0 |
-| Pro $29/month | BROKEN — MANUAL CONTRADICTION | `pages/marketing/Pricing.tsx` (credit-pack model `500 credits $29.99`), project memory says Pro `$39/mo` | Three different price points across manual, code, memory | S0 |
-| Stripe checkout | FULLY WORKING | `create-checkout`, `stripe-webhook` edge fns | — | — |
-| Stripe portal | FULLY WORKING | `create-billing-portal` edge fn | — | — |
-| Webhook plan sync | FULLY WORKING | `stripe-webhook` (canonical after prev-turn dedup) | — | — |
-| Cancellation / downgrade end-of-period | PARTIALLY WORKING | `cancel-subscription`, `resume-subscription` | Verify period-end behavior, not immediate | S2 |
-| No credit rollover | NOT VERIFIED | `credits_reset_at` field exists | Confirm monthly reset cron exists | S2 |
-| Low-credit notification at 50 | PARTIALLY WORKING | `notifications` table | Threshold trigger not found in code | S2 |
-
-### Chapter 11 — Settings & Advanced Configuration
-
-| Manual feature | Status | Files | Evidence / Gap | Sev |
-|---|---|---|---|---|
-| Settings index `/app/settings` | FULLY WORKING | `Settings.tsx` | — | — |
-| 11.1 BYOK OpenAI/Anthropic/Gemini | PARTIALLY WORKING | `SettingsBYOK.tsx`, `lib/byokVault.ts`, `validate-api-key` edge fn | Keys stored **in localStorage only** ("Keys are persisted only in local browser storage via byokVault"). **Manual claims AES-256 server-side encryption** — direct contradiction. | S1 |
-| BYOK keys actually used in edge functions | DISCONNECTED | `generate-answer` reads `x-byok-*` headers? — verify | If headers aren't forwarded server-side, BYOK is cosmetic | S1 |
-| 11.2 Retention controls (transcripts/docs/analytics/scorecard) | PARTIALLY WORKING | `SettingsPrivacy.tsx`, `profiles.data_retention_days`, `delete_expired_session_data()` | Sessions purged by cron; **documents and analytics ARE NOT purged** by the function | S1 |
-| Audio chunks never stored | FULLY WORKING (by design) | — | — | — |
-| 11.3 Private Mode network sever | PARTIALLY WORKING | `hooks/usePrivateMode.ts`, `hooks/useOfflineFallback.ts`, `lib/ai/offlineTemplates.ts` | Hook exists but does **not actually block fetch/WebSocket**; only renders OFFLINE badge | S1 |
-| OFFLINE badge | FULLY WORKING | `LiveNetworkMonitor.tsx`, `networkStore.ts` | Renders | — |
-| 11.4 Notifications (6 toggles) | PARTIALLY WORKING | `SettingsNotifications.tsx` → `profiles` JSONB | Toggles persist; **only credit-low and interview-day reminders have any backend wiring**. Streak reminder, weekly digest, product updates have **no scheduled sender** | S1 |
-| Hotkey remapping | PARTIALLY WORKING | `SettingsHotkeys.tsx`, `lib/constants/hotkeys.ts` | UI shows hotkeys; verify they persist per-user (not just constants) | S2 |
-| **Duplicate Settings pages** | DUPLICATE / LEGACY | 18 files vs ~10 manual sections | `SettingsSecurity` + `SettingsSecurityConfig`, `SettingsCredits` + `SettingsBilling` + `SettingsSubscription`, `SettingsModels` + `SettingsBYOK`, `SettingsPolish`, `SettingsData` | S2 |
-
-### Chapter 12 — Troubleshooting, Export, Deletion, Security
-
-| Manual feature | Status | Files | Evidence / Gap | Sev |
-|---|---|---|---|---|
-| 12.1 Audio troubleshooting tables | NOT TESTABLE / DOC-ONLY | — | Manual is documentation; verify in-app Help links to these | S3 |
-| 12.2 Overlay troubleshooting | NOT TESTABLE / DOC-ONLY | — | Same | S3 |
-| 12.3 Full JSON export | FULLY WORKING | `export-user-data` edge fn, `SettingsData.tsx`, `exports` bucket | Implemented | — |
-| 12.3 Transcript-only export | PARTIALLY WORKING | `SettingsData.tsx` | Verify a transcript-only filter path | S2 |
-| 12.3 Analytics CSV export | PARTIALLY WORKING | `SettingsData.tsx` | Verify CSV branch | S2 |
-| 12.3 Permanent account deletion + 24h backup purge | PARTIALLY WORKING | `delete-account` edge fn, `SettingsDanger.tsx` | Live DB cascade likely OK; **"24h backup purge" claim** is provider-dependent and not provable in app code | S1 |
-| 12.4 Security: OAuth 2.0 + PKCE, JWT 1h | FULLY WORKING (Supabase default) | — | — | — |
-| 12.4 Bcrypt cost factor 12 | NOT TESTABLE (Supabase managed) | — | Cannot verify cost factor | S3 |
-| 12.4 Rate limiting per user/IP | MISSING | — | No middleware in edge functions enforcing rate limits | S1 |
-| 12.4 CORS whitelist | PARTIALLY WORKING | `supabase/functions/_shared/cors.ts` | Uses `*` not a whitelist — manual promises whitelist | S2 |
-| 12.4 API key rotation every 90 days | MISSING | — | No documented rotation; `LOVABLE_API_KEY` is managed but unrotated | S2 |
-| 12.4 Security audit log | MISSING | `admin_audit_log` exists for admin ops only | No per-user security audit log (logins, exports, deletions) | S1 |
-| Session token invalidated on logout | FULLY WORKING | Supabase default | — | — |
-| Quarterly pen-test / HackerOne | NOT TESTABLE / EXTERNAL CLAIM | — | Cannot verify; **remove from manual unless contracted** | S2 |
+True multi-model routing; BYOK with server-side AES-GCM via Supabase Vault; cover-letter generator; LinkedIn/Azure OAuth; Mock-test product split as separate vertical; rich analytics heatmaps.
 
 ---
 
-## 4. What Works Fully (Production-Ready)
+## 3. Product-Contract Alignment Plan
 
-1. Email/password & Google OAuth auth, email verification, redirect to onboarding.
-2. 5-step onboarding wizard (route, persistence, completion gate).
-3. Document hub: resume upload + multi-layer parse (Gemini→Claude→OCR), JD upload, per-user RLS, AES-256 at rest via Supabase.
-4. Prep Lab: STAR Builder, Coding Hints, Rephraser, Company Research — full LLM round-trip with credits.
-5. Interview scheduling (`scheduled_interviews`+`interview_rounds`).
-6. Deepgram real-time transcription with temp-token security (60 s TTL).
-7. Debrief generation + transcript persistence.
-8. Stripe checkout, billing portal, webhook plan sync.
-9. Full data export and permanent account deletion edge functions.
-10. Dashboard core widgets (XP, streak, credit balance, notifications).
-
----
-
-## 5. Partial / Broken / Missing
-
-**Broken vs manual (S0/S1):**
-- Free credit default (50 vs 200), Pro pricing ($39/$29.99/$29 conflict), no Enterprise ∞ rendering.
-- Multi-model routing claim (Claude/GPT-4o/Gemini) — only Gemini implemented.
-- Screen-capture capture loop (Ch. 8.3) — missing entirely.
-- BYOK key storage (localStorage, not server-side AES-256 as manual promises).
-- Mock-test product surface diverges from manual (competitive-exam MCQ vs interview Q&A).
-- Audio session recording (missing — manual promises encrypted recording).
-- Notification senders for streak/weekly-digest/interview-reminders (cron jobs absent).
-- Rate limiting & security audit log (missing).
-- XP awards per session diverge sharply (10/15 actual vs 150/40 manual).
-
-**Disconnected:**
-- Two parallel mock flows (`/app/mock` vs `/app/mock-test`).
-- Document retention cleanup (table-only function, no fan-out to documents/analytics).
-- Private Mode hook does not actually sever network calls.
-
-**Missing:**
-- LinkedIn / Azure AD OAuth providers.
-- Cover-letter document type.
-- Custom-vocabulary upload for Deepgram.
-- Panel-mode multi-speaker colorization.
-- Cron-scheduled interview reminders.
-- Per-user security audit log.
-
----
-
-## 6. Manual vs Actual Mismatch Report (top 15)
-
-| # | Manual claim | Actual code | Severity |
-|---|---|---|---|
-| 1 | Pro = $29/month, Free = 200 credits, Enterprise = ∞ | $29.99 credit-pack pricing, 50-credit default, no ∞ UI | S0 |
-| 2 | Multi-model routing across Claude 3.5 / GPT-4o / Gemini | Only `gemini-2.0-flash` is wired | S0 |
-| 3 | OAuth Google/GitHub/LinkedIn/Azure AD | Only Google reliably; LinkedIn & Azure AD absent | S1 |
-| 4 | Deepgram **Nova-3** | `profiles.deepgram_model` default `nova-2` | S2 |
-| 5 | BYOK keys AES-256 server-side encrypted | `localStorage` via `byokVault.ts` | S1 |
-| 6 | Mock XP +150 / Warmup +40 | Trigger awards +10/+15 | S1 |
-| 7 | Encrypted full audio recording per session | Audio never persisted (good for privacy, contradicts manual) | S1 |
-| 8 | Email + in-app reminders 24h / 1h pre-interview | No cron sender | S1 |
-| 9 | Document retention 0–90 days configurable | Setting persists but no cleanup job for documents | S1 |
-| 10 | Private Mode severs network | Hook flips a flag, fetches still execute | S1 |
-| 11 | Stealth overlay invisible to Zoom/Teams | Implemented via Electron + SetWindowDisplayAffinity | **Compliance risk** |
-| 12 | 2 fps screen capture in live coding | Not implemented at all | S2 + risk |
-| 13 | Rate limiting per user/IP | None | S1 |
-| 14 | CORS whitelist | `*` wildcard | S2 |
-| 15 | Quarterly pen-test, HackerOne | External-process claim, no evidence | S2 |
-
----
-
-## 7. Compliance / Policy / Risk Findings
-
-| ID | Risk | Files | Recommendation |
-|---|---|---|---|
-| R1 | Real-time covert interview assistance ("crown jewel") | `useLiveCopilot.ts`, `generate-answer`, `LiveOverlay.tsx`, `OverlayAnswerStrength.tsx`, `OverlayChatPanel.tsx` | **Remove from production scope** or restrict to *practice-mode only* with visible disclosure and ToS gating |
-| R2 | OS-level screen-capture evasion | `lib/stealth/screenCaptureBlocker.ts`, `lib/stealth/electronBridge.ts`, `electron/main.cjs` (BrowserWindow `skipTaskbar`, `setContentProtection`), `lib/overlay/screenCaptureEvasion.ts` | **Remove** the screen-capture-exclusion APIs; keep a visible overlay only |
-| R3 | Panic Button concealment | `lib/stealth/stealthActions.ts`, `OverlayKeyboardHandler.tsx` | **Remove** ("panic" framing) |
-| R4 | Opacity auto-fade + auto-hide on focus loss | `StealthMouseGuard.tsx`, `WindowVisibilityManager.tsx` | **Remove** stealth fade; keep manual minimize only |
-| R5 | "No taskbar entry / Alt+Tab hidden" | `electron/main.cjs` | **Remove** `skipTaskbar:true` |
-| R6 | Marketing copy in manual itself ("never detected", "invisible AI partner") | `ClarifyAI_Complete_Manual_1.pdf` | **Rewrite manual** — current copy creates fraud-facilitation exposure |
-| R7 | Live coding screenshot capture (2 fps) of third-party platforms | Not implemented, but documented | **Drop from manual** |
-| R8 | Security claims unverifiable (SOC 2, quarterly pen-test, HackerOne) | n/a | **Remove from manual** until contractually true |
-
----
-
-## 8. End-to-End Flow Audit (top user journeys)
-
-1. **Signup → Onboarding → First Mock → Debrief:** WORKS end-to-end, with caveats (XP numbers wrong, recording missing).
-2. **Resume Upload → Parse → JD Upload → Gap Analysis → Prep Tools:** WORKS (cover letter missing).
-3. **Schedule Interview → Calendar Sync → Reminder → Live Overlay:** Breaks at "Reminder" (no cron); Overlay = compliance risk.
-4. **Upgrade to Pro → Stripe → Credits Refilled:** WORKS for checkout; **monthly credit amount is wrong** (50 → should be 2000).
-5. **BYOK → Generate Answer with own key:** Broken at storage layer (localStorage) and at routing layer (only Gemini in edge fns).
-6. **Export Data → Delete Account:** WORKS; backup-purge claim unverifiable.
-
----
-
-## 9. Frontend Audit
-
-- **Routing health:** 60+ authenticated routes in `App.tsx`, all lazy-loaded, wrapped in `RequireAuth`. ✅
-- **Duplicate routes:** `/app/mock/session` vs `/app/mock-test/session/:testId` — two separate session orchestrators.
-- **State stores (15 Zustand):** Generally clean; `overlayStore`+`sessionStore`+`audioStore`+`coachStore`+`networkStore` overlap conceptually in the live-session area; verify selector stability.
-- **Hooks (42):** `useLiveCopilot`, `usePrivateMode`, `useOfflineFallback`, `useInterviewScheduler`, `useCreditWarning`(?) — confirm not orphaned.
-- **Error boundaries:** Verify a top-level boundary in `App.tsx`; per-route boundary recommended.
-- **Loading/empty states:** Generally good per memory; spot-check Dashboard widgets.
-- **Accessibility:** Not audited this round; recommend axe sweep before launch.
-- **Responsive:** "HireFlow" compact design per memory; not re-verified.
-
-## 10. Backend / Edge Function Audit
-
-38 functions. Healthy:
-`ai-coach-chat, ai-feedback, analytics-dashboard, analyze-test-performance, cancel-subscription, company-research, create-billing-portal, create-checkout, create-test, deduct-credits, deepgram-token, delete-account, disconnect-calendar, end-session, export-user-data, gap-analysis, generate-answer, generate-debrief, generate-hint, generate-practice-questions, generate-questions, generate-star-answer, parse-question-pdf, parse-resume, ping, polish-star-section, prep-tool, resume-subscription, save-answer, save-transcript, select-test-questions, send-email, start-session, stripe-webhook, submit-test, sync-calendar, validate-api-key`
-
-Cross-cutting concerns:
-- **CORS:** central `_shared/cors.ts` uses `*` — manual claims whitelist.
-- **Auth:** mostly `getClaims`-based; verify all paid endpoints check JWT.
-- **Rate limit:** none. Add e.g. Upstash or Postgres-rate-limit.
-- **Zod validation:** inconsistent — `start-session`, `generate-answer` validate; others (`save-answer`, `prep-tool`) may not.
-- **Model routing:** all answer-generating fns hard-code Gemini. No Anthropic/OpenAI SDK present.
-
-## 11. Database / Storage / RLS Audit
-
-- **40+ tables**, all with RLS enabled (per linter). ✅
-- **Storage buckets:** `resumes` (private), `documents` (private), `exports` (private), `avatars` (public), `question-images` (public). Aligns with privacy posture.
-- **Schema drift:** `documents.type` enum likely lacks `cover_letter`; `interview_prep` table existed only in stale types (cleaned up last turn); `mock_tests` schema is exam-MCQ-flavored, not interview-Q&A.
-- **Functions:** 14 admin/RPC functions. `mark_notifications_read` patched, server-only SECURITY DEFINER calls locked down (prev turn).
-- **Triggers:** `update_user_streak()` awards 5/10/15 XP — **not 150/40 per manual**.
-
-## 12. Billing / Auth / Admin / Settings Audit
-
-- **Billing:** Stripe canonical webhook in place. Plan tiers in `plan_tier` enum (free/pro/enterprise). UI in Pricing page uses credit-pack model — **decide product model (subscription vs pack) and unify**.
-- **Auth:** Google OAuth in `Login.tsx`. LinkedIn/GitHub/Azure AD not present.
-- **Admin:** Rich admin suite (`AdminDashboard`, `AdminUsers`, `AdminRevenue`, `AdminFeatureFlags`, `AdminQuestionEditor`, `AdminAnalytics`, `AdminLiveChat`, `AdminModelCosts`, `AdminSeedQuestions`) — production-grade, gated via `has_role('admin')`.
-- **Settings:** 18 pages, manual demands ~10. Consolidate or hide unused (`SettingsPolish`, `SettingsSecurityConfig`).
-
----
-
-## 13. File-by-File Critical Audit (top 25)
-
-| File | Verdict | Action |
+| Manual claim | Reality | Decision |
 |---|---|---|
-| `supabase/functions/generate-answer/index.ts` | Hard-coded Gemini, manual promises Claude+GPT+Gemini | Add provider routing or rewrite manual |
-| `supabase/functions/_shared/gemini.ts` | OK | — |
-| `supabase/functions/handle_new_user (db fn)` | 50 credits vs manual 200 | Migration to 200 |
-| `supabase/functions/stripe-webhook/index.ts` | Canonical (prev-turn dedup) | Verify plan→credits map |
-| `src/pages/marketing/Pricing.tsx` | Credit-pack UI inconsistent with subscription model in manual | Rebuild to show Free/Pro/Enterprise tiers |
-| `src/store/authStore.ts` (`byokKeys`) + `lib/byokVault.ts` | LocalStorage only | Move to server-side encrypted secret per user |
-| `src/pages/app/settings/SettingsBYOK.tsx` | UI claim misleading vs reality | Update copy or move storage |
-| `src/lib/stealth/*` (4 files) | Compliance risk | Delete |
-| `src/lib/overlay/screenCaptureEvasion.ts` | Compliance risk | Delete |
-| `src/components/overlay/StealthMouseGuard.tsx` | Compliance risk | Delete |
-| `src/components/overlay/ScreenCaptureBlocker.tsx` | Compliance risk | Delete |
-| `electron/main.cjs` | Compliance risk (`skipTaskbar`, content protection) | Strip flags, or stop shipping Electron build |
-| `src/pages/app/mock/MockSession.tsx` vs `mock-test/TestSession.tsx` | Duplicate flows | Pick one; redirect other |
-| `src/pages/app/mock-test/*` | Wrong domain (JEE/NEET) per manual | Decide whether to keep as separate product line |
-| `src/pages/app/Dashboard.tsx` | Readiness formula unverified | Implement composite per manual |
-| `src/hooks/usePrivateMode.ts` | Does not actually sever network | Wrap `fetch`/Supabase client |
-| `src/hooks/useLiveCopilot.ts` | Compliance risk | Re-scope to practice-only |
-| `supabase/functions/send-email/index.ts` | No cron callers | Add `pg_cron` reminder jobs |
-| `supabase/functions/_shared/cors.ts` | `*` wildcard | Move to whitelist via env |
-| `src/pages/app/settings/SettingsSecurity.tsx` + `SettingsSecurityConfig.tsx` | Duplicate | Merge |
-| `src/pages/app/settings/SettingsCredits.tsx` + `SettingsBilling.tsx` + `SettingsSubscription.tsx` | Triplicate | Merge into one Billing page |
-| `update_user_streak()` db fn | XP numbers wrong | Migration to match manual |
-| `delete_expired_session_data()` db fn | Only covers session-family tables | Extend to documents + analytics per retention setting |
-| `supabase/functions/parse-resume/index.ts` | Fan-out fixed last turn | OK |
-| `src/pages/marketing/Privacy.tsx` & manual | Claims SOC 2 / pen-test / HackerOne | Remove or contract for |
+| 200 free / 2000 Pro / ∞ Ent credits | DB defaults 50/50 | **Fix product** → migration to 200/2000/null+UI∞ |
+| Multi-model smart routing (Claude/GPT-4o/Gemini) | Gemini only | **Rewrite manual** (Path A) — Gemini-only launch |
+| AES-256 server-side BYOK | localStorage only | **Remove feature** + rewrite manual ("BYOK coming soon") |
+| Stealth overlay invisible to Zoom/Teams | Implemented | **Remove feature** + rewrite manual + marketing |
+| Google/GitHub/LinkedIn/Azure SSO | Google only | **Rewrite manual** to Google-only at launch |
+| Mock test for interview prep | JEE/NEET MCQ engine | **De-scope** mock-test route; keep tables |
+| "End-to-end encrypted recordings" (if present) | Not implemented | **Remove claim** |
+| 90-day retention enforced | Function exists, no cron | **Fix product** — enable pg_cron |
+| Cover-letter generator | Missing | **Remove from manual** for v1 |
+| $29/mo Pro, $79/mo Ent | Pricing page shows $29.99 packs | **Fix product** — subscriptions |
 
 ---
 
-## 14. Exact Files to Edit (top 12 actionable, P0/P1)
+## 4. Compliance / Risk Removal or Gating Plan
 
-| # | Issue | Files | Change | P |
-|---|---|---|---|---|
-| 1 | Free credits 50 → 200 to match manual | DB migration on `handle_new_user()` + `subscriptions.monthly_credits` default + `profiles.credits` default | Update SQL defaults | P0 |
-| 2 | Pricing tier UI mismatch | `src/pages/marketing/Pricing.tsx`, `src/pages/app/settings/SettingsBilling.tsx` | Show Free 200 / Pro 2,000 @ $29 / Enterprise ∞ | P0 |
-| 3 | Strip stealth / evasion | Delete `src/lib/stealth/`, `src/lib/overlay/screenCaptureEvasion.ts`, `screenCaptureBlocker.ts`, `StealthMouseGuard`, `ScreenCaptureBlocker`; remove `setContentProtection`/`skipTaskbar` in `electron/main.cjs` | Replace with visible practice overlay | P0 |
-| 4 | Rewrite manual Chapters 6 + 8.3 + parts of 8.1 | external doc | Remove "invisible / never detected / hidden during real interviews" language | P0 |
-| 5 | Decide multi-model story | `supabase/functions/generate-answer/index.ts` + `_shared/` | Either add Anthropic/OpenAI SDK paths or update manual to "Gemini-only at launch" | P0 |
-| 6 | Consolidate mock flows | Decide: keep `/app/mock` (interview practice) or `/app/mock-test` (MCQ) as canonical | Redirect deprecated route | P0 |
-| 7 | BYOK server-side storage | Move from `byokVault` (localStorage) to per-user encrypted DB row + edge-fn decrypt | Update `SettingsBYOK` + `generate-answer` to read DB | P1 |
-| 8 | Document & analytics retention purge | Extend `delete_expired_session_data()` to fan out per `profiles.data_retention_days` | DB migration | P1 |
-| 9 | Cron reminders (24h / 1h / streak / weekly digest) | `pg_cron` + `send-email` invocations | New cron entries | P1 |
-| 10 | Wire credit cost central table | New `credit_costs` table or constants + refactor edge fns to read it | Match manual table | P1 |
-| 11 | Fix XP numbers | DB fn `update_user_streak()` and any post-session XP grant | +150 mock / +40 warmup / +25 first-of-day bonus | P1 |
-| 12 | Private Mode actually sever network | `hooks/usePrivateMode.ts`, `lib/supabase/client.ts` | Block fetch/WS when flag set | P1 |
+All items below are **REMOVE** (Path A). Do not flag-gate covert features — flags can be flipped.
 
-For every change above: **regression risk = medium** (touches credits / pricing / live session); always behind feature flags and ship one component at a time per your guardrails.
+| Risky surface | Files | Action |
+|---|---|---|
+| Electron content protection / skipTaskbar / panel type | `electron/main.cjs` lines for `setContentProtection`, `skipTaskbar:true`, `type:"panel"/"toolbar"`, `setVisibleOnAllWorkspaces(...visibleOnFullScreen:true)` | Delete those lines; window becomes normal frameless overlay visible in screen share |
+| Stealth bridge | `electron/preload.{cjs,ts}` `electronStealth` API | Delete |
+| Screen capture evasion | `src/lib/overlay/screenCaptureEvasion.ts`, `src/lib/stealth/screenCaptureBlocker.ts`, `src/lib/stealth/electronBridge.ts`, `src/lib/stealth/stealthActions.ts`, `src/lib/stealth/stealthConfig.ts` | Delete directory `src/lib/stealth/`; delete `screenCaptureEvasion.ts` |
+| Stealth mouse / mouse guard | `src/lib/overlay/stealthMouse.ts`, `src/hooks/useStealthMouse.ts` | Delete |
+| Panic hotkey concealment | `electron/main.cjs` Cmd+Shift+P → keep as plain "hide window" or remove | Simplify: keep only Cmd+Shift+H toggle; remove Panic semantics from UI/manual |
+| Self-exclude from getDisplayMedia | `src/lib/capture/screenShare.ts` `selfBrowserSurface:"exclude"` | Change to `"include"` (default) so overlay is shareable |
+| `stealth_mode` profile column | `profiles.stealth_mode` default true | Migration: default false; hide UI toggle |
+| `overlayStore.stealth_mode` | `src/store/overlayStore.ts` | Remove field & usages |
+| Live Co-Pilot covert framing | `src/hooks/useLiveCopilot.ts`, `src/pages/app/live/LiveOverlay.tsx` | Reframe as practice; add visible disclaimer banner |
+| Docs/marketing covert claims | `docs/STEALTH_FEATURES.md`, `replit.md`, `README.md`, landing copy | Delete file; rewrite copy |
 
----
-
-## 15. Priority-Based Fix Roadmap
-
-**P0 (cannot launch without):**
-- Items 1–6 above (credits, pricing, stealth removal, manual rewrite, model story, mock-flow consolidation).
-
-**P1 (launch within 2 sprints):**
-- Items 7–12 (BYOK, retention purge, reminders, cost table, XP numbers, Private Mode).
-- Add rate limiting + tighten CORS.
-- Add per-user security audit log.
-
-**P2 (post-launch hardening):**
-- LinkedIn / Azure AD OAuth providers.
-- Cover-letter doc type + Deepgram custom vocabulary.
-- Panel-mode multi-speaker colors.
-- Consolidate Settings pages (18 → ~10).
-- Verify Confidence-score formula weights (25/25/20/15/15).
-- Replace mock data on Analytics charts with real queries.
-
-**P3 (nice to have):**
-- Realtime Supabase subscriptions for dashboard widgets.
-- 50+ system-design scenarios seeded.
-- Accessibility/axe sweep.
+Verification: `rg -n "stealth|skipTaskbar|setContentProtection|screenCaptureBlocker|selfBrowserSurface\\s*:\\s*\"exclude\"|stealthMouse|WDA_EXCLUDEFROMCAPTURE"` returns **0** matches in `src/`, `electron/`, `docs/`, marketing pages.
 
 ---
 
-## 16. QA / Test Checklist (production)
+## 5. Workstream-by-Workstream Fix Plan
 
-**Smoke (per chapter):**
-- [ ] Sign up via email → verify email → land on `/onboarding`.
-- [ ] Complete 5-step wizard → land on `/app/dashboard`.
-- [ ] Dashboard shows real XP, streak, credits, upcoming interviews.
-- [ ] Upload resume PDF, DOCX, TXT; parsed fields appear; XP+20.
-- [ ] Upload JD; gap analysis returns ≥1 talking point.
-- [ ] STAR Builder → save to Answer Bank → appears in `/app/answers`.
-- [ ] Coding Hints in 7 supported languages, 3 depth levels.
-- [ ] Rephraser returns exactly 3 alternatives.
-- [ ] Company Research returns 5 category sections.
-- [ ] Schedule interview → row in `scheduled_interviews` + Google Calendar event (if connected).
-- [ ] Upload CSV with manual columns → questions imported.
-- [ ] Run Practice Session 5 Qs → debrief generated in ≤60 s with all sections.
-- [ ] Warmup 5 minutes → +40 XP awarded.
-- [ ] Live transcription appears within 500 ms of speech; speaker-color lanes present.
-- [ ] WPM / filler / silence / volume metrics visible and update live.
-- [ ] Credits decrement per-action per manual table; balance refreshes in ≤2 s.
-- [ ] Stripe checkout → upgrade reflects in ≤60 s; plan-gated UI flips.
-- [ ] Credit-low banner at <50.
-- [ ] Cancel subscription → access continues until period end.
-- [ ] BYOK key save → `validate-api-key` confirms; subsequent generation skips credit deduction.
-- [ ] Private Mode → fetch to AI fails fast; OFFLINE badge shows.
-- [ ] Each retention setting honored after cron run.
-- [ ] Export full JSON → email link arrives; transcript-only and CSV are immediate.
-- [ ] Account deletion → user cannot log in; rows in `profiles`, `sessions`, `documents`, `resumes` deleted.
+### WS1 — Product/Manual/Copy alignment
+Deliverables: single `src/lib/constants/pricing.ts` source of truth; rewritten manual ch.6, 8.1, 8.2, 8.3, 8.5, 11, 13; rewritten Privacy/Terms; landing/Pricing pages regenerated from constants.
 
-**Failure-path tests:**
-- [ ] Expired JWT on edge fn → 401.
-- [ ] Insufficient credits on `generate-answer` → 402-ish JSON, no debit.
-- [ ] Stripe webhook duplicate event → idempotent.
-- [ ] CSV with missing required column → 400 with field name.
-- [ ] PDF >10 MB → blocked client-side.
-- [ ] Concurrent answer regen → no double-debit.
+### WS2 — Compliance removal (see §4). Owner: senior eng. Must complete before WS-anything-else ships to prod.
 
-**Regression checklist:**
-- [ ] Existing answer-bank rows still queryable.
-- [ ] `mark_notifications_read` only affects caller (prev-turn fix).
-- [ ] `add_credits` callable only via service role (prev-turn fix).
-- [ ] All 60+ routes load without console errors.
+### WS3 — Auth/Onboarding/Profile
+- Remove non-Google OAuth buttons in `src/components/auth/OAuthButton.tsx` & Login/Signup pages.
+- Confirm `onboarding_completed` gate in `ProtectedRoute.tsx`.
+- Wire `role_type`, `experience_years`, `target_role`, `interview_strengths/weaknesses` into `buildContextEnvelope`.
 
-**Release checklist:**
-- [ ] Manual Ch. 6/8 rewritten or feature removed.
-- [ ] Pricing single source of truth.
-- [ ] Privacy policy aligned to actual retention behavior.
-- [ ] ToS includes no-cheating clause.
-- [ ] All P0 items above closed.
+### WS4 — Dashboard/Readiness
+- New SQL view `v_user_readiness` aggregating: avg debrief score (40%), session count last 30d (20%), streak (10%), filler reduction trend (15%), question diversity (15%).
+- `useConfidenceScore` reads it; Dashboard widget renders.
+- `CreditBalance` shows ∞ when `plan_id='enterprise'`; toast when < 20.
+
+### WS5 — Documents pipeline
+- Verify `upload-resume` → `parse-resume` → `resume_versions.parsed_data` writes; backfill missing.
+- `useResumeContext` reads latest parsed_data; pass into envelope.
+- De-scope cover-letter from manual.
+- Add retention cron (see WS13).
+
+### WS6 — Prep tools
+- STAR Builder result writes to `answers` (type='behavioral', is_polished=true).
+- Rephraser writes new row referencing original.
+- Coding hint depth ladder (concise/standard/deep) in `src/lib/ai/promptTemplates.ts CODING_HINT`.
+- Project Builder: confirm GitHub fetch is real (`fetch-github-repo` edge fn) — else remove from UI.
+- Per-action credit costs from central table.
+
+### WS7 — Mock/Practice consolidation
+- **Canonical = interview practice (Sessions)**. Mock-test (JEE/NEET) de-scoped.
+- Remove `/app/mock-test/*` routes from `src/App.tsx` & sidebar; keep DB.
+- Session creation: `useSessionOrchestrator` already OK; verify status transitions DRAFT→ACTIVE→COMPLETED trigger `update_user_streak`.
+- Debrief link via `debriefs.session_id`.
+
+### WS8 — Audio/Transcription
+- Verify `get-deepgram-token` returns 60s TTL temp key.
+- `useDeepgramStream` reconnect on socket error; flush partials on stop.
+- Persist transcripts to `session_transcripts` (already exists).
+- WPM/filler/silence hooks already present — add unit tests.
+
+### WS9 — AI generation (Gemini-only launch)
+- Collapse `src/lib/ai/modelRouter.ts` → always Gemini 2.0 Flash via Lovable AI Gateway.
+- Remove `anthropicClient.ts`, `openaiClient.ts` from exports (`src/lib/ai/index.ts`); keep files but unexported, or delete.
+- BYOK removed (P0-5).
+- Edge fn `_shared/gemini.ts` stays.
+
+### WS10 — Analytics/Debriefs
+- `generate-debrief` consumes `session_transcripts` + `session_answers`; writes scores + recommendations to `debriefs`.
+- Scorecard page reads `debriefs` for current session; trend chart reads last 10.
+- Missed-keywords array surfaced under "Improvements" widget.
+
+### WS11 — Billing/Credits/Stripe (single source of truth)
+File: `src/lib/constants/pricing.ts`
+```ts
+export const PLANS = {
+  free:       { credits: 200,  priceUsd: 0,  stripePriceId: null },
+  pro:        { credits: 2000, priceUsd: 29, stripePriceId: 'price_xxx' },
+  enterprise: { credits: null, priceUsd: 79, stripePriceId: 'price_yyy' },
+} as const;
+export const CREDIT_COSTS = { generate_hint:1, generate_answer:2, debrief:5, company_research:3, resume_parse:2 };
+```
+Migration updates `handle_new_user` (200 credits), `subscriptions` default 200. Stripe webhook (`supabase/functions/stripe-webhook`) maps `plan_id` and resets monthly credits on `invoice.payment_succeeded`.
+
+### WS12 — Settings/Privacy/Notifications/Private Mode
+- Delete duplicate settings pages (audit which is canonical).
+- Remove BYOK page.
+- Retention dropdown 30/60/90/180/365 writes to `profiles.data_retention_days`; cron honours it.
+- `usePrivateMode` if covert → repurpose as "don't save transcript for this session"; otherwise remove.
+- Notification toggles persisted in `profiles` metadata; `send-digest` edge fn cron reads & sends via Resend (add secret if used; else disable digest at launch).
+
+### WS13 — Security/Export/Deletion/RLS
+- CORS whitelist (P0-8).
+- Rate limit `_shared/rateLimit.ts` table `request_metrics` already exists → reuse.
+- `delete-account` edge fn: delete profile row → cascades; loop storage buckets `resumes`, `documents`, `exports` purging `user_id/*`.
+- Export: `export-transcripts` edge fn produces CSV signed URL to `exports` bucket; expire 24h.
+- Enable pg_cron daily 03:00 UTC `SELECT public.delete_expired_session_data();`.
+- Audit RLS: `feature_flags` already admin-only; verify no public-read PII.
+
+### WS14 — Testing/QA/Release
+- Add vitest cases: `creditsManager`, `modelRouter` (returns gemini), `contextEnvelopeBuilder` (includes onboarding fields).
+- Playwright smokes: signup→onboarding→session→debrief; pricing page; settings save.
+- Deno tests for edge fns: `generate-hint`, `deduct-credits`, `stripe-webhook` (signature verify), `delete-account`.
+- Manual QA matrix in `docs/QA_MANUAL.md` regenerated from manual chapters.
+- Release gates: build green, vitest green, playwright smoke green, no `rg` hits for stealth tokens, Stripe test-mode end-to-end checkout works.
 
 ---
 
-## 17. Final Launch Readiness Verdict
+## 6. Exact Files to Edit by Issue
+(See P0 matrix col "Files / DB" and §4 table — each row already lists files. Below adds non-obvious touches.)
 
-**RED — DO NOT LAUNCH** under the current manual.
-
-Two paths to GREEN:
-
-- **Path A (recommended):** Remove Chapter 6 stealth + Chapter 8.1/8.3 covert-assistance + Chapter 8.3 screen capture from the manual and from the product. Reposition as a *practice & post-interview analytics* tool. Then close P0 items 1, 2, 5, 6 and ship.
-- **Path B (not recommended):** Keep stealth/covert features but ship only to a legally vetted, contracted enterprise customer with explicit anti-cheating attestation. This still requires P0 items 1, 2, 5, 6, plus formal legal review.
-
-Either way, the P1 list (BYOK storage, retention purge, reminders, cost table, XP, Private Mode) is required for the manual's "production" promises to match reality.
+- **P0-1 stealth**: also remove imports in `src/components/overlay/*`, `src/hooks/useOverlayVisibility.ts`, `src/lib/overlay/index.ts` barrel.
+- **P0-2 credits**: update `src/test/lib/billing/creditsManager.test.ts` expected defaults.
+- **P0-6 mock-test**: also remove `src/components/layout/AppSidebar.tsx` nav entry, `src/lib/constants/features.ts` `FEATURE_PLAN_GATES.mock_test`.
 
 ---
 
-> **What I would do next (one component at a time, with guardrails):**
-> 1. Confirm **Path A or B** with you.
-> 2. If Path A: file-by-file removal plan for `src/lib/stealth/*` and `electron/` flags (single PR), with **"do not touch live transcription / debrief pipeline"** guardrail.
-> 3. Then DB migration to align `handle_new_user` credits to 200 + `update_user_streak` XP to 150/40, **without touching admin functions**.
-> 4. Then Pricing UI/data alignment **without touching Stripe webhook** (prev-turn canonical).
-> 5. Pause for verification after each.
+## 7. Database / Migration Change Plan
+
+Single migration `production_alignment_v1.sql`:
+
+```sql
+-- 1. New signup credits 50 → 200
+CREATE OR REPLACE FUNCTION public.handle_new_user() ... credits=200, monthly_credits=200 ...;
+ALTER TABLE public.profiles ALTER COLUMN credits SET DEFAULT 200;
+ALTER TABLE public.subscriptions ALTER COLUMN monthly_credits SET DEFAULT 200;
+
+-- 2. Stealth off by default
+ALTER TABLE public.profiles ALTER COLUMN stealth_mode SET DEFAULT false;
+UPDATE public.profiles SET stealth_mode = false WHERE stealth_mode = true;
+
+-- 3. Readiness view
+CREATE OR REPLACE VIEW public.v_user_readiness AS
+SELECT p.id AS user_id,
+       COALESCE(AVG(d.overall_score),0)*0.40
+     + LEAST(COUNT(s.id) FILTER (WHERE s.created_at>now()-interval '30 days'),20)*5*0.20
+     + LEAST(p.streak_days,30)*3.33*0.10
+     -- + filler trend, diversity (computed in app for now)
+       AS readiness_score
+FROM profiles p
+LEFT JOIN sessions s ON s.user_id=p.id
+LEFT JOIN debriefs d ON d.user_id=p.id
+GROUP BY p.id;
+GRANT SELECT ON public.v_user_readiness TO authenticated;
+-- RLS via security_invoker
+ALTER VIEW public.v_user_readiness SET (security_invoker = true);
+
+-- 4. Central credit costs table (optional; or keep TS constant)
+CREATE TABLE public.credit_costs (
+  action text PRIMARY KEY,
+  cost integer NOT NULL CHECK (cost > 0)
+);
+INSERT INTO public.credit_costs VALUES
+ ('generate_hint',1),('generate_answer',2),('debrief',5),
+ ('company_research',3),('resume_parse',2)
+ON CONFLICT DO NOTHING;
+ALTER TABLE public.credit_costs ENABLE ROW LEVEL SECURITY;
+CREATE POLICY credit_costs_read ON public.credit_costs FOR SELECT TO authenticated USING (true);
+
+-- 5. pg_cron retention
+SELECT cron.schedule('retention_daily','0 3 * * *',$$SELECT public.delete_expired_session_data();$$);
+```
+
+Risk: low. All additive or default-only changes; one trigger function replaced.
+
+---
+
+## 8. Edge Function Change Plan
+
+| Function | Change |
+|---|---|
+| `_shared/cors.ts` | Whitelist origins (P0-8) |
+| `_shared/gemini.ts` | Keep; remove any Claude/OpenAI fallback paths |
+| `_shared/rateLimit.ts` | **New** token-bucket helper, used by hint/answer/debrief |
+| `generate-hint` | Apply rate limit; ensure deduct_credits called via RPC; return `{hint, balance}` |
+| `generate-answer` | Same + STAR template enforcement |
+| `generate-debrief` | Read `session_transcripts` + `session_answers`; persist scores |
+| `stripe-webhook` | Map `plan_id`, reset monthly credits on `invoice.payment_succeeded`; verify signature |
+| `delete-account` | **New** — purge profile (cascade), storage objects |
+| `export-transcripts` | **New** — CSV → `exports` bucket → signed URL |
+| `send-digest` | **New** cron (or disable at launch) |
+| `parse-resume` | Confirm writes `resume_versions.parsed_data`; multi-layer fallback already memoed |
+| `get-deepgram-token` | Confirm 60s TTL |
+| Deleted: `schedule-interview` (already removed) |
+
+---
+
+## 9. Frontend / Route / Component / Hook / Store Changes
+
+Routes removed: `/app/mock-test/*`, `/app/settings/byok`.
+Routes reframed: `/app/live/*` (practice banner).
+Sidebar (`AppSidebar.tsx`): drop Mock Test, BYOK entries.
+Stores: `overlayStore` (drop `stealth_mode`, `active_model` collapses to gemini); `userStore` no behavior change.
+Hooks: `useStealthMouse`, `usePrivateMode` (if covert) — delete; `useLiveCopilot` — add policy disclaimer state; `useCredits` — low-balance toast; `useConfidenceScore` — read `v_user_readiness`.
+Components: `CreditBalance` ∞ rendering; `PricingCard` reads `PLANS` constant; `OAuthButton` Google-only.
+
+---
+
+## 10. Duplicate / Legacy / De-Scope Plan
+
+- **Delete**: `src/lib/stealth/*`, `screenCaptureEvasion.ts`, `stealthMouse.ts`, `useStealthMouse.ts`, `byokVault.ts`, `SettingsBYOK.tsx`, `docs/STEALTH_FEATURES.md`, duplicate settings pages.
+- **De-scope (keep tables, remove UI)**: mock-test pages, cover letter, multi-model UI, non-Google OAuth, BYOK.
+- **Deprecate carefully**: `usePrivateMode` (review before delete).
+- **Keep**: sessions, debriefs, prep tools, company research, audio pipeline, analytics, gamification.
+
+---
+
+## 11. Manual / Pricing / Privacy / Docs Rewrite Plan
+
+| Doc | Action |
+|---|---|
+| Manual ch.6 (Stealth) | **Delete chapter** |
+| Manual ch.8.1 (Live Co-Pilot) | Rewrite: "Practice with live AI coach. Not for use during real interviews." |
+| Manual ch.8.2 (Models) | Rewrite: "Powered by Google Gemini 2.0 Flash." |
+| Manual ch.8.3 (Capture evasion) | **Delete** |
+| Manual ch.8.5 (BYOK) | "BYOK on roadmap — not in v1." |
+| Manual ch.11 (Pricing) | Free 200 / Pro $29 2000 / Enterprise $79 unlimited |
+| Manual ch.13 (Security/Privacy) | Remove AES-256-BYOK & E2E-recording claims; describe actual posture (Supabase RLS, 90d retention, Gemini processor) |
+| `docs/STEALTH_FEATURES.md` | Delete |
+| `docs/QA_MANUAL.md` | Regenerate from new manual |
+| `src/pages/marketing/Privacy.tsx`, `Terms.tsx` | Sync to manual ch.13 |
+| `src/pages/marketing/Landing.tsx`, `Pricing.tsx` | Remove stealth/multi-model language |
+| `README.md`, `replit.md` | Remove stealth references |
+
+---
+
+## 12. Regression Risk Matrix
+
+| Change | Risk | Mitigation |
+|---|---|---|
+| Stealth removal | Overlay window behaviour changes (now visible, in taskbar) | Communicate as feature change; manual QA on macOS/Win |
+| Credit default 50→200 | Existing users keep current balance (only default changes) | Migration touches default only; no UPDATE of existing rows |
+| Mock-test route removed | Bookmarked URLs 404 | Add 301 redirect to `/app/dashboard` in `NotFound.tsx` route map |
+| Model collapse to Gemini | Users with non-gemini preference | One-time migration `UPDATE profiles SET preferred_model='gemini-2.0-flash'` (guarded by enum cast) |
+| CORS whitelist | Dev tooling from other origins blocked | Include localhost:5173, preview domain |
+| pg_cron retention | Could delete data unexpectedly | Function honours `data_retention_days`; default 90; emit notification before purge in P2 |
+| BYOK page removal | Users mid-setup | Show banner: "BYOK temporarily unavailable" for 7 days, then remove |
+
+---
+
+## 13. Verification Steps for Every Fix
+
+Each P0 has explicit verify column in §2. Generic checklist applied per PR:
+
+1. `rg` for forbidden tokens (per fix).
+2. `bunx vitest run` green.
+3. `npm run build` green (harness).
+4. Manual smoke: signup → onboarding → start session → request hint (credits decrement) → end session → debrief renders → analytics updates → logout.
+5. Edge fn: `supabase--curl_edge_functions` for changed function returns expected JSON.
+6. SQL: `psql -c "SELECT ..."` confirms migration applied.
+7. Screen-share test (P0-1, P0-7): screen-share to second device, overlay must be visible.
+
+---
+
+## 14. QA / Automation / Release Checklist
+
+**Pre-merge per PR**: lint, vitest, build, no `@ts-nocheck` added, no `console.log` left, security scan green.
+
+**Pre-release (RC build)**:
+- All P0 closed.
+- Playwright smoke suite green (signup, session, billing).
+- Stripe test-mode: subscribe Pro → 2000 credits applied; cancel → downgrade at period end.
+- Retention cron dry-run.
+- Privacy/Terms reviewed by legal (Path A) or held back (Path B).
+- Manual ch.6/8/11/13 rewritten and re-uploaded.
+
+**Post-deploy**:
+- Smoke real signup on prod.
+- Watch edge-function logs 24h.
+- Watch Stripe webhook deliveries.
+- Monitor `request_metrics` p95 latency.
+
+**Rollback**: revert via Lovable history; DB migration is additive (forward-only safe); if needed, run `ALTER TABLE profiles ALTER COLUMN credits SET DEFAULT 50;` reversal.
+
+---
+
+## 15. Final Safe Rollout Order
+
+**Sprint 1 (week 1) — Compliance & Truth**
+1. P0-1 stealth removal (biggest diff; do first, on its own branch).
+2. P0-7 manual screen-share verification.
+3. P0-10 Live page reframe + disclaimer.
+4. P0-9 Privacy/Terms rewrite.
+5. P0-5 BYOK removal.
+6. P0-4 model collapse to Gemini.
+7. Manual ch.6/8 rewrite published.
+
+**Sprint 2 (week 2) — Billing & Domain**
+8. P0-2 + P0-3 pricing/credits unification (migration + constants + Stripe).
+9. P0-6 mock-test de-scope.
+10. P0-8 CORS whitelist.
+11. P1-1..P1-3 readiness score, low-credit warning, ∞ rendering.
+12. P1-6..P1-8 onboarding propagation, resume context, STAR→AnswerBank.
+
+**Sprint 3 (week 3) — Reliability & Hardening**
+13. P1-4 retention cron live.
+14. P1-9 debrief consumes real data.
+15. P1-10 delete-account cascade.
+16. P1-11 rate limiting.
+17. P1-12 exports.
+18. P2 polish items.
+
+**Launch gate**: all P0 + P1 closed, QA checklist green, legal sign-off on rewritten manual & privacy.
+
+---
+
+End of execution plan. Approve to begin Sprint 1 step 1 (P0-1 stealth removal) — that's the single largest, most de-risking change and should ship in isolation.
