@@ -58,7 +58,7 @@ export default function MockWarmup() {
       user_id: user.id,
       type: "warmup",
       title: config.company ? `Warmup — ${config.company}` : "Mock warmup",
-      document_id: config.resume_id ?? null,
+      document_id: null,
       jd_id: config.jd_id ?? null,
       model_used: toDbModel(config.model ?? "gemini-flash") as any,
     }).then(async ({ session, reused }) => {
