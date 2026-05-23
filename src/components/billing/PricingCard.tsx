@@ -231,8 +231,10 @@ export function PricingCard({
         <div className="flex-1">
           <h3 className="text-lg font-bold text-foreground">{label}</h3>
           {subtitle && <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>}
-          {credits && (
-            <p className="text-xs text-muted-foreground mt-1">{credits} credits/month</p>
+          {credits !== undefined && credits !== null && (
+            <p className="text-xs text-muted-foreground mt-1">
+              {credits < 0 ? '∞ Unlimited' : credits.toLocaleString()} credits/month
+            </p>
           )}
         </div>
 

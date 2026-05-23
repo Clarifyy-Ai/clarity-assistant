@@ -68,11 +68,6 @@ const ALLOWED_HEADERS = [
   // Idempotency for billing/credit/state-changing actions
   "idempotency-key",
 
-  // BYOK headers. Never log these raw values.
-  "x-byok-openai",
-  "x-byok-anthropic",
-  "x-byok-gemini",
-
   // Optional webhook/signature headers if helper is reused
   "stripe-signature",
 ].join(", ");
