@@ -49,12 +49,12 @@ const STEPS = [
   },
   {
     number: 4,
-    title: "Run a live session",
+    title: "Run a live practice session",
     description:
-      "Start a Live Co-Pilot session before your next interview. The invisible overlay will listen and surface real-time hints and suggested answers.",
+      "Launch a Live Practice Coach session to rehearse out loud. The on-screen overlay surfaces real-time talking-point hints. Practice only — not for use during real interviews.",
     icon: Mic,
     link: "/app/live",
-    linkLabel: "Start Live Co-Pilot",
+    linkLabel: "Start Live Practice",
   },
   {
     number: 5,
@@ -98,20 +98,20 @@ const FAQ_DATA: FaqCategory[] = [
       { id: "gs-1", q: "What is Clarify AI?", a: "Clarify AI is an AI-powered interview preparation platform that provides real-time coaching during live interviews, full mock simulations with analytics, and a suite of prep tools to help you land your dream job." },
       { id: "gs-2", q: "How do I create an account?", a: "Click 'Get started free' on the homepage. You can sign up with your email or use Google/GitHub OAuth. No credit card required for the free plan." },
       { id: "gs-3", q: "What happens after I sign up?", a: "You'll go through a quick onboarding flow where you set your role, experience level, and target companies. This helps personalize your AI coaching experience." },
-      { id: "gs-4", q: "Is there a free plan?", a: "Yes! The free plan includes 20 credits per month, 3 live sessions, 5 mock sessions, and access to the STAR builder and answer bank." },
+      { id: "gs-4", q: "Is there a free plan?", a: "Yes. The Free plan includes 200 credits per month, the live practice coach, the mock engine, and the prep lab. No credit card required." },
       { id: "gs-5", q: "How do I upload my resume?", a: "Go to Documents in the sidebar, then click 'Upload'. We accept PDF and DOCX files. Your resume is used by the AI to tailor answers to your actual experience." },
-      { id: "gs-6", q: "What AI models are supported?", a: "We support GPT-4o, Claude 3.5 Sonnet, and Gemini 1.5 Pro. You can set a preferred model in Settings > Models, or enable smart routing to automatically pick the best model per question type." },
+      { id: "gs-6", q: "What AI model is used?", a: "At launch, Clarify AI is powered by Google Gemini 2.0 Flash for hints, STAR answer drafting, and debriefs. Additional model providers are on the roadmap." },
     ],
   },
   {
     title: "Live Co-Pilot",
     slug: "live-copilot",
     items: [
-      { id: "lc-1", q: "How does the live interview assistant work?", a: "During a live interview, Clarify AI listens to the conversation and provides real-time suggested answers, talking points, and hints through an invisible overlay that's undetectable by screen sharing software." },
-      { id: "lc-2", q: "Is the overlay really invisible to screen sharing?", a: "Yes. The stealth overlay uses compositor-layer separation, which means it sits above your screen content but is invisible to Zoom, Teams, Google Meet, and all screen capture tools." },
-      { id: "lc-3", q: "How many credits does a live session use?", a: "Each AI hint during a live session costs 1 credit. The number of credits used depends on how many hints you request during the interview." },
-      { id: "lc-4", q: "Can I customise what the overlay shows?", a: "Yes! Use Ctrl+Shift+Y to cycle between Full Answer, Short Hints, and Keywords-only modes. You can also dock the overlay to different corners using Ctrl+Shift+1-4." },
-      { id: "lc-5", q: "What is Stealth Mode?", a: "Stealth Mode (Ctrl+Shift+S) switches the overlay to a minimal view and renames all UI labels to neutral terms, making the app look like a generic productivity tool on your screen." },
+      { id: "lc-1", q: "How does the live practice coach work?", a: "During a practice session, Clarify AI listens to your spoken answers and provides real-time talking-point hints in an on-screen prep overlay. It's designed for rehearsal, not for use during real interviews." },
+      { id: "lc-2", q: "Can I use this during a real interview?", a: "No. Live Co-Pilot is built strictly for practice. Using AI assistance covertly in a real interview violates most employer and assessment policies. The overlay is a normal on-screen window and is visible to screen-sharing tools." },
+      { id: "lc-3", q: "How many credits does a session use?", a: "Each requested hint costs 1 credit. STAR answer drafts cost 2 credits and the end-of-session debrief costs 5 credits." },
+      { id: "lc-4", q: "Can I customise what the overlay shows?", a: "Yes. Use Ctrl+Shift+Y to cycle between Full Answer, Short Hints, and Keywords-only modes. You can also dock the overlay to different corners using Ctrl+Shift+1-4." },
+      { id: "lc-5", q: "What is Compact Mode?", a: "Compact Mode (Ctrl+Shift+S) switches the overlay to a minimal pill view that takes up less screen real estate while you're rehearsing." },
     ],
   },
   {
@@ -129,9 +129,9 @@ const FAQ_DATA: FaqCategory[] = [
     title: "Credits & Billing",
     slug: "credits-billing",
     items: [
-      { id: "cb-1", q: "How do credits work?", a: "Credits are the currency for AI-powered features. Each action (live hint, mock question, STAR polish, etc.) costs a specific number of credits. Credits refresh monthly based on your plan." },
-      { id: "cb-2", q: "Can I buy extra credits?", a: "Yes! Credit packs are available for purchase anytime without changing your subscription plan. Packs come in 50, 150, and 500 credit bundles." },
-      { id: "cb-3", q: "Do unused credits roll over?", a: "Monthly plan credits reset at the start of each billing cycle. However, credits purchased through credit packs do not expire." },
+      { id: "cb-1", q: "How do credits work?", a: "Credits are the currency for AI features. Each action (hint, STAR draft, debrief, company research, etc.) costs a set number of credits. Free includes 200/mo, Pro 2,000/mo, Enterprise unlimited." },
+      { id: "cb-2", q: "Can I buy extra credits?", a: "À la carte credit packs are not available at launch. To raise your monthly allowance, upgrade to Pro or Enterprise in Settings → Billing." },
+      { id: "cb-3", q: "Do unused credits roll over?", a: "Monthly plan credits reset at the start of each billing cycle and do not roll over." },
       { id: "cb-4", q: "How do I cancel my subscription?", a: "Go to Settings > Billing and click 'Cancel subscription'. Your plan will remain active until the end of the current billing period. You won't be charged again." },
       { id: "cb-5", q: "How do I view my credit usage?", a: "Go to Settings > Credits to see a breakdown of credit usage by feature, your remaining balance, and your monthly refresh date." },
     ],
@@ -141,7 +141,7 @@ const FAQ_DATA: FaqCategory[] = [
     slug: "settings-security",
     items: [
       { id: "ss-1", q: "How do I change my password?", a: "Go to Settings > Security and use the change password form. You'll need to enter your current password and then your new password (minimum 8 characters)." },
-      { id: "ss-2", q: "Can I use my own API keys?", a: "Yes! On Starter plans and above, you can bring your own API keys for OpenAI, Anthropic, or Google AI. When using your own keys, AI calls are billed directly to your provider account." },
+      { id: "ss-2", q: "Can I use my own AI API keys?", a: "Bring-your-own-key (BYOK) is on our roadmap and not available at launch. All AI calls today use Clarify's managed Gemini connection and count against your monthly credit balance." },
       { id: "ss-3", q: "How do I delete my account?", a: "Go to Settings > Danger Zone and click 'Delete Account'. This will permanently remove all your data, sessions, and answers. This action cannot be undone." },
       { id: "ss-4", q: "How do I change my notification preferences?", a: "Go to Settings > Notifications to choose which email and in-app notifications you receive for session reminders, scorecard summaries, and platform updates." },
       { id: "ss-5", q: "Is my data private?", a: "Yes. Your sessions, answers, and documents are private by default and never shared. Review our privacy settings at Settings > Privacy." },
@@ -176,8 +176,8 @@ const SHORTCUT_GROUPS: ShortcutGroup[] = [
 const FEATURES = [
   {
     icon: Mic,
-    name: "Live Co-Pilot",
-    description: "Real-time AI hints and suggested answers delivered through an invisible overlay during live interviews.",
+    name: "Live Practice Coach",
+    description: "Real-time AI talking-point hints in an on-screen prep overlay during practice sessions — not for use during real interviews.",
     link: "/app/live",
   },
   {
