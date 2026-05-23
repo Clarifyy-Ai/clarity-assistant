@@ -53,7 +53,8 @@ export const PLANS: Record<PlanId, Plan> = {
     tagline: "Get started — no card required",
     monthlyPrice: 0,
     yearlyPrice: 0,
-    creditsPerMonth: 20,
+    // Launch source of truth: src/lib/constants/pricing.ts
+    creditsPerMonth: 200,
     color: "slate",
     features: [
       {
@@ -187,9 +188,9 @@ export const PLANS: Record<PlanId, Plan> = {
     id: "pro",
     name: "Pro",
     tagline: "Everything you need to land the role",
-    monthlyPrice: 3_900,
-    yearlyPrice: 2_900,
-    creditsPerMonth: 300,
+    monthlyPrice: 2_900,
+    yearlyPrice: 2_417, // $29,000/yr ÷ 12 — display only
+    creditsPerMonth: 2_000,
     stripePriceIdMonthly: ENV.STRIPE_PRICE_PRO_MONTHLY,
     stripePriceIdYearly: ENV.STRIPE_PRICE_PRO_YEARLY,
     color: "violet",
@@ -338,8 +339,8 @@ export const PLANS: Record<PlanId, Plan> = {
     id: "enterprise",
     name: "Enterprise",
     tagline: "For teams and bootcamps",
-    monthlyPrice: 0,
-    yearlyPrice: 0,
+    monthlyPrice: 7_900,
+    yearlyPrice: 6_583, // $79,000/yr ÷ 12 — display only
     creditsPerMonth: -1,
     color: "emerald",
     features: [
