@@ -1,289 +1,60 @@
 // src/lib/security/byokVault.ts
 //
-// Client-side encrypted vault for user-supplied API keys.
+// P0-5 (production audit): BYOK (bring-your-own-key) was removed from the
+// launch product. The previous client-side AES-GCM vault wrote provider keys
+// to localStorage, which is not safe under XSS and was advertised with
+// security claims that were not enforced on the server.
 //
-// SECURITY PURPOSE:
-// - Avoid storing BYOK provider keys in Supabase/database
-// - Encrypt provider keys before storing in localStorage
-// - Keep a device-local AES-GCM key in browser storage
-// - Hydrate decrypted keys only into in-memory authStore.byokKeys
-// - Attach keys per request as x-byok-* headers through apiClient
+// This module is now a backwards-compatible no-op shim:
+//   * `loadBYOKVault()`  → always returns `{}` and proactively wipes any
+//                           legacy ciphertext + device key still in
+//                           localStorage from older builds.
+//   * `saveBYOKVault()`  → no-op (silently drops keys).
+//   * `clearBYOKVault()` → wipes legacy localStorage entries.
+//   * `hasBYOKVault()`   → always false.
 //
-// THREAT MODEL COVERED:
-// - Server/database compromise cannot read BYOK keys
-// - Database row leaks do not expose provider keys
-// - Plain localStorage payload is ciphertext
-//
-// NOT COVERED:
-// - Malicious browser extensions with full DOM/storage access
-// - Physical access to an unlocked device
-// - XSS with runtime access to decrypted in-memory keys
-//
-// Important:
-// This is browser-side encryption for user convenience and server-side
-// key isolation. It is not a replacement for XSS prevention.
+// Do NOT re-introduce persistent key storage here. If BYOK is ever re-enabled,
+// route it through a server-side encrypted vault (e.g. Supabase Vault), not
+// the browser.
 
-const VAULT_KEY_STORAGE = "clarify-byok-vault-key-v1";
-const VAULT_PAYLOAD_STORAGE = "clarify-byok-vault-v1";
+const LEGACY_KEY_STORAGE = "clarify-byok-vault-key-v1";
+const LEGACY_PAYLOAD_STORAGE = "clarify-byok-vault-v1";
 
 export type BYOKProvider = "openai" | "anthropic" | "gemini";
 export type BYOKVault = Partial<Record<BYOKProvider, string>>;
 
-type EncryptedBlob = {
-  iv: string;
-  ciphertext: string;
-};
-
-const PROVIDERS: BYOKProvider[] = ["openai", "anthropic", "gemini"];
-const AES_KEY_BYTES = 32;
-const AES_GCM_IV_BYTES = 12;
-
-function isBrowserStorageAvailable(): boolean {
-  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
-}
-
-function safeGetLocalStorageItem(key: string): string | null {
-  if (!isBrowserStorageAvailable()) {
-    return null;
-  }
-
+function safeRemove(key: string): void {
   try {
-    return window.localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function safeSetLocalStorageItem(key: string, value: string): void {
-  if (!isBrowserStorageAvailable()) {
-    return;
-  }
-
-  try {
-    window.localStorage.setItem(key, value);
-  } catch {
-    // Storage may be blocked or full. Caller handles failure when needed.
-  }
-}
-
-function safeRemoveLocalStorageItem(key: string): void {
-  if (!isBrowserStorageAvailable()) {
-    return;
-  }
-
-  try {
-    window.localStorage.removeItem(key);
-  } catch {
-    // Ignore storage failures.
-  }
-}
-
-function assertWebCryptoAvailable(): void {
-  if (
-    typeof crypto === "undefined" ||
-    !crypto.subtle ||
-    typeof crypto.getRandomValues !== "function"
-  ) {
-    throw new Error("WebCrypto is not available in this browser.");
-  }
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-
-  for (const byte of bytes) {
-    binary += String.fromCharCode(byte);
-  }
-
-  return btoa(binary);
-}
-
-function base64ToBytes(base64: string): Uint8Array {
-  const binary = atob(base64);
-  const output = new Uint8Array(binary.length);
-
-  for (let index = 0; index < binary.length; index += 1) {
-    output[index] = binary.charCodeAt(index);
-  }
-
-  return output;
-}
-
-function isEncryptedBlob(value: unknown): value is EncryptedBlob {
-  if (typeof value !== "object" || value === null) {
-    return false;
-  }
-
-  const candidate = value as Partial<EncryptedBlob>;
-
-  return (
-    typeof candidate.iv === "string" &&
-    candidate.iv.length > 0 &&
-    typeof candidate.ciphertext === "string" &&
-    candidate.ciphertext.length > 0
-  );
-}
-
-function cleanVault(vault: BYOKVault): BYOKVault {
-  const cleaned: BYOKVault = {};
-
-  for (const provider of PROVIDERS) {
-    const value = vault[provider];
-
-    if (typeof value === "string" && value.trim().length > 0) {
-      cleaned[provider] = value.trim();
+    if (typeof window !== "undefined" && window.localStorage) {
+      window.localStorage.removeItem(key);
     }
+  } catch {
+    /* ignore quota / privacy-mode errors */
   }
-
-  return cleaned;
 }
 
-async function getOrCreateDeviceKey(): Promise<CryptoKey> {
-  assertWebCryptoAvailable();
-
-  let rawKey = safeGetLocalStorageItem(VAULT_KEY_STORAGE);
-
-  if (!rawKey) {
-    const keyBytes = crypto.getRandomValues(new Uint8Array(AES_KEY_BYTES));
-    rawKey = bytesToBase64(keyBytes);
-    safeSetLocalStorageItem(VAULT_KEY_STORAGE, rawKey);
-  }
-
-  const keyBytes = base64ToBytes(rawKey);
-
-  if (keyBytes.byteLength !== AES_KEY_BYTES) {
-    throw new Error("Invalid BYOK vault key length.");
-  }
-
-  return crypto.subtle.importKey(
-    "raw",
-    keyBytes as unknown as BufferSource,
-    {
-      name: "AES-GCM",
-      length: 256,
-    },
-    false,
-    ["encrypt", "decrypt"]
-  );
+function wipeLegacy(): void {
+  safeRemove(LEGACY_KEY_STORAGE);
+  safeRemove(LEGACY_PAYLOAD_STORAGE);
 }
 
-async function encryptJSON(value: unknown): Promise<EncryptedBlob> {
-  const key = await getOrCreateDeviceKey();
-  const iv = crypto.getRandomValues(new Uint8Array(AES_GCM_IV_BYTES));
-
-  const plaintext = new TextEncoder().encode(JSON.stringify(value));
-
-  const ciphertext = await crypto.subtle.encrypt(
-    {
-      name: "AES-GCM",
-      iv,
-    },
-    key,
-    plaintext
-  );
-
-  return {
-    iv: bytesToBase64(iv),
-    ciphertext: bytesToBase64(new Uint8Array(ciphertext)),
-  };
-}
-
-async function decryptJSON<T>(blob: EncryptedBlob): Promise<T> {
-  const key = await getOrCreateDeviceKey();
-
-  const iv = base64ToBytes(blob.iv);
-  const ciphertext = base64ToBytes(blob.ciphertext);
-
-  if (iv.byteLength !== AES_GCM_IV_BYTES) {
-    throw new Error("Invalid BYOK vault IV length.");
-  }
-
-  const plaintext = await crypto.subtle.decrypt(
-    {
-      name: "AES-GCM",
-      iv: iv as unknown as BufferSource,
-    },
-    key,
-    ciphertext as unknown as BufferSource
-  );
-
-  const decoded = new TextDecoder().decode(plaintext);
-
-  return JSON.parse(decoded) as T;
-}
-
-/**
- * Persist BYOK keys to encrypted localStorage.
- *
- * Pass an empty object to clear encrypted provider keys.
- */
-export async function saveBYOKVault(vault: BYOKVault): Promise<void> {
-  const cleaned = cleanVault(vault);
-
-  if (Object.keys(cleaned).length === 0) {
-    safeRemoveLocalStorageItem(VAULT_PAYLOAD_STORAGE);
-    return;
-  }
-
-  const blob = await encryptJSON(cleaned);
-  safeSetLocalStorageItem(VAULT_PAYLOAD_STORAGE, JSON.stringify(blob));
-}
-
-/**
- * Load and decrypt BYOK keys from localStorage.
- *
- * Returns empty object if:
- * - no vault exists
- * - storage is unavailable
- * - vault payload is corrupt
- * - device key was cleared
- * - decryption fails
- */
+/** @deprecated Always returns `{}`. Wipes any leftover legacy ciphertext. */
 export async function loadBYOKVault(): Promise<BYOKVault> {
-  try {
-    const rawPayload = safeGetLocalStorageItem(VAULT_PAYLOAD_STORAGE);
-
-    if (!rawPayload) {
-      return {};
-    }
-
-    const parsed = JSON.parse(rawPayload) as unknown;
-
-    if (!isEncryptedBlob(parsed)) {
-      safeRemoveLocalStorageItem(VAULT_PAYLOAD_STORAGE);
-      return {};
-    }
-
-    const decrypted = await decryptJSON<BYOKVault>(parsed);
-
-    return cleanVault(decrypted);
-  } catch (error) {
-    console.warn("[byokVault] Failed to load vault. Clearing corrupted payload.", error);
-
-    safeRemoveLocalStorageItem(VAULT_PAYLOAD_STORAGE);
-
-    return {};
-  }
+  wipeLegacy();
+  return {};
 }
 
-/**
- * Wipe both encrypted payload and local device key.
- *
- * Use on:
- * - sign-out
- * - explicit user vault reset
- * - shared device cleanup
- */
+/** @deprecated No-op since P0-5. Provider keys are NOT persisted. */
+export async function saveBYOKVault(_vault: BYOKVault): Promise<void> {
+  wipeLegacy();
+}
+
+/** Clears any legacy BYOK ciphertext that may still be in localStorage. */
 export function clearBYOKVault(): void {
-  safeRemoveLocalStorageItem(VAULT_PAYLOAD_STORAGE);
-  safeRemoveLocalStorageItem(VAULT_KEY_STORAGE);
+  wipeLegacy();
 }
 
-/**
- * Returns true when encrypted vault payload exists.
- *
- * This does not decrypt keys.
- */
+/** @deprecated Always false since P0-5. */
 export function hasBYOKVault(): boolean {
-  return safeGetLocalStorageItem(VAULT_PAYLOAD_STORAGE) !== null;
+  return false;
 }
