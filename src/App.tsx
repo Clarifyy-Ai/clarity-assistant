@@ -473,7 +473,7 @@ const routes = [
       },
       {
         path: "/app/mock-test/session/:testId",
-        element: <Navigate to="/app/dashboard" replace />,
+        element: <Page component={MockTestSession} />,
       },
     ],
   },
