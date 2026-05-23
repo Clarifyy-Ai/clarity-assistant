@@ -67,13 +67,39 @@ async function callGemini(base64: string) {
   }
 
   const prompt = `
-Extract exam questions from PDF.
+You are an expert exam question extractor. Read this PDF of exam questions and
+extract every MCQ you find as structured JSON.
 
-Return valid JSON:
+Rules:
+- Return ONLY valid JSON. No markdown, no commentary, no code fences.
+- Each question must have exactly 4 options labelled A, B, C, D.
+- correct_answer must be one of "A", "B", "C", "D".
+- Preserve mathematical notation as plain text (e.g. "x^2 + 3x - 4 = 0").
+- Skip any item that is not a valid MCQ with 4 options.
+- difficulty must be one of "EASY", "MEDIUM", "HARD" (infer if not stated).
+
+Schema:
 {
-  "questions": []
+  "questions": [
+    {
+      "question_text": "string",
+      "options": [
+        {"label": "A", "text": "string"},
+        {"label": "B", "text": "string"},
+        {"label": "C", "text": "string"},
+        {"label": "D", "text": "string"}
+      ],
+      "correct_answer": "A",
+      "explanation": "string (optional, can be empty)",
+      "subject": "string (e.g. Physics, Quant, History)",
+      "topic": "string (specific chapter/topic)",
+      "difficulty": "MEDIUM",
+      "marks_positive": 4,
+      "marks_negative": 1
+    }
+  ]
 }
-`;
+`.trim();
 
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
