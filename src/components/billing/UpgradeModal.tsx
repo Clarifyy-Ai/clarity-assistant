@@ -22,8 +22,9 @@ const MODAL_PLANS: Array<{
   icon: typeof Zap
   color: "violet" | "amber"
 }> = [
-  { id: "pro",   icon: Zap,   color: "violet" },
-  { id: "elite", icon: Crown, color: "amber" },
+  // Launch lineup only — Pro is the single paid self-serve tier.
+  // Enterprise is contact-sales (handled on Pricing page), not an in-app upgrade.
+  { id: "pro", icon: Zap, color: "violet" },
 ]
 
 export function UpgradeModal() {
