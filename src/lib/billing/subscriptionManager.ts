@@ -188,9 +188,9 @@ export const PLANS: Record<PlanId, Plan> = {
     id: "pro",
     name: "Pro",
     tagline: "Everything you need to land the role",
-    monthlyPrice: 3_900,
-    yearlyPrice: 2_900,
-    creditsPerMonth: 300,
+    monthlyPrice: 2_900,
+    yearlyPrice: 2_417, // $29,000/yr ÷ 12 — display only
+    creditsPerMonth: 2_000,
     stripePriceIdMonthly: ENV.STRIPE_PRICE_PRO_MONTHLY,
     stripePriceIdYearly: ENV.STRIPE_PRICE_PRO_YEARLY,
     color: "violet",
