@@ -8,7 +8,7 @@ import {
   type PlanId,
 } from "@/lib/billing/subscriptionManager"
 import { formatPrice, CREDIT_PACKS } from "@/lib/billing/priceCalculator"
-import { Check, Zap, Crown } from "lucide-react"
+import { Check, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { supabase } from "@/lib/supabase/client"
 import { toast } from "sonner"
