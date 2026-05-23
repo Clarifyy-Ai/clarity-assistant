@@ -202,9 +202,51 @@ JSON Format:
     }
 
     // ---------------------------------------------
+    // F9: DEDUPE — in-memory + against existing DB rows
+    // ---------------------------------------------
+    // (a) Strip duplicates within this batch by normalized question_text
+    const seen = new Set<string>();
+    const inBatchUnique = cleaned.filter((q: any) => {
+      const key = String(q.question_text).trim().toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    });
+
+    // (b) Strip any whose text already exists for this (subject) in DB
+    const { data: existingRows } = await db
+      .from("questions")
+      .select("question_text")
+      .eq("subject", rawSubject)
+      .in(
+        "question_text",
+        inBatchUnique.map((q: any) => q.question_text),
+      );
+
+    const existingSet = new Set(
+      (existingRows ?? []).map((r: any) => String(r.question_text).trim().toLowerCase()),
+    );
+
+    const finalRows = inBatchUnique.filter(
+      (q: any) => !existingSet.has(String(q.question_text).trim().toLowerCase()),
+    );
+
+    if (finalRows.length === 0) {
+      return new Response(
+        JSON.stringify({
+          success: true,
+          generated: 0,
+          duplicates_skipped: cleaned.length,
+          message: "All generated questions were duplicates of existing questions",
+        }),
+        { headers: getCorsHeaders(req) }
+      );
+    }
+
+    // ---------------------------------------------
     // INSERT QUESTIONS
     // ---------------------------------------------
-    const { error: insertErr } = await db.from("questions").insert(cleaned);
+    const { error: insertErr } = await db.from("questions").insert(finalRows);
     if (insertErr) {
       console.error("[generate-practice-questions] DB insert error:", insertErr);
       return new Response(
