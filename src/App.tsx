@@ -636,7 +636,10 @@ const routes = [
                 path: "integrations",
                 element: <Page component={SettingsIntegrations} />,
               },
-              { path: "byok", element: <Page component={SettingsBYOK} /> },
+              // P0-5: BYOK route removed from launch. SettingsBYOK file kept
+              // as a deprecation stub; do NOT re-register a route here without
+              // first shipping a server-side vault.
+              // { path: "byok", element: <Page component={SettingsBYOK} /> },
               {
                 path: "appearance",
                 element: <Page component={SettingsAppearance} />,
