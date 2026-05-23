@@ -6,7 +6,8 @@
 // only for generic/manual credit actions that are not already// - Read credit balance from authStore/profile
 // deducted by the target Edge Function.
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
+import { toast } from "sonner";
 
 import { deductCredits as deductCreditsApi } from "@/lib/api/billing";
 import { useAuthStore } from "@/store/authStore";
@@ -90,6 +91,33 @@ export function useCredits() {
 
   const isLow = balance > 0 && balance <= 2;
   const isEmpty = balance <= 0;
+
+  // One-shot low-credit toasts per session at 20 and 5 thresholds.
+  const warnedRef = useRef<{ low: boolean; critical: boolean }>({
+    low: false,
+    critical: false,
+  });
+
+  useEffect(() => {
+    if (balance <= 0) return;
+    if (balance <= 5 && !warnedRef.current.critical) {
+      warnedRef.current.critical = true;
+      warnedRef.current.low = true;
+      toast.error(`Only ${balance} credits left — top up to keep practising.`, {
+        id: "credits-critical",
+        duration: 8000,
+      });
+    } else if (balance <= 20 && !warnedRef.current.low) {
+      warnedRef.current.low = true;
+      toast.warning(`Low credits: ${balance} remaining.`, {
+        id: "credits-low",
+        duration: 6000,
+      });
+    } else if (balance > 20) {
+      // Reset guards once user tops up.
+      warnedRef.current = { low: false, critical: false };
+    }
+  }, [balance]);
 
   const costs = useMemo(() => CREDIT_COSTS, []);
 

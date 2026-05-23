@@ -223,10 +223,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
   const user = useAuthStore((state) => state.user);
   const signOut = useAuthStore((state) => state.signOut);
 
-  const [questionCount, setQuestionCount] = useState<number | null>(null);
-
   const collapsed = onNavClick ? false : sidebarCollapsed;
-  const isMockTestSection = location.pathname.startsWith("/app/mock-test");
   const isAdmin = profile?.is_admin === true;
   const initial = getProfileInitial(profile);
   const planLabel = getPlanLabel(profile);
@@ -251,41 +248,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
     };
   }, [setSidebarCollapsed]);
 
-  useEffect(() => {
-    if (!user?.id) {
-      setQuestionCount(null);
-      return;
-    }
-
-    let cancelled = false;
-
-    async function fetchQuestionCount(): Promise<void> {
-      const { count, error } = await supabase
-        .from("questions")
-        .select("id", {
-          count: "exact",
-          head: true,
-        })
-        .eq("uploaded_by", user.id);
-
-      if (cancelled) {
-        return;
-      }
-
-      if (error) {
-        setQuestionCount(0);
-        return;
-      }
-
-      setQuestionCount(count ?? 0);
-    }
-
-    void fetchQuestionCount();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [user?.id, location.pathname]);
+  // Mock-test question count badge removed alongside section de-scoping.
 
   async function handleLogout(): Promise<void> {
     try {
