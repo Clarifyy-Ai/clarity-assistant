@@ -14,14 +14,9 @@ import { useOverlayStore } from "@/store/overlayStore";
 const PROBE_INTERVAL_MS  = 10_000;  // probe every 10s
 const FAST_PROBE_TIMEOUT = 5_000;   // abort probe if no response in 5s
 
-// FIX 1: Don't probe your own edge function — it requires CORS + auth
-// and causes hundreds of ERR_FAILED errors in the console.
-// Use a reliable public endpoint instead (Google favicon is ~200 bytes,
-// always available, no auth, no CORS needed).
-const PROBE_URL = "https://www.google.com/favicon.ico";
-
-// Kept as fallback RTT reference — used if you ever switch back to own endpoint
-// const PROBE_URL = `${SUPABASE_URL}/functions/v1/ping`;
+// Probe a same-origin asset to avoid CSP connect-src violations.
+// `/favicon.ico` is served by Vite/static hosting, no CORS or auth needed.
+const PROBE_URL = "/favicon.ico";
 
 // ─────────────────────────────────────────────────────────────────
 // NetworkMonitor class
