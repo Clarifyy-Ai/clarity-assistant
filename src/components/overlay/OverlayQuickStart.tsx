@@ -72,7 +72,7 @@ export function OverlayQuickStart({ onStart }: OverlayQuickStartProps) {
       hint_style:           hintStyle,
       model:                "gemini-flash",
       smart_routing:        false,
-      stealth_mode:         true,
+      stealth_mode:         false,
       resume_id:            activeResumeId,
       jd_id:                activeJdId,
       interview_type:       interviewType,

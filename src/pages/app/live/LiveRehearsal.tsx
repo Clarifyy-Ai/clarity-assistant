@@ -29,7 +29,7 @@ const DEFAULT_CONFIG: LiveSessionConfig = {
   hint_style: "short_hints",
   model: "gemini-flash",
   smart_routing: false,
-  stealth_mode: true,
+  stealth_mode: false,
   resume_id: null,
   jd_id: null,
   interview_type: "behavioral",

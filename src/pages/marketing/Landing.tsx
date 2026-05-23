@@ -35,8 +35,8 @@ const STEPS = [
   {
     num: "03",
     icon: Cpu,
-    title: "Ace your live interview",
-    desc: "Enable the stealth overlay before going live. AI answers appear instantly — only visible to you, invisible to screen capture and interviewers.",
+    title: "Rehearse with the live coach",
+    desc: "Run a live practice session with the AI coach. Hear yourself, get instant talking-point hints, then review a full debrief — so the real interview feels like a re-run.",
     color: "text-emerald-400",
     bg: "bg-emerald-500/10",
   },
@@ -45,13 +45,13 @@ const STEPS = [
 const FEATURES = [
   {
     icon: Mic,
-    title: "Live Co-Pilot",
-    desc: "Real-time AI answers streamed to an invisible stealth overlay during your actual interview.",
+    title: "Live Practice Coach",
+    desc: "Real-time AI talking-point hints streamed to an on-screen prep overlay during your practice sessions.",
     details: [
-      "Sub-1-second answer latency",
-      "Invisible to Zoom, Teams, and Google Meet",
+      "Sub-1-second hint latency",
+      "Powered by Google Gemini 2.0 Flash",
       "STAR-format answers auto-structured",
-      "Automatically adapts to question type",
+      "Practice-only — not for use in real interviews",
     ],
     color: "text-violet-400",
     bg: "bg-violet-500/10",
@@ -102,21 +102,21 @@ const FEATURES = [
 ];
 
 const STATS = [
-  { value: "< 1s",   label: "AI answer latency",    icon: Clock },
-  { value: "4",      label: "AI models, auto-routed", icon: Brain },
-  { value: "6",      label: "Live coaching features", icon: Target },
-  { value: "98%",    label: "Overlay undetection rate", icon: Shield },
+  { value: "< 1s",   label: "AI hint latency",          icon: Clock },
+  { value: "Gemini", label: "2.0 Flash, low-latency",   icon: Brain },
+  { value: "6",      label: "Practice coaching features", icon: Target },
+  { value: "200",    label: "Free credits / month",     icon: Shield },
 ];
 
 const COMPARISON = [
   {
-    feature: "Real-time stealth overlay",
+    feature: "Live AI practice coach with hints",
     clarify: true,
-    competitor: false,
+    competitor: "Partial",
     generic: false,
   },
   {
-    feature: "Sub-1s AI answer latency",
+    feature: "Sub-1s AI hint latency",
     clarify: true,
     competitor: "Partial",
     generic: false,
@@ -134,19 +134,19 @@ const COMPARISON = [
     generic: false,
   },
   {
-    feature: "BYOK (bring your own API key)",
+    feature: "STAR builder & answer rephraser",
+    clarify: true,
+    competitor: "Partial",
+    generic: false,
+  },
+  {
+    feature: "Post-session debrief & analytics",
     clarify: true,
     competitor: false,
     generic: false,
   },
   {
-    feature: "Works offline (resume fallback)",
-    clarify: true,
-    competitor: false,
-    generic: false,
-  },
-  {
-    feature: "Multi-model routing (GPT-4o + Claude + Gemini)",
+    feature: "Powered by Google Gemini 2.0 Flash",
     clarify: true,
     competitor: false,
     generic: false,
@@ -170,7 +170,7 @@ const TESTIMONIALS = [
     persona: "Senior candidate",
   },
   {
-    quote: "The stealth overlay is unreal. I had AI-powered hints during my entire technical loop without anyone knowing. Accepted the role at 40% higher comp.",
+    quote: "The live practice coach is the closest thing I've found to a real mock interviewer on demand. After two weeks of nightly sessions I walked into the loop with zero nerves.",
     name: "Priya S.",
     role: "Product Manager, Series B",
     rating: 5,
@@ -192,45 +192,41 @@ const TESTIMONIALS = [
 const FAQS = [
   {
     q: "What is Clarify AI?",
-    a: "Clarify AI is an interview preparation platform that combines a real-time AI co-pilot, full mock interview engine, prep lab tools, and deep analytics. The stealth overlay lets you receive AI-generated answers during live interviews without your interviewer knowing.",
+    a: "Clarify AI is an interview preparation platform that combines a live AI practice coach, a full mock interview engine, a prep lab, and detailed analytics. It is designed for rehearsal — to help you walk into the real interview prepared and confident.",
   },
   {
-    q: "How does the stealth overlay work?",
-    a: "The overlay renders in a separate compositor layer that is excluded from screen capture APIs used by Zoom, Google Meet, Microsoft Teams, and similar tools. Your interviewer only sees your camera feed — you see both the call and the AI answers.",
-  },
-  {
-    q: "Is it detectable?",
-    a: "The stealth overlay is designed to be invisible to screen-sharing and screen-capture software. It uses OS-level compositor separation so capture APIs never see the overlay window. We maintain a 98% undetection rate across the major video platforms.",
+    q: "Can I use Clarify AI during a real interview?",
+    a: "No. Clarify AI is built strictly for practice. Using AI assistance covertly during a real interview violates most employer and assessment policies and may breach the terms of platforms like Zoom, Teams, Google Meet, HackerRank, and CoderPad. The on-screen overlay is a normal window and is visible to screen-sharing tools.",
   },
   {
     q: "Which AI model does Clarify use?",
-    a: "Clarify AI uses Google Gemini 2.0 Flash for all answer generation and analysis at launch. Additional models may be added based on user feedback.",
+    a: "Clarify AI uses Google Gemini 2.0 Flash for hint generation, STAR answer drafting, and debriefs at launch. We chose Gemini 2.0 Flash for its sub-second latency and predictable cost. Additional providers are on the roadmap.",
   },
   {
     q: "How much does Clarify AI cost?",
-    a: "There is a free plan that includes 200 credits per month. Pro is $29/month with 2,000 credits, and Enterprise is $79/month with unlimited credits. See the pricing page for full details.",
+    a: "Free includes 200 credits per month — no credit card required. Pro is $29 / month for 2,000 credits and the full feature set. Enterprise is $79 / month per seat with unlimited credits and team controls.",
   },
   {
     q: "What is included in the free plan?",
-    a: "The free plan gives you 200 credits per month, access to the mock engine, prep lab tools, and basic analytics.",
+    a: "The free plan gives you 200 credits per month, full access to the mock engine, all prep lab tools, and basic analytics. You can upgrade anytime from Settings → Billing.",
   },
   {
-    q: "Can I bring my own API key (BYOK)?",
-    a: "Yes. Pro and Elite subscribers can connect their own OpenAI, Anthropic, or Google API keys. BYOK credits are tracked separately and do not count against your monthly plan credits.",
+    q: "Can I bring my own AI API key (BYOK)?",
+    a: "BYOK is on our roadmap and not available at launch. All AI calls currently use Clarify's managed Gemini connection and count against your monthly credit balance.",
   },
   {
     q: "Does it work for all interview types?",
-    a: "Yes. Clarify AI supports behavioral interviews (STAR format), technical coding rounds (with hints and explanations), system design interviews (with frameworks and diagrams), and general Q&A. The question bank covers over 500 common interview topics.",
+    a: "Yes. Clarify AI supports behavioral interviews (STAR format), technical coding rounds (with hints and explanations), system design interviews (with frameworks and diagrams), and general Q&A. The prep lab covers more than 500 common interview topics.",
   },
 ];
 
 const PROOF_POINTS = [
-  "AI answers in under 1 second",
-  "4 AI models, auto-routed by speed",
-  "Works offline with resume fallback",
+  "AI hints in under 1 second",
+  "Powered by Google Gemini 2.0 Flash",
+  "Full STAR builder & answer rephraser",
   "Resume + JD gap analysis built in",
   "Gamified streaks, XP, and badges",
-  "Stealth overlay undetectable by Zoom",
+  "200 free credits / month — no card required",
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -254,8 +250,8 @@ function CellValue({ value }: { value: boolean | string }) {
 
 export default function Landing() {
   usePageMeta({
-    title: "Clarify AI — Ace Every Interview with AI by Your Side",
-    description: "Real-time AI coaching during live interviews, mock sessions with deep analytics, and a full prep lab. Start free today.",
+    title: "Clarify AI — Practice every interview with AI by your side",
+    description: "Live AI practice coach, full mock interview engine with analytics, and a complete prep lab. Powered by Google Gemini 2.0 Flash. Start free with 200 credits / month.",
   });
 
   return (
@@ -270,18 +266,18 @@ export default function Landing() {
         >
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-xs font-medium text-primary mb-6">
             <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-            Powered by GPT-4o, Claude 3.5, and Gemini 1.5
+            Powered by Google Gemini 2.0 Flash
           </div>
 
           <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight leading-[1.08]">
-            Ace every interview with{" "}
+            Practice every interview with{" "}
             <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-blue-400 bg-clip-text text-transparent">
               AI by your side
             </span>
           </h1>
           <p className="mt-5 text-sm md:text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            Real-time coaching during live interviews. Mock sessions with deep analytics.
-            A full prep lab — and a stealth overlay your interviewer will never see.
+            A live AI practice coach, mock sessions with deep analytics, and a full prep lab —
+            so you walk into the real interview ready, not anxious.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-8">
             <Link
@@ -300,7 +296,7 @@ export default function Landing() {
             </Link>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
-            No credit card required &middot; Free plan includes 20 credits/month
+            No credit card required &middot; Free plan includes 200 credits / month
           </p>
         </motion.div>
 
@@ -398,7 +394,7 @@ export default function Landing() {
             </div>
           </div>
           <p className="mt-3 text-xs text-muted-foreground">
-            The AI overlay is invisible to your interviewer — only you see it.
+            A live AI coach guides every answer in your practice session.
           </p>
         </motion.div>
       </section>
