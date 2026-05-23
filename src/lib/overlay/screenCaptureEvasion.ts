@@ -48,6 +48,8 @@ export function getSupportInfo(): ScreenCaptureSupportInfo {
       typeof navigator !== "undefined" &&
       !!navigator.mediaDevices?.getDisplayMedia,
     notes: ["Screen-capture evasion disabled by policy (P0-2)."],
+    reason: "Disabled by policy (P0-2): covert capture evasion is not shipped.",
+    misses: ["content-protection", "evasion-loop", "stealth-attr"],
   };
 }
 
