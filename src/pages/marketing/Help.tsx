@@ -24,17 +24,17 @@ const FAQ_DATA: FaqCategory[] = [
       { id: "gs-1", q: "What is Clarify AI?", a: "Clarify AI is an AI-powered interview preparation platform that provides real-time coaching during live interviews, full mock simulations with analytics, and a suite of prep tools to help you land your dream job." },
       { id: "gs-2", q: "How do I create an account?", a: "Click 'Get started free' on the homepage. You can sign up with your email or use Google/GitHub OAuth. No credit card required for the free plan." },
       { id: "gs-3", q: "What happens after I sign up?", a: "You'll go through a quick onboarding flow where you set your role, experience level, and target companies. This helps personalize your AI coaching experience." },
-      { id: "gs-4", q: "Is there a free plan?", a: "Yes! The free plan includes 20 credits per month, 3 live sessions, 5 mock sessions, and access to the STAR builder and answer bank." },
+      { id: "gs-4", q: "Is there a free plan?", a: "Yes. The Free plan includes 200 credits per month, full access to practice sessions, the STAR builder, and the answer bank. No credit card required." },
     ],
   },
   {
     title: "Live Interview",
     slug: "live-interview",
     items: [
-      { id: "li-1", q: "How does the live interview assistant work?", a: "During a live interview, Clarify AI listens to the conversation and provides real-time suggested answers, talking points, and hints through an invisible overlay that's undetectable by screen sharing software." },
-      { id: "li-2", q: "Is the overlay really invisible?", a: "Yes. The stealth overlay uses compositor-layer separation, which means it sits above your screen content but is invisible to Zoom, Teams, Google Meet, and all screen capture tools." },
-      { id: "li-3", q: "What AI models are used?", a: "We support GPT-4o, Claude 3.5 Sonnet, and Gemini 1.5 Pro. You can set a preferred model or enable smart routing to automatically pick the best model for each question type." },
-      { id: "li-4", q: "How many credits does a live session cost?", a: "Each hint during a live session costs 1 credit. The number of credits used depends on how many hints you request during the interview." },
+      { id: "li-1", q: "How does the live practice coach work?", a: "During a practice session, Clarify AI listens to your spoken answers and provides real-time suggested talking points, structure hints, and follow-up prompts in an on-screen prep overlay. It is designed for rehearsal — not for use during real interviews." },
+      { id: "li-2", q: "Can I use this during a real interview?", a: "No. Live Co-Pilot is built strictly for interview practice. Using AI assistance covertly during a real interview violates most employer and assessment policies and may breach platform terms. The overlay is a normal on-screen window and is visible to screen-sharing tools." },
+      { id: "li-3", q: "What AI model is used?", a: "At launch, Clarify AI is powered by Google Gemini 2.0 Flash for low-latency hints, answer drafting, and debriefs. Additional model providers are on the roadmap." },
+      { id: "li-4", q: "How many credits does a practice session cost?", a: "Each requested hint costs 1 credit and each generated STAR answer costs 2 credits. Listening, transcription, and the debrief at the end of the session are included." },
     ],
   },
   {
@@ -50,10 +50,10 @@ const FAQ_DATA: FaqCategory[] = [
     title: "Billing & Credits",
     slug: "billing",
     items: [
-      { id: "bi-1", q: "How do credits work?", a: "Credits are the currency for AI-powered features. Each action (live hint, mock question, STAR polish, etc.) costs a specific number of credits. Credits refresh monthly based on your plan." },
-      { id: "bi-2", q: "Can I buy extra credits?", a: "Yes! Credit packs are available for purchase anytime without changing your subscription plan. Packs come in 50, 150, and 500 credit bundles." },
-      { id: "bi-3", q: "How do I cancel my subscription?", a: "Go to Settings > Billing and click 'Cancel subscription'. Your plan will remain active until the end of the current billing period. You won't be charged again." },
-      { id: "bi-4", q: "Do unused credits roll over?", a: "No, monthly credits reset at the start of each billing cycle. However, credits purchased through credit packs do not expire." },
+      { id: "bi-1", q: "How do credits work?", a: "Credits are the currency for AI-powered features. Each action (hint, STAR answer, debrief, company research, etc.) costs a specific number of credits. Free includes 200 credits / month, Pro includes 2,000 / month, and Enterprise is unlimited." },
+      { id: "bi-2", q: "How much do paid plans cost?", a: "Pro is $29 / month for 2,000 credits and unlocks the full feature set. Enterprise is $79 / month per seat with unlimited credits and team controls. Yearly billing saves roughly two months." },
+      { id: "bi-3", q: "How do I cancel my subscription?", a: "Go to Settings → Billing and click 'Cancel subscription'. Your plan stays active until the end of the current billing period; you won't be charged again." },
+      { id: "bi-4", q: "Do unused credits roll over?", a: "No, monthly plan credits reset at the start of each billing cycle." },
     ],
   },
   {
@@ -61,7 +61,7 @@ const FAQ_DATA: FaqCategory[] = [
     slug: "account",
     items: [
       { id: "ac-1", q: "How do I change my password?", a: "Go to Settings > Security and use the change password form. You'll need to enter your current password and then your new password (minimum 8 characters)." },
-      { id: "ac-2", q: "Can I use my own API keys?", a: "Yes! On Starter plans and above, you can bring your own API keys for OpenAI, Anthropic, or Google AI. When using your own keys, AI calls are billed directly to your provider account." },
+      { id: "ac-2", q: "Can I use my own AI API keys?", a: "Bring-your-own-key (BYOK) is on our roadmap and not available at launch. All AI calls today use Clarify's managed Gemini connection and count against your monthly credit balance." },
       { id: "ac-3", q: "How do I delete my account?", a: "Go to Settings > Danger Zone and click 'Delete Account'. This will permanently remove all your data, sessions, and answers. This action cannot be undone." },
     ],
   },
