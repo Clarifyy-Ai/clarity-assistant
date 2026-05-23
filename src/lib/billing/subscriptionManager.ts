@@ -53,7 +53,8 @@ export const PLANS: Record<PlanId, Plan> = {
     tagline: "Get started — no card required",
     monthlyPrice: 0,
     yearlyPrice: 0,
-    creditsPerMonth: 20,
+    // Launch source of truth: src/lib/constants/pricing.ts
+    creditsPerMonth: 200,
     color: "slate",
     features: [
       {
