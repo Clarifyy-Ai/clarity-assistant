@@ -166,11 +166,11 @@ Deno.serve(async (req) => {
     if (geminiRaw) {
       const parsed = parseJSON(sanitizeAI(geminiRaw), null);
       if (parsed && isValidResumeSchema(parsed)) {
-        // Save parsed content to resumes.content as summary text
         await db.from("resumes").update({ content: JSON.stringify(parsed) }).eq("id", resume_id);
         if (effectiveVersionId) {
           await db.from("resume_versions").update({ parsed_data: parsed, parse_status: "ready", parse_error: null }).eq("id", effectiveVersionId);
         }
+        await fanOutResume(db, userId, parsed);
         return new Response(JSON.stringify({ success: true, source: "gemini", parsed }), { headers: getCorsHeaders(req) });
       }
     }
