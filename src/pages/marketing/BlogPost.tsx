@@ -88,8 +88,8 @@ AI-powered mock interviews go beyond scripted questions. They adapt to your resp
 ### Personalized Learning Paths
 Modern AI prep tools analyze your performance across sessions to identify patterns. They create customized practice plans focusing on your specific weak spots — whether that's system design communication, behavioral story structure, or technical explanation clarity.
 
-### Multi-Model Architecture
-Leading platforms now use multiple AI models (GPT-4o, Claude, Gemini) with smart routing to pick the best model for each question type. This delivers faster, more accurate responses than single-model systems.
+### Low-Latency Generation
+The best prep tools stream hints in under a second so feedback feels conversational. That requires fast inference models and tight prompt engineering — not a flotilla of providers behind the scenes.
 
 ## The Impact on Hiring
 
