@@ -207,7 +207,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
   const toggleSidebar = useUIStore((state) => state.toggleSidebar);
 
   const profile = useAuthStore((state) => state.profile);
-  const user = useAuthStore((state) => state.user);
+  
   const signOut = useAuthStore((state) => state.signOut);
 
   const collapsed = onNavClick ? false : sidebarCollapsed;
