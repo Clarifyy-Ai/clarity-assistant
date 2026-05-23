@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles ALTER COLUMN stealth_mode SET DEFAULT false;
