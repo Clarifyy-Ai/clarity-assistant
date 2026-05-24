@@ -99,12 +99,11 @@ export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void>
 
   const body = {
     question,
-    model: model ?? "gemini-2.5-flash",
+    model: model ?? "gemini-2.0-flash",
     interview_type: context.session_type ?? "behavioral",
-    target_company: context.target_company ?? null,
-    transcript: context.last_transcript ?? null,
-    resume_context: context.resume_experience_summary ?? null,
-    simple_language: simpleLanguage ?? false,
+    target_company: context.target_company ?? "",
+    transcript: context.last_transcript ?? "",
+    resume_context: context.resume_experience_summary ?? "",
     session_id: opts.sessionId ?? null,
   };
 
