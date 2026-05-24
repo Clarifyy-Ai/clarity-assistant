@@ -106,8 +106,12 @@ const NAV_SECTIONS: NavSection[] = [
         stealthIcon: FolderOpen,
         label: "Prep Lab",
       },
-      // Mock Tests (JEE/NEET MCQ engine) de-scoped at launch per product alignment.
-      // Sidebar entry removed; routes redirect to dashboard.
+      {
+        to: "/app/mock-test",
+        icon: ClipboardList,
+        stealthIcon: PenTool,
+        label: "Gov Exam Mock Tests",
+      },
     ],
   },
   {
