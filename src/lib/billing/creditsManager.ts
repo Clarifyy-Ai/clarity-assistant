@@ -176,7 +176,8 @@ export async function deductCreditsForAction(
 
   try {
     const { getAuthHeaders } = await import("@/lib/network/fetchEdge");
-    const headers = await getAuthHeaders();
+    const idempotencyKey = `dc-${(crypto as any)?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
+    const headers = await getAuthHeaders({ "Idempotency-Key": idempotencyKey });
 
     const response = await fetch(`${EDGE_BASE}/deduct-credits`, {
       method: "POST",
