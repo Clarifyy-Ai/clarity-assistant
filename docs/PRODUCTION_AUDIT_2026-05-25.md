@@ -26,7 +26,23 @@ Full-stack production audit with in-repo fixes applied. Supersedes partial runs 
 
 ---
 
-## 2. Issue register (fixes applied this session)
+## 2. Issue register (pass 3 — 2026-05-25)
+
+| Severity | Issue | Fix | Files |
+|----------|-------|-----|-------|
+| P0 | Stripe/checkout return URLs pointed at `/app/billing` (404) | Use `/app/settings/billing` | `billing.ts`, `Dashboard.tsx` |
+| P0 | Command palette dead prep/answer routes | Align paths with `App.tsx` | `CommandPalette.tsx` |
+| P1 | `ROUTES` / `EDGE_FUNCTIONS` drift (phantom endpoints) | Sync with deployed functions + real routes | `apiEndpoints.ts` |
+| P1 | Admin model costs showed fabricated usage | Empty state + real credit_transactions only | `AdminModelCosts.tsx` |
+| P1 | `SettingsBilling.tsx` imports after component | Move `ENV`, icons, `toast` to top | `SettingsBilling.tsx` |
+| P2 | Prep Lab question bank static only | Load `answer_bank`; starters when empty | `PrepLab.tsx` |
+| P2 | Mock session silent AI fallback | Toast when using built-in questions | `MockSession.tsx` |
+| P2 | Scorecard link to `/mock/setup` | `/app/mock` | `Scorecard.tsx` |
+| P2 | Live rehearsal “panic mode” copy | “Calm coaching steps” | `LiveRehearsal.tsx` |
+
+---
+
+## 2b. Issue register (pass 1–2 — prior session)
 
 | Severity | Issue | Root cause | Fix | Files |
 |----------|-------|------------|-----|-------|

@@ -101,15 +101,8 @@ export default function AdminModelCosts() {
         );
       }
 
-      const mockStats: ModelUsageStat[] = [
-        { modelId: "gpt-4o",            provider: "openai",    callCount: 4820, tokensIn: 2_410_000, tokensOut: 724_000, costUSDCents: 14_460, revenueCredits: 9640, avgLatencyMs: 1240, errorRate: 0.008 },
-        { modelId: "gpt-4o-mini",       provider: "openai",    callCount: 8301, tokensIn: 4_150_500, tokensOut: 830_100, costUSDCents:  2_490, revenueCredits: 8301, avgLatencyMs:  540, errorRate: 0.003 },
-        { modelId: "claude-3-5-sonnet", provider: "anthropic", callCount: 1204, tokensIn:   602_000, tokensOut: 180_600, costUSDCents:  4_816, revenueCredits: 3612, avgLatencyMs: 1840, errorRate: 0.012 },
-        { modelId: "claude-3-haiku",    provider: "anthropic", callCount: 2891, tokensIn: 1_445_500, tokensOut: 289_100, costUSDCents:  1_446, revenueCredits: 2891, avgLatencyMs:  620, errorRate: 0.004 },
-        { modelId: "gemini-2.0-flash",  provider: "gemini",    callCount: 3102, tokensIn: 1_551_000, tokensOut: 465_300, costUSDCents:    310, revenueCredits: 3102, avgLatencyMs:  780, errorRate: 0.006 },
-        { modelId: "deepgram-nova-3",   provider: "deepgram",  callCount: 6450, tokensIn:          0, tokensOut:       0, costUSDCents:  1_290, revenueCredits:    0, avgLatencyMs:  120, errorRate: 0.001 },
-      ];
-      setModelStats(mockStats);
+      // Per-model token/cost telemetry is not stored in Postgres yet; show real credit data only.
+      setModelStats([]);
     } catch (err) {
       console.error("[AdminModelCosts] fetch error:", err);
     } finally {
@@ -230,7 +223,13 @@ export default function AdminModelCosts() {
                       ))}
                     </TableRow>
                   ))
-                : modelStats.map((model) => (
+                : modelStats.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={8} className="text-center text-sm text-muted-foreground py-8">
+                        No per-model usage telemetry in the database yet. Credit consumption by feature is shown below.
+                      </TableCell>
+                    </TableRow>
+                  ) : modelStats.map((model) => (
                     <TableRow key={model.modelId}>
                       <TableCell>
                         <div className="flex items-center gap-2">

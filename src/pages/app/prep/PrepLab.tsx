@@ -330,30 +330,79 @@ const BANK_CATEGORIES = [
   "Leadership", "Conflict", "Culture Fit", "HR",
 ];
 
-const SAMPLE_QUESTIONS = [
-  { id: "1", text: "Tell me about a time you failed and what you learned.",          category: "Behavioural", difficulty: "medium" },
-  { id: "2", text: "How would you design a URL shortener?",                          category: "System Design", difficulty: "hard"   },
-  { id: "3", text: "Describe a situation where you had to meet a tight deadline.",   category: "Behavioural", difficulty: "easy"   },
-  { id: "4", text: "Walk me through a time you led a cross-functional project.",     category: "Leadership",  difficulty: "medium" },
-  { id: "5", text: "How do you handle disagreements with your manager?",             category: "Conflict",    difficulty: "easy"   },
-  { id: "6", text: "What's your greatest professional weakness?",                    category: "HR",          difficulty: "easy"   },
-  { id: "7", text: "Design a distributed caching system for a social media platform.", category: "System Design", difficulty: "hard" },
-  { id: "8", text: "Tell me about a time you influenced without authority.",          category: "Leadership",  difficulty: "medium" },
+type BankQuestion = {
+  id: string;
+  text: string;
+  category: string;
+  difficulty: string;
+  fromLibrary?: boolean;
+};
+
+const STARTER_QUESTIONS: BankQuestion[] = [
+  { id: "starter-1", text: "Tell me about a time you failed and what you learned.", category: "Behavioural", difficulty: "medium" },
+  { id: "starter-2", text: "Describe a situation where you had to meet a tight deadline.", category: "Behavioural", difficulty: "easy" },
 ];
 
 function QuestionBank() {
+  const { user } = useAuthStore();
   const [category,   setCategory]   = useState("All");
   const [search,     setSearch]     = useState("");
   const [practicing, setPracticing] = useState<string | null>(null);
   const [answer,     setAnswer]     = useState("");
+  const [questions,  setQuestions]  = useState<BankQuestion[]>(STARTER_QUESTIONS);
+  const [loadingBank, setLoadingBank] = useState(true);
 
-  const filtered = SAMPLE_QUESTIONS.filter((q) => {
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadBank() {
+      if (!user?.id) {
+        setLoadingBank(false);
+        return;
+      }
+
+      try {
+        const { data, error } = await supabase
+          .from("answer_bank")
+          .select("id, question, category, tags")
+          .eq("user_id", user.id)
+          .order("updated_at", { ascending: false })
+          .limit(100);
+
+        if (error) throw error;
+
+        const fromBank: BankQuestion[] = (data ?? [])
+          .map((row: { id: string; question?: string; category?: string; tags?: string[] }) => ({
+            id: row.id,
+            text: (row.question ?? "").trim(),
+            category: row.category ?? "Behavioural",
+            difficulty: "medium",
+            fromLibrary: true,
+          }))
+          .filter((q) => q.text.length > 8);
+
+        if (!cancelled) {
+          setQuestions(fromBank.length > 0 ? fromBank : STARTER_QUESTIONS);
+        }
+      } catch (err) {
+        console.error("[PrepLab/QuestionBank] load failed:", err);
+        if (!cancelled) setQuestions(STARTER_QUESTIONS);
+      } finally {
+        if (!cancelled) setLoadingBank(false);
+      }
+    }
+
+    void loadBank();
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  const filtered = questions.filter((q) => {
     if (category !== "All" && q.category !== category) return false;
     if (search && !q.text.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
-  const activeQ = SAMPLE_QUESTIONS.find((q) => q.id === practicing);
+  const activeQ = questions.find((q) => q.id === practicing);
 
   return (
     <div className="space-y-4">
@@ -383,8 +432,21 @@ function QuestionBank() {
         </div>
       </div>
 
+      {loadingBank && (
+        <p className="text-xs text-muted-foreground">Loading your saved questions…</p>
+      )}
+
+      {!loadingBank && questions.every((q) => !q.fromLibrary) && (
+        <p className="text-xs text-muted-foreground">
+          Save STAR answers to your answer bank to build a personal question library. Showing starter examples until then.
+        </p>
+      )}
+
       {/* Questions list */}
       <div className="space-y-2">
+        {filtered.length === 0 && !loadingBank && (
+          <p className="text-sm text-muted-foreground py-6 text-center">No questions match your filters.</p>
+        )}
         {filtered.map((q) => (
           <Card
             key={q.id}

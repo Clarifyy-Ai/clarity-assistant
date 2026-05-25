@@ -224,7 +224,7 @@ export default function Dashboard() {
             You have fewer than 50 credits remaining. Top up to keep practising without interruptions.
           </p>
           <a
-            href="/app/billing"
+            href="/app/settings/billing"
             className="text-xs font-semibold text-red-400 hover:text-red-300 transition-colors whitespace-nowrap"
           >
             Add credits →

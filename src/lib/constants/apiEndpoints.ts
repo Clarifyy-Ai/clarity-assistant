@@ -32,28 +32,26 @@ export const EDGE_FUNCTIONS = {
 
   // Audio / Transcription
   DEEPGRAM_TOKEN:         "deepgram-token",
-  PROCESS_AUDIO:          "process-audio",
 
   // Billing
   CREATE_CHECKOUT:        "create-checkout",
+  CREATE_BILLING_PORTAL:  "create-billing-portal",
   CANCEL_SUBSCRIPTION:    "cancel-subscription",
   RESUME_SUBSCRIPTION:    "resume-subscription",
-  CREATE_PORTAL:          "create-checkout",
+  DEDUCT_CREDITS:         "deduct-credits",
   WEBHOOK_STRIPE:         "stripe-webhook",
-  PURCHASE_CREDITS:       "purchase-credits",
 
-  // Auth & User
+  // Auth & User / GDPR
   DELETE_ACCOUNT:         "delete-account",
-  SEND_INVITE:            "send-invite",
-  VERIFY_BYOK:            "verify-byok",
+  EXPORT_USER_DATA:       "export-user-data",
 
   // Notifications
   SEND_EMAIL:             "send-email",
-  SEND_NOTIFICATION:      "send-notification",
 
-  // Analytics
-  FLUSH_ANALYTICS:        "flush-analytics",
-  SYNC_SESSION:           "sync-session",
+  // Analytics & sessions
+  ANALYTICS_DASHBOARD:    "analytics-dashboard",
+  START_SESSION:          "start-session",
+  END_SESSION:            "end-session",
 } as const;
 
 export type EdgeFunctionName = (typeof EDGE_FUNCTIONS)[keyof typeof EDGE_FUNCTIONS];
@@ -151,40 +149,39 @@ export const ROUTES = {
   // Public
   HOME:              "/",
   PRICING:           "/pricing",
-  ABOUT:             "/about",
-  CONTACT:           "/contact",
+  HELP:              "/help",
+  TERMS:             "/terms",
+  PRIVACY:           "/privacy",
 
   // Auth
   LOGIN:             "/login",
   SIGNUP:            "/signup",
   FORGOT_PASSWORD:   "/forgot-password",
   RESET_PASSWORD:    "/reset-password",
-  VERIFY_EMAIL:      "/auth/verify-email",
+  VERIFY_EMAIL:      "/verify-email",
   AUTH_CALLBACK:     "/auth/callback",
 
-  // App (protected)
-  DASHBOARD:         "/dashboard",
-  LIVE_SESSION:      "/session/live",
-  SESSION:           (id: string) => `/session/${id}`,
-  SESSIONS_HISTORY:  "/sessions",
-  MOCK_INTERVIEW:    "/mock",
-  ANSWER_BANK:       "/answers",
-  COACH:             "/coach",
-  PREP:              "/prep",
-  COMPANY_RESEARCH:  "/research",
+  // App (protected) — matches src/App.tsx
+  DASHBOARD:         "/app/dashboard",
+  LIVE_SESSION:      "/app/live",
+  SESSION:           (id: string) => `/app/sessions/${id}`,
+  SESSIONS_HISTORY:  "/app/sessions/history",
+  MOCK_INTERVIEW:    "/app/mock",
+  MOCK_TEST:         "/app/mock-test",
+  ANSWER_BANK:       "/app/answers",
+  PREP:              "/app/prep",
+  ANALYTICS:         "/app/analytics",
+  COMPANY_RESEARCH:  "/app/companies",
+  INTERVIEWS:        "/app/interviews",
 
   // Settings
-  SETTINGS:          "/settings",
-  SETTINGS_PROFILE:  "/settings/profile",
-  SETTINGS_BILLING:  "/settings/billing",
-  SETTINGS_AUDIO:    "/settings/audio",
-  SETTINGS_HOTKEYS:  "/settings/hotkeys",
-  SETTINGS_AI:       "/settings/ai",
-
-  // Billing
-  UPGRADE:           "/upgrade",
-  BILLING_SUCCESS:   "/billing/success",
-  BILLING_CANCEL:    "/billing/cancel",
+  SETTINGS:          "/app/settings",
+  SETTINGS_PROFILE:  "/app/settings/profile",
+  SETTINGS_BILLING:  "/app/settings/billing",
+  SETTINGS_AUDIO:    "/app/settings/audio",
+  SETTINGS_HOTKEYS:  "/app/settings/hotkeys",
+  SETTINGS_PRIVACY:  "/app/settings/privacy",
+  SETTINGS_AI:       "/app/settings/models",
 } as const;
 
 export type AppRoute = string;

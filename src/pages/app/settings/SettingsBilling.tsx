@@ -31,6 +31,18 @@ import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
+import { toast } from "sonner";
+import { ENV } from "@/lib/env";
+import {
+  AlertTriangle,
+  ArrowUpRight,
+  CreditCard,
+  ExternalLink,
+  RefreshCw,
+  Shield,
+  XCircle,
+  Zap,
+} from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Constants
@@ -684,16 +696,3 @@ export default function SettingsBilling(): JSX.Element {
     </div>
   );
 }
-import {
-  AlertTriangle,
-  ArrowUpRight,
-  CreditCard,
-  ExternalLink,
-  RefreshCw,
-  Shield,
-  XCircle,
-  Zap,
-} from "lucide-react";
-import { toast } from "sonner";
-
-import { ENV } from "@/lib/env";

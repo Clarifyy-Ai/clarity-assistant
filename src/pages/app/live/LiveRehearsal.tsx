@@ -234,7 +234,7 @@ export default function LiveRehearsal() {
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground/60">
-                Press <kbd className="hotkey-badge">Ctrl+Shift+P</kbd> for panic mode
+                Press <kbd className="hotkey-badge">Ctrl+Shift+P</kbd> for calm coaching steps
               </p>
             </>
           ) : (

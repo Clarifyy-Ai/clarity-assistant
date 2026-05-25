@@ -36,13 +36,13 @@ const COMMANDS: NavCommand[] = [
   { label: "Sessions", path: "/app/sessions", icon: Calendar, group: "Sessions" },
   { label: "Debriefs", path: "/app/debrief", icon: Sparkles, group: "Sessions" },
   { label: "Prep lab", path: "/app/prep", icon: BookOpen, group: "Prep" },
-  { label: "STAR builder", path: "/app/prep/star", icon: BookOpen, group: "Prep" },
-  { label: "Project builder", path: "/app/prep/projects", icon: BookOpen, group: "Prep" },
+  { label: "STAR builder", path: "/app/prep/star-builder", icon: BookOpen, group: "Prep" },
+  { label: "Project builder", path: "/app/prep/project-builder", icon: BookOpen, group: "Prep" },
   { label: "Rephraser", path: "/app/prep/rephraser", icon: BookOpen, group: "Prep" },
   { label: "System design", path: "/app/prep/system-design", icon: BookOpen, group: "Prep" },
-  { label: "Coding hints", path: "/app/prep/coding", icon: BookOpen, group: "Prep" },
+  { label: "Coding hints", path: "/app/prep/coding-hints", icon: BookOpen, group: "Prep" },
   { label: "Documents", path: "/app/documents", icon: FileText, group: "Prep" },
-  { label: "Answer bank", path: "/app/answer-bank", icon: BookOpen, group: "Prep" },
+  { label: "Answer bank", path: "/app/answers", icon: BookOpen, group: "Prep" },
 ];
 
 export function CommandPalette() {

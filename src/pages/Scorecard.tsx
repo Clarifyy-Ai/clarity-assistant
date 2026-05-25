@@ -224,7 +224,7 @@ export default function Scorecard() {
         {/* ── CTA ────────────────────────────────────── */}
         <div className="flex flex-col sm:flex-row gap-3 pt-4">
           <Link
-            to="/mock/setup"
+            to="/app/mock"
             className="flex-1 text-center py-3 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-foreground font-semibold rounded-xl transition-all"
           >
             Practice Again

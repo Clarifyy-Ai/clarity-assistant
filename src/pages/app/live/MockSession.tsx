@@ -41,6 +41,7 @@ import {
   Loader2,
   AlertCircle,
 } from "lucide-react";
+import { toast } from "sonner";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -255,10 +256,15 @@ export default function MockSession() {
             }))
             .filter((q: MockQuestion) => q.text && q.text.length > 5);
 
-          if (mapped.length > 0) setQuestions(mapped);
+          if (mapped.length > 0) {
+            setQuestions(mapped);
+            return;
+          }
         }
+        toast.info("Using built-in practice questions — AI question generation was unavailable.");
       } catch (err) {
         console.error("[LiveMockSession] AI question load failed:", err);
+        toast.info("Using built-in practice questions — connect to generate personalized questions.");
       }
     }
 

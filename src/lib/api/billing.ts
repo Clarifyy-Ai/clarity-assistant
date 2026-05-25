@@ -145,12 +145,12 @@ export function getCheckoutUrls(): {
   const origin = window.location.origin;
 
   return {
-    success_url: `${origin}/app/billing?checkout=success`,
-    cancel_url: `${origin}/app/billing?checkout=cancelled`,
+    success_url: `${origin}/app/settings/billing?checkout=success`,
+    cancel_url: `${origin}/app/settings/billing?checkout=cancelled`,
   };
 }
 
-export function getBillingReturnUrl(path = "/app/billing"): string {
+export function getBillingReturnUrl(path = "/app/settings/billing"): string {
   return `${window.location.origin}${path}`;
 }
 
