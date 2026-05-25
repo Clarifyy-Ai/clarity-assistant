@@ -453,7 +453,7 @@ export default function Landing() {
         <div className="max-w-6xl mx-auto">
           <motion.div className="text-center mb-10" {...fadeUp()}>
             <h2 className="text-2xl sm:text-3xl font-bold">
-              Four pillars. One unfair advantage.
+              Four pillars. One complete prep system.
             </h2>
             <p className="mt-3 text-sm text-muted-foreground max-w-xl mx-auto">
               Every feature works together — before, during, and after your interviews.

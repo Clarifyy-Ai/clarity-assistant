@@ -95,7 +95,19 @@ To re-enable capture features: set `SCREEN_CAPTURE_EVASION_ENABLED` in `featureG
 
 ---
 
-## 6. Files changed (this audit)
+## 6. Pass 2 fixes (continued audit)
+
+| Severity | Issue | Fix | Files |
+|----------|-------|-----|-------|
+| P1 | Private mode cosmetic only | Block Edge Function calls when private mode on | `fetchEdge.ts`, `SettingsPrivacy.tsx` |
+| P1 | Prep Lab AI tool parse errors | Use `fetchEdgeJson` for wrapped responses | `PrepLab.tsx` |
+| P2 | Duplicate session XP on refresh | Session-scoped dedupe via `sessionStorage` | `useGamification.ts` |
+| P2 | Marketing “unfair advantage” copy | Accurate headline | `Landing.tsx` |
+| P2 | Plan feature “Stealth overlay” | Renamed to “Practice overlay” | `subscriptionManager.ts` |
+
+---
+
+## 7. Files changed (this audit)
 
 - `src/lib/compliance/featureGates.ts` (new)
 - `src/lib/stealth/stealthActions.ts`

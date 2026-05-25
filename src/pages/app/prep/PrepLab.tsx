@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { EDGE_BASE } from "@/lib/env";
-import { fetchEdge } from "@/lib/network/fetchEdge";
+import { fetchEdge, fetchEdgeJson } from "@/lib/network/fetchEdge";
 
 // ─────────────────────────────────────────────────────────────────
 // PrepLab — STAR builder, question bank, AI tools
@@ -608,11 +608,10 @@ function AIToolModal({
 
     try {
 
-      const res = await fetchEdge("prep-tool", { tool_id: toolId, input });
-
-      if (!res.ok) throw new Error(`AI tool returned ${res.status}`);
-
-      const data = await res.json();
+      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
+        tool_id: toolId,
+        input,
+      });
       setOutput(data.result ?? "");
     } catch (err) {
       console.error("AI tool run() failed:", err);

@@ -5,9 +5,11 @@ import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Toggle } from "@/components/ui/Toggle";
+import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/Badge";
-import { CheckCircle, Shield, Eye, Database, Lock } from "lucide-react";
+import { CheckCircle, Shield, Eye, Database, Lock, WifiOff } from "lucide-react";
 import { toast } from "sonner";
+import { usePrivateMode } from "@/hooks/usePrivateMode";
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsPrivacy
@@ -70,6 +72,7 @@ const PRIVACY_SETTINGS = [
 
 export default function SettingsPrivacy() {
   const { user, profile } = useAuthStore();
+  const { enabled: privateMode, toggle: togglePrivateMode } = usePrivateMode();
 
   const [prefs,  setPrefs]  = useState<Record<string, boolean>>(
     profile?.privacy_prefs ?? {
@@ -109,6 +112,24 @@ export default function SettingsPrivacy() {
   return (
     <div className="space-y-5">
       <h2 className="text-lg font-bold text-foreground">Privacy</h2>
+
+      <Card className="border-violet-500/20">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex gap-3">
+            <div className="w-9 h-9 rounded-xl bg-violet-500/10 flex items-center justify-center shrink-0">
+              <WifiOff className="w-4 h-4 text-violet-400" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-foreground">Private mode</p>
+              <p className="text-xs text-muted-foreground mt-1 leading-relaxed max-w-md">
+                Pauses cloud AI requests and analysis while enabled. Use on shared devices
+                or when you do not want session data sent to Edge Functions.
+              </p>
+            </div>
+          </div>
+          <Switch checked={privateMode} onCheckedChange={togglePrivateMode} />
+        </div>
+      </Card>
 
       {PRIVACY_SETTINGS.map((group) => (
         <Card key={group.group}>

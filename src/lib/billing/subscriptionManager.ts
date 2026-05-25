@@ -89,7 +89,7 @@ export const PLANS: Record<PlanId, Plan> = {
       },
       {
         key: "overlay",
-        label: "Stealth overlay",
+        label: "Practice overlay",
         included: false,
       },
       {
@@ -158,7 +158,7 @@ export const PLANS: Record<PlanId, Plan> = {
       },
       {
         key: "overlay",
-        label: "Stealth overlay",
+        label: "Practice overlay",
         included: true,
       },
       {
@@ -228,7 +228,7 @@ export const PLANS: Record<PlanId, Plan> = {
       },
       {
         key: "overlay",
-        label: "Stealth overlay",
+        label: "Practice overlay",
         included: true,
       },
       {
@@ -297,7 +297,7 @@ export const PLANS: Record<PlanId, Plan> = {
       },
       {
         key: "overlay",
-        label: "Stealth overlay",
+        label: "Practice overlay",
         included: true,
       },
       {

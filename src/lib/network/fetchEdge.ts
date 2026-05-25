@@ -1,7 +1,13 @@
 // src/lib/network/fetchEdge.ts
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
+import { getPrivateMode } from "@/hooks/usePrivateMode";
 import { EDGE_BASE, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
+
+/** Edge calls blocked while private mode is on (no cloud AI / analysis). */
+const PRIVATE_MODE_ALLOWLIST = new Set([
+  "ping",
+]);
 
 /**
  * Read JWT from auth store first (fast path, no network).
@@ -61,6 +67,12 @@ export async function fetchEdge(
     timeoutMs?: number;
   }
 ): Promise<Response> {
+  if (getPrivateMode() && !PRIVATE_MODE_ALLOWLIST.has(fnName)) {
+    throw new Error(
+      "Private mode is enabled — cloud AI and analysis are paused. Turn off private mode in Settings → Privacy to continue.",
+    );
+  }
+
   const method = options?.method ?? "POST";
   const timeoutMs = options?.timeoutMs ?? 30_000;
   const isFormData = body instanceof FormData;

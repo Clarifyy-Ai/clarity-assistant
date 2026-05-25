@@ -113,6 +113,27 @@ export const useGamificationStore = create<GamificationStore>()(
 // Awards a badge when the user first reaches a given level.
 // ─────────────────────────────────────────────────────────────────
 
+const XP_DEDUPE_PREFIX = "clarify_xp_awarded:";
+
+/** Returns true if this XP event was already awarded (same dedupe key). */
+function wasXpAlreadyAwarded(eventType: XPEventType, dedupeKey?: string): boolean {
+  if (!dedupeKey) return false;
+  try {
+    return sessionStorage.getItem(`${XP_DEDUPE_PREFIX}${eventType}:${dedupeKey}`) != null;
+  } catch {
+    return false;
+  }
+}
+
+function markXpAwarded(eventType: XPEventType, dedupeKey?: string): void {
+  if (!dedupeKey) return;
+  try {
+    sessionStorage.setItem(`${XP_DEDUPE_PREFIX}${eventType}:${dedupeKey}`, String(Date.now()));
+  } catch {
+    /* ignore quota errors */
+  }
+}
+
 const LEVEL_BADGES: Partial<Record<number, BadgeId>> = {
   5:  "level_5",
   10: "level_10",
@@ -213,6 +234,10 @@ export function useGamification() {
   ): Promise<void> => {
     if (!user) return;
 
+    const dedupeKey =
+      typeof metadata.dedupe_key === "string" ? metadata.dedupe_key : undefined;
+    if (wasXpAlreadyAwarded(eventType, dedupeKey)) return;
+
     const amount    = XP_REWARDS[eventType] ?? 0;
     if (!amount) return;
 
@@ -244,6 +269,7 @@ export function useGamification() {
     }
 
     store.setXP(newTotal);
+    markXpAwarded(eventType, dedupeKey);
 
     // ── Level-up achievement check ────────────────────────────
     // Re-read from store after the addXP call so we get the post-update level
@@ -346,6 +372,8 @@ export function useGamification() {
   const checkPostSessionAchievements = useCallback(async (params: {
     /** "live" = live co-pilot session, "mock" = mock interview */
     sessionType:      "live" | "mock";
+    /** Session id — used to prevent duplicate XP on re-entry / refresh */
+    sessionId?:       string;
     /** Total completed sessions for this user (fetched from DB before calling) */
     totalSessions:    number;
     /** Duration of this session in minutes */
@@ -359,16 +387,19 @@ export function useGamification() {
   }): Promise<void> => {
     if (!user) return;
 
+    const dedupe = params.sessionId ?? `session-${params.totalSessions}`;
+
     // 1. Award session-completion XP
     await awardXP(
       params.sessionType === "live"
         ? "live_session_complete"
         : "mock_session_complete",
+      { dedupe_key: dedupe },
     );
 
     // 2. First-ever session bonus XP
     if (params.totalSessions === 1) {
-      await awardXP("first_session");
+      await awardXP("first_session", { dedupe_key: `${dedupe}:first` });
     }
 
     // 3. Session-count milestone badges
