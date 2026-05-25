@@ -1,6 +1,6 @@
 // @ts-nocheck
-import { EDGE_BASE, SUPABASE_ANON_KEY } from "@/lib/env";
 import { useState, useEffect, useCallback } from "react";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import type {
@@ -44,21 +44,11 @@ export function useAnalytics() {
     setError(null);
 
     try {
-      
-      const { data: { session } } = await supabase.auth.getSession();
-      const response  = await fetch(`${EDGE_BASE}/analytics-dashboard`, {
-        method: "POST",
-        headers: {
-          "Content-Type":  "application/json",
-          "Authorization": `Bearer ${session?.access_token ?? ""}`,
-        },
-        body: JSON.stringify({ filter }),
-      });
-
-      if (!response.ok) throw new Error(`Analytics fetch failed: ${response.status}`);
-
-      const result = await response.json();
-      setData(result as AnalyticsDashboardData);
+      const result = await fetchEdgeJson<AnalyticsDashboardData>(
+        "analytics-dashboard",
+        { filter },
+      );
+      setData(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load analytics");
     } finally {

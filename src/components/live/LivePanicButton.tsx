@@ -3,8 +3,7 @@ import { PANIC_RESPONSE } from "@/types/session.types";
 import { cn } from "@/lib/utils";
 
 // ─────────────────────────────────────────────────────────────────
-// LivePanicButton
-// 🆘 Always-visible panic button. Zero latency, deterministic.
+// LiveCalmStepsButton — instant breathing / structure prompts (not overlay hiding).
 // Shows calming steps instantly — no AI call, no network required.
 // ─────────────────────────────────────────────────────────────────
 
@@ -34,10 +33,10 @@ export function LivePanicButton({ className }: LivePanicButtonProps) {
         "transition-all active:scale-95",
         className
       )}
-      title="Panic — show calming steps instantly (Ctrl+Shift+P)"
-      aria-label="Show panic guidance now"
+      title="Calm steps — grounding prompts (Ctrl+Shift+P)"
+      aria-label="Show calm coaching steps now"
     >
-      🆘 Panic
+      Calm steps
     </button>
   );
 }

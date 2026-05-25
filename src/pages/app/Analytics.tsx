@@ -37,6 +37,24 @@ export default function Analytics() {
     );
   }
 
+  if (analytics.error) {
+    return (
+      <div className="space-y-6 max-w-5xl">
+        <PageHeader title="Analytics" subtitle="Track your interview performance over time" />
+        <Card className="border-red-500/30 bg-red-500/10 p-4">
+          <p className="text-sm text-red-300">{analytics.error}</p>
+          <button
+            type="button"
+            onClick={() => analytics.reload()}
+            className="mt-3 text-xs font-medium text-violet-400 hover:underline"
+          >
+            Retry
+          </button>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 max-w-5xl">
       <PageHeader

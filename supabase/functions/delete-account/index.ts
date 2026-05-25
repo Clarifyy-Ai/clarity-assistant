@@ -40,22 +40,7 @@ Deno.serve(async (req) => {
     /* -------------------------------------------------------
        VALIDATE BODY
     ------------------------------------------------------- */
-    const body = await req.json().catch(() => null);
-    if (!body || typeof body.user_id !== "string") {
-      return new Response(JSON.stringify({ error: "Invalid body" }), {
-        status: 400,
-        headers: getCorsHeaders(req) });
-    }
-
-    const targetUserId = body.user_id;
-
-    // IMPORTANT: Users can ONLY delete their own accounts
-    if (targetUserId !== authenticatedUserId) {
-      return new Response(
-        JSON.stringify({ error: "Cannot delete another user's account" }),
-        { status: 403, headers: getCorsHeaders(req) }
-      );
-    }
+    const targetUserId = authenticatedUserId;
 
     /* -------------------------------------------------------
        DELETE ALL USER DATA IN SAFE ORDER

@@ -35,7 +35,7 @@ export default function SettingsDanger() {
     setExporting(true);
     try {
       
-      const res = await fetchEdge("export-user-data", { user_id: user?.id });
+      const res = await fetchEdge("export-user-data", { type: "full" });
 
       if (!res.ok) throw new Error(`Export failed: ${res.statusText}`);
 
@@ -86,7 +86,7 @@ export default function SettingsDanger() {
     setDeleting(true);
     try {
       
-      const res = await fetchEdge("delete-account", { user_id: user.id });
+      const res = await fetchEdge("delete-account", {});
 
       if (!res.ok) throw new Error(`Account deletion failed: ${res.statusText}`);
 

@@ -1,5 +1,4 @@
 // src/hooks/useGamification.ts
-import { fetchEdge } from "@/lib/network/fetchEdge";
 import { useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
@@ -186,10 +185,17 @@ export function useGamification() {
     store.unlockBadge(badgeId);
     store.setPendingBadge(badgeId); // triggers toast animation in UI
 
-    // Persist badge + trigger any bonus XP in the edge function
-    try {
-      await fetchEdge("unlock-badge", { badge_id: badgeId });
-    } catch { /* non-fatal — badge is already saved locally */ }
+    const { error: badgeErr } = await supabase.from("user_badges").upsert(
+      {
+        user_id:   user.id,
+        badge_id:  badgeId,
+        earned_at: new Date().toISOString(),
+      },
+      { onConflict: "user_id,badge_id", ignoreDuplicates: true },
+    );
+    if (badgeErr) {
+      console.warn("[useGamification] badge persist failed:", badgeErr.message);
+    }
 
     // Award bonus XP defined on the badge (e.g. achievement completionist bonus)
     const bonus = BADGE_DEFINITIONS[badgeId]?.xp_bonus ?? 0;
@@ -213,10 +219,31 @@ export function useGamification() {
     const prevLevel = useGamificationStore.getState().level;
     store.addXP(amount);
 
-    // Persist to DB via edge function (non-blocking)
-    try {
-      await fetchEdge("award-xp", { event_type: eventType, xp: amount, metadata });
-    } catch { /* non-fatal */ }
+    const { data: profileData, error: fetchErr } = await supabase
+      .from("profiles")
+      .select("xp")
+      .eq("id", user.id)
+      .single();
+
+    if (fetchErr || !profileData) {
+      store.addXP(-amount);
+      console.error("[useGamification] XP fetch failed:", fetchErr?.message);
+      return;
+    }
+
+    const newTotal = (profileData.xp ?? 0) + amount;
+    const { error: updateErr } = await supabase
+      .from("profiles")
+      .update({ xp: newTotal, updated_at: new Date().toISOString() })
+      .eq("id", user.id);
+
+    if (updateErr) {
+      store.addXP(-amount);
+      console.error("[useGamification] XP update failed:", updateErr.message);
+      return;
+    }
+
+    store.setXP(newTotal);
 
     // ── Level-up achievement check ────────────────────────────
     // Re-read from store after the addXP call so we get the post-update level

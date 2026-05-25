@@ -97,6 +97,55 @@ Deno.serve(async (req: Request) => {
         ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
         : 0;
 
+    const mid = new Date();
+    mid.setDate(mid.getDate() - Math.min(days, 30));
+    const recentSc = scorecardList.filter((sc) => new Date(sc.created_at) >= mid);
+    const olderSc = scorecardList.filter((sc) => new Date(sc.created_at) < mid);
+
+    const avgOf = (list: typeof scorecardList, field: "overall_score" | "filler_rate" | "wpm_avg") => {
+      const vals = list.map((s) => s[field]).filter((x): x is number => typeof x === "number");
+      return vals.length ? vals.reduce((a, b) => a + b, 0) / vals.length : null;
+    };
+
+    const recentScoreAvg = avgOf(recentSc, "overall_score");
+    const olderScoreAvg = avgOf(olderSc, "overall_score");
+    const scoreDelta30d =
+      recentScoreAvg !== null && olderScoreAvg !== null
+        ? Math.round(recentScoreAvg - olderScoreAvg)
+        : null;
+
+    const recentFillerAvg = avgOf(recentSc, "filler_rate");
+    const olderFillerAvg = avgOf(olderSc, "filler_rate");
+    const fillerDelta30d =
+      recentFillerAvg !== null && olderFillerAvg !== null
+        ? Math.round((recentFillerAvg - olderFillerAvg) * 100) / 100
+        : null;
+
+    const fillerTrend = scorecardList
+      .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
+      .slice(-30)
+      .map((sc) => ({
+        date: sc.created_at,
+        total_fillers: Math.round((sc.filler_rate ?? 0) * 10),
+        top_filler: sc.top_filler_word ?? null,
+      }));
+
+    const byType = new Map<string, { sum: number; count: number; sessions: number }>();
+    for (const sc of scorecardList) {
+      const session = sessionList.find((s) => s.id === sc.session_id);
+      const label = session?.interview_type ?? "behavioral";
+      const cur = byType.get(label) ?? { sum: 0, count: 0, sessions: 0 };
+      cur.sum += sc.overall_score ?? 0;
+      cur.count += 1;
+      cur.sessions += 1;
+      byType.set(label, cur);
+    }
+    const weakSpotRadar = [...byType.entries()].map(([label, v]) => ({
+      label,
+      avg_score: v.count ? Math.round(v.sum / v.count) : 0,
+      session_count: v.sessions,
+    }));
+
     /* ---------------------------
        RECENT SESSIONS (SAFE)
     --------------------------- */
@@ -134,7 +183,7 @@ Deno.serve(async (req: Request) => {
       total_sessions: profile?.total_sessions ?? totalSessions,
       total_practice_hours: Math.round((totalMinutes / 60) * 10) / 10,
       avg_confidence_score: avgScore,
-      avg_confidence_delta_30d: null, // TODO: implement later
+      avg_confidence_delta_30d: scoreDelta30d,
 
       current_streak: profile?.streak_days ?? 0,
       longest_streak: profile?.longest_streak ?? 0,
@@ -143,7 +192,7 @@ Deno.serve(async (req: Request) => {
         scorecardList.reduce((sum, sc) => sum + (sc.filler_rate ?? 0), 0) /
         (scorecardList.length || 1),
 
-      avg_filler_delta_30d: null, // TODO
+      avg_filler_delta_30d: fillerDelta30d,
 
       avg_wpm:
         scorecardList.reduce((sum, sc) => sum + (sc.wpm_avg ?? 0), 0) /
@@ -152,8 +201,8 @@ Deno.serve(async (req: Request) => {
       recent_sessions: recentSessions,
       confidence_trend: confidenceTrend,
 
-      filler_trend: [], // TODO: implement from scorecards
-      weak_spot_radar: [],
+      filler_trend: fillerTrend,
+      weak_spot_radar: weakSpotRadar,
       leaderboard: [],
     };
 

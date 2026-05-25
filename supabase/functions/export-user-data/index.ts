@@ -38,21 +38,9 @@ Deno.serve(async (req) => {
     /* ---------------------------------------------------
        VALIDATE BODY
     --------------------------------------------------- */
-    const body = await req.json().catch(() => null);
-    const { user_id, type = "full" } = body ?? {};
-
-    if (!user_id) {
-      return new Response(JSON.stringify({ error: "Missing user_id" }), {
-        status: 400,
-        headers: getCorsHeaders(req) });
-    }
-
-    // User can export ONLY their own data
-    if (user.id !== user_id) {
-      return new Response(JSON.stringify({ error: "Forbidden" }), {
-        status: 403,
-        headers: getCorsHeaders(req) });
-    }
+    const body = await req.json().catch(() => ({}));
+    const type = body?.type ?? "full";
+    const user_id = user.id;
 
     /* ---------------------------------------------------
        START EXPORT STRUCT

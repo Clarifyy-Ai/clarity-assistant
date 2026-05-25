@@ -160,7 +160,7 @@ export function useDocuments() {
       if (resumeErr) throw new Error(resumeErr.message);
 
       // Fire-and-forget XP award
-      fetchEdge("award-xp", { event_type: "resume_uploaded", xp: 20, metadata: {} }).catch(() => {});
+      // XP handled by useGamification / useXPSystem at call sites
 
       // Fire-and-forget parse
       parseResume(resumeId, path, file.type);
@@ -251,9 +251,6 @@ export function useDocuments() {
     });
 
     if (error) return { jdId: null, error: error.message };
-
-    // Fire-and-forget XP award
-    fetchEdge("award-xp", { event_type: "document_uploaded", xp: 20, metadata: {} }).catch(() => {});
 
     parseJobDescription(jdId, params.rawText);
     await loadDocuments();

@@ -159,7 +159,7 @@ export function useXPSystem() {
         .insert({
           user_id:     user.id,
           badge_id:    badgeId,
-          unlocked_at: new Date().toISOString(),
+          earned_at: new Date().toISOString(),
         } as any)
         .then(({ error: badgeErr }) => {
           if (badgeErr) {

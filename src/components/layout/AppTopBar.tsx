@@ -84,7 +84,11 @@ export function AppTopBar() {
           type="button"
           style={noDragStyle}
           onClick={toggleAppStealthMode}
-          title={stealthMode ? "Disable stealth mode" : "Enable stealth mode"}
+          title={
+            stealthMode
+              ? "Disable discrete UI labels (restores Clarify AI naming)"
+              : "Use neutral nav labels for private practice (does not hide the app from screen sharing)"
+          }
           className={cn(
             "flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl border text-[10px] sm:text-xs font-medium transition-all",
             stealthMode
@@ -97,7 +101,7 @@ export function AppTopBar() {
           ) : (
             <ShieldOff className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
           )}
-          <span className="hidden sm:inline">Stealth</span>
+          <span className="hidden sm:inline">Discrete UI</span>
         </button>
 
         <div style={noDragStyle}>

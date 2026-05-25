@@ -79,7 +79,7 @@ export default function SettingsData() {
 
     
     try {
-      const res = await fetchEdge("export-user-data", { user_id: user?.id, type });
+      const res = await fetchEdge("export-user-data", { type });
 
       const blob = await res.blob();
       const ext  = EXPORT_TYPES.find((t) => t.id === type)?.format.toLowerCase() ?? "json";

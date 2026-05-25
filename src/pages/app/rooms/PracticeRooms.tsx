@@ -56,9 +56,15 @@ export default function PracticeRooms() {
 
   return (
     <div>
+      <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200/90">
+        <strong className="font-semibold">Beta — text rooms only.</strong>{" "}
+        Peer video and WebRTC are not enabled yet. You can create a room, join via chat,
+        and coordinate practice — live A/V pairing ships in a future release.
+      </div>
+
       <PageHeader
         title="Practice Rooms"
-        subtitle="Join or host live mock interviews with other candidates"
+        subtitle="Coordinate practice sessions with other candidates (chat-based)"
         action={
           <Button as={Link} to="/app/rooms/new" variant="primary" size="sm" leftIcon={<Plus className="w-4 h-4" />}>
             New Room
