@@ -36,6 +36,11 @@ dist-ssr
 *.key
 
 # =========================
+# Supabase deploy artifacts (generated)
+# =========================
+.deploy-payloads/
+
+# =========================
 # 🧪 Testing & Coverage
 # =========================
 coverage/

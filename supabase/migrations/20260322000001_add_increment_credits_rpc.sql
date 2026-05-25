@@ -18,11 +18,11 @@ AS $$
   WHERE id = p_user_id;
 $$;
 
-GRANT EXECUTE ON FUNCTION public.increment_profile_credits TO service_role;
+GRANT EXECUTE ON FUNCTION public.increment_profile_credits(UUID, INTEGER, TEXT) TO service_role;
 
--- Partial unique index ensures each Stripe event can only produce one sentinel record.
--- The sentinel rows have action = 'stripe_event:<event_id>' and amount = 0.
--- This prevents duplicate credit grants when Stripe retries the same webhook event.
-CREATE UNIQUE INDEX IF NOT EXISTS credit_transactions_stripe_event_unique
-  ON public.credit_transactions (action)
-  WHERE action LIKE 'stripe_event:%';
+REVOKE ALL ON FUNCTION public.increment_profile_credits(UUID, INTEGER, TEXT) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.increment_profile_credits(UUID, INTEGER, TEXT) FROM anon;
+REVOKE ALL ON FUNCTION public.increment_profile_credits(UUID, INTEGER, TEXT) FROM authenticated;
+
+-- Stripe idempotency: use a dedicated text column (see stripe-webhook handler) rather than
+-- a partial index on enum `action` (LIKE/cast breaks on Postgres enum types).

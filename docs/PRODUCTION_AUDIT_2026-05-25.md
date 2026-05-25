@@ -55,7 +55,30 @@ To re-enable capture features: set `SCREEN_CAPTURE_EVASION_ENABLED` in `featureG
 
 ---
 
-## 4. Production checklist (summary)
+## 4. Supabase remote (Clarify.AI `qzgvjrvtkwlzxpmlddkx`) — 2026-05-25
+
+| Item | Status |
+|------|--------|
+| `profiles.privacy_prefs` / `notification_prefs` | **Applied** (`add_profile_prefs_columns`) |
+| `increment_profile_credits` RPC | **Applied** (`add_increment_profile_credits_fn`) |
+| RPC grants (`increment_profile_credits`) | **Locked down** — `service_role` only (revoked `anon` / `authenticated`) |
+| `stealth_mode` default | `false` on remote |
+| Edge functions `analytics-dashboard`, `export-user-data`, `delete-account` | **Partial deploy** — v94/v92/v98 exist but shared CORS/credits helpers on remote may still be stubs; redeploy full repo sources (see below) |
+
+**Redeploy full edge function sources** (Management API or MCP):
+
+```powershell
+$env:SUPABASE_ACCESS_TOKEN = "sbp_..."   # Dashboard → Account → Access Tokens
+node scripts/deploy-all-three.mjs
+```
+
+Or per function: `node scripts/write-mcp-deploy-args.mjs <name>` then MCP `deploy_edge_function` with `.deploy-payloads/_mcp-call-<name>.json`.
+
+**Dashboard (manual):** enable leaked-password protection; set secrets `ALLOWED_ORIGINS`, `GEMINI_API_KEY`, `DEEPGRAM_API_KEY`, `STRIPE_*`, Google OAuth if using calendar.
+
+---
+
+## 5. Production checklist (summary)
 
 | Feature | Status |
 |---------|--------|
