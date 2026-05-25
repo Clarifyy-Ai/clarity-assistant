@@ -79,14 +79,33 @@ export function useLiveCopilot({
     const transcript = audioState.transcript?.full_transcript ?? "";
     const lastTranscript = transcript.length > 2500 ? transcript.slice(-2500) : transcript;
 
+    const summary =
+      typeof overlay.resume_context === "string"
+        ? overlay.resume_context
+        : overlay.resume_context?.summary ?? "";
+
     return {
-      session_type: cfg.interview_type ?? "behavioral",
+      user_id: profile?.id ?? "",
+      full_name: profile?.full_name ?? null,
+      role: cfg.role ?? (profile as any)?.target_role ?? null,
+      domain: profile?.domain ?? null,
+      experience_level: (profile?.experience_level as any) ?? null,
+      years_of_experience: profile?.experience_years ?? null,
       target_company: cfg.company ?? "",
-      target_role: cfg.role ?? (profile as any)?.target_role ?? "",
-      resume_summary: overlay.resume_context?.summary ?? "",
+      coach_tone: (profile?.coach_tone as any) ?? "supportive",
+      hint_style: (cfg.hint_style as any) ?? "short_hints",
+      resume_skills: [],
+      resume_projects: [],
+      resume_experience_summary: summary || null,
+      jd_required_skills: [],
+      jd_seniority_signals: [],
+      gap_skills: [],
+      session_goals: [],
+      filler_words_to_watch: [],
+      current_filler_count: 0,
+      current_wpm: 0,
+      session_type: cfg.interview_type ?? "behavioral",
       last_transcript: lastTranscript,
-      call_type: overlay.session_call_type,
-      language: overlay.session_language,
     };
   }, [profile]);
 

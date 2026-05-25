@@ -5,6 +5,7 @@ import { Link } from "react-router-dom";
 import { useLiveCopilot } from "@/hooks/useLiveCopilot";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
+import { useAudioStore } from "@/store/audioStore";
 import { useAuthStore } from "@/store/userStore";
 
 import { OverlayWindow } from "@/components/overlay/OverlayWindow";
@@ -180,7 +181,14 @@ export default function LiveOverlay() {
 
   // ── Generate hint ─────────────────────────────────────────────────────────
   const handleGenerate = useCallback(() => {
-    const question = useOverlayStore.getState().current_question;
+    const store = useOverlayStore.getState();
+    let question = store.current_question?.trim() ?? "";
+    if (!question) {
+      const utterances = useAudioStore.getState().transcript?.utterances ?? [];
+      const lastThem = [...utterances].reverse().find((u) => u.speaker === "interviewer");
+      question = lastThem?.text?.trim() ?? "";
+      if (question) store.setCurrentQuestion(question);
+    }
     if (question) copilot.requestLiveHint(question);
     else toast.info("Speak a question or type one in Chat first");
   }, [copilot]);

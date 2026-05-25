@@ -151,6 +151,7 @@ function getRequestOrigin(req: Request): string | null {
   return normalizeOrigin(rawOrigin);
 }
 
+/** Lovable / preview staging hosts (e.g. preview--clarify-aii.lovable.app). */
 const PREVIEW_HOST_PATTERNS = [
   /\.lovable\.app$/i,
   /\.lovable\.dev$/i,
@@ -167,15 +168,15 @@ function isPreviewOrigin(origin: string): boolean {
   }
 }
 
+function isOriginAllowedForCors(requestOrigin: string | null): boolean {
+  if (!requestOrigin) return true;
+  if (getAllowedOrigins().has(requestOrigin)) return true;
+  if (isPreviewOrigin(requestOrigin)) return true;
+  return false;
+}
+
 export function isOriginAllowed(req: Request): boolean {
-  const requestOrigin = getRequestOrigin(req);
-
-  // Server-to-server/no-origin requests are not browser CORS requests.
-  if (!requestOrigin) {
-    return true;
-  }
-
-  return getAllowedOrigins().has(requestOrigin) || isPreviewOrigin(requestOrigin);
+  return isOriginAllowedForCors(getRequestOrigin(req));
 }
 
 /**
@@ -183,7 +184,6 @@ export function isOriginAllowed(req: Request): boolean {
  */
 export function getCorsHeaders(req: Request): Record<string, string> {
   const requestOrigin = getRequestOrigin(req);
-  const allowedOrigins = getAllowedOrigins();
 
   const headers: Record<string, string> = {
     "Access-Control-Allow-Methods": ALLOWED_METHODS,
@@ -192,13 +192,12 @@ export function getCorsHeaders(req: Request): Record<string, string> {
     "Vary": "Origin",
   };
 
-  const originOk =
-    !!requestOrigin && (allowedOrigins.has(requestOrigin) || isPreviewOrigin(requestOrigin));
-
-  if (originOk) {
-    headers["Access-Control-Allow-Origin"] = requestOrigin!;
+  if (requestOrigin && isOriginAllowedForCors(requestOrigin)) {
+    headers["Access-Control-Allow-Origin"] = requestOrigin;
     headers["Access-Control-Allow-Credentials"] = "true";
-  } else if (requestOrigin) {
+  }
+
+  if (requestOrigin && !isOriginAllowedForCors(requestOrigin)) {
     console.warn("[cors] Rejected origin:", requestOrigin);
   }
 
@@ -228,7 +227,7 @@ export function handleCors(req: Request): Response | null {
     });
   }
 
-  if (!getAllowedOrigins().has(requestOrigin) && !isPreviewOrigin(requestOrigin)) {
+  if (!isOriginAllowedForCors(requestOrigin)) {
     console.warn("[cors] Preflight rejected for origin:", requestOrigin);
 
     return new Response(

@@ -246,7 +246,8 @@ export function OverlayWindow({
       }}
       role="dialog"
       aria-label="Clarify AI Overlay"
-      aria-hidden={!shouldShow}
+      aria-hidden={shouldShow ? undefined : true}
+      {...(!shouldShow ? ({ inert: "" } as const) : {})}
     >
       <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent pointer-events-none" />
 
