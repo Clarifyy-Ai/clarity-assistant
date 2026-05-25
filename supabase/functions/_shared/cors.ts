@@ -192,16 +192,13 @@ export function getCorsHeaders(req: Request): Record<string, string> {
     "Vary": "Origin",
   };
 
-  if (requestOrigin && allowedOrigins.has(requestOrigin)) {
-    headers["Access-Control-Allow-Origin"] = requestOrigin;
+  const originOk =
+    !!requestOrigin && (allowedOrigins.has(requestOrigin) || isPreviewOrigin(requestOrigin));
 
-    // Keep this true only for compatibility.
-    // Frontend apiClient currently uses credentials: "omit",
-    // so cookies are not required for app API calls.
+  if (originOk) {
+    headers["Access-Control-Allow-Origin"] = requestOrigin!;
     headers["Access-Control-Allow-Credentials"] = "true";
-  }
-
-  if (requestOrigin && !allowedOrigins.has(requestOrigin)) {
+  } else if (requestOrigin) {
     console.warn("[cors] Rejected origin:", requestOrigin);
   }
 
