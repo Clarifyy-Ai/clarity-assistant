@@ -256,6 +256,8 @@ const AdminLiveChat = lazy(
 const AdminQuestionEditor = lazy(
   () => import("@/pages/app/admin/AdminQuestionEditor")
 );
+const AdminAuditLog = lazy(() => import("@/pages/app/admin/AdminAuditLog"));
+const AdminSupport = lazy(() => import("@/pages/app/admin/AdminSupport"));
 const AdminLayout = lazy(() => import("@/pages/app/admin/AdminLayout"));
 const Scorecard = lazy(() => import("@/pages/Scorecard"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
@@ -657,6 +659,8 @@ const routes = [
             path: "questions/:id",
             element: <Page component={AdminQuestionEditor} />,
           },
+          { path: "audit-log", element: <Page component={AdminAuditLog} /> },
+          { path: "support",   element: <Page component={AdminSupport} /> },
         ],
       },
     ],
