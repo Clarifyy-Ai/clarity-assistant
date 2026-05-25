@@ -119,7 +119,7 @@ export function OverlaySettings({
     const os = useOverlayStore.getState();
 
     setAppStealthMode(false);
-    os.setProctorSafe?.(true);
+    os.setProctorSafe?.(false);
     os.setStealthOpacity(90);
     os.setHintStyle?.("short_hints");
     os.setSimpleLanguage?.(false);
@@ -164,7 +164,8 @@ export function OverlaySettings({
           <div className="text-[12px] text-amber-400/80 flex-1">
             <p className="font-bold mb-0.5">Safety Reminder</p>
             <p className="text-amber-400/60 leading-snug">
-              Do not enable unsafe settings during actual interviews.
+              Use for authorized practice and productivity only. The overlay stays visible on
+              screen share and proctoring tools.
             </p>
           </div>
           <button
@@ -215,8 +216,8 @@ export function OverlaySettings({
         <div className="my-2 border-t border-white/[0.06]" />
 
         <SettingRow
-          label="Stealth Mode"
-          description="Hide cursor and pointer events"
+          label="Discrete UI"
+          description="Lower opacity until hover — still visible on screen share"
           icon={
             currentSettings.stealthMode ? (
               <EyeOff className="h-3.5 w-3.5 text-violet-400" aria-hidden="true" />
@@ -229,13 +230,13 @@ export function OverlaySettings({
             checked={currentSettings.stealthMode}
             onChange={(v) => handleStoreSettingChange("stealthMode", v)}
             color="bg-violet-500"
-            ariaLabel="Toggle stealth mode"
+            ariaLabel="Toggle discrete UI mode"
           />
         </SettingRow>
 
         <SettingRow
-          label="Proctor Safe Position"
-          description="Enforce safe position away from detection zones"
+          label="Corner snap layout"
+          description="Snap overlay to a screen corner (layout only, not concealment)"
           icon={<Shield className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />}
         >
           <Toggle
@@ -332,8 +333,8 @@ export function OverlaySettings({
           </p>
           <div className="space-y-1 text-[11px] font-mono text-white/25">
             <p>Ctrl+Shift+H — Toggle Overlay</p>
-            <p>Ctrl+Shift+S — Stealth Mode</p>
-            <p>Ctrl+Shift+P — Panic Button</p>
+            <p>Ctrl+Shift+S — Discrete UI</p>
+            <p>Ctrl+Shift+P — Calm coaching steps</p>
             <p>Ctrl+Shift+Y — Cycle Hint Style</p>
             <p>Escape — Clear / Hide</p>
           </div>

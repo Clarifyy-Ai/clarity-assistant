@@ -17,14 +17,18 @@ interface CreateSessionParams {
   model?: string;
   resume_id?: string | null;
   jd_id?: string | null;
+  /** When provided (e.g. DB session from getOrCreateSession), do not replace with a random id */
+  session_id?: string | null;
 }
 
 export function useSessionOrchestrator() {
   const store = useSessionStore;
 
   const createSession = useCallback(async (params: CreateSessionParams) => {
-    const sessionId = crypto.randomUUID();
-    store.getState().resetSession();
+    const sessionId = params.session_id ?? store.getState().session_id ?? crypto.randomUUID();
+    if (!params.session_id) {
+      store.getState().resetSession();
+    }
     store.getState().setSessionId(sessionId);
     store.getState().setMode(params.session_type === "live" ? "live" : "mock");
     store.getState().setStatus("active");
@@ -89,6 +93,7 @@ export function useSessionOrchestrator() {
           resume_context: resumeCtx,
           interview_type: (session.config as any)?.interview_type ?? "behavioural",
           model: overlay.active_model ?? "gemini-2.0-flash",
+          session_id: session.session_id,
         },
       });
 

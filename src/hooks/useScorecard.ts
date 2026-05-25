@@ -126,28 +126,40 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
     try {
       const { data: session } = await supabase
         .from("sessions")
-        .select(`*, session_questions(*)`)
+        .select("*")
         .eq("id", sessionId)
         .single();
 
       if (!session) throw new Error("Session not found");
 
-      const { data: transcript } = await supabase
-        .from("transcripts")
-        .select("utterances, filler_occurrences, wpm_data_points")
+      const { data: answerRows } = await supabase
+        .from("session_answers")
+        .select("*")
         .eq("session_id", sessionId)
-        .single();
+        .order("created_at", { ascending: true });
 
-      const fillerOccurrences: FillerWordOccurrence[] = transcript?.filler_occurrences ?? [];
-      const wpmDataPoints: WPMDataPoint[] = transcript?.wpm_data_points ?? [];
+      const questionsForScoring = (answerRows ?? []).map((row: any) => ({
+        id: row.id,
+        question_text: row.question,
+        candidate_answer: row.answer ?? "",
+      }));
+
       const durationSeconds = session.duration_seconds ?? 0;
-
-      const fillerSummary = buildFillerSummary(fillerOccurrences, durationSeconds);
-      const wpmTrend = analyseWPMTrend(wpmDataPoints);
+      const fillerTotal = session.filler_words ?? session.total_filler_words ?? 0;
+      const fillerSummary = {
+        total: fillerTotal,
+        rate_per_minute:
+          durationSeconds > 0 ? (fillerTotal / durationSeconds) * 60 : 0,
+        top_3: [] as Array<{ word: string; count: number }>,
+      };
+      const wpmTrend = {
+        avg: session.avg_wpm ?? 140,
+        trend: "stable" as const,
+      };
 
       const questionScores = await scoreQuestions(
-        session.session_questions ?? [],
-        transcript?.utterances ?? [],
+        questionsForScoring,
+        [],
         session
       );
 
@@ -181,6 +193,17 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
       };
 
       await supabase.from("scorecards").insert(scorecard);
+
+      await supabase
+        .from("sessions")
+        .update({
+          overall_score: overallScore,
+          ai_feedback: feedback.coach_note,
+          strengths: feedback.strengths,
+          improvements: feedback.improvements,
+          duration_seconds: durationSeconds || session.duration_seconds,
+        } as any)
+        .eq("id", sessionId);
 
       setState((s) => ({ ...s, scorecard, isGenerating: false }));
     } catch {
@@ -234,7 +257,12 @@ For each question, return a JSON array with objects:
 { "question_id": string, "score": number (0-100), "confidence_score": number (0-100), "star_used": boolean, "key_strength": string, "key_weakness": string, "coach_tip": string }
 
 Questions and answers:
-${questions.map((q: any, i: number) => `Q${i + 1}: "${q.question_text}"\nA: "${q.candidate_answer ?? "No answer recorded"}"`).join("\n\n")}
+${questions
+  .map(
+    (q: any, i: number) =>
+      `Q${i + 1}: "${q.question_text ?? q.question ?? ""}"\nA: "${q.candidate_answer ?? q.answer ?? "No answer recorded"}"`
+  )
+  .join("\n\n")}
 
 Return ONLY valid JSON array.`;
 

@@ -52,10 +52,10 @@ export default function SessionDetail() {
         .eq("user_id", user.id)
         .single(),
       supabase
-        .from("session_questions")           // FIX 1: was "session_answers"
+        .from("session_answers")
         .select("*")
         .eq("session_id", id)
-        .order("question_index", { ascending: true }),
+        .order("created_at", { ascending: true }),
     ]);
 
     if (sessErr) {
@@ -65,7 +65,21 @@ export default function SessionDetail() {
     }
 
     setSession(sess);
-    setAnswers(ans ?? []);
+    setAnswers(
+      (ans ?? []).map((row: any, index: number) => ({
+        id: row.id,
+        question_text: row.question,
+        transcript: row.answer,
+        score: row.score,
+        ai_feedback: row.ai_feedback,
+        question_index: index,
+        question_tags: [],
+        content_score: row.score,
+        structure_score: null,
+        communication_score: null,
+        confidence_score: null,
+      }))
+    );
     setLoading(false);
   }, [id, user?.id]);
 
@@ -160,7 +174,23 @@ export default function SessionDetail() {
             </p>
           </div>
         </div>
-        <div className="flex items-center gap-2 sm:ml-auto shrink-0">
+        <div className="flex items-center gap-2 sm:ml-auto shrink-0 flex-wrap">
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => navigate(`/app/scorecard/${session.id}`)}
+            leftIcon={<BarChart2 className="w-3.5 h-3.5" />}
+          >
+            Scorecard
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => navigate(`/app/debrief/${session.id}`)}
+            leftIcon={<Brain className="w-3.5 h-3.5" />}
+          >
+            Debrief
+          </Button>
           <Button
             variant="secondary"
             size="sm"

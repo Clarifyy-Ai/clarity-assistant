@@ -76,9 +76,8 @@ export default function LiveOverlay() {
     useSessionStore.getState().resetSession();
     useOverlayStore.getState().resetSessionState();
 
-    // Ensure both stealth + proctor-safe are updated from config
     useOverlayStore.getState().setStealthMode(!!sessionConfig.stealth_mode);
-    useOverlayStore.getState().setProctorSafe(!!sessionConfig.stealth_mode);
+    useOverlayStore.getState().setProctorSafe(false);
 
     useOverlayStore.getState().setActiveModel(sessionConfig.model);
     useOverlayStore.getState().setHintStyle(sessionConfig.hint_style);
@@ -240,7 +239,14 @@ export default function LiveOverlay() {
       {streamErrorMessage && (
         <div className="mx-auto max-w-md mb-4 flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
-          <span>{streamErrorMessage}</span>
+          <span className="flex-1">{streamErrorMessage}</span>
+          <button
+            type="button"
+            onClick={() => void copilot.reconnectAudio?.()}
+            className="shrink-0 text-xs font-semibold px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 text-red-200 transition-colors"
+          >
+            Reconnect
+          </button>
         </div>
       )}
 
@@ -255,7 +261,7 @@ export default function LiveOverlay() {
                 <kbd className="hotkey-badge">Ctrl+Shift+H</kbd> to toggle visibility/minimize.
               </p>
               <p className="text-xs text-muted-foreground/60">
-                Press <kbd className="hotkey-badge">Ctrl+Shift+P</kbd> for panic mode
+                Press <kbd className="hotkey-badge">Ctrl+Shift+P</kbd> for calm coaching steps
               </p>
             </>
           ) : (
@@ -290,4 +296,4 @@ export default function LiveOverlay() {
     </>
   );
 }
-``
+

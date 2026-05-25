@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 
 import { OverlayActivityTimer } from "./OverlayActivityTimer";
+import { OverlaySettings } from "./OverlaySettings";
 
 const MODEL_OPTIONS: { id: PreferredAIModel; label: string; note?: string }[] = [
   { id: "gpt-4o", label: "GPT-4o", note: "via Gemini" },
@@ -54,11 +55,11 @@ const HINT_STYLE_LABELS: Record<string, string> = {
 };
 
 const HOTKEY_REFERENCE = [
-  { keys: ["ctrl", "shift", "h"], label: "Toggle overlay" },
-  { keys: ["ctrl", "shift", "s"], label: "Stealth mode" },
+  { keys: ["ctrl", "shift", "h"], label: "Minimize / restore overlay" },
+  { keys: ["ctrl", "shift", "s"], label: "Discrete UI (opacity)" },
   { keys: ["ctrl", "shift", "y"], label: "Cycle hint style" },
   { keys: ["ctrl", "shift", "c"], label: "Screenshot + analyse" },
-  { keys: ["ctrl", "shift", "p"], label: "Panic button" },
+  { keys: ["ctrl", "shift", "p"], label: "Calm coaching steps" },
   { keys: ["ctrl", "shift", "m"], label: "Mute / unmute" },
   { keys: ["ctrl", "1-4"], label: "Snap to corner" },
   { keys: ["ctrl", "shift", "esc"], label: "Emergency exit" },
@@ -106,11 +107,13 @@ export function OverlayToolbar({
 
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showHotkeyRef, setShowHotkeyRef] = useState(false);
+  const [showOverlaySettings, setShowOverlaySettings] = useState(false);
   const [showPinnedMenu, setShowPinnedMenu] = useState(false);
   const [showResumeQuickPeek, setShowResumeQuickPeek] = useState(false);
 
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const hotkeyRefRef = useRef<HTMLDivElement>(null);
+  const overlaySettingsRef = useRef<HTMLDivElement>(null);
   const pinnedMenuRef = useRef<HTMLDivElement>(null);
   const resumeQuickPeekRef = useRef<HTMLDivElement>(null);
 
@@ -126,6 +129,9 @@ export function OverlayToolbar({
       const t = e.target as Node;
       if (moreMenuRef.current && !moreMenuRef.current.contains(t)) setShowMoreMenu(false);
       if (hotkeyRefRef.current && !hotkeyRefRef.current.contains(t)) setShowHotkeyRef(false);
+      if (overlaySettingsRef.current && !overlaySettingsRef.current.contains(t)) {
+        setShowOverlaySettings(false);
+      }
       if (pinnedMenuRef.current && !pinnedMenuRef.current.contains(t)) setShowPinnedMenu(false);
       if (resumeQuickPeekRef.current && !resumeQuickPeekRef.current.contains(t)) {
         setShowResumeQuickPeek(false);
@@ -290,7 +296,7 @@ export function OverlayToolbar({
 
               <MenuRow
                 icon={isStealth ? EyeOff : Eye}
-                label={isStealth ? "Exit stealth" : "Enter stealth"}
+                label={isStealth ? "Exit discrete UI" : "Discrete UI (opacity)"}
                 active={isStealth}
                 activeColor="text-violet-400"
                 onClick={() => {
@@ -400,10 +406,22 @@ export function OverlayToolbar({
 
               <MenuRow
                 icon={Settings2}
+                label="Overlay settings"
+                active={showOverlaySettings}
+                onClick={() => {
+                  setShowOverlaySettings((p) => !p);
+                  setShowHotkeyRef(false);
+                  setShowMoreMenu(false);
+                }}
+              />
+
+              <MenuRow
+                icon={Settings2}
                 label="Keyboard shortcuts"
-                active={false}
+                active={showHotkeyRef}
                 onClick={() => {
                   setShowHotkeyRef((p) => !p);
+                  setShowOverlaySettings(false);
                   setShowMoreMenu(false);
                 }}
               />
@@ -412,7 +430,7 @@ export function OverlayToolbar({
 
               <MenuRow
                 icon={AlertCircle}
-                label="Panic mode"
+                label="Calm coaching steps"
                 active={false}
                 danger
                 onClick={() => {
@@ -554,6 +572,18 @@ export function OverlayToolbar({
                 ))}
             </div>
           )}
+        </div>
+      )}
+
+      {showOverlaySettings && (
+        <div
+          ref={overlaySettingsRef}
+          className="absolute top-12 right-2 z-50 animate-fade-in"
+        >
+          <OverlaySettings
+            isOpen
+            onClose={() => setShowOverlaySettings(false)}
+          />
         </div>
       )}
 

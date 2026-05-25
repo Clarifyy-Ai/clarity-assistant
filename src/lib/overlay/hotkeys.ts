@@ -1,6 +1,7 @@
 import { captureAndAnalyseCodingProblem } from "@/lib/audio/screenshotCapture";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";
+import { useAudioStore } from "@/store/audioStore";
 import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 
 // ─────────────────────────────────────────────────────────────────
@@ -42,21 +43,21 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
     {
       id:          "toggle_overlay",
       label:       "Toggle Overlay",
-      description: "Show or hide the Clarify AI overlay",
+      description: "Minimize, restore, or show the overlay panel",
       keys:        ["ctrl", "shift", "h"],
       category:    "overlay",
-      action:      () => useOverlayStore.getState().toggleOverlay(),
+      action:      () => useOverlayStore.getState().toggleMinimize(),
       isEnabled:   () => true,
       showInHelp:  true,
     },
     {
       id:          "toggle_stealth",
-      label:       "Toggle Stealth Mode",
-      description: "Switch overlay to minimal stealth view",
+      label:       "Discrete UI",
+      description: "Lower overlay opacity until you hover (still visible on screen share)",
       keys:        ["ctrl", "shift", "s"],
       category:    "overlay",
       action:      toggleAppStealthMode,
-      isEnabled:   () => useOverlayStore.getState().is_visible,
+      isEnabled:   () => true,
       showInHelp:  true,
     },
 
@@ -89,8 +90,8 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
     // ── Panic ──────────────────────────────────────────────────
     {
       id:          "trigger_panic",
-      label:       "Panic Button",
-      description: "Show immediate calming steps",
+      label:       "Calm steps",
+      description: "Show grounding coaching prompts",
       keys:        ["ctrl", "shift", "p"],
       category:    "session",
       action:      () => {
@@ -110,13 +111,17 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
       keys:        ["ctrl", "shift", "m"],
       category:    "session",
       action:      () => {
-        const session = useSessionStore.getState();
-        // Guard: only attempt if the method exists (session type may vary)
-        if (typeof (session as any).toggleMic === "function") {
-          (session as any).toggleMic();
-        } else {
-          console.warn("[HotkeyManager] toggleMic not available on sessionStore");
+        const audio = useAudioStore.getState();
+        const stream = audio.streams?.mic_stream;
+        if (!stream) {
+          console.warn("[HotkeyManager] No mic stream — mute unavailable");
+          return;
         }
+        const muted = !audio.is_muted;
+        stream.getAudioTracks().forEach((t) => {
+          t.enabled = !muted;
+        });
+        audio.setIsMuted(muted);
       },
       isEnabled:   () => useSessionStore.getState().status === "active",
       showInHelp:  true,

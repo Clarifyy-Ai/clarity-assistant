@@ -8,3 +8,4 @@ export { StealthMouseGuard } from './StealthMouseGuard';
 export { ScreenCaptureBlocker } from './ScreenCaptureBlocker';
 export { WindowVisibilityManager } from './WindowVisibilityManager';
 export { OverlaySettings } from './OverlaySettings';
+export { OverlayComplianceBanner } from './OverlayComplianceBanner';

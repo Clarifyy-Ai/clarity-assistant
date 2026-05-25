@@ -28,6 +28,7 @@ import type {
   Speaker,
 } from "@/types/audio.types";
 import { useAudioStore } from "@/store/audioStore";
+import { isInterviewerQuestionText } from "./interviewerQuestion";
 
 /* ─── FILLER WORD CONSTANTS ──────────────────────────────────────────────── */
 
@@ -165,10 +166,14 @@ export function extractLatestQuestion(
       return u.text;
     }
   }
-  // Fallback: any final interviewer utterance even without a "?"
+  // Fallback: interviewer phrasing that may not end with "?"
   for (let i = utterances.length - 1; i >= 0; i--) {
     const u = utterances[i];
-    if (u.speaker === "interviewer" && u.is_final) {
+    if (
+      u.speaker === "interviewer" &&
+      u.is_final &&
+      isInterviewerQuestionText(u.text)
+    ) {
       return u.text;
     }
   }
@@ -241,7 +246,7 @@ export function processUtteranceForDiarization(
     ...utterance,
     speaker,
     is_interviewer_question:
-      speaker === "interviewer" && utterance.text.trim().endsWith("?"),
+      speaker === "interviewer" && isInterviewerQuestionText(utterance.text),
   };
 
   store.setCurrentSpeaker(speaker);

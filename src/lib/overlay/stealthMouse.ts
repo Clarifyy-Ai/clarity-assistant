@@ -339,8 +339,7 @@ export function getSnapEdge(
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Proctor-safe positioning presets
-// Positions optimised to avoid detection by webcam proctoring
+// Corner-snap layout presets (screen-edge placement only — not concealment)
 // ─────────────────────────────────────────────────────────────────
 
 export function getProctorSafePosition(

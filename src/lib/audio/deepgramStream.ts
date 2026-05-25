@@ -13,6 +13,7 @@ import { useAuthStore } from "@/store/authStore";
 import { useAudioStore } from "@/store/audioStore";
 import { FEATURE_FLAGS, FEATURE_PLAN_GATE } from "@/lib/constants/features";
 import { generateId } from "@/lib/utils";
+import { isInterviewerQuestionText } from "./interviewerQuestion";
 import type {
   DeepgramConfig,
   TranscriptUtterance,
@@ -364,7 +365,8 @@ export class DeepgramStreamClient {
             (((data.start as number) ?? 0) + ((data.duration as number) ?? 0)) * 1000,
           ),
           is_final: true,
-          is_interviewer_question: speaker === "interviewer" && text.endsWith("?"),
+          is_interviewer_question:
+            speaker === "interviewer" && isInterviewerQuestionText(text),
           confidence: alt.confidence ?? 0,
           filler_word_count: fillerCount > 0 ? fillerCount : undefined,
           filler_words_used: fillerList.length > 0 ? fillerList : undefined,

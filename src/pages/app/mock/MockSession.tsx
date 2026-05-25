@@ -228,9 +228,8 @@ export default function MockSession() {
     const overlay = useOverlayStore.getState();
     overlay.resetSessionState();
 
-    // ✅ Fix: align stealth + proctor-safe with config (same as LiveOverlay)
     overlay.setStealthMode(!!config.stealth_mode);
-    overlay.setProctorSafe(!!config.stealth_mode);
+    overlay.setProctorSafe(false);
 
     overlay.setActiveModel(config.model);
     overlay.setHintStyle(config.hint_style);
@@ -271,9 +270,8 @@ export default function MockSession() {
       model: config.model,
       resume_id: config.resume_id,
       jd_id: config.jd_id,
+      session_id: dbSessionId,
     });
-
-    useSessionStore.getState().setSessionId(dbSessionId);
 
     setPhase("loading");
     try {
@@ -343,7 +341,8 @@ export default function MockSession() {
       await persistMockSession();
       await orchestrator.completeSession();
       const sessionId = useSessionStore.getState().session_id;
-      if (sessionId) navigate(`/app/sessions/${sessionId}`);
+      if (sessionId) navigate(`/app/scorecard/${sessionId}`);
+      else navigate("/app/sessions");
     } else {
       orchestrator.nextQuestion();
       stt.start();
@@ -370,27 +369,32 @@ export default function MockSession() {
       const dbModel = toDbModel(overlay.active_model) as any;
       const transcript = stt.transcript || "";
       const questionCount = orchestrator.totalQuestions ?? 0;
+      const startedMs = startTimeRef.current
+        ? new Date(startTimeRef.current).getTime()
+        : Date.now();
+      const duration_seconds = Math.max(1, Math.round((Date.now() - startedMs) / 1000));
 
       await sessionsDB.update(sessionId, {
         status: "completed",
         credits_used: session.credits_consumed,
         model_used: dbModel as any,
         ended_at: new Date().toISOString(),
+        started_at: startTimeRef.current ?? new Date().toISOString(),
+        duration_seconds,
         filler_words: fillerHook.totalCount,
         avg_wpm: wpmHook.wpm,
         hints_used: overlay.hint_history.length,
-        answers_generated: overlay.hint_history.length,
+        answers_generated: answersRef.current.filter((a) => !a.skipped).length,
         questions_asked: questionCount,
         notes: transcript || null,
+        session_type: "mock",
       } as any);
 
       if (transcript) {
         await supabase.from("session_transcripts").insert({
           session_id: sessionId,
           user_id: userId,
-          content: transcript,
-          speaker: "candidate",
-          is_final: true,
+          transcript,
         } as any);
       }
 
@@ -436,7 +440,8 @@ export default function MockSession() {
     await persistMockSession();
     await orchestrator.completeSession();
     const sessionId = useSessionStore.getState().session_id;
-    if (sessionId) navigate(`/app/sessions/${sessionId}`);
+    if (sessionId) navigate(`/app/scorecard/${sessionId}`);
+    else navigate("/app/sessions");
   }
 
   useEffect(() => {

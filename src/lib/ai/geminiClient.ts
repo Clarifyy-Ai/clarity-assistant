@@ -75,6 +75,8 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
     resume_context: context.resume_experience_summary ?? null,
     simple_language: simpleLanguage ?? false,
     screenshot_base64: screenshotBase64 ?? null,
+    session_id: opts.sessionId ?? null,
+    question_id: opts.questionId ?? null,
   };
 
   try {

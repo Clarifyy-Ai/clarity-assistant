@@ -60,7 +60,7 @@ export default function MockWarmup() {
       title: config.company ? `Warmup — ${config.company}` : "Mock warmup",
       document_id: null,
       jd_id: config.jd_id ?? null,
-      model_used: toDbModel(config.model ?? "gemini-flash") as any,
+      model_used: toDbModel(config.model ?? "gemini-2.0-flash") as any,
     }).then(async ({ session, reused }) => {
       setWarmupSessionId(session.id);
       await activateSession(session.id);

@@ -1,7 +1,7 @@
 import { type ReactNode, useEffect, useRef, useState } from "react";
 
 interface StealthMouseGuardProps {
-  /** When true the overlay enters stealth — reduced opacity, no pointer events on outer shell */
+  /** When true the overlay uses discrete UI — reduced opacity until hover (still visible on capture) */
   isActive: boolean;
   /** 0–1 — opacity when stealth is active (default 0.15) */
   stealthOpacity?: number;
@@ -13,7 +13,7 @@ interface StealthMouseGuardProps {
 /**
  * StealthMouseGuard
  *
- * In stealth mode the wrapper becomes nearly transparent.
+ * In discrete UI mode the wrapper becomes more transparent until hover.
  * Hovering over it immediately (or after `hoverRevealDelayMs`) shows it
  * fully so the user can interact, then it fades back on mouse-leave.
  *

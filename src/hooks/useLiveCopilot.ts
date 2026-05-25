@@ -17,13 +17,12 @@ import { useAudioSession } from "./useAudioSession";
 import { useAudioStore } from "@/store/audioStore";
 import { routeHint } from "@/lib/ai/modelRouter";
 import { streamFullAnswer } from "@/lib/ai/geminiClient";
-import { checkCredits, deductCredits } from "@/lib/billing/creditsManager";
+import { checkCredits, refreshCredits } from "@/lib/billing/creditsManager";
 import {
   buildResumeContext,
   generateResumeTalkingPoints,
   formatTalkingPointsAsHint,
 } from "@/lib/ai/resumeFallback";
-import { hotkeyManager } from "@/lib/overlay/hotkeys";
 import { createDragHandler } from "@/lib/overlay/stealthMouse";
 import { generateId } from "@/lib/utils";
 import { sessionsDB } from "@/lib/supabase/database";
@@ -124,14 +123,35 @@ export function useLiveCopilot({
     sessionStore.setMode("live");
     sessionStore.setConfig(cfg);
     sessionStore.setStatus("active");
-  }, [profile]);
 
-  useEffect(() => {
-    hotkeyManager.register();
-    return () => {
-      hotkeyManager.unregister();
-    };
-  }, []);
+    if (profile?.id) {
+      coachStore.initContext({
+        user_id: profile.id,
+        full_name: profile.full_name ?? null,
+        role: cfg.role ?? profile.target_role ?? null,
+        domain: profile.domain ?? null,
+        experience_level: (profile.experience_level as any) ?? null,
+        years_of_experience: profile.experience_years ?? null,
+        target_company: cfg.company ?? null,
+        coach_tone: (profile.coach_tone as any) ?? "supportive",
+        hint_style: (cfg.hint_style as any) ?? "short_hints",
+        resume_skills: [],
+        resume_projects: [],
+        resume_experience_summary: resumeCtx,
+        jd_required_skills: [],
+        jd_seniority_signals: [],
+        gap_skills: [],
+        session_goals: [],
+        filler_words_to_watch: [],
+        current_filler_count: 0,
+        current_wpm: 0,
+        session_type: cfg.interview_type ?? "behavioral",
+        last_transcript: "",
+      });
+    }
+  }, [profile, coachStore]);
+
+  // Hotkeys: OverlayKeyboardHandler on live/mock pages (avoids duplicate Ctrl+Shift+H handlers).
 
   useEffect(() => {
     if (!overlayRef?.current) return;
@@ -227,9 +247,9 @@ export function useLiveCopilot({
       onDone: async () => {
         if (fullText) useOverlayStore.getState().commitStreamedHint();
 
-        // ✅ Keep billing consistent (same as hint mode)
-        const result = await deductCredits(selectedModel, sessionIdRef.current);
-        if (result.success) {
+        // Credits deducted server-side in generate-answer edge function
+        const remaining = await refreshCredits();
+        if (remaining !== null) {
           useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
         }
       },
@@ -291,8 +311,8 @@ export function useLiveCopilot({
           onChunk: (chunk) => useOverlayStore.getState().appendStreamChunk(chunk),
           onDone: async () => {
             useOverlayStore.getState().commitStreamedHint();
-            const result = await deductCredits(selectedModel, sessionIdRef.current);
-            if (result.success) {
+            const remaining = await refreshCredits();
+            if (remaining !== null) {
               useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
             }
           },
@@ -366,9 +386,8 @@ export function useLiveCopilot({
             chatBuffer += chunk;
           },
           onDone: async () => {
-            // billing consistency
-            const result = await deductCredits(selectedModel, sessionIdRef.current);
-            if (result.success) {
+            const remaining = await refreshCredits();
+            if (remaining !== null) {
               useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
             }
           },
@@ -514,6 +533,7 @@ export function useLiveCopilot({
     isMuted: audio.isMuted,
     toggleMute: audio.toggleMute,
     toggleSystemAudio: audio.toggleSystemAudio,
+    reconnectAudio: audio.reconnect,
     requestLiveHint,
     submitManualQuestion,
     startLiveSession,

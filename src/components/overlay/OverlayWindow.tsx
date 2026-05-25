@@ -15,8 +15,8 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { cn } from "@/lib/utils";
 import { Loader2, Sparkles } from "lucide-react";
 
-import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 import type { LiveSessionConfig } from "@/types/session.types";
+import { OverlayComplianceBanner } from "./OverlayComplianceBanner";
 
 import { OverlayHintPanel } from "./OverlayHintPanel";
 import { OverlayQuestionBar } from "./OverlayQuestionBar";
@@ -186,12 +186,9 @@ export function OverlayWindow({
 
   const displayText = hintState === "streaming" ? streamingBuffer : currentHint;
 
-  // Opacity behavior
-  const effectiveOpacity = !shouldShow
-    ? 0
-    : isStealthMode
-      ? Math.max(0.2, Math.min(1, stealthOpacity / 100))
-      : 1;
+  // Panel opacity: discrete UI dimming is handled by StealthMouseGuard (avoids double-fade).
+  const effectiveOpacity = !shouldShow ? 0 : isStealthMode ? 1 : 1;
+  const guardStealthOpacity = Math.max(0.15, Math.min(1, stealthOpacity / 100));
 
   // Pill width constraints
   const pillWidth = isMobile ? "100%" : Math.min(640, Math.max(420, overlayWidth));
@@ -296,13 +293,19 @@ export function OverlayWindow({
         <OverlayNetworkBadge color={networkColor} />
 
         {isStealthMode && (
-          <span className="font-mono text-[9px] font-bold text-violet-300 bg-violet-500/15 border border-violet-500/20 px-1.5 py-0.5 rounded shrink-0">
-            STEALTH
+          <span
+            className="font-mono text-[9px] font-bold text-violet-300 bg-violet-500/15 border border-violet-500/20 px-1.5 py-0.5 rounded shrink-0"
+            title="Discrete UI — lower opacity until hover; still visible on screen share"
+          >
+            DISCRETE
           </span>
         )}
         {isProctorSafe && (
-          <span className="font-mono text-[9px] font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/20 px-1.5 py-0.5 rounded shrink-0">
-            SAFE
+          <span
+            className="font-mono text-[9px] font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/20 px-1.5 py-0.5 rounded shrink-0"
+            title="Corner-snap layout preset"
+          >
+            CORNER
           </span>
         )}
 
@@ -338,7 +341,8 @@ export function OverlayWindow({
             </div>
           ) : (
             <>
-              <ScreenCaptureBanner isProctorSafe={isProctorSafe} />
+              <OverlayComplianceBanner compact={isMobile} />
+              <ScreenCaptureBanner />
 
               {isPanicVisible && panicContent ? (
                 <div className="p-3 bg-amber-500/10 border-b border-amber-500/15 shrink-0">
@@ -470,7 +474,10 @@ export function OverlayWindow({
   // MOBILE: fixed bottom sheet
   if (isMobile) {
     return createPortal(
-      <StealthMouseGuard isActive={isStealthMode}>
+      <StealthMouseGuard
+        isActive={isStealthMode}
+        stealthOpacity={guardStealthOpacity}
+      >
         <div
           ref={panelRef}
           className={cn(
@@ -488,7 +495,10 @@ export function OverlayWindow({
 
   // DESKTOP: floating draggable window
   return createPortal(
-    <StealthMouseGuard isActive={isStealthMode}>
+    <StealthMouseGuard
+      isActive={isStealthMode}
+      stealthOpacity={guardStealthOpacity}
+    >
       <OverlayPositionManager
         ref={panelRef}
         position={position}
@@ -546,7 +556,7 @@ function FloatingAIButton({
   );
 }
 
-function ScreenCaptureBanner({ isProctorSafe }: { isProctorSafe: boolean }) {
+function ScreenCaptureBanner() {
   const [detected, setDetected] = useState<"recording" | "sharing" | null>(null);
   const [dismissed, setDismissed] = useState(false);
 
@@ -560,22 +570,22 @@ function ScreenCaptureBanner({ isProctorSafe }: { isProctorSafe: boolean }) {
     return () => window.removeEventListener("clarify:screencapture", handler);
   }, []);
 
-  if (!isProctorSafe || dismissed || !detected) return null;
+  if (dismissed || !detected) return null;
 
   return (
-    <div className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border-b border-amber-500/15 shrink-0">
-      <span className="text-[11px] flex-1 text-amber-400">
-        ⚠ {detected === "recording" ? "Screen recording" : "Screen sharing"} detected
+    <div
+      role="status"
+      className="flex items-center gap-2 px-3 py-2 bg-amber-500/10 border-b border-amber-500/15 shrink-0"
+    >
+      <span className="text-[11px] flex-1 text-amber-400 leading-snug">
+        {detected === "recording" ? "Screen recording" : "Screen sharing"} detected. Your
+        overlay remains visible to others — use only for authorized practice or productivity.
       </span>
       <button
-        onClick={toggleAppStealthMode}
-        className="text-[10px] font-bold text-amber-300 bg-amber-500/20 hover:bg-amber-500/30 px-2 py-0.5 rounded-md transition-colors shrink-0"
-      >
-        Enable Stealth
-      </button>
-      <button
+        type="button"
         onClick={() => setDismissed(true)}
-        className="text-amber-400/40 hover:text-amber-400 text-[10px] shrink-0 transition-colors"
+        aria-label="Dismiss screen capture notice"
+        className="text-amber-400/40 hover:text-amber-400 text-[10px] shrink-0 transition-colors px-1"
       >
         ✕
       </button>

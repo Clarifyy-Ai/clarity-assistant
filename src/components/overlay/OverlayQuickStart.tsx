@@ -315,6 +315,13 @@ export function OverlayQuickStart({ onStart }: OverlayQuickStartProps) {
           </div>
         </div>
 
+        <p
+          className="text-[10px] text-indigo-300/70 leading-snug px-0.5"
+          role="note"
+        >
+          Practice & productivity only. Overlay stays visible on screen share and recordings.
+        </p>
+
         {/* Launch button */}
         <button
           onClick={handleSubmit}

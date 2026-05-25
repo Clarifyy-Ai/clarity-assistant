@@ -59,9 +59,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       const store = useAudioStore.getState();
 
       const enriched = processUtteranceForDiarization(utterance);
-
-      // ✅ KEY FIX: persist utterance to store so Transcript UI works
-      store.addUtterance(enriched);
+      // processUtteranceForDiarization already persists to audioStore
 
       // keep current speaker updated for UI/metrics
       if (enriched.speaker) {
