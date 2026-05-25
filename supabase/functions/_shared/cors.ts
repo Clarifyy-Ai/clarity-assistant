@@ -151,6 +151,22 @@ function getRequestOrigin(req: Request): string | null {
   return normalizeOrigin(rawOrigin);
 }
 
+const PREVIEW_HOST_PATTERNS = [
+  /\.lovable\.app$/i,
+  /\.lovable\.dev$/i,
+  /\.lovableproject\.com$/i,
+];
+
+function isPreviewOrigin(origin: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(origin);
+    if (protocol !== "https:") return false;
+    return PREVIEW_HOST_PATTERNS.some((re) => re.test(hostname));
+  } catch {
+    return false;
+  }
+}
+
 export function isOriginAllowed(req: Request): boolean {
   const requestOrigin = getRequestOrigin(req);
 
@@ -159,7 +175,7 @@ export function isOriginAllowed(req: Request): boolean {
     return true;
   }
 
-  return getAllowedOrigins().has(requestOrigin);
+  return getAllowedOrigins().has(requestOrigin) || isPreviewOrigin(requestOrigin);
 }
 
 /**
