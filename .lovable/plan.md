@@ -1,42 +1,49 @@
-# Plan: Complete Remaining Audit Items (P0-B, P1, P2)
+# Plan
 
-Continuing from the post-fix audit. P0-A (marketing purge) is done. Remaining work falls into three buckets.
+Per your guardrails I'm presenting a plan (not changing code yet) and breaking the work into discrete components. Before building, please confirm scope.
 
-## P0-B — Verification (no code changes, just confirm)
+## Audit findings
 
-1. **Retention cron** — Query `cron.job` to confirm `delete_expired_session_data()` is scheduled and last run succeeded.
-2. **Stripe price/metadata** — Read `stripe-webhook/index.ts` to confirm it reads `monthly_credits` from price metadata, and document the manual Stripe Dashboard checks the user must perform (price IDs, metadata keys).
+**Auth — already implemented.** Do not rebuild.
+- `src/pages/auth/Login.tsx`, `Signup.tsx`, `ResetPassword.tsx`, `VerifyEmail.tsx`, `AuthCallback.tsx`
+- `src/components/auth/OAuthButton.tsx` already exports Google, GitHub, LinkedIn, Azure buttons
+- `src/store/authStore.ts` + `ProtectedRoute.tsx` handle session, profile, admin, onboarding
+- `profiles` table + RLS already exist; `user_roles` + `has_role()` + `is_admin()` already exist
+- Supabase client wired at `src/integrations/supabase/client.ts`
 
-**Guardrail:** No DB or webhook code changes — verification only. If misalignment is found, surface it as a separate follow-up.
+What's actually needed for auth: only OAuth provider **configuration** in the Supabase dashboard (Google/GitHub client IDs + redirect URLs). That's a dashboard step, not a code change.
 
-## P1 — Quality Fixes (component-scoped)
+**Admin dashboard — partially implemented.**
+- `AdminDashboard.tsx` (KPIs), `AdminUsers.tsx`, `AdminFeatureFlags.tsx`, `AdminAnalytics.tsx`, `AdminRevenue.tsx`, `AdminModelCosts.tsx`, `AdminLayout.tsx` already exist
+- `admin_audit_log` table exists with admin-only RLS — **no UI page yet**
+- `feature_flags` table + admin RLS exist — page exists, status of filtering unknown
+- **`support_threads` table does NOT exist** in the schema
 
-3. **Dashboard readiness score** — `src/pages/app/Dashboard.tsx`: wire the existing `useConfidenceScore` hook into a new compact `ReadinessCard` component. Do not touch other dashboard widgets.
-4. **Low-credit toasts** — `src/hooks/useCredits.ts` (or equivalent): emit a `sonner` warning toast when balance drops below 20 and a second at 5. One-shot per threshold per session (use `useRef` guard). No changes to deduction logic.
-5. **Enterprise `∞` rendering** — `src/components/pricing/PricingCard.tsx`: render `∞` (or "Unlimited") when `monthly_credits` is null/`-1` for the Enterprise tier. Pure presentation fix.
+## Proposed work, component-by-component
 
-**Guardrail:** Each change is one file + minimal additions. No refactors to credit deduction, pricing logic, or dashboard data fetching.
+### Component 1 — Verify auth (no code changes)
+Confirm Login/Signup/OAuth work end-to-end. If a provider is missing in the UI or a redirect is broken, fix only that. Do not refactor authStore or ProtectedRoute.
 
-## P2 — Dead Code Cleanup
+**Guardrail:** do not modify existing working auth files.
 
-6. **`src/App.tsx`** — Remove 9 unused lazy imports for mock-test pages (routes already redirect to dashboard).
-7. **`src/components/layout/AppSidebar.tsx`** — Remove unreachable mock-test conditional branch.
-8. **`supabase/functions/_shared/cors.ts`** — Remove stale `x-byok-*` entries from allowed headers list.
+### Component 2 — Admin Audit Log page
+New file `src/pages/app/admin/AdminAuditLog.tsx` + register in `admin/index.ts` + add route + sidebar link.
+- Table of `admin_audit_log` (admin, action, target_type, target_id, ip, created_at, old/new diff in expandable row)
+- Filters: action (text), target_type (select), admin (select), date range
+- Server-side pagination (50/page), order by created_at desc
 
-**Guardrail:** Pure deletions of already-dead code. No behavior changes.
+### Component 3 — Feature Flags filtering
+Audit existing `AdminFeatureFlags.tsx` first; only add filter bar (search by key/name, toggle enabled-only, plan filter). Do not change write logic.
 
-## Out of Scope
+### Component 4 — Support Threads
+**Blocker:** no `support_threads` table exists. Two options — please pick one:
+- **(a) Create the table** (id, user_id, subject, status enum [open/pending/closed], priority, assigned_admin_id, created_at, updated_at + `support_messages` child table) with admin-only RLS + an owner-read policy. Then build the admin page.
+- **(b) Skip support_threads** for now — build only audit log + feature flag filters.
 
-- Inert model-picker UI in settings (deferred, low-risk cosmetic).
-- Any new features, schema changes, or edge function rewrites.
-- Re-enabling any stealth/BYOK/multi-model functionality.
+## Questions before I start
 
-## Verification After Build
+1. **OAuth providers:** which ones do you want enabled in the UI? Google only, or also GitHub/LinkedIn/Azure? (Buttons exist; need to confirm which appear on Login/Signup.)
+2. **Support threads:** option (a) create the table now, or (b) skip?
+3. Build order: Audit Log first, then Feature Flag filters, then (optionally) Support Threads?
 
-- `rg` for residual `mock-test` imports in `App.tsx` → expect 0.
-- Manual click-through: Dashboard shows readiness card; trigger a credit deduction near threshold to see toast; Enterprise pricing card shows `∞`.
-- `supabase--read_query` on `cron.job` to confirm retention schedule.
-
-## Execution Order
-
-P0-B (verify) → P2 (safe deletions) → P1 (Dashboard → toasts → pricing card), one component at a time.
+Reply with answers and I'll implement one component at a time, each with the "do not modify existing working features" guardrail.
