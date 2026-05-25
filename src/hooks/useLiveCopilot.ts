@@ -169,7 +169,7 @@ export function useLiveCopilot({
         current_wpm: 0,
         session_type: (cfg.interview_type as any) ?? "behavioral",
         last_transcript: "",
-      });
+      } as any);
     }
   }, [profile, coachStore]);
 
