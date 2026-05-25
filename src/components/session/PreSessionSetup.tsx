@@ -54,7 +54,7 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
     typedProfile?.hint_style ?? "short_hints"
   );
   const [enableSystemAudio, setEnableSystemAudio] = useState(false);
-  const [stealthMode,       setStealthMode]       = useState(true);
+  const [stealthMode,       setStealthMode]       = useState(false);
   const [showAdvanced,      setShowAdvanced]      = useState(false);
 
   const systemAudioSupported = typeof navigator !== "undefined"
@@ -270,9 +270,9 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
               />
               <div>
                 <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
-                  <Shield className="w-3.5 h-3.5" /> Stealth Mode
+                  <Shield className="w-3.5 h-3.5" /> Discrete UI labels
                 </p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Hidden from screen share</p>
+                <p className="text-[10px] text-muted-foreground mt-0.5">Neutral nav names only — overlay stays visible if you share your screen</p>
               </div>
             </label>
           </div>

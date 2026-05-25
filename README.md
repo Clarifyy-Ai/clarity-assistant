@@ -1,216 +1,96 @@
- **Clarify Assistant - Interview Preparation & Real-time Call Assistant**
+# Clarify AI — Interview Preparation & Live Practice Coach
 
-### **Core Purpose**
-A comprehensive AI-powered platform designed to help students and job seekers **overcome interview anxiety and perform better** by providing real-time assistance during mock interviews and actual interviews, with advanced stealth features that remain invisible during screen sharing.
+AI-powered interview preparation for students and job seekers: mock sessions, live practice coaching, prep tools, analytics, and secure document management.
 
----
-
-## **Key Features**
-
-### 🎯 **1. Live Interview Assistance (Real-time)**
-- **Real-time AI Answers**: Instant answer generation using Claude, OpenAI, or Gemini
-- **Live Transcription**: Speech-to-text conversion using Deepgram
-- **Answer Streaming**: Continuous answer display without lag
-- **Hotkey System**: Quick access to hints and answers via keyboard shortcuts
-- **Panic Button**: Hide all overlays instantly if needed
-- **Session Timer**: Track interview duration
-- **Network Monitoring**: Real-time connection quality checks
-
-### 👻 **2. Stealth Overlay Technology (Anti-Detection)**
-- **Invisible to Screen Capture**: Won't appear in OBS, Zoom screen share, or recording software
-- **Smart Mouse Hiding**: Mouse cursor won't be tracked or visible
-- **Screen Capture Detection**: Detects when recording is happening
-- **Window Visibility Manager**: Toggle visibility with hotkeys
-- **Anti-Detection Features**: Similar to Parakeet AI with enhanced capabilities
-- **Positioned Overlays**: Smart positioning to avoid suspicion
-
-### 🎤 **3. Audio & Speech Analysis**
-- **Speech Recognition**: Convert speech to text in real-time
-- **Filler Word Detection**: Identify and count "um", "uh", "like"
-- **Speaker Diarization**: Identify who's speaking
-- **Sentiment Analysis**: Detect emotional tone
-- **Silence Detection**: Identify pauses and gaps
-- **WPM Tracking**: Words per minute measurement
-- **System Audio Capture**: Capture interview audio
-- **Deepgram Integration**: Professional-grade speech-to-text
-
-### 💡 **4. Interview Preparation Tools**
-- **STAR Method Builder**: Structure behavioral answers using STAR framework
-- **Company Research**: Research company profiles and culture
-- **Resume Builder**: Create and optimize resumes
-- **Answer Bank**: Store and review previous answers
-- **Coding Problem Prep**: Practice coding problems with hints
-- **System Design Practice**: Learn system design concepts
-- **Rephraser**: Improve answer wording and clarity
-- **Project Builder**: Showcase projects effectively
-
-### 🏆 **5. Performance Analytics & Gamification**
-- **Confidence Score**: Track confidence levels across sessions
-- **Scorecard System**: Grade performance on multiple metrics
-- **XP System**: Earn experience points for practice
-- **Streak Tracker**: Maintain practice streaks
-- **Performance Metrics**: Track improvement over time
-- **Analytics Dashboard**: Visual performance data
-- **Referral System**: Incentivize user growth
-
-### 🤖 **6. AI Coaching Features**
-- **AI Feedback**: Instant feedback on answers
-- **Hint Generation**: Smart hints based on problem context
-- **Answer Generation**: AI-powered answer suggestions
-- **Code Analysis**: Real-time code review
-- **Personalized Coaching**: Tailored improvement suggestions
-
-### 📅 **7. Interview Scheduling & Management**
-- **Interview Scheduler**: Book practice sessions
-- **Google Calendar Sync**: Integrate with calendar
-- **Mock Interviews**: Full mock interview simulations
-- **Warm-up Sessions**: Quick 5-minute practice
-- **Interview History**: Track past interviews
-- **Debrief System**: Post-interview analysis and feedback
-
-### 📚 **8. Document Management**
-- **Resume Storage**: Secure resume vault
-- **Job Description Management**: Store and organize JDs
-- **Document Sharing**: Upload and manage documents
-- **Supabase Integration**: Cloud storage for files
-
-### 💳 **9. Billing & Monetization**
-- **Credit System**: Pay-per-use model
-- **Subscription Plans**: Monthly/yearly plans
-- **Stripe Integration**: Payment processing
-- **Credit Balance Tracking**: Monitor usage
-- **Upgrade Modal**: Tier management
-
-### 🔐 **10. Security & Privacy**
-- **Authentication**: Secure login with email verification
-- **OAuth Integration**: Social login options
-- **Data Privacy**: GDPR-compliant data handling
-- **Account Deletion**: User data export and deletion
-- **Private Mode**: Offline capability
-- **Bring Your Own Key (BYOK)**: Use personal API keys
+**Practice only.** Clarify AI is built for mock interviews and rehearsal. It must not be used to conceal assistance during real, graded, or employer interviews.
 
 ---
 
-## **Tech Stack**
+## Key features
 
-### **Frontend**
-- **React + TypeScript**: Type-safe component development
-- **Vite**: Fast build tooling
-- **Tailwind CSS**: Modern styling
-- **shadcn/ui**: Pre-built UI components
-- **Zustand**: Lightweight state management
-- **React Router**: Page navigation
+### Live practice coach
+- Real-time AI hints and answers (OpenAI, Anthropic, Gemini)
+- Live transcription via Deepgram
+- Streaming responses and keyboard shortcuts
+- **Calm steps** — instant grounding prompts when you feel stuck
+- Session timer and network status
 
-### **Backend & Database**
-- **Supabase**: PostgreSQL database + Auth + Storage
-- **Supabase Edge Functions**: Serverless functions
-- **Real-time Subscriptions**: Live data syncing
+### Practice overlay
+- Floating overlay for mock and live **practice** sessions
+- Resizable, dockable UI with resume/JD context
+- **Discrete UI** (optional): neutral nav labels for private practice — does **not** hide the app from screen sharing
+- Screen-sharing **awareness** notices (capture evasion is disabled by policy)
 
-### **AI/ML Services**
-- **OpenAI (GPT-4)**: Primary AI model
-- **Anthropic Claude**: Alternative AI model
-- **Google Gemini**: Third AI option
-- **Deepgram**: Speech-to-text (professional)
-- **Model Router**: Intelligent model selection based on task
+### Audio & speech
+- Speech-to-text, filler-word detection, WPM tracking
+- Speaker diarization and silence detection (where supported)
+- System audio capture for practice tabs (Chromium)
 
-### **Audio Processing**
-- **Deepgram API**: Real-time transcription
-- **Web Audio API**: Browser audio capture
-- **VAD (Voice Activity Detection)**: Silence detection
-- **Audio Mixing**: Combine multiple audio streams
+### Prep Lab
+- STAR builder, rephraser, coding hints, system design, project builder
+- Company research, answer bank, resume/JD management
 
-### **Third-party Integrations**
-- **Google Calendar**: Schedule synchronization
-- **Stripe**: Payment processing
-- **Sentry**: Error tracking & monitoring
-- **PostHog**: Analytics & feature flags
-- **Lovable**: Deployment platform
+### Analytics & gamification
+- Scorecards, debriefs, confidence trends
+- XP, streaks, badges
+- Analytics dashboard (server-side aggregates)
 
-### **Testing**
-- **Playwright**: E2E testing
-- **Vitest**: Unit testing
-- **ESLint**: Code quality
+### Scheduling & sessions
+- Interview scheduler, Google Calendar sync (when configured)
+- Mock interviews, warm-ups, session history
 
----
-
-## **User Personas**
-
-### 👨‍🎓 **1. Students**
-- Preparing for tech/corporate interviews
-- Want to practice without judgment
-- Need real-time guidance
-- Limited budget
-
-### 👨‍💼 **2. Job Seekers**
-- Career changers
-- Experienced professionals
-- Want to refresh interview skills
-- Can afford premium features
-
-### 🏢 **3. Interview Coaches**
-- Could use platform for client practice
-- Might want admin features
-- Could integrate into coaching business
+### Billing & security
+- Credits and Stripe subscriptions
+- Supabase Auth, RLS, GDPR export/delete
+- BYOK for bring-your-own API keys
+- Private/offline mode for sensitive practice
 
 ---
 
-## **Key Differentiators vs. Competitors**
+## Tech stack
 
-| Feature | Clarify | ParakeetAI | Others |
-|---------|---------|-----------|--------|
-| **Stealth Overlay** | ✅ Advanced | ✅ Basic | ❌ None |
-| **Real-time AI Answers** | ✅ Yes | ✅ Yes | ⚠️ Limited |
-| **Multi-AI Support** | ✅ 3 Models | ❌ 1 Model | ⚠️ Varies |
-| **Audio Analysis** | ✅ Comprehensive | ⚠️ Basic | ⚠️ Limited |
-| **Stealth Detection** | ✅ Advanced | ❌ No | ❌ No |
-| **STAR Builder** | ✅ Yes | ❌ No | ⚠️ Varies |
-| **Company Research** | ✅ Yes | ❌ No | ⚠️ Limited |
-| **Offline Mode** | ✅ Yes | ❌ No | ❌ No |
+| Layer | Stack |
+|--------|--------|
+| Frontend | React, TypeScript, Vite, Tailwind, shadcn/ui, Zustand |
+| Backend | Supabase (Postgres, Auth, Storage, Edge Functions) |
+| AI | OpenAI, Anthropic, Gemini via Edge Functions |
+| Audio | Deepgram, Web Audio API |
+| Payments | Stripe |
 
----
-
-## **Revenue Model**
-
-### 💰 **Monetization Streams**
-1. **Credits** - Pay per session/feature usage
-2. **Subscription Plans** - Monthly/yearly subscriptions
-3. **Premium Features** - Unlocks (BYOK, advanced analytics)
-4. **API Access** - For coaches integrating into their platforms
-5. **Enterprise Plans** - For corporate training teams
+See `docs/README.md`, `docs/API.md`, and `docs/PRODUCTION_AUDIT_2026-05-25.md` for deeper documentation.
 
 ---
 
-## **Deployment & Operations**
+## Local development
 
-- **Frontend**: Deployed on Lovable
-- **Backend**: Supabase Edge Functions
-- **Database**: Supabase PostgreSQL
-- **File Storage**: Supabase Storage
-- **Monitoring**: Sentry for errors, PostHog for analytics
+```bash
+npm install
+cp .env.example .env   # fill Supabase + API keys
+npm run dev
+```
 
----
-
-## **Current Status**
-
-✅ **Frontend Structure**: Complete file organization  
-✅ **Core Features**: Architected  
-⚠️ **Implementation**: In progress  
-⚠️ **Testing**: Needs coverage  
-⚠️ **Deployment**: Ready for Lovable  
+```bash
+npm run build
+npm test
+```
 
 ---
 
-## **Next Steps Priority**
+## Deployment checklist
 
-1. **Implement Overlay System** - Core differentiator
-2. **Build AI Integration** - Connect to Claude/OpenAI/Gemini
-3. **Audio Processing** - Deepgram integration
-4. **Authentication** - Supabase auth flow
-5. **Real-time Features** - WebSocket/Supabase subscriptions
-6. **Payment Integration** - Stripe setup
-7. **Testing & QA** - E2E and unit tests
-8. **Launch MVP** - Core features only
+1. Set Supabase secrets: `GEMINI_API_KEY`, `DEEPGRAM_API_KEY`, `STRIPE_*`, Google OAuth (calendar).
+2. Deploy Edge Functions: `supabase functions deploy`.
+3. Run migrations on the linked project.
+4. Enable leaked-password protection in Supabase Auth.
 
 ---
 
-This is essentially a **sophisticated EdTech platform combining exam prep software, AI coaching, and anti-detection technology** - positioned at the intersection of interview preparation, AI assistance, and stealth technology. The target market is students/professionals who want **unfair advantage during interviews with minimal detection risk**.
+## Compliance note
+
+Screen-capture exclusion, overlay hiding from interviewers, and anti-detection behaviour are **disabled** in production builds. See `src/lib/compliance/featureGates.ts`.
+
+---
+
+## License
+
+Proprietary — Clarifyy AI. See repository maintainers for terms.

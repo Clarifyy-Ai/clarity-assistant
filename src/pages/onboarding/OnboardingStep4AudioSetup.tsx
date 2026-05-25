@@ -184,8 +184,9 @@ export default function OnboardingStep4AudioSetup({ onNext, onBack, onSkip }: St
         <div className="flex items-start gap-2 bg-blue-500/5 border border-blue-500/15 rounded-xl p-3">
           <Info className="w-3.5 h-3.5 text-blue-400 shrink-0 mt-0.5" />
           <p className="text-[11px] text-blue-300 leading-relaxed">
-            The overlay is invisible to screen sharing. The interviewer cannot see
-            Clarify AI even when you share your screen.
+            Use Clarify AI for practice and mock sessions only. If you share your
+            screen, the overlay remains visible — do not use this tool to conceal
+            assistance during real interviews.
           </p>
         </div>
       </div>

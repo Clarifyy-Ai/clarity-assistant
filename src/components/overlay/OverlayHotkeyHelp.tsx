@@ -5,10 +5,10 @@ import { X, Keyboard } from "lucide-react";
 
 export const OVERLAY_HOTKEYS = [
   { keys: ["ctrl", "shift", "h"],   label: "Toggle overlay",       description: "Show or hide the Clarify AI overlay",          group: "visibility" },
-  { keys: ["ctrl", "shift", "s"],   label: "Stealth mode",         description: "Switch overlay to minimal stealth view",       group: "visibility" },
+  { keys: ["ctrl", "shift", "s"],   label: "Discrete UI",          description: "Toggle neutral app nav labels (practice privacy)", group: "visibility" },
   { keys: ["ctrl", "shift", "y"],   label: "Cycle hint style",     description: "Full Answer → Short Hints → Keywords",         group: "hints" },
   { keys: ["ctrl", "shift", "c"],   label: "Screenshot + analyse", description: "Screenshot problem & get AI analysis",          group: "actions" },
-  { keys: ["ctrl", "shift", "p"],   label: "Panic button",         description: "Show immediate calming steps",                 group: "actions" },
+  { keys: ["ctrl", "shift", "p"],   label: "Calm steps",           description: "Show grounding coaching prompts",              group: "actions" },
   { keys: ["ctrl", "shift", "m"],   label: "Mute / unmute",        description: "Toggle microphone during a live session",      group: "session" },
   { keys: ["ctrl", "shift", "/"],   label: "Hotkey help",          description: "Show this keyboard shortcut reference",        group: "session" },
   { keys: ["ctrl", "shift", "1-4"], label: "Dock position",        description: "Snap overlay to corner 1–4",                   group: "layout" },
