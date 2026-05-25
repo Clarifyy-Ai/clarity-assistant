@@ -128,15 +128,15 @@ export default function AdminRevenue() {
     try {
       const { data: profileData } = await supabase
         .from("profiles")
-        .select("plan, credits, stripe_subscription_id, subscription_status");
+        .select("plan_id, credits, stripe_subscription_id, subscription_status");
 
       if (profileData) {
         const planCounts: Record<string, number> = {};
         let activeSubscribers = 0;
 
         profileData.forEach((p) => {
-          const row = p as { plan?: string; subscription_status?: string };
-          const planId = row.plan ?? "free";
+          const row = p as { plan_id?: string; subscription_status?: string };
+          const planId = row.plan_id ?? "free";
           planCounts[planId] = (planCounts[planId] ?? 0) + 1;
           if (row.subscription_status === "active") activeSubscribers++;
         });
@@ -163,9 +163,9 @@ export default function AdminRevenue() {
         setMetrics({
           mrr,
           arr:               mrr * 12,
-          mrrGrowth:         8.4,
+          mrrGrowth:         0,
           activeSubscribers,
-          churnRate:         2.3,
+          churnRate:         0,
           ltv:               mrr > 0 ? Math.round(mrr / Math.max(activeSubscribers, 1)) * 18 : 0,
           totalRevenue:      mrr * 14,
           creditRevenue:     mrr * 0.12,

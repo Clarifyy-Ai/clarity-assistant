@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { toast } from "sonner";
+import { resolveExamConfigId } from "@/lib/mock-test/examTypes";
 
 interface DifficultyDistribution {
   EASY: number;
@@ -187,7 +188,7 @@ export default function TestConfigure() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
 
-  const examFromURL = searchParams.get("exam") ?? "JEE_MAIN";
+  const examFromURL = resolveExamConfigId(searchParams.get("exam"));
   const isQuick = searchParams.get("quick") === "true";
   const yearMinFromURL = searchParams.get("year_min")
     ? Number(searchParams.get("year_min"))

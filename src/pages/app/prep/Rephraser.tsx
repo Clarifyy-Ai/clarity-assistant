@@ -1,5 +1,6 @@
 // @ts-nocheck
-import { fetchEdge } from "@/lib/network/fetchEdge";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { refreshCredits } from "@/lib/billing/creditsManager";
 import { useState } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { useAuthStore } from "@/store/userStore";
@@ -49,28 +50,18 @@ export default function Rephraser() {
     setAlternatives(null);
     setSaved(null);
 
-    const { success, error: deductErr } = await credits.deduct("rephrase");
-    if (!success) {
-      setError(deductErr ?? "Failed to deduct credits");
-      setLoading(false);
-      return;
-    }
-
     try {
-      const input = original;
-      const res = await fetchEdge("prep-tool", { tool_id: "rephrase", input });
-
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
-      const json = await res.json();
-
-      // Unwrap successResponse envelope: { success: true, data: { result: "..." } }
-      const raw = json?.data?.result ?? json?.result ?? "";
+      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
+        tool_id: "rephrase",
+        input: original,
+      });
+      const raw = data.result ?? "";
       const parsed: Alternatives = JSON.parse(raw);
       setAlternatives(parsed);
+      await refreshCredits();
     } catch (err) {
-      await credits.refund("rephrase");
       setAlternatives(getOfflineAlternatives(original));
-      toast.info("Using offline rephrasing — AI unavailable. Credit refunded.");
+      toast.info("Using offline rephrasing — AI unavailable.");
     }
     setLoading(false);
   }

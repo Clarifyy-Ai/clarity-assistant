@@ -1,5 +1,6 @@
 // @ts-nocheck
-import { fetchEdge } from "@/lib/network/fetchEdge";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { refreshCredits } from "@/lib/billing/creditsManager";
 import { useState } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { useAuthStore } from "@/store/userStore";
@@ -69,25 +70,17 @@ export default function SystemDesign() {
     setError(null);
     setBreakdown("");
 
-    const { success, error: deductErr } = await credits.deduct("system_design");
-    if (!success) {
-      setError(deductErr ?? "Failed to deduct credits");
-      setLoading(false);
-      return;
-    }
-
     try {
-      
       const input = `Topic: ${activeTopic.title}\n\nPrompt: ${activeTopic.prompt}\n\nKey areas: ${activeTopic.keyAreas.join(", ")}${notes ? `\n\nCandidate notes:\n${notes}` : ""}`;
-      const res = await fetchEdge("prep-tool", { tool_id: "system_design", input });
-
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
-      const data = await res.json();
+      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
+        tool_id: "system_design",
+        input,
+      });
       setBreakdown(data.result ?? "Breakdown unavailable.");
+      await refreshCredits();
     } catch (err) {
-      await credits.refund("system_design");
       setBreakdown(getOfflineBreakdown(activeTopic));
-      toast.info("Using offline breakdown — AI unavailable. Credit refunded.");
+      toast.info("Using offline breakdown — AI unavailable.");
     }
     setLoading(false);
   }

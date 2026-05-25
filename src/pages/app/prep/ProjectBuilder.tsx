@@ -1,5 +1,6 @@
 // @ts-nocheck
-import { fetchEdge } from "@/lib/network/fetchEdge";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { refreshCredits } from "@/lib/billing/creditsManager";
 import { useState } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { useAuthStore } from "@/store/userStore";
@@ -52,26 +53,18 @@ export default function ProjectBuilder() {
     setShowcase("");
     setSaved(false);
 
-    const { success, error: deductErr } = await credits.deduct("project_build");
-    if (!success) {
-      setError(deductErr ?? "Failed to deduct credits");
-      setLoading(false);
-      return;
-    }
-
     try {
-      
       const techList = techStack.length > 0 ? techStack.join(", ") : "not specified";
       const input = `Project: ${projectName}\nRole: ${role}\nTech Stack: ${techList}\n\nWhat I did:\n${description}${impact ? `\n\nImpact & Metrics:\n${impact}` : ""}${githubUrl ? `\n\nGitHub/Portfolio URL: ${githubUrl}` : ""}`;
-      const res = await fetchEdge("prep-tool", { tool_id: "project_build", input });
-
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
-      const data = await res.json();
+      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
+        tool_id: "project_build",
+        input,
+      });
       setShowcase(data.result ?? "Showcase generation unavailable.");
+      await refreshCredits();
     } catch (err) {
-      await credits.refund("project_build");
       setShowcase(getOfflineShowcase(projectName, role, techStack, description, impact));
-      toast.info("Using offline template — AI unavailable. Credit refunded.");
+      toast.info("Using offline template — AI unavailable.");
     }
     setLoading(false);
   }

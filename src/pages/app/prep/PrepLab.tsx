@@ -21,7 +21,8 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { EDGE_BASE } from "@/lib/env";
-import { fetchEdge, fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { Link } from "react-router-dom";
 
 // ─────────────────────────────────────────────────────────────────
 // PrepLab — STAR builder, question bank, AI tools
@@ -35,6 +36,23 @@ export default function PrepLab() {
         title="Prep Lab"
         description="Build STAR answers, study questions, and use AI tools"
       />
+      <div className="flex flex-wrap gap-2 -mt-2">
+        {[
+          { to: "/app/prep/star-builder", label: "STAR Builder" },
+          { to: "/app/prep/rephraser", label: "Rephraser" },
+          { to: "/app/prep/coding-hints", label: "Coding Hints" },
+          { to: "/app/prep/system-design", label: "System Design" },
+          { to: "/app/prep/project-builder", label: "Project Builder" },
+        ].map((item) => (
+          <Link
+            key={item.to}
+            to={item.to}
+            className="text-xs font-medium px-3 py-1.5 rounded-xl border border-border bg-secondary/50 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+          >
+            {item.label}
+          </Link>
+        ))}
+      </div>
       <Tabs defaultValue="star">
         <TabsList>
           <TabsTrigger value="star">⭐ STAR Builder</TabsTrigger>
@@ -153,7 +171,17 @@ function STARBuilder() {
         },
         body: JSON.stringify({
           questionText: question,
-          resumeText:   docStore.active_context?.resume?.content || undefined,
+          resumeText: [
+            docStore.active_context?.resume?.content || "",
+            "",
+            "User STAR draft (polish and integrate):",
+            `Situation: ${star.situation}`,
+            `Task: ${star.task}`,
+            `Action: ${star.action}`,
+            `Result: ${star.result}`,
+          ]
+            .filter(Boolean)
+            .join("\n"),
         }),
       });
 
@@ -178,11 +206,12 @@ function STARBuilder() {
     if (!user || !generated) return;
     try {
       const { error } = await supabase.from("answer_bank").insert({
-        user_id:       user.id,
+        user_id: user.id,
         question_text: question,
-        answer_text:   generated,
-        star_breakdown: star,
-        source:        "prep_lab",
+        answer_text: generated,
+        category: "STAR",
+        source: "prep_lab",
+        tags: ["star", "prep_lab"],
       });
       if (error) throw error;
       setSaved(true);
@@ -345,6 +374,8 @@ const STARTER_QUESTIONS: BankQuestion[] = [
 
 function QuestionBank() {
   const { user } = useAuthStore();
+  const [feedbackLoading, setFeedbackLoading] = useState(false);
+  const [feedbackText, setFeedbackText] = useState<string | null>(null);
   const [category,   setCategory]   = useState("All");
   const [search,     setSearch]     = useState("");
   const [practicing, setPracticing] = useState<string | null>(null);
@@ -364,7 +395,7 @@ function QuestionBank() {
       try {
         const { data, error } = await supabase
           .from("answer_bank")
-          .select("id, question, category, tags")
+          .select("id, question_text, category, tags")
           .eq("user_id", user.id)
           .order("updated_at", { ascending: false })
           .limit(100);
@@ -372,9 +403,9 @@ function QuestionBank() {
         if (error) throw error;
 
         const fromBank: BankQuestion[] = (data ?? [])
-          .map((row: { id: string; question?: string; category?: string; tags?: string[] }) => ({
+          .map((row: { id: string; question_text?: string; category?: string; tags?: string[] }) => ({
             id: row.id,
-            text: (row.question ?? "").trim(),
+            text: (row.question_text ?? "").trim(),
             category: row.category ?? "Behavioural",
             difficulty: "medium",
             fromLibrary: true,
@@ -403,6 +434,42 @@ function QuestionBank() {
   });
 
   const activeQ = questions.find((q) => q.id === practicing);
+
+  async function savePracticeToBank() {
+    if (!user || !activeQ || answer.trim().length < 8) return;
+    try {
+      const { error } = await supabase.from("answer_bank").insert({
+        user_id: user.id,
+        question_text: activeQ.text,
+        answer_text: answer.trim(),
+        category: activeQ.category,
+        source: "prep_lab_practice",
+        tags: ["practice"],
+      });
+      if (error) throw error;
+      toast.success("Practice answer saved to your bank.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save answer.");
+    }
+  }
+
+  async function getPracticeFeedback() {
+    if (!activeQ || answer.trim().length < 20) return;
+    setFeedbackLoading(true);
+    setFeedbackText(null);
+    try {
+      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
+        tool_id: "star_method",
+        input: `Question: ${activeQ.text}\n\nCandidate answer:\n${answer.trim()}\n\nGive concise STAR feedback: strengths, gaps, and one improved opening sentence.`,
+      });
+      setFeedbackText(data.result ?? "No feedback returned.");
+      await refreshCredits();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to get feedback.");
+    } finally {
+      setFeedbackLoading(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -481,7 +548,24 @@ function QuestionBank() {
               <Button
                 variant="ghost"
                 size="xs"
-                leftIcon={<Star className="w-3 h-3" />}
+                leftIcon={<Save className="w-3 h-3" />}
+                onClick={async () => {
+                  if (!user) return;
+                  try {
+                    const { error } = await supabase.from("answer_bank").insert({
+                      user_id: user.id,
+                      question_text: q.text,
+                      answer_text: "(Draft — open Practice to add your answer)",
+                      category: q.category,
+                      source: "prep_lab_bank",
+                      tags: ["saved_question"],
+                    });
+                    if (error) throw error;
+                    toast.success("Question saved to your bank.");
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : "Failed to save.");
+                  }
+                }}
               >
                 Save
               </Button>
@@ -521,23 +605,36 @@ function QuestionBank() {
               rows={6}
               className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
             />
-            <div className="flex gap-3">
+            {feedbackText && (
+              <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3 text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+                {feedbackText}
+              </div>
+            )}
+            <div className="flex flex-wrap gap-3">
               <Button
                 variant="secondary"
                 size="sm"
-                fullWidth
                 onClick={() => setPracticing(null)}
               >
                 Cancel
               </Button>
               <Button
+                variant="ghost"
+                size="sm"
+                disabled={answer.trim().length < 8}
+                leftIcon={<Save className="w-3.5 h-3.5" />}
+                onClick={() => void savePracticeToBank()}
+              >
+                Save answer
+              </Button>
+              <Button
                 variant="primary"
                 size="sm"
-                fullWidth
-                disabled={answer.trim().length < 20}
+                disabled={answer.trim().length < 20 || feedbackLoading}
                 leftIcon={<Zap className="w-3.5 h-3.5" />}
+                onClick={() => void getPracticeFeedback()}
               >
-                Get AI feedback
+                {feedbackLoading ? "Analyzing…" : "Get AI feedback"}
               </Button>
             </div>
           </div>
@@ -743,13 +840,21 @@ function CompanyPrep() {
   async function generate() {
     if (!company.trim() || !role.trim()) return;
     setLoading(true);
-
-
-    const res = await fetchEdge("company-research", { company, role });
-
-    const data = await res.json();
-    setBrief(data);
-    setLoading(false);
+    setBrief(null);
+    try {
+      const data = await fetchEdgeJson<{
+        overview?: string;
+        questions?: string[];
+        culture?: string;
+        tips?: string[];
+      }>("company-research", { company: company.trim(), role: role.trim() });
+      setBrief(data);
+      await refreshCredits();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load company brief.");
+    } finally {
+      setLoading(false);
+    }
   }
 
   return (

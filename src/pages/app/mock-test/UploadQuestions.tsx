@@ -16,6 +16,7 @@ import {
 import { InlineMath, BlockMath } from "react-katex";
 import "katex/dist/katex.min.css";
 import { toast } from "sonner";
+import { normalizeExamTypeForStorage } from "@/lib/mock-test/examTypes";
 
 import { supabase } from "@/lib/supabase/client";
 import { SUPABASE_URL } from "@/lib/env";
@@ -268,7 +269,7 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
         marks_positive: form.marks_positive,
         marks_negative: form.marks_negative,
         source_year: form.source_year,
-        exam_type: form.exam_type,
+        exam_type: normalizeExamTypeForStorage(form.exam_type),
         image_url: form.image_url?.trim() || null,
         has_image: Boolean(form.image_url?.trim()),
         latex_present: latexPresent,
@@ -888,7 +889,7 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
         marks_positive: question.marks_positive,
         marks_negative: question.marks_negative,
         source_year: question.source_year,
-        exam_type: question.exam_type,
+        exam_type: normalizeExamTypeForStorage(question.exam_type),
         latex_present: question.latex_present,
         uploaded_by: user.id,
         source: "USER_UPLOAD",

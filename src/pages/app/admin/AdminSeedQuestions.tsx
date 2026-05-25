@@ -11,6 +11,8 @@ import { toast } from "sonner";
 import { Database, Upload, RefreshCw, Sparkles, FileText, Loader2, CheckCircle2 } from "lucide-react";
 import ExcelImportTab from "@/pages/app/mock-test/ExcelImportTab";
 import { cn } from "@/lib/utils";
+import { unwrapEdgePayload } from "@/lib/network/edgeResult";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 
@@ -89,10 +91,17 @@ export default function AdminSeedQuestions() {
         body: formData,
       });
 
-      if (!response.ok) throw new Error("Failed to process PDF via AI.");
-      const { data: questions } = await response.json();
+      if (!response.ok) {
+        const errBody = await response.json().catch(() => ({}));
+        throw new Error(
+          (errBody as { error?: string }).error ?? "Failed to process PDF via AI."
+        );
+      }
+      const json = await response.json();
+      const inner = unwrapEdgePayload<{ questions?: unknown[] }>(json);
+      const questions = Array.isArray(inner.questions) ? inner.questions : [];
 
-      if (!questions || questions.length === 0) throw new Error("No questions extracted.");
+      if (questions.length === 0) throw new Error("No questions extracted.");
 
       // Phase 2: Bulk-save verified questions as OFFICIAL_PYP
       const rowsToInsert = questions.map((q: any) => ({
@@ -121,19 +130,36 @@ export default function AdminSeedQuestions() {
     }
   }
 
-  // Phase 3: Trigger AI Gap Filling
+  // Phase 3: Trigger AI gap-fill via select-test-questions (uses SYSTEM_USER_ID secret)
   async function triggerGapFill(exam: string) {
-    toast.promise(
-      new Promise((resolve) => setTimeout(resolve, 3000)), // Simulate edge function call
-      {
-        loading: `Analyzing gaps for ${exam} and generating questions...`,
-        success: () => {
-          loadStats();
-          return `AI successfully generated 20 gap-fill questions for ${exam}!`;
+    const toastId = toast.loading(`Generating gap-fill questions for ${exam}…`);
+    try {
+      const res = await fetchEdgeJson<{
+        ai_generated_count?: number;
+        count?: number;
+      }>("select-test-questions", {
+        config: {
+          exam_type: exam,
+          question_count: 20,
+          subjects: ["General"],
+          topics: ["Gap fill"],
+          source_types: ["OFFICIAL_PYP", "AI_GENERATED"],
         },
-        error: "Failed to generate gap questions.",
-      }
-    );
+      });
+      const generated = res.ai_generated_count ?? 0;
+      toast.success(
+        generated > 0
+          ? `Added ${generated} AI-generated questions for ${exam}.`
+          : `Bank already has enough questions for ${exam} (no gap fill needed).`,
+        { id: toastId }
+      );
+      void loadStats();
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Gap fill failed. Check SYSTEM_USER_ID secret.",
+        { id: toastId }
+      );
+    }
   }
 
   return (

@@ -69,7 +69,7 @@ interface OfficialSetting {
  * Papers beyond this year will show a "Coming Soon" badge and
  * launch buttons will be disabled to prevent empty test sessions.
  */
-const QUESTIONS_MAX_YEAR = 2022;
+const QUESTIONS_MAX_YEAR = 2025;
 
 const EXAM_LABELS: Record<string, string> = {
   JEE_MAIN: "JEE Main",
@@ -92,6 +92,19 @@ const EXAM_DB_MAP: Record<string, string> = {
   UPSC:     "UPSC CSE",
   SSC_CGL:  "SSC CGL",
   IBPS_PO:  "IBPS PO",
+};
+
+/** exam_papers.exam_type → TestConfigure URL id */
+const EXAM_ROUTE_FROM_PAPER: Record<string, string> = {
+  "JEE Main": "JEE_MAIN",
+  "JEE Advanced": "JEE_ADV",
+  "NEET UG": "NEET",
+  "UPSC CSE": "UPSC",
+  "SSC CGL": "SSC_CGL",
+  "SSC Exams (CGL/CHSL)": "SSC_CGL",
+  "Banking (IBPS/SBI/RBI)": "IBPS_PO",
+  "IBPS PO": "IBPS_PO",
+  "HPCL Engineer": "HPCL_ENGINEER",
 };
 
 const OFFICIAL_SETTINGS: Record<string, OfficialSetting> = {
@@ -300,7 +313,9 @@ export default function ExamPapers() {
       toast.error(message);
       // Fallback to manual configuration
       navigate(
-        `/app/mock-test/configure?exam=${paper.exam_type}&year_min=${paper.year}&year_max=${paper.year}`,
+        `/app/mock-test/configure?exam=${encodeURIComponent(
+          EXAM_ROUTE_FROM_PAPER[paper.exam_type] ?? paper.exam_type.replace(/\s+/g, "_").toUpperCase()
+        )}&year_min=${paper.year}&year_max=${paper.year}`,
       );
     } finally {
       setLaunchingId(null);
@@ -580,7 +595,9 @@ export default function ExamPapers() {
                         className="flex-1 text-xs"
                         onClick={() =>
                           navigate(
-                            `/app/mock-test/configure?exam=${paper.exam_type}&year_min=${paper.year}&year_max=${paper.year}`,
+                            `/app/mock-test/configure?exam=${encodeURIComponent(
+          EXAM_ROUTE_FROM_PAPER[paper.exam_type] ?? paper.exam_type.replace(/\s+/g, "_").toUpperCase()
+        )}&year_min=${paper.year}&year_max=${paper.year}`,
                           )
                         }
                       >

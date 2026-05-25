@@ -314,21 +314,35 @@ export default function MockTestHub(): React.ReactElement {
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
           {EXAM_TYPES.map((exam) => (
-            <button
+            <div
               key={exam.id}
-              type="button"
-              onClick={() => handleExamStart(exam.id)}
-              className={`text-left rounded-xl border ${exam.border} bg-gradient-to-br ${exam.color} p-4 transition-all hover:scale-[1.02] hover:shadow-md`}
+              className={`rounded-xl border ${exam.border} bg-gradient-to-br ${exam.color} p-4 transition-all hover:shadow-md`}
             >
               <div className="flex items-center justify-between mb-2">
                 <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${exam.badgeColor}`}>
                   {exam.badge}
                 </span>
-                <ChevronRight className="h-4 w-4 text-muted-foreground" />
               </div>
               <p className="font-semibold text-foreground">{exam.name}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{exam.description}</p>
-            </button>
+              <p className="text-xs text-muted-foreground mt-0.5 mb-3">{exam.description}</p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleExamStart(exam.id)}
+                  className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-background/80 border border-border hover:bg-background transition-colors"
+                >
+                  Configure
+                </button>
+                {exam.id !== "CUSTOM" && (
+                  <Link
+                    to={`/app/mock-test/papers/${exam.id}`}
+                    className="text-xs font-semibold px-2.5 py-1 rounded-lg bg-background/60 border border-border text-muted-foreground hover:text-foreground transition-colors inline-flex items-center gap-1"
+                  >
+                    Papers <ChevronRight className="h-3 w-3" />
+                  </Link>
+                )}
+              </div>
+            </div>
           ))}
         </div>
       </section>

@@ -364,7 +364,9 @@ Deno.serve(async (req: Request) => {
     }
 
     const includeUserUploads = source_types.includes("USER_UPLOAD");
-    const includeOnlyPYP    = source_types.includes("OFFICIAL_PYP") && !includeUserUploads;
+    const wantsPYP = source_types.includes("OFFICIAL_PYP");
+    const wantsAI = source_types.includes("AI_GENERATED");
+    const includeOnlyPYP = wantsPYP && !wantsAI && !includeUserUploads;
 
     // Source values used in the questions table vary: "OFFICIAL_PYP",
     // "Previous Year Paper", "PYP", etc. Accept all common variants.

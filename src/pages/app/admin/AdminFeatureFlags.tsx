@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabase/client";
 import { useGlobalStore }       from "@/store";
 import { FEATURE_PLAN_GATES }   from "@/lib/constants/features";
 
@@ -60,12 +61,54 @@ export default function AdminFeatureFlags() {
   const featureFlags = useGlobalStore((s) => s.featureFlags);
 
   const [rows,       setRows]       = useState<FlagRow[]>([]);
+  const [dbFlags,    setDbFlags]    = useState<Record<string, boolean>>({});
   const [overrides,  setOverrides]  = useState<Partial<Record<FeatureFlagId, boolean>>>({});
   const [search,     setSearch]     = useState("");
   const [filterPlan, setFilterPlan] = useState<PlanId | "all">("all");
   const [filterCat,  setFilterCat]  = useState<string>("all");
-  const [isDirty,    setIsDirty]    = useState(false);
-  const [isSaving,   setIsSaving]   = useState(false);
+  const [isDirty,        setIsDirty]        = useState(false);
+  const [isSaving,       setIsSaving]       = useState(false);
+  const [dbFlagsLoading, setDbFlagsLoading] = useState(true);
+  const [dbFlagsError,   setDbFlagsError]   = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDbFlags() {
+      setDbFlagsLoading(true);
+      setDbFlagsError(null);
+
+      try {
+        const { data, error } = await supabase
+          .from("feature_flags")
+          .select("key, is_enabled");
+
+        if (cancelled) return;
+
+        if (error) throw error;
+
+        const map: Record<string, boolean> = {};
+        for (const row of data ?? []) {
+          map[row.key] = row.is_enabled;
+        }
+        setDbFlags(map);
+      } catch (err) {
+        if (cancelled) return;
+        const message =
+          err instanceof Error ? err.message : "Failed to load feature flags from database";
+        setDbFlagsError(message);
+        console.error("[AdminFeatureFlags] load failed:", err);
+        toast.error(message);
+      } finally {
+        if (!cancelled) setDbFlagsLoading(false);
+      }
+    }
+
+    void loadDbFlags();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const built: FlagRow[] = Object.entries(FEATURE_PLAN_GATES ?? {}).map(
@@ -74,11 +117,14 @@ export default function AdminFeatureFlags() {
         minPlan:  minPlan as PlanId,
         category: getCategoryForFlag(id as FeatureFlagId),
         isBeta:   id.includes("beta") || id.includes("experimental"),
-        enabled:  featureFlags[id as FeatureFlagId] ?? false,
+        enabled:
+          dbFlags[id] ??
+          featureFlags[id as FeatureFlagId] ??
+          false,
       })
     );
     setRows(built);
-  }, [featureFlags]);
+  }, [featureFlags, dbFlags]);
 
   const filtered = rows.filter((row) => {
     const matchSearch = search.trim() === "" ||
@@ -99,12 +145,36 @@ export default function AdminFeatureFlags() {
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await new Promise<void>((r) => setTimeout(r, 600));
-      toast.success(`${Object.keys(overrides).length} flag(s) updated.`);
+      const entries = Object.entries(overrides) as [FeatureFlagId, boolean][];
+      for (const [key, is_enabled] of entries) {
+        const { data: existing } = await supabase
+          .from("feature_flags")
+          .select("id")
+          .eq("key", key)
+          .maybeSingle();
+
+        if (existing?.id) {
+          const { error } = await supabase
+            .from("feature_flags")
+            .update({ is_enabled, updated_at: new Date().toISOString() })
+            .eq("key", key);
+          if (error) throw error;
+        } else {
+          const { error } = await supabase.from("feature_flags").insert({
+            key,
+            name: key.replace(/_/g, " "),
+            is_enabled,
+            rollout_percent: 100,
+          });
+          if (error) throw error;
+        }
+        setDbFlags((prev) => ({ ...prev, [key]: is_enabled }));
+      }
+      toast.success(`${entries.length} flag(s) saved to database.`);
       setOverrides({});
       setIsDirty(false);
-    } catch {
-      toast.error("Failed to save flag overrides.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save flag overrides.");
     } finally {
       setIsSaving(false);
     }
@@ -126,7 +196,7 @@ export default function AdminFeatureFlags() {
         <div>
           <h1 className="text-xl font-bold text-foreground">Feature Flags</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Toggle features per plan tier. Changes are live immediately.
+            Plan gates (client) plus global toggles saved to feature_flags.
           </p>
         </div>
 
@@ -143,6 +213,15 @@ export default function AdminFeatureFlags() {
           </div>
         )}
       </div>
+
+      {dbFlagsError && (
+        <p className="text-sm text-red-500 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2">
+          Database flags could not be loaded: {dbFlagsError}. Showing plan gates only until you refresh.
+        </p>
+      )}
+      {dbFlagsLoading && !dbFlagsError && (
+        <p className="text-xs text-muted-foreground">Loading database flag overrides…</p>
+      )}
 
       {/* Stats row */}
       <div className="flex items-center gap-4 flex-wrap">

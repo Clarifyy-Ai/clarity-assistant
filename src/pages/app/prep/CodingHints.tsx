@@ -1,4 +1,5 @@
-import { fetchEdge } from "@/lib/network/fetchEdge";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { refreshCredits } from "@/lib/billing/creditsManager";
 import { useState, useMemo } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -100,25 +101,21 @@ export default function CodingHints() {
     setError(null);
     setHintText("");
 
-    const { success, error: deductErr } = await credits.deduct("coding_hint");
-    if (!success) {
-      setError(deductErr ?? "Failed to deduct credits");
-      setLoading(null);
-      return;
-    }
-
     try {
-      
       const input = `Problem: ${activeProblem.title}\n\n${activeProblem.description}\n\nExamples:\n${activeProblem.examples}\n\nTags: ${activeProblem.tags.join(", ")}`;
-      const res = await fetchEdge("prep-tool", { tool_id: "coding_hint", input, depth });
-
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
-      const data = await res.json();
-      setHintText(data.result ?? "Think about the data structures that would help here. Consider time and space complexity tradeoffs.");
+      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
+        tool_id: "coding_hint",
+        input,
+        depth,
+      });
+      setHintText(
+        data.result ??
+          "Think about the data structures that would help here. Consider time and space complexity tradeoffs."
+      );
+      await refreshCredits();
     } catch (err) {
-      await credits.refund("coding_hint");
       setHintText(getOfflineHint(activeProblem));
-      toast.info("Using offline hints — AI unavailable. Credit refunded.");
+      toast.info("Using offline hints — AI unavailable.");
     }
     setLoading(null);
   }
@@ -129,25 +126,17 @@ export default function CodingHints() {
     setError(null);
     setSolutionText("");
 
-    const { success, error: deductErr } = await credits.deduct("coding_solution");
-    if (!success) {
-      setError(deductErr ?? "Failed to deduct credits");
-      setLoading(null);
-      return;
-    }
-
     try {
-      
       const input = `Problem: ${activeProblem.title}\n\n${activeProblem.description}\n\nExamples:\n${activeProblem.examples}\n\nTags: ${activeProblem.tags.join(", ")}`;
-      const res = await fetchEdge("prep-tool", { tool_id: "coding_solution", input });
-
-      if (!res.ok) throw new Error(`API error: ${res.status}`);
-      const data = await res.json();
+      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
+        tool_id: "coding_solution",
+        input,
+      });
       setSolutionText(data.result ?? "Solution explanation unavailable.");
+      await refreshCredits();
     } catch (err) {
-      await credits.refund("coding_solution");
       setSolutionText(getOfflineSolution(activeProblem));
-      toast.info("Using offline solution — AI unavailable. Credit refunded.");
+      toast.info("Using offline solution — AI unavailable.");
     }
     setLoading(null);
   }

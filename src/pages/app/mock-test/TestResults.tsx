@@ -144,25 +144,30 @@ export default function TestResults() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [testId, user?.id]);
 
+  async function fetchAnalysisWithRetry(): Promise<Record<string, unknown> | null> {
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const { data } = await supabase
+        .from("test_analyses")
+        .select("*")
+        .eq("test_id", testId!)
+        .eq("user_id", user!.id)
+        .maybeSingle();
+      if (data) return data as Record<string, unknown>;
+      await new Promise((r) => setTimeout(r, 400 + attempt * 300));
+    }
+    return null;
+  }
+
   async function loadResults() {
     setLoading(true);
 
     try {
-      const [{ data: testData, error: testError }, { data: analysisData, error: analysisError }] =
-        await Promise.all([
-          supabase
-            .from("mock_tests")
-            .select("*")
-            .eq("id", testId!)
-            .eq("user_id", user!.id)
-            .single(),
-          supabase
-            .from("test_analyses")
-            .select("*")
-            .eq("test_id", testId!)
-            .eq("user_id", user!.id)
-            .single(),
-        ]);
+      const { data: testData, error: testError } = await supabase
+        .from("mock_tests")
+        .select("*")
+        .eq("id", testId!)
+        .eq("user_id", user!.id)
+        .single();
 
       if (testError || !testData) {
         toast.error("Test not found.");
@@ -170,8 +175,9 @@ export default function TestResults() {
         return;
       }
 
-      if (analysisError || !analysisData) {
-        toast.error("Analysis not found yet. Please try again in a moment.");
+      const analysisData = await fetchAnalysisWithRetry();
+      if (!analysisData) {
+        toast.error("Analysis is still processing. Refresh the page in a few seconds.");
         navigate("/app/mock-test");
         return;
       }

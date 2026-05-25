@@ -136,6 +136,18 @@ const NAV_SECTIONS: NavSection[] = [
         label: "Usage",
       },
       {
+        to: "/app/debrief",
+        icon: BookMarked,
+        stealthIcon: Inbox,
+        label: "Debrief",
+      },
+      {
+        to: "/app/referrals",
+        icon: Star,
+        stealthIcon: Star,
+        label: "Referrals",
+      },
+      {
         to: "/app/documents",
         icon: FileText,
         stealthIcon: FileText,
@@ -152,6 +164,12 @@ const NAV_SECTIONS: NavSection[] = [
   {
     label: "Planner",
     items: [
+      {
+        to: "/app/interview-day",
+        icon: CalendarDays,
+        stealthIcon: Calendar,
+        label: "Interview Day",
+      },
       {
         to: "/app/interviews",
         icon: CalendarDays,

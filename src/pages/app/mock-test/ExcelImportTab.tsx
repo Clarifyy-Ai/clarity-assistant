@@ -15,6 +15,7 @@ import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { toast } from "sonner";
+import { normalizeExamTypeForStorage } from "@/lib/mock-test/examTypes";
 
 interface ParsedRow {
   _idx: number;
@@ -114,8 +115,8 @@ export default function ExcelImportTab({
     }
 
     const ext = file.name.split(".").pop()?.toLowerCase();
-    if (!["xlsx", "xls"].includes(ext ?? "")) {
-      toast.error("Only .xlsx or .xls files are supported.");
+    if (!["xlsx", "xls", "csv"].includes(ext ?? "")) {
+      toast.error("Only .xlsx, .xls, or .csv files are supported.");
       return;
     }
 
@@ -123,8 +124,11 @@ export default function ExcelImportTab({
 
     reader.onload = (event) => {
       try {
-        const data = new Uint8Array(event.target?.result as ArrayBuffer);
-        const workbook = XLSX.read(data, { type: "array" });
+        const raw = event.target?.result;
+        const workbook =
+          ext === "csv"
+            ? XLSX.read(String(raw ?? ""), { type: "string" })
+            : XLSX.read(new Uint8Array(raw as ArrayBuffer), { type: "array" });
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const json = XLSX.utils.sheet_to_json<Record<string, unknown>>(worksheet, {
           defval: "",
@@ -221,7 +225,7 @@ export default function ExcelImportTab({
         difficulty: row.difficulty,
         marks_positive: row.marks_positive,
         marks_negative: row.marks_negative,
-        exam_type: row.exam_type === "CUSTOM" ? null : row.exam_type,
+        exam_type: normalizeExamTypeForStorage(row.exam_type),
         source_year: row.source_year,
         image_url: row.image_url || null,
         has_image: Boolean(row.image_url),
@@ -265,7 +269,7 @@ export default function ExcelImportTab({
             Pre-formatted Excel file with headers
           </p>
         </div>
-        <a href="/ClarifyAI_Question_Template.xlsx" download>
+        <a href="/ClarifyAI_Question_Template.csv" download>
           <Button variant="outline" size="sm">
             <Download className="mr-1.5 h-4 w-4" />
             Template
@@ -291,7 +295,7 @@ export default function ExcelImportTab({
           <input
             ref={fileRef}
             type="file"
-            accept=".xlsx,.xls"
+            accept=".xlsx,.xls,.csv"
             className="sr-only"
             onChange={(e) => {
               const file = e.target.files?.[0];
@@ -301,7 +305,7 @@ export default function ExcelImportTab({
           <FileSpreadsheet className="mb-3 h-10 w-10 text-muted-foreground" />
           <p className="font-medium text-foreground">Drop your Excel file here</p>
           <p className="mt-1 text-sm text-muted-foreground">
-            or click to browse · .xlsx/.xls · Max 5 MB
+            or click to browse · .xlsx / .xls / .csv · Max 5 MB
           </p>
         </div>
       )}

@@ -74,23 +74,23 @@ export default function AdminDashboard() {
       value: stats.totalUsers.toLocaleString(),
       sub:   `${stats.freeUsers} free · ${stats.proUsers} pro`,
       icon:  <Users className="w-4 h-4 text-violet-400" />,
-      delta: "+12%",
+      delta: null,
       up:    true,
     },
     {
       label: "Conversion rate",
       value: `${stats.convRate}%`,
-      sub:   "Free → Pro",
+      sub:   "Free → paid plans",
       icon:  <TrendingUp className="w-4 h-4 text-emerald-400" />,
-      delta: "+2.1%",
+      delta: null,
       up:    true,
     },
     {
       label: "Est. MRR",
       value: `$${stats.mrr.toLocaleString()}`,
-      sub:   "Monthly recurring revenue",
+      sub:   "Pro users × $19 (estimate)",
       icon:  <DollarSign className="w-4 h-4 text-amber-400" />,
-      delta: "+8%",
+      delta: null,
       up:    true,
     },
     {
@@ -174,7 +174,7 @@ function RecentSignups() {
   useEffect(() => {
     supabase
       .from("profiles")
-      .select("id, full_name, email, plan, created_at")
+      .select("id, full_name, email, plan_id, created_at")
       .order("created_at", { ascending: false })
       .limit(10)
       .then(({ data }) => setRows((data as unknown as SignupRow[]) ?? []));

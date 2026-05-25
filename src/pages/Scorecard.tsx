@@ -53,7 +53,7 @@ export default function Scorecard() {
       <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center gap-4">
         <AlertTriangle className="w-10 h-10 text-red-400" />
         <p className="text-muted-foreground">Unable to load scorecard</p>
-        <Link to="/dashboard" className="text-sm text-violet-400 hover:underline">
+        <Link to="/app/dashboard" className="text-sm text-violet-400 hover:underline">
           Back to Dashboard
         </Link>
       </div>
@@ -230,7 +230,7 @@ export default function Scorecard() {
             Practice Again
           </Link>
           <Link
-            to="/analytics"
+            to="/app/analytics"
             className="flex-1 text-center py-3 bg-secondary hover:bg-secondary border border-border text-muted-foreground font-medium rounded-xl transition-all"
           >
             View Analytics
