@@ -151,6 +151,22 @@ function getRequestOrigin(req: Request): string | null {
   return normalizeOrigin(rawOrigin);
 }
 
+const PREVIEW_HOST_PATTERNS = [
+  /\.lovable\.app$/i,
+  /\.lovable\.dev$/i,
+  /\.lovableproject\.com$/i,
+];
+
+function isPreviewOrigin(origin: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(origin);
+    if (protocol !== "https:") return false;
+    return PREVIEW_HOST_PATTERNS.some((re) => re.test(hostname));
+  } catch {
+    return false;
+  }
+}
+
 export function isOriginAllowed(req: Request): boolean {
   const requestOrigin = getRequestOrigin(req);
 
@@ -159,7 +175,7 @@ export function isOriginAllowed(req: Request): boolean {
     return true;
   }
 
-  return getAllowedOrigins().has(requestOrigin);
+  return getAllowedOrigins().has(requestOrigin) || isPreviewOrigin(requestOrigin);
 }
 
 /**
@@ -176,16 +192,13 @@ export function getCorsHeaders(req: Request): Record<string, string> {
     "Vary": "Origin",
   };
 
-  if (requestOrigin && allowedOrigins.has(requestOrigin)) {
-    headers["Access-Control-Allow-Origin"] = requestOrigin;
+  const originOk =
+    !!requestOrigin && (allowedOrigins.has(requestOrigin) || isPreviewOrigin(requestOrigin));
 
-    // Keep this true only for compatibility.
-    // Frontend apiClient currently uses credentials: "omit",
-    // so cookies are not required for app API calls.
+  if (originOk) {
+    headers["Access-Control-Allow-Origin"] = requestOrigin!;
     headers["Access-Control-Allow-Credentials"] = "true";
-  }
-
-  if (requestOrigin && !allowedOrigins.has(requestOrigin)) {
+  } else if (requestOrigin) {
     console.warn("[cors] Rejected origin:", requestOrigin);
   }
 
@@ -215,7 +228,7 @@ export function handleCors(req: Request): Response | null {
     });
   }
 
-  if (!getAllowedOrigins().has(requestOrigin)) {
+  if (!getAllowedOrigins().has(requestOrigin) && !isPreviewOrigin(requestOrigin)) {
     console.warn("[cors] Preflight rejected for origin:", requestOrigin);
 
     return new Response(
