@@ -1311,6 +1311,7 @@ export type Database = {
           marketing_emails: boolean
           noise_suppression: boolean
           notice_period: string | null
+          notification_prefs: Json | null
           onboarding_completed: boolean
           onboarding_step: number
           overlay_font_size: number
@@ -1322,6 +1323,7 @@ export type Database = {
           preferred_language: string
           preferred_model: Database["public"]["Enums"]["ai_model"]
           preferred_salary: string | null
+          privacy_prefs: Json | null
           profile_visibility: string
           referral_code: string | null
           referred_by: string | null
@@ -1388,6 +1390,7 @@ export type Database = {
           marketing_emails?: boolean
           noise_suppression?: boolean
           notice_period?: string | null
+          notification_prefs?: Json | null
           onboarding_completed?: boolean
           onboarding_step?: number
           overlay_font_size?: number
@@ -1399,6 +1402,7 @@ export type Database = {
           preferred_language?: string
           preferred_model?: Database["public"]["Enums"]["ai_model"]
           preferred_salary?: string | null
+          privacy_prefs?: Json | null
           profile_visibility?: string
           referral_code?: string | null
           referred_by?: string | null
@@ -1465,6 +1469,7 @@ export type Database = {
           marketing_emails?: boolean
           noise_suppression?: boolean
           notice_period?: string | null
+          notification_prefs?: Json | null
           onboarding_completed?: boolean
           onboarding_step?: number
           overlay_font_size?: number
@@ -1476,6 +1481,7 @@ export type Database = {
           preferred_language?: string
           preferred_model?: Database["public"]["Enums"]["ai_model"]
           preferred_salary?: string | null
+          privacy_prefs?: Json | null
           profile_visibility?: string
           referral_code?: string | null
           referred_by?: string | null
@@ -3034,6 +3040,10 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      increment_profile_credits: {
+        Args: { p_credits: number; p_customer_id: string; p_user_id: string }
+        Returns: undefined
       }
       is_admin: { Args: never; Returns: boolean }
       mark_notifications_read: {
