@@ -26,7 +26,12 @@ const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 const ALLOWED_MIME_TYPES: Record<BucketName, string[]> = {
   resumes:      ["application/pdf", "application/msword",
                  "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
-  documents:    ["application/pdf", "text/plain", "text/markdown"],
+  documents:    [
+    "application/pdf",
+    "text/plain",
+    "text/markdown",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  ],
   avatars:      ["image/jpeg", "image/png", "image/webp", "image/gif"],
   screenshots:  ["image/jpeg", "image/png", "image/webp"],
   exports:      ["application/json", "text/csv", "application/zip"],

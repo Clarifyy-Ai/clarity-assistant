@@ -74,7 +74,9 @@ Rules:
 - Return ONLY valid JSON. No markdown, no commentary, no code fences.
 - Each question must have exactly 4 options labelled A, B, C, D.
 - correct_answer must be one of "A", "B", "C", "D".
-- Preserve mathematical notation as plain text (e.g. "x^2 + 3x - 4 = 0").
+- Preserve mathematical notation using LaTeX in question_text and option text (e.g. $x^2 + 3x - 4 = 0$, $$\\frac{a}{b}$$).
+- If a diagram is essential, set image_url to a short description placeholder (admin may attach image later).
+- Set latex_present true when the question uses equations.
 - Skip any item that is not a valid MCQ with 4 options.
 - difficulty must be one of "EASY", "MEDIUM", "HARD" (infer if not stated).
 
@@ -95,7 +97,9 @@ Schema:
       "topic": "string (specific chapter/topic)",
       "difficulty": "MEDIUM",
       "marks_positive": 4,
-      "marks_negative": 1
+      "marks_negative": 1,
+      "latex_present": true,
+      "image_url": ""
     }
   ]
 }

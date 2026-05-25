@@ -19,6 +19,7 @@ export { supabase, SUPABASE_URL, SUPABASE_ANON_KEY };
 
 export const STORAGE_BUCKETS = {
   RESUMES: "resumes",
+  DOCUMENTS: "documents",
   AVATARS: "avatars",
   SCORECARDS: "scorecards",
   JD_FILES: "jd-files",

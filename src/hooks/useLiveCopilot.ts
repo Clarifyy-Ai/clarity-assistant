@@ -23,6 +23,7 @@ import {
   generateResumeTalkingPoints,
   formatTalkingPointsAsHint,
 } from "@/lib/ai/resumeFallback";
+import { loadPrimaryCoverLetterText } from "@/lib/documents/interviewContext";
 import { createDragHandler } from "@/lib/overlay/stealthMouse";
 import { generateId } from "@/lib/utils";
 import { sessionsDB } from "@/lib/supabase/database";
@@ -92,7 +93,7 @@ export function useLiveCopilot({
   /**
    * Initialize overlay/session stores based on selected config & documents.
    */
-  const initSessionFromConfig = useCallback(() => {
+  const initSessionFromConfig = useCallback(async () => {
     if (!profile) return;
 
     const cfg = configRef.current;
@@ -100,7 +101,27 @@ export function useLiveCopilot({
     const { active_context } = useDocumentStore.getState();
     const parsed = (active_context?.resume as any)?.content ?? null;
 
-    const resumeCtx = buildResumeContext(parsed);
+    let resumeCtx = buildResumeContext(parsed);
+    const coverText = profile.id ? await loadPrimaryCoverLetterText(profile.id) : null;
+    if (coverText) {
+      const coverSnippet = coverText.slice(0, 2500);
+      if (resumeCtx) {
+        resumeCtx = {
+          ...resumeCtx,
+          summary: [resumeCtx.summary, `Cover letter:\n${coverSnippet}`]
+            .filter(Boolean)
+            .join("\n\n"),
+        };
+      } else {
+        resumeCtx = {
+          skills_count: 0,
+          experience_count: 0,
+          total_years: null,
+          top_skills: [],
+          summary: coverSnippet,
+        };
+      }
+    }
     const talkingPoints = generateResumeTalkingPoints(parsed, {
       company: cfg.company,
       role: cfg.role,
@@ -137,7 +158,8 @@ export function useLiveCopilot({
         hint_style: (cfg.hint_style as any) ?? "short_hints",
         resume_skills: [],
         resume_projects: [],
-        resume_experience_summary: resumeCtx,
+        resume_experience_summary:
+          typeof resumeCtx === "string" ? resumeCtx : resumeCtx?.summary ?? null,
         jd_required_skills: [],
         jd_seniority_signals: [],
         gap_skills: [],

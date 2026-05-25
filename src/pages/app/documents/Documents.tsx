@@ -1,10 +1,10 @@
 // @ts-nocheck
 // src/pages/app/documents/Documents.tsx
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
+import { useAuthStore } from "@/store/userStore";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { useDocumentStore } from "@/store/documentStore";
-import { useAuthStore } from "@/store/userStore";
 import { useDocumentManager } from "@/hooks/useDocumentManager";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -586,11 +586,34 @@ function JDManager() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function CoverLetterManager() {
-  const [file,      setFile]      = useState<File | null>(null);
-  const [dragOver,  setDragOver]  = useState(false);
+  const docMgr = useDocumentManager();
+  const user = useAuthStore((s) => s.user);
+  const [file, setFile] = useState<File | null>(null);
+  const [dragOver, setDragOver] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [coverDoc, setCoverDoc] = useState<{
+    title: string;
+    parsed_summary: string | null;
+    content: string | null;
+    updated_at: string;
+  } | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  function handleFile(f: File) {
+  useEffect(() => {
+    if (!user?.id) return;
+    void supabase
+      .from("documents")
+      .select("title, parsed_summary, content, updated_at")
+      .eq("user_id", user.id)
+      .eq("type", "cover_letter")
+      .eq("is_primary", true)
+      .maybeSingle()
+      .then(({ data, error }) => {
+        if (!error && data) setCoverDoc(data as typeof coverDoc);
+      });
+  }, [user?.id, uploading]);
+
+  async function handleFile(f: File) {
     if (f.size > 5 * 1024 * 1024) {
       toast.error("File too large. Maximum size is 5 MB.");
       return;
@@ -600,8 +623,15 @@ function CoverLetterManager() {
       toast.error("Only PDF or DOCX files are supported for cover letters.");
       return;
     }
+    setUploading(true);
     setFile(f);
-    toast.success("Cover letter selected — upload support coming soon.");
+    const { documentId, error } = await docMgr.uploadCoverLetter(f);
+    setUploading(false);
+    if (error) toast.error(error);
+    else if (documentId) {
+      toast.success("Cover letter uploaded and parsed for interview AI context.");
+      setFile(null);
+    }
   }
 
   return (
@@ -638,31 +668,40 @@ function CoverLetterManager() {
         onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
       />
 
-      {file ? (
-        <Card padding="sm">
-          <div className="flex items-center gap-3">
-            <div className="w-8 h-8 bg-emerald-500/10 rounded-xl flex items-center justify-center shrink-0">
-              <FileText className="w-4 h-4 text-emerald-400" />
-            </div>
-            <div className="flex-1 min-w-0">
-              <p className="text-sm text-foreground truncate">{file.name}</p>
-              <p className="text-xs text-muted-foreground">{(file.size / 1024).toFixed(0)} KB</p>
-            </div>
-            <Badge variant="amber" size="sm">Ready</Badge>
-            <button
-              onClick={() => setFile(null)}
-              className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-accent/5 transition-all"
-            >
-              <Trash2 className="w-3.5 h-3.5" />
-            </button>
+      {uploading && (
+        <p className="text-sm text-muted-foreground flex items-center gap-2">
+          <RefreshCw className="w-4 h-4 animate-spin" /> Parsing cover letter…
+        </p>
+      )}
+
+      {coverDoc ? (
+        <Card padding="sm" className="space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-foreground">{coverDoc.title}</p>
+            <Badge variant="green" size="sm">Active for AI</Badge>
           </div>
+          <p className="text-xs text-muted-foreground line-clamp-4">
+            {coverDoc.parsed_summary ?? coverDoc.content?.slice(0, 400) ?? "Parsed text available."}
+          </p>
+          <p className="text-[10px] text-muted-foreground">
+            Used in Live Co-Pilot and mock interviews with your resume.
+          </p>
         </Card>
-      ) : (
+      ) : !file ? (
         <Card className="text-center py-8 bg-secondary/30">
           <p className="text-sm text-muted-foreground">No cover letter uploaded.</p>
           <p className="text-xs text-muted-foreground/70 mt-1">
-            A tailored cover letter improves your application success rate.
+            Upload a PDF or DOCX — text is extracted and fed into interview AI context.
           </p>
+        </Card>
+      ) : null}
+
+      {file && !uploading && (
+        <Card padding="sm">
+          <div className="flex items-center gap-3">
+            <FileText className="w-4 h-4 text-emerald-400 shrink-0" />
+            <p className="text-sm text-foreground truncate flex-1">{file.name}</p>
+          </div>
         </Card>
       )}
     </div>

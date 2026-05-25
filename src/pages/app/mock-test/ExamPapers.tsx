@@ -32,6 +32,7 @@ import {
 } from "@/components/ui/select";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { launchMockTest, countQuestionsForPaper } from "@/lib/mock-test/launchMockTest";
 
 /* ─── TYPES ────────────────────────────────────────────────────────────────── */
 
@@ -126,6 +127,7 @@ export default function ExamPapers() {
   const [papers,      setPapers]      = useState<ExamPaper[]>([]);
   const [loading,     setLoading]     = useState(true);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
+  const [questionCounts, setQuestionCounts] = useState<Record<string, number>>({});
 
   // Filters
   const [yearFilter,       setYearFilter]       = useState<number | null>(null);
@@ -170,6 +172,17 @@ export default function ExamPapers() {
       const loadedPapers = (papersRes.data ?? []) as ExamPaper[];
       setPapers(loadedPapers);
 
+      const counts: Record<string, number> = {};
+      await Promise.all(
+        loadedPapers.map(async (p) => {
+          const routeId =
+            EXAM_ROUTE_FROM_PAPER[p.exam_type] ??
+            p.exam_type.replace(/\s+/g, "_").toUpperCase();
+          counts[p.id] = await countQuestionsForPaper(p.exam_type, p.year, routeId);
+        })
+      );
+      setQuestionCounts(counts);
+
       // Build progress stats
       const userTests  = (testsRes.data ?? []) as MockTestRow[];
       const attempted  = new Set<string>();
@@ -179,7 +192,12 @@ export default function ExamPapers() {
 
       for (const t of userTests) {
         const cfg = t.config as Record<string, unknown> | null;
-        if (cfg?.exam_type === normalised) {
+        const cfgExam = String(cfg?.exam_type ?? "");
+        const matchesExam =
+          cfgExam === normalised ||
+          cfgExam === dbExamType ||
+          EXAM_ROUTE_FROM_PAPER[cfgExam] === normalised;
+        if (matchesExam) {
           const yearMin = cfg?.year_range
             ? String((cfg.year_range as Record<string, unknown>).min ?? "")
             : "";
@@ -240,9 +258,9 @@ export default function ExamPapers() {
     setLaunchingId(paper.id);
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      if (!token) throw new Error("Session expired. Please log in again.");
+      const routeExamId =
+        EXAM_ROUTE_FROM_PAPER[paper.exam_type] ??
+        (examType ?? paper.exam_type.replace(/\s+/g, "_").toUpperCase());
 
       const s = officialSetting ?? {
         questions: paper.total_questions ?? 30,
@@ -255,51 +273,27 @@ export default function ExamPapers() {
         `${paper.exam_name} ${paper.year}${paper.shift ? ` Shift ${paper.shift}` : ""}`.trim() +
         (isPractice ? " (Practice Mode)" : "");
 
-      const config = {
-        exam_type:    paper.exam_type,   // exam_papers value — edge function will mapExamType()
-        test_name:    testName,
-        subjects:     [],
-        topics:       [],
-        source_types: ["OFFICIAL_PYP"],
-        year_range:   { min: paper.year, max: paper.year },
+      const { test_id, warning, ai_generated_count } = await launchMockTest({
+        exam_type: routeExamId,
+        test_name: testName,
+        subjects: [],
+        topics: [],
+        source_types: ["OFFICIAL_PYP", "AI_GENERATED"],
+        year_range: { min: paper.year, max: paper.year },
         difficulty_distribution: { EASY: 30, MEDIUM: 40, HARD: 30 },
-        question_count:          s.questions,
-        duration_minutes:        isPractice ? 0 : s.duration,
-        marks_positive:          s.positive,
-        marks_negative:          s.negative,
-        randomize_order:         false,
-        shuffle_options:         !isPractice,
-        practice_mode:           isPractice,
-      };
-
-      // 1. Select questions
-      const selectRes = await supabase.functions.invoke("select-test-questions", {
-        body:    { config },
-        headers: { Authorization: `Bearer ${token}` },
+        question_count: s.questions,
+        duration_minutes: isPractice ? 0 : s.duration,
+        marks_positive: s.positive,
+        marks_negative: s.negative,
+        randomize_order: false,
+        shuffle_options: !isPractice,
+        practice_mode: isPractice,
       });
-      if (selectRes.error) throw new Error(selectRes.error.message);
 
-      const { question_ids, warning } = selectRes.data as {
-        question_ids: string[];
-        warning?: string;
-      };
-
-      if (!question_ids || question_ids.length === 0) {
-        throw new Error(
-          `No questions found for ${paper.exam_name} ${paper.year}. ` +
-          `This paper's questions haven't been added to the bank yet.`,
-        );
-      }
       if (warning) toast.warning(warning);
-
-      // 2. Create the test record
-      const createRes = await supabase.functions.invoke("create-test", {
-        body:    { test_name: config.test_name, config, question_ids },
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (createRes.error) throw new Error(createRes.error.message);
-
-      const { test_id } = createRes.data as { test_id: string };
+      if (ai_generated_count && ai_generated_count > 0) {
+        toast.info(`Added ${ai_generated_count} AI-generated questions to fill the paper.`);
+      }
 
       toast.success(
         isPractice
@@ -311,12 +305,6 @@ export default function ExamPapers() {
       const message = err instanceof Error ? err.message : "Failed to launch test.";
       console.error("[ExamPapers] launchDirectTest:", err);
       toast.error(message);
-      // Fallback to manual configuration
-      navigate(
-        `/app/mock-test/configure?exam=${encodeURIComponent(
-          EXAM_ROUTE_FROM_PAPER[paper.exam_type] ?? paper.exam_type.replace(/\s+/g, "_").toUpperCase()
-        )}&year_min=${paper.year}&year_max=${paper.year}`,
-      );
     } finally {
       setLaunchingId(null);
     }
@@ -475,11 +463,13 @@ export default function ExamPapers() {
       ) : (
         <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
           {filtered.map((paper) => {
+            const bankCount    = questionCounts[paper.id] ?? 0;
             const qsCount      = paper.total_questions ?? officialSetting?.questions ?? 30;
             const timeLimit    = paper.duration_minutes ?? officialSetting?.duration ?? 60;
             const hasAttempted = attemptedIds.has(String(paper.year));
             const isComingSoon = paper.year > QUESTIONS_MAX_YEAR;
             const isLaunching  = launchingId === paper.id;
+            const needsBankSeed = !isComingSoon && bankCount === 0;
 
             return (
               <Card
@@ -536,7 +526,21 @@ export default function ExamPapers() {
                       variant="secondary"
                       className="font-mono text-[10px] bg-background border"
                     >
-                      {qsCount} Qs
+                      Bank: {bankCount}
+                    </Badge>
+                    {needsBankSeed && (
+                      <Badge
+                        variant="outline"
+                        className="text-[10px] border-amber-500/40 text-amber-600 bg-amber-500/10"
+                      >
+                        AI fill on launch
+                      </Badge>
+                    )}
+                    <Badge
+                      variant="secondary"
+                      className="font-mono text-[10px] bg-background border"
+                    >
+                      {qsCount} Qs paper
                     </Badge>
                     <Badge
                       variant="secondary"

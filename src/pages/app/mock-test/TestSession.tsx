@@ -23,6 +23,7 @@ import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
+import { resolveQuestionImageUrl } from "@/lib/mock-test/questionMedia";
 
 interface QuestionOption {
   label: string;
@@ -115,6 +116,11 @@ function computeRemainingSeconds(test: MockTest): number {
 function MathText({ text }: { text: string }) {
   if (!text) return null;
 
+  // Normalize common LaTeX delimiters to $...$ / $$...$$
+  const normalized = text
+    .replace(/\\\(([\s\S]+?)\\\)/g, "$$1$")
+    .replace(/\\\[([\s\S]+?)\\\]/g, "$$$1$$");
+
   const parts: React.ReactNode[] = [];
   const segments: MathSegment[] = [];
 
@@ -124,7 +130,7 @@ function MathText({ text }: { text: string }) {
   let match: RegExpExecArray | null;
 
   blockRe.lastIndex = 0;
-  while ((match = blockRe.exec(text)) !== null) {
+  while ((match = blockRe.exec(normalized)) !== null) {
     segments.push({
       start: match.index,
       end: match.index + match[0].length,
@@ -134,7 +140,7 @@ function MathText({ text }: { text: string }) {
   }
 
   inlineRe.lastIndex = 0;
-  while ((match = inlineRe.exec(text)) !== null) {
+  while ((match = inlineRe.exec(normalized)) !== null) {
     const start = match.index;
     const end = start + match[0].length;
     const overlapsBlock = segments.some((seg) => start >= seg.start && end <= seg.end);
@@ -153,7 +159,7 @@ function MathText({ text }: { text: string }) {
   let cursor = 0;
 
   for (const seg of segments) {
-    if (seg.start > cursor) parts.push(text.slice(cursor, seg.start));
+    if (seg.start > cursor) parts.push(normalized.slice(cursor, seg.start));
 
     try {
       parts.push(
@@ -170,28 +176,27 @@ function MathText({ text }: { text: string }) {
     cursor = seg.end;
   }
 
-  if (cursor < text.length) parts.push(text.slice(cursor));
+  if (cursor < normalized.length) parts.push(normalized.slice(cursor));
 
   return <>{parts}</>;
 }
 
 function transformImageUrl(url: string): string {
   if (!url) return url;
+  let working = resolveQuestionImageUrl(url);
   // Google Drive: convert share/view links to direct image embed
-  const driveMatch = url.match(/drive\.google\.com\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)/);
+  const driveMatch = working.match(/drive\.google\.com\/(?:file\/d\/|open\?id=)([a-zA-Z0-9_-]+)/);
   if (driveMatch) {
     return `https://drive.google.com/thumbnail?id=${driveMatch[1]}&sz=w800`;
   }
-  // Google Drive direct export link
-  const driveExport = url.match(/drive\.google\.com\/uc\?.*id=([a-zA-Z0-9_-]+)/);
+  const driveExport = working.match(/drive\.google\.com\/uc\?.*id=([a-zA-Z0-9_-]+)/);
   if (driveExport) {
     return `https://drive.google.com/thumbnail?id=${driveExport[1]}&sz=w800`;
   }
-  // Dropbox: replace dl=0 with raw=1
-  if (url.includes("dropbox.com") && !url.includes("raw=1")) {
-    return url.replace(/dl=0/, "raw=1").replace(/\?$/, "?raw=1");
+  if (working.includes("dropbox.com") && !working.includes("raw=1")) {
+    return working.replace(/dl=0/, "raw=1").replace(/\?$/, "?raw=1");
   }
-  return url;
+  return working;
 }
 
 function QuestionImage({ src, alt, className }: { src: string; alt: string; className?: string }) {

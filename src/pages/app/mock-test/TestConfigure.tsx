@@ -9,6 +9,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { toast } from "sonner";
 import { resolveExamConfigId } from "@/lib/mock-test/examTypes";
+import { launchMockTest } from "@/lib/mock-test/launchMockTest";
 
 interface DifficultyDistribution {
   EASY: number;
@@ -312,67 +313,29 @@ export default function TestConfigure() {
     setLoading(true);
 
     try {
-      const selectRes = await supabase.functions.invoke("select-test-questions", {
-        body: { config },
-      });
-
-      if (selectRes.error) {
-        throw new Error(selectRes.error.message || "Failed to select questions");
-      }
-
-      const selectData = (selectRes.data ?? {}) as {
-        question_ids?: string[];
-        error?: string;
-        warning?: string;
-      };
-
-      if (selectData.error) {
-        throw new Error(selectData.error);
-      }
-
-      const questionIds = Array.isArray(selectData.question_ids)
-        ? selectData.question_ids
-        : [];
-
-      if (questionIds.length === 0) {
-        throw new Error(
-          "No questions found matching your criteria. Try different filters or add more questions."
-        );
-      }
-
-      const createRes = await supabase.functions.invoke("create-test", {
-        body: {
+      const { test_id: testId, question_count, warning, ai_generated_count } =
+        await launchMockTest({
+          exam_type: config.exam_type,
           test_name: config.test_name,
-          config,
-          question_ids: questionIds,
-        },
-      });
+          subjects: config.subjects,
+          topics: config.topics,
+          source_types: config.source_types,
+          year_range: config.year_range,
+          difficulty_distribution: config.difficulty_distribution,
+          question_count: config.question_count,
+          duration_minutes: config.duration_minutes,
+          marks_positive: config.marks_positive,
+          marks_negative: config.marks_negative,
+          randomize_order: config.randomize_order,
+          shuffle_options: config.shuffle_options,
+        });
 
-      if (createRes.error) {
-        throw new Error(createRes.error.message || "Failed to create test");
+      if (warning) toast.warning(warning);
+      if (ai_generated_count && ai_generated_count > 0) {
+        toast.info(`Included ${ai_generated_count} AI-generated questions.`);
       }
 
-      const createData = (createRes.data ?? {}) as {
-        test_id?: string;
-        test?: { id?: string };
-        error?: string;
-      };
-
-      if (createData.error) {
-        throw new Error(createData.error);
-      }
-
-      const testId = createData.test_id ?? createData.test?.id;
-
-      if (!testId) {
-        throw new Error("No test ID returned from create-test.");
-      }
-
-      if (selectData.warning) {
-        toast.warning(selectData.warning);
-      }
-
-      toast.success(`Test created with ${questionIds.length} questions.`);
+      toast.success(`Test created with ${question_count} questions.`);
       navigate(`/app/mock-test/session/${testId}`);
     } catch (err) {
       console.error("[TestConfigure] start error:", err);

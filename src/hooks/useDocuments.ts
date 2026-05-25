@@ -177,6 +177,74 @@ export function useDocuments() {
     }
   }, [user]);
 
+  const uploadCoverLetter = useCallback(
+    async (file: File): Promise<{ documentId: string | null; error: string | null }> => {
+      if (!user) return { documentId: null, error: "Not authenticated" };
+
+      const documentId = generateId();
+      const ext = file.name.split(".").pop()?.toLowerCase() ?? "pdf";
+      const path = `${user.id}/cover-letters/${documentId}.${ext}`;
+      const mimeType =
+        ext === "pdf"
+          ? "application/pdf"
+          : "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+
+      docStore.setUploadProgress(0);
+      try {
+        const uploaded = await uploadFile(
+          STORAGE_BUCKETS.DOCUMENTS,
+          path,
+          file,
+          (pct) => docStore.setUploadProgress(pct)
+        );
+        if (!uploaded) throw new Error("Upload failed");
+
+        await supabase
+          .from("documents")
+          .update({ is_primary: false })
+          .eq("user_id", user.id)
+          .eq("type", "cover_letter");
+
+        const { error: insertErr } = await supabase.from("documents").insert({
+          id: documentId,
+          user_id: user.id,
+          type: "cover_letter",
+          title: file.name.replace(/\.[^/.]+$/, "") || "Cover Letter",
+          file_name: file.name,
+          file_url: uploaded.url,
+          mime_type: mimeType,
+          content: null,
+          parsed_summary: null,
+          is_primary: true,
+          is_active: true,
+        });
+        if (insertErr) throw new Error(insertErr.message);
+
+        const { error: parseErr } = await supabase.functions.invoke("parse-document", {
+          body: { document_id: documentId, file_path: path, mime_type: mimeType },
+        });
+        if (parseErr) {
+          console.warn("[useDocuments] parse-document:", parseErr);
+        }
+
+        return {
+          documentId,
+          error: parseErr
+            ? "File uploaded but text extraction failed. Retry or paste text manually."
+            : null,
+        };
+      } catch (err) {
+        return {
+          documentId: null,
+          error: err instanceof Error ? err.message : "Upload failed",
+        };
+      } finally {
+        docStore.setUploadProgress(0);
+      }
+    },
+    [user]
+  );
+
   // ── Parse resume via Edge Function ────────────────────────────
 
   async function parseResume(
@@ -394,6 +462,7 @@ ${rawText.slice(0, 4000)}`;
     isParsing,
 
     uploadResume,
+    uploadCoverLetter,
     deleteResume,
     setActiveResume: docStore.setActiveResumeId,
 

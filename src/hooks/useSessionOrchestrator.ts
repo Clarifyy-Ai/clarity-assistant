@@ -5,7 +5,9 @@
 import { useCallback } from "react";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
+import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/integrations/supabase/client";
+import { buildResumeContextForAI } from "@/lib/documents/interviewContext";
 import type { SessionQuestion } from "@/types/session.types";
 
 interface CreateSessionParams {
@@ -74,7 +76,14 @@ export function useSessionOrchestrator() {
   const requestHint = useCallback(async (questionText: string) => {
     const overlay = useOverlayStore.getState();
     const session = store.getState();
-    const resumeCtx = overlay.resume_context ?? "";
+    const resumeSummary =
+      typeof overlay.resume_context === "string"
+        ? overlay.resume_context
+        : overlay.resume_context?.summary ?? "";
+    const userId = useAuthStore.getState().profile?.id ?? useAuthStore.getState().user?.id;
+    const resumeCtx = userId
+      ? await buildResumeContextForAI(userId, resumeSummary)
+      : resumeSummary || "None provided.";
 
     // Record the user's question in chat history so it actually shows up
     overlay.addChatMessage({
