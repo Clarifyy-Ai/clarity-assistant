@@ -228,7 +228,7 @@ export function handleCors(req: Request): Response | null {
     });
   }
 
-  if (!getAllowedOrigins().has(requestOrigin)) {
+  if (!getAllowedOrigins().has(requestOrigin) && !isPreviewOrigin(requestOrigin)) {
     console.warn("[cors] Preflight rejected for origin:", requestOrigin);
 
     return new Response(
