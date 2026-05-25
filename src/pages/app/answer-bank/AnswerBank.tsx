@@ -46,12 +46,17 @@ export default function AnswerBank() {
 
   async function fetchAnswers() {
     setLoading(true);
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from("answer_bank")
       .select("*")
       .eq("user_id", user!.id)
       .order("created_at", { ascending: false });
-    setAnswers(data ?? []);
+    if (error) {
+      console.error("[AnswerBank] fetch:", error);
+      toast.error(error.message || "Failed to load answers");
+    } else {
+      setAnswers(data ?? []);
+    }
     setLoading(false);
   }
 

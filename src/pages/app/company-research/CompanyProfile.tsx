@@ -17,12 +17,12 @@ import {
 import { cn } from "@/lib/utils";
 
 export default function CompanyProfile() {
-  const { slug }   = useParams<{ slug: string }>();
+  const { id }     = useParams<{ id: string }>();
   const [params]   = useSearchParams();
   const navigate   = useNavigate();
   const { user }   = useAuthStore();
 
-  const companyName = params.get("name") ?? slug?.replace(/-/g, " ") ?? "";
+  const companyName = params.get("name") ?? id?.replace(/-/g, " ") ?? "";
 
   const [brief,    setBrief]    = useState<any>(null);
   const [loading,  setLoading]  = useState(true);

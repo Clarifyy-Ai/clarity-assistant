@@ -11,6 +11,7 @@ import {
   CheckCircle, Clock, Edit, Save, X, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { companyProfilePath } from "@/lib/company/slug";
 
 // ─── Matches actual `job_descriptions` table schema ───────────────────────────
 interface JobDescription {
@@ -141,12 +142,12 @@ export default function JDDetail() {
                 Edit
               </Button>
             )}
-            <Link to={`/app/companies/${encodeURIComponent(jd.company ?? "")}`}>
+            <Link to={jd.company ? companyProfilePath(jd.company) : "/app/companies"}>
               <Button variant="secondary" size="sm" leftIcon={<Building2 className="w-4 h-4" />}>
                 Company Brief
               </Button>
             </Link>
-            <Link to="/app/prep?tool=gap_analysis">
+            <Link to="/app/prep?tool=jd_fit">
               <Button variant="secondary" size="sm" leftIcon={<FileText className="w-4 h-4" />}>
                 Gap Analysis
               </Button>

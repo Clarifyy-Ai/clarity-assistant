@@ -8,6 +8,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 import type { StepProps } from "@/types/onboarding.types";
 import type { ProfileRow } from "@/types";
 
@@ -55,15 +56,18 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
   const [coachTone, setCoachTone] = useState<string>("encouraging");
   const [model,     setModel]     = useState<PreferredModel>("gemini-1-5-flash");
   const [loading,   setLoading]   = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   async function handleNext() {
     if (!user) return;
     setLoading(true);
+    setSaveError(null);
 
     const { data, error } = await supabase
       .from("profiles")
       .update({
         response_style:  hintStyle,
+        coach_tone:      coachTone,
         preferred_model: model,
         onboarding_step: 4,
       })
@@ -72,9 +76,13 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
       .maybeSingle();
 
     setLoading(false);
-    if (error) return; // non-blocking — still advance on failure
+    if (error) {
+      const message = error.message || "Failed to save preferences";
+      setSaveError(message);
+      toast.error(message);
+      return;
+    }
 
-    // Cast: Supabase row type vs local ProfileRow differ on computed columns
     if (data) setProfile(data as unknown as ProfileRow);
     onNext({ preferredModel: model });
   }

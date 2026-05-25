@@ -22,6 +22,7 @@ import OnboardingStep5ResumeUpload from "./OnboardingStep5ResumeUpload";
 
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { Button }                from "@/components/ui/Button";
+import { toast } from "sonner";
 
 // Re-export OnboardingData from the shared types file so consumers can import
 // from either location without creating circular dependencies.
@@ -190,9 +191,11 @@ function CompletionScreen({ onContinue }: { onContinue: () => void }) {
 export default function OnboardingIndex() {
   const navigate    = useNavigate();
   const [searchParams] = useSearchParams();
-  const user          = useAuthStore((s) => s.user);
-  const updateProfile = useAuthStore((s) => s.updateProfile);
-  const loadProfile   = useAuthStore((s) => s.loadProfile);
+  const user            = useAuthStore((s) => s.user);
+  const isOnboarded     = useAuthStore((s) => s.isOnboarded);
+  const isProfileLoaded = useAuthStore((s) => s.isProfileLoaded);
+  const updateProfile   = useAuthStore((s) => s.updateProfile);
+  const loadProfile     = useAuthStore((s) => s.loadProfile);
 
   const refCode = normalizeRefCode(searchParams.get("ref")) ?? getStoredRefCode();
 
@@ -202,13 +205,12 @@ export default function OnboardingIndex() {
   const [isSaving,       setIsSaving]       = useState(false);
   const [isComplete,     setIsComplete]     = useState(false);
 
-  // Redirect if already onboarded
+  // Redirect if already onboarded (after profile loads)
   useEffect(() => {
-    const profile = useAuthStore.getState().profile;
-    if (profile?.onboarding_completed) {
+    if (isProfileLoaded && isOnboarded) {
       navigate(ROUTES.DASHBOARD, { replace: true });
     }
-  }, [navigate]);
+  }, [isProfileLoaded, isOnboarded, navigate]);
 
   // ── Data merge helper ──────────────────────────────────────────────────────
 
@@ -247,8 +249,9 @@ export default function OnboardingIndex() {
       setIsComplete(true);
     } catch (err) {
       console.error("[OnboardingIndex] Failed to save onboarding:", err);
-      // Still complete — don't block the user
-      setIsComplete(true);
+      const message =
+        err instanceof Error ? err.message : "Could not save onboarding. Please try again.";
+      toast.error(message);
     } finally {
       setIsSaving(false);
     }

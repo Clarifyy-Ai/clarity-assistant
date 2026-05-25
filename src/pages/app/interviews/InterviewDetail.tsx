@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { format, isPast, isToday } from "date-fns";
 import { cn } from "@/lib/utils";
+import { companyProfilePath } from "@/lib/company/slug";
 
 // ─────────────────────────────────────────────────────────────────
 // InterviewDetail — single interview view + prep checklist
@@ -317,7 +318,10 @@ export default function InterviewDetail() {
         </Card>
         <Card
           hover
-          onClick={() => navigate(`/app/companies?q=${iv.company_name}`)}
+          onClick={() => {
+            if (!iv.company_name) return;
+            navigate(companyProfilePath(iv.company_name));
+          }}
           className="flex items-center gap-3"
         >
           <Building2 className="w-5 h-5 text-violet-400 shrink-0" />

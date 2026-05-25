@@ -73,8 +73,12 @@ function OverviewTab({ period }: { period: Period }) {
       (supabase.rpc as any)("get_admin_dau_mau", { p_days: period }),
     ]);
 
-    const dau = dauRows?.[0]?.dau ?? 0;
-    const activeUsers = (dauRows ?? []).reduce((s: number, r: any) => s + Number(r.dau ?? 0), 0);
+    const dauSeries = (dauRows ?? []) as { day?: string; dau?: number }[];
+    const latestDau = dauSeries.length > 0 ? Number(dauSeries[dauSeries.length - 1]?.dau ?? 0) : 0;
+    const peakDau = dauSeries.reduce(
+      (max, r) => Math.max(max, Number(r.dau ?? 0)),
+      0,
+    );
 
     // Signup series
     const days = Array.from({ length: Math.min(period, 30) }, (_, i) =>
@@ -90,10 +94,10 @@ function OverviewTab({ period }: { period: Period }) {
     setSignupSeries(signupData);
 
     setStats({
-      dau: Number(dau),
+      dau: latestDau,
       sessions: sessions ?? 0,
       signups: signups ?? 0,
-      activeUsers,
+      activeUsers: peakDau,
     });
     setLoading(false);
   }

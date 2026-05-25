@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
 import {
   Eye,
   EyeOff,
@@ -85,6 +85,7 @@ function formatLockMessage(lockMinsLeft: number): string {
 export default function Login(): JSX.Element {
   const navigate = useNavigate();
   const location = useLocation();
+  const [searchParams] = useSearchParams();
 
   const locationState = location.state as LocationState | null;
   const from = locationState?.from?.pathname ?? "/app";
@@ -98,6 +99,16 @@ export default function Login(): JSX.Element {
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [lockTick, setLockTick] = useState(0);
   const [authError, setAuthError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const message = searchParams.get("message");
+    const errorCode = searchParams.get("error");
+    if (message) {
+      setAuthError(decodeURIComponent(message.replace(/\+/g, " ")));
+    } else if (errorCode) {
+      setAuthError(`Sign-in failed (${errorCode}). Please try again.`);
+    }
+  }, [searchParams]);
 
   useEffect(() => {
     if (authStatus !== "authenticated" || !isProfileLoaded) {

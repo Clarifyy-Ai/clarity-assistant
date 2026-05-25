@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { companyProfilePath } from "@/lib/company/slug";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -27,6 +28,7 @@ const POPULAR = [
 
 export default function CompanyResearch() {
   const navigate  = useNavigate();
+  const [searchParams] = useSearchParams();
   const { user }  = useAuthStore();
 
   const [query,     setQuery]     = useState("");
@@ -37,25 +39,33 @@ export default function CompanyResearch() {
   // Fetch previously generated briefs
   useEffect(() => {
     if (!user) return;
-    supabase
+    void supabase
       .from("company_research")
       .select("id, company_name, role_title, created_at, overview")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(20)
-      .then(({ data }) => {
+      .then(({ data, error }) => {
+        if (error) {
+          console.error("[CompanyResearch] saved briefs:", error);
+        }
         setSaved(data ?? []);
         setLoadingSaved(false);
       });
   }, [user?.id]);
 
+  useEffect(() => {
+    const q = searchParams.get("q")?.trim();
+    if (q) {
+      setQuery(q);
+      navigate(companyProfilePath(q), { replace: true });
+    }
+  }, [searchParams, navigate]);
+
   async function handleSearch(company?: string) {
     const q = (company ?? query).trim();
     if (!q) return;
-
-    // Navigate to company profile — it will generate the brief
-    const slug = q.toLowerCase().replace(/\s+/g, "-");
-    navigate(`/app/companies/${slug}?name=${encodeURIComponent(q)}`);
+    navigate(companyProfilePath(q));
   }
 
   return (

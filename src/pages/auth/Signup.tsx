@@ -34,6 +34,8 @@ type PasswordStrength = {
 };
 
 const REFERRAL_STORAGE_KEY = "clarify_ref";
+const PENDING_PLAN_STORAGE_KEY = "clarify_pending_plan";
+const SIGNUP_PLANS = ["starter", "pro", "enterprise"] as const;
 
 const BENEFITS = [
   {
@@ -168,6 +170,13 @@ export default function Signup(): JSX.Element {
       safeSetLocalStorageItem(REFERRAL_STORAGE_KEY, refCode);
     }
   }, [refCode]);
+
+  useEffect(() => {
+    const plan = searchParams.get("plan");
+    if (plan && (SIGNUP_PLANS as readonly string[]).includes(plan)) {
+      safeSetLocalStorageItem(PENDING_PLAN_STORAGE_KEY, plan);
+    }
+  }, [searchParams]);
 
   const passwordStrength = useMemo(
     () => getPasswordStrength(password),

@@ -16,17 +16,29 @@ export default function Referrals() {
   useEffect(() => {
     if (!user?.id) return;
     (async () => {
-      const { count } = await supabase
+      const { count, error: countErr } = await supabase
         .from("referrals")
         .select("*", { count: "exact", head: true })
         .eq("referrer_id", user.id);
+      if (countErr) {
+        console.error("[Referrals] count:", countErr);
+        toast.error("Could not load referral stats");
+        return;
+      }
       setInvitedCount(count ?? 0);
 
-      const { data } = await supabase
+      const { data, error: sumErr } = await supabase
         .from("referrals")
         .select("credits_awarded")
         .eq("referrer_id", user.id);
-      const total = (data ?? []).reduce((sum: number, r: { credits_awarded?: number }) => sum + (r.credits_awarded ?? 0), 0);
+      if (sumErr) {
+        console.error("[Referrals] credits:", sumErr);
+        return;
+      }
+      const total = (data ?? []).reduce(
+        (sum: number, r: { credits_awarded?: number }) => sum + (r.credits_awarded ?? 0),
+        0,
+      );
       setCreditsEarned(total);
     })();
   }, [user?.id]);

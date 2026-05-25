@@ -25,7 +25,7 @@ const FOOTER_COLUMNS = [
     links: [
       { to: "/blog", label: "Blog" },
       { to: "/help", label: "Help Center" },
-      { to: "/help", label: "Getting started" },
+      { to: "/help/getting-started", label: "Getting started" },
       { to: "/shortcuts", label: "Keyboard shortcuts" },
     ],
   },

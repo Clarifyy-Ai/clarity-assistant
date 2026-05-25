@@ -100,12 +100,21 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     return <Navigate to="/verify-email" state={{ from: location }} replace />;
   }
 
-  // 6) Onboarding check
-  if ((requireOnboarding || requireOnboarded) && profile && !isOnboarded) {
-    return <Navigate to="/onboarding" state={{ from: location }} replace />;
+  // 6) Onboarding check — wait for profile before allowing /app (avoids bypass when profile is null)
+  if (requireOnboarded || requireOnboarding) {
+    if (!isProfileLoaded) {
+      return (
+        <div className="flex min-h-screen items-center justify-center bg-background">
+          <Spinner size="lg" />
+        </div>
+      );
+    }
+    if (!isOnboarded) {
+      return <Navigate to="/onboarding" state={{ from: location }} replace />;
+    }
   }
 
-  // 6) All checks passed
+  // 7) All checks passed
   return children ? <>{children}</> : <Outlet />;
 });
 

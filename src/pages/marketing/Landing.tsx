@@ -652,7 +652,7 @@ export default function Landing() {
                 tagline: "For teams and power users",
                 features: ["Unlimited credits", "All Pro features", "Priority AI routing", "Practice rooms", "Dedicated support"],
                 cta: "Contact Sales",
-                to: "/signup?plan=enterprise",
+                to: "mailto:sales@clarifyai.com?subject=Enterprise%20plan",
                 highlight: false,
               },
             ].map((plan, i) => (
@@ -685,17 +685,29 @@ export default function Landing() {
                     </li>
                   ))}
                 </ul>
-                <Link
-                  to={plan.to}
-                  className={cn(
-                    "mt-6 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all",
-                    plan.highlight
-                      ? "bg-primary text-primary-foreground hover:opacity-90"
-                      : "bg-secondary text-foreground hover:bg-secondary/80",
-                  )}
-                >
-                  {plan.cta} <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
+                {plan.to.startsWith("mailto:") ? (
+                  <a
+                    href={plan.to}
+                    className={cn(
+                      "mt-6 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all",
+                      "bg-secondary text-foreground hover:bg-secondary/80",
+                    )}
+                  >
+                    {plan.cta} <ArrowRight className="w-3.5 h-3.5" />
+                  </a>
+                ) : (
+                  <Link
+                    to={plan.to}
+                    className={cn(
+                      "mt-6 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all",
+                      plan.highlight
+                        ? "bg-primary text-primary-foreground hover:opacity-90"
+                        : "bg-secondary text-foreground hover:bg-secondary/80",
+                    )}
+                  >
+                    {plan.cta} <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                )}
               </motion.div>
             ))}
           </div>

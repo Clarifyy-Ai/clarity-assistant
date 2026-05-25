@@ -85,9 +85,9 @@ export default function AdminModelCosts() {
       if (data) {
         const featureMap: Record<string, number> = {};
         data.forEach((tx) => {
-          const desc    = ((tx.description as string) ?? "").toLowerCase();
+          const action  = String(tx.action ?? "").toLowerCase();
           const feature = DEFAULT_CREDIT_COSTS.find((c) =>
-            desc.includes(c.feature.replace("_", " ")) || desc.includes(c.label.toLowerCase())
+            action.includes(c.feature) || action.includes(c.feature.replace(/_/g, "-"))
           )?.feature ?? "other";
           featureMap[feature] = (featureMap[feature] ?? 0) + Math.abs(tx.amount as number);
         });

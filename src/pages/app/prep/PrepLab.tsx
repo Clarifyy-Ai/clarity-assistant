@@ -22,7 +22,7 @@ import { supabase } from "@/lib/supabase/client";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { EDGE_BASE } from "@/lib/env";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 
 // ─────────────────────────────────────────────────────────────────
 // PrepLab — STAR builder, question bank, AI tools
@@ -30,6 +30,11 @@ import { Link } from "react-router-dom";
 // ─────────────────────────────────────────────────────────────────
 
 export default function PrepLab() {
+  const [searchParams] = useSearchParams();
+  const toolParam = searchParams.get("tool");
+  const defaultTab =
+    toolParam === "jd_fit" ? "tools" : toolParam === "company" ? "company" : "star";
+
   return (
     <div className="space-y-5 max-w-5xl">
       <PageHeader
@@ -53,7 +58,7 @@ export default function PrepLab() {
           </Link>
         ))}
       </div>
-      <Tabs defaultValue="star">
+      <Tabs defaultValue={defaultTab} key={defaultTab}>
         <TabsList>
           <TabsTrigger value="star">⭐ STAR Builder</TabsTrigger>
           <TabsTrigger value="bank">📚 Question Bank</TabsTrigger>
@@ -70,7 +75,7 @@ export default function PrepLab() {
         </TabsContent>
 
         <TabsContent value="tools">
-          <AITools />
+          <AITools initialToolId={toolParam === "jd_fit" ? "jd_fit" : undefined} />
         </TabsContent>
 
         <TabsContent value="company">
@@ -693,9 +698,13 @@ const AI_TOOLS = [
   },
 ];
 
-function AITools() {
+function AITools({ initialToolId }: { initialToolId?: string }) {
   const { profile } = useAuthStore();
-  const [activeToolId, setActiveToolId] = useState<string | null>(null);
+  const [activeToolId, setActiveToolId] = useState<string | null>(initialToolId ?? null);
+
+  useEffect(() => {
+    if (initialToolId) setActiveToolId(initialToolId);
+  }, [initialToolId]);
   const isPro = profile?.plan_id !== "free";
 
   return (

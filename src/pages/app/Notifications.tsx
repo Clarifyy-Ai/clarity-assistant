@@ -35,16 +35,21 @@ export default function Notifications() {
     if (!user?.id) return;
     let cancelled = false;
     (async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("notifications")
         .select("*")
         .eq("user_id", user.id)
         .order("created_at", { ascending: false })
         .limit(50);
-      if (!cancelled) {
-        setNotifications((data as Notification[]) ?? []);
+      if (cancelled) return;
+      if (error) {
+        console.error("[Notifications] load failed:", error);
+        toast.error(error.message || "Failed to load notifications");
         setLoading(false);
+        return;
       }
+      setNotifications((data as Notification[]) ?? []);
+      setLoading(false);
     })();
     return () => {
       cancelled = true;
@@ -94,22 +99,24 @@ export default function Notifications() {
 
   async function markAllRead() {
     if (!user?.id) return;
-    // Use the mark_notifications_read RPC for batch update (server-defined, audited).
-    const { error } = await supabase.rpc("mark_notifications_read", { p_user_id: user.id });
-    if (error) {
-      toast.error("Failed to mark notifications as read.");
+    const { error: rpcError } = await supabase.rpc("mark_notifications_read", {
+      p_user_id: user.id,
+    });
+    if (!rpcError) {
+      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+      toast.success("All notifications marked as read");
+      return;
+    }
+    const { error: updateError } = await supabase
+      .from("notifications")
+      .update({ is_read: true })
+      .eq("user_id", user.id)
+      .eq("is_read", false);
+    if (updateError) {
+      toast.error(updateError.message || "Failed to mark notifications as read.");
     } else {
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       toast.success("All notifications marked as read");
-    }
-  }
-
-  async function deleteNotification(id: string) {
-    const { error } = await supabase.from("notifications").delete().eq("id", id);
-    if (!error) {
-      setNotifications((prev) => prev.filter((n) => n.id !== id));
-    } else {
-      toast.error("Failed to delete notification.");
     }
   }
 
