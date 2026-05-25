@@ -70,7 +70,7 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
         coach_tone:      coachTone,
         preferred_model: model,
         onboarding_step: 4,
-      })
+      } as any)
       .eq("id", user.id)
       .select()
       .maybeSingle();

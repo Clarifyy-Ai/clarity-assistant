@@ -113,7 +113,7 @@ export default function AdminUsers() {
 
         const { error } = await supabase.rpc("bulk_update_users", {
           p_user_ids: [userId],
-          p_patch: patch,
+          p_patch: patch as any,
         });
         if (error) throw error;
         toast.success("User updated");
