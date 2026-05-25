@@ -92,7 +92,7 @@ export function useLiveCopilot({
       experience_level: (profile?.experience_level as any) ?? null,
       years_of_experience: profile?.experience_years ?? null,
       target_company: cfg.company ?? "",
-      coach_tone: (profile?.coach_tone as any) ?? "supportive",
+      coach_tone: ((profile as any)?.coach_tone as any) ?? "supportive",
       hint_style: (cfg.hint_style as any) ?? "short_hints",
       resume_skills: [],
       resume_projects: [],
