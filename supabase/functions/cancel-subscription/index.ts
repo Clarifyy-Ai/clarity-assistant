@@ -1,6 +1,10 @@
 // supabase/functions/cancel-subscription/index.ts
 //
-// Cancels a Stripe subscription at period end,// Cancels a Stripe subscription at period end.
+// Cancels a Stripe subscription at period end.
+
+import {
+  handleCors,
+  getCorsHeaders,
   withCorsHeaders,
 } from "../_shared/cors.ts";
 
