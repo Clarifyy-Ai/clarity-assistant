@@ -1,6 +1,11 @@
 // supabase/functions/resume-subscription/index.ts
 //
-// Resumes a Stripe subscription that isHeaders,// Resumes a Stripe subscription that is scheduled to cancel at period end.
+// Resumes a Stripe subscription that is scheduled to cancel at period end.
+
+import {
+  handleCors,
+  getCorsHeaders,
+  withCorsHeaders,
 } from "../_shared/cors.ts";
 
 import { authenticateRequest } from "../_shared/auth.ts";
