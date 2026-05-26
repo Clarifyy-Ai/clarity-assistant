@@ -105,9 +105,15 @@ async function generateGapQuestions(
   subjects: string[],
   topics:   string[],
   examType: string | null,
-): Promise<string[]> {
+): Promise<{ ids: string[]; error?: string }> {
   try {
     const systemUserId = getSystemUserId();
+    if (!Deno.env.get("GEMINI_API_KEY")?.trim()) {
+      return {
+        ids: [],
+        error: "GEMINI_API_KEY not configured on Supabase",
+      };
+    }
     const subj         = subjects[0] ?? "General Subject";
     const topicStr     = topics.slice(0, 3).join(", ") || "Mixed Topics";
     const examStr      = examType && examType !== "CUSTOM"
@@ -189,7 +195,9 @@ Requirements:
         };
       });
 
-    if (cleaned.length === 0) return [];
+    if (cleaned.length === 0) {
+      return { ids: [], error: "Gemini returned no valid MCQ questions" };
+    }
 
     const { data: inserted, error } = await db
       .from("questions")
@@ -201,13 +209,14 @@ Requirements:
         "[select-test-questions] AI gap-fill insert failed:",
         error.message,
       );
-      return [];
+      return { ids: [], error: `Database insert failed: ${error.message}` };
     }
 
-    return (inserted ?? []).map((row: { id: string }) => row.id);
+    return { ids: (inserted ?? []).map((row: { id: string }) => row.id) };
   } catch (err) {
+    const message = err instanceof Error ? err.message : "Gemini gap-fill failed";
     console.warn("[select-test-questions] AI gap-fill error:", err);
-    return [];
+    return { ids: [], error: message };
   }
 }
 
@@ -440,15 +449,19 @@ Deno.serve(async (req: Request) => {
     let finalIds       = [...selectedIds];
     const gap          = question_count - finalIds.length;
     let generatedCount = 0;
+    let gapFillError: string | undefined;
 
     if (gap > 0) {
       console.log(
         `[select-test-questions] Target=${question_count}, found=${finalIds.length}. ` +
         `Gap-filling ${gap} via Gemini. exam_type="${exam_type ?? "any"}"`,
       );
-      const aiIds = await generateGapQuestions(db, gap, subjects, topics, exam_type);
-      finalIds.push(...aiIds);
-      generatedCount = aiIds.length;
+      const gapResult = await generateGapQuestions(db, gap, subjects, topics, exam_type);
+      finalIds.push(...gapResult.ids);
+      generatedCount = gapResult.ids.length;
+      if (gapResult.error && gapResult.ids.length === 0) {
+        gapFillError = gapResult.error;
+      }
     }
 
     /* ── FINAL SHUFFLE & TRIM ──────────────────────────────────────────── */
@@ -466,6 +479,10 @@ Deno.serve(async (req: Request) => {
         question_ids:       finalIds,
         count:              finalIds.length,
         ai_generated_count: generatedCount,
+        gap_fill_failed:    !!gapFillError,
+        error:              gapFillError ?? (finalIds.length === 0
+          ? "No questions in bank for this paper. Run Admin → Collect from public sources or upload PDFs."
+          : undefined),
         warning:
           finalIds.length < question_count
             ? `Only ${finalIds.length} of ${question_count} questions available.`

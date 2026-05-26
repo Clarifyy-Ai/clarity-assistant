@@ -50,20 +50,23 @@ export async function launchMockTest(
     count?: number;
     warning?: string;
     ai_generated_count?: number;
+    gap_fill_failed?: boolean;
     error?: string;
   }>("select-test-questions", { config: normalizedConfig });
 
-  if (selectData.error) throw new Error(selectData.error);
+  if (selectData.error && (!selectData.question_ids || selectData.question_ids.length === 0)) {
+    throw new Error(selectData.error);
+  }
 
   const questionIds = Array.isArray(selectData.question_ids)
     ? selectData.question_ids
     : [];
 
   if (questionIds.length === 0) {
-    throw new Error(
-      "No questions available for this paper. Upload questions via Admin → Seed Question Bank, " +
-        "or ensure GEMINI_API_KEY and SYSTEM_USER_ID are set on Supabase for AI gap-fill."
-    );
+    const hint = selectData.gap_fill_failed
+      ? "AI gap-fill failed — set GEMINI_API_KEY and SYSTEM_USER_ID in Supabase secrets."
+      : "Upload questions via Admin → Seed Question Bank, or use Collect from public sources.";
+    throw new Error(`No questions available for this paper. ${hint}`);
   }
 
   const createData = await fetchEdgeJson<{ test_id: string }>("create-test", {

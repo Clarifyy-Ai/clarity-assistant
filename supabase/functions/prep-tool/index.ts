@@ -195,14 +195,14 @@ Deno.serve(async (req: Request) => {
     /* ----------------------- BODY ----------------------- */
     const body = await req.json().catch(() => null);
     if (!body || typeof body.tool_id !== "string" || typeof body.input !== "string") {
-      return errorResponse("Missing tool_id or input", "INVALID_REQUEST", 400);
+      return errorResponse("Missing tool_id or input", "INVALID_REQUEST", 400, req);
     }
 
     const { tool_id } = body;
 
     const promptFn = TOOL_PROMPTS[tool_id];
     if (!promptFn) {
-      return errorResponse(`Unknown tool_id: ${tool_id}`, "INVALID_TOOL", 400);
+      return errorResponse(`Unknown tool_id: ${tool_id}`, "INVALID_TOOL", 400, req);
     }
 
     // For coding_hint, prepend depth level to input if provided
@@ -218,7 +218,7 @@ Deno.serve(async (req: Request) => {
     const toolCost = getToolCost(tool_id);
     const credit   = await deductCredits(userId, `prep_tool_${tool_id}` as any, toolCost);
     if (!credit.success) {
-      return errorResponse("Insufficient credits", "INSUFFICIENT_CREDITS", 402);
+      return errorResponse("Insufficient credits", "INSUFFICIENT_CREDITS", 402, req);
     }
 
     /* ----------------------- PROMPT ----------------------- */
@@ -238,7 +238,8 @@ Deno.serve(async (req: Request) => {
       return errorResponse(
         "AI service temporarily unavailable. Credits refunded.",
         "AI_ERROR",
-        502
+        502,
+        req
       );
     }
 
@@ -253,10 +254,12 @@ Deno.serve(async (req: Request) => {
 
     return successResponse(
       { result: cleaned },
-      { creditsCharged: toolCost }
+      { creditsCharged: toolCost },
+      200,
+      req
     );
   } catch (err) {
     console.error("prep-tool error:", err);
-    return errorResponse("Internal error", "INTERNAL", 500);
+    return errorResponse("Internal error", "INTERNAL", 500, req);
   }
 });

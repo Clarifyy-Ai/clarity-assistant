@@ -13,10 +13,12 @@ import {
   watchStreamEnded,
   isSystemAudioSupported,
 } from "@/lib/audio/audioCapture";
+import { confirmTabAudioCapture } from "@/lib/audio/tabAudioGuide";
 import { DeepgramStreamClient } from "@/lib/audio/deepgramStream";
 import { processUtteranceForDiarization } from "@/lib/audio/diarization";
 import { VADDetector, SilenceBoundaryDetector } from "@/lib/audio/vadDetector";
 import { WPMTracker } from "@/lib/audio/wpmTracker";
+import { toast } from "sonner";
 import type { TranscriptUtterance } from "@/types/audio.types";
 
 // ─────────────────────────────────────────────────────────────────
@@ -97,22 +99,48 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       const micStream = await captureMicrophone(opts.micDeviceId);
       store.setMicStream(micStream);
 
-      // 2) optional system audio
+      // 2) optional system audio (interviewer via tab share)
       let combinedStream = micStream;
       if (opts.enableSystemAudio && isSystemAudioSupported()) {
-        try {
-          const sysStream = await captureSystemAudio();
-          store.setSystemStream(sysStream);
-          store.setSystemAudioAvailable(true);
-          combinedStream = mergeAudioStreams(micStream, sysStream);
+        const proceed = confirmTabAudioCapture();
+        if (proceed) {
+          try {
+            const sysStream = await captureSystemAudio();
+            store.setSystemStream(sysStream);
+            store.setSystemAudioAvailable(true);
+            combinedStream = mergeAudioStreams(micStream, sysStream);
 
-          cleanupSysRef.current = watchStreamEnded(sysStream, () => {
-            store.setSystemStream(null);
-          });
-        } catch {
-          // continue with mic only
+            cleanupSysRef.current = watchStreamEnded(sysStream, () => {
+              store.setSystemStream(null);
+              toast.warning("Tab audio stopped. Interviewer speech may no longer be captured.");
+            });
+          } catch (err) {
+            const message = err instanceof Error ? err.message : "Tab audio capture failed";
+            store.setSystemAudioAvailable(false);
+            store.setStreamError({
+              code: "SYSTEM_AUDIO_FAILED",
+              message,
+              recoverable: true,
+              suggestion: "Share the interview tab and check \"Share tab audio\", then retry from the toolbar.",
+            });
+            toast.error(
+              "Interviewer audio not captured — only your mic is active. Use the toolbar to retry tab audio.",
+              { duration: 6000 }
+            );
+          }
+        } else {
           store.setSystemAudioAvailable(false);
+          toast.message("Continuing with mic only. Enable tab audio from the toolbar to capture the interviewer.");
         }
+      } else if (opts.enableSystemAudio && !isSystemAudioSupported()) {
+        store.setSystemAudioAvailable(false);
+        store.setStreamError({
+          code: "SYSTEM_AUDIO_NOT_SUPPORTED",
+          message: "Tab audio requires Chrome or Edge.",
+          recoverable: false,
+          suggestion: "Use Chrome/Edge and join the interview in a browser tab.",
+        });
+        toast.warning("Tab audio is not supported in this browser. Only your microphone will be transcribed.");
       }
 
       store.setCombinedStream(combinedStream);
@@ -285,14 +313,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         return;
       }
 
-      const proceed = window.confirm(
-        "Capture Interviewer Audio\n\n" +
-          "A screen share dialog will appear next.\n\n" +
-          "1. Select the tab/window with the interview call\n" +
-          "2. Check the \"Share audio\" checkbox at the bottom\n" +
-          "3. Click Share\n\n" +
-          "No video is recorded — only the audio is used for transcription."
-      );
+      const proceed = confirmTabAudioCapture();
       if (!proceed) return;
 
       try {
@@ -376,6 +397,31 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
   const getFillerSnapshot = useCallback(() => fillerAccRef.current?.getSnapshot() ?? [], []);
   const getWPMDataPoints = useCallback(() => wpmRef.current?.getDataPoints() ?? [], []);
   const getAverageWPM = useCallback(() => wpmRef.current?.getAverageWPM() ?? 0, []);
+
+  // Warn if interviewer audio likely missing after warm-up
+  useEffect(() => {
+    if (!isStartedRef.current) return;
+
+    const timer = setTimeout(() => {
+      const store = useAudioStore.getState();
+      if (store.streams.system_stream) return;
+
+      const utterances = store.transcript?.utterances ?? [];
+      const hasInterviewer = utterances.some(
+        (u) => u.speaker === "interviewer" || u.is_interviewer_question
+      );
+      if (hasInterviewer) return;
+
+      store.setStreamError({
+        code: "SYSTEM_AUDIO_FAILED",
+        message: "Interviewer audio not detected — only your microphone is active.",
+        recoverable: true,
+        suggestion: "Share the interview tab with \"Share tab audio\" enabled using the toolbar button.",
+      });
+    }, 25_000);
+
+    return () => clearTimeout(timer);
+  }, []);
 
   // cleanup on unmount
   useEffect(() => {

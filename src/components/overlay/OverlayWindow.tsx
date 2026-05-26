@@ -199,8 +199,9 @@ export function OverlayWindow({
 
     const clamp = () => {
       const w = isMinimalMode ? Math.min(640, Math.max(420, overlayWidth)) : overlayWidth;
+      const h = isMinimalMode ? 56 : overlayHeight;
       const maxX = Math.max(8, window.innerWidth - w - 8);
-      const maxY = Math.max(8, window.innerHeight - 60);
+      const maxY = Math.max(8, window.innerHeight - h - 8);
 
       const cur = useOverlayStore.getState().position;
       const nx = Math.min(Math.max(8, cur.x), maxX);
@@ -214,7 +215,7 @@ export function OverlayWindow({
     clamp();
     window.addEventListener("resize", clamp);
     return () => window.removeEventListener("resize", clamp);
-  }, [isMinimalMode, overlayWidth, isProctorSafe]);
+  }, [isMinimalMode, overlayWidth, overlayHeight, isProctorSafe]);
 
   if (!isMounted || !overlayRoot) return null;
 
@@ -226,8 +227,8 @@ export function OverlayWindow({
     <div
       ref={resizeContainerRef}
       className={cn(
-        "overlay-panel no-select relative flex flex-col gap-0 overflow-hidden",
-        isMinimalMode ? "rounded-full" : "rounded-2xl",
+        "overlay-panel no-select relative flex flex-col gap-0",
+        isMinimalMode ? "rounded-full" : "rounded-2xl overflow-hidden",
         "border border-white/10",
         "bg-[#0b0b18] backdrop-blur-2xl",
         "shadow-[0_12px_48px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.05)]",
@@ -251,7 +252,7 @@ export function OverlayWindow({
     >
       <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent pointer-events-none" />
 
-      {/* HEADER */}
+      {/* HEADER — drag strip only */}
       <div
         data-drag-handle
         className={cn(
@@ -261,9 +262,6 @@ export function OverlayWindow({
           isMobile && "py-3"
         )}
         title="Drag to move"
-        // Double-click behavior:
-        // - If in peek-only mode, restore overlay visibility
-        // - Otherwise, toggle pill/minimal mode (fast expand/minimize)
         onDoubleClick={() => {
           if (isPeekActive && !isVisible && useOverlayStore.getState().toggleMinimize) {
             useOverlayStore.getState().toggleMinimize();
@@ -272,49 +270,50 @@ export function OverlayWindow({
           useOverlayStore.getState().setMinimalMode(!isMinimalMode);
         }}
       >
-        <div className="flex items-center gap-2 shrink-0">
-          <div className="w-5 h-5 rounded-md bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+        <div className="flex items-center gap-2 shrink-0 min-w-0 flex-1">
+          <div className="w-5 h-5 rounded-md bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/30 shrink-0">
             <Sparkles className="w-3 h-3 text-white" />
           </div>
-          <span className="text-[12px] font-bold tracking-wide text-white/90 select-none">
+          <span className="text-[12px] font-bold tracking-wide text-white/90 select-none truncate">
             Clarify AI
           </span>
-        </div>
 
-        {isRecording && (
-          <div className="flex items-center gap-1 shrink-0">
+          {isRecording && (
+            <div className="flex items-center gap-1 shrink-0">
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_6px_rgba(239,68,68,0.8)]"
+                title="Recording"
+              />
+              <span className="text-[10px] font-mono text-red-400/70">LIVE</span>
+            </div>
+          )}
+
+          <OverlayNetworkBadge color={networkColor} />
+
+          {isStealthMode && (
             <span
-              className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse shadow-[0_0_6px_rgba(239,68,68,0.8)]"
-              title="Recording"
-            />
-            <span className="text-[10px] font-mono text-red-400/70">LIVE</span>
-          </div>
-        )}
+              className="font-mono text-[9px] font-bold text-violet-300 bg-violet-500/15 border border-violet-500/20 px-1.5 py-0.5 rounded shrink-0"
+              title="Discrete UI — lower opacity until hover; still visible on screen share"
+            >
+              DISCRETE
+            </span>
+          )}
+          {isProctorSafe && (
+            <span
+              className="font-mono text-[9px] font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/20 px-1.5 py-0.5 rounded shrink-0"
+              title="Corner-snap layout preset"
+            >
+              CORNER
+            </span>
+          )}
 
-        <OverlayNetworkBadge color={networkColor} />
+          <OverlayAudioBadge />
+          <OverlayAnswerTimer />
+        </div>
+      </div>
 
-        {isStealthMode && (
-          <span
-            className="font-mono text-[9px] font-bold text-violet-300 bg-violet-500/15 border border-violet-500/20 px-1.5 py-0.5 rounded shrink-0"
-            title="Discrete UI — lower opacity until hover; still visible on screen share"
-          >
-            DISCRETE
-          </span>
-        )}
-        {isProctorSafe && (
-          <span
-            className="font-mono text-[9px] font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/20 px-1.5 py-0.5 rounded shrink-0"
-            title="Corner-snap layout preset"
-          >
-            CORNER
-          </span>
-        )}
-
-        <div className="flex-1" />
-
-        <OverlayAudioBadge />
-        <OverlayAnswerTimer />
-
+      {/* TOOLBAR — separate row so drag handle does not capture button clicks */}
+      <div className="shrink-0 border-b border-white/[0.05]" data-no-drag>
         <OverlayToolbar
           onToggleMic={onToggleMic}
           onToggleSystemAudio={onToggleSystemAudio}
@@ -446,7 +445,7 @@ export function OverlayWindow({
         </>
       )}
 
-      {isSessionActive && <OverlaySessionStats />}
+      {isSessionActive && !isMinimalMode && <OverlaySessionStats />}
 
       {isSessionActive && !isMinimalMode && (
         <div className="flex items-center justify-between border-t border-white/[0.04] px-3 py-1 shrink-0">
@@ -477,12 +476,13 @@ export function OverlayWindow({
     return createPortal(
       <StealthMouseGuard
         isActive={isStealthMode}
+        interactive={shouldShow}
         stealthOpacity={guardStealthOpacity}
       >
         <div
           ref={panelRef}
           className={cn(
-            "fixed inset-x-0 bottom-0 z-overlay transition-all duration-200",
+            "fixed inset-x-0 bottom-0 z-overlay transition-all duration-200 pb-[env(safe-area-inset-bottom)]",
             shouldShow ? "translate-y-0" : "translate-y-full"
           )}
           style={{ pointerEvents: shouldShow ? "auto" : "none" }}

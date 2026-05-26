@@ -61,7 +61,8 @@ Deno.serve(async (req: Request) => {
       return errorResponse(
         validation.errors[0].message,
         "VALIDATION_ERROR",
-        400
+        400,
+        req
       );
     }
 
@@ -85,7 +86,8 @@ Deno.serve(async (req: Request) => {
       return errorResponse(
         credit.error ?? "Insufficient credits.",
         "INSUFFICIENT_CREDITS",
-        402
+        402,
+        req
       );
     }
 
@@ -147,7 +149,7 @@ Return ONLY this JSON:
     if (!aiResult?.text) {
       // Refund credits
       await deductCredits(userId, "refund_generate_star", -10);
-      return errorResponse("AI service failed.", "AI_ERROR", 502);
+      return errorResponse("AI service failed.", "AI_ERROR", 502, req);
     }
 
     // -------------------------------
@@ -196,14 +198,15 @@ Return ONLY this JSON:
       tokensUsed: aiResult.totalTokens,
       creditsCharged: 10,
       latencyMs: aiResult.latencyMs,
-    });
+    }, 200, req);
   } catch (err) {
     if (err instanceof Response) return err;
     log(FN, "error", "Unhandled error", err);
     return errorResponse(
       "Failed to generate STAR answer.",
       "INTERNAL_ERROR",
-      500
+      500,
+      req
     );
   }
 });

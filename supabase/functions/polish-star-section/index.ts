@@ -71,7 +71,7 @@ Deno.serve(async (req: Request) => {
       "currentText",
     ]);
     if (!validation.valid) {
-      return errorResponse(validation.errors[0].message, "VALIDATION_ERROR", 400);
+      return errorResponse(validation.errors[0].message, "VALIDATION_ERROR", 400, req);
     }
 
     // Validate section key
@@ -79,7 +79,8 @@ Deno.serve(async (req: Request) => {
       return errorResponse(
         "section must be one of: situation, task, action, result",
         "VALIDATION_ERROR",
-        400
+        400,
+        req
       );
     }
 
@@ -100,7 +101,7 @@ Deno.serve(async (req: Request) => {
     // CREDITS (FIXED: cost must be explicit)
     const credit = await deductCredits(auth.userId, "polish_star", 1);
     if (!credit.success) {
-      return errorResponse(credit.error ?? "Insufficient credits.", "INSUFFICIENT_CREDITS", 402);
+      return errorResponse(credit.error ?? "Insufficient credits.", "INSUFFICIENT_CREDITS", 402, req);
     }
 
     // Prompt construction
@@ -151,7 +152,8 @@ Return ONLY the rewritten ${sectionLabel} text:
       return errorResponse(
         "AI service temporarily unavailable. Your credit has been refunded.",
         "AI_ERROR",
-        502
+        502,
+        req
       );
     }
 
@@ -173,13 +175,15 @@ Return ONLY the rewritten ${sectionLabel} text:
         tokensUsed: aiResult.totalTokens,
         creditsCharged: 1,
         latencyMs: aiResult.latencyMs,
-      }
+      },
+      200,
+      req
     );
 
   } catch (err) {
     if (err instanceof Response) return err;
 
     log(FN, "error", "Unhandled error", err);
-    return errorResponse("Failed to polish STAR section.", "INTERNAL_ERROR", 500);
+    return errorResponse("Failed to polish STAR section.", "INTERNAL_ERROR", 500, req);
   }
 });

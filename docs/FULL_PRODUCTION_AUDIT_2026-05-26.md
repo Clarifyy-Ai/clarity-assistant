@@ -52,6 +52,11 @@ See [COMPLIANCE_GATING.md](./COMPLIANCE_GATING.md) for overlay safety flags.
 | I-10 | P2 | Integrations badges only | OAuth secrets missing | `SettingsIntegrations.tsx` | Env-gated OAuth + Calendar connect | FIXED |
 | I-11 | P2 | Rooms voice/video missing | WebRTC not built | `RoomSession.tsx`, `PracticeRooms.tsx` | Realtime chat/presence + honest UX | FIXED |
 | I-12 | P2 | Raw `functions.invoke` in pages | Inconsistent network layer | MockSession, Documents, Debrief, Integrations | Standardized P0 paths on `fetchEdgeJson` | FIXED (P0 paths) |
+| I-13 | P0 | Interviewer audio not transcribed | Mic-only default; silent tab-capture fallback | `LiveOverlay.tsx`, `useAudioSession.ts`, `audioCapture.ts` | Tab audio default on; guided share UX; mono mix; status badge | FIXED |
+| I-14 | P0/P1 | Overlay layout / recovery pill blocked | Full-header drag; StealthMouseGuard always interactive | `OverlayWindow.tsx`, `StealthMouseGuard.tsx`, `stealthMouse.ts` | Split header/toolbar; pointer-events fix; inset resize handles | FIXED |
+| I-15 | P0 | Mock exam Gemini / empty bank | Legacy Gemini model; gap-fill swallowed; exam_type mismatch | `parse-question-pdf`, `select-test-questions`, `AdminSeedQuestions.tsx` | Shared `geminiGenerate`; CORS `req`; gap_fill_failed UX; normalize exam_type | FIXED (code) |
+| I-16 | P0 | No public exam paper ingestion | No scraper edge function | `collect-exam-papers/`, `AdminSeedQuestions.tsx` | Admin allowlisted scraper + Collect UI | FIXED (code) |
+| I-17 | P0 | Prep tool CORS / double credit charge | Edge responses omit `req`; StarBuilder client deduct | `prep-tool`, `polish-star-section`, `generate-star-answer`, `cors.ts`, `StarBuilder.tsx` | Pass `req` on all responses; BYOK headers; `fetchEdgeJson` | FIXED (code) |
 
 ---
 
@@ -80,6 +85,10 @@ See [COMPLIANCE_GATING.md](./COMPLIANCE_GATING.md) for overlay safety flags.
 | Debrief | `fetchEdgeJson("generate-debrief", { session_id })` |
 | Network | P0 pages migrated from raw `invoke` to `fetchEdgeJson` |
 | Deploy | `DEPLOY_PRODUCTION_CHECKLIST.md`, `EDGE_DEPLOY_COMMANDS.txt`, `list-edge-functions.mjs` |
+| Live audio | Tab audio default; guided capture modal; mono mix; overlay Mic+Tab badge |
+| Overlay UX | Header/toolbar split; StealthMouseGuard pointer-events; drag handle fix; minimal mode reset |
+| Mock exams | `collect-exam-papers` EF; Gemini unified in parse/gap-fill; launchMockTest error UX |
+| Prep tools | prep-tool / polish-star / generate-star CORS + BYOK headers; StarBuilder on `fetchEdgeJson` |
 
 ---
 
@@ -88,7 +97,7 @@ See [COMPLIANCE_GATING.md](./COMPLIANCE_GATING.md) for overlay safety flags.
 | Category | Verdict |
 |----------|---------|
 | Code in repo | **Ready** — all audit todos implemented in source |
-| Supabase remote | **Action required** — run migrations + redeploy 39 edge functions |
+| Supabase remote | **Action required** — run migrations + redeploy 40 edge functions (incl. `collect-exam-papers`) |
 | External services | Stripe, Deepgram, Gemini required; Resend optional for email reminders |
 | Compliance | Capture evasion **disabled**; documented in `COMPLIANCE_GATING.md` |
 | Manual QA | Required on both `preview--clarify-aii.lovable.app` and production domains |

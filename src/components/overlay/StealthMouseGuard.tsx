@@ -3,6 +3,8 @@ import { type ReactNode, useEffect, useRef, useState } from "react";
 interface StealthMouseGuardProps {
   /** When true the overlay uses discrete UI — reduced opacity until hover (still visible on capture) */
   isActive: boolean;
+  /** When false, pointer events pass through (e.g. overlay hidden) */
+  interactive?: boolean;
   /** 0–1 — opacity when stealth is active (default 0.15) */
   stealthOpacity?: number;
   /** Milliseconds to wait after mouse-enter before restoring full visibility (default 0 = instant) */
@@ -23,6 +25,7 @@ interface StealthMouseGuardProps {
  */
 export function StealthMouseGuard({
   isActive,
+  interactive = true,
   stealthOpacity    = 0.15,
   hoverRevealDelayMs = 0,
   children,
@@ -83,7 +86,7 @@ export function StealthMouseGuard({
       onMouseEnter={handleMouseEnter}
       onMouseLeave={handleMouseLeave}
       style={{
-        pointerEvents: "auto",
+        pointerEvents: interactive ? "auto" : "none",
         opacity,
         transition: isActive
           ? isHovering

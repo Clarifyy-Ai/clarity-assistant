@@ -250,6 +250,43 @@ export async function geminiGenerate(
   return extractTextFromGemini(data);
 }
 
+/** Generate from text + inline PDF (base64) using shared Gemini auth + default model. */
+export async function geminiGenerateWithPdf(
+  prompt: string,
+  pdfBase64: string,
+  options?: { temperature?: number; maxTokens?: number; model?: string; byokKey?: string }
+): Promise<string> {
+  const safePrompt = sanitizePrompt(prompt, MAX_PROMPT_LENGTH);
+  const payload: Record<string, unknown> = {
+    contents: [
+      {
+        role: "user",
+        parts: [
+          { text: safePrompt },
+          {
+            inlineData: {
+              mimeType: "application/pdf",
+              data: pdfBase64,
+            },
+          },
+        ],
+      },
+    ],
+    generationConfig: {
+      temperature: normalizeTemperature(options?.temperature ?? 0.2),
+      maxOutputTokens: normalizeMaxTokens(options?.maxTokens ?? 4096),
+    },
+  };
+
+  const data = await geminiRequest(payload, {
+    byokKey: options?.byokKey,
+    model: options?.model,
+    timeoutMs: 60_000,
+  });
+
+  return extractTextFromGemini(data);
+}
+
 /* -------------------------------------------------------------------------- */
 /*                             CHAT MODE                                      */
 /* -------------------------------------------------------------------------- */

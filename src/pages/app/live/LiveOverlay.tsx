@@ -33,7 +33,7 @@ const DEFAULT_CONFIG: LiveSessionConfig = {
   jd_id: null,
   interview_type: "behavioral",
   instructions: "",
-  enable_system_audio: false,
+  enable_system_audio: true,
 };
 
 export default function LiveOverlay() {
@@ -244,7 +244,7 @@ export default function LiveOverlay() {
       )}
 
       {/* Stream error banner */}
-      {streamErrorMessage && (
+      {streamErrorMessage && !overlayVisible && (
         <div className="mx-auto max-w-md mb-4 flex items-start gap-3 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-400">
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
           <span className="flex-1">{streamErrorMessage}</span>

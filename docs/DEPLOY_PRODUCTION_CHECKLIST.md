@@ -46,7 +46,11 @@ generate-debrief
 deepgram-token
 select-test-questions
 create-test
-parse-document
+parse-question-pdf
+collect-exam-papers
+prep-tool
+polish-star-section
+generate-star-answer
 parse-resume
 schedule-interview
 send-email
@@ -63,12 +67,23 @@ $env:SUPABASE_ACCESS_TOKEN="sbp_..."
 # Deploy each function under supabase/functions/ except _shared
 ```
 
-Or generate deploy commands:
+Deploy (after merge):
 
 ```powershell
+npx supabase db push
 node scripts/list-edge-functions.mjs
-# Writes docs/EDGE_DEPLOY_COMMANDS.txt with one deploy line per function (39 total)
+# Priority batch (this pass):
+.\scripts\deploy-live-mock-prep.ps1
+# Or full list: docs/EDGE_DEPLOY_COMMANDS.txt (40 functions)
 ```
+
+Secrets: `GEMINI_API_KEY`, `SYSTEM_USER_ID`, `DEEPGRAM_API_KEY`, `ALLOWED_ORIGINS`
+
+Smoke (preview + production):
+
+1. Live overlay: share interview tab with audio → transcript shows interviewer → AI Help fills Answer
+2. Mock test: JEE Main 2024 launch OR Admin → Collect public papers → retry
+3. Prep: Rephraser + STAR Builder (no CORS console errors)
 
 ## 4. Frontend
 

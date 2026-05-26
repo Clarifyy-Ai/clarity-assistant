@@ -2,7 +2,7 @@
 import { useState } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
-import { useCredits } from "@/hooks/useCredits";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -19,7 +19,6 @@ const EXAMPLES = [
 
 export default function StarBuilder() {
   const { user } = useAuthStore();
-  const credits = useCredits();
 
   const [question, setQuestion] = useState("");
   const [situation, setSituation] = useState("");
@@ -37,23 +36,16 @@ export default function StarBuilder() {
       return;
     }
 
-    const deductResult = await credits.deduct("star_generate");
-    if (!deductResult.success) {
-      toast.error(deductResult.error ?? "Not enough credits.");
-      return;
-    }
-
     setPolishing(true);
     try {
       const input = `Question: ${question || "(general behavioral)"}\n\nSituation: ${situation}\nTask: ${task}\nAction: ${action}\nResult: ${result}`;
 
-      const { data, error } = await supabase.functions.invoke("prep-tool", {
-        body: { tool_id: "star_method", input },
+      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
+        tool_id: "star_method",
+        input,
       });
 
-      if (error) throw error;
-
-      const text = data?.result ?? data?.output ?? "";
+      const text = data?.result ?? "";
       if (text) {
         const parts = parseSTAR(text);
         if (parts.situation) setSituation(parts.situation);
@@ -63,8 +55,7 @@ export default function StarBuilder() {
         toast.success("Answer polished with AI!");
       }
     } catch (err) {
-      credits.refund("star_generate");
-      toast.error("AI polish failed. Credits refunded.");
+      toast.error(err instanceof Error ? err.message : "AI polish failed.");
     } finally {
       setPolishing(false);
     }

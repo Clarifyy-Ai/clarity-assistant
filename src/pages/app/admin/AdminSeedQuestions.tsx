@@ -13,6 +13,7 @@ import ExcelImportTab from "@/pages/app/mock-test/ExcelImportTab";
 import { cn } from "@/lib/utils";
 import { unwrapEdgePayload } from "@/lib/network/edgeResult";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { normalizeExamTypeForStorage } from "@/lib/mock-test/examTypes";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 
@@ -31,6 +32,7 @@ export default function AdminSeedQuestions() {
   const user = useAuthStore((s) => s.user);
   const [stats, setStats] = useState<BankStat[]>([]);
   const [loading, setLoading] = useState(true);
+  const [collecting, setCollecting] = useState(false);
 
   // PDF Upload States
   const fileRef = useRef<HTMLInputElement>(null);
@@ -104,9 +106,10 @@ export default function AdminSeedQuestions() {
       if (questions.length === 0) throw new Error("No questions extracted.");
 
       // Phase 2: Bulk-save verified questions as OFFICIAL_PYP
+      const storageExamType = normalizeExamTypeForStorage(examType) ?? examType;
       const rowsToInsert = questions.map((q: any) => ({
         ...q,
-        exam_type: examType,
+        exam_type: storageExamType,
         source_year: Number(sourceYear),
         source: "OFFICIAL_PYP",
         is_verified: true,    // Admin uploads are verified by default
@@ -162,6 +165,34 @@ export default function AdminSeedQuestions() {
     }
   }
 
+  async function collectPublicPapers() {
+    setCollecting(true);
+    const toastId = toast.loading(`Collecting public papers for ${examType}…`);
+    try {
+      const res = await fetchEdgeJson<{
+        imported?: number;
+        pdfs_found?: number;
+        message?: string;
+        errors?: string[];
+      }>("collect-exam-papers", {
+        exam_type: examType,
+        year: Number(sourceYear),
+      });
+      const imported = res.imported ?? 0;
+      if (imported > 0) {
+        toast.success(`Imported ${imported} questions from ${res.pdfs_found ?? 0} PDF(s).`, { id: toastId });
+      } else {
+        toast.warning(res.message ?? "No questions imported. Try a custom listing URL.", { id: toastId });
+      }
+      if (res.errors?.length) console.warn("[collect-exam-papers]", res.errors);
+      void loadStats();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Collection failed", { id: toastId });
+    } finally {
+      setCollecting(false);
+    }
+  }
+
   return (
     <div className="space-y-6 max-w-6xl pb-20">
       <PageHeader title="Seed Question Bank" description="Automated pipeline for building the public previous-year exam database." />
@@ -211,6 +242,32 @@ export default function AdminSeedQuestions() {
                 </Button>
               </div>
             </div>
+          </CardContent>
+        </Card>
+
+        {/* Public source collector (allowlisted official portals) */}
+        <Card className="border-emerald-500/30 bg-emerald-500/5 shadow-sm lg:col-span-2">
+          <CardContent className="p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <Database className="h-5 w-5 text-emerald-500" />
+              <h3 className="font-bold text-foreground text-lg">Collect from Public Sources</h3>
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Admin-only scraper for allowlisted official portals (NTA, UPSC, SSC). Respects domain allowlist —
+              does not crawl arbitrary sites. Uses the Target Exam and Source Year above.
+            </p>
+            <Button
+              onClick={() => void collectPublicPapers()}
+              disabled={collecting}
+              className="bg-emerald-600 hover:bg-emerald-700 text-white"
+            >
+              {collecting ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4 mr-2" />
+              )}
+              {collecting ? "Collecting…" : "Collect public papers"}
+            </Button>
           </CardContent>
         </Card>
 

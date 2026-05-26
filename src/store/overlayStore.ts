@@ -559,6 +559,7 @@ export const useOverlayStore = create<OverlayStore>()(
           activity_log: [],
 
           is_peek_active: false,
+          is_minimal_mode: false,
           is_hotkey_help_visible: false,
 
           chat_history: [],

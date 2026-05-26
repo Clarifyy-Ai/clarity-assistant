@@ -115,22 +115,18 @@ export function mergeAudioStreams(
   micStream: MediaStream,
   systemStream: MediaStream
 ): MediaStream {
-  // Some browsers require AudioContext to be created in a user gesture.
-  // Ensure call site is from a click or hotkey where possible.
   if (!_audioContext || _audioContext.state === "closed") {
     _audioContext = new AudioContext({ sampleRate: 16000 });
   }
 
   _destination = _audioContext.createMediaStreamDestination();
-  _merger = _audioContext.createChannelMerger(2);
 
   _micSource = _audioContext.createMediaStreamSource(micStream);
   _sysSource = _audioContext.createMediaStreamSource(systemStream);
 
-  // Connect both to merger, merger to destination
-  _micSource.connect(_merger, 0, 0);
-  _sysSource.connect(_merger, 0, 1);
-  _merger.connect(_destination);
+  // Mono mix — both sources into one channel for reliable Deepgram transcription
+  _micSource.connect(_destination);
+  _sysSource.connect(_destination);
 
   return _destination.stream;
 }

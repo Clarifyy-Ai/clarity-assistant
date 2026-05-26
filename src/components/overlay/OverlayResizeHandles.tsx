@@ -9,9 +9,9 @@ interface OverlayResizeHandlesProps {
 type Edge = "e" | "s" | "se";
 
 const HANDLE_STYLES: Record<Edge, React.CSSProperties> = {
-  e: { position: "absolute", top: 8, right: -4, bottom: 8, width: 8, cursor: "ew-resize" },
-  s: { position: "absolute", left: 8, right: 8, bottom: -4, height: 8, cursor: "ns-resize" },
-  se: { position: "absolute", right: -4, bottom: -4, width: 16, height: 16, cursor: "nwse-resize" },
+  e: { position: "absolute", top: 8, right: 0, bottom: 8, width: 8, cursor: "ew-resize" },
+  s: { position: "absolute", left: 8, right: 8, bottom: 0, height: 8, cursor: "ns-resize" },
+  se: { position: "absolute", right: 0, bottom: 0, width: 16, height: 16, cursor: "nwse-resize" },
 };
 
 export function OverlayResizeHandles({ containerRef }: OverlayResizeHandlesProps) {

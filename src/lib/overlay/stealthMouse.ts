@@ -69,9 +69,13 @@ export function createDragHandler(
   }
 
   function onMouseDown(e: MouseEvent): void {
-    // Only drag on the handle area (data-drag-handle attribute)
     const target = e.target as HTMLElement | null;
     if (!target?.closest("[data-drag-handle]")) return;
+    if (
+      target.closest("button, a, input, select, textarea, [role='button'], [data-no-drag]")
+    ) {
+      return;
+    }
 
     e.preventDefault();
 
