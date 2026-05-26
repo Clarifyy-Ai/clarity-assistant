@@ -487,3 +487,9 @@ Deno.serve(async (req: Request) => {
     });
 
     return json(corsHeaders, 500, {
+      error: "Subscription resume failed.",
+      code: "SUBSCRIPTION_RESUME_FAILED",
+    });
+  }
+});
+
