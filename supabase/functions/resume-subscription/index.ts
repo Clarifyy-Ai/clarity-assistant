@@ -1,6 +1,11 @@
 // supabase/functions/resume-subscription/index.ts
 //
-// Resumes a Stripe subscription that isHeaders,// Resumes a Stripe subscription that is scheduled to cancel at period end.
+// Resumes a Stripe subscription that is scheduled to cancel at period end.
+
+import {
+  handleCors,
+  getCorsHeaders,
+  withCorsHeaders,
 } from "../_shared/cors.ts";
 
 import { authenticateRequest } from "../_shared/auth.ts";
@@ -487,23 +492,4 @@ Deno.serve(async (req: Request) => {
     });
   }
 });
-//
-// Production hardening included:
-// - CORS handling
-// - POST-only method enforcement
-// - centralized JWT authentication
-// - required Idempotency-Key header
-// - optional request body validation
-// - rate limiting
-// - subscription ownership verification
-// - Stripe idempotency support
-// - database sync
-// - audit logging
-// - safe JSON responses
 
-import Stripe from "https://esm.sh/stripe@14.21.0?target=deno&deno-std=0.132.0";
-import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
-
-import {
-  handleCors,
-  getCorsHeaders,
