@@ -115,6 +115,19 @@ export default function RoomSession() {
     return () => { cancelled = true; };
   }, [id, user?.id]);
 
+  // Mark participant left when navigating away without clicking Leave
+  useEffect(() => {
+    if (!id || !user?.id) return;
+    return () => {
+      void supabase
+        .from("room_participants")
+        .update({ left_at: new Date().toISOString() })
+        .eq("room_id", id)
+        .eq("user_id", user.id)
+        .is("left_at", null);
+    };
+  }, [id, user?.id]);
+
   // Realtime presence + chat
   useEffect(() => {
     if (!id) return;
@@ -249,7 +262,8 @@ export default function RoomSession() {
               </div>
             </div>
             <p className="text-xs text-muted-foreground">
-              Voice/video chat is coming soon. Use the live chat below to coordinate questions and feedback in real time.
+              Real-time chat and participant presence are active. Video/voice rooms require a
+              future WebRTC release — use Live Co-Pilot for audio practice in the meantime.
             </p>
           </Card>
 

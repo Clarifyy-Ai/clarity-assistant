@@ -306,7 +306,7 @@ export function useLiveCopilot({
       if (!profile) return;
 
       // Prefer coach context; fallback if not initialized
-      const context = coachStore.getContext?.() ?? getSafeContext();
+      const context = coachStore.getContext() ?? getSafeContext();
       if (!context) return;
 
       const selectedModel = useOverlayStore.getState().active_model;
@@ -378,7 +378,7 @@ export function useLiveCopilot({
     async (question: string) => {
       if (!profile) return;
 
-      const context = coachStore.getContext?.() ?? getSafeContext();
+      const context = coachStore.getContext() ?? getSafeContext();
       if (!context) return;
 
       useOverlayStore.getState().addChatMessage({

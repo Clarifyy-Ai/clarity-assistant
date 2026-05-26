@@ -18,23 +18,24 @@ import { PreSessionSetup } from "@/components/session/PreSessionSetup";
 import { sessionsDB } from "@/lib/supabase/database";
 import { getOrCreateSession, activateSession } from "@/lib/session/sessionLifecycle";
 import { supabase } from "@/lib/supabase/client";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { toDbModel } from "@/lib/ai/modelMapping";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
+import { PANIC_RESPONSE } from "@/types/session.types";
+import type { LiveSessionConfig } from "@/types/session.types";
 import {
   Mic,
   MicOff,
   Square,
   ChevronRight,
   SkipForward,
-  Eye,
   EyeOff,
   Timer,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import type { LiveSessionConfig } from "@/types/session.types";
 
 /* ─── TYPES ─────────────────────────────────────────────────────────────── */
 
@@ -65,7 +66,7 @@ export default function MockSession() {
   const startTimeRef = useRef<string>(new Date().toISOString());
 
   const [phase, setPhase] = useState<"setup" | "loading" | "active">("setup");
-  const [panicMode, setPanicMode] = useState(false);
+  const [calmMode, setCalmMode] = useState(false);
   const [skipConfirm, setSkipConfirm] = useState(false);
   const [endConfirm, setEndConfirm] = useState(false);
 
@@ -133,7 +134,7 @@ export default function MockSession() {
     },
     "ctrl+shift+p": () => {
       if (phase !== "active") return;
-      setPanicMode((p) => !p);
+      setCalmMode((p) => !p);
     },
     "ctrl+shift+s": () => {
       if (phase !== "active") return;
@@ -275,38 +276,36 @@ export default function MockSession() {
 
     setPhase("loading");
     try {
-      const { data, error } = await supabase.functions.invoke("generate-questions", {
-        body: {
-          interview_type: config.interview_type,
-          experience_level: profile?.experience_years
-            ? profile.experience_years > 5
-              ? "senior"
-              : profile.experience_years > 2
-                ? "mid"
-                : "junior"
-            : "mid",
-          company: config.company || "",
-          role: profile?.target_role || "",
-          question_count: (config as any).question_count ?? 5,
-          session_id: dbSessionId,
-          user_id: userId,
-          config,
-          free_session: true,
-        },
+      const data = await fetchEdgeJson<{ questions?: unknown[] }>("generate-questions", {
+        interview_type: config.interview_type,
+        experience_level: profile?.experience_years
+          ? profile.experience_years > 5
+            ? "senior"
+            : profile.experience_years > 2
+              ? "mid"
+              : "junior"
+          : "mid",
+        company: config.company || "",
+        role: profile?.target_role || "",
+        question_count: (config as any).question_count ?? 5,
+        session_id: dbSessionId,
+        user_id: userId,
+        config,
+        free_session: true,
       });
 
       const questions =
-        (data as any)?.questions ??
+        data?.questions ??
         (data as any)?.data?.questions ??
         (data as any)?.data?.data?.questions ??
         [];
 
-      if (error || !Array.isArray(questions) || questions.length === 0) {
+      if (!Array.isArray(questions) || questions.length === 0) {
         await sessionsDB.update(
           dbSessionId,
           { status: "abandoned", ended_at: new Date().toISOString() } as any
         );
-        throw new Error(error?.message || (data as any)?.error || "Failed to generate questions");
+        throw new Error("Failed to generate questions");
       } else {
         orchestrator.setQuestions?.(questions);
       }
@@ -470,20 +469,22 @@ export default function MockSession() {
     );
   }
 
-  if (panicMode) {
+  if (calmMode) {
     return (
-      <div
-        className="min-h-screen bg-background flex items-center justify-center cursor-pointer"
-        onClick={() => setPanicMode(false)}
-      >
-        <div className="text-center space-y-3">
-          <div className="w-16 h-16 bg-accent/5 rounded-2xl flex items-center justify-center mx-auto">
-            <Eye className="w-7 h-7 text-muted-foreground" />
-          </div>
-          <p className="text-muted-foreground text-sm">Click anywhere to restore</p>
-          <kbd className="text-[10px] text-muted-foreground bg-secondary px-2 py-1 rounded">
-            Ctrl+Shift+P
-          </kbd>
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
+        <div className="max-w-md w-full bg-card border border-border rounded-2xl p-6 space-y-4 shadow-lg">
+          <h2 className="text-lg font-bold text-foreground">Calm coaching steps</h2>
+          <p className="text-xs text-muted-foreground">
+            Ground yourself — this panel does not hide your screen from others.
+          </p>
+          <ol className="space-y-3 text-sm text-foreground list-decimal list-inside">
+            <li>{PANIC_RESPONSE.step_1}</li>
+            <li>{PANIC_RESPONSE.step_2}</li>
+            <li>{PANIC_RESPONSE.step_3}</li>
+          </ol>
+          <Button variant="primary" size="sm" className="w-full" onClick={() => setCalmMode(false)}>
+            Continue practice
+          </Button>
         </div>
       </div>
     );
@@ -528,10 +529,10 @@ export default function MockSession() {
               <Button
                 variant="ghost"
                 size="xs"
-                onClick={() => setPanicMode(true)}
+                onClick={() => setCalmMode(true)}
                 leftIcon={<EyeOff className="w-3 h-3" />}
               >
-                Panic
+                Calm steps
               </Button>
               <Button
                 variant="danger"

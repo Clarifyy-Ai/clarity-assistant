@@ -387,7 +387,7 @@ const USER_MESSAGES: Partial<Record<ErrorCode, string>> = {
   [ErrorCode.DB_PERMISSION_DENIED]:         "You don't have access to this data.",
   [ErrorCode.STORAGE_FILE_TOO_LARGE]:       "File is too large. Maximum size is 10MB.",
   [ErrorCode.STORAGE_INVALID_FILE_TYPE]:    "File type not supported.",
-  [ErrorCode.OVERLAY_SCREEN_CAPTURED]:      "Screen capture detected. Overlay hidden for safety.",
+  [ErrorCode.OVERLAY_SCREEN_CAPTURED]:      "Screen capture detected. The overlay remains visible — use discrete mode if you prefer a subtler appearance.",
   [ErrorCode.SESSION_NOT_FOUND]:            "Session not found or has ended.",
   [ErrorCode.VALIDATION_REQUIRED_FIELD]:    "Please fill in all required fields.",
   [ErrorCode.VALIDATION_INVALID_EMAIL]:     "Please enter a valid email address.",

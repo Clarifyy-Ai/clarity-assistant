@@ -26,6 +26,8 @@ export type EdgeFunctionName =
   | "generate-questions"
   | "generate-hint"
   | "generate-debrief"
+  | "schedule-interview"
+  | "parse-document"
   | "ai-coach-chat"
   | "deduct-credits"
   | "create-checkout"

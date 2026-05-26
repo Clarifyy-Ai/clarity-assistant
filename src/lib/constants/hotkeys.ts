@@ -36,10 +36,11 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
     category:    "overlay",
     global:      true,
   },
-  PANIC_HIDE: {
-    keys:        "Escape",
-    action:      "overlay:panic_hide",
-    description: "Instantly hide overlay (emergency)",
+  PANIC_CALM: {
+    keys:        "Ctrl+Shift+P",
+    mac:         "⌘+Shift+P",
+    action:      "overlay:panic_calm",
+    description: "Show calm coaching steps (does not hide overlay)",
     category:    "overlay",
     global:      true,
   },

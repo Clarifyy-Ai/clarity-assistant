@@ -4,6 +4,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useDocumentStore } from "@/store/documentStore";
 import { useDocumentManager } from "@/hooks/useDocumentManager";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -104,13 +105,11 @@ function ResumeManager() {
 
     setRetrying(resumeId);
     try {
-      await supabase.functions.invoke("parse-resume", {
-        body: {
-          resume_id:  resumeId,
-          version_id: ver.id,
-          file_url:   ver.file_url,
-          mime_type:  "application/pdf",
-        },
+      await fetchEdgeJson("parse-resume", {
+        resume_id:  resumeId,
+        version_id: ver.id,
+        file_url:   ver.file_url,
+        mime_type:  "application/pdf",
       });
       await docMgr.reload();
       toast.success("Re-parsing started.");

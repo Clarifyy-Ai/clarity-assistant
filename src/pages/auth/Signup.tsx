@@ -306,13 +306,12 @@ export default function Signup(): JSX.Element {
               </div>
 
               <p className="text-white text-xs font-semibold">
-                50,000+ engineers trained
+                AI-powered interview coaching
               </p>
             </div>
 
             <p className="text-indigo-200 text-xs">
-              Trusted by engineers at Google, Meta, Amazon, Apple, Microsoft
-              and more.
+              Practice mock interviews, live co-pilot sessions, and gov exam prep in one place.
             </p>
           </div>
         </div>

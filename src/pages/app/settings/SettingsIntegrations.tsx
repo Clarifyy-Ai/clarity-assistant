@@ -10,6 +10,7 @@ import {
 } from "lucide-react";
 import { cn }          from "@/lib/utils";
 import { useCalendarSync } from "@/hooks/useCalendarSync";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { toast }       from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
@@ -39,10 +40,7 @@ const INTEGRATIONS: Integration[] = [
     status: "available",
     color:  "text-blue-400",
     bg:     "bg-blue-500/10",
-    // Set to true once GOOGLE_CLIENT_ID + GOOGLE_CLIENT_SECRET are configured
-    // and the OAuth consent screen is verified. The UI auto-detects readiness
-    // via the 501 response from the edge function.
-    live:   false,
+    live:   true,
   },
   {
     id:     "linkedin",
@@ -95,6 +93,81 @@ const INTEGRATIONS: Integration[] = [
     live:   false,
   },
 ];
+
+// ─────────────────────────────────────────────────────────────────
+// OAuth integrations — env-gated (no fake "coming soon" for providers)
+// ─────────────────────────────────────────────────────────────────
+
+const OAUTH_ENV_KEYS: Record<string, string> = {
+  linkedin: "VITE_LINKEDIN_CLIENT_ID",
+  github:   "VITE_GITHUB_CLIENT_ID",
+  slack:    "VITE_SLACK_CLIENT_ID",
+};
+
+function getOAuthClientId(integrationId: string): string {
+  const envKey = OAUTH_ENV_KEYS[integrationId];
+  if (!envKey) return "";
+  const value = import.meta.env[envKey];
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function OAuthIntegrationCard({ integration }: { integration: Integration }) {
+  const clientId = getOAuthClientId(integration.id);
+  const configured = Boolean(clientId);
+
+  async function handleConnect() {
+    if (!configured) return;
+    toast.info(
+      `${integration.label} OAuth is configured in the client. Complete the provider callback edge function and token storage in Supabase before production use.`,
+      { duration: 5000 },
+    );
+  }
+
+  return (
+    <Card className={configured ? "" : "opacity-90"}>
+      <div className="flex items-center gap-4">
+        <div className={cn(
+          "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
+          integration.bg,
+        )}>
+          <integration.icon className={cn("w-5 h-5", integration.color)} />
+        </div>
+
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <p className="text-sm font-semibold text-foreground">{integration.label}</p>
+            <Badge variant={configured ? "blue" : "amber"} size="sm">
+              {configured ? "Ready to connect" : "Admin setup required"}
+            </Badge>
+          </div>
+          <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+            {integration.desc}
+          </p>
+        </div>
+
+        <div className="shrink-0">
+          <Button
+            variant="secondary"
+            size="sm"
+            disabled={!configured}
+            onClick={handleConnect}
+            leftIcon={<ExternalLink className="w-3.5 h-3.5" />}
+          >
+            Connect
+          </Button>
+        </div>
+      </div>
+
+      <div className="mt-3 pt-3 border-t border-border">
+        <p className="text-[10px] text-muted-foreground leading-relaxed">
+          {configured
+            ? "Client ID detected. Wire the OAuth callback edge function and store tokens in Supabase before enabling for all users."
+            : `Configure ${OAUTH_ENV_KEYS[integration.id]} in the frontend env and provider secrets (client ID + secret) in Supabase before enabling OAuth.`}
+        </p>
+      </div>
+    </Card>
+  );
+}
 
 // ─────────────────────────────────────────────────────────────────
 // Coming-soon card — notify-me button (stored locally to avoid
@@ -194,18 +267,12 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
     let cancelled = false;
     (async () => {
       try {
-        const { supabase } = await import("@/lib/supabase/client");
-        const { error: invokeErr } = await supabase.functions.invoke(
-          "sync-calendar",
-          { body: { probe: true } },
-        );
-        // Supabase wraps non-2xx as FunctionsHttpError with a `status` field
-        const status = (invokeErr as { status?: number } | null)?.status;
-        if (!cancelled && status === 501) {
+        await fetchEdgeJson("sync-calendar", { probe: true });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "";
+        if (!cancelled && message.includes("501")) {
           setServerReady(false);
         }
-      } catch {
-        // Network error — don't flip the flag, let the user try to connect
       }
     })();
     return () => { cancelled = true; };
@@ -398,6 +465,11 @@ export default function SettingsIntegrations() {
           if (integration.id === "google_calendar") {
             return (
               <GoogleCalendarCard key={integration.id} integration={integration} />
+            );
+          }
+          if (integration.id in OAUTH_ENV_KEYS) {
+            return (
+              <OAuthIntegrationCard key={integration.id} integration={integration} />
             );
           }
           return (

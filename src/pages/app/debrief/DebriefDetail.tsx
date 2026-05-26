@@ -1,5 +1,5 @@
 // @ts-nocheck -- retained: complex Supabase row types with manual schema columns
-import { fetchEdge } from "@/lib/network/fetchEdge";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
@@ -37,9 +37,10 @@ export default function DebriefDetail() {
   const generateDebrief = useCallback(async (sessionId: string) => {
     setGenning(true);
     try {
-      const data = await fetchEdge("generate-debrief", {
-        body: { session_id: sessionId },
-      });
+      const data = await fetchEdgeJson<{ debrief?: unknown; session?: unknown }>(
+        "generate-debrief",
+        { session_id: sessionId }
+      );
       if (data?.debrief) setDebrief(data.debrief);
       if (data?.session) setSession(data.session);
     } catch (err: unknown) {

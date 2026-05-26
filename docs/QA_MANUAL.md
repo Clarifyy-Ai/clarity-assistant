@@ -20,21 +20,20 @@ Each script is tagged with its catalog T-ID where possible.
 
 ---
 
-## Live Overlay (desktop app, stealth)
+## Live Overlay (compliance-aware)
 
-### T-Overlay Screen-Share Invisibility
-**Pre:** Desktop build (Electron) running, active live session, screen share active in Zoom/Meet/Teams.
+### T-Overlay Screen-Share Visibility
+**Pre:** Active live session, screen share active in Zoom/Meet/Teams.
 **Steps:**
 1. Trigger overlay with `Ctrl+Shift+H`.
 2. Have a second person view the screen share.
-3. Verify the overlay region appears blank/transparent on the remote viewer's screen.
 
-**Expected:** Overlay is fully invisible to screen-capture viewers (`excludeFromCapture` working).
+**Expected:** Overlay **remains visible** to screen-capture viewers. Capture evasion is disabled for compliance (`SCREEN_CAPTURE_EVASION_ENABLED = false`).
 
-### T-Overlay Panic Mode (`Ctrl+Shift+P`)
+### T-Overlay Calm Mode (`Ctrl+Shift+P`)
 **Pre:** Active session, overlay visible.
 **Steps:** Press `Ctrl+Shift+P`.
-**Expected:** Overlay instantly replaced with neutral content; mouse/keyboard not captured.
+**Expected:** Calm coaching panel appears (breathing steps). Overlay is **not** hidden from screen share.
 
 ---
 

@@ -251,19 +251,19 @@ export default function Login(): JSX.Element {
               <div className="bg-white/10 border border-white/15 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-1">
                   <TrendingUp className="w-4 h-4 text-indigo-200" />
-                  <span className="text-white font-black text-2xl">87%</span>
+                  <span className="text-white font-black text-2xl">Live</span>
                 </div>
                 <p className="text-indigo-200 text-xs">
-                  of users get interviews within 60 days
+                  AI hints while you practice real interview questions
                 </p>
               </div>
 
               <div className="bg-white/10 border border-white/15 rounded-2xl p-4">
                 <div className="flex items-center gap-2 mb-1">
                   <Users className="w-4 h-4 text-indigo-200" />
-                  <span className="text-white font-black text-2xl">50k+</span>
+                  <span className="text-white font-black text-2xl">Prep</span>
                 </div>
-                <p className="text-indigo-200 text-xs">engineers trained</p>
+                <p className="text-indigo-200 text-xs">Mock tests, STAR builder, and answer bank</p>
               </div>
             </div>
           </div>

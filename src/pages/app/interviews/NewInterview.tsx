@@ -28,6 +28,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 
 /* ─── CONSTANTS ─────────────────────────────────────────────────────────── */
 
@@ -154,6 +155,20 @@ export default function NewInterview() {
       toast.warning(`Interview saved, but round details failed: ${roundErr}`);
     } else {
       toast.success("Interview scheduled!");
+
+      try {
+        await fetchEdgeJson<{ success?: boolean; email_sent?: boolean }>(
+          "schedule-interview",
+          {
+            interview_id: id,
+            company_name: company.trim(),
+            role_title: roleTitle.trim(),
+            scheduled_at: new Date(scheduledAt).toISOString(),
+          }
+        );
+      } catch (remErr) {
+        console.warn("[NewInterview] schedule-interview:", remErr);
+      }
     }
 
     // ── Step 3: Calendar sync ─────────────────────────────────────────────
