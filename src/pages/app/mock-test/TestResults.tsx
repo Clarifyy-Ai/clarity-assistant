@@ -26,6 +26,7 @@ import { Card, CardContent } from "@/components/ui/Card";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/env";
 import { useAuthStore } from "@/store/userStore";
 
@@ -244,19 +245,11 @@ export default function TestResults() {
     setAiLoading(true);
 
     try {
-      const result = await supabase.functions.invoke("analyze-test-performance", {
-        body: { test_id: testId },
-      });
-
-      if (result.error) {
-        throw new Error(result.error.message || "Failed to generate AI analysis");
-      }
-
-      const data = (result.data ?? {}) as {
+      const data = await fetchEdgeJson<{
         analysis?: string;
         ai_analysis_text?: string;
         error?: string;
-      };
+      }>("analyze-test-performance", { test_id: testId });
 
       if (data.error) throw new Error(data.error);
 
@@ -340,18 +333,10 @@ export default function TestResults() {
         shuffle_options: true,
       };
 
-      const selectResult = await supabase.functions.invoke("select-test-questions", {
-        body: { config: baseConfig },
-      });
-
-      if (selectResult.error) {
-        throw new Error(selectResult.error.message || "Failed to select questions");
-      }
-
-      const selectData = (selectResult.data ?? {}) as {
+      const selectData = await fetchEdgeJson<{
         question_ids?: string[];
         error?: string;
-      };
+      }>("select-test-questions", { config: baseConfig });
 
       if (selectData.error) throw new Error(selectData.error);
 
@@ -363,23 +348,15 @@ export default function TestResults() {
         throw new Error("No questions available for this recommended test.");
       }
 
-      const createResult = await supabase.functions.invoke("create-test", {
-        body: {
-          test_name: baseConfig.test_name,
-          config: baseConfig,
-          question_ids: questionIds,
-        },
-      });
-
-      if (createResult.error) {
-        throw new Error(createResult.error.message || "Failed to create test");
-      }
-
-      const createData = (createResult.data ?? {}) as {
+      const createData = await fetchEdgeJson<{
         test_id?: string;
         test?: { id?: string };
         error?: string;
-      };
+      }>("create-test", {
+        test_name: baseConfig.test_name,
+        config: baseConfig,
+        question_ids: questionIds,
+      });
 
       if (createData.error) throw new Error(createData.error);
 

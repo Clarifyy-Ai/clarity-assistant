@@ -229,11 +229,11 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
   const toggleSidebar = useUIStore((state) => state.toggleSidebar);
 
   const profile = useAuthStore((state) => state.profile);
-  
+  const isAdmin = useAuthStore((state) => state.isAdmin);
+
   const signOut = useAuthStore((state) => state.signOut);
 
   const collapsed = onNavClick ? false : sidebarCollapsed;
-  const isAdmin = profile?.is_admin === true;
   const initial = getProfileInitial(profile);
   const planLabel = getPlanLabel(profile);
 

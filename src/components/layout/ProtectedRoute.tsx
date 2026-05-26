@@ -67,6 +67,32 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     return <Navigate to={loginPath} state={{ from: location }} replace />;
   }
 
+  // 3b) Banned users — block all protected routes
+  if (isProfileLoaded && profile?.is_banned) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-md p-6">
+          <div className="flex gap-3">
+            <AlertCircle className="h-5 w-5 text-destructive mt-1 flex-shrink-0" />
+            <div>
+              <h2 className="text-lg font-semibold mb-2">Account suspended</h2>
+              <p className="text-sm text-muted-foreground mb-4">
+                Your account has been suspended. Contact support if you believe this is a mistake.
+              </p>
+              <button
+                type="button"
+                onClick={() => useAuthStore.getState().signOut()}
+                className="inline-block px-4 py-2 bg-primary rounded-lg text-sm font-medium text-primary-foreground hover:opacity-90 transition"
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   // 4) Admin check — wait for profile (and role) to finish loading before denying
   if (requireAdmin && !isProfileLoaded) {
     return <div className="min-h-screen bg-background" />;

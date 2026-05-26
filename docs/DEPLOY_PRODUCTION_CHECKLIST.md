@@ -15,6 +15,9 @@ Required migrations include:
 - `20260525140000_page_audit_grants.sql`
 - `20260525160000_seed_starter_mock_questions.sql`
 - `20260525161000_storage_documents_bucket.sql`
+- `20260527000000_revoke_increment_profile_credits.sql`
+- `20260527000001_pg_trgm_extensions_schema.sql`
+- `20260527120000_revoke_credit_transactions_client_insert.sql`
 
 ## 2. Supabase secrets
 
@@ -77,7 +80,19 @@ node scripts/list-edge-functions.mjs
 # Or full list: docs/EDGE_DEPLOY_COMMANDS.txt (40 functions)
 ```
 
-Secrets: `GEMINI_API_KEY`, `SYSTEM_USER_ID`, `DEEPGRAM_API_KEY`, `ALLOWED_ORIGINS`
+Secrets: `GEMINI_API_KEY`, `SYSTEM_USER_ID`, `DEEPGRAM_API_KEY`, `ALLOWED_ORIGINS`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`
+
+Post-deploy smoke:
+
+```bash
+SUPABASE_URL=https://YOUR_PROJECT.supabase.co ANON_KEY=eyJ... bash scripts/smoke-edge.sh
+```
+
+Or deploy all functions:
+
+```powershell
+node scripts/deploy-all-edge-functions.mjs
+```
 
 Smoke (preview + production):
 

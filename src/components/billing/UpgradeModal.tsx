@@ -10,7 +10,7 @@ import {
 import { formatPrice, CREDIT_PACKS } from "@/lib/billing/priceCalculator"
 import { Check, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { supabase } from "@/lib/supabase/client"
+import { fetchEdgeJson } from "@/lib/network/fetchEdge"
 import { toast } from "sonner"
 
 const STRIPE_CONFIGURED =
@@ -44,15 +44,12 @@ export function UpgradeModal() {
 
     setLoading(targetPlanId)
     try {
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: {
-          price_id:    plan.stripePriceIdMonthly,
-          success_url: `${window.location.origin}/app/settings/billing?success=1`,
-          cancel_url:  `${window.location.origin}/app/settings/billing?canceled=1`,
-        },
+      const data = await fetchEdgeJson<{ url?: string; error?: string }>("create-checkout", {
+        price_id: plan.stripePriceIdMonthly,
+        success_url: `${window.location.origin}/app/settings/billing?success=1`,
+        cancel_url: `${window.location.origin}/app/settings/billing?canceled=1`,
       })
 
-      if (error) throw error
       if (data?.url) {
         window.location.href = data.url
       } else if (data?.error) {
@@ -90,15 +87,12 @@ export function UpgradeModal() {
 
     setLoading("credits")
     try {
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: {
-          price_id:    priceId,
-          success_url: `${window.location.origin}/app/settings/credits?success=1`,
-          cancel_url:  `${window.location.origin}/app/settings/billing?canceled=1`,
-        },
+      const data = await fetchEdgeJson<{ url?: string; error?: string }>("create-checkout", {
+        price_id: priceId,
+        success_url: `${window.location.origin}/app/settings/credits?success=1`,
+        cancel_url: `${window.location.origin}/app/settings/billing?canceled=1`,
       })
 
-      if (error) throw error
       if (data?.url) {
         window.location.href = data.url
       } else if (data?.error) {

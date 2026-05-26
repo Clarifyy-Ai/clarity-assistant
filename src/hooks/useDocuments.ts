@@ -1,7 +1,6 @@
-// @ts-nocheck
 // src/hooks/useDocuments.ts
 import { EDGE_BASE } from "@/lib/env";
-import { fetchEdge } from "@/lib/network/fetchEdge";
+import { fetchEdge, fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase, uploadFile, deleteFile, STORAGE_BUCKETS } from "@/lib/supabase/client";
 import { useDocumentStore } from "@/store/documentStore";
@@ -45,11 +44,17 @@ function mapAnswerBankRowToSavedAnswer(row: any): SavedAnswer {
 // useDocuments — adapted to match actual DB schema
 // ─────────────────────────────────────────────────────────────────
 
-export function useDocuments() {
+type UseDocumentsOptions = {
+  /** When true, skip auto-load on mount (parent page already loaded). */
+  skipInitialLoad?: boolean;
+};
+
+export function useDocuments(options?: UseDocumentsOptions) {
   const { user }    = useAuthStore();
   const docStore    = useDocumentStore();
   const answerStore = useAnswerBankStore();
   const [isParsing, setIsParsing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const mountedRef = useRef(true);
   useEffect(() => {
@@ -58,10 +63,10 @@ export function useDocuments() {
   }, []);
 
   useEffect(() => {
-    if (!user) return;
+    if (!user || options?.skipInitialLoad) return;
     loadDocuments();
     loadAnswerBank();
-  }, [user?.id]);
+  }, [user?.id, options?.skipInitialLoad]);
 
   // ── Load documents ────────────────────────────────────────────
 
@@ -101,7 +106,9 @@ export function useDocuments() {
         docStore.setJDs(mapped as JDDocument[]);
       }
     } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load documents";
       console.error("[useDocuments] loadDocuments failed:", err);
+      if (mountedRef.current) setLoadError(msg);
     } finally {
       if (mountedRef.current) docStore.setIsLoading(false);
     }
@@ -220,18 +227,22 @@ export function useDocuments() {
         });
         if (insertErr) throw new Error(insertErr.message);
 
-        const { error: parseErr } = await supabase.functions.invoke("parse-document", {
-          body: { document_id: documentId, file_path: path, mime_type: mimeType },
-        });
-        if (parseErr) {
+        let parseError: string | null = null;
+        try {
+          await fetchEdgeJson("parse-document", {
+            document_id: documentId,
+            file_path: path,
+            mime_type: mimeType,
+          });
+        } catch (parseErr) {
           console.warn("[useDocuments] parse-document:", parseErr);
+          parseError =
+            "File uploaded but text extraction failed. Retry or paste text manually.";
         }
 
         return {
           documentId,
-          error: parseErr
-            ? "File uploaded but text extraction failed. Retry or paste text manually."
-            : null,
+          error: parseError,
         };
       } catch (err) {
         return {
@@ -255,8 +266,10 @@ export function useDocuments() {
     if (!mountedRef.current) return;
     setIsParsing(true);
     try {
-      const { data } = await supabase.functions.invoke("parse-resume", {
-        body: { resume_id: resumeId, file_path: filePath, mime_type: mimeType },
+      const data = await fetchEdgeJson<{ content?: string }>("parse-resume", {
+        resume_id: resumeId,
+        file_path: filePath,
+        mime_type: mimeType,
       });
       // Update content if parsed
       if (data?.content) {
@@ -458,6 +471,7 @@ ${rawText.slice(0, 4000)}`;
     answers:        answerStore.filtered_answers,
     allAnswers:     answerStore.answers,
     isLoading:      docStore.is_loading,
+    loadError,
     uploadProgress: docStore.upload_progress,
     isParsing,
 

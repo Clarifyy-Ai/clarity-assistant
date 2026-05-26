@@ -1,1 +1,33 @@
 project_id = "qzgvjrvtkwlzxpmlddkx"
+
+# JWT verification at the gateway (defense in depth).
+# Functions that must be public set verify_jwt = false explicitly.
+[functions.ping]
+verify_jwt = false
+
+[functions.stripe-webhook]
+verify_jwt = false
+
+[functions.generate-hint]
+verify_jwt = true
+
+[functions.generate-debrief]
+verify_jwt = true
+
+[functions.prep-tool]
+verify_jwt = true
+
+[functions.create-checkout]
+verify_jwt = true
+
+[functions.send-email]
+verify_jwt = true
+
+[functions.analytics-dashboard]
+verify_jwt = true
+
+[functions.export-user-data]
+verify_jwt = true
+
+[functions.delete-account]
+verify_jwt = true

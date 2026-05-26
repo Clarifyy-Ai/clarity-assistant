@@ -154,6 +154,7 @@ export function LiveMetricsPanel({
   const elapsedSeconds = useSessionStore((s) => s.elapsed_seconds ?? 0);
 
   const [metrics, setMetrics] = useState<SessionMetrics>(DEFAULT_METRICS);
+  const [isEstimated, setIsEstimated] = useState(true);
 
   // FIX: track previous score in a ref so we can compute a real trend delta
   const prevScoreRef = useRef<number>(DEFAULT_METRICS.overallScore);
@@ -165,6 +166,7 @@ export function LiveMetricsPanel({
       .toLowerCase();
     const words = text.split(/\s+/).filter((w) => w.length > 0);
     const total = words.length;
+    setIsEstimated(total < 15);
 
     // ── Answer Quality ─────────────────────────────────────────
     const completeness = Math.min(100, Math.max(20, (total / 100) * 50 + 50));
@@ -292,6 +294,14 @@ export function LiveMetricsPanel({
           <div>
             <p className="text-xs font-semibold" style={{ color: "rgba(255,255,255,0.7)" }}>
               Overall Score
+              {isEstimated && (
+                <span
+                  className="ml-1.5 text-[9px] font-normal uppercase tracking-wide px-1.5 py-0.5 rounded bg-white/10 text-white/40"
+                  title="Scores are estimated from transcript heuristics until enough speech is captured"
+                >
+                  Est.
+                </span>
+              )}
             </p>
             <p className={cn("text-[10px] mt-0.5 capitalize font-medium", getTierColor(metrics.tier))}>
               {metrics.tier}

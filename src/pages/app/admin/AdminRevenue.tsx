@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase }            from "@/lib/supabase/client";
+import { PLAN_PRICE_CENTS_MONTHLY } from "@/lib/constants/pricing";
 import { formatCents, formatNumber, formatPercent, formatDate } from "@/lib/utils/formatters";
 import { timeAgo }             from "@/lib/utils/dateUtils";
 
@@ -141,55 +142,81 @@ export default function AdminRevenue() {
           if (row.subscription_status === "active") activeSubscribers++;
         });
 
-        const planPrices: Record<string, number> = {
-          free: 0, starter: 1900, pro: 3900, elite: 7900, enterprise: 19900,
-        };
         const planNames: Record<string, string> = {
           free: "Free", starter: "Starter", pro: "Pro", elite: "Elite", enterprise: "Enterprise",
         };
 
         const total = profileData.length || 1;
-        const planDist: PlanDistribution[] = Object.entries(planCounts).map(([planId, count]) => ({
-          planId,
-          planName:   planNames[planId] ?? planId,
-          userCount:  count,
-          mrr:        (planPrices[planId] ?? 0) * count,
-          percentage: (count / total) * 100,
-        }));
+        const planDist: PlanDistribution[] = Object.entries(planCounts).map(([planId, count]) => {
+          const planKey = planId as keyof typeof PLAN_PRICE_CENTS_MONTHLY;
+          const cents = PLAN_PRICE_CENTS_MONTHLY[planKey] ?? 0;
+          return {
+            planId,
+            planName:   planNames[planId] ?? planId,
+            userCount:  count,
+            mrr:        (cents ?? 0) * count,
+            percentage: (count / total) * 100,
+          };
+        });
 
         setPlans(planDist);
 
         const mrr = planDist.reduce((sum, p) => sum + p.mrr, 0);
+
+        const { data: subRows } = await supabase
+          .from("subscriptions")
+          .select("status")
+          .in("status", ["active", "trialing"]);
+
+        const subsFromTable = subRows?.length ?? 0;
+        const activeCount = Math.max(activeSubscribers, subsFromTable);
+
+        const { data: txData } = await supabase
+          .from("credit_transactions")
+          .select("id, user_id, amount, action, created_at")
+          .order("created_at", { ascending: false })
+          .limit(50);
+
+        const creditPurchaseCents = (txData ?? [])
+          .filter((tx) => String(tx.action ?? "").includes("purchase"))
+          .reduce((sum, tx) => sum + Math.abs(Number(tx.amount) || 0), 0);
+
+        const userIds = [...new Set((txData ?? []).map((tx) => tx.user_id))];
+        const emailByUser: Record<string, string> = {};
+        if (userIds.length > 0) {
+          const { data: profileEmails } = await supabase
+            .from("profiles")
+            .select("id, email")
+            .in("id", userIds);
+          (profileEmails ?? []).forEach((p) => {
+            if (p.id && p.email) emailByUser[p.id] = p.email;
+          });
+        }
+
+        if (txData) {
+          const txs: RevenueTransaction[] = txData.map((tx) => ({
+            id:          tx.id,
+            userId:      tx.user_id,
+            userEmail:   emailByUser[tx.user_id] ?? `user-${tx.user_id.slice(0, 8)}`,
+            type:        String(tx.action ?? "").includes("purchase") ? "credits" : "subscription",
+            amount:      Math.abs(Number(tx.amount) || 0),
+            description: tx.action ?? "",
+            createdAt:   tx.created_at,
+            status:      "succeeded" as const,
+          }));
+          setTransactions(txs);
+        }
+
         setMetrics({
           mrr,
           arr:               mrr * 12,
           mrrGrowth:         0,
-          activeSubscribers,
+          activeSubscribers: activeCount,
           churnRate:         0,
-          ltv:               mrr > 0 ? Math.round(mrr / Math.max(activeSubscribers, 1)) * 18 : 0,
-          totalRevenue:      mrr * 14,
-          creditRevenue:     mrr * 0.12,
+          ltv:               mrr > 0 ? Math.round(mrr / Math.max(activeCount, 1)) * 18 : 0,
+          totalRevenue:      mrr,
+          creditRevenue:     creditPurchaseCents,
         });
-      }
-
-      const { data: txData } = await supabase
-        .from("credit_transactions")
-        .select("id, user_id, amount, action, created_at")
-        .order("created_at", { ascending: false })
-        .limit(50) as unknown as { data: Record<string, unknown>[] | null };
-
-      if (txData) {
-        const txs: RevenueTransaction[] = txData.map((tx) => ({
-          id:          tx.id as string,
-          userId:      tx.user_id as string,
-          userEmail:   `user-${(tx.user_id as string).slice(0, 8)}`,
-          type:        ((tx.action as string) ?? "").includes("purchase") ? "credits" : "subscription",
-          amount:      Math.abs(tx.amount as number) * 10,
-          description: (tx.action as string) ?? "",
-          createdAt:   tx.created_at as string,
-          status:      "succeeded" as const,
-        }));
-        setTransactions(txs);
       }
     } catch (err) {
       console.error("[AdminRevenue] fetch error:", err);
@@ -231,7 +258,7 @@ export default function AdminRevenue() {
         <div>
           <h1 className="text-xl font-bold text-foreground">Revenue</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            MRR, subscriptions, and credit purchases.
+            MRR from plan distribution (estimated). Transaction list uses live credit ledger data.
           </p>
         </div>
         <div className="flex items-center gap-2">

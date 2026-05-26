@@ -21,6 +21,7 @@ import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
 import { supabase } from "@/lib/supabase/client";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -479,23 +480,15 @@ export default function MyQuestions() {
         shuffle_options: true,
       };
 
-      const result = await supabase.functions.invoke("create-test", {
-        body: {
-          test_name: config.test_name,
-          config,
-          question_ids: ids,
-        },
-      });
-
-      if (result.error) {
-        throw new Error(result.error.message || "Failed to create test");
-      }
-
-      const data = (result.data ?? {}) as {
+      const data = await fetchEdgeJson<{
         test_id?: string;
         test?: { id?: string };
         error?: string;
-      };
+      }>("create-test", {
+        test_name: config.test_name,
+        config,
+        question_ids: ids,
+      });
 
       if (data.error) throw new Error(data.error);
 

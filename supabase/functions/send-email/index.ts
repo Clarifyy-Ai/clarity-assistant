@@ -166,6 +166,15 @@ Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
+  if (!RESEND_API_KEY.trim()) {
+    return errorResponse(
+      "Email is not configured yet. Add RESEND_API_KEY in Supabase project secrets.",
+      "SERVICE_UNAVAILABLE",
+      503,
+      req,
+    );
+  }
+
   try {
     const auth = await requireAuth(req);
     const userId = auth.userId;

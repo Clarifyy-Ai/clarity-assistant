@@ -18,6 +18,7 @@ import "katex/dist/katex.min.css";
 import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/env";
 import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
@@ -842,13 +843,7 @@ export default function TestSession() {
     try {
       await saveResponses();
 
-      const result = await supabase.functions.invoke("submit-test", {
-        body: { test_id: testId },
-      });
-
-      if (result.error) {
-        throw new Error(result.error.message || "Failed to submit test");
-      }
+      await fetchEdgeJson("submit-test", { test_id: testId });
 
       toast.success(autoSubmit ? "Time's up! Test submitted." : "Test submitted.");
       navigate(`/app/mock-test/results/${testId}`);

@@ -197,7 +197,7 @@ export class SpeechMetricsCalculator {
   }
 
   private estimateAnswerCompleteness(): number {
-    // Placeholder until you implement content‑based scoring (Chapter 9). [file:3]
+    // Heuristic placeholder — LiveMetricsPanel shows "Est." until content scoring exists
     return 10;
   }
 }

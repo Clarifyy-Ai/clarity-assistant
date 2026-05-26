@@ -1,32 +1,25 @@
 import { useCallback, useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase/client";
+import { fetchEdge, fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useAuthStore } from "@/store/userStore";
 import type { AuthChangeEvent } from "@supabase/supabase-js";
+
+async function parseEdgeJson<T>(res: Response): Promise<T> {
+  const text = await res.text().catch(() => "");
+  const payload = text ? JSON.parse(text) : {};
+  const data = (payload?.data ?? payload) as T & { error?: string; code?: string };
+  if (!res.ok) {
+    const err = new Error(data?.error ?? `Request failed (${res.status})`) as Error & { code?: string };
+    err.code = data?.code;
+    throw err;
+  }
+  return data;
+}
 
 // ─────────────────────────────────────────────────────────────────
 // useCalendarSync
 // Connects Google Calendar and imports upcoming interview events.
 // ─────────────────────────────────────────────────────────────────
-
-async function parseInvokeError(
-  fnError: { context?: Response; message?: string } | null,
-  data: Record<string, unknown> | null
-): Promise<{ code?: string; error?: string } | null> {
-  if (data && typeof data === "object") return data as { code?: string; error?: string };
-
-  try {
-    const ctx = fnError?.context;
-    if (ctx && typeof ctx.json === "function") {
-      return await ctx.json();
-    }
-    if (typeof fnError?.message === "string") {
-      return JSON.parse(fnError.message);
-    }
-  } catch {
-    // ignore parse failures
-  }
-  return null;
-}
 
 // Auth events that warrant a re-check of calendar connection status
 const CONNECTION_CHECK_EVENTS: AuthChangeEvent[] = [
@@ -56,16 +49,12 @@ export function useCalendarSync() {
       return;
     }
     try {
-      const { data, error: fnError } = await supabase.functions.invoke(
+      const data = await fetchEdgeJson<{ connected?: boolean }>(
         "disconnect-calendar",
+        undefined,
         { method: "GET" }
       );
-      if (!fnError && data !== null) {
-        setIsConnected(!!data?.connected);
-      } else {
-        const { data: sessionData } = await supabase.auth.getSession();
-        setIsConnected(!!sessionData?.session?.provider_token);
-      }
+      setIsConnected(!!data?.connected);
     } catch {
       const { data: sessionData } = await supabase.auth.getSession();
       setIsConnected(!!sessionData?.session?.provider_token);
@@ -120,28 +109,12 @@ export function useCalendarSync() {
       const body: Record<string, unknown> = {};
       if (providerToken) body.provider_token = providerToken;
 
-      const { data, error: fnError } = await supabase.functions.invoke(
-        "sync-calendar",
-        { body }
-      );
-
-      if (fnError) {
-        const parsed = await parseInvokeError(fnError, data);
-        const code = parsed?.code;
-
-        if (code === "TOKEN_REVOKED" || code === "NO_TOKEN") {
-          setIsConnected(false);
-          const msg = code === "TOKEN_REVOKED"
-            ? "Google Calendar permission was revoked. Please reconnect."
-            : "Google Calendar not connected. Please connect it first.";
-          setError(msg);
-          return { imported: 0, error: msg };
-        }
-
-        const msg = parsed?.error ?? fnError.message ?? "Sync failed";
-        setError(msg);
-        return { imported: 0, error: msg };
-      }
+      const res = await fetchEdge("sync-calendar", body);
+      const data = await parseEdgeJson<{
+        imported?: number;
+        error?: string;
+        code?: string;
+      }>(res);
 
       if (data?.code === "TOKEN_REVOKED") {
         setIsConnected(false);
@@ -165,6 +138,16 @@ export function useCalendarSync() {
       return { imported: count, error: null };
 
     } catch (err) {
+      const e = err as Error & { code?: string };
+      if (e.code === "TOKEN_REVOKED" || e.code === "NO_TOKEN") {
+        setIsConnected(false);
+        const msg =
+          e.code === "TOKEN_REVOKED"
+            ? "Google Calendar permission was revoked. Please reconnect."
+            : "Google Calendar not connected. Please connect it first.";
+        setError(msg);
+        return { imported: 0, error: msg };
+      }
       const msg = err instanceof Error ? err.message : "Sync failed";
       setError(msg);
       return { imported: 0, error: msg };
@@ -180,17 +163,11 @@ export function useCalendarSync() {
     setError(null);
 
     try {
-      const { data, error: fnError } = await supabase.functions.invoke(
+      const data = await fetchEdgeJson<{ success?: boolean; error?: string }>(
         "disconnect-calendar",
+        undefined,
         { method: "POST" }
       );
-
-      if (fnError) {
-        const parsed = await parseInvokeError(fnError, data);
-        const msg = parsed?.error ?? fnError.message ?? "Failed to disconnect Google Calendar";
-        setError(msg);
-        return { error: msg };
-      }
 
       if (data?.success === false) {
         const msg = data?.error ?? "Failed to disconnect Google Calendar";

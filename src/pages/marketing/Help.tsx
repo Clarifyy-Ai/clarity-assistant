@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { Search, ChevronDown, ChevronUp, HelpCircle, Mail } from "lucide-react";
 import { motion } from "framer-motion";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
@@ -68,6 +69,11 @@ const FAQ_DATA: FaqCategory[] = [
 ];
 
 export default function Help() {
+  usePageMeta({
+    title: "Help Center — Clarify AI",
+    description: "FAQs and guides for interview prep, live coaching, mock tests, and billing.",
+  });
+
   const [search, setSearch] = useState("");
   const [openItems, setOpenItems] = useState<Set<string>>(new Set());
 

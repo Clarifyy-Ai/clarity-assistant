@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Zap, TrendingDown, Info } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/lib/supabase/client";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { toast } from "sonner";
 import { CREDIT_PACKS, formatPrice } from "@/lib/billing/priceCalculator";
 
@@ -63,14 +63,11 @@ export default function SettingsCredits() {
 
     setBuying(packId);
     try {
-      const { data, error } = await supabase.functions.invoke("create-checkout", {
-        body: {
-          price_id:    pack.stripePriceId,
-          success_url: `${window.location.origin}/app/settings/credits?success=1`,
-          cancel_url:  `${window.location.origin}/app/settings/credits?canceled=1`,
-        },
+      const data = await fetchEdgeJson<{ url?: string; error?: string }>("create-checkout", {
+        price_id: pack.stripePriceId,
+        success_url: `${window.location.origin}/app/settings/credits?success=1`,
+        cancel_url: `${window.location.origin}/app/settings/credits?canceled=1`,
       });
-      if (error) throw error;
       if (data?.url) {
         window.location.href = data.url;
       } else if (data?.error) {

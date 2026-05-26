@@ -1,4 +1,3 @@
-// @ts-nocheck
 // src/pages/app/documents/Documents.tsx
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useAuthStore } from "@/store/userStore";
@@ -7,6 +6,8 @@ import { supabase } from "@/lib/supabase/client";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useDocumentStore } from "@/store/documentStore";
 import { useDocumentManager } from "@/hooks/useDocumentManager";
+import { Spinner } from "@/components/ui/Spinner";
+import { AlertCircle } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -30,12 +31,33 @@ function isValidUrl(url: string): boolean {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export default function Documents() {
+  const { isLoading, loadError, reload } = useDocumentManager();
+
   return (
     <div className="space-y-5 max-w-4xl">
       <PageHeader
         title="Documents"
         subtitle="Manage your resume and job descriptions for AI context"
       />
+      {loadError && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span className="flex-1">{loadError}</span>
+          <button
+            type="button"
+            onClick={() => reload()}
+            className="text-xs font-medium underline hover:no-underline"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      {isLoading && (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Spinner size="sm" />
+          Loading documents…
+        </div>
+      )}
       <Tabs defaultValue="resumes">
         <TabsList>
           <TabsTrigger value="resumes">📄 Resumes</TabsTrigger>
@@ -58,7 +80,7 @@ export default function Documents() {
 
 function ResumeManager() {
   const docStore = useDocumentStore();
-  const docMgr   = useDocumentManager();
+  const docMgr   = useDocumentManager({ skipInitialLoad: true });
 
   const [dragOver,  setDragOver]  = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -347,7 +369,7 @@ function ResumeManager() {
 
 function JDManager() {
   const docStore = useDocumentStore();
-  const docMgr   = useDocumentManager();
+  const docMgr   = useDocumentManager({ skipInitialLoad: true });
 
   const [addOpen,   setAddOpen]   = useState(false);
   const [title,     setTitle]     = useState("");
@@ -585,7 +607,7 @@ function JDManager() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function CoverLetterManager() {
-  const docMgr = useDocumentManager();
+  const docMgr = useDocumentManager({ skipInitialLoad: true });
   const user = useAuthStore((s) => s.user);
   const [file, setFile] = useState<File | null>(null);
   const [dragOver, setDragOver] = useState(false);
