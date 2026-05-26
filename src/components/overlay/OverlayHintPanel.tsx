@@ -1,4 +1,5 @@
 // src/components/overlay/OverlayHintPanel.tsx
+import { useMemo, useState, useCallback } from "react";
 import type { HintStyle } from "@/types/user.types";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";
@@ -18,6 +19,9 @@ import {
 import { OverlayAnswerStrength } from "./OverlayAnswerStrength";
 import { checkCredits } from "@/lib/billing/creditsManager";
 import { toast } from "sonner";
+import { composeHint, splitInlineCode } from "@/lib/overlay/overlayCompositor";
+import { useOverlayStore } from "@/store/overlayStore";
+import type { HintState } from "@/store/overlayStore";
 
 /* ─── TYPES ─────────────────────────────────────────────────────────────── */
 
@@ -569,7 +573,3 @@ function IdleStateContent() {
     </div>
   );
 }
-import { useMemo, useState, useCallback } from "react";
-import { composeHint, splitInlineCode } from "@/lib/overlay/overlayCompositor";
-import { useOverlayStore } from "@/store/overlayStore";
-import type { HintState } from "@/store/overlayStore";

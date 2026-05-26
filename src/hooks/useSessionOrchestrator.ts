@@ -6,7 +6,7 @@ import { useCallback } from "react";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useAuthStore } from "@/store/userStore";
-import { supabase } from "@/integrations/supabase/client";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { buildResumeContextForAI } from "@/lib/documents/interviewContext";
 import type { SessionQuestion } from "@/types/session.types";
 
@@ -96,27 +96,16 @@ export function useSessionOrchestrator() {
       overlay.setHintState("generating");
       overlay.setChatGenerating?.(true);
 
-      const { data, error } = await supabase.functions.invoke("generate-hint", {
-        body: {
+      const data = await fetchEdgeJson<{ hint?: string; answer?: string; text?: string }>(
+        "generate-hint",
+        {
           question: questionText,
           resume_context: resumeCtx,
           interview_type: (session.config as any)?.interview_type ?? "behavioural",
           model: overlay.active_model ?? "gemini-2.0-flash",
           session_id: session.session_id,
-        },
-      });
-
-      if (error) {
-        console.error("[useSessionOrchestrator] generate-hint error:", error);
-        overlay.setHintState("error");
-        overlay.setError(error.message || "Failed to generate hint");
-        overlay.addChatMessage({
-          role: "assistant",
-          text: `Error: ${error.message || "Failed to generate hint"}`,
-          timestamp: Date.now(),
-        });
-        return;
-      }
+        }
+      );
 
       const hint = data?.hint ?? data?.answer ?? data?.text ?? "";
       overlay.setCurrentQuestion(questionText);

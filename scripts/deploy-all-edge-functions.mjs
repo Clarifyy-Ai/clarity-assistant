@@ -1,68 +1,74 @@
+#!/usr/bin/env node
 /**
- * Deploy edge functions via Supabase Management API.
- * Requires SUPABASE_ACCESS_TOKEN env var.
+ * deploy-all-edge-functions.mjs
  *
- * Usage: SUPABASE_ACCESS_TOKEN=sbp_... node scripts/deploy-all-edge-functions.mjs
+ * Deploys every edge function found under supabase/functions/ (skips _shared).
+ * Uses the Supabase CLI via `npx supabase functions deploy <name>`.
+ *
+ * Prerequisites:
+ *   - Supabase CLI available (npx supabase --version)
+ *   - Logged in: npx supabase login
+ *   - Project linked: npx supabase link --project-ref <ref>
+ *
+ * Usage:
+ *   node scripts/deploy-all-edge-functions.mjs [--dry-run] [--filter=<name>]
+ *
+ * Options:
+ *   --dry-run        Print commands without executing
+ *   --filter=<name>  Only deploy functions whose name includes <name>
  */
-import fs from "fs";
-import path from "path";
+
+import { execSync } from "child_process";
+import { readdirSync, statSync } from "fs";
+import { join, dirname } from "path";
 import { fileURLToPath } from "url";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.join(__dirname, "..");
-const payloadDir = path.join(root, ".deploy-payloads");
-const names = ["delete-account", "export-user-data", "analytics-dashboard"];
+const __dirname = dirname(fileURLToPath(import.meta.url));
+const FUNCTIONS_DIR = join(__dirname, "..", "supabase", "functions");
 
-const token = process.env.SUPABASE_ACCESS_TOKEN?.trim();
-if (!token) {
-  console.error("Missing SUPABASE_ACCESS_TOKEN");
-  process.exit(2);
-}
+const args = process.argv.slice(2);
+const dryRun = args.includes("--dry-run");
+const filterArg = args.find((a) => a.startsWith("--filter="));
+const filter = filterArg ? filterArg.split("=")[1] : null;
 
-const results = {};
+// Collect function names (subdirectories, excluding _shared)
+const functions = readdirSync(FUNCTIONS_DIR)
+  .filter((name) => {
+    if (name.startsWith("_")) return false;
+    const full = join(FUNCTIONS_DIR, name);
+    return statSync(full).isDirectory();
+  })
+  .filter((name) => !filter || name.includes(filter))
+  .sort();
 
-for (const name of names) {
-  const argsPath = path.join(payloadDir, `invoke-args-${name}.json`);
-  const args = JSON.parse(fs.readFileSync(argsPath, "utf8"));
+console.log(`\nEdge functions to deploy: ${functions.length}`);
+if (dryRun) console.log("(DRY RUN — no commands will be executed)\n");
 
-  const url = `https://api.supabase.com/v1/projects/${args.project_id}/functions/deploy?slug=${encodeURIComponent(args.name)}`;
+const results = { ok: [], failed: [] };
 
-  const body = {
-    slug: args.name,
-    name: args.name,
-    entrypoint_path: args.entrypoint_path,
-    verify_jwt: args.verify_jwt,
-    files: args.files,
-  };
+for (const fn of functions) {
+  const cmd = `npx supabase functions deploy ${fn}`;
+  process.stdout.write(`  → ${fn.padEnd(38)}`);
 
-  const res = await fetch(url, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-
-  const text = await res.text();
-  let parsed;
-  try {
-    parsed = JSON.parse(text);
-  } catch {
-    parsed = { raw: text };
+  if (dryRun) {
+    console.log(`[dry-run] ${cmd}`);
+    results.ok.push(fn);
+    continue;
   }
 
-  results[name] = {
-    status: res.status,
-    ok: res.ok,
-    version: parsed?.version ?? null,
-    error: res.ok ? null : parsed,
-  };
-
-  console.log(JSON.stringify({ name, status: res.status, ok: res.ok, version: parsed?.version, error: res.ok ? null : parsed }));
+  try {
+    execSync(cmd, { stdio: "pipe" });
+    console.log("OK");
+    results.ok.push(fn);
+  } catch (err) {
+    const stderr = err.stderr?.toString().trim() || err.message;
+    console.log(`FAILED\n     ${stderr}`);
+    results.failed.push(fn);
+  }
 }
 
-const outPath = path.join(payloadDir, "deploy-results.json");
-fs.writeFileSync(outPath, JSON.stringify(results, null, 2));
-console.log(`Wrote ${outPath}`);
-process.exit(Object.values(results).every((r) => r.ok) ? 0 : 1);
+console.log(`\nDeployed ${results.ok.length}/${functions.length} functions.`);
+if (results.failed.length) {
+  console.error(`Failed: ${results.failed.join(", ")}`);
+  process.exit(1);
+}

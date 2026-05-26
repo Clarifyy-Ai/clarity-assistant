@@ -1,4 +1,4 @@
-// supabase/functions/generate-hint/index.ts// supabase/functionsening included:
+// supabase/functions/generate-hint/index.ts
 // - CORS handling
 // - POST-only method enforcement
 // - centralized JWT authentication

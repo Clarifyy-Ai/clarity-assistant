@@ -36,6 +36,15 @@ export default defineConfig(({ mode }) => {
 
     base: isElectron ? "./" : "/",
 
+    // Silence verbose console.log / console.debug calls in production builds.
+    // console.error and console.warn are kept intact (Sentry breadcrumbs).
+    ...(isProduction && {
+      define: {
+        "console.log": "(() => {})",
+        "console.debug": "(() => {})",
+      },
+    }),
+
     resolve: {
       alias: {
         "@": `${__dirname}src`,

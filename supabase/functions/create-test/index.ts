@@ -1,6 +1,6 @@
 // supabase/functions/create-test/index.ts
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
-import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
+import { createServiceClient, deductCredits, refundCredits } from "../_shared/supabase.ts";
 
 const CREATE_TEST_CREDIT_COST = 2;
 
@@ -153,6 +153,12 @@ Deno.serve(async (req) => {
 
     if (insertErr || !test) {
       console.error("[create-test] Insert error:", insertErr);
+      // Refund credits — test was never created
+      await refundCredits({
+        userId: user.id,
+        cost: CREATE_TEST_CREDIT_COST,
+        reason: "refund_create_mock_test",
+      }).catch((e) => console.error("[create-test] Refund failed:", e));
       return jsonResponse(req, { error: "Failed to create test" }, 500);
     }
 
