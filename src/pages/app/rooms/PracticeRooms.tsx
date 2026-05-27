@@ -2,7 +2,7 @@
 import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
-import { supabase } from "@/lib/supabase/client";
+import { practiceRoomsDB } from "@/lib/supabase/database";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -31,18 +31,15 @@ export default function PracticeRooms() {
     if (!user?.id) return;
     setLoading(true);
     setLoadError(null);
-    const { data, error } = await supabase
-      .from("practice_rooms")
-      .select("id, name, description, status, max_players, is_public, host_id, created_at")
-      .order("created_at", { ascending: false })
-      .limit(50);
-    if (error) {
-      setLoadError(error.message || "Failed to load practice rooms.");
+    try {
+      const data = await practiceRoomsDB.listRecent(50);
+      setRooms(data as Room[]);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load practice rooms.");
       setRooms([]);
-    } else {
-      setRooms((data as Room[]) ?? []);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   useEffect(() => {

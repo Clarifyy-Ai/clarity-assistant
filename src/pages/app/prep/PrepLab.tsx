@@ -372,11 +372,6 @@ type BankQuestion = {
   fromLibrary?: boolean;
 };
 
-const STARTER_QUESTIONS: BankQuestion[] = [
-  { id: "starter-1", text: "Tell me about a time you failed and what you learned.", category: "Behavioural", difficulty: "medium" },
-  { id: "starter-2", text: "Describe a situation where you had to meet a tight deadline.", category: "Behavioural", difficulty: "easy" },
-];
-
 function QuestionBank() {
   const { user } = useAuthStore();
   const [feedbackLoading, setFeedbackLoading] = useState(false);
@@ -385,7 +380,7 @@ function QuestionBank() {
   const [search,     setSearch]     = useState("");
   const [practicing, setPracticing] = useState<string | null>(null);
   const [answer,     setAnswer]     = useState("");
-  const [questions,  setQuestions]  = useState<BankQuestion[]>(STARTER_QUESTIONS);
+  const [questions,  setQuestions]  = useState<BankQuestion[]>([]);
   const [loadingBank, setLoadingBank] = useState(true);
 
   useEffect(() => {
@@ -418,11 +413,11 @@ function QuestionBank() {
           .filter((q) => q.text.length > 8);
 
         if (!cancelled) {
-          setQuestions(fromBank.length > 0 ? fromBank : STARTER_QUESTIONS);
+          setQuestions(fromBank);
         }
       } catch (err) {
         console.error("[PrepLab/QuestionBank] load failed:", err);
-        if (!cancelled) setQuestions(STARTER_QUESTIONS);
+        if (!cancelled) setQuestions([]);
       } finally {
         if (!cancelled) setLoadingBank(false);
       }
@@ -517,7 +512,18 @@ function QuestionBank() {
       {/* Questions list */}
       <div className="space-y-2">
         {filtered.length === 0 && !loadingBank && (
-          <p className="text-sm text-muted-foreground py-6 text-center">No questions match your filters.</p>
+          <div className="text-center py-8 space-y-2">
+            <p className="text-sm text-muted-foreground">
+              {questions.length === 0
+                ? "No saved questions yet. Practice in a mock session or add answers to your Answer Bank."
+                : "No questions match your filters."}
+            </p>
+            {questions.length === 0 && (
+              <Link to="/app/answers" className="text-sm text-violet-500 hover:underline">
+                Open Answer Bank →
+              </Link>
+            )}
+          </div>
         )}
         {filtered.map((q) => (
           <Card

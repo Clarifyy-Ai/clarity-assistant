@@ -294,7 +294,7 @@ export default function AdminRevenue() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard
-          title="MRR"
+          title="MRR (Est.)"
           value={metrics ? formatCents(metrics.mrr) : "—"}
           trend={metrics?.mrrGrowth}
           trendLabel="vs last month"

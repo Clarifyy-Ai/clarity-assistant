@@ -144,6 +144,8 @@ const DEFAULT_METRICS: SessionMetrics = {
   trending:      { scoreChange: 0, direction: "stable" },
 };
 
+const MIN_WORDS_FOR_SCORE = 15;
+
 export function LiveMetricsPanel({
   className,
   showTrend = true,
@@ -166,7 +168,12 @@ export function LiveMetricsPanel({
       .toLowerCase();
     const words = text.split(/\s+/).filter((w) => w.length > 0);
     const total = words.length;
-    setIsEstimated(total < 15);
+    const hasEnoughSpeech = total >= MIN_WORDS_FOR_SCORE;
+    setIsEstimated(!hasEnoughSpeech);
+
+    if (!hasEnoughSpeech) {
+      return;
+    }
 
     // ── Answer Quality ─────────────────────────────────────────
     const completeness = Math.min(100, Math.max(20, (total / 100) * 50 + 50));
@@ -263,6 +270,20 @@ export function LiveMetricsPanel({
 
   // ── Compact view ────────────────────────────────────────────────
   if (!detailed) {
+    if (isEstimated) {
+      return (
+        <div className={cn("space-y-2", className)}>
+          <div
+            className="px-3 py-2 rounded-xl border text-center"
+            style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.07)" }}
+          >
+            <p className="text-[11px]" style={{ color: "rgba(255,255,255,0.45)" }}>
+              Keep speaking — scores appear after ~{MIN_WORDS_FOR_SCORE} words
+            </p>
+          </div>
+        </div>
+      );
+    }
     return (
       <div className={cn("space-y-2", className)}>
         <div
@@ -285,6 +306,25 @@ export function LiveMetricsPanel({
   }
 
   // ── Detailed view ────────────────────────────────────────────────
+  if (isEstimated) {
+    return (
+      <div className={cn("space-y-3", className)}>
+        <div
+          className="p-4 rounded-xl border text-center"
+          style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.07)" }}
+        >
+          <Star className="h-5 w-5 text-amber-400/60 mx-auto mb-2" />
+          <p className="text-xs font-medium" style={{ color: "rgba(255,255,255,0.6)" }}>
+            Metrics unlock after you speak more
+          </p>
+          <p className="text-[11px] mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>
+            Answer at least {MIN_WORDS_FOR_SCORE} words for estimated scores
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className={cn("space-y-3", className)}>
 

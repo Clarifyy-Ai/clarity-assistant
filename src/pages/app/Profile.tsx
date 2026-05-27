@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { Link } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
+import { sessionsDB } from "@/lib/supabase/database";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -10,22 +11,27 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase/client";
 
 export default function Profile() {
   const { profile, user } = useAuthStore();
   const [sessionsCompleted, setSessionsCompleted] = useState(0);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
 
   useEffect(() => {
     if (!user?.id) return;
+    let cancelled = false;
     (async () => {
-      const { count } = await supabase
-        .from("sessions")
-        .select("*", { count: "exact", head: true })
-        .eq("user_id", user.id)
-        .eq("status", "completed");
-      setSessionsCompleted(count ?? 0);
+      setSessionsLoading(true);
+      try {
+        const count = await sessionsDB.countCompletedByUserId(user.id);
+        if (!cancelled) setSessionsCompleted(count);
+      } catch {
+        if (!cancelled) setSessionsCompleted(0);
+      } finally {
+        if (!cancelled) setSessionsLoading(false);
+      }
     })();
+    return () => { cancelled = true; };
   }, [user?.id]);
 
   const initial = (
@@ -46,7 +52,7 @@ export default function Profile() {
     { label: "Role", value: profile?.role ?? "Not set", icon: Briefcase },
     { label: "Experience", value: profile?.experience_level ?? "Not set", icon: User },
     { label: "Domain", value: profile?.domain ?? "Not set", icon: MapPin },
-    { label: "Joined", value: profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : "—", icon: Calendar },
+    { label: "Joined", value: profile?.created_at ? new Date(profile.created_at).toLocaleDateString() : "???", icon: Calendar },
   ];
 
   return (
@@ -104,7 +110,11 @@ export default function Profile() {
             {stats.map((s) => (
               <Card key={s.label} className="text-center">
                 <s.icon className={cn("w-5 h-5 mx-auto mb-1", s.color)} />
-                <p className="text-xl font-bold text-foreground">{s.value}</p>
+                {s.label === "Sessions" && sessionsLoading ? (
+                  <div className="h-7 w-10 mx-auto rounded bg-muted animate-pulse" />
+                ) : (
+                  <p className="text-xl font-bold text-foreground">{s.value}</p>
+                )}
                 <p className="text-[11px] text-muted-foreground">{s.label}</p>
               </Card>
             ))}

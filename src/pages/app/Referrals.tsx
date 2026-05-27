@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/userStore";
-import { supabase } from "@/lib/supabase/client";
+import { referralsDB } from "@/lib/supabase/database";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -12,34 +12,20 @@ export default function Referrals() {
   const [copied, setCopied] = useState(false);
   const [invitedCount, setInvitedCount] = useState(0);
   const [creditsEarned, setCreditsEarned] = useState(0);
+  const [statsError, setStatsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
     (async () => {
-      const { count, error: countErr } = await supabase
-        .from("referrals")
-        .select("*", { count: "exact", head: true })
-        .eq("referrer_id", user.id);
-      if (countErr) {
-        console.error("[Referrals] count:", countErr);
+      try {
+        const stats = await referralsDB.getStats(user.id);
+        setInvitedCount(stats.invitedCount);
+        setCreditsEarned(stats.creditsEarned);
+        setStatsError(null);
+      } catch (err) {
+        setStatsError(err instanceof Error ? err.message : "Could not load referral stats");
         toast.error("Could not load referral stats");
-        return;
       }
-      setInvitedCount(count ?? 0);
-
-      const { data, error: sumErr } = await supabase
-        .from("referrals")
-        .select("credits_awarded")
-        .eq("referrer_id", user.id);
-      if (sumErr) {
-        console.error("[Referrals] credits:", sumErr);
-        return;
-      }
-      const total = (data ?? []).reduce(
-        (sum: number, r: { credits_awarded?: number }) => sum + (r.credits_awarded ?? 0),
-        0,
-      );
-      setCreditsEarned(total);
     })();
   }, [user?.id]);
 
@@ -72,6 +58,12 @@ export default function Referrals() {
         description="Invite friends and earn bonus credits"
         icon={<Gift className="w-5 h-5 text-violet-400" />}
       />
+
+      {statsError && (
+        <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {statsError}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-6">

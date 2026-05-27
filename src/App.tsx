@@ -461,9 +461,9 @@ const routes = [
     ],
   },
 
-  // Full-screen protected routes
+  // Full-screen protected routes (verified + onboarded)
   {
-    element: <ProtectedRoute requireEmailVerification />,
+    element: <ProtectedRoute requireOnboarded requireEmailVerification />,
     children: [
       {
         path: "/app/live/overlay",

@@ -1,6 +1,6 @@
-// @ts-nocheck
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useAuthStore } from "@/store/userStore";
+import { notificationsDB } from "@/lib/supabase/database";
 import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -8,15 +8,9 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Bell, Check, CheckCheck, CreditCard, AlertTriangle, Info, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import type { Tables } from "@/integrations/supabase";
 
-interface Notification {
-  id: string;
-  title: string;
-  body: string;
-  type: string;
-  is_read: boolean;
-  created_at: string;
-}
+type Notification = Tables<"notifications">;
 
 const TYPE_ICONS: Record<string, React.ElementType> = {
   credit: CreditCard,
@@ -29,34 +23,27 @@ export default function Notifications() {
   const { user } = useAuthStore();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  // Initial load
-  useEffect(() => {
+  const loadNotifications = useCallback(async () => {
     if (!user?.id) return;
-    let cancelled = false;
-    (async () => {
-      const { data, error } = await supabase
-        .from("notifications")
-        .select("*")
-        .eq("user_id", user.id)
-        .order("created_at", { ascending: false })
-        .limit(50);
-      if (cancelled) return;
-      if (error) {
-        console.error("[Notifications] load failed:", error);
-        toast.error(error.message || "Failed to load notifications");
-        setLoading(false);
-        return;
-      }
-      setNotifications((data as Notification[]) ?? []);
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const data = await notificationsDB.listByUserId(user.id);
+      setNotifications(data);
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load notifications");
+      setNotifications([]);
+    } finally {
       setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
+    }
   }, [user?.id]);
 
-  // Realtime subscription — keeps unread badge & list fresh without refresh.
+  useEffect(() => {
+    void loadNotifications();
+  }, [loadNotifications]);
+
   useEffect(() => {
     if (!user?.id) return;
     const channel = supabase
@@ -91,41 +78,31 @@ export default function Notifications() {
   }, [user?.id]);
 
   async function markRead(id: string) {
-    const { error } = await supabase.from("notifications").update({ is_read: true }).eq("id", id);
-    if (!error) {
+    try {
+      await notificationsDB.markRead(id);
       setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, is_read: true } : n)));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to mark as read");
     }
   }
 
   async function markAllRead() {
     if (!user?.id) return;
-    const { error: rpcError } = await supabase.rpc("mark_notifications_read", {
-      p_user_id: user.id,
-    });
-    if (!rpcError) {
+    try {
+      await notificationsDB.markAllRead(user.id);
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       toast.success("All notifications marked as read");
-      return;
-    }
-    const { error: updateError } = await supabase
-      .from("notifications")
-      .update({ is_read: true })
-      .eq("user_id", user.id)
-      .eq("is_read", false);
-    if (updateError) {
-      toast.error(updateError.message || "Failed to mark notifications as read.");
-    } else {
-      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-      toast.success("All notifications marked as read");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to mark notifications as read.");
     }
   }
 
   async function deleteNotification(id: string) {
-    const { error } = await supabase.from("notifications").delete().eq("id", id);
-    if (!error) {
+    try {
+      await notificationsDB.delete(id);
       setNotifications((prev) => prev.filter((n) => n.id !== id));
-    } else {
-      toast.error("Failed to delete notification.");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to delete notification.");
     }
   }
 
@@ -145,6 +122,15 @@ export default function Notifications() {
         }
       />
 
+      {loadError && (
+        <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-3">
+          <span className="flex-1">{loadError}</span>
+          <Button size="sm" variant="outline" onClick={() => void loadNotifications()}>
+            Retry
+          </Button>
+        </div>
+      )}
+
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
@@ -162,7 +148,7 @@ export default function Notifications() {
       ) : (
         <div className="space-y-2">
           {notifications.map((n) => {
-            const Icon = TYPE_ICONS[n.type] ?? Bell;
+            const Icon = TYPE_ICONS[n.type ?? ""] ?? Bell;
             return (
               <Card
                 key={n.id}

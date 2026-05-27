@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Keyboard } from "lucide-react";
 import { motion } from "framer-motion";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 interface Shortcut {
   keys: string[];
@@ -81,6 +82,11 @@ function KeyBadge({ children }: { children: string }) {
 }
 
 export default function Shortcuts() {
+  usePageMeta({
+    title: "Keyboard Shortcuts — Clarify AI",
+    description: "Keyboard shortcuts for navigation, live sessions, mock practice, and settings in Clarify AI.",
+  });
+
   return (
     <MarketingLayout>
       <section className="pt-36 pb-16 px-6">

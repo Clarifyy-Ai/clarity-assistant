@@ -270,7 +270,10 @@ export default function Guide() {
           </span>
         </div>
         <p className="mt-1 text-sm text-muted-foreground">
-          Everything you need to get the most out of Clarify AI — in one place.
+          Everything you need to get the most out of Clarify AI — in one place.{" "}
+          <Link to="/help" className="text-violet-500 hover:underline">
+            Full help center →
+          </Link>
         </p>
       </div>
 
