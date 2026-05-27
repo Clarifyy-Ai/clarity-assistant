@@ -1,194 +1,82 @@
+# Critical Batch — Production Readiness Fixes
 
-# Production Audit Report — Clarify AI (read-only, 2026-05-27)
+Scope: only items #1–#6 from the audit's Critical list. No UI/behavior changes. Working features will not be modified.
 
-Scope: full repo scan, 769-line router, 100+ pages, 41 edge functions, 55 tables. No code modified. Findings cross-checked against `docs/FULL_PRODUCTION_AUDIT_2026-05-25.md` and prior audit memory.
-
----
-
-## 1. Feature Inventory
-
-Counts: **78 working ✅ / 6 broken ❌ / 11 partial ⚠️ / 4 mocked 🧪**
-
-### Auth & Onboarding
-- ✅ Email/password login, signup, password reset, email verification, OAuth callback
-- ✅ 5-step onboarding (role, experience, prefs, audio, resume)
-- ✅ Banned-user block in `ProtectedRoute`
-
-### User App (`/app/*`)
-- ✅ Dashboard, Analytics, Usage, Profile, Notifications, Referrals, InterviewDay
-- ⚠️ Live Co-Pilot (`/app/live`) — works but credits double-deduct risk noted in audit doc; overlay window layout cramped (per prior user feedback)
-- ⚠️ Mock Interview (`/app/mock`, `/mock/session`, `/mock/warmup`) — flows complete; layout cramped (prior feedback)
-- ✅ Mock Test Engine (hub, configure, session, results, my-questions, upload, revision, analytics, papers)
-- ✅ Prep Lab (star-builder, project-builder, rephraser, coding-hints, system-design)
-- ✅ Sessions (history, calls, detail), Documents (resume, JD), Answer Bank, Interviews, Companies, Debrief, Rooms, Scorecard, Guide
-- ✅ Settings (15 sub-routes: profile, audio, models, billing, notifications, privacy, security, security-config, integrations, appearance, subscription, credits, data, danger, hotkeys, polish)
-- ❌ BYOK settings — route disabled (P0-5), file kept as deprecation stub
-- ❌ Stripe billing flows — edge functions exist (`create-checkout`, `stripe-webhook`, `create-billing-portal`, `cancel-subscription`, `resume-subscription`) but `STRIPE_*` secrets MISSING from vault (only Deepgram/Gemini/OCR/Lovable present)
-- ❌ Transactional email — `send-email` function exists but `RESEND_API_KEY` MISSING
-- ⚠️ Calendar sync (`sync-calendar`, `disconnect-calendar`) — needs Google OAuth secrets (not in vault)
-
-### Admin Portal (`/app/admin/*`)
-- ✅ Dashboard, Users, Analytics, Revenue, Model Costs, Feature Flags, Seed Questions, Live Chat, Question Editor, Audit Log, Support
-- ⚠️ Revenue MRR/churn growth deltas hardcoded to 0 (see `FULL_PRODUCTION_AUDIT_2026-05-25.md` F-04)
-
-### Public / Marketing
-- ✅ Landing, Pricing, Blog (+post), Help (+article), Shortcuts, Privacy, Terms, NotFound
-
-### Overlay / Electron
-- ✅ `LiveOverlay` route; stealth shims neutralized (compliance gate `SCREEN_CAPTURE_EVASION_ENABLED=false`)
+Guardrails (per your standing rules):
+- Do NOT modify any existing working feature, page, hook, or component.
+- Do NOT touch Live/Mock/Prep UI in this pass (those are in the High/spacing batch).
+- Each step is independent and reversible.
+- All DB changes ship as a single additive migration (no destructive DDL).
 
 ---
 
-## 2. Portal & Role Coverage
+## Step 1 — Add missing production secrets (requires you)
 
-| Portal | Guard | Notes |
-|--------|-------|-------|
-| Public marketing | none | OK |
-| Auth pages | none | OK |
-| `/onboarding/*` | `ProtectedRoute` (auth) | OK |
-| `/app/live/overlay`, `/app/rooms/:id/session`, `/app/mock-test/session/:id` | `ProtectedRoute(requireOnboarded, requireEmailVerification)` | Full-screen, OK |
-| `/app/*` | `ProtectedRoute(requireOnboarded, requireEmailVerification)` | OK |
-| `/app/admin/*` | `ProtectedRoute(requireAdmin)` + `AdminLayout` second guard | OK — double-checked via `has_role('admin')` + `user_roles` table |
+I cannot create these values; you must paste them via the secure form. The following are missing from the vault and block paid flows / email / AI gap-fill:
 
-✅ **No routes reachable by wrong role detected.** Banned users blocked at `ProtectedRoute`. Email-verification gate active on `/app/*`.
+- `STRIPE_SECRET_KEY`
+- `STRIPE_WEBHOOK_SECRET`
+- `RESEND_API_KEY` (or confirm "skip email for now" and I'll feature-flag `send-email`)
+- `SYSTEM_USER_ID` (any admin UUID used as author for AI-generated questions)
+- `ALLOWED_ORIGINS` (comma list of allowed web origins for edge CORS)
 
-⚠️ **`/dashboard` legacy redirect** → `/app/dashboard` is unguarded redirect (harmless — target is guarded).
+Stripe price IDs are frontend env (`VITE_STRIPE_PRICE_*`) — those go in your `.env`, not the secrets vault.
 
----
+If you want me to use **Lovable's built-in Stripe payments** instead of BYOK, say the word and I'll route through `enable_stripe_payments` (no key paste needed).
 
-## 3. Public Pages
+## Step 2 — SECURITY DEFINER hardening migration (single migration)
 
-| Item | Status |
-|------|--------|
-| Landing hero CTAs → /signup, /login | ✅ |
-| Pricing CTAs → checkout | ⚠️ Will 500 until Stripe price IDs + secrets configured |
-| Legal pages (Privacy, Terms) | ✅ via `usePageMeta` |
-| Blog + Help routing | ✅ |
-| SEO meta (`usePageMeta` hook) | ✅ on all marketing pages |
-| `robots.txt` + `sitemap.xml` | ✅ present in `public/` |
-| 404 (`NotFound`) catch-all | ✅ |
-| Signup form validation | ✅ |
-| OAuth callback handling | ✅ |
+Single additive migration `20260527140000_definer_grants_and_pg_trgm.sql`:
 
----
+- `REVOKE EXECUTE ... FROM PUBLIC` on every SECURITY DEFINER function in `public` (deduct_credits, refund_credits, update_topic_performance, bulk_update_users, get_admin_perf_stats, get_admin_dau_mau, mark_notifications_read, add_credits, delete_expired_session_data, increment_profile_credits, is_admin, has_role).
+- `GRANT EXECUTE` back to `authenticated` only for the user-facing ones (deduct_credits, refund_credits, mark_notifications_read, update_topic_performance, has_role, is_admin).
+- `GRANT EXECUTE` only to `service_role` for admin/system RPCs (bulk_update_users, add_credits, delete_expired_session_data, increment_profile_credits, get_admin_perf_stats, get_admin_dau_mau).
+- Add explicit role check at the top of `refund_credits` and `increment_profile_credits` (defense in depth).
 
-## 4. Dummy / Mock Data
+## Step 3 — Move `pg_trgm` to `extensions` schema
 
-🧪 Items found:
+Same migration:
+```
+CREATE SCHEMA IF NOT EXISTS extensions;
+ALTER EXTENSION pg_trgm SET SCHEMA extensions;
+GRANT USAGE ON SCHEMA extensions TO authenticated, anon, service_role;
+```
+Then add `extensions` to the `search_path` of any function that uses trigram operators (none currently do in our SQL — only the operators are used inline, which Postgres resolves via the new schema in `search_path`).
 
-1. **`src/pages/marketing/Landing.tsx`** — testimonials, FAQs, feature list arrays are hardcoded. *Expected for marketing copy; not a bug.*
-2. **`src/pages/app/admin/AdminRevenue.tsx`** — MRR growth %, churn % hardcoded `0` placeholders. *Replace with historical series query once `mrr_snapshots` table seeded.*
-3. **`src/pages/app/admin/AdminDashboard.tsx`** — Trend delta arrows previously fake; now removed per F-03 but verify no remnants on `recent signups` widget.
-4. **`src/pages/app/Referrals.tsx`** — referral leaderboard may use placeholder names if `referrals` table empty (no graceful empty state confirmed).
-5. **`src/pages/app/rooms/PracticeRooms.tsx`** — chat-only beta; "live audio" copy may imply unimplemented features.
+Risk: if any index uses `gin_trgm_ops` it stays valid (operators move with extension). Verified — no app code calls trigram functions by name.
 
-✅ Dashboard KPIs, Analytics, Sessions, Documents, Answer Bank, Mock Test results all bind to real Supabase queries.
+## Step 4 — Edge fleet redeploy
 
----
+Trigger `supabase--deploy_edge_functions` for all 41 functions in one call so they pick up the latest CORS + model fixes already in the repo.
 
-## 5. Styles & Design Consistency
+## Step 5 — Verification
 
-- ✅ Tailwind semantic tokens defined in `src/index.css` and `tailwind.config.ts` (HSL, dark mode ready).
-- ✅ shadcn primitives in `src/components/ui/` reused consistently.
-- ⚠️ **Cramped spacing** in: `OverlayWindow` + live panels, `MockInterview.tsx` setup, `LiveRehearsal.tsx`, `MockSession.tsx` (carryover from earlier user feedback — not yet remediated end-to-end).
-- ⚠️ Mixed badge variants (`emerald` vs `success`) — recent build fixed Documents page but other pages may still use `success`. Grep recommended.
-- ⚠️ Some pages still import raw color classes (e.g. `text-white`, `bg-black`) — design rule violation; scan needed.
+- Run `supabase--linter` after migration — confirm pg_trgm warning gone and no new errors.
+- `secrets--fetch_secrets` to confirm new secrets present.
+- Spot-check 2 edge functions via logs to confirm redeploy succeeded.
 
 ---
 
-## 6. Responsiveness
+## What this plan does NOT touch (intentional)
 
-Sampled at 1067×768 (current viewport), assumed breakpoints 640/1024/1280:
+- Live Co-Pilot, Mock Interview, Mock Session, Overlay UI/spacing
+- AdminUsers/AdminRevenue responsive fixes
+- Skeleton loaders, N+1, pagination, ts-nocheck sweep
+- Badge variant normalization
+- Marketing copy, testimonials
+- Any working edge function logic
+- `src/integrations/supabase/types.ts` (read-only generated file)
 
-| Page | Mobile | Tablet | Desktop |
-|------|--------|--------|---------|
-| Landing | ✅ | ✅ | ✅ |
-| Dashboard | ✅ | ✅ | ✅ |
-| MockInterview setup | ⚠️ cramped | ⚠️ | ✅ |
-| LiveRehearsal | ⚠️ panels stack poorly | ⚠️ | ✅ |
-| MockSession (test) | ⚠️ question + timer overlap on <400px | ✅ | ✅ |
-| Overlay window | ⚠️ N/A (Electron fixed-size) | — | — |
-| AdminUsers table | ❌ horizontal overflow on mobile | ⚠️ | ✅ |
-| AdminRevenue charts | ❌ chart legend cut off <640px | ⚠️ | ✅ |
-| Settings sub-pages | ✅ | ✅ | ✅ |
-| Mock Test session | ⚠️ palette cramped <640px | ✅ | ✅ |
+These remain queued for the High/Medium batches and will be proposed as separate component-scoped plans per your standing rule.
 
 ---
 
-## 7. Data / API Layer
+## Order of operations
 
-- ⚠️ **N+1 risk:** `SessionHistory.tsx` may fetch answers per session in a loop (recommend join or batch RPC).
-- ⚠️ **Missing loading skeletons:** `Referrals`, `InterviewDay`, `CompanyProfile` show spinner only — no skeleton parity with Dashboard.
-- ⚠️ **Missing error states:** several pages use `.maybeSingle()` correctly but don't surface error toast on failure (silent fail). Examples: `Documents.tsx`, `AnswerDetail.tsx`.
-- ⚠️ Supabase 1000-row default limit not paginated on `AdminUsers`, `AdminAuditLog`, `SessionHistory`.
-- ⚠️ TypeScript hygiene: ~67 files use `@ts-nocheck`, ~76 `: any` annotations (per prior audit) — runtime safety risk.
-- ✅ All edge functions follow `_shared/utils.ts` with `requireAuth`, `deductCredits`, `errorResponse` envelope.
-- ✅ Refund-on-AI-failure pattern verified in `ai-feedback`, `analyze-test-performance`.
+1. You approve this plan.
+2. You paste the 5 secrets (or tell me to skip email / use built-in Stripe).
+3. I write + submit the migration (you approve it).
+4. I trigger the bulk edge redeploy.
+5. I run the linter and report results.
 
----
-
-## 8. Security & Auth
-
-✅ Strong:
-- RLS enabled project-wide (per `rls_auto_enable` event trigger).
-- Roles in separate `user_roles` table; `has_role()` SECURITY DEFINER.
-- `protect_admin_column` trigger prevents privilege escalation via profile update.
-- `mark_notifications_read` ignores `p_user_id`, scopes to `auth.uid()` — anti-IDOR.
-- Anon key used in frontend; service role only in edge functions.
-- `is_banned` enforcement in `ProtectedRoute`.
-
-⚠️ Issues (per existing audit + new scan):
-- **11 SECURITY DEFINER functions** (e.g. `update_topic_performance`, `deduct_credits`, `refund_credits`, `bulk_update_users`, admin perf/dau RPCs) are EXECUTABLE by `authenticated`. While they internally check `auth.uid()`/role, default grants should be tightened — `REVOKE EXECUTE ... FROM PUBLIC` + grant only where needed.
-- **`pg_trgm` extension installed in `public` schema** — should be moved to `extensions` schema (Supabase linter warning).
-- **Missing secrets**: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `RESEND_API_KEY`, `SYSTEM_USER_ID`, `ALLOWED_ORIGINS` — checkout, webhooks, transactional email, AI gap-fill all fail in prod.
-- **Edge fleet drift**: 41 functions in repo; bulk redeploy needed to apply prior CORS/AI-model fixes.
-- **`increment_profile_credits`** has no role check inside SQL — relies on `service_role` only being callable from edge. Confirm `REVOKE EXECUTE FROM authenticated, anon`.
-- **`handle_new_user`** trigger inserts 200 free credits — verify no abuse (rate-limit signups in Supabase Auth settings).
-- **CookieConsent** present ✅ (GDPR).
-
----
-
-## 9. Prioritized Fix List
-
-### 🔴 Critical (blocks production launch)
-1. Add `STRIPE_SECRET_KEY` + `STRIPE_WEBHOOK_SECRET` + price IDs → fixes `create-checkout`, `stripe-webhook`, `create-billing-portal`, billing UI.
-2. Add `RESEND_API_KEY` (or feature-flag email off) → fixes `send-email`, password reset emails, transactional notifications.
-3. Add `SYSTEM_USER_ID` → fixes AI gap-fill in `select-test-questions`, `generate-questions`.
-4. Apply migration `20260525120000_admin_production_fixes.sql` on remote (per audit doc §5).
-5. Bulk redeploy all 41 edge functions to apply CORS + model fixes.
-6. Tighten `SECURITY DEFINER` grants: `REVOKE EXECUTE ... FROM public, authenticated` on internal RPCs; keep only role-scoped grants. Files: new migration.
-
-### 🟠 High
-7. Move `pg_trgm` extension out of `public` schema.
-8. Fix responsiveness on `AdminUsers`, `AdminRevenue` (mobile overflow).
-9. Complete spacing refactor for Live Co-Pilot overlay + Mock Interview + MockSession + LiveRehearsal (carry-over from prior request).
-10. Add pagination to `AdminUsers`, `AdminAuditLog`, `SessionHistory` (avoid 1000-row clipping).
-11. Replace silent `.maybeSingle()` failures with toast/error UI in `Documents.tsx`, `AnswerDetail.tsx`, `CompanyProfile.tsx`.
-
-### 🟡 Medium
-12. Replace placeholder `0` growth/churn deltas in `AdminRevenue.tsx` with real `mrr_snapshots` query.
-13. Add skeleton loaders to `Referrals`, `InterviewDay`, `CompanyProfile`.
-14. Eliminate N+1 in `SessionHistory.tsx` via join/RPC.
-15. Sweep `@ts-nocheck` and `: any` annotations (67 + 76 occurrences).
-16. Grep & remove raw color classes (`text-white`, `bg-black`) violating semantic-token rule.
-17. Normalize Badge variants (`success` → `emerald`) across all pages.
-
-### 🟢 Low
-18. Delete 30+ legacy `scripts/archive/deploy-*` variants.
-19. Remove dead `SettingsBYOK` deprecation stub once confirmed unreferenced.
-20. Strip `console.log` calls (build now strips via esbuild `pure`, but source noise remains).
-21. Add `usePageMeta` SEO tags to admin pages (low SEO value but consistency).
-
----
-
-## Final Verdict
-
-**Production readiness: 7.5 / 10** — consistent with `FULL_PRODUCTION_AUDIT_2026-05-26.md`.
-
-**Can launch?** ❌ **NO** — until items 1–6 (Critical) are resolved. Stripe + email secrets are hard blockers for any paid user flow.
-
-**After Critical fixes:** soft-launch viable; High items should follow within first sprint; Medium/Low can ship iteratively.
-
----
-
-*This report is read-only. No files were modified. Approve to switch into build mode and tackle the Critical batch (recommended order: secrets → migration → redeploy → responsiveness).*
+Reply **approve** to proceed, or tell me which steps to drop/modify.
