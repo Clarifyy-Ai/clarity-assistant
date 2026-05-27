@@ -108,8 +108,8 @@ export default function AnswerBank() {
 
       <PageHeader
         title="Answer Bank"
-        subtitle="Your saved STAR answers and best responses"
-        action={
+        description="Your saved STAR answers and best responses"
+        actions={
           <Button
             variant="primary"
             size="sm"
@@ -164,7 +164,8 @@ export default function AnswerBank() {
         </Card>
       ) : (
         <div className="space-y-3">
-          {filtered.map((ans) => {
+          {filtered.map((ansRaw) => {
+            const ans = ansRaw as any;
             const isOpen = expanded[ans.id];
             const isEditing = editId === ans.id;
 
