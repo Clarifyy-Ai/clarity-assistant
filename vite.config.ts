@@ -39,9 +39,8 @@ export default defineConfig(({ mode }) => {
     // Silence verbose console.log / console.debug calls in production builds.
     // console.error and console.warn are kept intact (Sentry breadcrumbs).
     ...(isProduction && {
-      define: {
-        "console.log": "(() => {})",
-        "console.debug": "(() => {})",
+      esbuild: {
+        pure: ["console.log", "console.debug"],
       },
     }),
 
