@@ -43,10 +43,16 @@ export default function Referrals() {
     })();
   }, [user?.id]);
 
-  const code = profile?.referral_code ?? profile?.id?.slice(0, 8)?.toUpperCase() ?? "XXXXXX";
-  const link = `${window.location.origin}/signup?ref=${code}`;
+  const code =
+    profile?.referral_code?.trim() ||
+    (profile?.id ? profile.id.slice(0, 8).toUpperCase() : null);
+  const link = code ? `${window.location.origin}/signup?ref=${code}` : null;
 
   function copyLink() {
+    if (!link) {
+      toast.error("Referral link unavailable. Refresh the page or contact support.");
+      return;
+    }
     navigator.clipboard.writeText(link);
     setCopied(true);
     toast.success("Referral link copied!");
@@ -71,22 +77,30 @@ export default function Referrals() {
         <div className="lg:col-span-2 space-y-6">
           <Card>
             <h3 className="text-sm font-semibold text-foreground mb-3">Your Referral Link</h3>
-            <div className="flex items-center gap-2">
-              <div className="flex-1 bg-muted rounded-xl px-3 py-2.5 text-sm text-muted-foreground font-mono truncate">
-                {link}
-              </div>
-              <Button
-                variant={copied ? "success" : "primary"}
-                size="sm"
-                onClick={copyLink}
-                leftIcon={copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-              >
-                {copied ? "Copied!" : "Copy"}
-              </Button>
-            </div>
-            <p className="text-xs text-muted-foreground mt-2">
-              Referral code: <span className="font-mono font-semibold text-foreground">{code}</span>
-            </p>
+            {!code ? (
+              <p className="text-sm text-destructive">
+                We could not load your referral code. Refresh the page or contact support if this persists.
+              </p>
+            ) : (
+              <>
+                <div className="flex items-center gap-2">
+                  <div className="flex-1 bg-muted rounded-xl px-3 py-2.5 text-sm text-muted-foreground font-mono truncate">
+                    {link}
+                  </div>
+                  <Button
+                    variant={copied ? "success" : "primary"}
+                    size="sm"
+                    onClick={copyLink}
+                    leftIcon={copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                  >
+                    {copied ? "Copied!" : "Copy"}
+                  </Button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  Referral code: <span className="font-mono font-semibold text-foreground">{code}</span>
+                </p>
+              </>
+            )}
           </Card>
 
           <Card>

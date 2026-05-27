@@ -1,33 +1,125 @@
 project_id = "qzgvjrvtkwlzxpmlddkx"
 
-# JWT verification at the gateway (defense in depth).
-# Functions that must be public set verify_jwt = false explicitly.
+# JWT verification at the Supabase gateway (defense in depth).
+# Public/webhook endpoints must set verify_jwt = false explicitly.
+# All other functions default to verify_jwt = true below.
+
 [functions.ping]
 verify_jwt = false
 
 [functions.stripe-webhook]
 verify_jwt = false
 
-[functions.generate-hint]
+[functions.ai-coach-chat]
 verify_jwt = true
 
-[functions.generate-debrief]
-verify_jwt = true
-
-[functions.prep-tool]
-verify_jwt = true
-
-[functions.create-checkout]
-verify_jwt = true
-
-[functions.send-email]
+[functions.ai-feedback]
 verify_jwt = true
 
 [functions.analytics-dashboard]
 verify_jwt = true
 
-[functions.export-user-data]
+[functions.analyze-test-performance]
+verify_jwt = true
+
+[functions.cancel-subscription]
+verify_jwt = true
+
+[functions.collect-exam-papers]
+verify_jwt = true
+
+[functions.company-research]
+verify_jwt = true
+
+[functions.create-billing-portal]
+verify_jwt = true
+
+[functions.create-checkout]
+verify_jwt = true
+
+[functions.create-test]
+verify_jwt = true
+
+[functions.deduct-credits]
+verify_jwt = true
+
+[functions.deepgram-token]
 verify_jwt = true
 
 [functions.delete-account]
+verify_jwt = true
+
+[functions.disconnect-calendar]
+verify_jwt = true
+
+[functions.end-session]
+verify_jwt = true
+
+[functions.export-user-data]
+verify_jwt = true
+
+[functions.gap-analysis]
+verify_jwt = true
+
+[functions.generate-answer]
+verify_jwt = true
+
+[functions.generate-debrief]
+verify_jwt = true
+
+[functions.generate-hint]
+verify_jwt = true
+
+[functions.generate-practice-questions]
+verify_jwt = true
+
+[functions.generate-questions]
+verify_jwt = true
+
+[functions.generate-star-answer]
+verify_jwt = true
+
+[functions.parse-document]
+verify_jwt = true
+
+[functions.parse-question-pdf]
+verify_jwt = true
+
+[functions.parse-resume]
+verify_jwt = true
+
+[functions.polish-star-section]
+verify_jwt = true
+
+[functions.prep-tool]
+verify_jwt = true
+
+[functions.resume-subscription]
+verify_jwt = true
+
+[functions.save-answer]
+verify_jwt = true
+
+[functions.save-transcript]
+verify_jwt = true
+
+[functions.schedule-interview]
+verify_jwt = true
+
+[functions.select-test-questions]
+verify_jwt = true
+
+[functions.send-email]
+verify_jwt = true
+
+[functions.start-session]
+verify_jwt = true
+
+[functions.submit-test]
+verify_jwt = true
+
+[functions.sync-calendar]
+verify_jwt = true
+
+[functions.validate-api-key]
 verify_jwt = true

@@ -24,24 +24,30 @@ export default function PracticeRooms() {
   const { user } = useAuthStore();
   const [rooms, setRooms] = useState<Room[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search, setSearch] = useState("");
+
+  async function loadRooms() {
+    if (!user?.id) return;
+    setLoading(true);
+    setLoadError(null);
+    const { data, error } = await supabase
+      .from("practice_rooms")
+      .select("id, name, description, status, max_players, is_public, host_id, created_at")
+      .order("created_at", { ascending: false })
+      .limit(50);
+    if (error) {
+      setLoadError(error.message || "Failed to load practice rooms.");
+      setRooms([]);
+    } else {
+      setRooms((data as Room[]) ?? []);
+    }
+    setLoading(false);
+  }
 
   useEffect(() => {
     if (!user?.id) return;
-    let cancelled = false;
-    (async () => {
-      // RLS allows public rooms OR rooms hosted by user
-      const { data } = await supabase
-        .from("practice_rooms")
-        .select("id, name, description, status, max_players, is_public, host_id, created_at")
-        .order("created_at", { ascending: false })
-        .limit(50);
-      if (!cancelled) {
-        setRooms((data as Room[]) ?? []);
-        setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
+    void loadRooms();
   }, [user?.id]);
 
   const filtered = rooms.filter(
@@ -71,6 +77,15 @@ export default function PracticeRooms() {
           </Button>
         }
       />
+
+      {loadError && (
+        <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-3">
+          <span className="flex-1">{loadError}</span>
+          <Button size="sm" variant="outline" onClick={() => void loadRooms()}>
+            Retry
+          </Button>
+        </div>
+      )}
 
       <div className="mb-4 relative max-w-md">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />

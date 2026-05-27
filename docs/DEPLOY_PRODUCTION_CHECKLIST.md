@@ -2,6 +2,8 @@
 
 Run after merging audit fixes to `main`.
 
+**Pre-flight:** `node scripts/pre-deploy-check.mjs` — verifies security migrations exist and lists required secrets.
+
 ## 1. Database
 
 ```powershell

@@ -1,4 +1,3 @@
-// @ts-nocheck
 // src/hooks/useInterviewScheduler.ts — PRODUCTION FIXED
 // Fixes (F5 - scheduler hook):
 // - createInterview: removed virtual fields (rounds, next_round, is_today) from DB insert.
@@ -54,6 +53,7 @@ export function useInterviewScheduler() {
   const loadInterviews = useCallback(async (): Promise<void> => {
     if (!user?.id) return;
     store.setIsLoading(true);
+    store.setLoadError(null);
 
     const { data, error } = await supabase
       .from("scheduled_interviews")
@@ -67,7 +67,7 @@ export function useInterviewScheduler() {
     // ✅ FIX: Error handling — previously ignored; store was left empty
     if (error) {
       console.error("[useInterviewScheduler] loadInterviews failed:", error.message);
-      store.setError?.(error.message); // optional chaining — guard if store doesn't have setError yet
+      store.setLoadError(error.message);
       store.setIsLoading(false);
       return;
     }

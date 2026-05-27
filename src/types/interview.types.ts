@@ -147,6 +147,7 @@ export interface InterviewSchedulerStoreState {
   pipeline_by_stage: Record<InterviewStage, ScheduledInterview[]>;
   calendar_sync: CalendarSyncState;
   is_loading: boolean;
+  load_error: string | null;
   selected_interview_id: string | null;
 }
 

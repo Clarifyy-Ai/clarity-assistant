@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { toast } from "sonner";
@@ -56,6 +55,22 @@ export default function InterviewDetail() {
       <div className="max-w-2xl space-y-4">
         <SkeletonCard />
         <SkeletonCard />
+      </div>
+    );
+  }
+
+  if (store.load_error) {
+    return (
+      <div className="max-w-2xl space-y-4">
+        <Button variant="ghost" size="sm" onClick={() => navigate("/app/interviews")}>
+          <ChevronLeft className="w-4 h-4" /> Back
+        </Button>
+        <Card className="p-6 border-destructive/30 bg-destructive/5">
+          <p className="text-sm text-destructive mb-3">{store.load_error}</p>
+          <Button size="sm" onClick={() => scheduler.reload()}>
+            Retry
+          </Button>
+        </Card>
       </div>
     );
   }

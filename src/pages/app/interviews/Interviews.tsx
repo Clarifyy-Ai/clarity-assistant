@@ -104,6 +104,16 @@ export default function Interviews() {
         }
       />
 
+      {store.load_error && (
+        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span className="flex-1">{store.load_error}</span>
+          <Button variant="ghost" size="sm" onClick={() => scheduler.reload()}>
+            Retry
+          </Button>
+        </div>
+      )}
+
       {/* Filter tabs */}
       <div className="flex gap-1.5 flex-wrap">
         {STATUS_FILTERS.map((f) => (

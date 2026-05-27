@@ -361,6 +361,87 @@ export const subscriptionsDB = {
   },
 };
 
+// ─── Answer bank ──────────────────────────────────────────────────────────────
+
+export const answerBankDB = {
+  async listByUserId(userId: string): Promise<Tables<"answer_bank">[]> {
+    const { data, error } = await supabase
+      .from("answer_bank")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "answer_bank",
+        operation: "listByUserId",
+      });
+    }
+    return data ?? [];
+  },
+
+  async getById(userId: string, id: string): Promise<Tables<"answer_bank">> {
+    return query(
+      () =>
+        supabase
+          .from("answer_bank")
+          .select("*")
+          .eq("id", id)
+          .eq("user_id", userId)
+          .single(),
+      { table: "answer_bank", operation: "getById" }
+    );
+  },
+
+  async update(
+    userId: string,
+    id: string,
+    updates: TablesUpdate<"answer_bank">
+  ): Promise<Tables<"answer_bank">> {
+    return query(
+      () =>
+        supabase
+          .from("answer_bank")
+          .update({ ...updates, updated_at: new Date().toISOString() })
+          .eq("id", id)
+          .eq("user_id", userId)
+          .select()
+          .single(),
+      { table: "answer_bank", operation: "update" }
+    );
+  },
+
+  async delete(userId: string, id: string): Promise<void> {
+    const { error } = await supabase
+      .from("answer_bank")
+      .delete()
+      .eq("id", id)
+      .eq("user_id", userId);
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "answer_bank",
+        operation: "delete",
+      });
+    }
+  },
+
+  async create(
+    userId: string,
+    row: Omit<TablesInsert<"answer_bank">, "user_id">
+  ): Promise<Tables<"answer_bank">> {
+    return query(
+      () =>
+        supabase
+          .from("answer_bank")
+          .insert({ ...row, user_id: userId })
+          .select()
+          .single(),
+      { table: "answer_bank", operation: "create" }
+    );
+  },
+};
+
 // ─── Analytics Events ────────────────────────────────────────────────────────
 
 export const analyticsDB = {

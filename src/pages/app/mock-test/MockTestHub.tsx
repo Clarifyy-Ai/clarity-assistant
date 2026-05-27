@@ -156,6 +156,7 @@ export default function MockTestHub(): React.ReactElement {
     totalTests: 0, totalQuestions: 0, avgAccuracy: 0, streakDays: 0,
   });
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -163,7 +164,9 @@ export default function MockTestHub(): React.ReactElement {
   }, [user?.id]);
 
   async function loadData() {
+    if (!user?.id) return;
     setLoading(true);
+    setLoadError(null);
     try {
       const [recentRes, questionsRes, analysesRes, completedCountRes, streakRes] = await Promise.all([
         // Recent tests for the list (last 5 any status)
@@ -200,6 +203,14 @@ export default function MockTestHub(): React.ReactElement {
           .limit(90),
       ]);
 
+      const queryError =
+        recentRes.error ??
+        questionsRes.error ??
+        analysesRes.error ??
+        completedCountRes.error ??
+        streakRes.error;
+      if (queryError) throw queryError;
+
       setRecentTests((recentRes.data ?? []) as RecentTest[]);
 
       const totalTests = completedCountRes.count ?? 0;
@@ -217,9 +228,9 @@ export default function MockTestHub(): React.ReactElement {
 
       setStats({ totalTests, totalQuestions, avgAccuracy, streakDays });
     } catch (err: unknown) {
-      console.error("[MockTestHub] load error:", err);
-      const _m = err instanceof Error ? err.message : "Failed to load test history.";
-      toast.error(_m);
+      const msg = err instanceof Error ? err.message : "Failed to load test history.";
+      setLoadError(msg);
+      toast.error(msg);
     } finally {
       setLoading(false);
     }
@@ -268,6 +279,15 @@ export default function MockTestHub(): React.ReactElement {
           </div>
         </div>
       </div>
+
+      {loadError && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-3">
+          <span className="flex-1">{loadError}</span>
+          <Button size="sm" variant="outline" onClick={() => void loadData()}>
+            Retry
+          </Button>
+        </div>
+      )}
 
       {/* ── Stats bar: 4 stats including streak ───────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">

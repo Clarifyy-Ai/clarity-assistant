@@ -44,6 +44,7 @@ export default function JDDetail() {
 
   const [jd,          setJd]          = useState<JobDescription | null>(null);
   const [loading,     setLoading]     = useState(true);
+  const [fetchError,  setFetchError]  = useState<string | null>(null);
   const [editing,     setEditing]     = useState(false);
   const [editRole,    setEditRole]    = useState("");
   const [editCompany, setEditCompany] = useState("");
@@ -52,15 +53,22 @@ export default function JDDetail() {
   useEffect(() => {
     if (!id || !user?.id) return;
     (async () => {
-      const { data } = await supabase
+      setLoading(true);
+      setFetchError(null);
+      const { data, error } = await supabase
         .from("job_descriptions")
         .select("*")
         .eq("id", id)
         .eq("user_id", user.id)
         .single();
-      setJd(data as JobDescription | null);
-      setEditRole(data?.target_role ?? data?.title ?? "");
-      setEditCompany(data?.company ?? "");
+      if (error) {
+        setFetchError(error.message);
+        setJd(null);
+      } else {
+        setJd(data as JobDescription | null);
+        setEditRole(data?.target_role ?? data?.title ?? "");
+        setEditCompany(data?.company ?? "");
+      }
       setLoading(false);
     })();
   }, [id, user?.id]);
@@ -103,6 +111,18 @@ export default function JDDetail() {
   }
 
   if (loading) return <Card className="animate-pulse h-48" />;
+
+  if (fetchError) {
+    return (
+      <Card className="text-center py-12 border-destructive/30 bg-destructive/5">
+        <p className="text-foreground font-medium">Could not load job description</p>
+        <p className="text-sm text-muted-foreground mt-1">{fetchError}</p>
+        <Link to="/app/documents" className="text-sm text-violet-500 hover:underline mt-3 inline-block">
+          Back to Documents
+        </Link>
+      </Card>
+    );
+  }
 
   if (!jd) {
     return (

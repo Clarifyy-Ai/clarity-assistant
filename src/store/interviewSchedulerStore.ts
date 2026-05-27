@@ -32,6 +32,7 @@ interface InterviewSchedulerStore extends InterviewSchedulerStoreState {
 
   // Loading
   setIsLoading: (loading: boolean) => void;
+  setLoadError: (error: string | null) => void;
 
   // Reset
   resetScheduler: () => void;
@@ -112,6 +113,7 @@ const INITIAL_STATE: InterviewSchedulerStoreState = {
   pipeline_by_stage: buildPipelineByStage([]),
   calendar_sync: INITIAL_CALENDAR_SYNC,
   is_loading: false,
+  load_error: null,
   selected_interview_id: null,
 };
 
@@ -216,6 +218,7 @@ export const useInterviewSchedulerStore = create<InterviewSchedulerStore>()(
 
     // ── Loading ────────────────────────────────────────────
     setIsLoading: (is_loading) => set({ is_loading }),
+    setLoadError: (load_error) => set({ load_error }),
 
     // ── Reset ──────────────────────────────────────────────
     resetScheduler: () => set(INITIAL_STATE),

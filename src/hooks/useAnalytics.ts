@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect, useCallback } from "react";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { supabase } from "@/lib/supabase/client";

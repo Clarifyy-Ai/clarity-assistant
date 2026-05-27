@@ -1,9 +1,7 @@
-// @ts-nocheck -- retained: answer_bank table types not yet in Supabase generated schema (added via
-// manual migration); removed type annotation would produce ~20 implicit-any errors on row access.
-// Full fix requires regenerating types from DB schema.
 import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/userStore";
-import { supabase } from "@/lib/supabase/client";
+import { answerBankDB } from "@/lib/supabase/database";
+import type { Tables } from "@/integrations/supabase";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -29,8 +27,9 @@ const CATEGORIES = ["All", "Behavioural", "Technical", "Leadership", "System Des
 export default function AnswerBank() {
   const { user }  = useAuthStore();
 
-  const [answers,   setAnswers]   = useState<any[]>([]);
+  const [answers,   setAnswers]   = useState<Tables<"answer_bank">[]>([]);
   const [loading,   setLoading]   = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [search,    setSearch]    = useState("");
   const [category,  setCategory]  = useState("All");
   const [expanded,  setExpanded]  = useState<Record<string, boolean>>({});
@@ -45,49 +44,45 @@ export default function AnswerBank() {
   }, [user?.id]);
 
   async function fetchAnswers() {
+    if (!user?.id) return;
     setLoading(true);
-    const { data, error } = await supabase
-      .from("answer_bank")
-      .select("*")
-      .eq("user_id", user!.id)
-      .order("created_at", { ascending: false });
-    if (error) {
-      console.error("[AnswerBank] fetch:", error);
-      toast.error(error.message || "Failed to load answers");
-    } else {
-      setAnswers(data ?? []);
+    setLoadError(null);
+    try {
+      const data = await answerBankDB.listByUserId(user.id);
+      setAnswers(data);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "Failed to load answers";
+      setLoadError(msg);
+      toast.error(msg);
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   async function saveEdit() {
     if (!editId) return;
     try {
-      const { error } = await supabase
-        .from("answer_bank")
-        .update({ answer_text: editText })
-        .eq("id", editId);
-      if (error) throw error;
+      if (!user?.id) return;
+      await answerBankDB.update(user.id, editId, { answer_text: editText });
       setAnswers((p) =>
         p.map((a) => a.id === editId ? { ...a, answer_text: editText } : a)
       );
       setEditId(null);
       toast.success("Answer updated");
     } catch (err) {
-      toast.error(err?.message ?? "Failed to update answer.");
+      toast.error(err instanceof Error ? err.message : "Failed to update answer.");
     }
   }
 
   async function deleteAnswer() {
-    if (!deleteId) return;
+    if (!deleteId || !user?.id) return;
     try {
-      const { error } = await supabase.from("answer_bank").delete().eq("id", deleteId);
-      if (error) throw error;
+      await answerBankDB.delete(user.id, deleteId);
       setAnswers((p) => p.filter((a) => a.id !== deleteId));
       setDeleteId(null);
       toast.success("Answer deleted");
     } catch (err) {
-      toast.error(err?.message ?? "Failed to delete answer.");
+      toast.error(err instanceof Error ? err.message : "Failed to delete answer.");
     }
   }
 
@@ -105,6 +100,12 @@ export default function AnswerBank() {
 
   return (
     <div className="space-y-5 max-w-4xl">
+      {loadError && (
+        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {loadError}
+        </div>
+      )}
+
       <PageHeader
         title="Answer Bank"
         subtitle="Your saved STAR answers and best responses"
@@ -341,23 +342,21 @@ function AddAnswerModal({
   async function handleSave() {
     if (!question.trim() || !answer.trim()) return;
     setSaving(true);
-
-    const { data } = await supabase
-      .from("answer_bank")
-      .insert({
-        user_id:       userId,
+    try {
+      const data = await answerBankDB.create(userId, {
         question_text: question.trim(),
         answer_text:   answer.trim(),
         category,
         source:        "manual",
-      })
-      .select()
-      .single();
-
-    setSaving(false);
-    if (data) {
+      });
       onSaved(data);
-      setQuestion(""); setAnswer(""); setCategory("Behavioural");
+      setQuestion("");
+      setAnswer("");
+      setCategory("Behavioural");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to save answer.");
+    } finally {
+      setSaving(false);
     }
   }
 

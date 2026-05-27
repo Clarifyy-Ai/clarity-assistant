@@ -1,26 +1,15 @@
-// @ts-nocheck
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
-import { supabase } from "@/lib/supabase/client";
+import { answerBankDB } from "@/lib/supabase/database";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { BookOpen, Edit, Trash2, Save, X, Loader2, ArrowLeft } from "lucide-react";
+import { BookOpen, Edit, Trash2, Save, X, Loader2, ArrowLeft, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import type { Tables } from "@/integrations/supabase";
 
-interface Answer {
-  id: string;
-  question_text: string;
-  answer_text: string;
-  category: string;
-  source: string;
-  tags: string[];
-  created_at: string;
-  star_breakdown?: { situation?: string; task?: string; action?: string; result?: string };
-  score?: number;
-  ai_feedback?: string;
-}
+type Answer = Tables<"answer_bank">;
 
 export default function AnswerDetail() {
   const { id } = useParams<{ id: string }>();
@@ -29,6 +18,7 @@ export default function AnswerDetail() {
 
   const [answer, setAnswer] = useState<Answer | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [saving, setSaving] = useState(false);
@@ -36,29 +26,28 @@ export default function AnswerDetail() {
   useEffect(() => {
     if (!id || !user?.id) return;
     (async () => {
-      const { data } = await supabase
-        .from("answer_bank")
-        .select("*")
-        .eq("id", id)
-        .eq("user_id", user.id)
-        .single();
-      setAnswer(data as Answer | null);
-      setEditText(data?.answer_text ?? "");
-      setLoading(false);
+      setLoading(true);
+      setFetchError(null);
+      try {
+        const data = await answerBankDB.getById(user.id, id);
+        setAnswer(data);
+        setEditText(data.answer_text ?? "");
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Failed to load answer";
+        setFetchError(msg);
+        setAnswer(null);
+      } finally {
+        setLoading(false);
+      }
     })();
   }, [id, user?.id]);
 
   async function handleSave() {
-    if (!id) return;
+    if (!id || !user?.id) return;
     setSaving(true);
     try {
-      const { error } = await supabase
-        .from("answer_bank")
-        .update({ answer_text: editText, updated_at: new Date().toISOString() })
-        .eq("id", id)
-        .eq("user_id", user?.id);
-      if (error) throw error;
-      setAnswer((prev) => prev ? { ...prev, answer_text: editText } : prev);
+      const updated = await answerBankDB.update(user.id, id, { answer_text: editText });
+      setAnswer(updated);
       setEditing(false);
       toast.success("Answer updated");
     } catch {
@@ -70,12 +59,12 @@ export default function AnswerDetail() {
 
   async function handleDelete() {
     if (!id || !user?.id || !confirm("Delete this answer?")) return;
-    const { error } = await supabase.from("answer_bank").delete().eq("id", id).eq("user_id", user.id);
-    if (error) {
-      toast.error("Failed to delete answer. Please try again.");
-    } else {
+    try {
+      await answerBankDB.delete(user.id, id);
       toast.success("Answer deleted");
       navigate("/app/answers");
+    } catch {
+      toast.error("Failed to delete answer. Please try again.");
     }
   }
 
@@ -84,6 +73,25 @@ export default function AnswerDetail() {
       <div className="space-y-4">
         <Card className="animate-pulse h-32" />
         <Card className="animate-pulse h-48" />
+      </div>
+    );
+  }
+
+  if (fetchError) {
+    return (
+      <div className="space-y-4">
+        <Link to="/app/answers" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground">
+          <ArrowLeft className="w-4 h-4" /> Back to Answer Bank
+        </Link>
+        <Card className="p-6 border-destructive/30 bg-destructive/5">
+          <div className="flex gap-3">
+            <AlertCircle className="h-5 w-5 text-destructive shrink-0" />
+            <div>
+              <p className="font-medium text-destructive">Could not load answer</p>
+              <p className="text-sm text-muted-foreground mt-1">{fetchError}</p>
+            </div>
+          </div>
+        </Card>
       </div>
     );
   }
@@ -99,10 +107,16 @@ export default function AnswerDetail() {
     );
   }
 
+  const star = answer.star_breakdown as
+    | { situation?: string; task?: string; action?: string; result?: string }
+    | null
+    | undefined;
+  const tags = (answer.tags ?? []) as string[];
+
   return (
     <div>
       <PageHeader
-        title={answer.question_text}
+        title={answer.question_text ?? "Saved answer"}
         description={`${answer.category ?? "General"} · ${answer.source === "prep_lab" ? "Prep Lab" : "Manual"}`}
         icon={<BookOpen className="w-5 h-5 text-violet-400" />}
         breadcrumbs={[
@@ -139,7 +153,7 @@ export default function AnswerDetail() {
                   leftIcon={saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}>
                   Save
                 </Button>
-                <Button variant="ghost" size="sm" onClick={() => { setEditing(false); setEditText(answer.answer_text); }}
+                <Button variant="ghost" size="sm" onClick={() => { setEditing(false); setEditText(answer.answer_text ?? ""); }}
                   leftIcon={<X className="w-4 h-4" />}>
                   Cancel
                 </Button>
@@ -152,14 +166,14 @@ export default function AnswerDetail() {
           )}
         </Card>
 
-        {answer.star_breakdown && (
+        {star && (
           <Card>
             <h3 className="text-sm font-semibold text-foreground mb-3">STAR Breakdown</h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {(["situation", "task", "action", "result"] as const).map((key) => (
                 <div key={key} className="p-3 rounded-xl bg-muted/50 border border-border">
                   <p className="text-[10px] font-semibold text-violet-500 uppercase mb-1">{key}</p>
-                  <p className="text-xs text-foreground">{answer.star_breakdown?.[key] || "—"}</p>
+                  <p className="text-xs text-foreground">{star[key] || "—"}</p>
                 </div>
               ))}
             </div>
@@ -182,11 +196,11 @@ export default function AnswerDetail() {
           </Card>
         )}
 
-        {answer.tags && answer.tags.length > 0 && (
+        {tags.length > 0 && (
           <Card>
             <h3 className="text-sm font-semibold text-foreground mb-2">Tags</h3>
             <div className="flex flex-wrap gap-1.5">
-              {answer.tags.map((tag) => (
+              {tags.map((tag) => (
                 <span key={tag} className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-muted text-muted-foreground">
                   {tag}
                 </span>

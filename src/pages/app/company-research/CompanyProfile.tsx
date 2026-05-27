@@ -1,5 +1,4 @@
-// @ts-nocheck -- retained: Supabase row types not in generated schema
-import { fetchEdge } from "@/lib/network/fetchEdge";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
@@ -66,15 +65,9 @@ export default function CompanyProfile() {
       }
 
       // ── Edge function call ───────────────────────────────────
-      const res = await fetchEdge("company-research", { company: companyName });
-
-      if (!res.ok) {
-        // FIX 7: extract actual error message from response
-        const errBody = await res.json().catch(() => ({}));
-        throw new Error(errBody?.error ?? `Server error ${res.status}`);
-      }
-
-      const data = await res.json();
+      const data = await fetchEdgeJson<Record<string, unknown>>("company-research", {
+        company: companyName,
+      });
       setBrief(data);
 
       // ── Cache the result ─────────────────────────────────────

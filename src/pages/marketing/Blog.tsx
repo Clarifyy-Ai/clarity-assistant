@@ -2,6 +2,7 @@ import { Link } from "react-router-dom";
 import { Calendar, Tag, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 interface BlogPostMeta {
   slug: string;
@@ -87,6 +88,11 @@ function formatDate(dateStr: string) {
 }
 
 export default function Blog() {
+  usePageMeta({
+    title: "Blog — Clarify AI",
+    description: "Interview prep guides, STAR method tips, and AI coaching insights from Clarify AI.",
+  });
+
   return (
     <MarketingLayout>
       <section className="pt-20 sm:pt-28 pb-14 px-4 sm:px-6">

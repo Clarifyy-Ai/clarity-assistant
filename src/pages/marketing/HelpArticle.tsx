@@ -2,6 +2,7 @@ import { useParams, Link } from "react-router-dom";
 import { ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 interface Article {
   id: string;
@@ -119,6 +120,21 @@ export default function HelpArticle() {
   const { slug } = useParams<{ slug: string }>();
 
   const categoryData = slug ? CATEGORY_SLUGS[slug] : null;
+  const article = !categoryData && slug ? ARTICLES.find((a) => a.id === slug) : null;
+
+  usePageMeta({
+    title: categoryData
+      ? `${categoryData.title} — Help — Clarify AI`
+      : article
+        ? `${article.q} — Help — Clarify AI`
+        : "Help — Clarify AI",
+    description: categoryData
+      ? `Help articles about ${categoryData.title.toLowerCase()} on Clarify AI.`
+      : article
+        ? article.a.replace(/\*\*/g, "").slice(0, 155)
+        : "Clarify AI help center.",
+  });
+
   if (categoryData) {
     const categoryArticles = categoryData.ids
       .map((id) => ARTICLES.find((a) => a.id === id))
@@ -148,8 +164,6 @@ export default function HelpArticle() {
       </MarketingLayout>
     );
   }
-
-  const article = ARTICLES.find((a) => a.id === slug);
 
   if (!article) {
     return (

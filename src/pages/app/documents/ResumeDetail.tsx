@@ -53,6 +53,7 @@ export default function ResumeDetail() {
 
   const [doc,        setDoc]        = useState<Resume | null>(null);
   const [loading,    setLoading]    = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [editing,    setEditing]    = useState(false);
   const [editName,   setEditName]   = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
@@ -60,14 +61,21 @@ export default function ResumeDetail() {
   useEffect(() => {
     if (!id || !user?.id) return;
     (async () => {
-      const { data } = await supabase
+      setLoading(true);
+      setFetchError(null);
+      const { data, error } = await supabase
         .from("resumes")
         .select("*")
         .eq("id", id)
         .eq("user_id", user.id)
         .single();
-      setDoc(data as Resume | null);
-      setEditName(data?.name ?? "");
+      if (error) {
+        setFetchError(error.message);
+        setDoc(null);
+      } else {
+        setDoc(data as Resume | null);
+        setEditName(data?.name ?? "");
+      }
       setLoading(false);
     })();
   }, [id, user?.id]);
@@ -108,6 +116,18 @@ export default function ResumeDetail() {
   }
 
   if (loading) return <Card className="animate-pulse h-48" />;
+
+  if (fetchError) {
+    return (
+      <Card className="text-center py-12 border-destructive/30 bg-destructive/5">
+        <p className="text-foreground font-medium">Could not load resume</p>
+        <p className="text-sm text-muted-foreground mt-1">{fetchError}</p>
+        <Link to="/app/documents" className="text-sm text-violet-500 hover:underline mt-3 inline-block">
+          Back to Documents
+        </Link>
+      </Card>
+    );
+  }
 
   if (!doc) {
     return (
