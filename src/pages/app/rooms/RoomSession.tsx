@@ -261,10 +261,21 @@ export default function RoomSession() {
                 </Button>
               </div>
             </div>
-            <p className="text-xs text-muted-foreground">
-              Real-time chat and participant presence are active. Video/voice rooms require a
-              future WebRTC release — use Live Co-Pilot for audio practice in the meantime.
-            </p>
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="secondary"
+                size="sm"
+                leftIcon={<Video className="w-4 h-4" />}
+                disabled
+                title="Voice and video (WebRTC) is coming soon. Text chat is available now."
+                className="opacity-60 cursor-not-allowed"
+              >
+                Join voice / video
+              </Button>
+              <p className="text-xs text-muted-foreground flex-1 min-w-[200px]">
+                Voice and video (WebRTC) is coming soon. Text-based practice rooms are available now.
+              </p>
+            </div>
           </Card>
 
           <Card>

@@ -1,4 +1,5 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 // delete-account — securely delete account and all linked data
@@ -8,34 +9,10 @@ Deno.serve(async (req) => {
   if (cors) return cors;
 
   try {
+    const auth = await authenticateRequest(req);
+    if (auth.error) return auth.error;
+    const authenticatedUserId = auth.context.user.id;
     const db = createServiceClient();
-
-    /* -------------------------------------------------------
-       AUTHENTICATION (must verify real user)
-    ------------------------------------------------------- */
-    const authHeader =
-      req.headers.get("authorization") ??
-      req.headers.get("Authorization");
-
-    if (!authHeader?.toLowerCase().startsWith("bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: getCorsHeaders(req) });
-    }
-
-    const token = authHeader.replace(/^bearer\s+/i, "");
-    const {
-      data: { user },
-      error: authErr,
-    } = await db.auth.getUser(token);
-
-    if (authErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: getCorsHeaders(req) });
-    }
-
-    const authenticatedUserId = user.id;
 
     /* -------------------------------------------------------
        VALIDATE BODY

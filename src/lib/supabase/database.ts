@@ -580,6 +580,313 @@ export const practiceRoomsDB = {
   },
 };
 
+// ─── Credit transactions (read-only from client) ─────────────────────────────
+
+export type CreditTransactionRow = Pick<
+  Tables<"credit_transactions">,
+  "id" | "user_id" | "amount" | "action" | "created_at" | "session_id" | "description"
+>;
+
+export const creditsDB = {
+  async listByUserId(userId: string, limit = 50): Promise<CreditTransactionRow[]> {
+    const { data, error } = await supabase
+      .from("credit_transactions")
+      .select("id, user_id, amount, action, created_at, session_id, description")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "credit_transactions",
+        operation: "listByUserId",
+      });
+    }
+    return data ?? [];
+  },
+
+  async listByUserIdWithBalance(userId: string, limit = 100) {
+    const { data, error } = await supabase
+      .from("credit_transactions")
+      .select("id, action, amount, balance_after, description, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "credit_transactions",
+        operation: "listByUserIdWithBalance",
+      });
+    }
+    return data ?? [];
+  },
+
+  async listRecent(limit = 50): Promise<CreditTransactionRow[]> {
+    const { data, error } = await supabase
+      .from("credit_transactions")
+      .select("id, user_id, amount, action, created_at, session_id, description")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "credit_transactions",
+        operation: "listRecent",
+      });
+    }
+    return data ?? [];
+  },
+
+  async sumPurchasesSince(sinceIso: string): Promise<number> {
+    const { data, error } = await supabase
+      .from("credit_transactions")
+      .select("amount, action")
+      .gte("created_at", sinceIso);
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "credit_transactions",
+        operation: "sumPurchasesSince",
+      });
+    }
+
+    return (data ?? [])
+      .filter((tx) => String(tx.action ?? "").includes("purchase"))
+      .reduce((sum, tx) => sum + Math.abs(Number(tx.amount) || 0), 0);
+  },
+
+  async monthlyRevenueByPlan(sinceIso: string): Promise<
+    { month: string; planId: string; totalCents: number }[]
+  > {
+    const { data, error } = await supabase
+      .from("credit_transactions")
+      .select("amount, action, created_at, user_id")
+      .gte("created_at", sinceIso)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "credit_transactions",
+        operation: "monthlyRevenueByPlan",
+      });
+    }
+
+    const userIds = [...new Set((data ?? []).map((r) => r.user_id).filter(Boolean))];
+    const planByUser: Record<string, string> = {};
+
+    if (userIds.length > 0) {
+      const { data: profiles, error: profileErr } = await supabase
+        .from("profiles")
+        .select("id, plan_id")
+        .in("id", userIds);
+
+      if (profileErr) {
+        throw new DatabaseError(profileErr.message, ErrorCode.DB_QUERY_FAILED, {
+          table: "profiles",
+          operation: "monthlyRevenueByPlan.plans",
+        });
+      }
+
+      (profiles ?? []).forEach((p) => {
+        if (p.id) planByUser[p.id] = p.plan_id ?? "free";
+      });
+    }
+
+    const bucket: Record<string, number> = {};
+    for (const tx of data ?? []) {
+      const action = String(tx.action ?? "");
+      if (!action.includes("subscription") && !action.includes("purchase")) continue;
+      const month = tx.created_at?.slice(0, 7) ?? "unknown";
+      const planId = planByUser[tx.user_id] ?? "unknown";
+      const key = `${month}|${planId}`;
+      bucket[key] = (bucket[key] ?? 0) + Math.abs(Number(tx.amount) || 0);
+    }
+
+    return Object.entries(bucket).map(([key, totalCents]) => {
+      const [month, planId] = key.split("|");
+      return { month, planId, totalCents };
+    });
+  },
+};
+
+// ─── Admin analytics (admin pages only) ───────────────────────────────────────
+
+type AdminPerfRow = {
+  function_name: string;
+  call_count: number;
+  avg_ms: number;
+  p50_ms: number;
+  p95_ms: number;
+  p99_ms: number;
+  error_count: number;
+  error_rate: number;
+};
+
+type AdminDauRow = { day?: string; dau?: number };
+
+export const adminAnalyticsDB = {
+  async countSessionsSince(sinceIso: string): Promise<number> {
+    const { count, error } = await supabase
+      .from("sessions")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", sinceIso);
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "sessions",
+        operation: "countSessionsSince",
+      });
+    }
+    return count ?? 0;
+  },
+
+  async countSignupsSince(sinceIso: string): Promise<number> {
+    const { count, error } = await supabase
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", sinceIso);
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "profiles",
+        operation: "countSignupsSince",
+      });
+    }
+    return count ?? 0;
+  },
+
+  async countSignupsOnDay(day: string): Promise<number> {
+    const { count, error } = await supabase
+      .from("profiles")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", `${day}T00:00:00`)
+      .lt("created_at", `${day}T23:59:59`);
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "profiles",
+        operation: "countSignupsOnDay",
+      });
+    }
+    return count ?? 0;
+  },
+
+  async getDauMauSeries(days: number): Promise<AdminDauRow[]> {
+    const { data, error } = await supabase.rpc("get_admin_dau_mau", { p_days: days });
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "rpc",
+        operation: "get_admin_dau_mau",
+      });
+    }
+    return (data ?? []) as AdminDauRow[];
+  },
+
+  async getPerfStats(days: number): Promise<AdminPerfRow[]> {
+    const { data, error } = await supabase.rpc("get_admin_perf_stats", { p_days: days });
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "rpc",
+        operation: "get_admin_perf_stats",
+      });
+    }
+    return (data ?? []) as AdminPerfRow[];
+  },
+
+  async getModelCostLogsSince(sinceIso: string) {
+    const { data, error } = await supabase
+      .from("model_cost_logs")
+      .select("model, tokens_in, tokens_out, cost_usd, credits_charged")
+      .gte("created_at", sinceIso);
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "model_cost_logs",
+        operation: "getModelCostLogsSince",
+      });
+    }
+    return data ?? [];
+  },
+
+  async countMockTestsCreatedSince(sinceIso: string): Promise<number> {
+    const { count, error } = await supabase
+      .from("mock_tests")
+      .select("*", { count: "exact", head: true })
+      .gte("created_at", sinceIso);
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "mock_tests",
+        operation: "countMockTestsCreatedSince",
+      });
+    }
+    return count ?? 0;
+  },
+
+  async countMockTestsSubmittedSince(sinceIso: string): Promise<number> {
+    const { count, error } = await supabase
+      .from("mock_tests")
+      .select("*", { count: "exact", head: true })
+      .gte("submitted_at", sinceIso)
+      .not("submitted_at", "is", null);
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "mock_tests",
+        operation: "countMockTestsSubmittedSince",
+      });
+    }
+    return count ?? 0;
+  },
+
+  async getQuestionExamTypesSince(sinceIso: string): Promise<string[]> {
+    const { data, error } = await supabase
+      .from("questions")
+      .select("exam_type")
+      .gte("created_at", sinceIso);
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "questions",
+        operation: "getQuestionExamTypesSince",
+      });
+    }
+    return (data ?? []).map((r) => r.exam_type ?? "Other");
+  },
+
+  async getSupportThreadStats(sinceIso: string): Promise<{
+    open: number;
+    resolved: number;
+    avgResolutionHours: number;
+  }> {
+    const [{ count: open }, { count: resolved }, { data: resolvedRows }] =
+      await Promise.all([
+        supabase
+          .from("support_threads")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "open"),
+        supabase
+          .from("support_threads")
+          .select("*", { count: "exact", head: true })
+          .eq("status", "resolved")
+          .gte("updated_at", sinceIso),
+        supabase
+          .from("support_threads")
+          .select("created_at, updated_at")
+          .eq("status", "resolved")
+          .gte("updated_at", sinceIso)
+          .limit(200),
+      ]);
+
+    const durations = (resolvedRows ?? []).map((r) =>
+      (new Date(r.updated_at).getTime() - new Date(r.created_at).getTime()) / 3_600_000,
+    );
+    const avgResolutionHours = durations.length
+      ? durations.reduce((s, d) => s + d, 0) / durations.length
+      : 0;
+
+    return {
+      open: open ?? 0,
+      resolved: resolved ?? 0,
+      avgResolutionHours,
+    };
+  },
+};
+
 // ─── Analytics Events ────────────────────────────────────────────────────────
 
 export const analyticsDB = {

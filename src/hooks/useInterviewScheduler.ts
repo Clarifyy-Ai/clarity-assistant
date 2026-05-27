@@ -9,8 +9,6 @@
 // - updateInterview: virtual fields stripped from patch before DB update
 // - loadInterviews extracted to useCallback so createInterview/addRound callbacks
 //   capture a stable reference (was re-created on every render → stale closure)
-// - @ts-nocheck preserved
-
 import { useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
@@ -73,7 +71,14 @@ export function useInterviewScheduler() {
     }
 
     if (data) {
-      const interviews = (data as any[]).map((i) => ({
+      schedulerLastFetchAt = Date.now();
+      schedulerLastFetchUserId = user.id;
+
+      type InterviewRow = ScheduledInterview & {
+        interview_rounds?: InterviewRound[];
+      };
+
+      const interviews = (data as InterviewRow[]).map((i) => ({
         ...i,
         rounds:     i.interview_rounds ?? [],
         next_round: getNextRound(i.interview_rounds ?? []),

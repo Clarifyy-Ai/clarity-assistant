@@ -1,6 +1,5 @@
-// @ts-nocheck
 import { useEffect, useState } from "react";
-import { supabase } from "@/lib/supabase/client";
+import { adminAnalyticsDB } from "@/lib/supabase/database";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
@@ -60,49 +59,63 @@ function OverviewTab({ period }: { period: Period }) {
   const [stats, setStats] = useState<{ dau: number; sessions: number; signups: number; activeUsers: number } | null>(null);
   const [signupSeries, setSignupSeries] = useState<{ day: string; count: number }[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => { void load(); }, [period]);
 
   async function load() {
     setLoading(true);
-    const since = new Date(Date.now() - period * 86400_000).toISOString();
+    setLoadError(null);
+    try {
+      const since = new Date(Date.now() - period * 86400_000).toISOString();
 
-    const [{ count: sessions }, { count: signups }, { data: dauRows }] = await Promise.all([
-      supabase.from("sessions").select("*", { count: "exact", head: true }).gte("created_at", since),
-      supabase.from("profiles").select("*", { count: "exact", head: true }).gte("created_at", since),
-      (supabase.rpc as any)("get_admin_dau_mau", { p_days: period }),
-    ]);
+      const [sessions, signups, dauSeries] = await Promise.all([
+        adminAnalyticsDB.countSessionsSince(since),
+        adminAnalyticsDB.countSignupsSince(since),
+        adminAnalyticsDB.getDauMauSeries(period),
+      ]);
 
-    const dauSeries = (dauRows ?? []) as { day?: string; dau?: number }[];
-    const latestDau = dauSeries.length > 0 ? Number(dauSeries[dauSeries.length - 1]?.dau ?? 0) : 0;
-    const peakDau = dauSeries.reduce(
-      (max, r) => Math.max(max, Number(r.dau ?? 0)),
-      0,
-    );
+      const latestDau = dauSeries.length > 0 ? Number(dauSeries[dauSeries.length - 1]?.dau ?? 0) : 0;
+      const peakDau = dauSeries.reduce((max, r) => Math.max(max, Number(r.dau ?? 0)), 0);
 
-    // Signup series
-    const days = Array.from({ length: Math.min(period, 30) }, (_, i) =>
-      format(subDays(new Date(), Math.min(period, 30) - 1 - i), "yyyy-MM-dd"),
-    );
-    const signupData = await Promise.all(
-      days.map((day) =>
-        supabase.from("profiles").select("*", { count: "exact", head: true })
-          .gte("created_at", `${day}T00:00:00`).lt("created_at", `${day}T23:59:59`)
-          .then(({ count }) => ({ day, count: count ?? 0 })),
-      ),
-    );
-    setSignupSeries(signupData);
+      const days = Array.from({ length: Math.min(period, 30) }, (_, i) =>
+        format(subDays(new Date(), Math.min(period, 30) - 1 - i), "yyyy-MM-dd"),
+      );
+      const signupData = await Promise.all(
+        days.map(async (day) => ({
+          day,
+          count: await adminAnalyticsDB.countSignupsOnDay(day),
+        })),
+      );
+      setSignupSeries(signupData);
 
-    setStats({
-      dau: latestDau,
-      sessions: sessions ?? 0,
-      signups: signups ?? 0,
-      activeUsers: peakDau,
-    });
-    setLoading(false);
+      setStats({
+        dau: latestDau,
+        sessions,
+        signups,
+        activeUsers: peakDau,
+      });
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load overview");
+      setStats(null);
+    } finally {
+      setLoading(false);
+    }
   }
 
-  if (loading || !stats) return <SkeletonGrid />;
+  if (loading || !stats) {
+    return (
+      <div className="space-y-4">
+        {loadError && (
+          <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-3">
+            <span className="flex-1">{loadError}</span>
+            <Button size="sm" variant="outline" onClick={() => void load()}>Retry</Button>
+          </div>
+        )}
+        <SkeletonGrid />
+      </div>
+    );
+  }
 
   const max = Math.max(...signupSeries.map((d) => d.count), 1);
 
@@ -133,18 +146,26 @@ function OverviewTab({ period }: { period: Period }) {
 }
 
 // ─────────────────────── PERF ───────────────────────
+type PerfRow = Awaited<ReturnType<typeof adminAnalyticsDB.getPerfStats>>[number];
+
 function PerfTab({ period }: { period: Period }) {
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<PerfRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => { void load(); }, [period]);
 
   async function load() {
     setLoading(true);
-    const { data, error } = await (supabase.rpc as any)("get_admin_perf_stats", { p_days: period });
-    if (error) console.error(error);
-    setRows(data ?? []);
-    setLoading(false);
+    setLoadError(null);
+    try {
+      setRows(await adminAnalyticsDB.getPerfStats(period));
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load performance stats");
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (loading) return <SkeletonGrid />;
@@ -156,6 +177,12 @@ function PerfTab({ period }: { period: Period }) {
 
   return (
     <div className="space-y-4">
+      {loadError && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-3">
+          <span className="flex-1">{loadError}</span>
+          <Button size="sm" variant="outline" onClick={() => void load()}>Retry</Button>
+        </div>
+      )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat label="Total calls" value={totalCalls.toLocaleString()} sub={`last ${period}d`} />
         <Stat label="Avg p95 latency" value={`${avgP95} ms`} />
@@ -209,8 +236,17 @@ function PerfTab({ period }: { period: Period }) {
 }
 
 // ─────────────────────── AI USAGE ───────────────────────
+type AIModelRow = {
+  model: string;
+  calls: number;
+  tokens_in: number;
+  tokens_out: number;
+  cost: number;
+  credits: number;
+};
+
 function AITab({ period }: { period: Period }) {
-  const [rows, setRows] = useState<any[]>([]);
+  const [rows, setRows] = useState<AIModelRow[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => { void load(); }, [period]);
@@ -218,20 +254,20 @@ function AITab({ period }: { period: Period }) {
   async function load() {
     setLoading(true);
     const since = new Date(Date.now() - period * 86400_000).toISOString();
-    const { data } = await supabase
-      .from("model_cost_logs")
-      .select("model, tokens_in, tokens_out, cost_usd, credits_charged")
-      .gte("created_at", since);
-    const map: Record<string, any> = {};
-    (data ?? []).forEach((r: any) => {
-      if (!map[r.model]) map[r.model] = { model: r.model, calls: 0, tokens_in: 0, tokens_out: 0, cost: 0, credits: 0 };
-      map[r.model].calls++;
-      map[r.model].tokens_in += Number(r.tokens_in ?? 0);
-      map[r.model].tokens_out += Number(r.tokens_out ?? 0);
-      map[r.model].cost += Number(r.cost_usd ?? 0);
-      map[r.model].credits += Number(r.credits_charged ?? 0);
+    const data = await adminAnalyticsDB.getModelCostLogsSince(since);
+    const map: Record<string, AIModelRow> = {};
+    data.forEach((r) => {
+      const model = r.model ?? "unknown";
+      if (!map[model]) {
+        map[model] = { model, calls: 0, tokens_in: 0, tokens_out: 0, cost: 0, credits: 0 };
+      }
+      map[model].calls++;
+      map[model].tokens_in += Number(r.tokens_in ?? 0);
+      map[model].tokens_out += Number(r.tokens_out ?? 0);
+      map[model].cost += Number(r.cost_usd ?? 0);
+      map[model].credits += Number(r.credits_charged ?? 0);
     });
-    setRows(Object.values(map).sort((a: any, b: any) => b.cost - a.cost));
+    setRows(Object.values(map).sort((a, b) => b.cost - a.cost));
     setLoading(false);
   }
 
@@ -286,13 +322,20 @@ function MockTab({ period }: { period: Period }) {
   async function load() {
     setLoading(true);
     const since = new Date(Date.now() - period * 86400_000).toISOString();
-    const { count: created } = await supabase.from("mock_tests").select("*", { count: "exact", head: true }).gte("created_at", since);
-    const { count: submitted } = await supabase.from("mock_tests").select("*", { count: "exact", head: true }).gte("submitted_at", since).not("submitted_at", "is", null);
-    const { data: examData } = await supabase.from("questions").select("exam_type").gte("created_at", since);
+    const [created, submitted, examTypes] = await Promise.all([
+      adminAnalyticsDB.countMockTestsCreatedSince(since),
+      adminAnalyticsDB.countMockTestsSubmittedSince(since),
+      adminAnalyticsDB.getQuestionExamTypesSince(since),
+    ]);
     const map: Record<string, number> = {};
-    (examData ?? []).forEach((r: any) => { const k = r.exam_type ?? "Other"; map[k] = (map[k] ?? 0) + 1; });
-    const byExam = Object.entries(map).map(([exam, count]) => ({ exam, count })).sort((a, b) => b.count - a.count);
-    setStats({ created: created ?? 0, submitted: submitted ?? 0, byExam });
+    examTypes.forEach((examType) => {
+      const k = examType ?? "Other";
+      map[k] = (map[k] ?? 0) + 1;
+    });
+    const byExam = Object.entries(map)
+      .map(([exam, count]) => ({ exam, count }))
+      .sort((a, b) => b.count - a.count);
+    setStats({ created, submitted, byExam });
     setLoading(false);
   }
 
@@ -337,16 +380,12 @@ function ChatTab({ period }: { period: Period }) {
   async function load() {
     setLoading(true);
     const since = new Date(Date.now() - period * 86400_000).toISOString();
-    const [{ count: open }, { count: resolved }, { data: resolvedRows }] = await Promise.all([
-      supabase.from("support_threads").select("*", { count: "exact", head: true }).eq("status", "open"),
-      supabase.from("support_threads").select("*", { count: "exact", head: true }).eq("status", "resolved").gte("updated_at", since),
-      supabase.from("support_threads").select("created_at, updated_at").eq("status", "resolved").gte("updated_at", since).limit(200),
-    ]);
-    const durations = (resolvedRows ?? []).map((r: any) =>
-      (new Date(r.updated_at).getTime() - new Date(r.created_at).getTime()) / 3600_000,
-    );
-    const avgResolution = durations.length ? durations.reduce((s, d) => s + d, 0) / durations.length : 0;
-    setStats({ open: open ?? 0, resolved: resolved ?? 0, avgResolution });
+    const threadStats = await adminAnalyticsDB.getSupportThreadStats(since);
+    setStats({
+      open: threadStats.open,
+      resolved: threadStats.resolved,
+      avgResolution: threadStats.avgResolutionHours,
+    });
     setLoading(false);
   }
 

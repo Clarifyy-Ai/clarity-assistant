@@ -31,6 +31,7 @@ import {
 import { supabase } from "@/lib/supabase/client";
 import { ROUTES } from "@/lib/constants";
 import { useAuthStore } from "@/store/authStore";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 import { FormWrapper } from "@/components/common/FormWrapper";
 import { Button } from "@/components/ui/Button";
@@ -259,6 +260,16 @@ export default function ResetPassword(): JSX.Element {
   );
 
   const [mode, setMode] = useState<PageMode>(initialMode);
+
+  usePageMeta({
+    title:
+      mode === "reset"
+        ? "Reset password | Clarify AI"
+        : "Forgot password | Clarify AI",
+    description: "Reset your Clarify AI account password.",
+    noIndex: true,
+  });
+
   const [generalError, setGeneralError] = useState<string | null>(null);
   const [submittedEmail, setSubmittedEmail] = useState("");
   const [password, setPassword] = useState("");

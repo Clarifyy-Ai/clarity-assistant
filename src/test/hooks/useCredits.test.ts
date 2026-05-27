@@ -141,17 +141,17 @@ describe("useCredits — deduct [T-0122]", () => {
 });
 
 describe("useCredits — refund [T-0123]", () => {
-  it("calls refund_credits RPC with cost", async () => {
-    mockRpc.mockResolvedValueOnce({ data: null, error: null });
+  it("does not call refund_credits RPC (server-side only)", async () => {
+    mockSingleSelect.mockResolvedValueOnce({ data: { credits: 42 }, error: null });
     const { result } = renderHook(() => useCredits());
 
+    let res: { success: boolean; newBalance: number };
     await act(async () => {
-      await result.current.refund("live_hint");
+      res = await result.current.refund("live_hint");
     });
 
-    expect(mockRpc).toHaveBeenCalledWith("refund_credits", {
-      p_cost: CREDIT_COSTS.live_hint,
-    });
+    expect(mockRpc).not.toHaveBeenCalledWith("refund_credits", expect.anything());
+    expect(res!.success).toBe(true);
   });
 });
 

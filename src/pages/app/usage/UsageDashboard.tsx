@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 
 import { supabase } from "@/lib/supabase/client";
+import { creditsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/Button";
 import {
@@ -268,13 +269,8 @@ export default function UsageDashboard(): JSX.Element {
     setError(null);
 
     try {
-      const [transactionsResult, sessionsResult] = await Promise.all([
-        supabase
-          .from("credit_transactions")
-          .select("id, action, amount, balance_after, description, created_at")
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(100),
+      const [txData, sessionsResult] = await Promise.all([
+        creditsDB.listByUserIdWithBalance(user.id, 100),
 
         supabase
           .from("sessions")
@@ -286,15 +282,11 @@ export default function UsageDashboard(): JSX.Element {
           .limit(50),
       ]);
 
-      if (transactionsResult.error) {
-        throw transactionsResult.error;
-      }
-
       if (sessionsResult.error) {
         throw sessionsResult.error;
       }
 
-      setTransactions((transactionsResult.data ?? []) as CreditTransaction[]);
+      setTransactions((txData ?? []) as CreditTransaction[]);
       setSessions((sessionsResult.data ?? []) as unknown as SessionSummary[]);
 
       await refreshCredits();

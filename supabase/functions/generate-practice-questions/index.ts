@@ -1,4 +1,5 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
 import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
 
@@ -23,29 +24,10 @@ Deno.serve(async (req) => {
   if (cors) return cors;
 
   try {
-    // ---------------------------------------------
-    // AUTHENTICATE USER SAFELY
-    // ---------------------------------------------
-    const authHeader =
-      req.headers.get("authorization") ??
-      req.headers.get("Authorization") ??
-      "";
-
-    if (!authHeader.toLowerCase().startsWith("bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: getCorsHeaders(req) });
-    }
-
-    const token = authHeader.replace(/^bearer\s+/i, "");
+    const auth = await authenticateRequest(req);
+    if (auth.error) return auth.error;
+    const user = auth.context.user;
     const db = createServiceClient();
-
-    const { data: { user }, error: authErr } = await db.auth.getUser(token);
-    if (authErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: getCorsHeaders(req) });
-    }
 
     // ---------------------------------------------
     // PARSE & VALIDATE INPUT

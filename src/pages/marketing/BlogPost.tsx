@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { ArrowLeft, Calendar, User } from "lucide-react";
 import { motion } from "framer-motion";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 interface BlogPostData {
   slug: string;
@@ -432,6 +433,28 @@ function useBlogPostMeta(post: BlogPostData | undefined) {
   }, [post]);
 }
 
+function BlogPostNotFound() {
+  usePageMeta({
+    title: "Post not found | Clarify AI Blog",
+    description: "This blog post could not be found.",
+    noIndex: true,
+  });
+
+  return (
+    <MarketingLayout>
+      <div className="flex min-h-[60vh] items-center justify-center px-6 pt-32 pb-24">
+        <div className="text-center max-w-md">
+          <h1 className="mb-4 text-4xl font-bold text-foreground">404</h1>
+          <p className="mb-4 text-xl text-muted-foreground">This post does not exist</p>
+          <Link to="/blog" className="text-primary underline hover:text-primary/90 text-sm">
+            Back to Blog
+          </Link>
+        </div>
+      </div>
+    </MarketingLayout>
+  );
+}
+
 export default function BlogPost() {
   const { slug } = useParams<{ slug: string }>();
   const post = POSTS.find((p) => p.slug === slug);
@@ -439,16 +462,7 @@ export default function BlogPost() {
   useBlogPostMeta(post);
 
   if (!post) {
-    return (
-      <MarketingLayout>
-        <div className="pt-32 pb-24 flex items-center justify-center">
-          <div className="text-center">
-            <p className="text-muted-foreground mb-4">Post not found</p>
-            <Link to="/blog" className="text-primary hover:underline text-sm">Back to Blog</Link>
-          </div>
-        </div>
-      </MarketingLayout>
-    );
+    return <BlogPostNotFound />;
   }
 
   return (

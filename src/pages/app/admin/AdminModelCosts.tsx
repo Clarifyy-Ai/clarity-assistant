@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase }            from "@/lib/supabase/client";
+import { creditsDB } from "@/lib/supabase/database";
 import { formatNumber, formatCents, formatPercent } from "@/lib/utils/formatters";
 
 import {
@@ -76,20 +76,16 @@ export default function AdminModelCosts() {
     else             setIsLoading(true);
 
     try {
-      const { data } = await supabase
-        .from("credit_transactions")
-        .select("id, user_id, amount, action, created_at")
-        .order("created_at", { ascending: false })
-        .limit(2000) as unknown as { data: Record<string, unknown>[] | null };
+      const data = await creditsDB.listRecent(2000);
 
-      if (data) {
+      if (data.length > 0) {
         const featureMap: Record<string, number> = {};
         data.forEach((tx) => {
           const action  = String(tx.action ?? "").toLowerCase();
           const feature = DEFAULT_CREDIT_COSTS.find((c) =>
             action.includes(c.feature) || action.includes(c.feature.replace(/_/g, "-"))
           )?.feature ?? "other";
-          featureMap[feature] = (featureMap[feature] ?? 0) + Math.abs(tx.amount as number);
+          featureMap[feature] = (featureMap[feature] ?? 0) + Math.abs(Number(tx.amount) || 0);
         });
 
         setCreditCosts((prev) =>

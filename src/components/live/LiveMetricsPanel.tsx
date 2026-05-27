@@ -3,6 +3,10 @@ import { useAudioStore } from "@/store/audioStore";
 import { useSessionStore } from "@/store/sessionStore";
 import { TrendingUp, TrendingDown, Minus, Star } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  computeTranscriptConfidence,
+  TRANSCRIPT_MIN_WORDS,
+} from "@/lib/audio/transcriptConfidence";
 
 // ─────────────────────────────────────────────────────────────────
 // LiveMetricsPanel
@@ -144,7 +148,7 @@ const DEFAULT_METRICS: SessionMetrics = {
   trending:      { scoreChange: 0, direction: "stable" },
 };
 
-const MIN_WORDS_FOR_SCORE = 15;
+const MIN_WORDS_FOR_SCORE = TRANSCRIPT_MIN_WORDS;
 
 export function LiveMetricsPanel({
   className,
@@ -168,15 +172,12 @@ export function LiveMetricsPanel({
       .toLowerCase();
     const words = text.split(/\s+/).filter((w) => w.length > 0);
     const total = words.length;
+    const signals = computeTranscriptConfidence(text);
     const hasEnoughSpeech = total >= MIN_WORDS_FOR_SCORE;
     setIsEstimated(!hasEnoughSpeech);
 
-    if (!hasEnoughSpeech) {
-      return;
-    }
-
     // ── Answer Quality ─────────────────────────────────────────
-    const completeness = Math.min(100, Math.max(20, (total / 100) * 50 + 50));
+    const completeness = signals.completeness;
 
     const accuracyKw = ["example", "specifically", "demonstrated", "achieved", "learned", "measured", "improved"];
     const accuracy = Math.min(100, 50 + accuracyKw.filter((k) => text.includes(k)).length * 8);
@@ -270,7 +271,7 @@ export function LiveMetricsPanel({
 
   // ── Compact view ────────────────────────────────────────────────
   if (!detailed) {
-    if (isEstimated) {
+    if (isEstimated && metrics.overallScore === DEFAULT_METRICS.overallScore) {
       return (
         <div className={cn("space-y-2", className)}>
           <div
@@ -278,7 +279,7 @@ export function LiveMetricsPanel({
             style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.07)" }}
           >
             <p className="text-[11px]" style={{ color: "rgba(255,255,255,0.45)" }}>
-              Keep speaking — scores appear after ~{MIN_WORDS_FOR_SCORE} words
+              Estimating… speak a few more words for live scores
             </p>
           </div>
         </div>
@@ -298,28 +299,16 @@ export function LiveMetricsPanel({
             <span className={cn("text-sm font-bold", getTierColor(metrics.tier))}>
               {metrics.overallScore}
             </span>
+            {isEstimated && (
+              <span
+                className="text-[9px] uppercase tracking-wide px-1 py-0.5 rounded bg-white/10 text-white/40"
+                title="Preliminary score — improves with more speech"
+              >
+                Est.
+              </span>
+            )}
             {showTrend && <TrendIcon direction={metrics.trending.direction} />}
           </div>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Detailed view ────────────────────────────────────────────────
-  if (isEstimated) {
-    return (
-      <div className={cn("space-y-3", className)}>
-        <div
-          className="p-4 rounded-xl border text-center"
-          style={{ background: "rgba(255,255,255,0.03)", borderColor: "rgba(255,255,255,0.07)" }}
-        >
-          <Star className="h-5 w-5 text-amber-400/60 mx-auto mb-2" />
-          <p className="text-xs font-medium" style={{ color: "rgba(255,255,255,0.6)" }}>
-            Metrics unlock after you speak more
-          </p>
-          <p className="text-[11px] mt-1" style={{ color: "rgba(255,255,255,0.35)" }}>
-            Answer at least {MIN_WORDS_FOR_SCORE} words for estimated scores
-          </p>
         </div>
       </div>
     );

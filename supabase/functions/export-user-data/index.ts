@@ -1,6 +1,7 @@
 // export-user-data/index.ts — FIXED & SECURE VERSION
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 Deno.serve(async (req) => {
@@ -8,32 +9,10 @@ Deno.serve(async (req) => {
   if (cors) return cors;
 
   try {
+    const auth = await authenticateRequest(req);
+    if (auth.error) return auth.error;
+    const user = auth.context.user;
     const db = createServiceClient();
-
-    /* ---------------------------------------------------
-       AUTHENTICATION (REQUIRED)
-    --------------------------------------------------- */
-    const authHeader =
-      req.headers.get("authorization") ??
-      req.headers.get("Authorization");
-
-    if (!authHeader?.toLowerCase().startsWith("bearer ")) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: getCorsHeaders(req) });
-    }
-
-    const token = authHeader.replace(/^bearer\s+/i, "");
-    const {
-      data: { user },
-      error: userErr
-    } = await db.auth.getUser(token);
-
-    if (userErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: getCorsHeaders(req) });
-    }
 
     /* ---------------------------------------------------
        VALIDATE BODY

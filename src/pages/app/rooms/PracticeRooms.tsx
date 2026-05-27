@@ -60,9 +60,8 @@ export default function PracticeRooms() {
   return (
     <div>
       <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200/90">
-        <strong className="font-semibold">Beta — chat + presence.</strong>{" "}
-        Real-time chat and live participant lists are active. Peer video/WebRTC is not enabled yet —
-        use Live Co-Pilot for solo audio practice.
+        <strong className="font-semibold">Practice rooms.</strong>{" "}
+        Voice and video (WebRTC) is coming soon. Text-based practice rooms are available now.
       </div>
 
       <PageHeader

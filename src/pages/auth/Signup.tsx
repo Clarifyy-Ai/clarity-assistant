@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { useAuthStore } from "@/store/authStore";
+import { usePageMeta } from "@/hooks/usePageMeta";
 import { FormWrapper } from "@/components/common/FormWrapper";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -143,6 +144,11 @@ const signupFormSchema = (signupSchema as any).extend({
 type SignupFormInput = z.infer<typeof signupFormSchema>;
 
 export default function Signup(): JSX.Element {
+  usePageMeta({
+    title: "Create account | Clarify AI",
+    description: "Create your Clarify AI account.",
+    noIndex: true,
+  });
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
 

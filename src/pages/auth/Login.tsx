@@ -22,6 +22,7 @@ import {
 } from "@/components/auth/OAuthButton";
 
 import { loginSchema, type LoginInput } from "@/lib/validators";
+import { usePageMeta } from "@/hooks/usePageMeta";
 
 type LocationState = {
   from?: {
@@ -83,6 +84,12 @@ function formatLockMessage(lockMinsLeft: number): string {
 }
 
 export default function Login(): JSX.Element {
+  usePageMeta({
+    title: "Sign in | Clarify AI",
+    description: "Sign in to your Clarify AI account.",
+    noIndex: true,
+  });
+
   const navigate = useNavigate();
   const location = useLocation();
   const [searchParams] = useSearchParams();

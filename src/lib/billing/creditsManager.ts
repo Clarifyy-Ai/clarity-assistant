@@ -1,6 +1,7 @@
 // src/lib/billing/creditsManager.ts
 
 import { EDGE_BASE } from "@/lib/env";
+import { creditsDB } from "@/lib/supabase/database";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { useUIStore } from "@/store/uiStore";
@@ -304,14 +305,12 @@ export async function fetchCreditHistory(
   const { user } = useAuthStore.getState();
   if (!user) return [];
 
-  const { data, error } = await supabase
-    .from("credit_transactions")
-    .select("id, action, amount, session_id, created_at, description")
-    .eq("user_id", user.id)
-    .order("created_at", { ascending: false })
-    .limit(limit);
-
-  if (error || !data) return [];
+  let data;
+  try {
+    data = await creditsDB.listByUserId(user.id, limit);
+  } catch {
+    return [];
+  }
   return data.map((row) => ({
     id:         row.id,
     model:      row.action ?? "unknown",

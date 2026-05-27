@@ -6,6 +6,7 @@ import type { WPMDataPoint } from "./wpmTracker";
 import { FillerDetector } from "./fillerDetector";
 import { SilenceDetector, type SilenceEvent } from "./silenceDetector";
 import { VolumeMonitor, type VolumeAlert } from "./volumeMonitor";
+import { computeTranscriptConfidence } from "./transcriptConfidence";
 
 export interface SpeechMetrics {
   wpm: number;
@@ -41,6 +42,7 @@ export class SpeechMetricsCalculator {
   private speakingDurationMs = 0;
   private lastChunkTimestamp = Date.now();
   private totalDurationMs = 0;
+  private latestTranscript = "";
 
   private onMetricsUpdate: (metrics: SpeechMetrics) => void;
 
@@ -106,12 +108,16 @@ export class SpeechMetricsCalculator {
       ? (this.speakingDurationMs / this.totalDurationMs) * 100
       : 0;
 
+    const transcriptSignals = computeTranscriptConfidence(this.latestTranscript);
+    const answerCompleteness = Math.round((transcriptSignals.completeness / 100) * 15);
+
     const confidenceScore = this.calculateConfidenceScore(
       wpm,
       fillerCount,
       this.silenceDetector.getEventCount(),
       variance,
-      this.estimateAnswerCompleteness(), // placeholder
+      answerCompleteness,
+      transcriptSignals.confidenceScore,
     );
 
     return {
@@ -152,15 +158,17 @@ export class SpeechMetricsCalculator {
     silenceEvents: number,
     volumeVariance: number,
     answerCompleteness: number,
+    transcriptConfidence: number,
   ): number {
-    const speakingPaceScore = this.scoreWpm(wpm);             // 0–25
-    const fillerScore = this.scoreFiller(fillerCount);        // 0–25
-    const silenceScore = this.scoreSilence(silenceEvents);    // 0–20
-    const volumeScore = this.scoreVolume(volumeVariance);     // 0–15
+    const speakingPaceScore = this.scoreWpm(wpm);
+    const fillerScore = this.scoreFiller(fillerCount);
+    const silenceScore = this.scoreSilence(silenceEvents);
+    const volumeScore = this.scoreVolume(volumeVariance);
     const completenessScore = Math.max(0, Math.min(15, answerCompleteness));
 
-    const total = speakingPaceScore + fillerScore + silenceScore + volumeScore + completenessScore;
-    return Math.min(100, total);
+    const audioBlend = speakingPaceScore + fillerScore + silenceScore + volumeScore + completenessScore;
+    const blended = Math.round(audioBlend * 0.55 + transcriptConfidence * 0.45);
+    return Math.min(100, blended);
   }
 
   private scoreWpm(wpm: number): number {
@@ -196,8 +204,4 @@ export class SpeechMetricsCalculator {
     return 0;
   }
 
-  private estimateAnswerCompleteness(): number {
-    // Heuristic placeholder — LiveMetricsPanel shows "Est." until content scoring exists
-    return 10;
-  }
 }

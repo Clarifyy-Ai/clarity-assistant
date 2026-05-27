@@ -12,6 +12,7 @@
 //   ALLOWED_ORIGINS  — From Fix 27 (cors.ts)
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
 import { mapExamType } from "../_shared/examTypeMap.ts";
@@ -231,32 +232,10 @@ Deno.serve(async (req: Request) => {
 
   try {
     /* ── AUTH ──────────────────────────────────────────────────────────── */
-    const authHeader =
-      req.headers.get("authorization") ??
-      req.headers.get("Authorization") ??
-      "";
-
-    // FIX: was "^bearer\\\\s+" (4 backslashes → literal \s, not whitespace)
-    //      now "^bearer\\s+"  (2 backslashes → whitespace shorthand \s)
-    if (!new RegExp("^bearer\\s+", "i").test(authHeader)) {
-      return new Response(
-        JSON.stringify({ error: "Missing or malformed Authorization header" }),
-        { status: 401, headers },
-      );
-    }
-
-    // FIX: same regex fix for the replace
-    const token = authHeader.replace(new RegExp("^bearer\\s+", "i"), "");
-    const db    = createServiceClient();
-
-    const { data: { user }, error: authErr } = await db.auth.getUser(token);
-    if (authErr || !user) {
-      return new Response(
-        JSON.stringify({ error: "Unauthorized" }),
-        { status: 401, headers },
-      );
-    }
-    const userId = user.id;
+    const auth = await authenticateRequest(req);
+    if (auth.error) return auth.error;
+    const userId = auth.context.user.id;
+    const db = createServiceClient();
 
     /* ── PARSE & VALIDATE INPUT ────────────────────────────────────────── */
     const body   = await req.json().catch(() => null) as Record<string, unknown> | null;

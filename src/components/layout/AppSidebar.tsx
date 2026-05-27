@@ -357,7 +357,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
 
       <div className="space-y-1 border-t border-sidebar-border py-3">
         <SidebarLink
-          to="/app/guide"
+          to="/help"
           icon={BookMarked}
           label="Guide"
           collapsed={collapsed}

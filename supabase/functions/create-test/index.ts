@@ -1,5 +1,6 @@
 // supabase/functions/create-test/index.ts
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient, deductCredits, refundCredits } from "../_shared/supabase.ts";
 
 const CREATE_TEST_CREDIT_COST = 2;
@@ -39,22 +40,9 @@ Deno.serve(async (req) => {
   const db = createServiceClient();
 
   try {
-    const authHeader =
-      req.headers.get("authorization") ?? req.headers.get("Authorization");
-
-    if (!authHeader?.toLowerCase().startsWith("bearer ")) {
-      return jsonResponse(req, { error: "Unauthorized" }, 401);
-    }
-
-    const token = authHeader.replace(/^bearer\s+/i, "");
-    const {
-      data: { user },
-      error: authErr,
-    } = await db.auth.getUser(token);
-
-    if (authErr || !user) {
-      return jsonResponse(req, { error: "Unauthorized" }, 401);
-    }
+    const auth = await authenticateRequest(req);
+    if (auth.error) return auth.error;
+    const user = auth.context.user;
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {

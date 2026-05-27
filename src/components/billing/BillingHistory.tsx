@@ -5,7 +5,7 @@ import { Calendar, Download, CreditCard, ArrowDownLeft, Filter } from 'lucide-re
 import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { supabase } from '@/lib/supabase/client';
+import { creditsDB } from '@/lib/supabase/database';
 
 /**
  * BillingHistory Component
@@ -67,16 +67,9 @@ export function BillingHistory({
       if (!profile?.id) return;
       setLoading(true);
       try {
-        const { data, error } = await supabase
-          .from('credit_transactions')
-          .select('id, amount, action, created_at')
-          .eq('user_id', profile.id)
-          .order('created_at', { ascending: false })
-          .limit(100);
+        const data = await creditsDB.listByUserId(profile.id, 100);
 
-        if (error) throw error;
-
-        const mapped: Transaction[] = (data ?? []).map((row) => {
+        const mapped: Transaction[] = data.map((row) => {
           const credits = row.amount as number;
           const reason: string = (row.action as string) ?? '';
 

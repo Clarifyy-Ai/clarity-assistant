@@ -8,6 +8,7 @@ import { cn } from "@/lib/utils";
 // ─────────────────────────────────────────────────────────────────
 
 export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  /** @deprecated Use `destructive` — `danger` is kept as an alias */
   variant?:  "primary" | "secondary" | "ghost" | "danger" | "success" | "outline" | "destructive";
   size?:     "xs" | "sm" | "md" | "lg" | "default";
   loading?:  boolean;
@@ -50,6 +51,8 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
     },
     ref
   ) => {
+    const resolvedVariant = variant === "danger" ? "destructive" : variant;
+
     return (
       <button
         ref={ref}
@@ -58,7 +61,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
           "inline-flex items-center justify-center font-medium border transition-all",
           "disabled:opacity-40 disabled:cursor-not-allowed",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
-          VARIANTS[variant],
+          VARIANTS[resolvedVariant],
           SIZES[size],
           fullWidth && "w-full",
           className

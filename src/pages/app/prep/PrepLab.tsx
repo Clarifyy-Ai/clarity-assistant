@@ -356,6 +356,37 @@ function STARBuilder() {
 }
 
 // ─────────────────────────────────────────────────────────────────
+// Question Bank — display-only starter examples (not persisted)
+// ─────────────────────────────────────────────────────────────────
+
+const STARTER_ANSWER_TEMPLATES = [
+  {
+    id: "starter-behavioral",
+    text: "Tell me about a time you resolved a conflict on your team.",
+    category: "Behavioural",
+    difficulty: "medium" as const,
+    answerPreview:
+      "Situation: Two engineers disagreed on API design during a release crunch. Task: I facilitated alignment without delaying the ship date. Action: I ran a 30-minute decision doc review, listed trade-offs, and proposed a phased rollout. Result: We shipped on time and reduced similar debates by documenting ADRs.",
+  },
+  {
+    id: "starter-technical",
+    text: "How would you debug a sudden spike in API latency?",
+    category: "Technical",
+    difficulty: "hard" as const,
+    answerPreview:
+      "I'd start with dashboards (p95/p99, error rate), check recent deploys and feature flags, then trace slow requests. I'd compare DB query plans, cache hit rates, and upstream dependencies, roll back if needed, and add an alert on the regression threshold.",
+  },
+  {
+    id: "starter-leadership",
+    text: "Describe how you mentored a junior teammate to deliver independently.",
+    category: "Leadership",
+    difficulty: "medium" as const,
+    answerPreview:
+      "I paired weekly on their first feature, broke work into milestones, and gave written feedback on PRs. Within six weeks they owned a module end-to-end and presented the demo to stakeholders.",
+  },
+];
+
+// ─────────────────────────────────────────────────────────────────
 // Question Bank
 // ─────────────────────────────────────────────────────────────────
 
@@ -511,18 +542,33 @@ function QuestionBank() {
 
       {/* Questions list */}
       <div className="space-y-2">
-        {filtered.length === 0 && !loadingBank && (
-          <div className="text-center py-8 space-y-2">
-            <p className="text-sm text-muted-foreground">
-              {questions.length === 0
-                ? "No saved questions yet. Practice in a mock session or add answers to your Answer Bank."
-                : "No questions match your filters."}
+        {filtered.length === 0 && !loadingBank && questions.length === 0 && (
+          <div className="space-y-4">
+            <p className="text-xs text-muted-foreground text-center">
+              Starter examples — add your own answers to build your bank.
             </p>
-            {questions.length === 0 && (
+            {STARTER_ANSWER_TEMPLATES.map((starter) => (
+              <Card key={starter.id} padding="sm" className="border-dashed border-violet-500/30">
+                <p className="text-sm font-medium text-foreground">{starter.text}</p>
+                <div className="flex items-center gap-2 mt-2">
+                  <Badge variant="default" size="sm">{starter.category}</Badge>
+                  <Badge variant="violet" size="sm">Example</Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
+                  {starter.answerPreview}
+                </p>
+              </Card>
+            ))}
+            <div className="text-center pt-2">
               <Link to="/app/answers" className="text-sm text-violet-500 hover:underline">
                 Open Answer Bank →
               </Link>
-            )}
+            </div>
+          </div>
+        )}
+        {filtered.length === 0 && !loadingBank && questions.length > 0 && (
+          <div className="text-center py-8">
+            <p className="text-sm text-muted-foreground">No questions match your filters.</p>
           </div>
         )}
         {filtered.map((q) => (

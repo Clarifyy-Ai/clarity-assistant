@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
-import { supabase }            from "@/lib/supabase/client";
+import { supabase } from "@/lib/supabase/client";
+import { creditsDB } from "@/lib/supabase/database";
+import { ENV } from "@/lib/env";
 import { PLAN_PRICE_CENTS_MONTHLY } from "@/lib/constants/pricing";
 import { formatCents, formatNumber, formatPercent, formatDate } from "@/lib/utils/formatters";
 import { timeAgo }             from "@/lib/utils/dateUtils";
@@ -52,6 +54,16 @@ interface RevenueTransaction {
 }
 
 type DateRange = "7d" | "30d" | "90d" | "12m";
+
+const STRIPE_CONFIGURED =
+  !!ENV.STRIPE_PRICE_PRO_MONTHLY || !!ENV.STRIPE_PRICE_STARTER_MONTHLY;
+
+const RANGE_DAYS: Record<DateRange, number> = {
+  "7d": 7,
+  "30d": 30,
+  "90d": 90,
+  "12m": 365,
+};
 
 interface MetricCardProps {
   title:      string;
@@ -121,12 +133,19 @@ export default function AdminRevenue() {
   const [dateRange,    setDateRange]    = useState<DateRange>("30d");
   const [isLoading,    setIsLoading]    = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [mrrIsEstimated, setMrrIsEstimated] = useState(!STRIPE_CONFIGURED);
 
   const fetchData = async (showRefresh = false) => {
     if (showRefresh) setIsRefreshing(true);
     else             setIsLoading(true);
+    setLoadError(null);
 
     try {
+      const days = RANGE_DAYS[dateRange];
+      const since = new Date();
+      since.setDate(since.getDate() - days);
+      const sinceIso = since.toISOString();
       const { data: profileData } = await supabase
         .from("profiles")
         .select("plan_id, credits, stripe_subscription_id, subscription_status");
@@ -161,7 +180,7 @@ export default function AdminRevenue() {
 
         setPlans(planDist);
 
-        const mrr = planDist.reduce((sum, p) => sum + p.mrr, 0);
+        const planEstimateMrr = planDist.reduce((sum, p) => sum + p.mrr, 0);
 
         const { data: subRows } = await supabase
           .from("subscriptions")
@@ -171,15 +190,13 @@ export default function AdminRevenue() {
         const subsFromTable = subRows?.length ?? 0;
         const activeCount = Math.max(activeSubscribers, subsFromTable);
 
-        const { data: txData } = await supabase
-          .from("credit_transactions")
-          .select("id, user_id, amount, action, created_at")
-          .order("created_at", { ascending: false })
-          .limit(50);
-
-        const creditPurchaseCents = (txData ?? [])
-          .filter((tx) => String(tx.action ?? "").includes("purchase"))
-          .reduce((sum, tx) => sum + Math.abs(Number(tx.amount) || 0), 0);
+        const txData = await creditsDB.listRecent(50);
+        const creditPurchaseCents = await creditsDB.sumPurchasesSince(sinceIso);
+        const ledgerMrrRows = await creditsDB.monthlyRevenueByPlan(sinceIso);
+        const ledgerMrr = ledgerMrrRows.reduce((sum, row) => sum + row.totalCents, 0);
+        const useLedgerMrr = STRIPE_CONFIGURED && ledgerMrr > 0;
+        const mrr = useLedgerMrr ? ledgerMrr : planEstimateMrr;
+        setMrrIsEstimated(!useLedgerMrr);
 
         const userIds = [...new Set((txData ?? []).map((tx) => tx.user_id))];
         const emailByUser: Record<string, string> = {};
@@ -258,7 +275,9 @@ export default function AdminRevenue() {
         <div>
           <h1 className="text-xl font-bold text-foreground">Revenue</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            MRR from plan distribution (estimated). Transaction list uses live credit ledger data.
+            {mrrIsEstimated
+              ? "Estimated (Stripe disconnected) — MRR from plan counts. Transactions use live ledger data."
+              : "MRR from credit_transactions grouped by month and plan. Transactions use live ledger data."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -291,10 +310,17 @@ export default function AdminRevenue() {
         </div>
       </div>
 
+      {loadError && (
+        <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-3">
+          <span className="flex-1">{loadError}</span>
+          <Button size="sm" variant="outline" onClick={() => fetchData(true)}>Retry</Button>
+        </div>
+      )}
+
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard
-          title="MRR (Est.)"
+          title={mrrIsEstimated ? "MRR — Estimated (Stripe disconnected)" : "MRR"}
           value={metrics ? formatCents(metrics.mrr) : "—"}
           trend={metrics?.mrrGrowth}
           trendLabel="vs last month"

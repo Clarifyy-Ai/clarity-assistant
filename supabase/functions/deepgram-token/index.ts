@@ -4,7 +4,7 @@
 // NEVER falls back to returning the raw production key.
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
-import { createServiceClient } from "../_shared/supabase.ts";
+import { authenticateRequest } from "../_shared/auth.ts";
 
 const TOKEN_TTL_SECONDS = 60; // 1 minute
 const CACHE_SAFETY_BUFFER_S = 8;
@@ -23,27 +23,9 @@ Deno.serve(async (req: Request) => {
   const headers = getCorsHeaders(req);
 
   try {
-    /* ── AUTH ──────────────────────────────────────────────────────────── */
-    const db = createServiceClient();
-    const authHeader =
-      req.headers.get("authorization") ?? req.headers.get("Authorization") ?? "";
-
-    if (!new RegExp("^bearer\\s+", "i").test(authHeader)) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...headers, "Content-Type": "application/json" },
-      });
-    }
-
-    const token = authHeader.replace(new RegExp("^bearer\\s+", "i"), "");
-    const { data: { user }, error: authErr } = await db.auth.getUser(token);
-
-    if (authErr || !user) {
-      return new Response(JSON.stringify({ error: "Unauthorized" }), {
-        status: 401,
-        headers: { ...headers, "Content-Type": "application/json" },
-      });
-    }
+    const auth = await authenticateRequest(req);
+    if (auth.error) return auth.error;
+    const user = auth.context.user;
 
     /* ── ENV VALIDATION ────────────────────────────────────────────────── */
     const DEEPGRAM_API_KEY = Deno.env.get("DEEPGRAM_API_KEY");
