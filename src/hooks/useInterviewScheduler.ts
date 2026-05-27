@@ -189,7 +189,7 @@ export function useInterviewScheduler() {
     interviewId: string,
     values: RoundFormValues,
   ): Promise<{ error: string | null }> => {
-    const round: Partial<InterviewRound> = {
+    const round: Partial<InterviewRound> & Record<string, any> = {
       id:                     generateId(),
       scheduled_interview_id: interviewId,
       round_number:           values.round_number,
