@@ -73,6 +73,7 @@ export default function CompanyProfile() {
       // ── Cache the result ─────────────────────────────────────
       // FIX 4: add onConflict so upsert updates existing row
       // instead of inserting duplicates on every refresh
+      const d = data as any;
       const { error: upsertErr } = await supabase
         .from("company_research")
         .upsert(
@@ -80,11 +81,11 @@ export default function CompanyProfile() {
             user_id:      user?.id,
             company_name: companyName,
             role_title:   params.get("role") ?? null,
-            raw_data:     data,
-            overview:     data.overview  ?? null,
-            culture:      data.culture   ?? null,
-            prep_tips:    data.tips?.join("; ") ?? null,
-          },
+            raw_data:     d,
+            overview:     d.overview  ?? null,
+            culture:      d.culture   ?? null,
+            prep_tips:    Array.isArray(d.tips) ? d.tips.join("; ") : null,
+          } as any,
           { onConflict: "user_id,company_name" }  // FIX 4: update, don't insert
         );
 

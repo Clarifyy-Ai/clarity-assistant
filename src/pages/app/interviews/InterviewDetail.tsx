@@ -48,9 +48,10 @@ export default function InterviewDetail() {
     }
   }, [id]);
 
-  const iv = store.interviews.find((iv) => iv.id === id);
+  const ivRaw = store.interviews.find((iv) => iv.id === id);
+  const iv = ivRaw as any;
 
-  if (store.isLoading) {
+  if ((store as any).is_loading) {
     return (
       <div className="max-w-2xl space-y-4">
         <SkeletonCard />
@@ -105,7 +106,7 @@ export default function InterviewDetail() {
 
   async function handleComplete() {
     try {
-      await scheduler.updateInterview(iv.id, { status: "completed" });
+      await scheduler.updateInterview(iv.id, { status: "completed" } as any);
     } catch (err) {
       console.error("handleComplete failed:", err);
       toast.error("Failed to mark interview as completed. Please try again.");

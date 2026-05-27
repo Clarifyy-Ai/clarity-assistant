@@ -115,7 +115,8 @@ export function useAnalytics() {
       .single();
 
     if (!data) return null;
-    const session = (data as any).sessions;
+    const d = data as any;
+    const session = d.sessions;
 
     return {
       session_id:       sessionId,
@@ -123,9 +124,9 @@ export function useAnalytics() {
       mode:             session.mode,
       interview_type:   session.interview_type,
       company:          session.company,
-      overall_score:    data.overall_score,
-      filler_rate:      data.filler_rate,
-      wpm_avg:          data.wpm_avg,
+      overall_score:    d.overall_score,
+      filler_rate:      d.filler_rate,
+      wpm_avg:          d.wpm_avg,
       duration_minutes: Math.round(session.duration_seconds / 60),
       question_count:   session.session_questions?.[0]?.count ?? 0,
     };
@@ -137,7 +138,7 @@ export function useAnalytics() {
     if (!user) return;
     await supabase
       .from("profiles")
-      .update({ leaderboard_opt_in: optIn })
+      .update({ leaderboard_opt_in: optIn } as any)
       .eq("id", user.id);
 
     // Reload analytics to refresh leaderboard

@@ -189,7 +189,7 @@ export function useInterviewScheduler() {
     interviewId: string,
     values: RoundFormValues,
   ): Promise<{ error: string | null }> => {
-    const round: Partial<InterviewRound> = {
+    const round: Partial<InterviewRound> & Record<string, any> = {
       id:                     generateId(),
       scheduled_interview_id: interviewId,
       round_number:           values.round_number,
@@ -210,7 +210,7 @@ export function useInterviewScheduler() {
       updated_at:             new Date().toISOString(),
     };
 
-    const { error } = await supabase.from("interview_rounds").insert(round);
+    const { error } = await supabase.from("interview_rounds").insert(round as any);
 
     if (error) {
       // ✅ FIX: Rollback the parent interview row so we don't leave an orphaned
