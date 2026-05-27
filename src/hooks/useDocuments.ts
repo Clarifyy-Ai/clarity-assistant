@@ -362,13 +362,13 @@ Return ONLY valid JSON matching this schema:
 Job description:
 ${rawText.slice(0, 4000)}`;
 
-      const text  = await callGemini({ prompt, model: "gemini-2.0-flash", maxOutputTokens: 2048 });
+      const text  = await callGemini({ prompt, model: "gemini-2.0-flash", max_tokens: 2048 });
       const clean = text.replace(/```json|```/g, "").trim();
       const data: ParsedJD = JSON.parse(clean);
 
       await supabase
         .from("job_descriptions")
-        .update({ parsed_data: data, parse_status: "ready", parse_error: null })
+        .update({ parsed_data: data as any, parse_status: "ready", parse_error: null })
         .eq("id", jdId);
 
       if (mountedRef.current) await loadDocuments();

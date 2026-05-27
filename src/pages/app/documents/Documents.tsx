@@ -37,7 +37,7 @@ export default function Documents() {
     <div className="space-y-5 max-w-4xl">
       <PageHeader
         title="Documents"
-        subtitle="Manage your resume and job descriptions for AI context"
+        description="Manage your resume and job descriptions for AI context"
       />
       {loadError && (
         <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
@@ -299,8 +299,8 @@ function ResumeManager() {
       >
         {previewVer?.parsed_data ? (
           <div className="max-h-96 overflow-y-auto bg-secondary rounded-xl p-4 space-y-3">
-            {previewVer.parsed_data.name && (
-              <p className="text-sm font-semibold text-foreground">{previewVer.parsed_data.name}</p>
+            {(previewVer.parsed_data as any).name && (
+              <p className="text-sm font-semibold text-foreground">{(previewVer.parsed_data as any).name}</p>
             )}
             {previewVer.parsed_data.summary && (
               <p className="text-xs text-muted-foreground leading-relaxed">{previewVer.parsed_data.summary}</p>
@@ -699,7 +699,7 @@ function CoverLetterManager() {
         <Card padding="sm" className="space-y-3">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-semibold text-foreground">{coverDoc.title}</p>
-            <Badge variant="green" size="sm">Active for AI</Badge>
+            <Badge variant="emerald" size="sm">Active for AI</Badge>
           </div>
           <p className="text-xs text-muted-foreground line-clamp-4">
             {coverDoc.parsed_summary ?? coverDoc.content?.slice(0, 400) ?? "Parsed text available."}

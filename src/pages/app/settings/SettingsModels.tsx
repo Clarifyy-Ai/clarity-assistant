@@ -45,13 +45,13 @@ export default function SettingsModels() {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .update({ preferred_model: selected, updated_at: new Date().toISOString() })
+        .update({ preferred_model: selected as any, updated_at: new Date().toISOString() })
         .eq("id", profile.id)
         .select()
         .single();
 
       if (error) throw error;
-      if (data) setProfile(data as typeof profile);
+      if (data) setProfile(data as unknown as typeof profile);
 
       useOverlayStore.getState().setActiveModel(
         selected === "gemini-pro" ? "gemini-pro" : "gemini-flash"

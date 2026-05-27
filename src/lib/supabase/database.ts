@@ -11,7 +11,7 @@ import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase
 // ─── Generic Query Helper ─────────────────────────────────────────────────────
 
 async function query<T>(
-  operation: () => Promise<{ data: T | null; error: unknown }>,
+  operation: () => PromiseLike<{ data: T | null; error: unknown }>,
   context: { table: string; operation: string }
 ): Promise<T> {
   const [data, err] = await tryCatch(async () => {
@@ -127,8 +127,8 @@ export const sessionsDB = {
     return sessionsDB.update(sessionId, {
       status:  "completed",
       ended_at: new Date().toISOString(),
-      summary:  summary ?? null,
-    });
+      ...(summary ? { summary } : {}),
+    } as any);
   },
 
   async delete(sessionId: string): Promise<void> {
@@ -233,7 +233,7 @@ export const documentsDB = {
       .eq("user_id", userId)
       .order("created_at", { ascending: false });
 
-    if (type) q = q.eq("type", type);
+    if (type) q = q.eq("type", type as any);
 
     const { data, error } = await q;
 
