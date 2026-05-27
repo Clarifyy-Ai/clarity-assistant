@@ -11,7 +11,7 @@ import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase
 // ─── Generic Query Helper ─────────────────────────────────────────────────────
 
 async function query<T>(
-  operation: () => Promise<{ data: T | null; error: unknown }>,
+  operation: () => PromiseLike<{ data: T | null; error: unknown }>,
   context: { table: string; operation: string }
 ): Promise<T> {
   const [data, err] = await tryCatch(async () => {
