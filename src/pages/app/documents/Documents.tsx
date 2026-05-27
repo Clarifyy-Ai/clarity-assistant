@@ -699,7 +699,7 @@ function CoverLetterManager() {
         <Card padding="sm" className="space-y-3">
           <div className="flex items-center justify-between gap-2">
             <p className="text-sm font-semibold text-foreground">{coverDoc.title}</p>
-            <Badge variant="success" size="sm">Active for AI</Badge>
+            <Badge variant="emerald" size="sm">Active for AI</Badge>
           </div>
           <p className="text-xs text-muted-foreground line-clamp-4">
             {coverDoc.parsed_summary ?? coverDoc.content?.slice(0, 400) ?? "Parsed text available."}
