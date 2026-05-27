@@ -290,6 +290,107 @@ export const documentsDB = {
     if (error) throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED,
       { table: "documents", operation: "delete" });
   },
+
+  async clearPrimaryCoverLetters(userId: string): Promise<void> {
+    const { error } = await supabase
+      .from("documents")
+      .update({ is_primary: false })
+      .eq("user_id", userId)
+      .eq("type", "cover_letter");
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "documents",
+        operation: "clearPrimaryCoverLetters",
+      });
+    }
+  },
+};
+
+// ─── Resumes ──────────────────────────────────────────────────────────────────
+
+export const resumesDB = {
+  async listByUserId(userId: string): Promise<Tables<"resumes">[]> {
+    const { data, error } = await supabase
+      .from("resumes")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "resumes",
+        operation: "listByUserId",
+      });
+    }
+
+    return data ?? [];
+  },
+
+  async create(row: TablesInsert<"resumes">): Promise<Tables<"resumes">> {
+    return query(
+      () => supabase.from("resumes").insert(row).select().single(),
+      { table: "resumes", operation: "create" },
+    );
+  },
+
+  async update(id: string, updates: TablesUpdate<"resumes">): Promise<void> {
+    const { error } = await supabase.from("resumes").update(updates).eq("id", id);
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "resumes",
+        operation: "update",
+      });
+    }
+  },
+
+  async delete(id: string): Promise<void> {
+    const { error } = await supabase.from("resumes").delete().eq("id", id);
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "resumes",
+        operation: "delete",
+      });
+    }
+  },
+};
+
+// ─── Job descriptions ─────────────────────────────────────────────────────────
+
+export const jobDescriptionsDB = {
+  async listByUserId(userId: string): Promise<Tables<"job_descriptions">[]> {
+    const { data, error } = await supabase
+      .from("job_descriptions")
+      .select("*")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "job_descriptions",
+        operation: "listByUserId",
+      });
+    }
+
+    return data ?? [];
+  },
+
+  async create(row: TablesInsert<"job_descriptions">): Promise<Tables<"job_descriptions">> {
+    return query(
+      () => supabase.from("job_descriptions").insert(row).select().single(),
+      { table: "job_descriptions", operation: "create" },
+    );
+  },
+
+  async update(id: string, updates: TablesUpdate<"job_descriptions">): Promise<void> {
+    const { error } = await supabase.from("job_descriptions").update(updates).eq("id", id);
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "job_descriptions",
+        operation: "update",
+      });
+    }
+  },
 };
 
 // ─── Feedback ─────────────────────────────────────────────────────────────────
@@ -315,6 +416,11 @@ export const feedbackDB = {
     return data ?? [];
   },
 };
+
+export type CreditTransactionRow = Pick<
+  Tables<"credit_transactions">,
+  "id" | "user_id" | "amount" | "action" | "created_at" | "session_id" | "description"
+>;
 
 // ─── Credits ──────────────────────────────────────────────────────────────────
 
@@ -351,6 +457,127 @@ export const creditsDB = {
     });
     if (error) throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED,
       { table: "credits", operation: "add" });
+  },
+
+  async listByUserId(userId: string, limit = 50): Promise<CreditTransactionRow[]> {
+    const { data, error } = await supabase
+      .from("credit_transactions")
+      .select("id, user_id, amount, action, created_at, session_id, description")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "credit_transactions",
+        operation: "listByUserId",
+      });
+    }
+    return data ?? [];
+  },
+
+  async listByUserIdWithBalance(userId: string, limit = 100) {
+    const { data, error } = await supabase
+      .from("credit_transactions")
+      .select("id, action, amount, balance_after, description, created_at")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "credit_transactions",
+        operation: "listByUserIdWithBalance",
+      });
+    }
+    return data ?? [];
+  },
+
+  async listRecent(limit = 50): Promise<CreditTransactionRow[]> {
+    const { data, error } = await supabase
+      .from("credit_transactions")
+      .select("id, user_id, amount, action, created_at, session_id, description")
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "credit_transactions",
+        operation: "listRecent",
+      });
+    }
+    return data ?? [];
+  },
+
+  async sumPurchasesSince(sinceIso: string): Promise<number> {
+    const { data, error } = await supabase
+      .from("credit_transactions")
+      .select("amount, action")
+      .gte("created_at", sinceIso);
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "credit_transactions",
+        operation: "sumPurchasesSince",
+      });
+    }
+
+    return (data ?? [])
+      .filter((tx) => String(tx.action ?? "").includes("purchase"))
+      .reduce((sum, tx) => sum + Math.abs(Number(tx.amount) || 0), 0);
+  },
+
+  async monthlyRevenueByPlan(sinceIso: string): Promise<
+    { month: string; planId: string; totalCents: number }[]
+  > {
+    const { data, error } = await supabase
+      .from("credit_transactions")
+      .select("amount, action, created_at, user_id")
+      .gte("created_at", sinceIso)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "credit_transactions",
+        operation: "monthlyRevenueByPlan",
+      });
+    }
+
+    const userIds = [...new Set((data ?? []).map((r) => r.user_id).filter(Boolean))];
+    const planByUser: Record<string, string> = {};
+
+    if (userIds.length > 0) {
+      const { data: profiles, error: profileErr } = await supabase
+        .from("profiles")
+        .select("id, plan_id")
+        .in("id", userIds);
+
+      if (profileErr) {
+        throw new DatabaseError(profileErr.message, ErrorCode.DB_QUERY_FAILED, {
+          table: "profiles",
+          operation: "monthlyRevenueByPlan.plans",
+        });
+      }
+
+      (profiles ?? []).forEach((p) => {
+        if (p.id) planByUser[p.id] = p.plan_id ?? "free";
+      });
+    }
+
+    const bucket: Record<string, number> = {};
+    for (const tx of data ?? []) {
+      const action = String(tx.action ?? "");
+      if (!action.includes("subscription") && !action.includes("purchase")) continue;
+      const month = tx.created_at?.slice(0, 7) ?? "unknown";
+      const planId = planByUser[tx.user_id] ?? "unknown";
+      const key = `${month}|${planId}`;
+      bucket[key] = (bucket[key] ?? 0) + Math.abs(Number(tx.amount) || 0);
+    }
+
+    return Object.entries(bucket).map(([key, totalCents]) => {
+      const [month, planId] = key.split("|");
+      return { month, planId, totalCents };
+    });
   },
 };
 
@@ -578,135 +805,174 @@ export const practiceRoomsDB = {
     }
     return data ?? [];
   },
-};
 
-// ─── Credit transactions (read-only from client) ─────────────────────────────
-
-export type CreditTransactionRow = Pick<
-  Tables<"credit_transactions">,
-  "id" | "user_id" | "amount" | "action" | "created_at" | "session_id" | "description"
->;
-
-export const creditsDB = {
-  async listByUserId(userId: string, limit = 50): Promise<CreditTransactionRow[]> {
+  async getById(id: string): Promise<Tables<"practice_rooms"> | null> {
     const { data, error } = await supabase
-      .from("credit_transactions")
-      .select("id, user_id, amount, action, created_at, session_id, description")
+      .from("practice_rooms")
+      .select("id, name, description, status, max_players, is_public, host_id, created_at")
+      .eq("id", id)
+      .maybeSingle();
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "practice_rooms",
+        operation: "getById",
+      });
+    }
+
+    return data ?? null;
+  },
+
+  async create(room: TablesInsert<"practice_rooms">): Promise<Tables<"practice_rooms">> {
+    return query(
+      () =>
+        supabase
+          .from("practice_rooms")
+          .insert(room)
+          .select("id, name, description, status, max_players, is_public, host_id, created_at")
+          .single(),
+      { table: "practice_rooms", operation: "create" },
+    );
+  },
+
+  async delete(id: string): Promise<void> {
+    const { error } = await supabase.from("practice_rooms").delete().eq("id", id);
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "practice_rooms",
+        operation: "delete",
+      });
+    }
+  },
+
+  async updateStatus(id: string, status: string): Promise<void> {
+    const { error } = await supabase
+      .from("practice_rooms")
+      .update({ status })
+      .eq("id", id);
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "practice_rooms",
+        operation: "updateStatus",
+      });
+    }
+  },
+
+  async listParticipants(roomId: string): Promise<Tables<"room_participants">[]> {
+    const { data, error } = await supabase
+      .from("room_participants")
+      .select("*")
+      .eq("room_id", roomId)
+      .is("left_at", null);
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "room_participants",
+        operation: "listParticipants",
+      });
+    }
+
+    return data ?? [];
+  },
+
+  async findParticipant(
+    roomId: string,
+    userId: string,
+  ): Promise<Tables<"room_participants"> | null> {
+    const { data, error } = await supabase
+      .from("room_participants")
+      .select("*")
+      .eq("room_id", roomId)
       .eq("user_id", userId)
-      .order("created_at", { ascending: false })
+      .maybeSingle();
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "room_participants",
+        operation: "findParticipant",
+      });
+    }
+
+    return data ?? null;
+  },
+
+  async addParticipant(row: TablesInsert<"room_participants">): Promise<Tables<"room_participants">> {
+    return query(
+      () => supabase.from("room_participants").insert(row).select().single(),
+      { table: "room_participants", operation: "addParticipant" },
+    );
+  },
+
+  async reactivateParticipant(id: string, role: string): Promise<void> {
+    const { error } = await supabase
+      .from("room_participants")
+      .update({ left_at: null, role, joined_at: new Date().toISOString() })
+      .eq("id", id);
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "room_participants",
+        operation: "reactivateParticipant",
+      });
+    }
+  },
+
+  async markParticipantLeft(roomId: string, userId: string): Promise<void> {
+    const { error } = await supabase
+      .from("room_participants")
+      .update({ left_at: new Date().toISOString() })
+      .eq("room_id", roomId)
+      .eq("user_id", userId);
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "room_participants",
+        operation: "markParticipantLeft",
+      });
+    }
+  },
+
+  async listQuestions(roomId: string): Promise<Tables<"room_questions">[]> {
+    const { data, error } = await supabase
+      .from("room_questions")
+      .select("*")
+      .eq("room_id", roomId)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "room_questions",
+        operation: "listQuestions",
+      });
+    }
+
+    return data ?? [];
+  },
+
+  async listMessages(roomId: string, limit = 100): Promise<Tables<"room_chat">[]> {
+    const { data, error } = await supabase
+      .from("room_chat")
+      .select("*")
+      .eq("room_id", roomId)
+      .order("created_at", { ascending: true })
       .limit(limit);
 
     if (error) {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
-        table: "credit_transactions",
-        operation: "listByUserId",
+        table: "room_chat",
+        operation: "listMessages",
       });
     }
+
     return data ?? [];
   },
 
-  async listByUserIdWithBalance(userId: string, limit = 100) {
-    const { data, error } = await supabase
-      .from("credit_transactions")
-      .select("id, action, amount, balance_after, description, created_at")
-      .eq("user_id", userId)
-      .order("created_at", { ascending: false })
-      .limit(limit);
-
+  async sendMessage(message: TablesInsert<"room_chat">): Promise<void> {
+    const { error } = await supabase.from("room_chat").insert(message);
     if (error) {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
-        table: "credit_transactions",
-        operation: "listByUserIdWithBalance",
+        table: "room_chat",
+        operation: "sendMessage",
       });
     }
-    return data ?? [];
-  },
-
-  async listRecent(limit = 50): Promise<CreditTransactionRow[]> {
-    const { data, error } = await supabase
-      .from("credit_transactions")
-      .select("id, user_id, amount, action, created_at, session_id, description")
-      .order("created_at", { ascending: false })
-      .limit(limit);
-
-    if (error) {
-      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
-        table: "credit_transactions",
-        operation: "listRecent",
-      });
-    }
-    return data ?? [];
-  },
-
-  async sumPurchasesSince(sinceIso: string): Promise<number> {
-    const { data, error } = await supabase
-      .from("credit_transactions")
-      .select("amount, action")
-      .gte("created_at", sinceIso);
-
-    if (error) {
-      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
-        table: "credit_transactions",
-        operation: "sumPurchasesSince",
-      });
-    }
-
-    return (data ?? [])
-      .filter((tx) => String(tx.action ?? "").includes("purchase"))
-      .reduce((sum, tx) => sum + Math.abs(Number(tx.amount) || 0), 0);
-  },
-
-  async monthlyRevenueByPlan(sinceIso: string): Promise<
-    { month: string; planId: string; totalCents: number }[]
-  > {
-    const { data, error } = await supabase
-      .from("credit_transactions")
-      .select("amount, action, created_at, user_id")
-      .gte("created_at", sinceIso)
-      .order("created_at", { ascending: false });
-
-    if (error) {
-      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
-        table: "credit_transactions",
-        operation: "monthlyRevenueByPlan",
-      });
-    }
-
-    const userIds = [...new Set((data ?? []).map((r) => r.user_id).filter(Boolean))];
-    const planByUser: Record<string, string> = {};
-
-    if (userIds.length > 0) {
-      const { data: profiles, error: profileErr } = await supabase
-        .from("profiles")
-        .select("id, plan_id")
-        .in("id", userIds);
-
-      if (profileErr) {
-        throw new DatabaseError(profileErr.message, ErrorCode.DB_QUERY_FAILED, {
-          table: "profiles",
-          operation: "monthlyRevenueByPlan.plans",
-        });
-      }
-
-      (profiles ?? []).forEach((p) => {
-        if (p.id) planByUser[p.id] = p.plan_id ?? "free";
-      });
-    }
-
-    const bucket: Record<string, number> = {};
-    for (const tx of data ?? []) {
-      const action = String(tx.action ?? "");
-      if (!action.includes("subscription") && !action.includes("purchase")) continue;
-      const month = tx.created_at?.slice(0, 7) ?? "unknown";
-      const planId = planByUser[tx.user_id] ?? "unknown";
-      const key = `${month}|${planId}`;
-      bucket[key] = (bucket[key] ?? 0) + Math.abs(Number(tx.amount) || 0);
-    }
-
-    return Object.entries(bucket).map(([key, totalCents]) => {
-      const [month, planId] = key.split("|");
-      return { month, planId, totalCents };
-    });
   },
 };
 

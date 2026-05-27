@@ -1,4 +1,3 @@
-// @ts-nocheck
 // src/hooks/useRoom.ts — PRODUCTION FIXED
 // Fixes (F4):
 // - requireUserId() guard: createRoom/joinRoom throw immediately if user.id is undefined
@@ -11,14 +10,17 @@
 
 import { useState, useEffect, useRef, useCallback } from "react";
 import { supabase } from "@/lib/supabase/client";
+import { practiceRoomsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
-import { generateId, generateShareToken } from "@/lib/utils";
+import { generateId } from "@/lib/utils";
 import type {
   PracticeRoom,
   RoomParticipant,
   RoomQuestion,
   RoomChatMessage,
 } from "@/types/room.types";
+import type { Tables } from "@/integrations/supabase";
+import type { InterviewType } from "@/types/session.types";
 
 /* ─── HELPERS ─────────────────────────────────────────────────────────────── */
 
@@ -30,6 +32,62 @@ import type {
 function requireUserId(userId: string | undefined | null, context: string): string {
   if (!userId) throw new Error(`${context}: user is not authenticated. Please sign in.`);
   return userId;
+}
+
+function mapPracticeRoom(row: Tables<"practice_rooms">): PracticeRoom {
+  return {
+    id: row.id,
+    host_id: row.host_id,
+    name: row.name,
+    interview_type: "mixed",
+    status: row.status as PracticeRoom["status"],
+    max_participants: row.max_players,
+    is_public: row.is_public,
+    share_token: row.id,
+    current_question_index: 0,
+    started_at: null,
+    ended_at: null,
+    created_at: row.created_at,
+    updated_at: row.created_at,
+  };
+}
+
+function mapParticipant(row: Tables<"room_participants">): RoomParticipant {
+  return {
+    id: row.id,
+    room_id: row.room_id,
+    user_id: row.user_id,
+    full_name: "Participant",
+    avatar_url: null,
+    role: row.role as RoomParticipant["role"],
+    is_online: row.left_at === null,
+    is_ready: false,
+    joined_at: row.joined_at,
+  };
+}
+
+function mapQuestion(row: Tables<"room_questions">, index: number): RoomQuestion {
+  return {
+    id: row.id,
+    room_id: row.room_id,
+    question_text: row.question,
+    question_type: (row.question_type ?? "mixed") as InterviewType,
+    order_index: index,
+    created_at: row.created_at,
+  };
+}
+
+function mapMessage(row: Tables<"room_chat">): RoomChatMessage {
+  return {
+    id: row.id,
+    room_id: row.room_id,
+    user_id: row.user_id,
+    full_name: "Participant",
+    avatar_url: null,
+    content: row.message,
+    type: "chat",
+    created_at: row.created_at,
+  };
 }
 
 /* ─── HOOK ────────────────────────────────────────────────────────────────── */
@@ -77,21 +135,21 @@ export function useRoom({ roomId }: UseRoomOptions = {}) {
     try {
       const [roomRes, participantsRes, questionsRes, messagesRes] =
         await Promise.all([
-          supabase.from("practice_rooms").select("*").eq("id", id).single(),
-          supabase.from("room_participants").select("*").eq("room_id", id),
-          supabase.from("room_questions").select("*").eq("room_id", id).order("order_index"),
-          supabase.from("room_chat").select("*").eq("room_id", id).order("created_at").limit(100),
+          practiceRoomsDB.getById(id),
+          practiceRoomsDB.listParticipants(id),
+          practiceRoomsDB.listQuestions(id),
+          practiceRoomsDB.listMessages(id, 100),
         ]);
 
       // ✅ FIX: Surface actual Supabase error messages rather than swallowing them
-      if (roomRes.error) throw new Error(roomRes.error.message);
+      if (!roomRes) throw new Error("Room not found");
 
-      if (roomRes.data)         setRoom(roomRes.data as PracticeRoom);
-      if (participantsRes.data) setParticipants(participantsRes.data as RoomParticipant[]);
-      if (questionsRes.data)    setQuestions(questionsRes.data as RoomQuestion[]);
-      if (messagesRes.data)     setMessages(messagesRes.data as RoomChatMessage[]);
+      setRoom(mapPracticeRoom(roomRes));
+      setParticipants(participantsRes.map(mapParticipant));
+      setQuestions(questionsRes.map(mapQuestion));
+      setMessages(messagesRes.map(mapMessage));
 
-      isHostRef.current = roomRes.data?.host_id === user?.id;
+      isHostRef.current = roomRes.host_id === user?.id;
 
       subscribeToRoom(id);
     } catch (err) {
@@ -110,7 +168,7 @@ export function useRoom({ roomId }: UseRoomOptions = {}) {
         event: "*", schema: "public", table: "practice_rooms",
         filter: `id=eq.${id}`,
       }, (payload) => {
-        if (payload.new) setRoom(payload.new as PracticeRoom);
+        if (payload.new) setRoom(mapPracticeRoom(payload.new as Tables<"practice_rooms">));
       })
       .on("postgres_changes", {
         event: "INSERT", schema: "public", table: "room_participants",
@@ -118,8 +176,9 @@ export function useRoom({ roomId }: UseRoomOptions = {}) {
       }, (payload) => {
         setParticipants((prev) => {
           // Deduplicate in case the INSERT fires before our optimistic update
-          const exists = prev.some((p) => p.id === (payload.new as RoomParticipant).id);
-          return exists ? prev : [...prev, payload.new as RoomParticipant];
+          const next = mapParticipant(payload.new as Tables<"room_participants">);
+          const exists = prev.some((p) => p.id === next.id);
+          return exists ? prev : [...prev, next];
         });
       })
       .on("postgres_changes", {
@@ -128,8 +187,8 @@ export function useRoom({ roomId }: UseRoomOptions = {}) {
       }, (payload) => {
         setParticipants((prev) =>
           prev.map((p) =>
-            p.id === (payload.new as RoomParticipant).id
-              ? (payload.new as RoomParticipant)
+            p.id === (payload.new as Tables<"room_participants">).id
+              ? mapParticipant(payload.new as Tables<"room_participants">)
               : p,
           ),
         );
@@ -139,8 +198,9 @@ export function useRoom({ roomId }: UseRoomOptions = {}) {
         filter: `room_id=eq.${id}`,
       }, (payload) => {
         setMessages((prev) => {
-          const exists = prev.some((m) => m.id === (payload.new as RoomChatMessage).id);
-          return exists ? prev : [...prev, payload.new as RoomChatMessage];
+          const next = mapMessage(payload.new as Tables<"room_chat">);
+          const exists = prev.some((m) => m.id === next.id);
+          return exists ? prev : [...prev, next];
         });
       })
       .subscribe();
@@ -189,26 +249,26 @@ export function useRoom({ roomId }: UseRoomOptions = {}) {
     }
 
     const newRoomId  = generateId();
-    const shareToken = generateShareToken();
 
-    const newRoom: Partial<PracticeRoom> = {
+    const newRoom: Tables<"practice_rooms">["Insert"] = {
       id:               newRoomId,
       host_id:          userId,            // ✅ guaranteed non-undefined
       name:             params.name.trim(),
-      interview_type:   params.interviewType as any,
+      description:      `Interview type: ${params.interviewType}`,
       status:           "waiting",
-      max_participants: params.maxParticipants ?? 4,
+      max_players:      params.maxParticipants ?? 4,
       is_public:        params.isPublic ?? false,
-      share_token:      shareToken,
-      current_question_index: 0,
-      created_at:       new Date().toISOString(),
-      updated_at:       new Date().toISOString(),
     };
 
     // 1. Insert room
-    const { error: roomError } = await supabase.from("practice_rooms").insert(newRoom);
-    if (roomError) {
-      return { roomId: null, shareToken: null, error: roomError.message };
+    try {
+      await practiceRoomsDB.create(newRoom);
+    } catch (err) {
+      return {
+        roomId: null,
+        shareToken: null,
+        error: err instanceof Error ? err.message : "Failed to create room",
+      };
     }
 
     // 2. ✅ FIX: Insert host into room_participants IMMEDIATELY after room creation,
@@ -218,7 +278,7 @@ export function useRoom({ roomId }: UseRoomOptions = {}) {
     const joinResult = await joinRoom(newRoomId, "interviewer");
     if (joinResult.error) {
       // Rollback: delete the room so we don't leave an orphaned room with no host
-      await supabase.from("practice_rooms").delete().eq("id", newRoomId);
+      await practiceRoomsDB.delete(newRoomId);
       return {
         roomId: null,
         shareToken: null,
@@ -226,7 +286,7 @@ export function useRoom({ roomId }: UseRoomOptions = {}) {
       };
     }
 
-    return { roomId: newRoomId, shareToken, error: null };
+    return { roomId: newRoomId, shareToken: newRoomId, error: null };
   }, [user?.id, joinRoom]);
 
   /* ── Join room ──────────────────────────────────────────────────────────── */
@@ -245,48 +305,38 @@ export function useRoom({ roomId }: UseRoomOptions = {}) {
 
     // ✅ FIX: Duplicate guard — prevents unique constraint violation when the
     // same user rejoins (e.g. page refresh, reconnect, or back navigation).
-    const { data: existing } = await supabase
-      .from("room_participants")
-      .select("id")
-      .eq("room_id", id)
-      .eq("user_id", userId)
-      .maybeSingle();
+    const existing = await practiceRoomsDB.findParticipant(id, userId);
 
     if (existing) {
       // Already a participant — update online status and role instead of inserting
-      const { error: updateError } = await supabase
-        .from("room_participants")
-        .update({ is_online: true, role, joined_at: new Date().toISOString() })
-        .eq("id", existing.id);
-      return { error: updateError?.message ?? null };
+      try {
+        await practiceRoomsDB.reactivateParticipant(existing.id, role);
+        return { error: null };
+      } catch (err) {
+        return { error: err instanceof Error ? err.message : "Failed to rejoin room" };
+      }
     }
 
-    const participant: Partial<RoomParticipant> = {
-      id:         generateId(),
+    const participant: Tables<"room_participants">["Insert"] = {
       room_id:    id,
       user_id:    userId,               // ✅ guaranteed non-undefined
-      full_name:  profile?.full_name ?? "Anonymous",
-      avatar_url: profile?.avatar_url ?? null,
       role,
-      is_online:  true,
-      is_ready:   false,
-      joined_at:  new Date().toISOString(),
     };
 
-    const { error } = await supabase.from("room_participants").insert(participant);
-    return { error: error?.message ?? null };
-  }, [user?.id, profile]);
+    try {
+      await practiceRoomsDB.addParticipant(participant);
+      return { error: null };
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : "Failed to join room" };
+    }
+  }, [user?.id]);
 
   /* ── Leave room ─────────────────────────────────────────────────────────── */
 
   const leaveRoom = useCallback(async (): Promise<void> => {
     if (!user?.id || !roomId) return;
 
-    await supabase
-      .from("room_participants")
-      .delete()
-      .eq("room_id", roomId)
-      .eq("user_id", user.id);
+    await practiceRoomsDB.markParticipantLeft(roomId, user.id);
 
     cleanup();
   }, [user?.id, roomId, cleanup]);
@@ -296,10 +346,7 @@ export function useRoom({ roomId }: UseRoomOptions = {}) {
   const startRoom = useCallback(async (): Promise<void> => {
     if (!isHostRef.current || !roomId) return;
 
-    await supabase
-      .from("practice_rooms")
-      .update({ status: "in_progress", started_at: new Date().toISOString() })
-      .eq("id", roomId);
+    await practiceRoomsDB.updateStatus(roomId, "in_progress");
   }, [roomId]);
 
   /* ── Advance question (host only) ───────────────────────────────────────── */
@@ -309,15 +356,9 @@ export function useRoom({ roomId }: UseRoomOptions = {}) {
 
     const nextIndex = room.current_question_index + 1;
     if (nextIndex >= questions.length) {
-      await supabase
-        .from("practice_rooms")
-        .update({ status: "completed", ended_at: new Date().toISOString() })
-        .eq("id", room.id);
+      await practiceRoomsDB.updateStatus(room.id, "completed");
     } else {
-      await supabase
-        .from("practice_rooms")
-        .update({ current_question_index: nextIndex })
-        .eq("id", room.id);
+      setRoom({ ...room, current_question_index: nextIndex });
     }
   }, [room, questions.length]);
 
@@ -326,19 +367,14 @@ export function useRoom({ roomId }: UseRoomOptions = {}) {
   const sendMessage = useCallback(async (content: string): Promise<void> => {
     if (!user?.id || !roomId || !content.trim()) return;
 
-    const message: Partial<RoomChatMessage> = {
-      id:         generateId(),
+    const message: Tables<"room_chat">["Insert"] = {
       room_id:    roomId,
       user_id:    user.id,
-      full_name:  profile?.full_name ?? "Anonymous",
-      avatar_url: profile?.avatar_url ?? null,
-      content:    content.trim(),
-      type:       "chat",
-      created_at: new Date().toISOString(),
+      message:    content.trim(),
     };
 
-    await supabase.from("room_chat").insert(message);
-  }, [user?.id, roomId, profile]);
+    await practiceRoomsDB.sendMessage(message);
+  }, [user?.id, roomId]);
 
   /* ── Toggle ready ───────────────────────────────────────────────────────── */
 
@@ -348,10 +384,9 @@ export function useRoom({ roomId }: UseRoomOptions = {}) {
     const me = participants.find((p) => p.user_id === user.id);
     if (!me) return;
 
-    await supabase
-      .from("room_participants")
-      .update({ is_ready: !me.is_ready })
-      .eq("id", me.id);
+    setParticipants((prev) =>
+      prev.map((p) => (p.id === me.id ? { ...p, is_ready: !p.is_ready } : p)),
+    );
   }, [user?.id, roomId, participants]);
 
   /* ── Computed ───────────────────────────────────────────────────────────── */
