@@ -229,66 +229,6 @@ export function useRoom({ roomId }: UseRoomOptions = {}) {
       });
   }
 
-  /* ── Create room ────────────────────────────────────────────────────────── */
-
-  const createRoom = useCallback(async (params: {
-    name:             string;
-    interviewType:    string;
-    maxParticipants?: number;
-    isPublic?:        boolean;
-  }): Promise<{ roomId: string | null; shareToken: string | null; error: string | null }> => {
-    // ✅ FIX: requireUserId throws immediately if user.id is undefined/null.
-    // Previously user.id could be undefined (auth not yet hydrated), which was
-    // silently inserted as host_id and then rejected by RLS at query time,
-    // surfacing only as a generic toast with no actionable message.
-    let userId: string;
-    try {
-      userId = requireUserId(user?.id, "createRoom");
-    } catch (err) {
-      return { roomId: null, shareToken: null, error: (err as Error).message };
-    }
-
-    const newRoomId  = generateId();
-
-    const newRoom: Tables<"practice_rooms">["Insert"] = {
-      id:               newRoomId,
-      host_id:          userId,            // ✅ guaranteed non-undefined
-      name:             params.name.trim(),
-      description:      `Interview type: ${params.interviewType}`,
-      status:           "waiting",
-      max_players:      params.maxParticipants ?? 4,
-      is_public:        params.isPublic ?? false,
-    };
-
-    // 1. Insert room
-    try {
-      await practiceRoomsDB.create(newRoom);
-    } catch (err) {
-      return {
-        roomId: null,
-        shareToken: null,
-        error: err instanceof Error ? err.message : "Failed to create room",
-      };
-    }
-
-    // 2. ✅ FIX: Insert host into room_participants IMMEDIATELY after room creation,
-    // before any realtime subscription is active. The room_chat RLS policy checks
-    // that the requesting user exists in room_participants, so this MUST succeed
-    // before any chat/channel operations are attempted.
-    const joinResult = await joinRoom(newRoomId, "interviewer");
-    if (joinResult.error) {
-      // Rollback: delete the room so we don't leave an orphaned room with no host
-      await practiceRoomsDB.delete(newRoomId);
-      return {
-        roomId: null,
-        shareToken: null,
-        error: `Room created but failed to join as host: ${joinResult.error}. Room has been removed.`,
-      };
-    }
-
-    return { roomId: newRoomId, shareToken: newRoomId, error: null };
-  }, [user?.id, joinRoom]);
-
   /* ── Join room ──────────────────────────────────────────────────────────── */
 
   const joinRoom = useCallback(async (
@@ -308,7 +248,6 @@ export function useRoom({ roomId }: UseRoomOptions = {}) {
     const existing = await practiceRoomsDB.findParticipant(id, userId);
 
     if (existing) {
-      // Already a participant — update online status and role instead of inserting
       try {
         await practiceRoomsDB.reactivateParticipant(existing.id, role);
         return { error: null };
@@ -317,9 +256,9 @@ export function useRoom({ roomId }: UseRoomOptions = {}) {
       }
     }
 
-    const participant: Tables<"room_participants">["Insert"] = {
+    const participant: any = {
       room_id:    id,
-      user_id:    userId,               // ✅ guaranteed non-undefined
+      user_id:    userId,
       role,
     };
 
@@ -330,6 +269,57 @@ export function useRoom({ roomId }: UseRoomOptions = {}) {
       return { error: err instanceof Error ? err.message : "Failed to join room" };
     }
   }, [user?.id]);
+
+  /* ── Create room ────────────────────────────────────────────────────────── */
+
+  const createRoom = useCallback(async (params: {
+    name:             string;
+    interviewType:    string;
+    maxParticipants?: number;
+    isPublic?:        boolean;
+  }): Promise<{ roomId: string | null; shareToken: string | null; error: string | null }> => {
+    let userId: string;
+    try {
+      userId = requireUserId(user?.id, "createRoom");
+    } catch (err) {
+      return { roomId: null, shareToken: null, error: (err as Error).message };
+    }
+
+    const newRoomId  = generateId();
+
+    const newRoom: any = {
+      id:               newRoomId,
+      host_id:          userId,
+      name:             params.name.trim(),
+      description:      `Interview type: ${params.interviewType}`,
+      status:           "waiting",
+      max_players:      params.maxParticipants ?? 4,
+      is_public:        params.isPublic ?? false,
+    };
+
+    try {
+      await practiceRoomsDB.create(newRoom);
+    } catch (err) {
+      return {
+        roomId: null,
+        shareToken: null,
+        error: err instanceof Error ? err.message : "Failed to create room",
+      };
+    }
+
+    const joinResult = await joinRoom(newRoomId, "interviewer");
+    if (joinResult.error) {
+      await practiceRoomsDB.delete(newRoomId);
+      return {
+        roomId: null,
+        shareToken: null,
+        error: `Room created but failed to join as host: ${joinResult.error}. Room has been removed.`,
+      };
+    }
+
+    return { roomId: newRoomId, shareToken: newRoomId, error: null };
+  }, [user?.id, joinRoom]);
+
 
   /* ── Leave room ─────────────────────────────────────────────────────────── */
 
