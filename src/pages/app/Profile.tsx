@@ -66,7 +66,7 @@ function ProfilePageSkeleton() {
 
 export default function Profile() {
   const { profile: storeProfile, user, setProfile } = useAuthStore();
-  const [profile, setLocalProfile] = useState<ProfileRow | null>(storeProfile);
+  const [profile, setLocalProfile] = useState<any>(storeProfile);
   const [profileLoading, setProfileLoading] = useState(!storeProfile);
   const [profileError, setProfileError] = useState<string | null>(null);
 
