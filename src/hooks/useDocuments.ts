@@ -105,7 +105,7 @@ export function useDocuments(options?: UseDocumentsOptions) {
           parse_status: (j.parse_status ?? "ready") as JDDocument["parse_status"],
           updated_at: j.updated_at ?? j.created_at,
         }));
-        docStore.setJDs(mapped as JDDocument[]);
+        docStore.setJDs(mapped as unknown as JDDocument[]);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to load documents";
