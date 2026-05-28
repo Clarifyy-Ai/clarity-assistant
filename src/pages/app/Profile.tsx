@@ -82,7 +82,7 @@ export default function Profile() {
     try {
       const row = await profilesDB.getById(user.id);
       setLocalProfile(row);
-      setProfile(row);
+      setProfile(row as any);
     } catch (err) {
       setProfileError(err instanceof Error ? err.message : "Failed to load profile");
     } finally {
