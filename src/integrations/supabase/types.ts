@@ -3051,8 +3051,6 @@ export type Database = {
         Returns: undefined
       }
       refund_credits: { Args: { p_cost: number }; Returns: Json }
-      show_limit: { Args: never; Returns: number }
-      show_trgm: { Args: { "": string }; Returns: string[] }
       update_topic_performance: {
         Args: {
           p_attempted_delta: number
