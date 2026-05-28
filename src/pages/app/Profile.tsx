@@ -288,7 +288,7 @@ export default function Profile() {
                     className="flex items-center justify-between text-sm border-b border-border/50 pb-2 last:border-0"
                   >
                     <span className="text-foreground capitalize">
-                      {session.session_type ?? "Practice"}
+                      {(session as any).session_type ?? "Practice"}
                     </span>
                     <span className="text-muted-foreground text-xs">
                       {session.created_at
