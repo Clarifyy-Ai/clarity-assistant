@@ -357,7 +357,7 @@ export function useRoom({ roomId }: UseRoomOptions = {}) {
   const sendMessage = useCallback(async (content: string): Promise<void> => {
     if (!user?.id || !roomId || !content.trim()) return;
 
-    const message: Tables<"room_chat">["Insert"] = {
+    const message: any = {
       room_id:    roomId,
       user_id:    user.id,
       message:    content.trim(),
