@@ -71,14 +71,11 @@ export function useInterviewScheduler() {
     }
 
     if (data) {
-      schedulerLastFetchAt = Date.now();
-      schedulerLastFetchUserId = user.id;
-
       type InterviewRow = ScheduledInterview & {
         interview_rounds?: InterviewRound[];
       };
 
-      const interviews = (data as InterviewRow[]).map((i) => ({
+      const interviews = (data as unknown as InterviewRow[]).map((i) => ({
         ...i,
         rounds:     i.interview_rounds ?? [],
         next_round: getNextRound(i.interview_rounds ?? []),

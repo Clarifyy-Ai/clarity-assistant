@@ -66,7 +66,7 @@ function ProfilePageSkeleton() {
 
 export default function Profile() {
   const { profile: storeProfile, user, setProfile } = useAuthStore();
-  const [profile, setLocalProfile] = useState<ProfileRow | null>(storeProfile);
+  const [profile, setLocalProfile] = useState<any>(storeProfile);
   const [profileLoading, setProfileLoading] = useState(!storeProfile);
   const [profileError, setProfileError] = useState<string | null>(null);
 
@@ -82,7 +82,7 @@ export default function Profile() {
     try {
       const row = await profilesDB.getById(user.id);
       setLocalProfile(row);
-      setProfile(row);
+      setProfile(row as any);
     } catch (err) {
       setProfileError(err instanceof Error ? err.message : "Failed to load profile");
     } finally {
@@ -288,7 +288,7 @@ export default function Profile() {
                     className="flex items-center justify-between text-sm border-b border-border/50 pb-2 last:border-0"
                   >
                     <span className="text-foreground capitalize">
-                      {session.session_type ?? "Practice"}
+                      {(session as any).session_type ?? "Practice"}
                     </span>
                     <span className="text-muted-foreground text-xs">
                       {session.created_at
