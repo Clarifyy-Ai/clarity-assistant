@@ -282,9 +282,9 @@ export function useDocuments(options?: UseDocumentsOptions) {
     if (!resume) return;
 
     // Delete file from storage
-    if (resume.file_path) {
+    if ((resume as any).file_path) {
       try {
-        await deleteFile(STORAGE_BUCKETS.RESUMES, resume.file_path);
+        await deleteFile(STORAGE_BUCKETS.RESUMES, (resume as any).file_path);
       } catch (err) {
         console.warn("[useDocuments] deleteFile failed:", err);
       }
