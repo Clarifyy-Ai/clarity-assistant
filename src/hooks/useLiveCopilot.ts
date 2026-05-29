@@ -54,6 +54,7 @@ export function useLiveCopilot({
   const coachStore = useCoachStore();
 
   const abortRef = useRef<AbortController | null>(null);
+  const chatAbortRef = useRef<AbortController | null>(null);
   const lastQuestionRef = useRef<string | null>(null);
   const dragCleanupRef = useRef<(() => void) | null>(null);
   const sessionIdRef = useRef<string>(generateId());
