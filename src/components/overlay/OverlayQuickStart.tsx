@@ -77,7 +77,7 @@ export function OverlayQuickStart({ onStart }: OverlayQuickStartProps) {
       jd_id:                activeJdId,
       interview_type:       interviewType,
       instructions:         "",
-      enable_system_audio:  false,
+      enable_system_audio:  true,
     };
 
     /* Slight delay for ripple animation feel */

@@ -54,6 +54,7 @@ export function useLiveCopilot({
   const coachStore = useCoachStore();
 
   const abortRef = useRef<AbortController | null>(null);
+  const chatAbortRef = useRef<AbortController | null>(null);
   const lastQuestionRef = useRef<string | null>(null);
   const dragCleanupRef = useRef<(() => void) | null>(null);
   const sessionIdRef = useRef<string>(generateId());
@@ -401,9 +402,10 @@ export function useLiveCopilot({
         return;
       }
 
-      abortRef.current?.abort();
+      // Dedicated chat abort — do NOT cancel the auto-hint pipeline
+      chatAbortRef.current?.abort();
       const controller = new AbortController();
-      abortRef.current = controller;
+      chatAbortRef.current = controller;
 
       const requestId = generateId();
       useOverlayStore.getState().setChatGenerating(true);
@@ -455,6 +457,7 @@ export function useLiveCopilot({
           });
         }
       } finally {
+        if (chatAbortRef.current === controller) chatAbortRef.current = null;
         useOverlayStore.getState().setChatGenerating(false);
       }
     },
