@@ -35,6 +35,7 @@ import { OverlaySessionStats } from "./OverlaySessionStats";
 import { OverlayHotkeyHelp } from "./OverlayHotkeyHelp";
 import { OverlayAnswerTimer } from "./OverlayAnswerTimer";
 import { OverlayAudioBadge } from "./OverlayAudioBadge";
+import { OverlaySystemAudioBanner } from "./OverlaySystemAudioBanner";
 
 import { LiveTranscriptStream } from "@/components/live/LiveTranscriptStream";
 
@@ -342,6 +343,10 @@ export function OverlayWindow({
           ) : (
             <>
               <OverlayComplianceBanner compact={isMobile} />
+              <OverlaySystemAudioBanner
+                enabled={!!onToggleSystemAudio}
+                onRetry={onToggleSystemAudio}
+              />
               <ScreenCaptureBanner />
 
               {isPanicVisible && panicContent ? (
