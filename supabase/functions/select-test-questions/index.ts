@@ -424,23 +424,25 @@ Deno.serve(async (req: Request) => {
       ...pickQuestions(pools.HARD,   countHard),
     ];
 
-    /* ── AI GAP-FILL ───────────────────────────────────────────────────── */
-    let finalIds       = [...selectedIds];
-    const gap          = question_count - finalIds.length;
-    let generatedCount = 0;
+    /* ── NO AI GAP-FILL (policy) ───────────────────────────────────────────
+     * Exam papers must come from the official-source scraper
+     * (admin → collect-exam-papers). We no longer synthesize MCQs via Gemini
+     * to fill gaps — that yielded inconsistent quality and is disallowed
+     * per product policy.
+     */
+    let finalIds         = [...selectedIds];
+    const gap            = question_count - finalIds.length;
+    const generatedCount = 0;
     let gapFillError: string | undefined;
 
     if (gap > 0) {
-      console.log(
-        `[select-test-questions] Target=${question_count}, found=${finalIds.length}. ` +
-        `Gap-filling ${gap} via Gemini. exam_type="${exam_type ?? "any"}"`,
+      console.warn(
+        `[select-test-questions] Bank short by ${gap} for exam_type="${exam_type ?? "any"}". ` +
+        `AI gap-fill is disabled; admin must run collect-exam-papers.`,
       );
-      const gapResult = await generateGapQuestions(db, gap, subjects, topics, exam_type);
-      finalIds.push(...gapResult.ids);
-      generatedCount = gapResult.ids.length;
-      if (gapResult.error && gapResult.ids.length === 0) {
-        gapFillError = gapResult.error;
-      }
+      gapFillError =
+        `Question bank is short by ${gap}. Ask an admin to import more official papers ` +
+        `(Admin → Seed Questions → Collect from public sources).`;
     }
 
     /* ── FINAL SHUFFLE & TRIM ──────────────────────────────────────────── */
