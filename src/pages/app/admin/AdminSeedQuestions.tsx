@@ -133,36 +133,11 @@ export default function AdminSeedQuestions() {
     }
   }
 
-  // Phase 3: Trigger AI gap-fill via select-test-questions (uses SYSTEM_USER_ID secret)
-  async function triggerGapFill(exam: string) {
-    const toastId = toast.loading(`Generating gap-fill questions for ${exam}…`);
-    try {
-      const res = await fetchEdgeJson<{
-        ai_generated_count?: number;
-        count?: number;
-      }>("select-test-questions", {
-        config: {
-          exam_type: exam,
-          question_count: 20,
-          subjects: ["General"],
-          topics: ["Gap fill"],
-          source_types: ["OFFICIAL_PYP", "AI_GENERATED"],
-        },
-      });
-      const generated = res.ai_generated_count ?? 0;
-      toast.success(
-        generated > 0
-          ? `Added ${generated} AI-generated questions for ${exam}.`
-          : `Bank already has enough questions for ${exam} (no gap fill needed).`,
-        { id: toastId }
-      );
-      void loadStats();
-    } catch (err) {
-      toast.error(
-        err instanceof Error ? err.message : "Gap fill failed. Check SYSTEM_USER_ID secret.",
-        { id: toastId }
-      );
-    }
+  // AI gap-fill is disabled by policy — admins must scrape papers via collect-exam-papers.
+  function triggerGapFill(exam: string) {
+    toast.error(
+      `AI gap-fill is disabled. Use "Collect from public sources" or upload PDFs to add more ${exam} questions.`,
+    );
   }
 
   async function collectPublicPapers() {
