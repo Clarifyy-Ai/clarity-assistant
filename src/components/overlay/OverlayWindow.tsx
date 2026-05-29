@@ -343,6 +343,10 @@ export function OverlayWindow({
           ) : (
             <>
               <OverlayComplianceBanner compact={isMobile} />
+              <OverlaySystemAudioBanner
+                enabled={!!onToggleSystemAudio}
+                onRetry={onToggleSystemAudio}
+              />
               <ScreenCaptureBanner />
 
               {isPanicVisible && panicContent ? (
