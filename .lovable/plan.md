@@ -1,82 +1,81 @@
-# Critical Batch — Production Readiness Fixes
+# Live Co-pilot Production Fixes — Plan
 
-Scope: only items #1–#6 from the audit's Critical list. No UI/behavior changes. Working features will not be modified.
-
-Guardrails (per your standing rules):
-- Do NOT modify any existing working feature, page, hook, or component.
-- Do NOT touch Live/Mock/Prep UI in this pass (those are in the High/spacing batch).
-- Each step is independent and reversible.
-- All DB changes ship as a single additive migration (no destructive DDL).
+Per your guardrails: investigate first, fix component-by-component, do not touch unrelated working features. Below is what I found and a tightly scoped fix plan for each of the 4 issues. Nothing has been changed yet.
 
 ---
 
-## Step 1 — Add missing production secrets (requires you)
+## Issue 1 — Chat only generates a single answer, slow response
 
-I cannot create these values; you must paste them via the secure form. The following are missing from the vault and block paid flows / email / AI gap-fill:
+**Findings (`src/hooks/useLiveCopilot.ts`)**
+- Every new chat call runs `abortRef.current?.abort()` (line 404), which is the *same* AbortController shared with the auto-hint pipeline. So sending a 2nd chat message aborts the 1st mid-stream, and any in-flight hint cancels chat too. That looks to the user like "only one answer ever finishes".
+- `submitManualQuestion` calls `routeHint(...)` with `answerMode` not pinned — chat uses the same hint router, which streams a short hint and stops. There's no separate `chatAbortRef`.
+- Slow response: `routeHint` → server round-trip + Gemini cold start. There's no streaming flush throttle issue, but `setChatGenerating(true)` is set *after* the abort, adding a render delay. Also no optimistic "thinking…" bubble.
 
-- `STRIPE_SECRET_KEY`
-- `STRIPE_WEBHOOK_SECRET`
-- `RESEND_API_KEY` (or confirm "skip email for now" and I'll feature-flag `send-email`)
-- `SYSTEM_USER_ID` (any admin UUID used as author for AI-generated questions)
-- `ALLOWED_ORIGINS` (comma list of allowed web origins for edge CORS)
+**Fix (scoped to `useLiveCopilot.ts` only)**
+1. Add a dedicated `chatAbortRef` separate from `abortRef` so chat and auto-hint don't cancel each other.
+2. Push the user message + an empty assistant placeholder into chat history *before* the await so the UI feels instant.
+3. Always set `answerMode: "chat"` (or keep "hint" but stop sharing the abort controller).
+4. Wrap in try/finally to guarantee `setChatGenerating(false)`.
 
-Stripe price IDs are frontend env (`VITE_STRIPE_PRICE_*`) — those go in your `.env`, not the secrets vault.
-
-If you want me to use **Lovable's built-in Stripe payments** instead of BYOK, say the word and I'll route through `enable_stripe_payments` (no key paste needed).
-
-## Step 2 — SECURITY DEFINER hardening migration (single migration)
-
-Single additive migration `20260527140000_definer_grants_and_pg_trgm.sql`:
-
-- `REVOKE EXECUTE ... FROM PUBLIC` on every SECURITY DEFINER function in `public` (deduct_credits, refund_credits, update_topic_performance, bulk_update_users, get_admin_perf_stats, get_admin_dau_mau, mark_notifications_read, add_credits, delete_expired_session_data, increment_profile_credits, is_admin, has_role).
-- `GRANT EXECUTE` back to `authenticated` only for the user-facing ones (deduct_credits, refund_credits, mark_notifications_read, update_topic_performance, has_role, is_admin).
-- `GRANT EXECUTE` only to `service_role` for admin/system RPCs (bulk_update_users, add_credits, delete_expired_session_data, increment_profile_credits, get_admin_perf_stats, get_admin_dau_mau).
-- Add explicit role check at the top of `refund_credits` and `increment_profile_credits` (defense in depth).
-
-## Step 3 — Move `pg_trgm` to `extensions` schema
-
-Same migration:
-```
-CREATE SCHEMA IF NOT EXISTS extensions;
-ALTER EXTENSION pg_trgm SET SCHEMA extensions;
-GRANT USAGE ON SCHEMA extensions TO authenticated, anon, service_role;
-```
-Then add `extensions` to the `search_path` of any function that uses trigram operators (none currently do in our SQL — only the operators are used inline, which Postgres resolves via the new schema in `search_path`).
-
-Risk: if any index uses `gin_trgm_ops` it stays valid (operators move with extension). Verified — no app code calls trigram functions by name.
-
-## Step 4 — Edge fleet redeploy
-
-Trigger `supabase--deploy_edge_functions` for all 41 functions in one call so they pick up the latest CORS + model fixes already in the repo.
-
-## Step 5 — Verification
-
-- Run `supabase--linter` after migration — confirm pg_trgm warning gone and no new errors.
-- `secrets--fetch_secrets` to confirm new secrets present.
-- Spot-check 2 edge functions via logs to confirm redeploy succeeded.
+No changes to stores, edge functions, or other hooks.
 
 ---
 
-## What this plan does NOT touch (intentional)
+## Issue 2 — System voice not read, only mic
 
-- Live Co-Pilot, Mock Interview, Mock Session, Overlay UI/spacing
-- AdminUsers/AdminRevenue responsive fixes
-- Skeleton loaders, N+1, pagination, ts-nocheck sweep
-- Badge variant normalization
-- Marketing copy, testimonials
-- Any working edge function logic
-- `src/integrations/supabase/types.ts` (read-only generated file)
+**Findings**
+- `useAudioSession.ts` line 104–134 correctly requests tab audio via `captureSystemAudio()` when `enableSystemAudio` is true, merges streams, and feeds Deepgram.
+- BUT `OverlayQuickStart.tsx:80` starts the live session with `enable_system_audio: false`. Other entry points (LiveOverlay, LiveRehearsal, MockInterview, wizards) pass `true`. If the user enters via Quick Start, the system stream is never requested → only mic is transcribed.
+- Even when `true`, `captureSystemAudioViaTabShare` requires the user to tick **"Share tab audio"** in Chrome's picker. If they miss it, we fall back to mic-only with a toast — but the toast may be missed.
 
-These remain queued for the High/Medium batches and will be proposed as separate component-scoped plans per your standing rule.
+**Fix (scoped, no logic changes to capture pipeline)**
+1. Flip `OverlayQuickStart.tsx:80` to `enable_system_audio: true` so the Quick Start path matches the other entry points.
+2. In `useAudioSession.ts`, after the tab-share confirm dialog, if the returned stream has 0 audio tracks (user didn't tick "Share audio"), show a **persistent banner** (not just a toast) via `streamError` with code `SYSTEM_AUDIO_MISSING_CHECKBOX` so the user can retry from the toolbar.
+
+I will NOT change `tabAudioCapture.ts`, `systemAudioCapture.ts`, or Deepgram wiring — they already work.
 
 ---
 
-## Order of operations
+## Issue 3 — Exam papers being scraped by AI, must use Edge function
 
-1. You approve this plan.
-2. You paste the 5 secrets (or tell me to skip email / use built-in Stripe).
-3. I write + submit the migration (you approve it).
-4. I trigger the bulk edge redeploy.
-5. I run the linter and report results.
+**Findings**
+- Edge function `supabase/functions/collect-exam-papers/index.ts` already exists (227 lines) and is the correct scraping path (allowlisted official portals: NTA, UPSC, SSC).
+- It IS already wired in `src/pages/app/admin/AdminSeedQuestions.tsx:177` via `fetchEdgeJson("collect-exam-papers", ...)`.
+- The "AI" path you're seeing is most likely **`parse-question-pdf`** (line 70 of `supabase/functions/parse-question-pdf/index.ts`) — that's Gemini extracting MCQs from an *already-downloaded* PDF, which is a different stage (parsing, not scraping). And the AI gap-fill in `select-test-questions` runs only when scraped questions are insufficient.
 
-Reply **approve** to proceed, or tell me which steps to drop/modify.
+**Question for you (need confirmation before changing)**
+- **Where exactly are you seeing AI used for scraping?** Options:
+  - (a) The "AI Gap-Fill" badge on mock test launch — that's *fallback* generation, not scraping. Should I disable it and hard-fail instead, forcing admins to run `collect-exam-papers` first?
+  - (b) An admin flow that calls Gemini directly to "fetch" papers (I didn't find this — please point me at the page).
+  - (c) The PDF parser (`parse-question-pdf`) — that is scraping *from* a PDF, but it's not web scraping. Should it be replaced with a non-AI parser?
+
+I will not touch `collect-exam-papers` or `parse-question-pdf` until you confirm which path is wrong.
+
+---
+
+## Issue 4 — Overlay not production-ready
+
+This is broad. Per your "component-by-component" rule, I'd rather not do a sweeping overlay rewrite. From prior audits the known overlay gaps are:
+- Cramped layout at < 1100px
+- No persistent error banner for missing tab audio (covered in Issue 2)
+- Chat input loses focus on stream commit
+- No "stop generating" button (only abort happens on next send)
+
+**Proposal:** I'll ship Issues 1–3 first. Then for the overlay, please tell me **which single sub-issue to tackle next** (layout, stop button, focus, error banner, etc.) so I can do it surgically without touching unrelated overlay code.
+
+---
+
+## Files I will touch (only after you approve)
+
+For Issues 1 + 2:
+- `src/hooks/useLiveCopilot.ts` — add `chatAbortRef`, optimistic chat bubble, try/finally
+- `src/components/overlay/OverlayQuickStart.tsx` — flip `enable_system_audio` to `true`
+- `src/hooks/useAudioSession.ts` — persistent banner when "Share audio" unchecked
+
+For Issue 3: waiting on your answer (a/b/c).
+
+For Issue 4: waiting on which sub-issue.
+
+**Nothing else will be modified.** No store changes, no edge function changes, no type changes, no migration.
+
+Approve to proceed with Issues 1 + 2, and answer the Issue 3 question.
