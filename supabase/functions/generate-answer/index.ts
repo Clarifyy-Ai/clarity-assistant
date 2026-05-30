@@ -19,6 +19,7 @@
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { bannedResponse, isUserBanned } from "../_shared/banCheck.ts";
 import {
   authenticateRequest,
   enforceResourceOwnership,
