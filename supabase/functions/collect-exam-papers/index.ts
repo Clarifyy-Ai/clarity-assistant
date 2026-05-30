@@ -17,9 +17,27 @@ const ALLOWED_HOSTS = new Set([
   "www.upsc.gov.in",
   "ssc.nic.in",
   "www.ssc.nic.in",
+  "ssc.gov.in",
+  "www.ssc.gov.in",
   "ibps.in",
   "www.ibps.in",
 ]);
+
+/**
+ * Official paper PDFs are frequently served from government CDN subdomains
+ * (e.g. NTA via cdnbbsr.s3waas.gov.in / digialm). We allowlist those for PDF
+ * downloads, while still restricting listing-page fetches to ALLOWED_HOSTS.
+ */
+const ALLOWED_PDF_HOSTS = new Set<string>([
+  ...ALLOWED_HOSTS,
+  "cdnbbsr.s3waas.gov.in",
+  "cdn3.digialm.com",
+  "cdn.digialm.com",
+  "documents.upsc.gov.in",
+  "static.upsc.gov.in",
+  "ibpsonline.ibps.in",
+]);
+
 
 /** Default listing pages per frontend exam id (admin can override with listing_url). */
 const DEFAULT_LISTINGS: Record<string, string[]> = {
@@ -39,14 +57,22 @@ function sanitizeText(v: unknown, max = 120): string {
   return String(v ?? "").replace(/[<>]/g, "").slice(0, max).trim();
 }
 
-function isAllowedUrl(raw: string): boolean {
+function isAllowedHost(raw: string, hosts: Set<string>): boolean {
   try {
     const u = new URL(raw);
     if (u.protocol !== "https:") return false;
-    return ALLOWED_HOSTS.has(u.hostname.toLowerCase());
+    return hosts.has(u.hostname.toLowerCase());
   } catch {
     return false;
   }
+}
+
+function isAllowedListingUrl(raw: string): boolean {
+  return isAllowedHost(raw, ALLOWED_HOSTS);
+}
+
+function isAllowedPdfUrl(raw: string): boolean {
+  return isAllowedHost(raw, ALLOWED_PDF_HOSTS);
 }
 
 function resolveUrl(href: string, base: string): string | null {
@@ -58,17 +84,26 @@ function resolveUrl(href: string, base: string): string | null {
 }
 
 function extractPdfLinks(html: string, pageUrl: string, year?: number): string[] {
-  const links = new Set<string>();
+  // Collect every allowlisted PDF on the page, then prefer ones whose URL
+  // mentions the requested year. Fall back to all matches if none match the
+  // year (handles ranges like "2024-25" that don't include the bare year).
+  const all: string[] = [];
   const re = /href=["']([^"']+\.pdf[^"']*)["']/gi;
   let m: RegExpExecArray | null;
+  const seen = new Set<string>();
   while ((m = re.exec(html)) !== null) {
     const resolved = resolveUrl(m[1], pageUrl);
-    if (!resolved || !isAllowedUrl(resolved)) continue;
-    if (year && !resolved.includes(String(year)) && !html.includes(String(year))) continue;
-    links.add(resolved);
+    if (!resolved || !isAllowedPdfUrl(resolved)) continue;
+    if (seen.has(resolved)) continue;
+    seen.add(resolved);
+    all.push(resolved);
   }
-  return [...links].slice(0, 5);
+  if (!year) return all.slice(0, 5);
+  const yearStr = String(year);
+  const withYear = all.filter((u) => u.includes(yearStr));
+  return (withYear.length > 0 ? withYear : all).slice(0, 5);
 }
+
 
 async function fetchText(url: string): Promise<string> {
   const res = await fetch(url, {
