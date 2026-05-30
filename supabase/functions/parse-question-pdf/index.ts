@@ -134,7 +134,7 @@ Deno.serve(async (req) => {
     }
 
     return errorResponse(
-      err instanceof Error ? err.message : "Internal server error",
+      "Internal server error",
       "INTERNAL",
       500,
       req
