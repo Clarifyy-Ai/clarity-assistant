@@ -201,9 +201,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    let totalImported = 0;
 
-    const errors: string[] = [];
 
     for (const pdfUrl of uniquePdfs) {
       try {
