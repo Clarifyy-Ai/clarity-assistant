@@ -17,6 +17,7 @@ import {
 } from "../_shared/cors.ts";
 
 import { authenticateRequest } from "../_shared/auth.ts";
+import { bannedResponse, isUserBanned } from "../_shared/banCheck.ts";
 
 import {
   checkRateLimit,
@@ -419,6 +420,10 @@ Deno.serve(async (req: Request) => {
 
   const body = validation.data;
   const db = createServiceClient();
+
+  if (await isUserBanned(db, user.id)) {
+    return withCorsHeaders(req, bannedResponse(corsHeaders));
+  }
 
   const sessionType = toSessionType(body);
   const company = sanitizeShortText(body.company);

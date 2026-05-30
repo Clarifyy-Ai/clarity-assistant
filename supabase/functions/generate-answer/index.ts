@@ -422,6 +422,10 @@ Deno.serve(async (req: Request) => {
     return withCors(rateLimitResponse(rateLimitResult), corsHeaders);
   }
 
+  if (await isUserBanned(db, user.id)) {
+    return withCors(bannedResponse(corsHeaders), corsHeaders);
+  }
+
   const validation = await parseAndValidateRequest(req, corsHeaders);
 
   if (!validation.ok) {
