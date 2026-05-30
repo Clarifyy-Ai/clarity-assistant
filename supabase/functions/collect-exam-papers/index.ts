@@ -169,29 +169,40 @@ Deno.serve(async (req) => {
     const systemUserId = Deno.env.get("SYSTEM_USER_ID") ?? auth.userId;
 
     const pdfUrls: string[] = [];
+    const errors: string[] = [];
     for (const page of listings) {
-      if (!isAllowedUrl(page)) {
+      if (!isAllowedListingUrl(page)) {
         return errorResponse(`Listing URL not on allowlist: ${page}`, "FORBIDDEN_URL", 403, req);
       }
-      const html = await fetchText(page);
-      pdfUrls.push(...extractPdfLinks(html, page, year));
+      try {
+        const html = await fetchText(page);
+        pdfUrls.push(...extractPdfLinks(html, page, year));
+      } catch (err) {
+        errors.push(`${page}: ${err instanceof Error ? err.message : "fetch failed"}`);
+      }
     }
 
-    const uniquePdfs = [...new Set(pdfUrls)].slice(0, 3);
+    const uniquePdfs = [...new Set(pdfUrls)].slice(0, 5);
     if (uniquePdfs.length === 0) {
       return successResponse(
         {
           imported: 0,
           pdfs_found: 0,
-          message: "No PDF links found on allowlisted pages. Try a different listing_url or year.",
+          pdfs_processed: 0,
+          message:
+            errors.length > 0
+              ? "Could not fetch any listing pages. See errors[] for details."
+              : "No PDF links found on allowlisted pages. Try a different listing_url or year.",
+          errors: errors.length ? errors : undefined,
         },
         undefined,
         200,
-        req
+        req,
       );
     }
 
     let totalImported = 0;
+
     const errors: string[] = [];
 
     for (const pdfUrl of uniquePdfs) {
