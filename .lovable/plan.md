@@ -1,81 +1,96 @@
-# Live Co-pilot Production Fixes — Plan
+# Production Hardening Plan
 
-Per your guardrails: investigate first, fix component-by-component, do not touch unrelated working features. Below is what I found and a tightly scoped fix plan for each of the 4 issues. Nothing has been changed yet.
+Two input sources are merged here:
+- **Security scan findings** (from `security--get_scan_results`): admin ban broken, "Make Admin" already partially fixed (verified in code), rate limiting on `send-email`/`export-user-data`/`delete-account`, raw `err.message` leakage in `analytics-dashboard` + `parse-question-pdf`, leaked-password protection (Supabase auth), realtime topic scoping, `referrals` over-permissive UPDATE, `room_chat` INSERT missing participant check.
+- **Production audit** (20 prioritized items you provided).
 
----
-
-## Issue 1 — Chat only generates a single answer, slow response
-
-**Findings (`src/hooks/useLiveCopilot.ts`)**
-- Every new chat call runs `abortRef.current?.abort()` (line 404), which is the *same* AbortController shared with the auto-hint pipeline. So sending a 2nd chat message aborts the 1st mid-stream, and any in-flight hint cancels chat too. That looks to the user like "only one answer ever finishes".
-- `submitManualQuestion` calls `routeHint(...)` with `answerMode` not pinned — chat uses the same hint router, which streams a short hint and stops. There's no separate `chatAbortRef`.
-- Slow response: `routeHint` → server round-trip + Gemini cold start. There's no streaming flush throttle issue, but `setChatGenerating(true)` is set *after* the abort, adding a render delay. Also no optimistic "thinking…" bubble.
-
-**Fix (scoped to `useLiveCopilot.ts` only)**
-1. Add a dedicated `chatAbortRef` separate from `abortRef` so chat and auto-hint don't cancel each other.
-2. Push the user message + an empty assistant placeholder into chat history *before* the await so the UI feels instant.
-3. Always set `answerMode: "chat"` (or keep "hint" but stop sharing the abort controller).
-4. Wrap in try/finally to guarantee `setChatGenerating(false)`.
-
-No changes to stores, edge functions, or other hooks.
+Per your standing rules, work ships **component-by-component**, **no changes to features outside each phase's scope**, and each phase is independently verifiable.
 
 ---
 
-## Issue 2 — System voice not read, only mic
+## Phase 1 — Security: DB + RLS hardening (migration only)
+**Guardrail:** schema changes only; no app code touched.
 
-**Findings**
-- `useAudioSession.ts` line 104–134 correctly requests tab audio via `captureSystemAudio()` when `enableSystemAudio` is true, merges streams, and feeds Deepgram.
-- BUT `OverlayQuickStart.tsx:80` starts the live session with `enable_system_audio: false`. Other entry points (LiveOverlay, LiveRehearsal, MockInterview, wizards) pass `true`. If the user enters via Quick Start, the system stream is never requested → only mic is transcribed.
-- Even when `true`, `captureSystemAudioViaTabShare` requires the user to tick **"Share tab audio"** in Chrome's picker. If they miss it, we fall back to mic-only with a toast — but the toast may be missed.
+1. `referrals` UPDATE policy — drop blanket policy, recreate restricted to non-sensitive columns only (status changes handled server-side via service_role).
+2. `room_chat` INSERT policy — add `WITH CHECK` requiring `EXISTS (room_participants WHERE room_id = NEW.room_id AND user_id = auth.uid())`.
+3. `realtime.messages` SELECT — add topic-scoped policies for `room:<id>:*` (verify participation) and `support:<thread>:*` (verify ownership).
+4. Verify `profiles` UPDATE policy has `WITH CHECK` that prevents self-elevating `role`/`is_admin` (trigger `protect_admin_column` already exists; confirm no UPDATE policy bypass exists, add explicit `WITH CHECK` if missing).
+5. Apply pending `refund_credits` hardening from `docs/PENDING_MIGRATION_refund_credits_hardening.sql`.
 
-**Fix (scoped, no logic changes to capture pipeline)**
-1. Flip `OverlayQuickStart.tsx:80` to `enable_system_audio: true` so the Quick Start path matches the other entry points.
-2. In `useAudioSession.ts`, after the tab-share confirm dialog, if the returned stream has 0 audio tracks (user didn't tick "Share audio"), show a **persistent banner** (not just a toast) via `streamError` with code `SYSTEM_AUDIO_MISSING_CHECKBOX` so the user can retry from the toolbar.
-
-I will NOT change `tabAudioCapture.ts`, `systemAudioCapture.ts`, or Deepgram wiring — they already work.
+Note: Supabase **leaked-password protection** is an Auth dashboard setting — cannot be toggled from migration. Flagged for user to enable in dashboard.
 
 ---
 
-## Issue 3 — Exam papers being scraped by AI, must use Edge function
+## Phase 2 — Security: Edge functions
+**Guardrail:** no signature changes; only add rate-limit + sanitize error responses.
 
-**Findings**
-- Edge function `supabase/functions/collect-exam-papers/index.ts` already exists (227 lines) and is the correct scraping path (allowlisted official portals: NTA, UPSC, SSC).
-- It IS already wired in `src/pages/app/admin/AdminSeedQuestions.tsx:177` via `fetchEdgeJson("collect-exam-papers", ...)`.
-- The "AI" path you're seeing is most likely **`parse-question-pdf`** (line 70 of `supabase/functions/parse-question-pdf/index.ts`) — that's Gemini extracting MCQs from an *already-downloaded* PDF, which is a different stage (parsing, not scraping). And the AI gap-fill in `select-test-questions` runs only when scraped questions are insufficient.
+6. `send-email/index.ts` — add `enforceRateLimit` with `{limit:3, windowMs:60_000}` after auth.
+7. `export-user-data/index.ts` — add `RATE_LIMIT_PRESETS.DATA_EXPORT` (2/h).
+8. `delete-account/index.ts` — add `RATE_LIMIT_PRESETS.ACCOUNT_DELETION` (1/24h).
+9. `analytics-dashboard/index.ts:200` — replace `err.message` with fixed `"Internal server error"`; keep `console.error` for the real error.
+10. `parse-question-pdf/index.ts:137` — same treatment, generic message client-side.
 
-**Question for you (need confirmation before changing)**
-- **Where exactly are you seeing AI used for scraping?** Options:
-  - (a) The "AI Gap-Fill" badge on mock test launch — that's *fallback* generation, not scraping. Should I disable it and hard-fail instead, forcing admins to run `collect-exam-papers` first?
-  - (b) An admin flow that calls Gemini directly to "fetch" papers (I didn't find this — please point me at the page).
-  - (c) The PDF parser (`parse-question-pdf`) — that is scraping *from* a PDF, but it's not web scraping. Should it be replaced with a non-AI parser?
-
-I will not touch `collect-exam-papers` or `parse-question-pdf` until you confirm which path is wrong.
+Deploy all five via `supabase--deploy_edge_functions`.
 
 ---
 
-## Issue 4 — Overlay not production-ready
+## Phase 3 — Admin actions correctness
+**Guardrail:** AdminUsers.tsx only.
 
-This is broad. Per your "component-by-component" rule, I'd rather not do a sweeping overlay rewrite. From prior audits the known overlay gaps are:
-- Cramped layout at < 1100px
-- No persistent error banner for missing tab audio (covered in Issue 2)
-- Chat input loses focus on stream commit
-- No "stop generating" button (only abort happens on next send)
-
-**Proposal:** I'll ship Issues 1–3 first. Then for the overlay, please tell me **which single sub-issue to tackle next** (layout, stop button, focus, error banner, etc.) so I can do it surgically without touching unrelated overlay code.
+11. `AdminUsers.tsx` — `make_admin` already correctly inserts into `user_roles` (verified at line 82-92, security finding is stale → mark fixed). `ban`/`unban` already toggles `is_banned` via `bulk_update_users` RPC (verified line 98-103, finding stale → mark fixed). Action: mark both findings fixed in scanner, no code change.
+12. Add server-side `is_banned` gate to `start-session` and `generate-answer` edge functions (rejects 403 if banned).
 
 ---
 
-## Files I will touch (only after you approve)
+## Phase 4 — Critical app fixes (audit 🔴)
+**Guardrail:** one file per change, no cross-feature refactors.
 
-For Issues 1 + 2:
-- `src/hooks/useLiveCopilot.ts` — add `chatAbortRef`, optimistic chat bubble, try/finally
-- `src/components/overlay/OverlayQuickStart.tsx` — flip `enable_system_audio` to `true`
-- `src/hooks/useAudioSession.ts` — persistent banner when "Share audio" unchecked
+13. `.single()` → `.maybeSingle()` in: `SessionDetail.tsx:53`, `DebriefDetail.tsx:85`, `TestResults.tsx:171`, `ResumeDetail.tsx:71`, `JDDetail.tsx:63`, `useGamification.ts:167/251/316`. Add null-guard + empty state per touched file.
+14. `AdminDashboard.tsx` — wrap `fetchStats`, `RecentSignups`, `SessionVolumeChart` in try/catch with `finally { setLoading(false) }`.
+15. N+1 elimination:
+    - `AdminDashboard.tsx:238` — one ranged `sessions` query, bucket in JS.
+    - `AdminAnalytics.tsx:85` — new `get_signup_series(p_days int)` RPC + replace 30-call loop.
+16. `AdminLayout.tsx` — `hidden md:flex` on `<aside>` + Sheet-based mobile drawer trigger in top bar.
 
-For Issue 3: waiting on your answer (a/b/c).
+---
 
-For Issue 4: waiting on which sub-issue.
+## Phase 5 — SEO meta on public pages
+**Guardrail:** install `react-helmet-async`, add `<HelmetProvider>` in `main.tsx`, add per-page `<Helmet>` to 11 pages; remove static canonical from `index.html` to avoid duplicates. No layout changes.
 
-**Nothing else will be modified.** No store changes, no edge function changes, no type changes, no migration.
+Pages: Landing, Pricing, Blog, BlogPost, Help, HelpArticle, Terms, Privacy, Login, Signup, NotFound (latter with `noindex`).
 
-Approve to proceed with Issues 1 + 2, and answer the Issue 3 question.
+---
+
+## Phase 6 — Audit 🟠 High
+17. `AdminDashboard.tsx:64` — replace `pro * 19` with `PLAN_PRICE_CENTS_MONTHLY`.
+18. `AdminRevenue.tsx` — derive `mrrGrowth`, `churnRate` from Stripe webhook tables (`subscriptions.canceled_at`, period-over-period); compute `ltv = arpu / churnRate` once churn is real.
+19. Extract `<PlanCTAButton>` component; replace `bg-violet-600`/`bg-amber-500` with semantic tokens in `UpgradeModal`, `PricingCard`, `PlanGate`, `ui/Tabs`.
+20. Add `zod` schemas to `Login.tsx` and `Signup.tsx` via `react-hook-form`.
+
+---
+
+## Phase 7 — Audit 🟡 Medium + 🟢 Low
+21. Landing testimonials — add "Illustrative" label (DB-backed deferred).
+22. Landing FAQ — interpolate from `PLANS` constants.
+23. AdminDashboard KPI deltas — WoW comparison.
+24. Practice Rooms voice/video — hide disabled buttons until shipped.
+25. Remove `// @ts-nocheck` from `Analytics.tsx` and `useStreakTracker.ts`, fix surfaced type errors.
+26. `useGamification`, `useStreakTracker`, `useXPSystem` — `setError` on failure.
+27. Consolidate anon key in `env.ts` only; have `client.ts` import from it.
+28. Add `--surface-dark` token; replace raw `#0a0a0f`/`#1a1a2e` in `ErrorBoundary`, `PreSessionSetupWizard`.
+29. Tighten overlay/footer copy widths.
+30. Decide `/settings/byok` — recommend **delete** (BYOK already neutered per `byokVault.ts` shim).
+
+---
+
+## Recommended sequencing
+- **Today:** Phase 1 + Phase 2 + Phase 3 (security closeout, low blast radius).
+- **Next:** Phase 4 (correctness/N+1).
+- **Then:** Phase 5 (SEO is mechanical), Phase 6, Phase 7.
+
+## What I need from you
+1. **Approve the phase order** above, or pick a subset to start (e.g. "do Phases 1–3 only").
+2. **Confirm:** for AdminRevenue churn (item 18), should I treat a cancellation as `subscriptions.status='canceled'` in last 30 days / active 30 days ago? Or do you have a different definition?
+3. **Confirm delete** of `src/pages/app/settings/BYOK.tsx` (item 30), since the BYOK vault is already a no-op shim.
+
+Once you approve I'll implement Phase 1 first and stop for verification before moving on.
