@@ -19,6 +19,7 @@
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { bannedResponse, isUserBanned } from "../_shared/banCheck.ts";
 import {
   authenticateRequest,
   enforceResourceOwnership,
@@ -420,6 +421,10 @@ Deno.serve(async (req: Request) => {
     });
 
     return withCors(rateLimitResponse(rateLimitResult), corsHeaders);
+  }
+
+  if (await isUserBanned(db, user.id)) {
+    return withCors(bannedResponse(corsHeaders), corsHeaders);
   }
 
   const validation = await parseAndValidateRequest(req, corsHeaders);
