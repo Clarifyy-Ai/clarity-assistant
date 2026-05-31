@@ -252,6 +252,28 @@ export default function Landing() {
   usePageMeta({
     title: "Clarify AI — Practice every interview with AI by your side",
     description: "Live AI practice coach, full mock interview engine with analytics, and a complete prep lab. Powered by Google Gemini 2.0 Flash. Start free with 200 credits / month.",
+    canonical: "https://clarify.ai.sltfinanceindia.com/",
+    jsonLd: [
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        name: "Clarify AI",
+        url: "https://clarify.ai.sltfinanceindia.com/",
+        description: "AI-powered interview preparation platform.",
+      },
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        name: "Clarify AI",
+        applicationCategory: "BusinessApplication",
+        operatingSystem: "Web",
+        offers: {
+          "@type": "Offer",
+          price: "0",
+          priceCurrency: "USD",
+        },
+      },
+    ],
   });
 
   return (
