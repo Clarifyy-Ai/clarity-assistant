@@ -512,7 +512,7 @@ export const useAuthStore = create<AuthStore>()(
             }
 
             const [profileResult, roleResult] = await Promise.all([
-              supabase.from("profiles").select("*").eq("id", userId).single(),
+              supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
               supabase
                 .from("user_roles")
                 .select("role")
@@ -634,7 +634,7 @@ export const useAuthStore = create<AuthStore>()(
               .from("profiles")
               .select("credits")
               .eq("id", userId)
-              .single();
+              .maybeSingle();
 
             if (error || !data) {
               return;

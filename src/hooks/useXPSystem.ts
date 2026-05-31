@@ -112,7 +112,7 @@ export function useXPSystem() {
       .from("profiles")
       .select("xp, total_sessions")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
     if (error || !profileData) {
       gamification.addXP(-amount);

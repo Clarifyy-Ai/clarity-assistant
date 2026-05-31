@@ -168,7 +168,7 @@ export default function TestResults() {
         .select("*")
         .eq("id", testId!)
         .eq("user_id", user!.id)
-        .single();
+        .maybeSingle();
 
       if (testError || !testData) {
         toast.error("Test not found.");

@@ -68,7 +68,7 @@ export default function ResumeDetail() {
         .select("*")
         .eq("id", id)
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
       if (error) {
         setFetchError(error.message);
         setDoc(null);
