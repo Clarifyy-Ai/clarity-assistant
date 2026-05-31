@@ -450,7 +450,7 @@ export default function ExcelImportTab({
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           </CardContent>
         </Card>
