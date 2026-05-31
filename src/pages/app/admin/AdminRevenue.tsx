@@ -146,6 +146,12 @@ export default function AdminRevenue() {
       const since = new Date();
       since.setDate(since.getDate() - days);
       const sinceIso = since.toISOString();
+
+      // Previous-period window for growth calc
+      const prevSince = new Date();
+      prevSince.setDate(prevSince.getDate() - days * 2);
+      const prevSinceIso = prevSince.toISOString();
+
       const { data: profileData } = await supabase
         .from("profiles")
         .select("plan_id, credits, stripe_subscription_id, subscription_status");
@@ -190,6 +196,17 @@ export default function AdminRevenue() {
         const subsFromTable = subRows?.length ?? 0;
         const activeCount = Math.max(activeSubscribers, subsFromTable);
 
+        // Churn: subscriptions canceled in current period
+        const { count: canceledInPeriod } = await (supabase as any)
+          .from("subscriptions")
+          .select("id", { count: "exact", head: true })
+          .eq("status", "canceled")
+          .gte("updated_at", sinceIso);
+
+        const churnRate = activeCount > 0
+          ? ((canceledInPeriod ?? 0) / (activeCount + (canceledInPeriod ?? 0))) * 100
+          : 0;
+
         const txData = await creditsDB.listRecent(50);
         const creditPurchaseCents = await creditsDB.sumPurchasesSince(sinceIso);
         const ledgerMrrRows = await creditsDB.monthlyRevenueByPlan(sinceIso);
@@ -197,6 +214,22 @@ export default function AdminRevenue() {
         const useLedgerMrr = STRIPE_CONFIGURED && ledgerMrr > 0;
         const mrr = useLedgerMrr ? ledgerMrr : planEstimateMrr;
         setMrrIsEstimated(!useLedgerMrr);
+
+        // MRR growth vs previous period (only meaningful with ledger data)
+        let mrrGrowth = 0;
+        if (useLedgerMrr) {
+          try {
+            const prevRows = await creditsDB.monthlyRevenueByPlan(prevSinceIso);
+            const prevTotal = prevRows.reduce((sum, row) => sum + row.totalCents, 0);
+            // prevTotal covers 2x window; subtract current to get prior period only
+            const priorPeriod = Math.max(prevTotal - ledgerMrr, 0);
+            if (priorPeriod > 0) {
+              mrrGrowth = ((ledgerMrr - priorPeriod) / priorPeriod) * 100;
+            }
+          } catch {
+            mrrGrowth = 0;
+          }
+        }
 
         const userIds = [...new Set((txData ?? []).map((tx) => tx.user_id))];
         const emailByUser: Record<string, string> = {};
@@ -224,19 +257,28 @@ export default function AdminRevenue() {
           setTransactions(txs);
         }
 
+        // LTV: average revenue per paying user / monthly churn rate (capped sanely),
+        // or fallback to 18-month multiplier when churn is 0.
+        const arpu = activeCount > 0 ? mrr / activeCount : 0;
+        const monthlyChurnFrac = churnRate / 100;
+        const ltv = monthlyChurnFrac > 0
+          ? Math.round(arpu / monthlyChurnFrac)
+          : Math.round(arpu * 18);
+
         setMetrics({
           mrr,
           arr:               mrr * 12,
-          mrrGrowth:         0,
+          mrrGrowth,
           activeSubscribers: activeCount,
-          churnRate:         0,
-          ltv:               mrr > 0 ? Math.round(mrr / Math.max(activeCount, 1)) * 18 : 0,
+          churnRate,
+          ltv,
           totalRevenue:      mrr,
           creditRevenue:     creditPurchaseCents,
         });
       }
     } catch (err) {
       console.error("[AdminRevenue] fetch error:", err);
+      setLoadError("Failed to load revenue metrics. Please retry.");
     } finally {
       setIsLoading(false);
       setIsRefreshing(false);
