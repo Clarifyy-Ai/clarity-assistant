@@ -475,7 +475,7 @@ export default function BlogPost() {
 
           <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
             <span className="text-xs text-primary font-medium">{post.category}</span>
-            <h1 className="text-3xl sm:text-4xl font-bold mt-2 mb-4">{post.title}</h1>
+            <h1 className="text-3xl md:text-4xl font-bold mt-2 mb-4">{post.title}</h1>
 
             <div className="flex items-center gap-4 text-xs text-muted-foreground/70 mb-8">
               <span className="flex items-center gap-1"><User className="w-3 h-3" /> {post.author}</span>

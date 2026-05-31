@@ -22,7 +22,15 @@ const ADMIN_NAV: { to: string; icon: React.ElementType; label: string }[] = [
 ];
 
 export default function AdminLayout() {
-  const { isAdmin } = useAuthStore();
+  const { isAdmin, isProfileLoaded } = useAuthStore();
+
+  if (!isProfileLoaded) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <div className="text-xs text-muted-foreground">Loading admin panel…</div>
+      </div>
+    );
+  }
 
   if (!isAdmin) {
     return <Navigate to="/app/dashboard" replace />;

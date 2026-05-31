@@ -13,9 +13,11 @@ export default function Referrals() {
   const [invitedCount, setInvitedCount] = useState(0);
   const [creditsEarned, setCreditsEarned] = useState(0);
   const [statsError, setStatsError] = useState<string | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
 
   useEffect(() => {
     if (!user?.id) return;
+    setStatsLoading(true);
     (async () => {
       try {
         const stats = await referralsDB.getStats(user.id);
@@ -25,6 +27,8 @@ export default function Referrals() {
       } catch (err) {
         setStatsError(err instanceof Error ? err.message : "Could not load referral stats");
         toast.error("Could not load referral stats");
+      } finally {
+        setStatsLoading(false);
       }
     })();
   }, [user?.id]);
@@ -114,12 +118,20 @@ export default function Referrals() {
         <div className="space-y-4">
           <Card className="text-center">
             <Users className="w-6 h-6 mx-auto text-violet-500 mb-2" />
-            <p className="text-2xl font-bold text-foreground">{invitedCount}</p>
+            {statsLoading ? (
+              <div className="h-7 w-12 mx-auto bg-muted animate-pulse rounded" />
+            ) : (
+              <p className="text-2xl font-bold text-foreground">{invitedCount}</p>
+            )}
             <p className="text-xs text-muted-foreground">Friends Invited</p>
           </Card>
           <Card className="text-center">
             <Zap className="w-6 h-6 mx-auto text-amber-500 mb-2" />
-            <p className="text-2xl font-bold text-foreground">{creditsEarned}</p>
+            {statsLoading ? (
+              <div className="h-7 w-12 mx-auto bg-muted animate-pulse rounded" />
+            ) : (
+              <p className="text-2xl font-bold text-foreground">{creditsEarned}</p>
+            )}
             <p className="text-xs text-muted-foreground">Credits Earned</p>
           </Card>
         </div>
