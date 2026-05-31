@@ -1,6 +1,6 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { refreshCredits } from "@/lib/billing/creditsManager";
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -13,6 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { CodeScratchpad } from "@/components/prep/CodeScratchpad";
+import { supabase } from "@/lib/supabase/client";
 
 const CATEGORIES = [
   { id: "all",       label: "All",           icon: "📋" },
@@ -37,30 +38,15 @@ interface CodingProblem {
   tags: string[];
 }
 
-const PROBLEMS: CodingProblem[] = [
-  { id: "1",  title: "Two Sum",                      category: "arrays",   difficulty: "easy",   description: "Given an array of integers nums and an integer target, return indices of the two numbers such that they add up to target. You may assume that each input would have exactly one solution.", examples: "Input: nums = [2,7,11,15], target = 9\nOutput: [0,1]", tags: ["hash map", "brute force"] },
-  { id: "2",  title: "Best Time to Buy and Sell Stock", category: "arrays", difficulty: "easy",   description: "Given an array prices where prices[i] is the price of a given stock on the ith day, find the maximum profit you can achieve. You may complete at most one transaction.", examples: "Input: prices = [7,1,5,3,6,4]\nOutput: 5", tags: ["sliding window", "greedy"] },
-  { id: "3",  title: "Maximum Subarray",              category: "arrays",   difficulty: "medium", description: "Given an integer array nums, find the subarray with the largest sum, and return its sum.", examples: "Input: nums = [-2,1,-3,4,-1,2,1,-5,4]\nOutput: 6", tags: ["kadane's", "divide and conquer"] },
-  { id: "4",  title: "Product of Array Except Self",   category: "arrays",   difficulty: "medium", description: "Given an integer array nums, return an array answer such that answer[i] is equal to the product of all elements of nums except nums[i], without using division.", examples: "Input: nums = [1,2,3,4]\nOutput: [24,12,8,6]", tags: ["prefix/suffix"] },
-  { id: "5",  title: "Valid Anagram",                 category: "strings",  difficulty: "easy",   description: "Given two strings s and t, return true if t is an anagram of s, and false otherwise.", examples: "Input: s = 'anagram', t = 'nagaram'\nOutput: true", tags: ["hash map", "sorting"] },
-  { id: "6",  title: "Longest Substring Without Repeating", category: "strings", difficulty: "medium", description: "Given a string s, find the length of the longest substring without repeating characters.", examples: "Input: s = 'abcabcbb'\nOutput: 3", tags: ["sliding window", "hash set"] },
-  { id: "7",  title: "Group Anagrams",                category: "strings",  difficulty: "medium", description: "Given an array of strings strs, group the anagrams together. You can return the answer in any order.", examples: "Input: ['eat','tea','tan','ate','nat','bat']\nOutput: [['bat'],['nat','tan'],['ate','eat','tea']]", tags: ["hash map", "sorting"] },
-  { id: "8",  title: "Longest Palindromic Substring",  category: "strings",  difficulty: "medium", description: "Given a string s, return the longest palindromic substring in s.", examples: "Input: s = 'babad'\nOutput: 'bab' or 'aba'", tags: ["expand around center", "dp"] },
-  { id: "9",  title: "Invert Binary Tree",            category: "trees",    difficulty: "easy",   description: "Given the root of a binary tree, invert the tree, and return its root.", examples: "Input: root = [4,2,7,1,3,6,9]\nOutput: [4,7,2,9,6,3,1]", tags: ["recursion", "bfs"] },
-  { id: "10", title: "Maximum Depth of Binary Tree",   category: "trees",    difficulty: "easy",   description: "Given the root of a binary tree, return its maximum depth.", examples: "Input: root = [3,9,20,null,null,15,7]\nOutput: 3", tags: ["recursion", "dfs"] },
-  { id: "11", title: "Validate Binary Search Tree",    category: "trees",    difficulty: "medium", description: "Given the root of a binary tree, determine if it is a valid binary search tree (BST).", examples: "Input: root = [2,1,3]\nOutput: true", tags: ["dfs", "inorder"] },
-  { id: "12", title: "Lowest Common Ancestor",         category: "trees",    difficulty: "medium", description: "Given a binary tree, find the lowest common ancestor (LCA) of two given nodes in the tree.", examples: "Input: root = [3,5,1,6,2,0,8,null,null,7,4], p = 5, q = 1\nOutput: 3", tags: ["recursion", "dfs"] },
-  { id: "13", title: "Number of Islands",              category: "graphs",   difficulty: "medium", description: "Given an m x n 2D binary grid which represents a map of '1's (land) and '0's (water), return the number of islands.", examples: "Input: grid = [['1','1','0'],['1','1','0'],['0','0','1']]\nOutput: 2", tags: ["bfs", "dfs", "union find"] },
-  { id: "14", title: "Clone Graph",                    category: "graphs",   difficulty: "medium", description: "Given a reference of a node in a connected undirected graph, return a deep copy (clone) of the graph.", examples: "Input: adjList = [[2,4],[1,3],[2,4],[1,3]]\nOutput: [[2,4],[1,3],[2,4],[1,3]]", tags: ["bfs", "dfs", "hash map"] },
-  { id: "15", title: "Course Schedule",                category: "graphs",   difficulty: "medium", description: "There are a total of numCourses courses you have to take. Some courses may have prerequisites. Determine if you can finish all courses.", examples: "Input: numCourses = 2, prerequisites = [[1,0]]\nOutput: true", tags: ["topological sort", "dfs"] },
-  { id: "16", title: "Climbing Stairs",                category: "dp",       difficulty: "easy",   description: "You are climbing a staircase. It takes n steps to reach the top. Each time you can either climb 1 or 2 steps. In how many distinct ways can you climb to the top?", examples: "Input: n = 3\nOutput: 3", tags: ["fibonacci", "memoization"] },
-  { id: "17", title: "Coin Change",                    category: "dp",       difficulty: "medium", description: "Given an integer array coins representing coin denominations and an integer amount, return the fewest number of coins needed to make up that amount.", examples: "Input: coins = [1,2,5], amount = 11\nOutput: 3", tags: ["bottom-up dp"] },
-  { id: "18", title: "Longest Increasing Subsequence",  category: "dp",       difficulty: "medium", description: "Given an integer array nums, return the length of the longest strictly increasing subsequence.", examples: "Input: nums = [10,9,2,5,3,7,101,18]\nOutput: 4", tags: ["binary search", "dp"] },
-  { id: "19", title: "Reverse Linked List",            category: "linked",   difficulty: "easy",   description: "Given the head of a singly linked list, reverse the list, and return the reversed list.", examples: "Input: head = [1,2,3,4,5]\nOutput: [5,4,3,2,1]", tags: ["iterative", "recursive"] },
-  { id: "20", title: "Merge Two Sorted Lists",         category: "linked",   difficulty: "easy",   description: "Merge two sorted linked lists and return it as a sorted list. The list should be made by splicing together the nodes of the first two lists.", examples: "Input: l1 = [1,2,4], l2 = [1,3,4]\nOutput: [1,1,2,3,4,4]", tags: ["recursion", "iterative"] },
-  { id: "21", title: "Merge Sort",                     category: "sorting",  difficulty: "medium", description: "Implement merge sort algorithm. Given an array of integers, sort them in ascending order using the divide and conquer approach.", examples: "Input: [38,27,43,3,9,82,10]\nOutput: [3,9,10,27,38,43,82]", tags: ["divide and conquer", "stable sort"] },
-  { id: "22", title: "Quick Select (Kth Largest)",     category: "sorting",  difficulty: "medium", description: "Find the kth largest element in an unsorted array. Note that it is the kth largest element in sorted order, not the kth distinct element.", examples: "Input: nums = [3,2,1,5,6,4], k = 2\nOutput: 5", tags: ["partition", "quickselect"] },
-];
+interface CodingRow {
+  slug: string;
+  title: string;
+  pattern: string | null;
+  description: string | null;
+  difficulty: string | null;
+  example_problems: Array<{ example?: string }> | null;
+  tags: string[] | null;
+}
 
 const DIFFICULTY_COLORS: Record<Difficulty, string> = {
   easy:   "emerald",
@@ -68,9 +54,17 @@ const DIFFICULTY_COLORS: Record<Difficulty, string> = {
   hard:   "red",
 };
 
+function normalizeDifficulty(value: string | null | undefined): Difficulty {
+  const v = (value ?? "medium").toLowerCase();
+  if (v === "easy" || v === "medium" || v === "hard") return v;
+  return "medium";
+}
+
 export default function CodingHints() {
   const credits = useCredits();
 
+  const [problems, setProblems]     = useState<CodingProblem[] | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
   const [category, setCategory]     = useState("all");
   const [difficulty, setDifficulty] = useState<Difficulty | "all">("all");
   const [search, setSearch]         = useState("");
@@ -81,8 +75,42 @@ export default function CodingHints() {
   const [error, setError]           = useState<string | null>(null);
   const [depth, setDepth]           = useState<"surface" | "medium" | "near-complete">("surface");
 
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data, error: dbError } = await (supabase as any)
+        .from("coding_hints")
+        .select("slug, title, pattern, description, difficulty, example_problems, tags")
+        .eq("published", true)
+        .order("sort_order", { ascending: true });
+
+      if (cancelled) return;
+
+      if (dbError) {
+        setFetchError("Couldn't load problems. Please try again later.");
+        setProblems([]);
+        return;
+      }
+
+      const mapped: CodingProblem[] = ((data as CodingRow[]) ?? []).map((row) => ({
+        id: row.slug,
+        title: row.title,
+        category: row.pattern ?? "all",
+        difficulty: normalizeDifficulty(row.difficulty),
+        description: row.description ?? "",
+        examples: Array.isArray(row.example_problems)
+          ? row.example_problems.map((e) => e?.example ?? "").filter(Boolean).join("\n\n")
+          : "",
+        tags: row.tags ?? [],
+      }));
+      setProblems(mapped);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
   const filtered = useMemo(() => {
-    return PROBLEMS.filter((p) => {
+    if (!problems) return [];
+    return problems.filter((p) => {
       if (category !== "all" && p.category !== category) return false;
       if (difficulty !== "all" && p.difficulty !== difficulty) return false;
       if (search) {
@@ -91,9 +119,9 @@ export default function CodingHints() {
       }
       return true;
     });
-  }, [category, difficulty, search]);
+  }, [problems, category, difficulty, search]);
 
-  const activeProblem = PROBLEMS.find((p) => p.id === selected);
+  const activeProblem = problems?.find((p) => p.id === selected) ?? null;
 
   async function getAIHint() {
     if (!activeProblem || !credits.canAfford("coding_hint")) return;
@@ -198,7 +226,14 @@ export default function CodingHints() {
           </div>
 
           <div className="space-y-1.5 max-h-[500px] overflow-y-auto pr-1">
-            {filtered.map((p) => (
+            {problems === null && (
+              <div className="space-y-1.5">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <div key={i} className="h-16 rounded-xl bg-secondary/40 animate-pulse" />
+                ))}
+              </div>
+            )}
+            {problems !== null && filtered.map((p) => (
               <button
                 key={p.id}
                 onClick={() => { setSelected(p.id); setHintText(""); setSolutionText(""); setError(null); }}
@@ -220,14 +255,16 @@ export default function CodingHints() {
                   >
                     {p.difficulty}
                   </Badge>
-                  <span className="text-[10px] text-muted-foreground">{CATEGORIES.find((c) => c.id === p.category)?.label}</span>
+                  <span className="text-[10px] text-muted-foreground">{CATEGORIES.find((c) => c.id === p.category)?.label ?? p.category}</span>
                 </div>
               </button>
             ))}
-            {filtered.length === 0 && (
+            {problems !== null && filtered.length === 0 && (
               <div className="text-center py-8">
                 <Code2 className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
-                <p className="text-sm text-muted-foreground">No problems match your filters.</p>
+                <p className="text-sm text-muted-foreground">
+                  {fetchError ?? "No problems match your filters."}
+                </p>
               </div>
             )}
           </div>
@@ -251,9 +288,11 @@ export default function CodingHints() {
                   </div>
                 </div>
                 <p className="text-sm text-foreground leading-relaxed">{activeProblem.description}</p>
-                <div className="mt-4 bg-muted/40 rounded-xl p-4 font-mono text-xs text-foreground whitespace-pre-wrap">
-                  {activeProblem.examples}
-                </div>
+                {activeProblem.examples && (
+                  <div className="mt-4 bg-muted/40 rounded-xl p-4 font-mono text-xs text-foreground whitespace-pre-wrap">
+                    {activeProblem.examples}
+                  </div>
+                )}
               </Card>
 
               {error && (
@@ -265,7 +304,6 @@ export default function CodingHints() {
                 </Card>
               )}
 
-              {/* Depth selector */}
               <div className="flex gap-1.5">
                 {([
                   { id: "surface",      label: "Quick hint" },
@@ -346,7 +384,6 @@ export default function CodingHints() {
                 </Card>
               )}
 
-              {/* Sprint D: Code scratchpad */}
               <div className="mt-4">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">
                   Your solution
