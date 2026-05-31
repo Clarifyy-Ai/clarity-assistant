@@ -1,7 +1,6 @@
-// @ts-nocheck
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { refreshCredits } from "@/lib/billing/creditsManager";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -17,29 +16,25 @@ import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { Whiteboard } from "@/components/prep/Whiteboard";
 
+type Difficulty = "easy" | "medium" | "hard";
+
 interface DesignTopic {
   id: string;
   title: string;
   category: string;
-  difficulty: "medium" | "hard";
+  difficulty: Difficulty;
   prompt: string;
   keyAreas: string[];
 }
 
-const DESIGN_TOPICS: DesignTopic[] = [
-  { id: "1",  title: "URL Shortener",           category: "Web",       difficulty: "medium", prompt: "Design a URL shortening service like bit.ly that can handle millions of URLs.", keyAreas: ["Hashing", "Database", "Caching", "Analytics"] },
-  { id: "2",  title: "Chat System",             category: "Real-time", difficulty: "hard",   prompt: "Design a real-time chat system like Slack or WhatsApp supporting 1-on-1 and group messages.", keyAreas: ["WebSocket", "Message Queue", "Presence", "Storage"] },
-  { id: "3",  title: "News Feed",               category: "Social",    difficulty: "hard",   prompt: "Design a social media news feed like Facebook or Twitter's home timeline.", keyAreas: ["Fan-out", "Ranking", "Caching", "Real-time updates"] },
-  { id: "4",  title: "Rate Limiter",            category: "Infra",     difficulty: "medium", prompt: "Design a distributed rate limiter that can handle millions of requests per second.", keyAreas: ["Token bucket", "Sliding window", "Redis", "Distributed sync"] },
-  { id: "5",  title: "File Storage Service",    category: "Storage",   difficulty: "hard",   prompt: "Design a file storage and sharing service like Google Drive or Dropbox.", keyAreas: ["Chunking", "Deduplication", "Sync", "Metadata DB"] },
-  { id: "6",  title: "Search Autocomplete",     category: "Search",    difficulty: "medium", prompt: "Design a typeahead/autocomplete system for a search engine.", keyAreas: ["Trie", "Ranking", "Caching", "Data collection"] },
-  { id: "7",  title: "Video Streaming Platform", category: "Media",    difficulty: "hard",   prompt: "Design a video streaming platform like YouTube or Netflix.", keyAreas: ["CDN", "Transcoding", "Adaptive bitrate", "Storage"] },
-  { id: "8",  title: "Notification System",     category: "Infra",     difficulty: "medium", prompt: "Design a notification system that supports push, email, SMS, and in-app notifications.", keyAreas: ["Message queue", "Priority", "Rate limiting", "Templates"] },
-  { id: "9",  title: "E-commerce Platform",     category: "Web",       difficulty: "hard",   prompt: "Design an e-commerce platform like Amazon with product catalog, cart, checkout, and order tracking.", keyAreas: ["Inventory", "Payment", "Search", "Recommendations"] },
-  { id: "10", title: "Distributed Cache",       category: "Infra",     difficulty: "hard",   prompt: "Design a distributed caching system like Memcached or Redis cluster.", keyAreas: ["Consistent hashing", "Eviction", "Replication", "Partitioning"] },
-  { id: "11", title: "Ride-Sharing Service",    category: "Real-time", difficulty: "hard",   prompt: "Design a ride-sharing service like Uber that matches drivers with riders in real-time.", keyAreas: ["Geo-indexing", "Matching", "ETA", "Pricing"] },
-  { id: "12", title: "Web Crawler",             category: "Infra",     difficulty: "medium", prompt: "Design a web crawler that can crawl billions of web pages efficiently.", keyAreas: ["BFS/DFS", "Politeness", "Deduplication", "Distributed workers"] },
-];
+interface DesignRow {
+  slug: string;
+  title: string;
+  category: string | null;
+  difficulty: string | null;
+  description: string | null;
+  key_concepts: string[] | null;
+}
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   Web: <Globe className="w-3.5 h-3.5" />,
@@ -51,18 +46,56 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   Media: <Server className="w-3.5 h-3.5" />,
 };
 
+function normalizeDifficulty(value: string | null | undefined): Difficulty {
+  const v = (value ?? "medium").toLowerCase();
+  if (v === "easy" || v === "medium" || v === "hard") return v;
+  return "medium";
+}
+
 export default function SystemDesign() {
   const credits = useCredits();
   const { user } = useAuthStore();
 
-  const [selected, setSelected]     = useState<string | null>(null);
-  const [notes, setNotes]           = useState("");
-  const [breakdown, setBreakdown]   = useState("");
-  const [loading, setLoading]       = useState(false);
-  const [saved, setSaved]           = useState(false);
-  const [error, setError]           = useState<string | null>(null);
+  const [topics, setTopics]       = useState<DesignTopic[] | null>(null);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+  const [selected, setSelected]   = useState<string | null>(null);
+  const [notes, setNotes]         = useState("");
+  const [breakdown, setBreakdown] = useState("");
+  const [loading, setLoading]     = useState(false);
+  const [saved, setSaved]         = useState(false);
+  const [error, setError]         = useState<string | null>(null);
 
-  const activeTopic = DESIGN_TOPICS.find((t) => t.id === selected);
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data, error: dbError } = await (supabase as any)
+        .from("system_design_topics")
+        .select("slug, title, category, difficulty, description, key_concepts")
+        .eq("published", true)
+        .order("sort_order", { ascending: true });
+
+      if (cancelled) return;
+
+      if (dbError) {
+        setFetchError("Couldn't load topics. Please try again later.");
+        setTopics([]);
+        return;
+      }
+
+      const mapped: DesignTopic[] = ((data as DesignRow[]) ?? []).map((row) => ({
+        id: row.slug,
+        title: row.title,
+        category: row.category ?? "Web",
+        difficulty: normalizeDifficulty(row.difficulty),
+        prompt: row.description ?? "",
+        keyAreas: row.key_concepts ?? [],
+      }));
+      setTopics(mapped);
+    })();
+    return () => { cancelled = true; };
+  }, []);
+
+  const activeTopic = topics?.find((t) => t.id === selected) ?? null;
 
   async function getAIBreakdown() {
     if (!activeTopic || !credits.canAfford("system_design")) return;
@@ -87,7 +120,7 @@ export default function SystemDesign() {
 
   async function saveDesignNotes() {
     if (!user || !activeTopic || !notes.trim()) return;
-    const { error: insertErr } = await supabase.from("answer_bank").insert({
+    const { error: insertErr } = await (supabase as any).from("answer_bank").insert({
       user_id: user.id,
       question_text: `System Design: ${activeTopic.title}`,
       answer_text: `${notes}\n\n--- AI Breakdown ---\n${breakdown}`,
@@ -112,7 +145,22 @@ export default function SystemDesign() {
 
       <div className="flex flex-col lg:flex-row gap-5">
         <div className="lg:w-[320px] space-y-2 flex-shrink-0 max-h-[600px] overflow-y-auto pr-1">
-          {DESIGN_TOPICS.map((topic) => (
+          {topics === null && (
+            <div className="space-y-2">
+              {[0, 1, 2, 3, 4].map((i) => (
+                <div key={i} className="h-16 rounded-xl bg-secondary/40 animate-pulse" />
+              ))}
+            </div>
+          )}
+          {topics !== null && topics.length === 0 && (
+            <div className="text-center py-8">
+              <Server className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+              <p className="text-sm text-muted-foreground">
+                {fetchError ?? "No topics available yet."}
+              </p>
+            </div>
+          )}
+          {topics?.map((topic) => (
             <button
               key={topic.id}
               onClick={() => { setSelected(topic.id); setBreakdown(""); setNotes(""); setError(null); setSaved(false); }}
@@ -125,14 +173,14 @@ export default function SystemDesign() {
             >
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-muted-foreground">{CATEGORY_ICONS[topic.category]}</span>
+                  <span className="text-muted-foreground">{CATEGORY_ICONS[topic.category] ?? <Server className="w-3.5 h-3.5" />}</span>
                   <span className="text-sm font-medium text-foreground">{topic.title}</span>
                 </div>
                 <ChevronRight className="w-3.5 h-3.5 text-muted-foreground" />
               </div>
               <div className="flex items-center gap-2 mt-1.5 ml-6">
                 <Badge variant="default" size="sm">{topic.category}</Badge>
-                <Badge variant={topic.difficulty === "medium" ? "amber" : "red"} size="sm">
+                <Badge variant={topic.difficulty === "easy" ? "emerald" : topic.difficulty === "medium" ? "amber" : "red"} size="sm">
                   {topic.difficulty}
                 </Badge>
               </div>
@@ -214,7 +262,6 @@ export default function SystemDesign() {
                 </Card>
               )}
 
-              {/* Sprint D: Sketch your architecture */}
               <div className="mt-4">
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">
                   Sketch your design
