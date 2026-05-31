@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -6,7 +7,7 @@ import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
   Users,
   TrendingUp, TrendingDown, Activity,
-  DollarSign,
+  DollarSign, AlertCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, subDays } from "date-fns";
@@ -33,39 +34,51 @@ interface KPIItem {
 export default function AdminDashboard() {
   const [stats,   setStats]   = useState<DashboardStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
 
   useEffect(() => { fetchStats(); }, []);
 
   async function fetchStats() {
     setLoading(true);
+    setError(null);
 
-    const [
-      { count: totalUsers },
-      { count: proUsers   },
-      { count: todaySessions },
-      { count: totalSessions },
-    ] = await Promise.all([
-      supabase.from("profiles").select("*", { count: "exact", head: true }),
-      (supabase.from("profiles") as unknown as ReturnType<typeof supabase.from>).select("*", { count: "exact", head: true }).not("plan_id", "eq", "free"),
-      supabase.from("sessions").select("*", { count: "exact", head: true })
-        .gte("created_at", new Date().toISOString().slice(0, 10)),
-      supabase.from("sessions").select("*", { count: "exact", head: true }),
-    ]);
+    try {
+      const [
+        totalRes,
+        proRes,
+        todayRes,
+        totalSessionsRes,
+      ] = await Promise.all([
+        supabase.from("profiles").select("*", { count: "exact", head: true }),
+        (supabase.from("profiles") as unknown as ReturnType<typeof supabase.from>).select("*", { count: "exact", head: true }).not("plan_id", "eq", "free"),
+        supabase.from("sessions").select("*", { count: "exact", head: true })
+          .gte("created_at", new Date().toISOString().slice(0, 10)),
+        supabase.from("sessions").select("*", { count: "exact", head: true }),
+      ]);
 
-    const total = totalUsers ?? 0;
-    const pro   = proUsers   ?? 0;
+      const firstErr = [totalRes, proRes, todayRes, totalSessionsRes].find((r) => r.error)?.error;
+      if (firstErr) throw firstErr;
 
-    setStats({
-      totalUsers:    total,
-      proUsers:      pro,
-      freeUsers:     total - pro,
-      todaySessions: todaySessions ?? 0,
-      totalSessions: totalSessions ?? 0,
-      mrr:           pro * 19,
-      convRate:      total ? ((pro / total) * 100).toFixed(1) : "0",
-    });
+      const total = totalRes.count ?? 0;
+      const pro   = proRes.count   ?? 0;
 
-    setLoading(false);
+      setStats({
+        totalUsers:    total,
+        proUsers:      pro,
+        freeUsers:     total - pro,
+        todaySessions: todayRes.count ?? 0,
+        totalSessions: totalSessionsRes.count ?? 0,
+        mrr:           pro * 19,
+        convRate:      total ? ((pro / total) * 100).toFixed(1) : "0",
+      });
+    } catch (e: any) {
+      const msg = e?.message ?? "Failed to load admin stats";
+      console.error("[AdminDashboard] fetchStats:", e);
+      setError(msg);
+      toast.error(msg);
+    } finally {
+      setLoading(false);
+    }
   }
 
   const KPIs: KPIItem[] = stats ? [
