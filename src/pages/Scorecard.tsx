@@ -113,7 +113,7 @@ export default function Scorecard() {
               { label: "Structure",  value: scorecard.structure_score },
               { label: "Relevance",  value: scorecard.relevance_score },
             ].map((s) => (
-              <div key={s.label} className="bg-black/20 rounded-xl p-3">
+              <div key={s.label} className="bg-background/40 rounded-xl p-3">
                 <div className="text-xl font-bold text-foreground">{s.value}</div>
                 <div className="text-xs text-muted-foreground">{s.label}</div>
                 <MiniScoreBar value={s.value} />

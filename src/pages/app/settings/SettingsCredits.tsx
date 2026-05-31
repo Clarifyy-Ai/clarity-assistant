@@ -127,7 +127,7 @@ export default function SettingsCredits() {
 
       <div>
         <h3 className="text-sm font-semibold text-foreground mb-3">Buy credit packs</h3>
-        <div className="grid grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           {CREDIT_PACKS.map((pack) => (
             <Card
               key={pack.id}
@@ -171,7 +171,7 @@ export default function SettingsCredits() {
           <Info className="w-4 h-4 text-muted-foreground" />
           <h3 className="text-sm font-semibold text-foreground">Credit costs</h3>
         </div>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           {CREDIT_COSTS.map((c) => (
             <div
               key={c.action}

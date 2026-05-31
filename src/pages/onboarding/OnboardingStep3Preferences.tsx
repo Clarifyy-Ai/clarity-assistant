@@ -105,7 +105,7 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
         <p className="text-xs font-medium text-muted-foreground mb-2">
           How much help do you want during live sessions?
         </p>
-        <div className="grid grid-cols-3 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
           {HINT_STYLES.map((h) => (
             <button
               key={h.value}

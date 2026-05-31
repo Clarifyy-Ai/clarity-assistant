@@ -344,7 +344,7 @@ export default function ExcelImportTab({
             </div>
 
             <div className="max-h-[500px] overflow-auto rounded-lg border border-border">
-              <table className="w-full whitespace-nowrap text-left text-xs">
+              <div className="overflow-x-auto"><table className="w-full whitespace-nowrap text-left text-xs">
                 <thead className="sticky top-0 z-10 bg-muted/80 shadow-sm">
                   <tr>
                     <th className="border-b border-border px-3 py-2 font-medium text-muted-foreground">

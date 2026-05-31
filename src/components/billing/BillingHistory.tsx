@@ -252,8 +252,8 @@ export function BillingHistory({
       ) : (
         <div className="space-y-2">
           {/* Desktop Table */}
-          <div className="hidden md:block rounded-lg border border-border bg-secondary/50 overflow-hidden">
-            <table className="w-full">
+          <div className="hidden md:block rounded-lg border border-border bg-secondary/50 overflow-x-auto">
+            <table className="w-full min-w-[640px]">
               <thead>
                 <tr className="border-b border-border bg-secondary/50">
                   <th className="px-4 py-3 text-left text-xs font-semibold text-muted-foreground">
