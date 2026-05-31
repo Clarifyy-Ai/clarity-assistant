@@ -21,8 +21,31 @@ const PLAN_COLORS: Record<string, string> = {
   emerald: "from-emerald-500 to-teal-500",
 };
 
+const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
+
 export default function Pricing() {
-  usePageMeta({ title: "Pricing — Clarify AI", description: "Simple, transparent pricing for interview prep. Start free, upgrade when ready." });
+  usePageMeta({
+    title: "Pricing — Clarify AI",
+    description: "Simple, transparent pricing for interview prep. Start free, upgrade when ready.",
+    canonical: `${SITE_URL}/pricing`,
+    jsonLd: {
+      "@context": "https://schema.org",
+      "@type": "Product",
+      name: "Clarify AI",
+      description: "AI-powered interview preparation platform with live coaching, mock interviews, and a prep lab.",
+      brand: { "@type": "Brand", name: "Clarify AI" },
+      offers: DISPLAY_PLANS.map((planId) => {
+        const plan = PLANS[planId];
+        return {
+          "@type": "Offer",
+          name: plan.name,
+          price: (plan.monthlyPrice / 100).toFixed(2),
+          priceCurrency: "USD",
+          url: `${SITE_URL}/signup${planId === "free" ? "" : `?plan=${planId}`}`,
+        };
+      }),
+    },
+  });
   const [annual, setAnnual] = useState(false);
 
   return (

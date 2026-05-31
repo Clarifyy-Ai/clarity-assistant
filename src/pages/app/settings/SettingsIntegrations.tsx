@@ -478,26 +478,17 @@ export default function SettingsIntegrations() {
         })}
       </div>
 
-      {/* API access card */}
+      {/* API access card — coming soon */}
       <Card>
-        <div className="flex items-center gap-2 mb-4">
+        <div className="flex items-center gap-2 mb-2">
           <Zap className="w-4 h-4 text-violet-400" />
           <h3 className="text-sm font-semibold text-foreground">API access</h3>
-          <Badge variant="amber" size="sm">Pro</Badge>
+          <Badge variant="amber" size="sm">Coming soon</Badge>
         </div>
-        <p className="text-xs text-muted-foreground mb-4 leading-relaxed">
-          Use the Clarify AI API to build integrations, automate workflows,
-          or pull data into your own tools.
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          The Clarify AI public API for building integrations and automating workflows
+          is in development. Pro and Enterprise plans will get programmatic access at launch.
         </p>
-        <div className="flex gap-3">
-          <input
-            readOnly
-            value="sk-clarify-••••••••••••••••••••••"
-            className="flex-1 bg-background border border-input text-muted-foreground rounded-xl px-4 py-2.5 text-sm font-mono focus:outline-none"
-          />
-          <Button variant="secondary" size="sm">Reveal</Button>
-          <Button variant="secondary" size="sm">Regenerate</Button>
-        </div>
       </Card>
     </div>
   );
