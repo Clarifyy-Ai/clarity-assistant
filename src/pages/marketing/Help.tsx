@@ -1,100 +1,99 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { Search, ChevronDown, ChevronUp, HelpCircle, Mail } from "lucide-react";
 import { motion } from "framer-motion";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
+import { supabase } from "@/lib/supabase/client";
 
-interface FaqItem {
-  id: string;
-  q: string;
-  a: string;
+interface HelpRow {
+  slug: string;
+  question: string;
+  answer: string;
+  category_slug: string;
+  category_title: string;
+  sort_order: number;
 }
 
 interface FaqCategory {
   title: string;
   slug: string;
-  items: FaqItem[];
+  items: HelpRow[];
 }
 
-const FAQ_DATA: FaqCategory[] = [
-  {
-    title: "Getting Started",
-    slug: "getting-started",
-    items: [
-      { id: "gs-1", q: "What is Clarify AI?", a: "Clarify AI is an AI-powered interview preparation platform that provides real-time coaching during live interviews, full mock simulations with analytics, and a suite of prep tools to help you land your dream job." },
-      { id: "gs-2", q: "How do I create an account?", a: "Click 'Get started free' on the homepage. You can sign up with your email or use Google/GitHub OAuth. No credit card required for the free plan." },
-      { id: "gs-3", q: "What happens after I sign up?", a: "You'll go through a quick onboarding flow where you set your role, experience level, and target companies. This helps personalize your AI coaching experience." },
-      { id: "gs-4", q: "Is there a free plan?", a: "Yes. The Free plan includes 200 credits per month, full access to practice sessions, the STAR builder, and the answer bank. No credit card required." },
-    ],
-  },
-  {
-    title: "Live Interview",
-    slug: "live-interview",
-    items: [
-      { id: "li-1", q: "How does the live practice coach work?", a: "During a practice session, Clarify AI listens to your spoken answers and provides real-time suggested talking points, structure hints, and follow-up prompts in an on-screen prep overlay. It is designed for rehearsal — not for use during real interviews." },
-      { id: "li-2", q: "Can I use this during a real interview?", a: "No. Live Co-Pilot is built strictly for interview practice. Using AI assistance covertly during a real interview violates most employer and assessment policies and may breach platform terms. The overlay is a normal on-screen window and is visible to screen-sharing tools." },
-      { id: "li-3", q: "What AI model is used?", a: "At launch, Clarify AI is powered by Google Gemini 2.0 Flash for low-latency hints, answer drafting, and debriefs. Additional model providers are on the roadmap." },
-      { id: "li-4", q: "How many credits does a practice session cost?", a: "Each requested hint costs 1 credit and each generated STAR answer costs 2 credits. Listening, transcription, and the debrief at the end of the session are included." },
-    ],
-  },
-  {
-    title: "Mock Practice",
-    slug: "mock-practice",
-    items: [
-      { id: "mp-1", q: "What types of mock interviews are available?", a: "We offer behavioral, technical, system design, and role-specific mock sessions. Each session includes AI-generated questions, real-time feedback, and a detailed scorecard." },
-      { id: "mp-2", q: "Can I practice with others?", a: "Yes! Practice Rooms allow you to create collaborative sessions where you and peers can practice together with shared scorecards and real-time coaching." },
-      { id: "mp-3", q: "How does the scoring work?", a: "After each mock session, you receive a scorecard covering clarity, structure (STAR method usage), specificity, relevance, and confidence. Each area is scored and compared against your historical performance." },
-    ],
-  },
-  {
-    title: "Billing & Credits",
-    slug: "billing",
-    items: [
-      { id: "bi-1", q: "How do credits work?", a: "Credits are the currency for AI-powered features. Each action (hint, STAR answer, debrief, company research, etc.) costs a specific number of credits. Free includes 200 credits / month, Pro includes 2,000 / month, and Enterprise is unlimited." },
-      { id: "bi-2", q: "How much do paid plans cost?", a: "Pro is $29 / month for 2,000 credits and unlocks the full feature set. Enterprise is $79 / month per seat with unlimited credits and team controls. Yearly billing saves roughly two months." },
-      { id: "bi-3", q: "How do I cancel my subscription?", a: "Go to Settings → Billing and click 'Cancel subscription'. Your plan stays active until the end of the current billing period; you won't be charged again." },
-      { id: "bi-4", q: "Do unused credits roll over?", a: "No, monthly plan credits reset at the start of each billing cycle." },
-    ],
-  },
-  {
-    title: "Account & Security",
-    slug: "account",
-    items: [
-      { id: "ac-1", q: "How do I change my password?", a: "Go to Settings > Security and use the change password form. You'll need to enter your current password and then your new password (minimum 8 characters)." },
-      { id: "ac-2", q: "Can I use my own AI API keys?", a: "Bring-your-own-key (BYOK) is on our roadmap and not available at launch. All AI calls today use Clarify's managed Gemini connection and count against your monthly credit balance." },
-      { id: "ac-3", q: "How do I delete my account?", a: "Go to Settings > Danger Zone and click 'Delete Account'. This will permanently remove all your data, sessions, and answers. This action cannot be undone." },
-    ],
-  },
-];
+const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
 
 export default function Help() {
   usePageMeta({
     title: "Help Center — Clarify AI",
     description: "FAQs and guides for interview prep, live coaching, mock tests, and billing.",
+    canonical: `${SITE_URL}/help`,
   });
 
   const [search, setSearch] = useState("");
   const [openItems, setOpenItems] = useState<Set<string>>(new Set());
+  const [categories, setCategories] = useState<FaqCategory[] | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { data, error } = await (supabase as any)
+        .from("help_articles")
+        .select("slug, question, answer, category_slug, category_title, sort_order")
+        .eq("published", true)
+        .order("sort_order", { ascending: true });
+
+      if (cancelled) return;
+
+      if (error || !data) {
+        setCategories([]);
+        setLoading(false);
+        return;
+      }
+
+      const byCat = new Map<string, FaqCategory>();
+      (data as HelpRow[]).forEach((row) => {
+        if (!byCat.has(row.category_slug)) {
+          byCat.set(row.category_slug, {
+            slug: row.category_slug,
+            title: row.category_title,
+            items: [],
+          });
+        }
+        byCat.get(row.category_slug)!.items.push(row);
+      });
+      setCategories(Array.from(byCat.values()));
+      setLoading(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   function toggleItem(id: string) {
     setOpenItems((prev) => {
       const next = new Set(prev);
-      next.has(id) ? next.delete(id) : next.add(id);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
       return next;
     });
   }
 
-  const filtered = search.trim()
-    ? FAQ_DATA.map((cat) => ({
-        ...cat,
-        items: cat.items.filter(
-          (item) =>
-            item.q.toLowerCase().includes(search.toLowerCase()) ||
-            item.a.toLowerCase().includes(search.toLowerCase())
-        ),
-      })).filter((cat) => cat.items.length > 0)
-    : FAQ_DATA;
+  const filtered = !categories
+    ? []
+    : search.trim()
+      ? categories
+          .map((cat) => ({
+            ...cat,
+            items: cat.items.filter(
+              (item) =>
+                item.question.toLowerCase().includes(search.toLowerCase()) ||
+                item.answer.toLowerCase().includes(search.toLowerCase()),
+            ),
+          }))
+          .filter((cat) => cat.items.length > 0)
+      : categories;
 
   return (
     <MarketingLayout>
@@ -121,7 +120,19 @@ export default function Help() {
 
       <section className="pb-14 px-4 sm:px-6">
         <div className="max-w-3xl mx-auto space-y-10">
-          {filtered.map((category) => (
+          {loading && (
+            <div className="space-y-6">
+              {[0, 1, 2].map((i) => (
+                <div key={i} className="space-y-2 animate-pulse">
+                  <div className="h-5 w-40 rounded bg-secondary/60" />
+                  <div className="h-14 rounded-xl bg-secondary/40" />
+                  <div className="h-14 rounded-xl bg-secondary/40" />
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!loading && filtered.map((category) => (
             <motion.div
               key={category.slug}
               initial={{ opacity: 0, y: 16 }}
@@ -132,21 +143,21 @@ export default function Help() {
               <h2 className="text-xl font-bold mb-4" id={category.slug}>{category.title}</h2>
               <div className="space-y-2">
                 {category.items.map((item) => {
-                  const isOpen = openItems.has(item.id);
+                  const isOpen = openItems.has(item.slug);
                   return (
-                    <div key={item.id} className="rounded-xl border border-border bg-card overflow-hidden">
+                    <div key={item.slug} className="rounded-xl border border-border bg-card overflow-hidden">
                       <button
-                        onClick={() => toggleItem(item.id)}
+                        onClick={() => toggleItem(item.slug)}
                         className="w-full flex items-center justify-between p-4 text-left hover:bg-secondary/40 transition-all"
                       >
-                        <span className="text-sm font-medium pr-4">{item.q}</span>
+                        <span className="text-sm font-medium pr-4">{item.question}</span>
                         {isOpen ? <ChevronUp className="w-4 h-4 text-muted-foreground flex-shrink-0" /> : <ChevronDown className="w-4 h-4 text-muted-foreground flex-shrink-0" />}
                       </button>
                       {isOpen && (
                         <div className="px-4 pb-4">
-                          <p className="text-sm text-muted-foreground leading-relaxed">{item.a}</p>
+                          <p className="text-sm text-muted-foreground leading-relaxed whitespace-pre-line">{item.answer}</p>
                           <Link
-                            to={`/help/${item.id}`}
+                            to={`/help/${item.slug}`}
                             className="inline-block mt-2 text-xs text-primary hover:underline"
                           >
                             Read full article &rarr;
@@ -160,9 +171,11 @@ export default function Help() {
             </motion.div>
           ))}
 
-          {filtered.length === 0 && (
+          {!loading && filtered.length === 0 && (
             <div className="text-center py-12">
-              <p className="text-muted-foreground">No articles found for "{search}"</p>
+              <p className="text-muted-foreground">
+                {search ? `No articles found for "${search}"` : "No help articles available yet."}
+              </p>
             </div>
           )}
         </div>
