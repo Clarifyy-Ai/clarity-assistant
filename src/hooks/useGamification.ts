@@ -164,7 +164,7 @@ export function useGamification() {
         .from("profiles")
         .select("xp, streak_days, longest_streak, last_active_date")
         .eq("id", user.id)
-        .single(),
+        .maybeSingle(),
       supabase
         .from("user_badges")
         .select("badge_id")
@@ -248,7 +248,7 @@ export function useGamification() {
       .from("profiles")
       .select("xp")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
     if (fetchErr || !profileData) {
       store.addXP(-amount);
@@ -313,7 +313,7 @@ export function useGamification() {
       .from("profiles")
       .select("streak_days, longest_streak, last_active_date")
       .eq("id", user.id)
-      .single();
+      .maybeSingle();
 
     if (!data) return;
 

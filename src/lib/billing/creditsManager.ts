@@ -276,7 +276,7 @@ export async function refreshCredits(): Promise<number | null> {
     .from("profiles")
     .select("credits, plan_id, subscription_status")
     .eq("id", user.id)
-    .single();
+    .maybeSingle();
 
   if (error || !data) return null;
 

@@ -18,7 +18,7 @@ export function useStreakTracker() {
       .from("profiles")
       .select("streak_days, longest_streak, last_active_date, xp")
       .eq("id", user!.id)
-      .single();
+      .maybeSingle();
 
     if (!data) return;
 

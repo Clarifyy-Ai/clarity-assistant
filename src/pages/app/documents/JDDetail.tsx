@@ -60,7 +60,7 @@ export default function JDDetail() {
         .select("*")
         .eq("id", id)
         .eq("user_id", user.id)
-        .single();
+        .maybeSingle();
       if (error) {
         setFetchError(error.message);
         setJd(null);

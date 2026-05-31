@@ -457,7 +457,7 @@ export default function TestSession() {
         .select("*")
         .eq("id", testId!)
         .eq("user_id", user!.id)
-        .single();
+        .maybeSingle();
 
       if (testError || !testData) {
         toast.error("Test not found.");

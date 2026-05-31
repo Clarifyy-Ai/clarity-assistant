@@ -82,7 +82,7 @@ export default function DebriefDetail() {
             .from("sessions")
             .select("*")
             .eq("id", db.session_id)
-            .single();
+            .maybeSingle();
           setSession(sess ?? null);
         }
       } else {

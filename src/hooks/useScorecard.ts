@@ -94,7 +94,7 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
         .from("scorecards")
         .select("*")
         .eq("session_id", sessionId)
-        .single();
+        .maybeSingle();
 
       if (existing) {
         setState((s) => ({
@@ -128,7 +128,7 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
         .from("sessions")
         .select("*")
         .eq("id", sessionId)
-        .single();
+        .maybeSingle();
 
       if (!session) throw new Error("Session not found");
 

@@ -112,7 +112,7 @@ export function useAnalytics() {
         )
       `)
       .eq("session_id", sessionId)
-      .single();
+      .maybeSingle();
 
     if (!data) return null;
     const d = data as any;
