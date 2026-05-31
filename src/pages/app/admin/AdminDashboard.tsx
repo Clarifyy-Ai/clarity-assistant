@@ -123,6 +123,24 @@ export default function AdminDashboard() {
         <Badge variant="red" size="sm">Admin only</Badge>
       </div>
 
+      {error && !loading && (
+        <Card>
+          <div className="flex items-start gap-3 text-sm">
+            <AlertCircle className="w-4 h-4 text-red-400 mt-0.5 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-foreground font-medium">Failed to load stats</p>
+              <p className="text-muted-foreground text-xs mt-0.5">{error}</p>
+              <button
+                onClick={fetchStats}
+                className="mt-2 text-xs text-violet-400 hover:text-violet-300 font-medium"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {loading ? (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
