@@ -259,6 +259,54 @@ export type Database = {
           },
         ]
       }
+      blog_posts: {
+        Row: {
+          author: string
+          category: string
+          content: string
+          cover_image_url: string | null
+          created_at: string
+          excerpt: string
+          id: string
+          published: boolean
+          published_at: string
+          read_time: string | null
+          slug: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          author?: string
+          category?: string
+          content: string
+          cover_image_url?: string | null
+          created_at?: string
+          excerpt: string
+          id?: string
+          published?: boolean
+          published_at?: string
+          read_time?: string | null
+          slug: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          author?: string
+          category?: string
+          content?: string
+          cover_image_url?: string | null
+          created_at?: string
+          excerpt?: string
+          id?: string
+          published?: boolean
+          published_at?: string
+          read_time?: string | null
+          slug?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       calendar_integrations: {
         Row: {
           access_token: string | null
@@ -322,6 +370,57 @@ export type Database = {
           updated_at?: string
           user_id?: string
           weak_areas?: string[] | null
+        }
+        Relationships: []
+      }
+      coding_hints: {
+        Row: {
+          created_at: string
+          description: string
+          difficulty: string
+          example_problems: Json
+          id: string
+          language: string
+          pattern: string
+          published: boolean
+          slug: string
+          sort_order: number
+          tags: string[]
+          template_code: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          description: string
+          difficulty?: string
+          example_problems?: Json
+          id?: string
+          language?: string
+          pattern: string
+          published?: boolean
+          slug: string
+          sort_order?: number
+          tags?: string[]
+          template_code?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          description?: string
+          difficulty?: string
+          example_problems?: Json
+          id?: string
+          language?: string
+          pattern?: string
+          published?: boolean
+          slug?: string
+          sort_order?: number
+          tags?: string[]
+          template_code?: string | null
+          title?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -832,6 +931,48 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      help_articles: {
+        Row: {
+          answer: string
+          body_md: string | null
+          category_slug: string
+          category_title: string
+          created_at: string
+          id: string
+          published: boolean
+          question: string
+          slug: string
+          sort_order: number
+          updated_at: string
+        }
+        Insert: {
+          answer: string
+          body_md?: string | null
+          category_slug: string
+          category_title: string
+          created_at?: string
+          id?: string
+          published?: boolean
+          question: string
+          slug: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Update: {
+          answer?: string
+          body_md?: string | null
+          category_slug?: string
+          category_title?: string
+          created_at?: string
+          id?: string
+          published?: boolean
+          question?: string
+          slug?: string
+          sort_order?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       interview_rounds: {
         Row: {
@@ -2618,6 +2759,60 @@ export type Database = {
           unread_for_user?: boolean
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      system_design_topics: {
+        Row: {
+          category: string
+          components: Json
+          created_at: string
+          description: string
+          difficulty: string
+          example_companies: string[]
+          id: string
+          key_concepts: string[]
+          published: boolean
+          reference_url: string | null
+          slug: string
+          sort_order: number
+          title: string
+          tradeoffs: Json
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          components?: Json
+          created_at?: string
+          description: string
+          difficulty?: string
+          example_companies?: string[]
+          id?: string
+          key_concepts?: string[]
+          published?: boolean
+          reference_url?: string | null
+          slug: string
+          sort_order?: number
+          title: string
+          tradeoffs?: Json
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          components?: Json
+          created_at?: string
+          description?: string
+          difficulty?: string
+          example_companies?: string[]
+          id?: string
+          key_concepts?: string[]
+          published?: boolean
+          reference_url?: string | null
+          slug?: string
+          sort_order?: number
+          title?: string
+          tradeoffs?: Json
+          updated_at?: string
         }
         Relationships: []
       }
