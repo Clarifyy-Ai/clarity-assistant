@@ -1,74 +1,58 @@
-# Audit Remediation Plan — All 17 Fixes
+# Clarity.AI Production Hardening — Phased Plan
 
-Per your memory rules, I'll execute **component-by-component**, never touching working features beyond the listed change, and grouping fixes into 4 phases that match the audit's priority tiers. Each item lists the **only** file(s) I will touch and what I will change.
+Per your standing rules I'm planning first, breaking this into small component-scoped passes, and adding explicit guardrails. This sprint is too large for one loop — attempting all of P0–P7 at once would risk regressing the 59 working surfaces. I'll execute one priority group per turn, you approve, we move on.
 
-## Guardrails (apply to every step)
+## Guardrails (apply to every phase)
+- **Do not modify** any working feature outside the named files for that phase.
+- **Do not touch** locked migrations, `docs/COMPLIANCE_GATING.md`, stealth shims, or memory'd "do not re-add" items (P0-2 stealth, dashboard re-add, etc.).
+- **Do not** blanket-remove `@ts-nocheck` — only remove on files actually edited in the phase, and only if types compile.
+- **Do not** rewrite shared utilities (`fetchEdge`, `database.ts`, `authStore`) unless the phase explicitly requires it — additive changes only.
+- Every edit ships full file contents per your request; no partial diffs.
 
-- Touch only the files listed for each item.
-- No refactors outside the named change. No "while I'm here" edits.
-- Semantic-token swaps only replace raw color classes — no layout, spacing, or copy changes.
-- No migrations to data (only RLS policy migrations in Phase 1).
-- After each phase: skim build output; stop on the first regression.
+## Phase order (one per approval)
 
----
+### Phase 1 — P0 Bootstrap & Dashboard
+Files: `src/App.tsx`, `src/main.tsx`, `src/pages/app/Dashboard.tsx`, `src/components/common/LoadingScreen.tsx` (new `AppLoadingFallback`), `src/hooks/useGamification.ts`.
+- Route-level `React.lazy` + `Suspense` for `/app/*` only; marketing eager.
+- Shell-shaped skeleton fallback.
+- De-dup profile/session fetch (canonical hook).
+- Per-section skeletons + retry on Dashboard.
 
-## Phase 1 — 🔴 Critical (security migrations)
+### Phase 2 — P1 Live Co-Pilot (dual-channel audio + layout)
+Files: `src/lib/audio/audioCapture.ts` (or equivalent), `src/hooks/useDeepgramStream.ts`, `src/store/audioStore.ts`, `src/pages/app/live/*`, `src/components/overlay/OverlayPanel.tsx`.
+- Two `MediaStream`s, two Deepgram sockets, merged labelled transcript.
+- Graceful mic-only fallback + dismissible banner.
+- Cleanup on unmount.
+- Stable overlay layout; memoised subcomponents.
 
-**1. `request_metrics` INSERT policy**
-- Migration: drop existing INSERT policy, recreate with `WITH CHECK (user_id = auth.uid())`. Keep service_role bypass.
+### Phase 3 — P2 Mock Interviews
+Files: `src/pages/app/mock/MockSession.tsx` + related session hooks.
+- Explicit state machine, cached question set, persisted session on end.
 
-**2. `feature_flags` SELECT policy**
-- Migration: drop `USING (true)`, replace with `USING (public.has_role(auth.uid(), 'admin'))`. Frontend reads flags via an edge function or seeded defaults — verify no client-side direct read before locking down. If client reads exist, expose a public-safe `feature_flags_public` view with only non-sensitive flags.
+### Phase 4 — P3 Admin Exam Scraper UI
+Files: `src/pages/app/admin/AdminSeed.tsx`, new `scrape_jobs` realtime subscription.
+- Migration needed for `scrape_jobs` table if it doesn't exist (will surface separately for approval).
 
-## Phase 2 — 🟠 High
+### Phase 5 — P4 Call Sessions
+Files: `src/pages/app/live/*`, new `src/hooks/useCallSession.ts`.
+- Single-init hook, cached device enumeration, lifecycle states.
 
-**3. `PreSessionSetupWizard.tsx`** — swap `text-gray-*` → `text-muted-foreground`/`text-foreground`, `bg-white` → `bg-card`/`bg-background`. No structural changes.
+### Phase 6 — P5 Reports / Sprint Review
+Files: `src/pages/app/analytics/*`.
+- Date range, real queries, CSV export.
 
-**4. Responsive grid prefixes** (5 files, 1-line edits each):
-- `OnboardingStep3Preferences.tsx:108` → `grid-cols-1 sm:grid-cols-3`
-- `Login.tsx:257`, `Signup.tsx:357` → `grid-cols-1 sm:grid-cols-2`
-- `PreSessionSetupWizard.tsx:579,624` → `grid-cols-1 md:grid-cols-4` / `md:grid-cols-2`
+### Phase 7 — P6 Broken Pages (sub-phased per page)
+P6-A Usage → P6-B Debrief → P6-C Referrals → P6-D Documents → P6-E Knowledge Base → P6-F Calendar → P6-G Rooms → P6-H Guide → P6-I Inbox → P6-J Settings.
+Each shipped individually so you can verify no regressions before moving on.
 
-**5. `AdminLayout.tsx:23`** — gate redirect on `isProfileLoaded`; show a small loader otherwise.
+### Phase 8 — P7 Cross-cutting
+`GlobalErrorBoundary`, sonner standardisation pass, `getAuthHeaders` consolidation in `src/lib/api/headers.ts`.
 
-**6. `InterviewDay.tsx`** — add `isLoading`/`error` states with skeleton + retry. (`Profile.tsx` already has them per current code in context — will verify and skip if so.)
+## Scope confirmations needed before Phase 1
 
-## Phase 3 — 🟡 Medium
+1. **Confirm phased execution** — one priority group per turn, you review preview, then say "continue" for the next. (Recommended; matches your stated workflow.)
+2. **Confirm Phase 4 migration** — `scrape_jobs` table likely doesn't exist; I'll propose a migration when we reach P3. OK?
+3. **Audio refactor risk (Phase 2)** — dual-channel will touch `audioStore` shape. Any existing consumers (overlay pill, mock flow) will be updated in the same phase. Confirm acceptable.
+4. **Skip / defer anything?** — e.g. if Sprint Review page (P5-B) doesn't exist yet, I'll note and skip rather than invent.
 
-**7. Tables overflow** — wrap `<table>` in `BillingHistory.tsx` and `ExcelImportTab.tsx` with `<div className="overflow-x-auto">`.
-
-**8. `NotFound.tsx`** — add `usePageMeta({ title, description, noindex: true })`, swap `<a>` → `<Link>`. (Will extend `usePageMeta` to accept `noindex` if not already supported — see #12.)
-
-**9. Semantic tokens** in `PricingCard.tsx`, `UpgradeModal.tsx`, `PlanGate.tsx`, `Scorecard.tsx` — swap `text-black`/`bg-black` → `text-foreground`/`bg-background` (or `bg-card`).
-
-**10. Blog/Help CMS** — **Defer**. This is a 2-table migration + admin CRUD + content migration. Will instead add a `// STATIC-BY-DESIGN` comment header documenting the decision, and create a follow-up task. Tell me if you want me to do the full DB migration now.
-
-**11. Anon key** — move hardcoded `CONNECTED_SUPABASE_*` constants in `src/lib/env.ts` behind `VITE_SUPABASE_URL`/`VITE_SUPABASE_PUBLISHABLE_KEY` env-only (keep fallback throwing a clear error in prod). Verify `.env` is populated (Lovable auto-populates these).
-
-## Phase 4 — 🔵 Low
-
-**12. SEO depth** — extend `usePageMeta` to support `ogImage`, `ogType`, `canonical`, `noindex`, `jsonLd`. Sitewide og:* stay in `index.html`.
-
-**13. CodingHints / SystemDesign → DB** — **Defer** (same reason as #10). Comment + follow-up.
-
-**14. `@ts-nocheck` audit** — **Defer**. Listed ~20 files; safe removal requires per-file schema reconciliation. Will create a tracked task; not done in this batch.
-
-**15. Typography** — `BlogPost.tsx:478` `sm:text-4xl` → `md:text-4xl`; `Login.tsx`/`Signup.tsx` heading → `text-3xl md:text-4xl`.
-
-**16. Skeletons** — `Referrals.tsx`, `Notifications.tsx` loading skeletons.
-
-**17. Settings grids** — `SettingsProfile.tsx:193`, `SettingsCredits.tsx:130,174` → `grid-cols-1 sm:grid-cols-2`.
-
----
-
-## What I will NOT do without explicit approval
-
-- Build full CMS for blog/help (#10) or move CodingHints/SystemDesign to DB (#13) — large scope, deserves its own plan.
-- Remove `@ts-nocheck` en masse (#14) — schema-drift risk.
-- Touch any feature outside the file list above.
-
-## Execution order
-
-Phase 1 (migration approvals) → Phase 2 → Phase 3 → Phase 4. I'll batch parallel edits per phase and pause for the security migration approvals between #1 and #2.
-
-Reply **approve** to proceed, or tell me which items to drop/add.
+Reply "go" (or "go phase 1") to start Phase 1, or adjust scope.
