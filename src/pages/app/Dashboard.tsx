@@ -23,13 +23,39 @@ import {
   Mic, ClipboardList, FlaskConical, BarChart2,
   CalendarDays, Flame, Zap, ChevronRight,
   Star, TrendingUp, Trophy, Clock,
-  Building2, AlertTriangle,
+  Building2, AlertTriangle, RefreshCw,
   ListTodo, PenTool, FolderOpen, BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { getStealthLabel } from "@/lib/stealth/stealthConfig";
 import type { Tables } from "@/integrations/supabase/types";
+
+/* ─── INLINE ERROR / RETRY (file-local) ──────────────────────────────────── */
+// ✅ FIX P0-B: per-section retry banner — failed fetches no longer blank the
+// whole dashboard. Keep file-local to avoid touching shared components.
+function InlineErrorRetry({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-red-500/30 bg-red-500/5 text-xs">
+      <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+      <span className="flex-1 text-red-300 truncate">{message}</span>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="flex items-center gap-1 text-red-300 hover:text-red-200 font-semibold whitespace-nowrap"
+      >
+        <RefreshCw className="w-3 h-3" /> Retry
+      </button>
+    </div>
+  );
+}
+
 
 /* ─── LOCAL TYPES ────────────────────────────────────────────────────────── */
 
