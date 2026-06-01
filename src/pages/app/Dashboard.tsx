@@ -150,22 +150,27 @@ export default function Dashboard() {
 
   // FIX Issue 22: null = loading, number = loaded
   const [sessionCount, setSessionCount] = useState<number | null>(null);
+  const [sessionCountError, setSessionCountError] = useState<string | null>(null);
+  const [sessionCountReloadKey, setSessionCountReloadKey] = useState(0);
 
   useEffect(() => {
     if (!profile?.id) return;
+    setSessionCountError(null);
     void supabase
       .from("sessions")
       .select("id", { count: "exact", head: true })
       .eq("user_id", profile.id)
       .then(({ count, error }) => {
-        // FIX Issue 36: handle query error
         if (error) {
-          toast.error("Failed to load session count. Please refresh.");
+          // ✅ FIX P0-B: surface inline retry instead of silent toast
+          setSessionCountError("Couldn't load session count");
           console.error("[Dashboard] session count error:", error);
+          return;
         }
         setSessionCount(count ?? 0);
       });
-  }, [profile?.id]);
+  }, [profile?.id, sessionCountReloadKey]);
+
 
   const todayInterview = (scheduler.interviews as ScheduledInterview[]).find((i) => {
     if (!i.scheduled_at) return false;
