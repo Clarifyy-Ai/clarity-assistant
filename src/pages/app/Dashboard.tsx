@@ -23,13 +23,39 @@ import {
   Mic, ClipboardList, FlaskConical, BarChart2,
   CalendarDays, Flame, Zap, ChevronRight,
   Star, TrendingUp, Trophy, Clock,
-  Building2, AlertTriangle,
+  Building2, AlertTriangle, RefreshCw,
   ListTodo, PenTool, FolderOpen, BarChart3,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { getStealthLabel } from "@/lib/stealth/stealthConfig";
 import type { Tables } from "@/integrations/supabase/types";
+
+/* ─── INLINE ERROR / RETRY (file-local) ──────────────────────────────────── */
+// ✅ FIX P0-B: per-section retry banner — failed fetches no longer blank the
+// whole dashboard. Keep file-local to avoid touching shared components.
+function InlineErrorRetry({
+  message,
+  onRetry,
+}: {
+  message: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-red-500/30 bg-red-500/5 text-xs">
+      <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
+      <span className="flex-1 text-red-300 truncate">{message}</span>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="flex items-center gap-1 text-red-300 hover:text-red-200 font-semibold whitespace-nowrap"
+      >
+        <RefreshCw className="w-3 h-3" /> Retry
+      </button>
+    </div>
+  );
+}
+
 
 /* ─── LOCAL TYPES ────────────────────────────────────────────────────────── */
 
@@ -124,22 +150,27 @@ export default function Dashboard() {
 
   // FIX Issue 22: null = loading, number = loaded
   const [sessionCount, setSessionCount] = useState<number | null>(null);
+  const [sessionCountError, setSessionCountError] = useState<string | null>(null);
+  const [sessionCountReloadKey, setSessionCountReloadKey] = useState(0);
 
   useEffect(() => {
     if (!profile?.id) return;
+    setSessionCountError(null);
     void supabase
       .from("sessions")
       .select("id", { count: "exact", head: true })
       .eq("user_id", profile.id)
       .then(({ count, error }) => {
-        // FIX Issue 36: handle query error
         if (error) {
-          toast.error("Failed to load session count. Please refresh.");
+          // ✅ FIX P0-B: surface inline retry instead of silent toast
+          setSessionCountError("Couldn't load session count");
           console.error("[Dashboard] session count error:", error);
+          return;
         }
         setSessionCount(count ?? 0);
       });
-  }, [profile?.id]);
+  }, [profile?.id, sessionCountReloadKey]);
+
 
   const todayInterview = (scheduler.interviews as ScheduledInterview[]).find((i) => {
     if (!i.scheduled_at) return false;
@@ -304,13 +335,20 @@ export default function Dashboard() {
       </div>
 
       {/* ── Stats row ───────────────────────────────────────────────── */}
+      {sessionCountError && (
+        <InlineErrorRetry
+          message={sessionCountError}
+          onRetry={() => setSessionCountReloadKey((k) => k + 1)}
+        />
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           label="Total sessions"
-          value={sessionCount === null ? "—" : sessionCount}
+          value={sessionCountError ? "—" : sessionCount === null ? "—" : sessionCount}
           icon={<ClipboardList className="w-4 h-4 text-blue-400" />}
           color="blue"
         />
+
         <StatCard
           label="Credits"
           value={profile?.credits ?? 0}
@@ -382,21 +420,30 @@ function RecentSessions() {
   const navigate      = useNavigate();
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [loading, setLoading]   = useState(true);
+  // ✅ FIX P0-B: inline retry instead of silent toast
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!user?.id) { setLoading(false); return; }
+    setLoading(true);
+    setError(null);
     void supabase
       .from("sessions")
       .select("id, type, status, overall_score, title, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(5)
-      .then(({ data, error }) => {
-        if (error) toast.error("Failed to load recent sessions");
+      .then(({ data, error: qErr }) => {
+        if (qErr) {
+          setError("Couldn't load recent sessions");
+          setLoading(false);
+          return;
+        }
         setSessions((data ?? []) as SessionRow[]);
         setLoading(false);
       });
-  }, [user?.id]);
+  }, [user?.id, reloadKey]);
 
   return (
     <Card>
@@ -412,10 +459,16 @@ function RecentSessions() {
         </Link>
       </div>
 
-      {loading ? (
+      {error ? (
+        <InlineErrorRetry
+          message={error}
+          onRetry={() => setReloadKey((k) => k + 1)}
+        />
+      ) : loading ? (
         <div className="space-y-2">
           {Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}
         </div>
+
       ) : sessions.length === 0 ? (
         <EmptyState
           icon={ClipboardList}
