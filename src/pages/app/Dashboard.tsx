@@ -335,13 +335,20 @@ export default function Dashboard() {
       </div>
 
       {/* ── Stats row ───────────────────────────────────────────────── */}
+      {sessionCountError && (
+        <InlineErrorRetry
+          message={sessionCountError}
+          onRetry={() => setSessionCountReloadKey((k) => k + 1)}
+        />
+      )}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           label="Total sessions"
-          value={sessionCount === null ? "—" : sessionCount}
+          value={sessionCountError ? "—" : sessionCount === null ? "—" : sessionCount}
           icon={<ClipboardList className="w-4 h-4 text-blue-400" />}
           color="blue"
         />
+
         <StatCard
           label="Credits"
           value={profile?.credits ?? 0}
