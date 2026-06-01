@@ -420,21 +420,30 @@ function RecentSessions() {
   const navigate      = useNavigate();
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [loading, setLoading]   = useState(true);
+  // ✅ FIX P0-B: inline retry instead of silent toast
+  const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
     if (!user?.id) { setLoading(false); return; }
+    setLoading(true);
+    setError(null);
     void supabase
       .from("sessions")
       .select("id, type, status, overall_score, title, created_at")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(5)
-      .then(({ data, error }) => {
-        if (error) toast.error("Failed to load recent sessions");
+      .then(({ data, error: qErr }) => {
+        if (qErr) {
+          setError("Couldn't load recent sessions");
+          setLoading(false);
+          return;
+        }
         setSessions((data ?? []) as SessionRow[]);
         setLoading(false);
       });
-  }, [user?.id]);
+  }, [user?.id, reloadKey]);
 
   return (
     <Card>
@@ -450,10 +459,16 @@ function RecentSessions() {
         </Link>
       </div>
 
-      {loading ? (
+      {error ? (
+        <InlineErrorRetry
+          message={error}
+          onRetry={() => setReloadKey((k) => k + 1)}
+        />
+      ) : loading ? (
         <div className="space-y-2">
           {Array.from({ length: 3 }).map((_, i) => <SkeletonCard key={i} />)}
         </div>
+
       ) : sessions.length === 0 ? (
         <EmptyState
           icon={ClipboardList}
