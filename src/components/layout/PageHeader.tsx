@@ -89,17 +89,17 @@ export function PageHeader({
                 </span>
               )}
             </div>
-            {description && (
+            {resolvedDescription && (
               <p className="text-muted-foreground text-sm sm:text-base mt-1">
-                {description}
+                {resolvedDescription}
               </p>
             )}
           </div>
         </div>
 
-        {actions && (
+        {resolvedActions && (
           <div className="flex gap-2 flex-shrink-0 flex-wrap sm:flex-nowrap">
-            {actions}
+            {resolvedActions}
           </div>
         )}
       </div>
