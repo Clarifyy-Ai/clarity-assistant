@@ -1,4 +1,5 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { supabase } from "@/integrations/supabase/client";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { useState, useEffect } from "react";
 import { useCredits } from "@/hooks/useCredits";
