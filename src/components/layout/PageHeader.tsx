@@ -12,8 +12,12 @@ interface Breadcrumb {
 interface PageHeaderProps {
   title: string;
   description?: string;
+  /** @deprecated Alias for `description` */
+  subtitle?: string;
   breadcrumbs?: Breadcrumb[];
   actions?: ReactNode;
+  /** @deprecated Alias for `actions` */
+  action?: ReactNode;
   className?: string;
   icon?: ReactNode;
   badge?: string;
@@ -22,12 +26,16 @@ interface PageHeaderProps {
 export function PageHeader({
   title,
   description,
+  subtitle,
   breadcrumbs,
   actions,
+  action,
   className,
   icon,
   badge,
 }: PageHeaderProps) {
+  const resolvedDescription = description ?? subtitle;
+  const resolvedActions = actions ?? action;
   const stealth = useUIStore((s) => s.stealth_mode);
   const displayTitle = getStealthLabel(title, stealth);
 
