@@ -430,9 +430,9 @@ export const sessionTranscriptsDB = {
     const { error } = await supabase.from("session_transcripts").insert({
       session_id: row.session_id,
       user_id: row.user_id,
-      transcript: row.transcript,
+      content: row.transcript,
       ...(row.utterances !== undefined ? { utterances: row.utterances } : {}),
-    } as TablesInsert<"session_transcripts">);
+    } as unknown as TablesInsert<"session_transcripts">);
 
     if (error) {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
