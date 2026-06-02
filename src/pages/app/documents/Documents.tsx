@@ -3,6 +3,7 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { toast } from "sonner";
 import { jobDescriptionsDB } from "@/lib/supabase/database";
+import { supabase } from "@/integrations/supabase/client";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useDocumentStore } from "@/store/documentStore";
 import { useDocumentManager } from "@/hooks/useDocumentManager";
