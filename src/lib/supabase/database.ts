@@ -159,7 +159,7 @@ export const userRolesDB = {
       .from("user_roles")
       .select("role")
       .eq("user_id", userId)
-      .eq("role", role)
+      .eq("role", role as any)
       .maybeSingle();
 
     if (error) {
