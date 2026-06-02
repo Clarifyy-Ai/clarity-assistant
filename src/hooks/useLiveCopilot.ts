@@ -141,7 +141,7 @@ export function useLiveCopilot({
 
     setPrepStepIndex(1);
 
-    let resumeCtx = buildResumeContext(parsed);
+    let resumeCtx = buildResumeContext(parsed as any);
     const coverText = profile.id ? await loadPrimaryCoverLetterText(profile.id) : null;
     if (coverText) {
       const coverSnippet = coverText.slice(0, 2500);
