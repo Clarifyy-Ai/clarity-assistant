@@ -131,7 +131,7 @@ export default function Interviews() {
           >
             {f}
             {f === "today" && store.interviews.some(
-              (iv) => isToday(new Date(iv.scheduled_at))
+              (iv) => isToday(new Date(iv.next_round?.scheduled_at ?? iv.created_at))
             ) && (
               <span className="ml-1.5 w-1.5 h-1.5 bg-violet-500 rounded-full inline-block" />
             )}
