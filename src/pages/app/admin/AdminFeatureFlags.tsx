@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { supabase } from "@/lib/supabase/client";
+import { featureFlagsDB } from "@/lib/supabase/database";
 import { useGlobalStore }       from "@/store";
 import { FEATURE_PLAN_GATES }   from "@/lib/constants/features";
 
@@ -79,18 +79,8 @@ export default function AdminFeatureFlags() {
       setDbFlagsError(null);
 
       try {
-        const { data, error } = await supabase
-          .from("feature_flags")
-          .select("key, is_enabled");
-
+        const map = await featureFlagsDB.listKeyEnabled();
         if (cancelled) return;
-
-        if (error) throw error;
-
-        const map: Record<string, boolean> = {};
-        for (const row of data ?? []) {
-          map[row.key] = row.is_enabled;
-        }
         setDbFlags(map);
       } catch (err) {
         if (cancelled) return;
@@ -147,27 +137,7 @@ export default function AdminFeatureFlags() {
     try {
       const entries = Object.entries(overrides) as [FeatureFlagId, boolean][];
       for (const [key, is_enabled] of entries) {
-        const { data: existing } = await supabase
-          .from("feature_flags")
-          .select("id")
-          .eq("key", key)
-          .maybeSingle();
-
-        if (existing?.id) {
-          const { error } = await supabase
-            .from("feature_flags")
-            .update({ is_enabled, updated_at: new Date().toISOString() })
-            .eq("key", key);
-          if (error) throw error;
-        } else {
-          const { error } = await supabase.from("feature_flags").insert({
-            key,
-            name: key.replace(/_/g, " "),
-            is_enabled,
-            rollout_percent: 100,
-          });
-          if (error) throw error;
-        }
+        await featureFlagsDB.upsertEnabled(key, is_enabled);
         setDbFlags((prev) => ({ ...prev, [key]: is_enabled }));
       }
       toast.success(`${entries.length} flag(s) saved to database.`);

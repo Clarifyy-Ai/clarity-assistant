@@ -1,8 +1,8 @@
-// @ts-nocheck
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Link } from "react-router-dom";
-import { supabase } from "@/lib/supabase/client";
+import { sessionsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
+import type { Tables } from "@/integrations/supabase";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -21,36 +21,37 @@ import { format } from "date-fns";
 const SESSION_TYPES = ["all", "mock", "live", "practice"] as const;
 type FilterType = typeof SESSION_TYPES[number];
 
+type SessionSummary = Pick<
+  Tables<"sessions">,
+  | "id"
+  | "type"
+  | "title"
+  | "overall_score"
+  | "created_at"
+  | "started_at"
+  | "ended_at"
+  | "questions_asked"
+  | "status"
+  | "tags"
+>;
+
 export default function SessionHistory() {
   usePageMeta({ title: "Session History | Clarify AI", description: "Review all your interview practice sessions." });
 
   const { user } = useAuthStore();
-  const [sessions, setSessions] = useState<any[]>([]);
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);
   const [filter, setFilter] = useState<FilterType>("all");
   const [search, setSearch] = useState("");
 
-  useEffect(() => {
-    if (user?.id) {
-      fetchSessions();
-    }
-  }, [user?.id]);
-
-  async function fetchSessions() {
+  const fetchSessions = useCallback(async () => {
+    if (!user?.id) return;
     setLoading(true);
     setError(false);
     try {
-      const { data, error: fetchError } = await supabase
-        .from("sessions")
-        .select("id, type, title, overall_score, created_at, started_at, ended_at, questions_asked, status, tags")
-        .eq("user_id", user!.id)
-        .order("created_at", { ascending: false })
-        .limit(50);
-
-      if (fetchError) throw fetchError;
-      
-      setSessions(data ?? []);
+      const data = await sessionsDB.listSummariesByUserId(user.id, 50);
+      setSessions(data);
     } catch (err) {
       console.error("[SessionHistory] Unexpected error:", err);
       setError(true);
@@ -58,7 +59,11 @@ export default function SessionHistory() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [user?.id]);
+
+  useEffect(() => {
+    void fetchSessions();
+  }, [fetchSessions]);
 
   const filtered = sessions.filter((s) => {
     if (filter !== "all" && s.type !== filter) return false;
@@ -116,7 +121,7 @@ export default function SessionHistory() {
           <AlertCircle className="w-10 h-10 text-destructive/60 mb-3" />
           <p className="text-foreground font-medium mb-1">Unable to load sessions</p>
           <p className="text-muted-foreground text-sm mb-4">There was a problem connecting to the database.</p>
-          <Button onClick={fetchSessions} variant="outline" size="sm">
+          <Button onClick={() => void fetchSessions()} variant="outline" size="sm">
             <RefreshCcw className="w-4 h-4 mr-2" />
             Retry
           </Button>

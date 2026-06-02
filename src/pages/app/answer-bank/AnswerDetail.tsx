@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { BookOpen, Edit, Trash2, Save, X, Loader2, ArrowLeft, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import type { Tables } from "@/integrations/supabase";
 
 type Answer = Tables<"answer_bank">;
@@ -22,6 +23,8 @@ export default function AnswerDetail() {
   const [editing, setEditing] = useState(false);
   const [editText, setEditText] = useState("");
   const [saving, setSaving] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!id || !user?.id) return;
@@ -58,13 +61,17 @@ export default function AnswerDetail() {
   }
 
   async function handleDelete() {
-    if (!id || !user?.id || !confirm("Delete this answer?")) return;
+    if (!id || !user?.id) return;
+    setDeleting(true);
     try {
       await answerBankDB.delete(user.id, id);
       toast.success("Answer deleted");
       navigate("/app/answers");
     } catch {
       toast.error("Failed to delete answer. Please try again.");
+    } finally {
+      setDeleting(false);
+      setDeleteOpen(false);
     }
   }
 
@@ -131,7 +138,12 @@ export default function AnswerDetail() {
                 Edit
               </Button>
             )}
-            <Button variant="ghost" size="sm" onClick={handleDelete} className="text-red-400 hover:text-red-300">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setDeleteOpen(true)}
+              className="text-red-400 hover:text-red-300"
+            >
               <Trash2 className="w-4 h-4" />
             </Button>
           </div>
@@ -214,6 +226,17 @@ export default function AnswerDetail() {
           Created {new Date(answer.created_at).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" })}
         </p>
       </div>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete this answer?"
+        description="This cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        isLoading={deleting}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

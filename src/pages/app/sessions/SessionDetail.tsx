@@ -2,7 +2,7 @@
 // not in generated types. Removing produces implicit-any cascade across all data accesses.
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { supabase } from "@/lib/supabase/client";
+import { answerBankDB, sessionsDB, sessionAnswersDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -37,50 +37,41 @@ export default function SessionDetail() {
   // ── Fetch session + answers ───────────────────────────────────
 
   const fetchSession = useCallback(async () => {
-    if (!id || !user) return;
+    if (!id || !user?.id) return;
     setLoading(true);
     setFetchError(null);
 
-    const [
-      { data: sess, error: sessErr },
-      { data: ans,  error: ansErr  },
-    ] = await Promise.all([
-      supabase
-        .from("sessions")
-        .select("*")
-        .eq("id", id)
-        .eq("user_id", user.id)
-        .maybeSingle(),
-      supabase
-        .from("session_answers")
-        .select("*")
-        .eq("session_id", id)
-        .order("created_at", { ascending: true }),
-    ]);
+    try {
+      const [sess, ans] = await Promise.all([
+        sessionsDB.getByIdForUser(id, user.id),
+        sessionAnswersDB.listBySessionId(id),
+      ]);
 
-    if (sessErr) {
-      setFetchError(sessErr.message);
+      setSession(sess);
+      setAnswers(
+        ans.map((row, index) => ({
+          id: row.id,
+          question_text: row.question,
+          transcript: row.answer,
+          score: row.score,
+          ai_feedback: row.ai_feedback,
+          question_index: index,
+          question_tags: [],
+          content_score: row.score,
+          structure_score: null,
+          communication_score: null,
+          confidence_score: null,
+          session_id: id,
+          star_breakdown: null,
+        })),
+      );
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Failed to load session");
+      setSession(null);
+      setAnswers([]);
+    } finally {
       setLoading(false);
-      return;
     }
-
-    setSession(sess);
-    setAnswers(
-      (ans ?? []).map((row: any, index: number) => ({
-        id: row.id,
-        question_text: row.question,
-        transcript: row.answer,
-        score: row.score,
-        ai_feedback: row.ai_feedback,
-        question_index: index,
-        question_tags: [],
-        content_score: row.score,
-        structure_score: null,
-        communication_score: null,
-        confidence_score: null,
-      }))
-    );
-    setLoading(false);
   }, [id, user?.id]);
 
   useEffect(() => {
@@ -449,21 +440,20 @@ export default function SessionDetail() {
                         size="xs"
                         leftIcon={<Star className="w-3 h-3" />}
                         onClick={async () => {
+                          if (!user?.id) {
+                            toast.error("Sign in to save answers.");
+                            return;
+                          }
                           try {
-                            const { error } = await supabase.from("answer_bank").upsert(
-                              {
-                                user_id:        user?.id,
-                                session_id:     ans.session_id,
-                                question_text:  ans.question_text,
-                                answer_text:    ans.transcript,
-                                score:          ans.score,
-                                tags:           ans.question_tags  ?? [],
-                                star_breakdown: ans.star_breakdown ?? null,
-                                ai_feedback:    ans.ai_feedback    ?? null,
-                              },
-                              { onConflict: "user_id,session_id,question_text" }
-                            );
-                            if (error) throw error;
+                            await answerBankDB.upsert(user.id, {
+                              session_id: ans.session_id,
+                              question_text: ans.question_text,
+                              answer_text: ans.transcript,
+                              score: ans.score,
+                              tags: ans.question_tags ?? [],
+                              star_breakdown: ans.star_breakdown ?? null,
+                              ai_feedback: ans.ai_feedback ?? null,
+                            });
                             toast.success("Saved to Answer Bank");
                           } catch (err: unknown) {
                             toast.error(err instanceof Error ? err.message : "Failed to save answer.");

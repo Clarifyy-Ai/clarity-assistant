@@ -2,7 +2,8 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Link } from "react-router-dom";
 
-import { useLiveCopilot } from "@/hooks/useLiveCopilot";
+import { useCallSession } from "@/hooks/useCallSession";
+import { CallSessionLifecycleBanner } from "@/components/live/CallSessionLifecycleBanner";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useAudioStore } from "@/store/audioStore";
@@ -20,7 +21,14 @@ import { toDbModel } from "@/lib/ai/modelMapping";
 
 import { ClipboardCheck, AlertTriangle, RefreshCw, Eye } from "lucide-react";
 import { toast } from "sonner";
+import { Skeleton } from "@/components/ui/SkeletonLoader";
 import type { LiveSessionConfig } from "@/types/session.types";
+
+const PREP_LABELS = [
+  "Analysing your profile…",
+  "Loading resume & interview context…",
+  "Starting audio capture…",
+] as const;
 
 const DEFAULT_CONFIG: LiveSessionConfig = {
   company: null,
@@ -49,11 +57,12 @@ export default function LiveOverlay() {
   const didEndRef = useRef(false);
   const isPreparingSessionRef = useRef(false);
 
-  const copilot = useLiveCopilot({
+  const call = useCallSession({
     config,
     sessionType: "live",
     existingSessionId: preparedSessionId,
   });
+  const copilot = call.copilot;
 
   const isActive = sessionStatus === "active";
   const isPaused = sessionStatus === "paused"; // safe if you add pause later
@@ -135,8 +144,8 @@ export default function LiveOverlay() {
     // 2) Now start live session exactly once
     hasStartedRef.current = true;
 
-    copilot
-      .startLiveSession()
+    call
+      .startSession()
       .then(() => {
         setPhase("active");
       })
@@ -204,10 +213,22 @@ export default function LiveOverlay() {
   }
 
   if (phase === "starting") {
+    const prepLabel =
+      PREP_LABELS[Math.min(copilot.prepStepIndex, PREP_LABELS.length - 1)] ??
+      "Preparing session…";
+
     return (
-      <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3">
-        <RefreshCw className="h-8 w-8 animate-spin text-primary" />
-        <p className="text-sm text-muted-foreground">Starting live co-pilot…</p>
+      <div className="mx-auto flex min-h-[50vh] max-w-md flex-col justify-center gap-4 px-4">
+        <RefreshCw className="h-8 w-8 animate-spin text-primary mx-auto" />
+        <p className="text-sm font-medium text-foreground text-center">{prepLabel}</p>
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-5/6" />
+        <Skeleton className="h-24 w-full rounded-xl" />
+        {copilot.isPreparingSession && (
+          <p className="text-xs text-muted-foreground text-center">
+            Session will start when context and audio are ready.
+          </p>
+        )}
       </div>
     );
   }
@@ -230,6 +251,8 @@ export default function LiveOverlay() {
         onStartSession={handleSetup}
         onSetupNewSession={() => setPhase("setup")}
         lastSessionId={lastSessionId}
+        isPreparingSession={copilot.isPreparingSession}
+        prepStepIndex={copilot.prepStepIndex}
       />
 
       {/* Recovery pill — visible when overlay is hidden during an active/paused session */}

@@ -1,11 +1,10 @@
 // src/pages/app/mock/MockSession.tsx
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { useSessionOrchestrator } from "@/hooks/useSessionOrchestrator";
-import { useSpeechRecognition } from "@/hooks/useSpeechRecognition";
+import { useAudioSession } from "@/hooks/useAudioSession";
 import { useFillerWordDetection } from "@/hooks/useFillerWordDetection";
 import { useWPMTracker } from "@/hooks/useWPMTracker";
-import { useSentimentAnalysis } from "@/hooks/useSentimentAnalysis";
 import { useHotkeys } from "@/hooks/useHotkeys";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";
@@ -15,16 +14,21 @@ import { OverlayWindow } from "@/components/overlay/OverlayWindow";
 import { OverlayKeyboardHandler } from "@/components/overlay/OverlayKeyboardHandler";
 import { LiveSessionController } from "@/components/live/LiveSessionController";
 import { PreSessionSetup } from "@/components/session/PreSessionSetup";
-import { sessionsDB } from "@/lib/supabase/database";
+import { MockConversationPanel } from "@/components/mock/MockConversationPanel";
+import {
+  sessionsDB,
+  sessionTranscriptsDB,
+  sessionAnswersDB,
+} from "@/lib/supabase/database";
 import { getOrCreateSession, activateSession } from "@/lib/session/sessionLifecycle";
-import { supabase } from "@/lib/supabase/client";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { toDbModel } from "@/lib/ai/modelMapping";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
+import { Skeleton } from "@/components/ui/SkeletonLoader";
 import { PANIC_RESPONSE } from "@/types/session.types";
-import type { LiveSessionConfig } from "@/types/session.types";
+import type { LiveSessionConfig, SessionQuestion } from "@/types/session.types";
 import {
   Mic,
   MicOff,
@@ -33,9 +37,13 @@ import {
   SkipForward,
   EyeOff,
   Timer,
+  RefreshCw,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+
+type MockSessionPhase = "idle" | "configuring" | "active" | "completed";
 
 /* ─── TYPES ─────────────────────────────────────────────────────────────── */
 
@@ -57,20 +65,38 @@ export default function MockSession() {
   const location = useLocation();
   const profile = useAuthStore((s) => s.profile);
 
-  const orchestrator = useSessionOrchestrator() as any;
-  const stt = useSpeechRecognition() as any;
-  const fillerHook = useFillerWordDetection(stt.interimTranscript) as any;
-  const wpmHook = useWPMTracker(stt.transcript) as any;
-  const sentimentHook = useSentimentAnalysis(stt.transcript) as any;
+  const orchestrator = useSessionOrchestrator();
+  const interimText = useAudioStore((s) => s.transcript?.interim_text ?? "");
+  const candidateTranscript = useAudioStore((s) =>
+    (s.transcript?.utterances ?? [])
+      .filter((u) => u.speaker === "candidate" && u.is_final)
+      .map((u) => u.text)
+      .join(" "),
+  );
+  const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
+  const isMuted = useAudioStore((s) => s.is_muted ?? false);
+  const deepgramStatus = useAudioStore((s) => s.deepgram_status ?? "disconnected");
+
+  const fillerHook = useFillerWordDetection(interimText);
+  const wpmHook = useWPMTracker(candidateTranscript);
+
+  const audio = useAudioSession({
+    enableSystemAudio: false,
+    onQuestionDetected: () => {},
+    onFillerDetected: (count) => useSessionStore.getState().setFillerCount(count),
+    onWPMUpdate: (wpm) => useSessionStore.getState().setCurrentWPM(wpm),
+  });
 
   const startTimeRef = useRef<string>(new Date().toISOString());
 
-  const [phase, setPhase] = useState<"setup" | "loading" | "active">("setup");
+  const [phase, setPhase] = useState<MockSessionPhase>("idle");
   const [calmMode, setCalmMode] = useState(false);
   const [skipConfirm, setSkipConfirm] = useState(false);
   const [endConfirm, setEndConfirm] = useState(false);
+  const [questionsError, setQuestionsError] = useState<string | null>(null);
 
   const sessionConfigRef = useRef<LiveSessionConfig | null>(null);
+  const questionsCacheRef = useRef<SessionQuestion[] | null>(null);
   const isStartingRef = useRef(false);
   const autoStartedRef = useRef(false);
 
@@ -115,10 +141,33 @@ export default function MockSession() {
     };
   }, [phase]);
 
-  // Reset per-question metrics when question changes
+  const injectInterviewerQuestion = useCallback(
+    (qText: string, index: number) => {
+      if (!qText.trim()) return;
+      const store = useAudioStore.getState();
+      const utteranceId = `mock-q-${index}`;
+      if (store.transcript.utterances.some((u) => u.id === utteranceId)) return;
+
+      const now = Date.now();
+      store.addUtterance({
+        id: utteranceId,
+        text: qText.trim(),
+        speaker: "interviewer",
+        words: [],
+        start_ms: now,
+        end_ms: now,
+        is_final: true,
+        is_interviewer_question: true,
+        confidence: 1,
+      });
+      store.setCurrentSpeaker("interviewer");
+      store.setLastQuestion(qText.trim());
+    },
+    [],
+  );
+
   useEffect(() => {
     if (phase !== "active") return;
-    stt.resetTranscript();
     fillerHook.reset();
     wpmHook.reset();
     questionStartRef.current = Date.now();
@@ -138,7 +187,7 @@ export default function MockSession() {
     },
     "ctrl+shift+s": () => {
       if (phase !== "active") return;
-      stt.toggleMute();
+      audio.toggleMute();
     },
     "ctrl+shift+n": () => {
       if (phase !== "active") return;
@@ -151,54 +200,19 @@ export default function MockSession() {
   const totalQ = orchestrator.totalQuestions ?? 5;
   const isLastQ = qIndex >= totalQ - 1;
 
-  const prevTranscriptLenRef = useRef(0);
-
-  // When question changes, push to overlay and auto-generate hint if enabled
   useEffect(() => {
     if (phase !== "active" || !question) return;
 
     const qText = typeof question === "string" ? question : question.question_text ?? "";
     if (qText) {
-      prevTranscriptLenRef.current = 0;
+      injectInterviewerQuestion(qText, qIndex);
       useOverlayStore.getState().setCurrentQuestion(qText);
       if (useOverlayStore.getState().auto_generate) {
         void handleRequestHint(qText);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, question]);
-
-  // Push transcript deltas to audio store (candidate utterances)
-  useEffect(() => {
-    if (phase !== "active" || !stt.transcript) return;
-    const full = stt.transcript.trim();
-    if (!full || full.length <= prevTranscriptLenRef.current) return;
-
-    const delta = full.slice(prevTranscriptLenRef.current).trim();
-    prevTranscriptLenRef.current = full.length;
-    if (!delta) return;
-
-    const now = Date.now();
-    useAudioStore.getState().addUtterance({
-      id: `mock-${now}`,
-      text: delta,
-      speaker: "candidate",
-      words: [],
-      start_ms: now,
-      end_ms: now,
-      is_final: true,
-      is_interviewer_question: false,
-      confidence: 1.0,
-    });
-  }, [phase, stt.transcript]);
-
-  // Interim transcript
-  useEffect(() => {
-    if (phase !== "active") return;
-    if (stt.interimTranscript) {
-      useAudioStore.getState().updateInterimText(stt.interimTranscript);
-    }
-  }, [phase, stt.interimTranscript]);
+  }, [phase, question, qIndex, injectInterviewerQuestion]);
 
   const timeColor =
     sessionTimeLeft > 120 ? "emerald" : sessionTimeLeft > 30 ? "amber" : "red";
@@ -208,7 +222,7 @@ export default function MockSession() {
     const elapsed = Math.round((Date.now() - questionStartRef.current) / 1000);
     answersRef.current.push({
       question_text: qText,
-      answer_text: skipped ? "" : (stt.transcript || ""),
+      answer_text: skipped ? "" : candidateTranscript,
       question_index: qIndex,
       skipped,
       filler_count: fillerHook.totalCount ?? 0,
@@ -218,26 +232,72 @@ export default function MockSession() {
     });
   }
 
+  async function loadQuestions(
+    dbSessionId: string,
+    config: LiveSessionConfig,
+    userId: string,
+  ): Promise<void> {
+    if (questionsCacheRef.current?.length) {
+      orchestrator.setQuestions(questionsCacheRef.current);
+      return;
+    }
+
+    setQuestionsError(null);
+
+    const data = await fetchEdgeJson<{ questions?: unknown[] }>("generate-questions", {
+      interview_type: config.interview_type,
+      experience_level: profile?.experience_years
+        ? profile.experience_years > 5
+          ? "senior"
+          : profile.experience_years > 2
+            ? "mid"
+            : "junior"
+        : "mid",
+      company: config.company || "",
+      role: profile?.target_role || "",
+      question_count: (config as LiveSessionConfig & { question_count?: number }).question_count ?? 5,
+      session_id: dbSessionId,
+      user_id: userId,
+      config,
+      free_session: true,
+    });
+
+    const raw =
+      data?.questions ??
+      (data as { data?: { questions?: unknown[] } })?.data?.questions ??
+      [];
+
+    if (!Array.isArray(raw) || raw.length === 0) {
+      throw new Error("No questions returned — try again.");
+    }
+
+    orchestrator.setQuestions(raw);
+    const mapped = useSessionStore.getState().questions;
+    questionsCacheRef.current = mapped;
+  }
+
   async function handleSetup(config: LiveSessionConfig) {
     if (isStartingRef.current) return;
     isStartingRef.current = true;
+    setPhase("configuring");
+    setQuestionsError(null);
 
     sessionConfigRef.current = config;
     startTimeRef.current = new Date().toISOString();
     endCalledRef.current = false;
+    useAudioStore.getState().clearTranscript();
 
     const overlay = useOverlayStore.getState();
     overlay.resetSessionState();
-
     overlay.setStealthMode(!!config.stealth_mode);
     overlay.setProctorSafe(false);
-
     overlay.setActiveModel(config.model);
     overlay.setHintStyle(config.hint_style);
 
     const userId = profile?.id;
     if (!userId) {
       toast.error("You must be signed in to start a session.");
+      setPhase("idle");
       isStartingRef.current = false;
       return;
     }
@@ -248,83 +308,60 @@ export default function MockSession() {
         user_id: userId,
         type: "mock",
         title: config.company ? `Mock — ${config.company}` : "Mock interview",
-        document_id: null,
+        document_id: config.resume_id ?? null,
         jd_id: config.jd_id ?? null,
-        model_used: toDbModel(config.model) as any,
+        model_used: toDbModel(config.model) as Parameters<typeof sessionsDB.update>[1]["model_used"],
       });
       dbSessionId = session.id;
       if (reused) toast.message("Resuming your in-progress session");
       await activateSession(session.id);
-    } catch (err) {
-      console.error("[MockSession] Failed to create/reuse session record:", err);
-      toast.error(
-        "Failed to start session — could not save to database. Check your connection and try again."
-      );
-      isStartingRef.current = false;
-      return;
-    }
 
-    await orchestrator.createSession({
-      session_type: "mock",
-      interview_type: config.interview_type,
-      hint_style: config.hint_style,
-      model: config.model,
-      resume_id: config.resume_id,
-      jd_id: config.jd_id,
-      session_id: dbSessionId,
-    });
-
-    setPhase("loading");
-    try {
-      const data = await fetchEdgeJson<{ questions?: unknown[] }>("generate-questions", {
+      await orchestrator.createSession({
+        session_type: "mock",
         interview_type: config.interview_type,
-        experience_level: profile?.experience_years
-          ? profile.experience_years > 5
-            ? "senior"
-            : profile.experience_years > 2
-              ? "mid"
-              : "junior"
-          : "mid",
-        company: config.company || "",
-        role: profile?.target_role || "",
-        question_count: (config as any).question_count ?? 5,
+        hint_style: config.hint_style,
+        model: config.model,
+        resume_id: config.resume_id,
+        jd_id: config.jd_id,
         session_id: dbSessionId,
-        user_id: userId,
-        config,
-        free_session: true,
       });
 
-      const questions =
-        data?.questions ??
-        (data as any)?.data?.questions ??
-        (data as any)?.data?.data?.questions ??
-        [];
-
-      if (!Array.isArray(questions) || questions.length === 0) {
-        await sessionsDB.update(
-          dbSessionId,
-          { status: "abandoned", ended_at: new Date().toISOString() } as any
-        );
-        throw new Error("Failed to generate questions");
-      } else {
-        orchestrator.setQuestions?.(questions);
-      }
+      await loadQuestions(dbSessionId, config, userId);
     } catch (err) {
-      console.error("[MockSession] generate-questions error:", err);
-      toast.error(err instanceof Error ? err.message : "Failed to generate questions. Please try again.");
-      setPhase("setup");
+      console.error("[MockSession] setup failed:", err);
+      const message = err instanceof Error ? err.message : "Failed to start mock session";
+      setQuestionsError(message);
+      if (dbSessionId) {
+        try {
+          await sessionsDB.update(dbSessionId, {
+            status: "abandoned",
+            ended_at: new Date().toISOString(),
+          } as Parameters<typeof sessionsDB.update>[1]);
+        } catch {
+          /* ignore */
+        }
+      }
       isStartingRef.current = false;
       return;
     }
 
-    setPhase("active");
-    isStartingRef.current = false;
-    stt.start();
+    try {
+      await audio.start();
+      setPhase("active");
+      overlay.showOverlay();
+    } catch (err) {
+      console.error("[MockSession] audio start failed:", err);
+      toast.error(err instanceof Error ? err.message : "Microphone failed to start");
+      setPhase("configuring");
+      setQuestionsError("Audio capture failed — check permissions and retry.");
+    } finally {
+      isStartingRef.current = false;
+    }
   }
 
   useEffect(() => {
     const configFromRoute = (location.state as { config?: LiveSessionConfig } | null)?.config;
-    if (!configFromRoute || autoStartedRef.current || phase !== "setup") return;
+    if (!configFromRoute || autoStartedRef.current || phase !== "idle") return;
     autoStartedRef.current = true;
     void handleSetup(configFromRoute);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -332,10 +369,11 @@ export default function MockSession() {
 
   async function handleNextQuestion() {
     captureAnswer();
-    stt.stop();
 
     if (isLastQ) {
       if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+      setPhase("completed");
+      audio.stop();
       useOverlayStore.getState().hideOverlay();
       await persistMockSession();
       await orchestrator.completeSession();
@@ -344,7 +382,6 @@ export default function MockSession() {
       else navigate("/app/sessions");
     } else {
       orchestrator.nextQuestion();
-      stt.start();
     }
   }
 
@@ -365,8 +402,10 @@ export default function MockSession() {
     if (!userId || !sessionId) return;
 
     try {
-      const dbModel = toDbModel(overlay.active_model) as any;
-      const transcript = stt.transcript || "";
+      const dbModel = toDbModel(overlay.active_model);
+      const audioState = useAudioStore.getState();
+      const transcript = audioState.transcript?.full_transcript ?? candidateTranscript;
+      const utterances = audioState.transcript?.utterances ?? [];
       const questionCount = orchestrator.totalQuestions ?? 0;
       const startedMs = startTimeRef.current
         ? new Date(startTimeRef.current).getTime()
@@ -390,36 +429,24 @@ export default function MockSession() {
       } as any);
 
       if (transcript) {
-        await supabase.from("session_transcripts").insert({
+        await sessionTranscriptsDB.create({
           session_id: sessionId,
           user_id: userId,
           transcript,
-        } as any);
-      }
-
-      if (overlay.hint_history.length > 0) {
-        const interactions = overlay.hint_history.map((h: any) => ({
-          session_id: sessionId,
-          user_id: userId,
-          type: "hint" as const,
-          prompt: h.question,
-          response: h.hint,
-          model: dbModel,
-        }));
-        await supabase.from("session_ai_interactions").insert(interactions as any);
+          utterances,
+        });
       }
 
       if (answersRef.current.length > 0) {
-        const answerRows = answersRef.current.map((a) => ({
-          session_id: sessionId,
-          user_id: userId,
-          question: a.question_text,
-          answer: a.answer_text,
-          duration_ms: a.duration_seconds * 1000,
-        }));
-        await supabase.from("session_answers").insert(answerRows as any).then(({ error }: any) => {
-          if (error) console.error("[MockSession] Failed to save session_answers:", error);
-        });
+        await sessionAnswersDB.createMany(
+          answersRef.current.map((a) => ({
+            session_id: sessionId,
+            user_id: userId,
+            question: a.question_text,
+            answer: a.answer_text,
+            duration_ms: a.duration_seconds * 1000,
+          })),
+        );
       }
 
       await useAuthStore.getState().refreshCredits();
@@ -434,7 +461,8 @@ export default function MockSession() {
 
     captureAnswer();
     if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
-    stt.stop();
+    setPhase("completed");
+    audio.stop();
     useOverlayStore.getState().hideOverlay();
     await persistMockSession();
     await orchestrator.completeSession();
@@ -447,8 +475,10 @@ export default function MockSession() {
     handleEndSessionRef.current = handleEndSession;
   });
 
-  // UI phases
-  if (phase === "setup") {
+  const isListening =
+    isCapturing && (deepgramStatus === "connected" || deepgramStatus === "reconnecting");
+
+  if (phase === "idle") {
     return (
       <PreSessionSetup
         onStart={handleSetup}
@@ -458,12 +488,63 @@ export default function MockSession() {
     );
   }
 
-  if (phase === "loading") {
+  if (phase === "configuring") {
+    return (
+      <div className="flex items-center justify-center min-h-screen px-4">
+        <div className="w-full max-w-md space-y-4">
+          <div className="text-center space-y-2">
+            <RefreshCw className="h-8 w-8 animate-spin text-primary mx-auto" />
+            <p className="text-sm font-medium text-foreground">Generating questions…</p>
+            <p className="text-xs text-muted-foreground">
+              Preparing your mock interview session
+            </p>
+          </div>
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-5/6" />
+          <Skeleton className="h-24 w-full rounded-xl" />
+          {questionsError && (
+            <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs">
+              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+              <span className="flex-1 text-red-300">{questionsError}</span>
+              <button
+                type="button"
+                className="font-semibold text-red-200 hover:text-red-100 whitespace-nowrap"
+                onClick={() => {
+                  const cfg = sessionConfigRef.current;
+                  const uid = profile?.id;
+                  const sid = useSessionStore.getState().session_id;
+                  if (!cfg || !uid || !sid) {
+                    setPhase("idle");
+                    return;
+                  }
+                  void loadQuestions(sid, cfg, uid)
+                    .then(() => audio.start())
+                    .then(() => {
+                      setPhase("active");
+                      useOverlayStore.getState().showOverlay();
+                    })
+                    .catch((err: unknown) => {
+                      setQuestionsError(
+                        err instanceof Error ? err.message : "Retry failed",
+                      );
+                    });
+                }}
+              >
+                Retry
+              </button>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === "completed") {
     return (
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
-          <p className="text-muted-foreground text-sm">Generating questions…</p>
+          <RefreshCw className="h-8 w-8 animate-spin text-primary mx-auto" />
+          <p className="text-sm text-muted-foreground">Saving session…</p>
         </div>
       </div>
     );
@@ -511,7 +592,7 @@ export default function MockSession() {
   return (
     <div className="min-h-screen max-h-screen overflow-y-auto bg-background text-foreground">
       <LiveSessionController isActive={true} />
-      <OverlayKeyboardHandler enabled={phase === "active"} onToggleMute={stt.toggleMute} />
+      <OverlayKeyboardHandler enabled={phase === "active"} onToggleMute={audio.toggleMute} />
 
       {/* Main UI */}
       <div className="flex items-center justify-center min-h-screen">
@@ -589,7 +670,7 @@ export default function MockSession() {
                 <div
                   className={cn(
                     "w-2 h-2 rounded-full",
-                    stt.isListening ? "bg-red-500 animate-pulse" : "bg-muted-foreground/30"
+                    isListening ? "bg-red-500 animate-pulse" : "bg-muted-foreground/30",
                   )}
                 />
                 <span className="text-xs font-medium text-foreground">Your answer</span>
@@ -609,8 +690,13 @@ export default function MockSession() {
                   {wpmHook.wpm} WPM
                 </span>
               </div>
-              <button onClick={stt.toggleMute} className="p-1.5 rounded-lg hover:bg-accent/10 transition-all">
-                {stt.isMuted ? (
+              <button
+                type="button"
+                onClick={audio.toggleMute}
+                className="p-1.5 rounded-lg hover:bg-accent/10 transition-all"
+                title={isMuted ? "Unmute" : "Mute"}
+              >
+                {isMuted ? (
                   <MicOff className="w-3.5 h-3.5 text-red-400" />
                 ) : (
                   <Mic className="w-3.5 h-3.5 text-emerald-400" />
@@ -619,10 +705,19 @@ export default function MockSession() {
             </div>
 
             <div className="min-h-[60px] text-sm text-foreground leading-relaxed">
-              {stt.transcript || <span className="text-muted-foreground italic">Start speaking…</span>}
-              {stt.interimTranscript && (
-                <span className="text-muted-foreground italic"> {stt.interimTranscript}</span>
+              {candidateTranscript || (
+                <span className="text-muted-foreground italic">Start speaking…</span>
               )}
+              {interimText && (
+                <span className="text-muted-foreground italic"> {interimText}</span>
+              )}
+            </div>
+
+            <div className="mt-4 pt-3 border-t border-border">
+              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
+                Conversation
+              </p>
+              <MockConversationPanel />
             </div>
 
             {fillerHook.totalCount > 0 && (
@@ -658,7 +753,8 @@ export default function MockSession() {
 
       {/* Overlay */}
       <OverlayWindow
-        onToggleMic={stt.toggleMute}
+        onToggleMic={audio.toggleMute}
+        onToggleSystemAudio={audio.toggleSystemAudio}
         onGenerate={() => handleRequestHint()}
         onEndSession={handleEndSession}
         onManualQuestion={(q: string) => {

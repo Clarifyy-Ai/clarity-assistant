@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
+import { profilesDB, supportDB } from "@/lib/supabase/database";
 import { Card, CardContent } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -53,40 +54,39 @@ export default function AdminLiveChat() {
 
   async function loadThreads() {
     setLoading(true);
-    let q: any = supabase.from("support_threads").select("*").order("last_message_at", { ascending: false }).limit(100);
-    if (statusFilter !== "all") q = q.eq("status", statusFilter);
-    const { data } = await q;
-    const list = (data as Thread[]) ?? [];
-    setThreads(list);
+    try {
+      const list = (await supportDB.listThreads(statusFilter)) as Thread[];
+      setThreads(list);
 
-    // Load user profiles
-    const ids = Array.from(new Set(list.map((t) => t.user_id)));
-    if (ids.length) {
-      const { data: profs } = await supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .in("id", ids);
-      const map: Record<string, ProfileLite> = {};
-      (profs ?? []).forEach((p: any) => { map[p.id] = p; });
-      setProfiles(map);
+      const ids = Array.from(new Set(list.map((t) => t.user_id)));
+      if (ids.length) {
+        const profs = await profilesDB.listLiteByIds(ids);
+        const map: Record<string, ProfileLite> = {};
+        profs.forEach((p) => {
+          map[p.id] = { id: p.id, full_name: p.full_name ?? null, email: p.email ?? null };
+        });
+        setProfiles(map);
+      } else {
+        setProfiles({});
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load support threads");
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   }
 
   // Load messages for active thread
   useEffect(() => {
     if (!activeId) return;
     (async () => {
-      const { data } = await supabase
-        .from("support_messages")
-        .select("*")
-        .eq("thread_id", activeId)
-        .order("created_at", { ascending: true });
-      setMessages((data as Message[]) ?? []);
-      // Mark thread read
-      await (supabase.from("support_threads") as any)
-        .update({ unread_for_admin: false })
-        .eq("id", activeId);
+      try {
+        const data = (await supportDB.listMessagesByThreadId(activeId)) as Message[];
+        setMessages(data ?? []);
+        await supportDB.markThreadReadForAdmin(activeId);
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to load messages");
+      }
     })();
   }, [activeId]);
 
@@ -131,22 +131,28 @@ export default function AdminLiveChat() {
     setSending(true);
     const body = reply.trim();
     setReply("");
-    const { error } = await supabase.from("support_messages").insert({
-      thread_id: activeId,
-      sender_id: user.id,
-      sender_role: "admin",
-      body,
-    });
-    if (error) toast.error(error.message);
-    setSending(false);
+    try {
+      await supportDB.sendMessage({
+        thread_id: activeId,
+        sender_id: user.id,
+        sender_role: "admin",
+        body,
+      });
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to send reply");
+    } finally {
+      setSending(false);
+    }
   }
 
   async function setStatus(id: string, status: Thread["status"]) {
-    const { error } = await (supabase.from("support_threads") as any)
-      .update({ status }).eq("id", id);
-    if (error) return toast.error(error.message);
-    toast.success(`Marked ${status}`);
-    void loadThreads();
+    try {
+      await supportDB.updateThread(id, { status });
+      toast.success(`Marked ${status}`);
+      void loadThreads();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to update thread");
+    }
   }
 
   const active = threads.find((t) => t.id === activeId) ?? null;

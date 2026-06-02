@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { memo, useEffect, useRef } from "react";
 import { useAudioStore } from "@/store/audioStore";
 import { cn } from "@/lib/utils";
 
@@ -15,7 +15,7 @@ function formatTimestamp(ms: number): string {
   return `${m}:${String(s).padStart(2, "0")}`;
 }
 
-export function LiveTranscriptStream() {
+function LiveTranscriptStreamInner() {
   const transcript = useAudioStore((s) => s.transcript);
 
   const utterances = transcript?.utterances ?? [];
@@ -100,3 +100,5 @@ export function LiveTranscriptStream() {
     </div>
   );
 }
+
+export const LiveTranscriptStream = memo(LiveTranscriptStreamInner);

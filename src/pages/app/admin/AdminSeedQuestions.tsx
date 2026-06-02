@@ -1,6 +1,7 @@
 // @ts-nocheck
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/lib/supabase/client";
+import { questionsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -46,12 +47,12 @@ export default function AdminSeedQuestions() {
   async function loadStats() {
     setLoading(true);
     try {
-      const { data } = await supabase
-        .from("questions")
-        .select("exam_type, source, is_verified, subject, source_year");
+      const data = await questionsDB.list({
+        columns: "exam_type, source, is_verified, subject, source_year",
+      });
 
       const map: Record<string, BankStat> = {};
-      for (const q of (data ?? []) as any[]) {
+      for (const q of data) {
         const et = q.exam_type ?? "CUSTOM";
         if (!map[et]) map[et] = { exam_type: et, total: 0, verified: 0, ai_generated: 0, years: [], subjects: [] };
         map[et].total++;
@@ -117,8 +118,7 @@ export default function AdminSeedQuestions() {
         uploaded_by: user.id
       }));
 
-      const { error } = await supabase.from("questions").insert(rowsToInsert);
-      if (error) throw error;
+      await questionsDB.createMany(rowsToInsert);
 
       toast.success(`Successfully extracted and verified ${questions.length} questions!`);
       setPdfFile(null);

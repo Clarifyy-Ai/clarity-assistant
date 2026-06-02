@@ -11,6 +11,8 @@ import {
   CheckCircle, Clock, Edit, Save, X, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import { jobDescriptionsDB } from "@/lib/supabase/database";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { companyProfilePath } from "@/lib/company/slug";
 
 // ─── Matches actual `job_descriptions` table schema ───────────────────────────
@@ -49,6 +51,8 @@ export default function JDDetail() {
   const [editRole,    setEditRole]    = useState("");
   const [editCompany, setEditCompany] = useState("");
   const [savingEdit,  setSavingEdit]  = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!id || !user?.id) return;
@@ -96,17 +100,17 @@ export default function JDDetail() {
   }
 
   async function handleDelete() {
-    if (!id || !user?.id || !confirm("Delete this job description?")) return;
-    const { error } = await supabase
-      .from("job_descriptions")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", user.id);
-    if (error) {
-      toast.error("Failed to delete job description. Please try again.");
-    } else {
+    if (!id || !user?.id) return;
+    setDeleting(true);
+    try {
+      await jobDescriptionsDB.delete(id, user.id);
       toast.success("Job description deleted");
       navigate("/app/documents");
+    } catch {
+      toast.error("Failed to delete job description. Please try again.");
+    } finally {
+      setDeleting(false);
+      setDeleteOpen(false);
     }
   }
 
@@ -175,7 +179,7 @@ export default function JDDetail() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={handleDelete}
+              onClick={() => setDeleteOpen(true)}
               className="text-red-400 hover:text-red-300"
             >
               <Trash2 className="w-4 h-4" />
@@ -311,6 +315,17 @@ export default function JDDetail() {
           })}
         </p>
       </div>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete this job description?"
+        description="This cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        isLoading={deleting}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }

@@ -3,10 +3,9 @@
 // window.location.href→navigate, error handling on queries.
 
 import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
-import { supabase } from "@/lib/supabase/client";
+import { sessionsDB } from "@/lib/supabase/database";
 import { useUIStore } from "@/store/uiStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
@@ -139,37 +138,32 @@ const QUICK_ACTIONS: QuickAction[] = [
 /* ─── DASHBOARD ──────────────────────────────────────────────────────────── */
 
 export default function Dashboard() {
-  const { profile, isLoading } = useAuthStore();
+  const { profile, user, isProfileLoaded } = useAuthStore();
   const stealth    = useUIStore((s) => s.stealth_mode);
-  const docStore   = useDocumentStore();
   const scheduler  = useInterviewSchedulerStore();
-  const gamification = useGamification() as GamificationData;
+  const gamification = useGamification();
   const navigate     = useNavigate();
 
-  useInterviewScheduler();
+  const { reload: reloadInterviews } = useInterviewScheduler();
 
-  // FIX Issue 22: null = loading, number = loaded
   const [sessionCount, setSessionCount] = useState<number | null>(null);
   const [sessionCountError, setSessionCountError] = useState<string | null>(null);
   const [sessionCountReloadKey, setSessionCountReloadKey] = useState(0);
 
+  const userId = profile?.id ?? user?.id;
+
   useEffect(() => {
-    if (!profile?.id) return;
+    if (!userId) return;
+    setSessionCount(null);
     setSessionCountError(null);
-    void supabase
-      .from("sessions")
-      .select("id", { count: "exact", head: true })
-      .eq("user_id", profile.id)
-      .then(({ count, error }) => {
-        if (error) {
-          // ✅ FIX P0-B: surface inline retry instead of silent toast
-          setSessionCountError("Couldn't load session count");
-          console.error("[Dashboard] session count error:", error);
-          return;
-        }
-        setSessionCount(count ?? 0);
+    void sessionsDB
+      .countByUserId(userId)
+      .then((count) => setSessionCount(count))
+      .catch((err: unknown) => {
+        setSessionCountError("Couldn't load session count");
+        console.error("[Dashboard] session count error:", err);
       });
-  }, [profile?.id, sessionCountReloadKey]);
+  }, [userId, sessionCountReloadKey]);
 
 
   const todayInterview = (scheduler.interviews as ScheduledInterview[]).find((i) => {
@@ -183,16 +177,8 @@ export default function Dashboard() {
     );
   });
 
-  if (isLoading) {
-    return (
-      <div className="space-y-6">
-        <Skeleton className="h-8 w-48" />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {Array.from({ length: 4 }).map((_, i) => <SkeletonCard key={i} />)}
-        </div>
-      </div>
-    );
-  }
+  const profileLoading = Boolean(userId) && !isProfileLoaded;
+  const gamificationLoading = gamification.isLoading;
 
   const firstName = profile?.full_name?.split(" ")[0] ?? "there";
   const hour      = new Date().getHours();
@@ -217,14 +203,14 @@ export default function Dashboard() {
           <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
             <Flame className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500 dark:text-amber-400" />
             <span className="text-[10px] sm:text-xs font-bold text-amber-600 dark:text-amber-400">
-              {gamification.streakCurrent} day streak
+              {gamificationLoading ? "…" : `${gamification.streakCurrent} day streak`}
             </span>
           </div>
 
           {/* FIX: low-credit warning badge at <50 credits (manual Ch.2) */}
           {(() => {
-            const credits     = profile?.credits ?? 0;
-            const isLowCredit = credits < 50;
+            const credits     = profileLoading ? null : (profile?.credits ?? 0);
+            const isLowCredit = credits !== null && credits < 50;
             return (
               <div className={cn(
                 "flex items-center gap-1.5 px-2 sm:px-3 py-1.5 border rounded-xl",
@@ -239,7 +225,7 @@ export default function Dashboard() {
                   "text-[10px] sm:text-xs font-bold",
                   isLowCredit ? "text-red-400" : "text-primary",
                 )}>
-                  {credits} credits{isLowCredit ? " — low" : ""}
+                  {credits === null ? "…" : credits} credits{isLowCredit ? " — low" : ""}
                 </span>
               </div>
             );
@@ -248,7 +234,7 @@ export default function Dashboard() {
       </div>
 
       {/* FIX: persistent low-credit warning banner (manual Ch.2 — show when <50) */}
-      {(profile?.credits ?? 0) < 50 && (
+      {!profileLoading && (profile?.credits ?? 0) < 50 && (
         <div className="flex items-center gap-3 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl">
           <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
           <p className="text-xs text-red-300 flex-1">
@@ -351,21 +337,24 @@ export default function Dashboard() {
 
         <StatCard
           label="Credits"
-          value={profile?.credits ?? 0}
+          value={profileLoading ? "—" : (profile?.credits ?? 0)}
           icon={<Zap className="w-4 h-4 text-emerald-400" />}
           color="emerald"
+          loading={profileLoading}
         />
         <StatCard
           label="Best streak"
-          value={`${gamification.streakLongest}d`}
+          value={gamificationLoading ? "—" : `${gamification.streakLongest}d`}
           icon={<Trophy className="w-4 h-4 text-amber-400" />}
           color="amber"
+          loading={gamificationLoading}
         />
         <StatCard
           label="XP total"
-          value={gamification.xp.toLocaleString()}
+          value={gamificationLoading ? "—" : gamification.xp.toLocaleString()}
           icon={<Zap className="w-4 h-4 text-violet-400" />}
           color="violet"
+          loading={gamificationLoading}
         />
       </div>
 
@@ -375,11 +364,17 @@ export default function Dashboard() {
           <RecentSessions />
           <UpcomingInterviews
             interviews={(scheduler.interviews as ScheduledInterview[]).slice(0, 3)}
+            loading={scheduler.is_loading}
+            error={scheduler.load_error}
+            onRetry={() => void reloadInterviews()}
           />
         </div>
         <div className="space-y-5">
           <SetupChecklist />
-          <XPLevelCard gamification={gamification} />
+          <XPLevelCard
+            gamification={gamification}
+            loading={gamificationLoading}
+          />
           <DocumentsStatusCard />
         </div>
       </div>
@@ -395,9 +390,10 @@ interface StatCardProps {
   icon:  React.ReactNode;
   color: string;
   trend?: "up" | "down" | "neutral";
+  loading?: boolean;
 }
 
-function StatCard({ label, value, icon, trend }: StatCardProps) {
+function StatCard({ label, value, icon, trend, loading }: StatCardProps) {
   return (
     <Card className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
@@ -406,7 +402,11 @@ function StatCard({ label, value, icon, trend }: StatCardProps) {
           <span className="text-[10px] text-emerald-400">↑ improving</span>
         )}
       </div>
-      <p className="text-xl sm:text-2xl font-black text-foreground">{value}</p>
+      {loading ? (
+        <Skeleton className="h-8 w-16" />
+      ) : (
+        <p className="text-xl sm:text-2xl font-black text-foreground">{value}</p>
+      )}
       <p className="text-[10px] sm:text-xs text-muted-foreground">{label}</p>
     </Card>
   );
@@ -416,34 +416,34 @@ function StatCard({ label, value, icon, trend }: StatCardProps) {
 
 function RecentSessions() {
   const stealth       = useUIStore((s) => s.stealth_mode);
-  const { user }      = useAuthStore();
+  const { user, profile } = useAuthStore();
   const navigate      = useNavigate();
   const [sessions, setSessions] = useState<SessionRow[]>([]);
   const [loading, setLoading]   = useState(true);
-  // ✅ FIX P0-B: inline retry instead of silent toast
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
 
+  const userId = profile?.id ?? user?.id;
+
   useEffect(() => {
-    if (!user?.id) { setLoading(false); return; }
+    if (!userId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
-    void supabase
-      .from("sessions")
-      .select("id, type, status, overall_score, title, created_at")
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false })
-      .limit(5)
-      .then(({ data, error: qErr }) => {
-        if (qErr) {
-          setError("Couldn't load recent sessions");
-          setLoading(false);
-          return;
-        }
-        setSessions((data ?? []) as SessionRow[]);
+    void sessionsDB
+      .listRecentSummary(userId, 5)
+      .then((rows) => {
+        setSessions(rows as SessionRow[]);
+        setLoading(false);
+      })
+      .catch((err: unknown) => {
+        setError("Couldn't load recent sessions");
+        console.error("[Dashboard] recent sessions:", err);
         setLoading(false);
       });
-  }, [user?.id, reloadKey]);
+  }, [userId, reloadKey]);
 
   return (
     <Card>
@@ -532,7 +532,17 @@ function RecentSessions() {
 
 /* ─── UPCOMING INTERVIEWS ────────────────────────────────────────────────── */
 
-function UpcomingInterviews({ interviews }: { interviews: ScheduledInterview[] }) {
+function UpcomingInterviews({
+  interviews,
+  loading,
+  error,
+  onRetry,
+}: {
+  interviews: ScheduledInterview[];
+  loading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
+}) {
   const stealth  = useUIStore((s) => s.stealth_mode);
   const navigate = useNavigate();
 
@@ -551,7 +561,18 @@ function UpcomingInterviews({ interviews }: { interviews: ScheduledInterview[] }
         </Link>
       </div>
 
-      {interviews.length === 0 ? (
+      {error ? (
+        <InlineErrorRetry
+          message={error}
+          onRetry={() => onRetry?.()}
+        />
+      ) : loading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <Skeleton key={i} className="h-14 w-full rounded-xl" />
+          ))}
+        </div>
+      ) : interviews.length === 0 ? (
         <EmptyState
           icon={CalendarDays}
           title={stealth ? "No upcoming meetings" : "No upcoming interviews"}
@@ -597,10 +618,21 @@ function UpcomingInterviews({ interviews }: { interviews: ScheduledInterview[] }
 
 /* ─── XP LEVEL CARD ──────────────────────────────────────────────────────── */
 
-function XPLevelCard({ gamification }: { gamification: GamificationData }) {
-  // FIX: use pre-computed values from useGamification's computeLevel() which
-  // correctly uses the non-linear XP_LEVELS thresholds instead of the old
-  // flat XP_PER_LEVEL = 200 constant (wrong for levels 2+).
+function XPLevelCard({
+  gamification,
+  loading,
+}: {
+  gamification: GamificationData;
+  loading?: boolean;
+}) {
+  if (loading) {
+    return (
+      <Card>
+        <Skeleton className="h-20 w-full rounded-xl" />
+      </Card>
+    );
+  }
+
   return (
     <Card>
       <div className="flex items-center justify-between mb-3">

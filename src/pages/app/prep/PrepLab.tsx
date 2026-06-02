@@ -19,6 +19,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";
+import { answerBankDB } from "@/lib/supabase/database";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { EDGE_BASE } from "@/lib/env";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
@@ -210,15 +211,13 @@ function STARBuilder() {
   async function saveToBank() {
     if (!user || !generated) return;
     try {
-      const { error } = await supabase.from("answer_bank").insert({
-        user_id: user.id,
+      await answerBankDB.create(user.id, {
         question_text: question,
         answer_text: generated,
         category: "STAR",
         source: "prep_lab",
         tags: ["star", "prep_lab"],
       });
-      if (error) throw error;
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
     } catch (err) {
@@ -424,16 +423,9 @@ function QuestionBank() {
       }
 
       try {
-        const { data, error } = await supabase
-          .from("answer_bank")
-          .select("id, question_text, category, tags")
-          .eq("user_id", user.id)
-          .order("updated_at", { ascending: false })
-          .limit(100);
+        const rows = await answerBankDB.listByUserId(user.id);
 
-        if (error) throw error;
-
-        const fromBank: BankQuestion[] = (data ?? [])
+        const fromBank: BankQuestion[] = rows.slice(0, 100)
           .map((row: { id: string; question_text?: string; category?: string; tags?: string[] }) => ({
             id: row.id,
             text: (row.question_text ?? "").trim(),
@@ -469,15 +461,13 @@ function QuestionBank() {
   async function savePracticeToBank() {
     if (!user || !activeQ || answer.trim().length < 8) return;
     try {
-      const { error } = await supabase.from("answer_bank").insert({
-        user_id: user.id,
+      await answerBankDB.create(user.id, {
         question_text: activeQ.text,
         answer_text: answer.trim(),
         category: activeQ.category,
         source: "prep_lab_practice",
         tags: ["practice"],
       });
-      if (error) throw error;
       toast.success("Practice answer saved to your bank.");
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save answer.");
@@ -609,15 +599,13 @@ function QuestionBank() {
                 onClick={async () => {
                   if (!user) return;
                   try {
-                    const { error } = await supabase.from("answer_bank").insert({
-                      user_id: user.id,
+                    await answerBankDB.create(user.id, {
                       question_text: q.text,
                       answer_text: "(Draft — open Practice to add your answer)",
                       category: q.category,
                       source: "prep_lab_bank",
                       tags: ["saved_question"],
                     });
-                    if (error) throw error;
                     toast.success("Question saved to your bank.");
                   } catch (err) {
                     toast.error(err instanceof Error ? err.message : "Failed to save.");

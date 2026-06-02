@@ -20,7 +20,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-import { supabase } from "@/lib/supabase/client";
+import { questionsDB } from "@/lib/supabase/database";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
@@ -158,12 +158,7 @@ function EditModal({
         exam_type: form.exam_type,
       };
 
-      const { error } = await supabase
-        .from("questions")
-        .update(payload)
-        .eq("id", question.id);
-
-      if (error) throw error;
+      await questionsDB.update(question.id, payload);
 
       const updated: Question = {
         ...question,
@@ -308,16 +303,12 @@ export default function MyQuestions() {
     setLoading(true);
 
     try {
-      const { data, error } = await supabase
-        .from("questions")
-        .select(
-          "id, question_text, question_type, subject, topic, difficulty, exam_type, correct_answer, explanation, created_at, is_verified"
-        )
-        .eq("uploaded_by", user.id)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      setQuestions((data ?? []) as Question[]);
+      const data = await questionsDB.list({
+        uploadedBy: user.id,
+        columns:
+          "id, question_text, question_type, subject, topic, difficulty, exam_type, correct_answer, explanation, created_at, is_verified",
+      });
+      setQuestions(data as Question[]);
     } catch (error) {
       console.error("[MyQuestions] load failed:", error);
       toast.error("Failed to load questions.");
@@ -417,8 +408,7 @@ export default function MyQuestions() {
 
   async function handleDelete(id: string) {
     try {
-      const { error } = await supabase.from("questions").delete().eq("id", id);
-      if (error) throw error;
+      await questionsDB.delete(id);
 
       setQuestions((prev) => prev.filter((question) => question.id !== id));
       setSelected((prev) => {
@@ -441,8 +431,7 @@ export default function MyQuestions() {
     if (ids.length === 0) return;
 
     try {
-      const { error } = await supabase.from("questions").delete().in("id", ids);
-      if (error) throw error;
+      await questionsDB.deleteMany(ids);
 
       setQuestions((prev) => prev.filter((question) => !ids.includes(question.id)));
       setSelected(new Set());

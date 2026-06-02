@@ -1,12 +1,31 @@
-/** User-facing instructions before Chromium tab-audio capture. */
+import { toast } from "sonner";
+
+const TAB_AUDIO_GUIDE_KEY = "clarify:tab_audio_guide_ack_v1";
+
+const TAB_AUDIO_INSTRUCTIONS =
+  "When the share dialog opens: pick your interview tab, enable \"Share tab audio\", then click Share. Only audio is captured — no video.";
+
+/** Call from pre-session wizard when system audio is enabled. */
+export function acknowledgeTabAudioGuide(): void {
+  try {
+    sessionStorage.setItem(TAB_AUDIO_GUIDE_KEY, "1");
+  } catch {
+    // ignore private mode
+  }
+}
+
+/** Returns true when capture may proceed (no blocking window.confirm). */
 export function confirmTabAudioCapture(): boolean {
-  return window.confirm(
-    "Capture Interviewer Audio\n\n" +
-      "A screen share dialog will appear next.\n\n" +
-      "1. Select the tab with your interview call (Meet/Zoom in browser)\n" +
-      "2. Check \"Share tab audio\" at the bottom\n" +
-      "3. Click Share\n\n" +
-      "Desktop Zoom/Teams apps are not supported — use the browser tab.\n" +
-      "No video is recorded — only audio is used for transcription."
-  );
+  try {
+    if (sessionStorage.getItem(TAB_AUDIO_GUIDE_KEY)) return true;
+  } catch {
+    // fall through to toast
+  }
+
+  toast.info("Share tab audio", {
+    description: TAB_AUDIO_INSTRUCTIONS,
+    duration: 10_000,
+  });
+  acknowledgeTabAudioGuide();
+  return true;
 }

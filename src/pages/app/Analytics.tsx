@@ -13,8 +13,17 @@ import {
   BarChart2, TrendingUp, TrendingDown,
   Flame, Zap, Brain, Mic,
   AlertTriangle, CheckCircle, Target,
-  Calendar, Clock, Volume2,
+  Calendar, Clock, Volume2, Download,
 } from "lucide-react";
+import { Button } from "@/components/ui/Button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import type { AnalyticsPeriod } from "@/types/analytics.types";
 import { cn } from "@/lib/utils";
 import { format, subDays } from "date-fns";
 
@@ -60,12 +69,39 @@ export default function Analytics() {
       <PageHeader
         title="Analytics"
         subtitle="Track your interview performance over time"
+        actions={
+          <div className="flex flex-wrap items-center gap-2">
+            <Select
+              value={analytics.filter.period}
+              onValueChange={(v) => analytics.setPeriod(v as AnalyticsPeriod)}
+            >
+              <SelectTrigger className="w-[130px] h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="7d">Last 7 days</SelectItem>
+                <SelectItem value="30d">Last 30 days</SelectItem>
+                <SelectItem value="90d">Last 90 days</SelectItem>
+                <SelectItem value="all">All time</SelectItem>
+              </SelectContent>
+            </Select>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void analytics.downloadCSV()}
+              disabled={!analytics.data?.recent_sessions?.length}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              Export CSV
+            </Button>
+          </div>
+        }
       />
 
       {/* ── KPI row ───────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <KPICard
-          label="Avg score (30d)"
+          label={`Avg score (${analytics.filter.period})`}
           value={`${analytics.avgScore30d ?? 0}`}
           delta={analytics.scoreDelta}
           icon={<BarChart2 className="w-4 h-4 text-violet-400" />}

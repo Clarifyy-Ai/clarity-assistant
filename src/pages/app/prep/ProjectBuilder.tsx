@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase/client";
+import { answerBankDB } from "@/lib/supabase/database";
 
 export default function ProjectBuilder() {
   const credits = useCredits();
@@ -71,14 +71,14 @@ export default function ProjectBuilder() {
 
   async function saveShowcase() {
     if (!user || !showcase) return;
-    const { error: insertErr } = await supabase.from("answer_bank").insert({
-      user_id: user.id,
-      question_text: `Project Showcase: ${projectName}`,
-      answer_text: showcase,
-      category: "Technical",
-      source: "prep_lab",
-    });
-    if (insertErr) {
+    try {
+      await answerBankDB.create(user.id, {
+        question_text: `Project Showcase: ${projectName}`,
+        answer_text: showcase,
+        category: "Technical",
+        source: "prep_lab",
+      });
+    } catch {
       toast.error("Failed to save — please try again");
       return;
     }

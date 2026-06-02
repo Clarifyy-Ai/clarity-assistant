@@ -2,7 +2,7 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase/client";
+import { jobDescriptionsDB } from "@/lib/supabase/database";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useDocumentStore } from "@/store/documentStore";
 import { useDocumentManager } from "@/hooks/useDocumentManager";
@@ -368,6 +368,7 @@ function ResumeManager() {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function JDManager() {
+  const { user } = useAuthStore();
   const docStore = useDocumentStore();
   const docMgr   = useDocumentManager({ skipInitialLoad: true });
 
@@ -414,10 +415,18 @@ function JDManager() {
   }
 
   const handleDeleteJD = useCallback(async (jdId: string) => {
-    await supabase.from("job_descriptions").delete().eq("id", jdId);
-    docStore.removeJD(jdId);
-    toast.success("Job description deleted.");
-  }, []);
+    if (!user?.id) {
+      toast.error("Sign in to delete job descriptions.");
+      return;
+    }
+    try {
+      await jobDescriptionsDB.delete(jdId, user.id);
+      docStore.removeJD(jdId);
+      toast.success("Job description deleted.");
+    } catch {
+      toast.error("Failed to delete job description.");
+    }
+  }, [user?.id]);
 
   return (
     <div className="space-y-4">

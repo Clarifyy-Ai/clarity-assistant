@@ -10,14 +10,16 @@ const PRIVATE_MODE_ALLOWLIST = new Set([
 ]);
 
 /**
- * Read JWT from auth store first (fast path, no network).
- * Only falls back to supabase.auth.getSession() when the store is empty.
+ * ✅ FIX P7-C: Always read a fresh JWT at call time (session may have refreshed).
  */
 async function readToken(): Promise<string | undefined> {
-  const cached = useAuthStore.getState().session?.access_token;
-  if (cached) return cached;
-  const { data } = await supabase.auth.getSession();
-  return data?.session?.access_token;
+  const { data, error } = await supabase.auth.getSession();
+  if (error) {
+    console.warn("[fetchEdge] getSession failed:", error.message);
+  }
+  const fresh = data?.session?.access_token;
+  if (fresh) return fresh;
+  return useAuthStore.getState().session?.access_token;
 }
 
 export async function getAuthHeaders(

@@ -10,7 +10,7 @@ import {
   X,
 } from "lucide-react";
 import * as XLSX from "xlsx";
-import { supabase } from "@/lib/supabase/client";
+import { questionsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -240,8 +240,7 @@ export default function ExcelImportTab({
 
       for (let i = 0; i < rows.length; i += 50) {
         const chunk = rows.slice(i, i + 50);
-        const { error } = await supabase.from("questions").insert(chunk);
-        if (error) throw error;
+        await questionsDB.createMany(chunk);
       }
 
       toast.success(`${rows.length} questions imported successfully.`);

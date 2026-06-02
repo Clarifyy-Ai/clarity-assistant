@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase/client";
+import { adminAnalyticsDB } from "@/lib/supabase/database";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
@@ -43,33 +43,17 @@ export default function AdminDashboard() {
     setError(null);
 
     try {
-      const [
-        totalRes,
-        proRes,
-        todayRes,
-        totalSessionsRes,
-      ] = await Promise.all([
-        supabase.from("profiles").select("*", { count: "exact", head: true }),
-        (supabase.from("profiles") as unknown as ReturnType<typeof supabase.from>).select("*", { count: "exact", head: true }).not("plan_id", "eq", "free"),
-        supabase.from("sessions").select("*", { count: "exact", head: true })
-          .gte("created_at", new Date().toISOString().slice(0, 10)),
-        supabase.from("sessions").select("*", { count: "exact", head: true }),
-      ]);
-
-      const firstErr = [totalRes, proRes, todayRes, totalSessionsRes].find((r) => r.error)?.error;
-      if (firstErr) throw firstErr;
-
-      const total = totalRes.count ?? 0;
-      const pro   = proRes.count   ?? 0;
+      const counts = await adminAnalyticsDB.getDashboardStats();
+      const { totalUsers, proUsers, todaySessions, totalSessions } = counts;
 
       setStats({
-        totalUsers:    total,
-        proUsers:      pro,
-        freeUsers:     total - pro,
-        todaySessions: todayRes.count ?? 0,
-        totalSessions: totalSessionsRes.count ?? 0,
-        mrr:           pro * 19,
-        convRate:      total ? ((pro / total) * 100).toFixed(1) : "0",
+        totalUsers,
+        proUsers,
+        freeUsers: totalUsers - proUsers,
+        todaySessions,
+        totalSessions,
+        mrr: proUsers * 19,
+        convRate: totalUsers ? ((proUsers / totalUsers) * 100).toFixed(1) : "0",
       });
     } catch (e: any) {
       const msg = e?.message ?? "Failed to load admin stats";

@@ -3,7 +3,11 @@ import { fetchEdge } from "@/lib/network/fetchEdge";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
-import { supabase } from "@/lib/supabase/client";
+import {
+  answerBankDB,
+  sessionAnswersDB,
+  sessionsDB,
+} from "@/lib/supabase/database";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -61,12 +65,11 @@ export default function SettingsDanger() {
     if (!user) return;
     setResetting(true);
     try {
-      const { error: e1 } = await supabase.from("sessions").delete().eq("user_id", user.id);
-      if (e1) throw e1;
-      const { error: e2 } = await supabase.from("session_answers").delete().eq("user_id", user.id);
-      if (e2) throw e2;
-      const { error: e3 } = await supabase.from("answer_bank").delete().eq("user_id", user.id);
-      if (e3) throw e3;
+      await Promise.all([
+        sessionsDB.deleteAllByUserId(user.id),
+        sessionAnswersDB.deleteAllByUserId(user.id),
+        answerBankDB.deleteAllByUserId(user.id),
+      ]);
 
       toast.success("Progress reset successfully");
       setResetOpen(false);

@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase/client";
+import { answerBankDB } from "@/lib/supabase/database";
 import { Whiteboard } from "@/components/prep/Whiteboard";
 
 type Difficulty = "easy" | "medium" | "hard";
@@ -120,14 +120,14 @@ export default function SystemDesign() {
 
   async function saveDesignNotes() {
     if (!user || !activeTopic || !notes.trim()) return;
-    const { error: insertErr } = await (supabase as any).from("answer_bank").insert({
-      user_id: user.id,
-      question_text: `System Design: ${activeTopic.title}`,
-      answer_text: `${notes}\n\n--- AI Breakdown ---\n${breakdown}`,
-      category: "System Design",
-      source: "prep_lab",
-    });
-    if (insertErr) {
+    try {
+      await answerBankDB.create(user.id, {
+        question_text: `System Design: ${activeTopic.title}`,
+        answer_text: `${notes}\n\n--- AI Breakdown ---\n${breakdown}`,
+        category: "System Design",
+        source: "prep_lab",
+      });
+    } catch {
       toast.error("Failed to save — please try again");
       return;
     }

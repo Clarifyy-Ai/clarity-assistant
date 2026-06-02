@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
-import { supabase } from "@/lib/supabase/client";
+import { questionsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import {
   Plus, Save, Eye, ListChecks, Loader2, Trash2, Search, ArrowLeft,
 } from "lucide-react";
@@ -65,30 +66,40 @@ function ListView() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
   const [examFilter, setExamFilter] = useState<string>("all");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => { void load(); }, [search, examFilter]);
 
   async function load() {
     setLoading(true);
-    let q: any = supabase
-      .from("questions")
-      .select("*")
-      .order("created_at", { ascending: false })
-      .limit(100);
-    if (examFilter !== "all") q = q.eq("exam_type", examFilter);
-    if (search) q = q.ilike("question_text", `%${search}%`);
-    const { data, error } = await q;
-    if (error) toast.error(error.message);
-    setRows((data as QuestionRow[]) ?? []);
-    setLoading(false);
+    try {
+      const data = await questionsDB.list({
+        examType: examFilter,
+        search: search || undefined,
+        limit: 100,
+      });
+      setRows(data as QuestionRow[]);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to load questions");
+    } finally {
+      setLoading(false);
+    }
   }
 
-  async function handleDelete(qid: string) {
-    if (!confirm("Delete this question? This cannot be undone.")) return;
-    const { error } = await supabase.from("questions").delete().eq("id", qid);
-    if (error) return toast.error(error.message);
-    toast.success("Deleted");
-    void load();
+  async function confirmDelete() {
+    if (!deleteId) return;
+    setDeleting(true);
+    try {
+      await questionsDB.delete(deleteId);
+      toast.success("Deleted");
+      void load();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Delete failed");
+    } finally {
+      setDeleting(false);
+      setDeleteId(null);
+    }
   }
 
   return (
@@ -171,7 +182,7 @@ function ListView() {
                     </td>
                     <td className="px-4 py-3 text-right">
                       <button
-                        onClick={(e) => { e.stopPropagation(); handleDelete(r.id); }}
+                        onClick={(e) => { e.stopPropagation(); setDeleteId(r.id); }}
                         className="p-1.5 rounded-lg text-destructive hover:bg-destructive/10"
                       >
                         <Trash2 className="w-4 h-4" />
@@ -184,6 +195,17 @@ function ListView() {
           </div>
         )}
       </Card>
+
+      <ConfirmDialog
+        open={deleteId !== null}
+        onOpenChange={(open) => { if (!open) setDeleteId(null); }}
+        title="Delete this question?"
+        description="This cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        isLoading={deleting}
+        onConfirm={confirmDelete}
+      />
     </div>
   );
 }
@@ -242,42 +264,48 @@ function EditorView({ id }: { id?: string }) {
     if (isNew) return;
     (async () => {
       setLoading(true);
-      const { data, error } = await supabase
-        .from("questions")
-        .select("*")
-        .eq("id", id!)
-        .maybeSingle();
-      if (error || !data) {
-        toast.error(error?.message ?? "Question not found");
+      try {
+        const data = await questionsDB.getById(id!);
+        if (!data) {
+          toast.error("Question not found");
+          navigate("/app/admin/questions");
+          return;
+        }
+        const r = data;
+        const optsRaw: Record<string, unknown> =
+          (r.options as Record<string, unknown>) ?? {};
+        const optionBlocks: Record<string, Block[]> = {};
+        for (const L of OPTION_LETTERS) {
+          optionBlocks[L] = ensureBlocks(
+            (r.option_blocks as Record<string, Block[] | undefined>)?.[L],
+            typeof optsRaw === "object" ? String(optsRaw[L] ?? "") : "",
+          );
+        }
+        setState({
+          qBlocks: ensureBlocks(r.question_blocks as Block[] | null, r.question_text),
+          optionBlocks,
+          explanationBlocks: ensureBlocks(
+            r.explanation_blocks as Block[] | null,
+            r.explanation,
+          ),
+          correct: (r.correct_answer ?? "A") as "A",
+          subject: r.subject ?? "",
+          topic: r.topic ?? "",
+          subtopic: r.subtopic ?? "",
+          difficulty: r.difficulty ?? "MEDIUM",
+          examType: r.exam_type ?? "JEE_MAIN",
+          sourceYear: String(r.source_year ?? new Date().getFullYear()),
+          marksPositive: Number(r.marks_positive ?? 4),
+          marksNegative: Number(r.marks_negative ?? 1),
+          isVerified: !!r.is_verified,
+          isPublic: !!r.is_public,
+        });
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to load question");
         navigate("/app/admin/questions");
-        return;
+      } finally {
+        setLoading(false);
       }
-      const r = data as any;
-      const optsRaw: any = r.options ?? {};
-      const optionBlocks: Record<string, Block[]> = {};
-      for (const L of OPTION_LETTERS) {
-        optionBlocks[L] = ensureBlocks(
-          r.option_blocks?.[L],
-          typeof optsRaw === "object" ? (optsRaw[L] ?? "") : "",
-        );
-      }
-      setState({
-        qBlocks: ensureBlocks(r.question_blocks, r.question_text),
-        optionBlocks,
-        explanationBlocks: ensureBlocks(r.explanation_blocks, r.explanation),
-        correct: (r.correct_answer ?? "A") as "A",
-        subject: r.subject ?? "",
-        topic: r.topic ?? "",
-        subtopic: r.subtopic ?? "",
-        difficulty: r.difficulty ?? "MEDIUM",
-        examType: r.exam_type ?? "JEE_MAIN",
-        sourceYear: String(r.source_year ?? new Date().getFullYear()),
-        marksPositive: Number(r.marks_positive ?? 4),
-        marksNegative: Number(r.marks_negative ?? 1),
-        isVerified: !!r.is_verified,
-        isPublic: !!r.is_public,
-      });
-      setLoading(false);
     })();
   }, [id, isNew, navigate]);
 
@@ -320,13 +348,11 @@ function EditorView({ id }: { id?: string }) {
       };
 
       if (isNew) {
-        const { data, error } = await supabase.from("questions").insert(payload).select("id").single();
-        if (error) throw error;
+        const { id: newId } = await questionsDB.create(payload);
         toast.success("Question created");
-        navigate(`/app/admin/questions/${data.id}`);
+        navigate(`/app/admin/questions/${newId}`);
       } else {
-        const { error } = await supabase.from("questions").update(payload).eq("id", id!);
-        if (error) throw error;
+        await questionsDB.update(id!, payload);
         toast.success("Saved");
       }
     } catch (err: any) {

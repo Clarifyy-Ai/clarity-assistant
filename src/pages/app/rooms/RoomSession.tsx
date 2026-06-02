@@ -1,41 +1,40 @@
-// @ts-nocheck
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
+import { practiceRoomsDB } from "@/lib/supabase/database";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import {
-  Video, Square, Play, MessageSquare, Users, Send, Loader2, CheckCircle, LogOut,
+  Video,
+  Square,
+  Play,
+  MessageSquare,
+  Users,
+  Send,
+  Loader2,
+  CheckCircle,
+  LogOut,
+  RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import type { Tables } from "@/integrations/supabase";
 
-interface Room {
-  id: string;
-  name: string;
-  description: string | null;
-  status: string;
-  max_players: number;
-  is_public: boolean;
-  host_id: string;
-  created_at: string;
-}
-
-interface Participant {
-  id: string;
-  user_id: string;
-  role: string;
-  joined_at: string;
-}
-
-interface ChatMessage {
-  id: string;
-  user_id: string;
-  message: string;
-  created_at: string;
-}
+type Room = Pick<
+  Tables<"practice_rooms">,
+  | "id"
+  | "name"
+  | "description"
+  | "status"
+  | "max_players"
+  | "is_public"
+  | "host_id"
+  | "created_at"
+>;
+type Participant = Tables<"room_participants">;
+type ChatMessage = Tables<"room_chat">;
 
 export default function RoomSession() {
   const { roomId: id } = useParams<{ roomId: string }>();
@@ -46,138 +45,144 @@ export default function RoomSession() {
   const [participants, setParticipants] = useState<Participant[]>([]);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
 
-  // Initial fetch + auto-join
-  useEffect(() => {
-    if (!id) return;
-    // Wait for auth to hydrate before fetching — but never leave the page
-    // stuck on a skeleton: if user is null after first render, flip loading
-    // so the "Room not found" / sign-in fallback can render.
-    if (!user?.id) {
+  const loadRoom = useCallback(async () => {
+    if (!id || !user?.id) {
       setLoading(false);
       return;
     }
-    let cancelled = false;
+
     setLoading(true);
-    (async () => {
-      try {
-        const { data: r, error: roomErr } = await supabase
-          .from("practice_rooms")
-          .select("*")
-          .eq("id", id)
-          .maybeSingle();
+    setLoadError(null);
 
-        if (cancelled) return;
-        if (roomErr) {
-          console.error("[RoomSession] room fetch failed:", roomErr);
-          toast.error(roomErr.message || "Failed to load room");
-        }
-        setRoom((r as Room | null) ?? null);
-
-        if (r) {
-          // Join if not already a participant
-          const { data: existing } = await supabase
-            .from("room_participants")
-            .select("id")
-            .eq("room_id", id)
-            .eq("user_id", user.id)
-            .maybeSingle();
-
-          if (!existing) {
-            const { error: joinErr } = await supabase.from("room_participants").insert({
-              room_id: id,
-              user_id: user.id,
-              role: r.host_id === user.id ? "host" : "participant",
-            });
-            if (joinErr) console.error("[RoomSession] auto-join failed:", joinErr);
-          }
-
-          const [{ data: parts }, { data: msgs }] = await Promise.all([
-            supabase.from("room_participants").select("*").eq("room_id", id).is("left_at", null),
-            supabase.from("room_chat").select("*").eq("room_id", id).order("created_at", { ascending: true }).limit(200),
-          ]);
-
-          if (!cancelled) {
-            setParticipants((parts as Participant[]) ?? []);
-            setMessages((msgs as ChatMessage[]) ?? []);
-          }
-        }
-      } catch (err) {
-        console.error("[RoomSession] unexpected error:", err);
-        if (!cancelled) toast.error("Failed to load room");
-      } finally {
-        if (!cancelled) setLoading(false);
+    try {
+      const r = await practiceRoomsDB.getById(id);
+      if (!r) {
+        setRoom(null);
+        return;
       }
-    })();
-    return () => { cancelled = true; };
+
+      setRoom(r as Room);
+
+      const existing = await practiceRoomsDB.findParticipant(id, user.id);
+      const role = r.host_id === user.id ? "host" : "participant";
+
+      if (!existing) {
+        await practiceRoomsDB.addParticipant({
+          room_id: id,
+          user_id: user.id,
+          role,
+        });
+      } else if (existing.left_at) {
+        await practiceRoomsDB.reactivateParticipant(existing.id, role);
+      }
+
+      const [parts, msgs] = await Promise.all([
+        practiceRoomsDB.listParticipants(id),
+        practiceRoomsDB.listMessages(id, 200),
+      ]);
+
+      setParticipants(parts);
+      setMessages(msgs);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load room";
+      setLoadError(message);
+      toast.error(message);
+    } finally {
+      setLoading(false);
+    }
   }, [id, user?.id]);
 
-  // Mark participant left when navigating away without clicking Leave
+  useEffect(() => {
+    void loadRoom();
+  }, [loadRoom]);
+
   useEffect(() => {
     if (!id || !user?.id) return;
     return () => {
-      void supabase
-        .from("room_participants")
-        .update({ left_at: new Date().toISOString() })
-        .eq("room_id", id)
-        .eq("user_id", user.id)
-        .is("left_at", null);
+      void practiceRoomsDB.markParticipantLeft(id, user.id);
     };
   }, [id, user?.id]);
 
-  // Realtime presence + chat
   useEffect(() => {
     if (!id) return;
     const channel = supabase
       .channel(`room:${id}`)
-      .on("postgres_changes",
-        { event: "*", schema: "public", table: "room_participants", filter: `room_id=eq.${id}` },
+      .on(
+        "postgres_changes",
+        {
+          event: "*",
+          schema: "public",
+          table: "room_participants",
+          filter: `room_id=eq.${id}`,
+        },
         async () => {
-          const { data } = await supabase
-            .from("room_participants").select("*")
-            .eq("room_id", id).is("left_at", null);
-          setParticipants((data as Participant[]) ?? []);
-        })
-      .on("postgres_changes",
-        { event: "INSERT", schema: "public", table: "room_chat", filter: `room_id=eq.${id}` },
+          const data = await practiceRoomsDB.listParticipants(id);
+          setParticipants(data);
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "room_chat",
+          filter: `room_id=eq.${id}`,
+        },
         (payload) => {
           setMessages((prev) => [...prev, payload.new as ChatMessage]);
-        })
-      .on("postgres_changes",
-        { event: "UPDATE", schema: "public", table: "practice_rooms", filter: `id=eq.${id}` },
-        (payload) => setRoom(payload.new as Room))
+        },
+      )
+      .on(
+        "postgres_changes",
+        {
+          event: "UPDATE",
+          schema: "public",
+          table: "practice_rooms",
+          filter: `id=eq.${id}`,
+        },
+        (payload) => setRoom(payload.new as Room),
+      )
       .subscribe();
-    return () => { supabase.removeChannel(channel); };
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [id]);
 
-  // Auto-scroll chat
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length]);
 
   async function startSession() {
     if (!id) return;
-    const { error } = await supabase
-      .from("practice_rooms").update({ status: "in_progress" }).eq("id", id);
-    if (error) toast.error("Failed to start session");
+    try {
+      await practiceRoomsDB.updateStatus(id, "in_progress");
+    } catch {
+      toast.error("Failed to start session");
+    }
   }
 
   async function endSession() {
     if (!id) return;
-    const { error } = await supabase
-      .from("practice_rooms").update({ status: "completed" }).eq("id", id);
-    if (!error) toast.success("Session ended");
+    try {
+      await practiceRoomsDB.updateStatus(id, "completed");
+      toast.success("Session ended");
+    } catch {
+      toast.error("Failed to end session");
+    }
   }
 
   async function leaveRoom() {
     if (!id || !user?.id) return;
-    await supabase
-      .from("room_participants")
-      .update({ left_at: new Date().toISOString() })
-      .eq("room_id", id).eq("user_id", user.id);
+    try {
+      await practiceRoomsDB.markParticipantLeft(id, user.id);
+    } catch {
+      // still navigate away
+    }
     navigate("/app/rooms");
   }
 
@@ -186,14 +191,18 @@ export default function RoomSession() {
     setSending(true);
     const text = draft.trim();
     setDraft("");
-    const { error } = await supabase.from("room_chat").insert({
-      room_id: id, user_id: user.id, message: text,
-    });
-    if (error) {
+    try {
+      await practiceRoomsDB.sendMessage({
+        room_id: id,
+        user_id: user.id,
+        message: text,
+      });
+    } catch {
       toast.error("Failed to send");
       setDraft(text);
+    } finally {
+      setSending(false);
     }
-    setSending(false);
   }
 
   if (loading) {
@@ -202,6 +211,19 @@ export default function RoomSession() {
         <Card className="animate-pulse h-32" />
         <Card className="animate-pulse h-64" />
       </div>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <Card className="text-center py-12 border-destructive/30">
+        <p className="text-foreground font-medium mb-2">Could not load room</p>
+        <p className="text-sm text-muted-foreground mb-4">{loadError}</p>
+        <Button variant="outline" size="sm" onClick={() => void loadRoom()}>
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Retry
+        </Button>
+      </Card>
     );
   }
 
@@ -238,25 +260,49 @@ export default function RoomSession() {
           <Card className="border-violet-500/20">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
-                <span className={cn("w-2 h-2 rounded-full",
-                  isActive ? "bg-red-500 animate-pulse" :
-                  isCompleted ? "bg-emerald-500" : "bg-blue-500")} />
-                <span className="text-sm font-medium capitalize">{room.status?.replace("_", " ")}</span>
+                <span
+                  className={cn(
+                    "w-2 h-2 rounded-full",
+                    isActive
+                      ? "bg-red-500 animate-pulse"
+                      : isCompleted
+                        ? "bg-emerald-500"
+                        : "bg-blue-500",
+                  )}
+                />
+                <span className="text-sm font-medium capitalize">
+                  {room.status?.replace("_", " ")}
+                </span>
               </div>
               <div className="flex gap-2">
                 {isHost && isWaiting && (
-                  <Button variant="primary" size="sm" leftIcon={<Play className="w-4 h-4" />} onClick={startSession}>
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    leftIcon={<Play className="w-4 h-4" />}
+                    onClick={() => void startSession()}
+                  >
                     Start session
                   </Button>
                 )}
                 {isHost && isActive && (
-                  <Button variant="ghost" size="sm" leftIcon={<Square className="w-4 h-4" />} onClick={endSession}
-                    className="text-red-400 hover:text-red-300">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    leftIcon={<Square className="w-4 h-4" />}
+                    onClick={() => void endSession()}
+                    className="text-red-400 hover:text-red-300"
+                  >
                     End session
                   </Button>
                 )}
-                <Button variant="ghost" size="sm" leftIcon={<LogOut className="w-4 h-4" />} onClick={leaveRoom}
-                  className="text-muted-foreground">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  leftIcon={<LogOut className="w-4 h-4" />}
+                  onClick={() => void leaveRoom()}
+                  className="text-muted-foreground"
+                >
                   Leave
                 </Button>
               </div>
@@ -293,11 +339,18 @@ export default function RoomSession() {
                 messages.map((m) => {
                   const isMine = m.user_id === user?.id;
                   return (
-                    <div key={m.id} className={cn("flex", isMine ? "justify-end" : "justify-start")}>
-                      <div className={cn(
-                        "max-w-[80%] rounded-xl px-3 py-2 text-sm",
-                        isMine ? "bg-violet-500/20 text-foreground" : "bg-muted/50 text-foreground border border-border"
-                      )}>
+                    <div
+                      key={m.id}
+                      className={cn("flex", isMine ? "justify-end" : "justify-start")}
+                    >
+                      <div
+                        className={cn(
+                          "max-w-[80%] rounded-xl px-3 py-2 text-sm",
+                          isMine
+                            ? "bg-violet-500/20 text-foreground"
+                            : "bg-muted/50 text-foreground border border-border",
+                        )}
+                      >
                         {m.message}
                       </div>
                     </div>
@@ -308,8 +361,13 @@ export default function RoomSession() {
             </div>
 
             {!isCompleted && (
-              <form onSubmit={(e) => { e.preventDefault(); sendMessage(); }}
-                className="flex gap-2 mt-3 pt-3 border-t border-border">
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  void sendMessage();
+                }}
+                className="flex gap-2 mt-3 pt-3 border-t border-border"
+              >
                 <input
                   type="text"
                   value={draft}
@@ -317,8 +375,17 @@ export default function RoomSession() {
                   placeholder="Type a message…"
                   className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
                 />
-                <Button type="submit" variant="primary" size="sm" disabled={sending || !draft.trim()}>
-                  {sending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+                <Button
+                  type="submit"
+                  variant="primary"
+                  size="sm"
+                  disabled={sending || !draft.trim()}
+                >
+                  {sending ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Send className="w-4 h-4" />
+                  )}
                 </Button>
               </form>
             )}
@@ -349,7 +416,9 @@ export default function RoomSession() {
                       {p.user_id === user?.id ? "You" : `User ${p.user_id.slice(0, 6)}`}
                     </span>
                     {p.role === "host" && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-500">Host</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-500">
+                        Host
+                      </span>
                     )}
                   </div>
                 ))}
@@ -368,7 +437,9 @@ export default function RoomSession() {
               </div>
               <div className="flex justify-between">
                 <span className="text-muted-foreground">Created</span>
-                <span className="text-foreground">{new Date(room.created_at).toLocaleString()}</span>
+                <span className="text-foreground">
+                  {new Date(room.created_at).toLocaleString()}
+                </span>
               </div>
             </div>
           </Card>

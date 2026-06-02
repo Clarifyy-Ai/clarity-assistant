@@ -7,7 +7,7 @@ import { useSessionStore } from "@/store/sessionStore";
 import { useAudioStore } from "@/store/audioStore";
 import { useAuthStore } from "@/store/userStore";
 
-import { supabase } from "@/lib/supabase/client";
+import { profilesDB } from "@/lib/supabase/database";
 import { useStealthMouse } from "@/hooks/useStealthMouse";
 import { useDocumentPiP } from "@/lib/overlay/useDocumentPiP";
 import { useIsMobile } from "@/hooks/use-mobile";
@@ -34,8 +34,9 @@ import { OverlayPositionManager } from "./OverlayPositionManager";
 import { OverlaySessionStats } from "./OverlaySessionStats";
 import { OverlayHotkeyHelp } from "./OverlayHotkeyHelp";
 import { OverlayAnswerTimer } from "./OverlayAnswerTimer";
-import { OverlayAudioBadge } from "./OverlayAudioBadge";
+import { OverlayAudioStatusBar } from "./OverlayAudioStatusBar";
 import { OverlaySystemAudioBanner } from "./OverlaySystemAudioBanner";
+import { OverlaySessionPreparing } from "./OverlaySessionPreparing";
 
 import { LiveTranscriptStream } from "@/components/live/LiveTranscriptStream";
 
@@ -71,6 +72,8 @@ interface OverlayWindowProps {
   onStartSession?: (config: LiveSessionConfig) => void;
   onSetupNewSession?: () => void;
   lastSessionId?: string | null;
+  isPreparingSession?: boolean;
+  prepStepIndex?: number;
 }
 
 export function OverlayWindow({
@@ -82,6 +85,8 @@ export function OverlayWindow({
   onStartSession,
   onSetupNewSession,
   lastSessionId,
+  isPreparingSession = false,
+  prepStepIndex = 0,
 }: OverlayWindowProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const resizeContainerRef = useRef<HTMLDivElement>(null);
@@ -144,13 +149,13 @@ export function OverlayWindow({
       if (persistPositionTimerRef.current) clearTimeout(persistPositionTimerRef.current);
 
       persistPositionTimerRef.current = setTimeout(() => {
-        void supabase
-          .from("profiles")
-          .update({
+        void profilesDB
+          .update(profileId, {
             overlay_position: JSON.stringify(pos),
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", profileId);
+          } as Parameters<typeof profilesDB.update>[1])
+          .catch((err: unknown) => {
+            console.warn("[OverlayWindow] position persist failed:", err);
+          });
       }, 500);
     },
     [profileId]
@@ -228,7 +233,7 @@ export function OverlayWindow({
     <div
       ref={resizeContainerRef}
       className={cn(
-        "overlay-panel no-select relative flex flex-col gap-0",
+        "overlay-panel no-select relative flex flex-col gap-0 min-h-0 max-h-full overflow-hidden",
         isMinimalMode ? "rounded-full" : "rounded-2xl overflow-hidden",
         "border border-white/10",
         "bg-[#0b0b18] backdrop-blur-2xl",
@@ -308,7 +313,6 @@ export function OverlayWindow({
             </span>
           )}
 
-          <OverlayAudioBadge />
           <OverlayAnswerTimer />
         </div>
       </div>
@@ -413,35 +417,49 @@ export function OverlayWindow({
 
                   <div
                     className={cn(
-                      "min-h-0",
-                      activeTab === "chat"
-                        ? "flex-1 flex flex-col"
-                        : "overflow-y-auto flex-1"
+                      "flex-1 min-h-0 flex flex-col overflow-hidden",
+                      activeTab === "chat" ? "" : "",
                     )}
                   >
-                    {activeTab === "answer" && (
-                      <OverlayHintPanel
-                        text={displayText}
-                        hintStyle={hintStyle}
-                        hintState={hintState}
-                        errorMessage={errorMessage}
-                        screenshotHint={screenshotHint}
-                        isScreenshotLoading={isScreenshotLoading}
-                      />
-                    )}
+                    {isPreparingSession ? (
+                      <OverlaySessionPreparing stepIndex={prepStepIndex} />
+                    ) : (
+                      <>
+                        {activeTab === "answer" && (
+                          <div className="flex-1 min-h-0 overflow-y-auto">
+                            <OverlayHintPanel
+                              text={displayText}
+                              hintStyle={hintStyle}
+                              hintState={hintState}
+                              errorMessage={errorMessage}
+                              screenshotHint={screenshotHint}
+                              isScreenshotLoading={isScreenshotLoading}
+                            />
+                          </div>
+                        )}
 
-                    {activeTab === "chat" && onManualQuestion && (
-                      <OverlayChatPanel onSubmit={onManualQuestion} />
-                    )}
+                        {activeTab === "chat" && onManualQuestion && (
+                          <OverlayChatPanel onSubmit={onManualQuestion} />
+                        )}
 
-                    {activeTab === "transcript" && (
-                      <div className="p-3">
-                        <LiveTranscriptStream />
-                      </div>
-                    )}
+                        {activeTab === "transcript" && (
+                          <div className="flex-1 min-h-0 overflow-y-auto p-3">
+                            <LiveTranscriptStream />
+                          </div>
+                        )}
 
-                    {activeTab === "resume" && <OverlayResumePanel />}
-                    {activeTab === "audit" && <OverlayAuditPanel />}
+                        {activeTab === "resume" && (
+                          <div className="flex-1 min-h-0 overflow-y-auto">
+                            <OverlayResumePanel />
+                          </div>
+                        )}
+                        {activeTab === "audit" && (
+                          <div className="flex-1 min-h-0 overflow-y-auto">
+                            <OverlayAuditPanel />
+                          </div>
+                        )}
+                      </>
+                    )}
                   </div>
                 </>
               )}
@@ -451,6 +469,8 @@ export function OverlayWindow({
       )}
 
       {isSessionActive && !isMinimalMode && <OverlaySessionStats />}
+
+      {isSessionActive && !isMinimalMode && <OverlayAudioStatusBar />}
 
       {isSessionActive && !isMinimalMode && (
         <div className="flex items-center justify-between border-t border-white/[0.04] px-3 py-1 shrink-0">
@@ -561,6 +581,7 @@ function FloatingAIButton({
     </button>
   );
 }
+
 
 function ScreenCaptureBanner() {
   const [detected, setDetected] = useState<"recording" | "sharing" | null>(null);

@@ -7,7 +7,7 @@
 // - Full-answer path deductCredits consistency (same as hint path)
 // - Uses selected mic id from audioStore when available
 
-import { useCallback, useRef, useEffect } from "react";
+import { useCallback, useRef, useEffect, useState } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";
 import { useCoachStore } from "@/store/coachStore";
@@ -26,9 +26,13 @@ import {
 import { loadPrimaryCoverLetterText } from "@/lib/documents/interviewContext";
 import { createDragHandler } from "@/lib/overlay/stealthMouse";
 import { generateId } from "@/lib/utils";
-import { sessionsDB } from "@/lib/supabase/database";
+import {
+  sessionsDB,
+  jobDescriptionsDB,
+  resumesDB,
+  sessionTranscriptsDB,
+} from "@/lib/supabase/database";
 import { getOrCreateSession, activateSession } from "@/lib/session/sessionLifecycle";
-import { supabase } from "@/lib/supabase/client";
 import { toDbModel } from "@/lib/ai/modelMapping";
 import type { LiveSessionConfig } from "@/types/session.types";
 
@@ -64,6 +68,9 @@ export function useLiveCopilot({
 
   const existingSessionIdRef = useRef(existingSessionId ?? null);
   existingSessionIdRef.current = existingSessionId ?? null;
+
+  const [isPreparingSession, setIsPreparingSession] = useState(false);
+  const [prepStepIndex, setPrepStepIndex] = useState(0);
 
   // ✅ Use selected mic if present (setup wizard / device selection)
   const selectedMicId = useAudioStore((s) => s.setup?.selected_mic_id ?? null);
@@ -117,9 +124,22 @@ export function useLiveCopilot({
     if (!profile) return;
 
     const cfg = configRef.current;
+    setPrepStepIndex(0);
 
+    let parsed: unknown = null;
     const { active_context } = useDocumentStore.getState();
-    const parsed = (active_context?.resume as any)?.content ?? null;
+    parsed = (active_context?.resume as any)?.content ?? null;
+
+    if (!parsed && cfg.resume_id) {
+      try {
+        const row = await resumesDB.getById(cfg.resume_id);
+        parsed = (row as { content?: unknown }).content ?? row;
+      } catch (err) {
+        console.warn("[useLiveCopilot] resume load failed:", err);
+      }
+    }
+
+    setPrepStepIndex(1);
 
     let resumeCtx = buildResumeContext(parsed);
     const coverText = profile.id ? await loadPrimaryCoverLetterText(profile.id) : null;
@@ -147,6 +167,25 @@ export function useLiveCopilot({
       role: cfg.role,
       interview_type: cfg.interview_type as any,
     });
+
+    let jdRequiredSkills: string[] = [];
+    let jdSeniority: string[] = [];
+    if (cfg.jd_id) {
+      try {
+        const jd = await jobDescriptionsDB.getById(cfg.jd_id);
+        const raw = jd as Record<string, unknown>;
+        const skills = raw.required_skills ?? raw.skills;
+        if (Array.isArray(skills)) {
+          jdRequiredSkills = skills.filter((s): s is string => typeof s === "string");
+        }
+        const seniority = raw.seniority_signals ?? raw.seniority;
+        if (Array.isArray(seniority)) {
+          jdSeniority = seniority.filter((s): s is string => typeof s === "string");
+        }
+      } catch (err) {
+        console.warn("[useLiveCopilot] JD load failed:", err);
+      }
+    }
 
     const overlay = useOverlayStore.getState();
     overlay.setResumeContext(resumeCtx);
@@ -180,8 +219,8 @@ export function useLiveCopilot({
         resume_projects: [],
         resume_experience_summary:
           typeof resumeCtx === "string" ? resumeCtx : resumeCtx?.summary ?? null,
-        jd_required_skills: [],
-        jd_seniority_signals: [],
+        jd_required_skills: jdRequiredSkills,
+        jd_seniority_signals: jdSeniority,
         gap_skills: [],
         session_goals: [],
         filler_words_to_watch: [],
@@ -473,6 +512,8 @@ export function useLiveCopilot({
     if (!userId) throw new Error("Please sign in to start a live session.");
 
     const cfg = configRef.current;
+    setIsPreparingSession(true);
+    setPrepStepIndex(0);
 
     try {
       const reusableSessionId = existingSessionIdRef.current;
@@ -490,22 +531,26 @@ export function useLiveCopilot({
               : sessionType === "warmup"
                 ? "Mock warmup"
                 : "Live co-pilot",
-          document_id: null,
+          document_id: cfg.resume_id ?? null,
           jd_id: cfg.jd_id ?? null,
           model_used: toDbModel(useOverlayStore.getState().active_model) as any,
         });
         sessionIdRef.current = session.id;
         await activateSession(session.id);
       }
-    } catch (err) {
-      console.error("[useLiveCopilot] Failed to create/reuse session record:", err);
-      throw err instanceof Error ? err : new Error("Failed to start live session");
-    }
 
-    initSessionFromConfig();
-    useOverlayStore.getState().showOverlay();
-    await audio.start();
-  }, [audio.start, initSessionFromConfig, profile?.id, sessionType]); // eslint-disable-line react-hooks/exhaustive-deps
+      await initSessionFromConfig();
+      setPrepStepIndex(2);
+      useOverlayStore.getState().showOverlay();
+      await audio.start();
+    } catch (err) {
+      console.error("[useLiveCopilot] Failed to start live session:", err);
+      throw err instanceof Error ? err : new Error("Failed to start live session");
+    } finally {
+      setIsPreparingSession(false);
+      setPrepStepIndex(0);
+    }
+  }, [audio.start, initSessionFromConfig, profile?.id, sessionType]);
 
   const endLiveSession = useCallback(async () => {
     abortRef.current?.abort();
@@ -538,13 +583,13 @@ export function useLiveCopilot({
           notes: saveTranscript && fullTranscript ? fullTranscript : null,
         });
 
-        if (fullTranscript && userId && saveTranscript) {
+        if (fullTranscript && saveTranscript) {
           try {
-            await (supabase.from("session_transcripts") as any).insert({
+            await sessionTranscriptsDB.create({
               session_id: session.session_id,
               user_id: userId,
               transcript: fullTranscript,
-              utterances: utterances as any,
+              utterances,
             });
           } catch (err) {
             console.error("[useLiveCopilot] Failed to save transcript:", err);
@@ -573,6 +618,8 @@ export function useLiveCopilot({
     sessionStatus,
     elapsedSeconds,
     creditsConsumed,
+    isPreparingSession,
+    prepStepIndex,
     streamError: audio.streamError,
     isMuted: audio.isMuted,
     toggleMute: audio.toggleMute,

@@ -24,6 +24,8 @@ import { immer } from "zustand/middleware/immer";
 import posthog from "posthog-js";
 
 import { supabase } from "@/lib/supabase/client";
+import { readCachedAuthSession } from "@/lib/supabase/sessionCache";
+import { profilesDB, userRolesDB } from "@/lib/supabase/database";
 import { useOverlayStore } from "@/store/overlayStore";
 
 import {
@@ -103,22 +105,45 @@ export interface AuthActions {
 
 export type AuthStore = AuthState & AuthActions;
 
-const INITIAL_STATE: AuthState = {
-  status: "idle",
-  session: null,
-  user: null,
-  profile: null,
-  isProfileLoaded: false,
-  byokKeys: {},
-  error: null,
-  isAdmin: false,
-  isOnboarded: false,
-  planId: "free",
-  credits: 0,
+function buildInitialAuthState(): AuthState {
+  const cached = readCachedAuthSession();
 
-  isLoading: true,
-  isAuthenticated: false,
-};
+  if (cached) {
+    return {
+      status: "authenticated",
+      session: cached.session as unknown as SupabaseSession,
+      user: cached.user as unknown as SupabaseUser,
+      profile: null,
+      isProfileLoaded: false,
+      byokKeys: {},
+      error: null,
+      isAdmin: false,
+      isOnboarded: false,
+      planId: "free",
+      credits: 0,
+      isLoading: false,
+      isAuthenticated: true,
+    };
+  }
+
+  return {
+    status: "loading",
+    session: null,
+    user: null,
+    profile: null,
+    isProfileLoaded: false,
+    byokKeys: {},
+    error: null,
+    isAdmin: false,
+    isOnboarded: false,
+    planId: "free",
+    credits: 0,
+    isLoading: true,
+    isAuthenticated: false,
+  };
+}
+
+const INITIAL_STATE: AuthState = buildInitialAuthState();
 
 let unsubAuthListener: (() => void) | null = null;
 
@@ -260,10 +285,19 @@ export const useAuthStore = create<AuthStore>()(
               unsubAuthListener = null;
             }
 
-            dset((state) => {
-              state.status = "loading";
-              state.error = null;
-            });
+            const hadCachedSession =
+              get().status === "authenticated" && Boolean(get().session);
+
+            if (!hadCachedSession) {
+              dset((state) => {
+                state.status = "loading";
+                state.error = null;
+              });
+            } else {
+              dset((state) => {
+                state.error = null;
+              });
+            }
 
             try {
               const vault = await loadBYOKVault();
@@ -275,6 +309,10 @@ export const useAuthStore = create<AuthStore>()(
               }
             } catch (error) {
               console.warn("[authStore] BYOK vault hydration failed:", error);
+            }
+
+            if (hadCachedSession && get().user?.id) {
+              void get().loadProfile();
             }
 
             try {
@@ -511,46 +549,42 @@ export const useAuthStore = create<AuthStore>()(
               return;
             }
 
-            const [profileResult, roleResult] = await Promise.all([
-              supabase.from("profiles").select("*").eq("id", userId).maybeSingle(),
-              supabase
-                .from("user_roles")
-                .select("role")
-                .eq("user_id", userId)
-                .eq("role", "admin")
-                .maybeSingle(),
-            ]);
+            try {
+              const [profile, hasAdminRole] = await Promise.all([
+                profilesDB.getByIdMaybe(userId),
+                userRolesDB.hasRole(userId, "admin"),
+              ]);
 
-            if (profileResult.error || !profileResult.data) {
-              console.error(
-                "[authStore] Failed to load profile:",
-                profileResult.error?.message
-              );
+              if (!profile) {
+                console.error("[authStore] Failed to load profile: not found");
+                set((state) => {
+                  state.isProfileLoaded = false;
+                });
+                return;
+              }
 
+              const row = profile as unknown as Record<string, unknown>;
+
+              set((state) => {
+                state.profile = profile as unknown as ProfileRow;
+                state.isProfileLoaded = true;
+                state.isAdmin = hasAdminRole;
+                state.isOnboarded = getProfileBoolean(
+                  row,
+                  "onboarding_completed",
+                  false
+                );
+                state.planId = getProfileString(row, "plan_id", "free");
+                state.credits = getProfileNumber(row, "credits", 0);
+              });
+
+              syncOverlayFromProfile(row);
+            } catch (err) {
+              console.error("[authStore] Failed to load profile:", err);
               set((state) => {
                 state.isProfileLoaded = false;
               });
-
-              return;
             }
-
-            const row = profileResult.data as Record<string, unknown>;
-            const hasAdminRole = Boolean(roleResult.data);
-
-            set((state) => {
-              state.profile = profileResult.data as unknown as ProfileRow;
-              state.isProfileLoaded = true;
-              state.isAdmin = hasAdminRole;
-              state.isOnboarded = getProfileBoolean(
-                row,
-                "onboarding_completed",
-                false
-              );
-              state.planId = getProfileString(row, "plan_id", "free");
-              state.credits = getProfileNumber(row, "credits", 0);
-            });
-
-            syncOverlayFromProfile(row);
           },
 
           updateProfile: async (updates) => {
@@ -560,26 +594,10 @@ export const useAuthStore = create<AuthStore>()(
               throw new Error("Not authenticated.");
             }
 
-            const payload: Partial<ProfileRow> & {
-              updated_at: string;
-            } = {
-              ...updates,
-              updated_at: new Date().toISOString(),
-            };
-
-            const { data, error } = await supabase
-              .from("profiles")
-              .update(payload as any)
-              .eq("id", userId)
-              .select()
-              .single();
-
-            if (error) {
-              throw error;
-            }
+            const data = await profilesDB.update(userId, updates as any);
 
             const row = data as unknown as ProfileRow;
-            const rowRecord = data as Record<string, unknown>;
+            const rowRecord = data as unknown as Record<string, unknown>;
 
             set((state) => {
               state.profile = row;
@@ -630,13 +648,8 @@ export const useAuthStore = create<AuthStore>()(
               return;
             }
 
-            const { data, error } = await supabase
-              .from("profiles")
-              .select("credits")
-              .eq("id", userId)
-              .maybeSingle();
-
-            if (error || !data) {
+            const data = await profilesDB.getByIdMaybe(userId);
+            if (!data) {
               return;
             }
 

@@ -9,7 +9,8 @@
 // audio-session logic — it only re-invokes `onRetry`, which the parent
 // already wires to `useAudioSession.toggleSystemAudio`.
 
-import { AlertTriangle, Volume2 } from "lucide-react";
+import { useState } from "react";
+import { AlertTriangle, Volume2, X } from "lucide-react";
 import { useAudioStore } from "@/store/audioStore";
 
 interface Props {
@@ -20,12 +21,11 @@ interface Props {
 }
 
 export function OverlaySystemAudioBanner({ enabled, onRetry }: Props) {
+  const [dismissed, setDismissed] = useState(false);
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
   const hasSystem   = useAudioStore((s) => !!s.streams?.system_stream);
 
-  // Only show while a live session is actively capturing and system audio
-  // was requested but is missing.
-  if (!enabled || !isCapturing || hasSystem) return null;
+  if (!enabled || !isCapturing || hasSystem || dismissed) return null;
 
   return (
     <div
@@ -43,16 +43,26 @@ export function OverlaySystemAudioBanner({ enabled, onRetry }: Props) {
           capture the interviewer.
         </p>
       </div>
-      {onRetry && (
+      <div className="flex shrink-0 items-center gap-1">
+        {onRetry && (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 text-amber-100 transition-colors"
+          >
+            <Volume2 className="w-3 h-3" />
+            Share audio
+          </button>
+        )}
         <button
           type="button"
-          onClick={onRetry}
-          className="shrink-0 inline-flex items-center gap-1 text-[10px] font-bold px-2 py-1 rounded-md bg-amber-500/20 hover:bg-amber-500/30 text-amber-100 transition-colors"
+          aria-label="Dismiss"
+          onClick={() => setDismissed(true)}
+          className="p-1 rounded-md hover:bg-amber-500/20 text-amber-200/80"
         >
-          <Volume2 className="w-3 h-3" />
-          Share audio
+          <X className="w-3.5 h-3.5" />
         </button>
-      )}
+      </div>
     </div>
   );
 }

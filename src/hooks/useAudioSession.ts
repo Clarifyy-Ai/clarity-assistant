@@ -6,7 +6,6 @@ import { useSessionStore } from "@/store/sessionStore";
 import {
   captureMicrophone,
   captureSystemAudio,
-  mergeAudioStreams,
   createLevelAnalyser,
   stopStream,
   teardownAudioContext,
@@ -19,7 +18,7 @@ import { processUtteranceForDiarization } from "@/lib/audio/diarization";
 import { VADDetector, SilenceBoundaryDetector } from "@/lib/audio/vadDetector";
 import { WPMTracker } from "@/lib/audio/wpmTracker";
 import { toast } from "sonner";
-import type { TranscriptUtterance } from "@/types/audio.types";
+import type { Speaker, TranscriptUtterance } from "@/types/audio.types";
 
 // ─────────────────────────────────────────────────────────────────
 // useAudioSession — master pipeline:
@@ -44,7 +43,8 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
   const streamError = useAudioStore((s) => s.streams?.error ?? null);
 
   // refs
-  const deepgramRef = useRef<DeepgramStreamClient | null>(null);
+  const deepgramMicRef = useRef<DeepgramStreamClient | null>(null);
+  const deepgramSystemRef = useRef<DeepgramStreamClient | null>(null);
   const vadRef = useRef<VADDetector | null>(null);
   const silenceRef = useRef<SilenceBoundaryDetector | null>(null);
   const fillerAccRef = useRef<FillerAccumulator | null>(null);
@@ -57,31 +57,65 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
 
   // ── Handle final utterance ────────────────────────────────────
   const handleUtterance = useCallback(
-    (utterance: TranscriptUtterance) => {
+    (utterance: TranscriptUtterance, forcedSpeaker?: Speaker) => {
       const store = useAudioStore.getState();
 
-      const enriched = processUtteranceForDiarization(utterance);
-      // processUtteranceForDiarization already persists to audioStore
+      const enriched = processUtteranceForDiarization(utterance, {
+        forcedSpeaker,
+      });
 
-      // keep current speaker updated for UI/metrics
       if (enriched.speaker) {
         store.setCurrentSpeaker(enriched.speaker);
       }
 
-      // WPM + filler update for candidate speech
       if (enriched.speaker === "candidate") {
         wpmRef.current?.processText(enriched.text);
         fillerAccRef.current?.processText(enriched.text, enriched.start_ms / 1000);
       }
 
-      // Trigger hint generation if interviewer asked a question
       if (enriched.is_interviewer_question) {
-        // Keep a record of last question in transcript state too
         store.setLastQuestion(enriched.text);
         silenceRef.current?.onInterviewerUtteranceEnd(enriched.text);
       }
     },
     [],
+  );
+
+  const connectDeepgram = useCallback(
+    async (
+      stream: MediaStream,
+      forcedSpeaker: Speaker,
+      onInterim?: (text: string) => void,
+    ): Promise<DeepgramStreamClient> => {
+      const store = useAudioStore.getState();
+      const client = new DeepgramStreamClient({
+        stream,
+        config: {
+          model: "nova-2-meeting",
+          filler_words: true,
+          interim_results: true,
+          utterance_end_ms: 1200,
+        },
+        onUtterance: (u) => handleUtterance(u, forcedSpeaker),
+        onInterim: (text) => {
+          if (onInterim) onInterim(text);
+        },
+        onError: (error) => {
+          store.setStreamError({
+            code: "DEEPGRAM_CONNECTION_FAILED",
+            message: error.message,
+            recoverable: true,
+            suggestion: "Check your internet connection.",
+          });
+        },
+        onStatusChange: (status) => {
+          store.setDeepgramStatus(status);
+        },
+      });
+      await client.connect();
+      return client;
+    },
+    [handleUtterance],
   );
 
   // ── Start pipeline ────────────────────────────────────────────
@@ -99,18 +133,19 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       const micStream = await captureMicrophone(opts.micDeviceId);
       store.setMicStream(micStream);
 
-      // 2) optional system audio (interviewer via tab share)
-      let combinedStream = micStream;
+      // 2) optional system audio — separate stream + Deepgram channel (P1-A)
+      let sysStream: MediaStream | null = null;
       if (opts.enableSystemAudio && isSystemAudioSupported()) {
         const proceed = confirmTabAudioCapture();
         if (proceed) {
           try {
-            const sysStream = await captureSystemAudio();
+            sysStream = await captureSystemAudio();
             store.setSystemStream(sysStream);
             store.setSystemAudioAvailable(true);
-            combinedStream = mergeAudioStreams(micStream, sysStream);
 
             cleanupSysRef.current = watchStreamEnded(sysStream, () => {
+              deepgramSystemRef.current?.disconnect();
+              deepgramSystemRef.current = null;
               store.setSystemStream(null);
               toast.warning("Tab audio stopped. Interviewer speech may no longer be captured.");
             });
@@ -143,11 +178,11 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         toast.warning("Tab audio is not supported in this browser. Only your microphone will be transcribed.");
       }
 
-      store.setCombinedStream(combinedStream);
+      store.setCombinedStream(micStream);
       store.setIsCapturing(true);
 
-      // 3) analyser → VAD
-      const analyser = createLevelAnalyser(combinedStream);
+      // 3) analyser → VAD (mic only — candidate speech metrics)
+      const analyser = createLevelAnalyser(micStream);
       levelAnalyserRef.current = analyser;
 
       const vad = new VADDetector({
@@ -184,37 +219,22 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       wpmRef.current = wpmTracker;
       wpmTracker.start();
 
-      // 7) deepgram
-      const deepgram = new DeepgramStreamClient({
-        stream: combinedStream,
-        config: {
-          model: "nova-2-meeting",
-          filler_words: true,
-          interim_results: true,
-          utterance_end_ms: 1200,
-          // NOTE: diarize is handled by the client’s internal plan gate.
-          // If you want to force it, do it in deepgramStream.ts.
-        },
-        onUtterance: (u) => handleUtterance(u),
-        onInterim: (text) => {
+      // 7) dual Deepgram — mic = candidate, system = interviewer
+      deepgramMicRef.current = await connectDeepgram(
+        micStream,
+        "candidate",
+        (text) => {
           store.updateInterimText(text);
           fillerRTRef.current?.check(text);
         },
-        onError: (error) => {
-          store.setStreamError({
-            code: "DEEPGRAM_CONNECTION_FAILED",
-            message: error.message,
-            recoverable: true,
-            suggestion: "Check your internet connection.",
-          });
-        },
-        onStatusChange: (status) => {
-          store.setDeepgramStatus(status);
-        },
-      });
+      );
 
-      deepgramRef.current = deepgram;
-      await deepgram.connect();
+      if (sysStream) {
+        deepgramSystemRef.current = await connectDeepgram(
+          sysStream,
+          "interviewer",
+        );
+      }
 
       // 8) watch mic end
       cleanupMicRef.current = watchStreamEnded(micStream, () => {
@@ -237,15 +257,16 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       });
       store.setDeepgramStatus("error");
     }
-  }, [opts.micDeviceId, opts.enableSystemAudio, opts.onQuestionDetected, opts.onFillerDetected, opts.onWPMUpdate, handleUtterance]);
+  }, [opts.micDeviceId, opts.enableSystemAudio, opts.onQuestionDetected, opts.onFillerDetected, opts.onWPMUpdate, handleUtterance, connectDeepgram]);
 
   // ── Stop pipeline ─────────────────────────────────────────────
   const stop = useCallback(() => {
     isStartedRef.current = false;
 
-    // deepgram
-    deepgramRef.current?.disconnect();
-    deepgramRef.current = null;
+    deepgramMicRef.current?.disconnect();
+    deepgramMicRef.current = null;
+    deepgramSystemRef.current?.disconnect();
+    deepgramSystemRef.current = null;
 
     // vad
     vadRef.current?.stop();
@@ -297,6 +318,8 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
 
     // stop sys audio
     if (currentSysStream) {
+      deepgramSystemRef.current?.disconnect();
+      deepgramSystemRef.current = null;
       cleanupSysRef.current?.();
       cleanupSysRef.current = null;
       stopStream(currentSysStream);
@@ -337,52 +360,28 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       }
     }
 
-    // rebuild combined stream
     const micStream = store.streams.mic_stream;
-    const sysStream = store.streams.system_stream;
     if (!micStream) return;
 
-    const combined = sysStream ? mergeAudioStreams(micStream, sysStream) : micStream;
-    store.setCombinedStream(combined);
+    store.setCombinedStream(micStream);
 
-    // rebuild analyser (keep VAD working)
-    const levelAnalyser = createLevelAnalyser(combined);
-    levelAnalyserRef.current?.disconnect();
-    levelAnalyserRef.current = levelAnalyser;
-
-    // restart deepgram cleanly
-    deepgramRef.current?.disconnect();
-    deepgramRef.current = null;
-
-    const deepgram = new DeepgramStreamClient({
-      stream: combined,
-      config: {
-        model: "nova-2-meeting",
-        filler_words: true,
-        interim_results: true,
-        utterance_end_ms: 1200,
-      },
-      onUtterance: (u) => handleUtterance(u),
-      onInterim: (text) => {
-        store.updateInterimText(text);
-        fillerRTRef.current?.check(text);
-      },
-      onError: (error) => {
+    if (store.streams.system_stream) {
+      try {
+        deepgramSystemRef.current = await connectDeepgram(
+          store.streams.system_stream,
+          "interviewer",
+        );
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "System audio failed";
         store.setStreamError({
-          code: "DEEPGRAM_CONNECTION_FAILED",
-          message: error.message,
+          code: "SYSTEM_AUDIO_FAILED",
+          message,
           recoverable: true,
-          suggestion: "Check your internet connection.",
+          suggestion: "Share the interview tab with \"Share tab audio\" enabled.",
         });
-      },
-      onStatusChange: (status) => {
-        store.setDeepgramStatus(status);
-      },
-    });
-
-    deepgramRef.current = deepgram;
-    await deepgram.connect();
-  }, [handleUtterance]);
+      }
+    }
+  }, [connectDeepgram]);
 
   const isSystemAudioActive = useAudioStore((s) => s.streams.system_stream !== null);
 

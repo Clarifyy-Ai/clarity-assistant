@@ -29,8 +29,21 @@ import { NetworkBanner } from "@/components/layout/NetworkBanner";
 import { SetupChecklist } from "@/components/layout/SetupChecklist";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
 import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
+import { GlobalErrorBoundary } from "@/components/layout/GlobalErrorBoundary";
+import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
 import { Toaster } from "@/components/ui/sonner";
 import { CookieConsent } from "@/components/common/CookieConsent";
+
+// ✅ FIX P0-A: Marketing routes load eagerly (no lazy chunk on first paint).
+import Landing from "@/pages/marketing/Landing";
+import Pricing from "@/pages/marketing/Pricing";
+import Help from "@/pages/marketing/Help";
+import HelpArticle from "@/pages/marketing/HelpArticle";
+import Shortcuts from "@/pages/marketing/Shortcuts";
+import Blog from "@/pages/marketing/Blog";
+import BlogPost from "@/pages/marketing/BlogPost";
+import Terms from "@/pages/marketing/Terms";
+import Privacy from "@/pages/marketing/Privacy";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Electron typing
@@ -218,17 +231,6 @@ const SettingsPolish = lazy(
   () => import("@/pages/app/settings/SettingsPolish")
 );
 
-// Marketing
-const Landing = lazy(() => import("@/pages/marketing/Landing"));
-const Pricing = lazy(() => import("@/pages/marketing/Pricing"));
-const Help = lazy(() => import("@/pages/marketing/Help"));
-const HelpArticle = lazy(() => import("@/pages/marketing/HelpArticle"));
-const Shortcuts = lazy(() => import("@/pages/marketing/Shortcuts"));
-const Blog = lazy(() => import("@/pages/marketing/Blog"));
-const BlogPost = lazy(() => import("@/pages/marketing/BlogPost"));
-const Terms = lazy(() => import("@/pages/marketing/Terms"));
-const Privacy = lazy(() => import("@/pages/marketing/Privacy"));
-
 // Guide / Admin / Scorecard / 404
 const Guide = lazy(() => import("@/pages/app/guide/Guide"));
 const AdminDashboard = lazy(
@@ -275,11 +277,20 @@ function PageLoader(): JSX.Element {
 }
 
 function Page({ component: Component }: { component: ComponentType }): JSX.Element {
+  const location = useLocation();
+  const isAppRoute =
+    location.pathname.startsWith("/app") ||
+    location.pathname.startsWith("/onboarding");
+
   return (
-    <Suspense fallback={<PageLoader />}>
+    <Suspense fallback={isAppRoute ? <AppLoadingFallback /> : <PageLoader />}>
       <Component />
     </Suspense>
   );
+}
+
+function MarketingPage({ component: Component }: { component: ComponentType }): JSX.Element {
+  return <Component />;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -428,15 +439,15 @@ console.warn = (...args: unknown[]) => {
 
 const routes = [
   // Marketing
-  { path: "/", element: <Page component={Landing} /> },
-  { path: "/pricing", element: <Page component={Pricing} /> },
-  { path: "/help", element: <Page component={Help} /> },
-  { path: "/help/:slug", element: <Page component={HelpArticle} /> },
-  { path: "/shortcuts", element: <Page component={Shortcuts} /> },
-  { path: "/blog", element: <Page component={Blog} /> },
-  { path: "/blog/:slug", element: <Page component={BlogPost} /> },
-  { path: "/terms", element: <Page component={Terms} /> },
-  { path: "/privacy", element: <Page component={Privacy} /> },
+  { path: "/", element: <MarketingPage component={Landing} /> },
+  { path: "/pricing", element: <MarketingPage component={Pricing} /> },
+  { path: "/help", element: <MarketingPage component={Help} /> },
+  { path: "/help/:slug", element: <MarketingPage component={HelpArticle} /> },
+  { path: "/shortcuts", element: <MarketingPage component={Shortcuts} /> },
+  { path: "/blog", element: <MarketingPage component={Blog} /> },
+  { path: "/blog/:slug", element: <MarketingPage component={BlogPost} /> },
+  { path: "/terms", element: <MarketingPage component={Terms} /> },
+  { path: "/privacy", element: <MarketingPage component={Privacy} /> },
 
   { path: "/dashboard", element: <Navigate to="/app/dashboard" replace /> },
 
@@ -745,9 +756,10 @@ export default function App(): JSX.Element {
   }, [stealthMode]);
 
   return (
-    <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <RouterProvider router={router} />
+    <GlobalErrorBoundary>
+      <ErrorBoundary>
+        <QueryClientProvider client={queryClient}>
+          <RouterProvider router={router} />
 
         <Toaster
           position="bottom-right"
@@ -763,7 +775,8 @@ export default function App(): JSX.Element {
         />
 
         <CookieConsent />
-      </QueryClientProvider>
-    </ErrorBoundary>
+        </QueryClientProvider>
+      </ErrorBoundary>
+    </GlobalErrorBoundary>
   );
 }

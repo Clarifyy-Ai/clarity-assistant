@@ -1,7 +1,8 @@
 // src/pages/app/live/LiveRehearsal.tsx — PRODUCTION READY
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { useLiveCopilot } from "@/hooks/useLiveCopilot";
+import { useCallSession } from "@/hooks/useCallSession";
+import { CallSessionLifecycleBanner } from "@/components/live/CallSessionLifecycleBanner";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useAudioStore } from "@/store/audioStore";
@@ -52,7 +53,8 @@ export default function LiveRehearsal() {
   const hasStartedRef = useRef(false);
   const didEndRef = useRef(false);
 
-  const copilot = useLiveCopilot({ config });
+  const call = useCallSession({ config, sessionType: "rehearsal" });
+  const copilot = call.copilot;
   const isActive = sessionStatus === "active";
   const isPaused = sessionStatus === "paused";
 
@@ -93,7 +95,7 @@ export default function LiveRehearsal() {
 
     useOverlayStore.getState().showOverlay();
 
-    copilot.startLiveSession().catch((err: unknown) => {
+    call.startSession().catch((err: unknown) => {
       const message = err instanceof Error ? err.message : "Failed to start live session";
       toast.error(message);
     });
@@ -165,6 +167,8 @@ export default function LiveRehearsal() {
         onStartSession={handleSetup}
         onSetupNewSession={() => setPhase("setup")}
         lastSessionId={lastSessionId}
+        isPreparingSession={copilot.isPreparingSession}
+        prepStepIndex={copilot.prepStepIndex}
       />
 
       {streamErrorMessage && (
@@ -193,6 +197,12 @@ export default function LiveRehearsal() {
 
       <div className="flex items-center justify-center min-h-[60vh]">
         <div className="text-center space-y-3 max-w-md px-4">
+          {(isActive || isPaused || call.lifecycle !== "ready") && (
+            <CallSessionLifecycleBanner
+              lifecycle={call.lifecycle}
+              isReconnecting={call.isReconnecting}
+            />
+          )}
           {isActive || isPaused ? (
             <>
               <div className="mx-auto w-12 h-12 rounded-2xl bg-primary/10 flex items-center justify-center mb-2">

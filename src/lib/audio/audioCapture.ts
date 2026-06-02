@@ -5,6 +5,7 @@ import type {
 } from "@/types/audio.types";
 import { useAudioStore } from "@/store/audioStore";
 import { captureSystemAudioViaTabShare } from "@/lib/capture/tabAudioCapture";
+import { getCachedAudioDevices } from "@/lib/audio/audioDeviceCache";
 
 // ─────────────────────────────────────────────────────────────────
 // Audio Capture Engine
@@ -16,19 +17,7 @@ import { captureSystemAudioViaTabShare } from "@/lib/capture/tabAudioCapture";
 
 export async function enumerateAudioDevices(): Promise<AudioDevice[]> {
   try {
-    // Request mic permission first so labels are populated
-    const tempStream = await navigator.mediaDevices.getUserMedia({ audio: true });
-    tempStream.getTracks().forEach((t) => t.stop());
-
-    const devices = await navigator.mediaDevices.enumerateDevices();
-    return devices
-      .filter((d) => d.kind === "audioinput")
-      .map((d, i) => ({
-        deviceId: d.deviceId,
-        label: d.label || `Microphone ${i + 1}`,
-        kind: "audioinput" as const,
-        isDefault: d.deviceId === "default" || i === 0,
-      }));
+    return await getCachedAudioDevices();
   } catch (err) {
     throw buildAudioError("PERMISSION_DENIED", err);
   }

@@ -1,7 +1,11 @@
 // @ts-nocheck
 import { ENV } from "@/lib/env";
 import { useState, useEffect, useCallback } from "react";
-import { supabase } from "@/lib/supabase/client";
+import {
+  scorecardsDB,
+  sessionsDB,
+  sessionAnswersDB,
+} from "@/lib/supabase/database";
 import { callGemini } from "@/lib/ai/geminiClient";
 import { buildFillerSummary } from "@/lib/audio/fillerDetector";
 import { analyseWPMTrend } from "@/lib/audio/wpmTracker";
@@ -90,11 +94,7 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
     setState((s) => ({ ...s, isLoading: true, error: null }));
 
     try {
-      const { data: existing } = await supabase
-        .from("scorecards")
-        .select("*")
-        .eq("session_id", sessionId)
-        .maybeSingle();
+      const existing = await scorecardsDB.getBySessionId(sessionId);
 
       if (existing) {
         setState((s) => ({
@@ -124,19 +124,11 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
     setState((s) => ({ ...s, isGenerating: true, isLoading: false }));
 
     try {
-      const { data: session } = await supabase
-        .from("sessions")
-        .select("*")
-        .eq("id", sessionId)
-        .maybeSingle();
+      const session = await sessionsDB.getById(sessionId);
 
       if (!session) throw new Error("Session not found");
 
-      const { data: answerRows } = await supabase
-        .from("session_answers")
-        .select("*")
-        .eq("session_id", sessionId)
-        .order("created_at", { ascending: true });
+      const answerRows = await sessionAnswersDB.listBySessionId(sessionId);
 
       const questionsForScoring = (answerRows ?? []).map((row: any) => ({
         id: row.id,
@@ -192,18 +184,15 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
         generated_at:        new Date().toISOString(),
       };
 
-      await supabase.from("scorecards").insert(scorecard);
+      await scorecardsDB.create(scorecard);
 
-      await supabase
-        .from("sessions")
-        .update({
-          overall_score: overallScore,
-          ai_feedback: feedback.coach_note,
-          strengths: feedback.strengths,
-          improvements: feedback.improvements,
-          duration_seconds: durationSeconds || session.duration_seconds,
-        } as any)
-        .eq("id", sessionId);
+      await sessionsDB.update(sessionId, {
+        overall_score: overallScore,
+        ai_feedback: feedback.coach_note,
+        strengths: feedback.strengths,
+        improvements: feedback.improvements,
+        duration_seconds: durationSeconds || session.duration_seconds,
+      } as any);
 
       setState((s) => ({ ...s, scorecard, isGenerating: false }));
     } catch {
@@ -215,8 +204,11 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
     if (!state.scorecard) return null;
     const token = generateShareToken();
     const url   = buildShareUrl(token);
-    const { error } = await supabase.from("scorecards").update({ is_shared: true, share_token: token }).eq("session_id", sessionId);
-    if (error) return null;
+    try {
+      await scorecardsDB.markShared(sessionId, token);
+    } catch {
+      return null;
+    }
     setState((s) => ({ ...s, isShared: true, shareToken: token, shareUrl: url }));
     return url;
   }, [state.scorecard, sessionId]);

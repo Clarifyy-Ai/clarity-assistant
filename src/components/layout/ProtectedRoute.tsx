@@ -3,6 +3,7 @@ import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { Spinner } from "@/components/ui/Spinner";
 import { Card } from "@/components/ui/Card";
+import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
 import { AlertCircle } from "lucide-react";
 
 interface ProtectedRouteProps {
@@ -34,7 +35,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
 
   // FIX Issue 14: blank screen during auth hydration to prevent flash of protected content
   if (status === "idle" || status === "loading") {
-    return <div className="min-h-screen bg-background" />;
+    return <AppLoadingFallback />;
   }
 
   // 2) Error
@@ -95,7 +96,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
 
   // 4) Admin check — wait for profile (and role) to finish loading before denying
   if (requireAdmin && !isProfileLoaded) {
-    return <div className="min-h-screen bg-background" />;
+    return <AppLoadingFallback />;
   }
   if (requireAdmin && !isAdmin) {
     return (

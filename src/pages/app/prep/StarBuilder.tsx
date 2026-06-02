@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { useState } from "react";
 import { useAuthStore } from "@/store/userStore";
-import { supabase } from "@/lib/supabase/client";
+import { answerBankDB } from "@/lib/supabase/database";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -66,15 +66,13 @@ export default function StarBuilder() {
     setSaving(true);
     try {
       const answerText = `**Situation:** ${situation}\n\n**Task:** ${task}\n\n**Action:** ${action}\n\n**Result:** ${result}`;
-      const { error } = await supabase.from("answer_bank").insert({
-        user_id: user.id,
+      await answerBankDB.create(user.id, {
         question_text: question || "Behavioral question",
         answer_text: answerText,
         category: "Behavioural",
         source: "prep_lab",
         tags: ["star"],
       });
-      if (error) throw error;
       toast.success("Saved to Answer Bank!");
     } catch {
       toast.error("Failed to save answer.");

@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
-import { supabase } from "@/lib/supabase/client";
+import { answerBankDB } from "@/lib/supabase/database";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -76,13 +76,13 @@ export default function Rephraser() {
       confident: "Confident",
       concise:   "Concise",
     };
-    const { error: insertErr } = await supabase.from("answer_bank").insert({
-      user_id:       user.id,
-      question_text: `Rephrased answer (${styleLabels[style]})`,
-      answer_text:   text,
-      source:        "prep_lab",
-    });
-    if (insertErr) {
+    try {
+      await answerBankDB.create(user.id, {
+        question_text: `Rephrased answer (${styleLabels[style]})`,
+        answer_text: text,
+        source: "prep_lab",
+      });
+    } catch {
       toast.error("Failed to save — please try again");
       return;
     }

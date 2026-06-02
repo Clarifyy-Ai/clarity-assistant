@@ -3,7 +3,7 @@ import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
-import { supabase } from "@/lib/supabase/client";
+import { sessionDebriefsDB, sessionsDB } from "@/lib/supabase/database";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -19,6 +19,7 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { DebriefExtras } from "@/components/session/DebriefExtras";
+import { DebriefLoadingSteps } from "@/components/debrief/DebriefLoadingSteps";
 
 export default function DebriefDetail() {
   const { id }   = useParams<{ id: string }>();
@@ -29,6 +30,7 @@ export default function DebriefDetail() {
   const [session,    setSession]    = useState<any>(null);
   const [loading,    setLoading]    = useState(true);
   const [genning,    setGenning]    = useState(false);
+  const [loadStep,   setLoadStep]   = useState(0);
   const [fetchError, setFetchError] = useState<string | null>(null);
 
   // ── Generate debrief from edge function ──────────────────────
@@ -36,11 +38,13 @@ export default function DebriefDetail() {
   // FIX 5: removed user_id from body — derived server-side from auth token
   const generateDebrief = useCallback(async (sessionId: string) => {
     setGenning(true);
+    setLoadStep(2);
     try {
       const data = await fetchEdgeJson<{ debrief?: unknown; session?: unknown }>(
         "generate-debrief",
         { session_id: sessionId }
       );
+      setLoadStep(3);
       if (data?.debrief) setDebrief(data.debrief);
       if (data?.session) setSession(data.session);
     } catch (err: unknown) {
@@ -60,30 +64,21 @@ export default function DebriefDetail() {
     if (!id || !user) return;
     setLoading(true);
     setFetchError(null);
+    setLoadStep(0);
 
     try {
-      const { data: db, error: dbErr } = await supabase
-        .from("session_debriefs")
-        .select("*")
-        .eq("id", id)
-        .eq("user_id", user.id)
-        .maybeSingle();  // maybeSingle returns null (not error) when row missing
-
-      if (dbErr) {
-        // Real DB error — don't accidentally trigger generation
-        throw dbErr;
-      }
+      setLoadStep(1);
+      const db = await sessionDebriefsDB.getByIdForUser(id, user.id);
 
       if (db) {
-        // Found an existing debrief by its own ID
         setDebrief(db);
         if (db.session_id) {
-          const { data: sess } = await supabase
-            .from("sessions")
-            .select("*")
-            .eq("id", db.session_id)
-            .maybeSingle();
-          setSession(sess ?? null);
+          try {
+            const sess = await sessionsDB.getById(db.session_id);
+            setSession(sess);
+          } catch {
+            setSession(null);
+          }
         }
       } else {
         // No debrief found by debrief ID — treat `id` as a session_id
@@ -114,9 +109,8 @@ export default function DebriefDetail() {
   // ── Loading state — initial DB fetch ─────────────────────────
   if (loading) {
     return (
-      <div className="max-w-3xl space-y-5">
-        <SkeletonCard />
-        <SkeletonCard />
+      <div className="max-w-3xl space-y-5 py-12">
+        <DebriefLoadingSteps activeIndex={loadStep} />
         <SkeletonCard />
       </div>
     );
@@ -137,9 +131,7 @@ export default function DebriefDetail() {
             ✨ AI is analysing your session and building a personalised action plan
           </p>
         </div>
-        <div className="w-48 h-1 bg-secondary rounded-full overflow-hidden">
-          <div className="h-full bg-violet-500 rounded-full animate-[shimmer_1.5s_ease-in-out_infinite] w-1/2" />
-        </div>
+        <DebriefLoadingSteps activeIndex={loadStep} />
       </div>
     );
   }

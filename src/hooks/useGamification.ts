@@ -1,6 +1,6 @@
 // src/hooks/useGamification.ts
-import { useEffect, useCallback } from "react";
-import { supabase } from "@/lib/supabase/client";
+import { useEffect, useCallback, useState } from "react";
+import { gamificationDB, profilesDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/authStore";
 import {
   XP_LEVELS,
@@ -146,53 +146,52 @@ const LEVEL_BADGES: Partial<Record<number, BadgeId>> = {
 // ─────────────────────────────────────────────────────────────────
 
 export function useGamification() {
-  const { user } = useAuthStore();
+  const { user, profile, isProfileLoaded } = useAuthStore();
   const store    = useGamificationStore();
+  const [isLoading, setIsLoading] = useState(true);
 
-  // ── Load from DB on mount ─────────────────────────────────────
-
+  // ✅ FIX P0-B: Reuse auth profile XP/streak — avoid duplicate profiles fetch.
   useEffect(() => {
-    if (!user?.id) return;
-    void loadGamificationData();
-  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+    if (!user?.id) {
+      setIsLoading(false);
+      return;
+    }
 
-  async function loadGamificationData(): Promise<void> {
-    if (!user) return;
-
-    const [profileRes, badgesRes, challengeRes] = await Promise.all([
-      supabase
-        .from("profiles")
-        .select("xp, streak_days, longest_streak, last_active_date")
-        .eq("id", user.id)
-        .maybeSingle(),
-      supabase
-        .from("user_badges")
-        .select("badge_id")
-        .eq("user_id", user.id),
-      supabase
-        .from("weekly_challenges")
-        .select("*")
-        .eq("user_id", user.id)
-        .gte("week_end", new Date().toISOString())
-        .maybeSingle(),
-    ]);
-
-    if (profileRes.data) {
-      const p = profileRes.data;
-      store.setXP(p.xp ?? 0);
+    if (isProfileLoaded && profile) {
+      store.setXP(profile.xp ?? 0);
       store.setStreak(
-        p.streak_days         ?? 0,
-        p.longest_streak      ?? 0,
-        p.last_active_date    ?? null,
+        profile.streak_days ?? 0,
+        profile.longest_streak ?? 0,
+        profile.last_active_date ?? null,
       );
     }
 
-    if (badgesRes.data) {
-      badgesRes.data.forEach((b) => store.unlockBadge(b.badge_id as BadgeId));
+    void loadGamificationExtras();
+  }, [user?.id, isProfileLoaded, profile?.xp, profile?.streak_days]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function loadGamificationExtras(): Promise<void> {
+    if (!user) {
+      setIsLoading(false);
+      return;
     }
 
-    if (challengeRes.data) {
-      store.setWeeklyChallenge(challengeRes.data as GamificationState["weekly_challenge"]);
+    setIsLoading(true);
+
+    try {
+      const [badgeIds, challenge] = await Promise.all([
+        gamificationDB.listBadgeIdsByUserId(user.id),
+        gamificationDB.getActiveWeeklyChallenge(user.id),
+      ]);
+
+      badgeIds.forEach((id) => store.unlockBadge(id as BadgeId));
+
+      if (challenge) {
+        store.setWeeklyChallenge(
+          challenge as GamificationState["weekly_challenge"],
+        );
+      }
+    } finally {
+      setIsLoading(false);
     }
   }
 
@@ -206,16 +205,10 @@ export function useGamification() {
     store.unlockBadge(badgeId);
     store.setPendingBadge(badgeId); // triggers toast animation in UI
 
-    const { error: badgeErr } = await supabase.from("user_badges").upsert(
-      {
-        user_id:   user.id,
-        badge_id:  badgeId,
-        earned_at: new Date().toISOString(),
-      },
-      { onConflict: "user_id,badge_id", ignoreDuplicates: true },
-    );
-    if (badgeErr) {
-      console.warn("[useGamification] badge persist failed:", badgeErr.message);
+    try {
+      await gamificationDB.upsertBadge(user.id, badgeId);
+    } catch (err) {
+      console.warn("[useGamification] badge persist failed:", err);
     }
 
     // Award bonus XP defined on the badge (e.g. achievement completionist bonus)
@@ -244,32 +237,23 @@ export function useGamification() {
     const prevLevel = useGamificationStore.getState().level;
     store.addXP(amount);
 
-    const { data: profileData, error: fetchErr } = await supabase
-      .from("profiles")
-      .select("xp")
-      .eq("id", user.id)
-      .maybeSingle();
+    try {
+      const profileData = await profilesDB.getGamificationFields(user.id);
+      if (!profileData) {
+        store.addXP(-amount);
+        console.error("[useGamification] XP fetch failed: profile not found");
+        return;
+      }
 
-    if (fetchErr || !profileData) {
+      const newTotal = (profileData.xp ?? 0) + amount;
+      await profilesDB.update(user.id, { xp: newTotal });
+      store.setXP(newTotal);
+      markXpAwarded(eventType, dedupeKey);
+    } catch (err) {
       store.addXP(-amount);
-      console.error("[useGamification] XP fetch failed:", fetchErr?.message);
+      console.error("[useGamification] XP update failed:", err);
       return;
     }
-
-    const newTotal = (profileData.xp ?? 0) + amount;
-    const { error: updateErr } = await supabase
-      .from("profiles")
-      .update({ xp: newTotal, updated_at: new Date().toISOString() })
-      .eq("id", user.id);
-
-    if (updateErr) {
-      store.addXP(-amount);
-      console.error("[useGamification] XP update failed:", updateErr.message);
-      return;
-    }
-
-    store.setXP(newTotal);
-    markXpAwarded(eventType, dedupeKey);
 
     // ── Level-up achievement check ────────────────────────────
     // Re-read from store after the addXP call so we get the post-update level
@@ -309,12 +293,7 @@ export function useGamification() {
   const updateStreak = useCallback(async (): Promise<void> => {
     if (!user) return;
 
-    const { data } = await supabase
-      .from("profiles")
-      .select("streak_days, longest_streak, last_active_date")
-      .eq("id", user.id)
-      .maybeSingle();
-
+    const data = await profilesDB.getGamificationFields(user.id);
     if (!data) return;
 
     const lastActivity = data.last_active_date
@@ -336,14 +315,11 @@ export function useGamification() {
     store.setStreak(newStreak, newLongest, now.toISOString());
 
     // Persist updated streak to DB
-    await supabase
-      .from("profiles")
-      .update({
-        streak_days:       newStreak,
-        longest_streak:    newLongest,
-        last_active_date:  now.toISOString(),
-      })
-      .eq("id", user.id);
+    await profilesDB.update(user.id, {
+      streak_days: newStreak,
+      longest_streak: newLongest,
+      last_active_date: now.toISOString(),
+    });
 
     // Streak milestone badges
     const streakBadges: Array<[number, BadgeId]> = [
@@ -467,20 +443,15 @@ export function useGamification() {
       const updatedProgress = (challenge.progress ?? 0) + 1;
       if (updatedProgress >= (challenge.goal ?? 1)) {
         await awardXP("weekly_challenge_complete");
-        // Persist challenge completion
-        await supabase
-          .from("weekly_challenges")
-          .update({
-            progress:     updatedProgress,
-            completed:    true,
-          })
-          .eq("id", challenge.id);
+        await gamificationDB.updateWeeklyChallenge(challenge.id, {
+          progress: updatedProgress,
+          completed: true,
+        });
         store.setWeeklyChallenge({ ...challenge, completed: true, progress: updatedProgress });
       } else {
-        await supabase
-          .from("weekly_challenges")
-          .update({ progress: updatedProgress })
-          .eq("id", challenge.id);
+        await gamificationDB.updateWeeklyChallenge(challenge.id, {
+          progress: updatedProgress,
+        });
         store.setWeeklyChallenge({ ...challenge, progress: updatedProgress });
       }
     }
@@ -494,6 +465,7 @@ export function useGamification() {
   // ─────────────────────────────────────────────────────────────
 
   return {
+    isLoading,
     // State
     xp:                store.xp,
     level:             store.level,

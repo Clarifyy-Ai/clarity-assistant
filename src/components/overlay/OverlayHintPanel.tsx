@@ -1,9 +1,9 @@
 // src/components/overlay/OverlayHintPanel.tsx
-import { useMemo, useState, useCallback } from "react";
+import { memo, useMemo, useState, useCallback } from "react";
 import type { HintStyle } from "@/types/user.types";
 import { cn } from "@/lib/utils";
-import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
+import { answerBankDB } from "@/lib/supabase/database";
 import {
   Loader2,
   Copy,
@@ -43,7 +43,7 @@ interface OverlayHintPanelProps {
 
 /* ─── COMPONENT ─────────────────────────────────────────────────────────── */
 
-export function OverlayHintPanel({
+function OverlayHintPanelInner({
   text,
   hintStyle,
   hintState,
@@ -89,6 +89,8 @@ export function OverlayHintPanel({
     return safeText;
   }, [safeText, isHintMode]);
 
+  const streamingBuffer = useOverlayStore((s) => s.streaming_buffer);
+
   const composed = useMemo(() => composeHint(textForCompose, hintStyle), [textForCompose, hintStyle]);
 
   /* ── HANDLERS ────────────────────────────────────────────────────────── */
@@ -116,15 +118,14 @@ export function OverlayHintPanel({
     const userId = useAuthStore.getState().profile?.id;
 
     if (userId) {
-      const { error } = await supabase.from("answer_bank").insert({
-        user_id: userId,
-        question_text: question,
-        answer_text: safeText,
-      });
-
-      if (error) {
-        // Supabase insert failed — fall back to localStorage and inform user
-        console.error("[OverlayHintPanel] save to bank failed:", error.message);
+      try {
+        await answerBankDB.create(userId, {
+          question_text: question,
+          answer_text: safeText,
+        });
+        toast.success("Saved to answer bank");
+      } catch (err) {
+        console.error("[OverlayHintPanel] save to bank failed:", err);
         const existing = JSON.parse(localStorage.getItem("clarify:answer_bank") ?? "[]") as unknown[];
         localStorage.setItem(
           "clarify:answer_bank",
@@ -236,7 +237,16 @@ export function OverlayHintPanel({
       )}
 
       {/* ── Answer / Hint content ─────────────────────────────────────── */}
-      {((composed?.lines?.length ?? 0) > 0 || isStreaming) && (
+      {isStreaming && streamingBuffer.trim().length > 0 && (composed?.lines?.length ?? 0) === 0 && (
+        <div className="space-y-1">
+          <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-white/85">
+            {streamingBuffer}
+            <span className="stream-cursor text-[13px]" aria-hidden="true" />
+          </p>
+        </div>
+      )}
+
+      {((composed?.lines?.length ?? 0) > 0 || (isStreaming && hasContent)) && (
         <div className="space-y-0">
           {!isGenerating && (hasContent || isStreaming) && (
             <div className="flex items-center gap-2 mb-2.5">
@@ -497,6 +507,8 @@ function NavBtn({
     </button>
   );
 }
+
+export const OverlayHintPanel = memo(OverlayHintPanelInner);
 
 function IdleStateContent() {
   const resumeCtx = useOverlayStore((s) => s.resume_context) as any;

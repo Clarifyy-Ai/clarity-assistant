@@ -10,10 +10,14 @@
 // - loadInterviews extracted to useCallback so createInterview/addRound callbacks
 //   capture a stable reference (was re-created on every render → stale closure)
 import { useEffect, useCallback } from "react";
-import { supabase } from "@/lib/supabase/client";
+import {
+  scheduledInterviewsDB,
+  interviewRoundsDB,
+} from "@/lib/supabase/database";
 import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
 import { useAuthStore } from "@/store/userStore";
 import { generateId } from "@/lib/utils";
+import type { TablesInsert, TablesUpdate } from "@/integrations/supabase";
 import type {
   ScheduledInterview,
   InterviewRound,
@@ -53,24 +57,9 @@ export function useInterviewScheduler() {
     store.setIsLoading(true);
     store.setLoadError(null);
 
-    const { data, error } = await supabase
-      .from("scheduled_interviews")
-      .select(`
-        *,
-        interview_rounds(*)
-      `)
-      .eq("user_id", user.id)
-      .order("created_at", { ascending: false });
+    try {
+      const data = await scheduledInterviewsDB.listWithRoundsByUserId(user.id);
 
-    // ✅ FIX: Error handling — previously ignored; store was left empty
-    if (error) {
-      console.error("[useInterviewScheduler] loadInterviews failed:", error.message);
-      store.setLoadError(error.message);
-      store.setIsLoading(false);
-      return;
-    }
-
-    if (data) {
       type InterviewRow = ScheduledInterview & {
         interview_rounds?: InterviewRound[];
       };
@@ -82,9 +71,13 @@ export function useInterviewScheduler() {
         is_today:   checkIsToday(i.interview_rounds ?? []),
       })) as ScheduledInterview[];
       store.setInterviews(interviews);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to load interviews";
+      console.error("[useInterviewScheduler] loadInterviews failed:", message);
+      store.setLoadError(message);
+    } finally {
+      store.setIsLoading(false);
     }
-
-    store.setIsLoading(false);
   }, [user?.id]); // store is stable (Zustand) so excluded
 
   /* ── Load on mount ───────────────────────────────────────────────────── */
@@ -129,14 +122,16 @@ export function useInterviewScheduler() {
       updated_at:      new Date().toISOString(),
     };
 
-    const { error } = await supabase
-      .from("scheduled_interviews")
-      .insert(dbRow);
-
-    if (error) return { id: null, error: error.message };
-
-    await loadInterviews();
-    return { id, error: null };
+    try {
+      await scheduledInterviewsDB.create(dbRow);
+      await loadInterviews();
+      return { id, error: null };
+    } catch (err) {
+      return {
+        id: null,
+        error: err instanceof Error ? err.message : "Failed to create interview",
+      };
+    }
   }, [user?.id, loadInterviews]);
 
   /* ── Update interview ────────────────────────────────────────────────── */
@@ -153,21 +148,21 @@ export function useInterviewScheduler() {
       updated_at: new Date().toISOString(),
     });
 
-    const { error } = await supabase
-      .from("scheduled_interviews")
-      .update(dbPatch)
-      .eq("id", id);
-
-    if (!error) {
+    try {
+      await scheduledInterviewsDB.update(id, dbPatch as TablesUpdate<"scheduled_interviews">);
       store.updateInterview(id, patch as Partial<ScheduledInterview>);
+      return { error: null };
+    } catch (err) {
+      return {
+        error: err instanceof Error ? err.message : "Failed to update interview",
+      };
     }
-    return { error: error?.message ?? null };
   }, []);
 
   /* ── Delete interview ────────────────────────────────────────────────── */
 
   const deleteInterview = useCallback(async (id: string): Promise<void> => {
-    await supabase.from("scheduled_interviews").delete().eq("id", id);
+    await scheduledInterviewsDB.delete(id);
     store.removeInterview(id);
   }, []);
 
@@ -177,10 +172,10 @@ export function useInterviewScheduler() {
     id: string,
     stage: InterviewStage,
   ): Promise<void> => {
-    await supabase
-      .from("scheduled_interviews")
-      .update({ stage, updated_at: new Date().toISOString() })
-      .eq("id", id);
+    await scheduledInterviewsDB.update(id, {
+      stage,
+      updated_at: new Date().toISOString(),
+    });
 
     store.moveInterviewStage(id, stage);
   }, []);
@@ -212,39 +207,28 @@ export function useInterviewScheduler() {
       updated_at:             new Date().toISOString(),
     };
 
-    const { error } = await supabase.from("interview_rounds").insert(round as any);
-
-    if (error) {
-      // ✅ FIX: Rollback the parent interview row so we don't leave an orphaned
-      // scheduled_interview with no rounds. The caller (NewInterview.tsx) already
-      // got a successful createInterview — without this rollback the interview
-      // appears in the pipeline with no date/platform/round data attached.
-      //
-      // This is a best-effort rollback. If the delete also fails (race condition,
-      // network drop), we log it but still return the original round error so the
-      // UI can inform the user correctly.
+    try {
+      await interviewRoundsDB.create(round as TablesInsert<"interview_rounds">);
+      await loadInterviews();
+      return { error: null };
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to add round";
       console.warn(
         "[useInterviewScheduler] addRound failed — rolling back parent interview",
         interviewId,
       );
-      const { error: rollbackError } = await supabase
-        .from("scheduled_interviews")
-        .delete()
-        .eq("id", interviewId);
-
-      if (rollbackError) {
+      try {
+        await scheduledInterviewsDB.delete(interviewId);
+      } catch (rollbackErr) {
         console.error(
           "[useInterviewScheduler] Rollback also failed:",
-          rollbackError.message,
-          "— orphaned interview ID:", interviewId,
+          rollbackErr,
+          "— orphaned interview ID:",
+          interviewId,
         );
       }
-
-      return { error: error.message };
+      return { error: message };
     }
-
-    await loadInterviews();
-    return { error: null };
   }, [loadInterviews]);
 
   /* ── Update round outcome ────────────────────────────────────────────── */
@@ -255,15 +239,12 @@ export function useInterviewScheduler() {
     outcome:     InterviewRound["outcome"],
     notes?:      string,
   ): Promise<void> => {
-    await supabase
-      .from("interview_rounds")
-      .update({
-        outcome,
-        status:     "completed",
-        notes:      notes ?? null,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", roundId);
+    await interviewRoundsDB.update(roundId, {
+      outcome,
+      status: "completed",
+      notes: notes ?? null,
+      updated_at: new Date().toISOString(),
+    });
 
     await loadInterviews();
   }, [loadInterviews]);

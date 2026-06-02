@@ -4,8 +4,9 @@ import { referralsDB } from "@/lib/supabase/database";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Gift, Copy, Users, Zap, Check, Share2 } from "lucide-react";
+import { Gift, Copy, Users, Zap, Check, Share2, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 
 export default function Referrals() {
   const { profile, user } = useAuthStore();
@@ -15,22 +16,24 @@ export default function Referrals() {
   const [statsError, setStatsError] = useState<string | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
 
-  useEffect(() => {
+  async function loadStats() {
     if (!user?.id) return;
     setStatsLoading(true);
-    (async () => {
-      try {
-        const stats = await referralsDB.getStats(user.id);
-        setInvitedCount(stats.invitedCount);
-        setCreditsEarned(stats.creditsEarned);
-        setStatsError(null);
-      } catch (err) {
-        setStatsError(err instanceof Error ? err.message : "Could not load referral stats");
-        toast.error("Could not load referral stats");
-      } finally {
-        setStatsLoading(false);
-      }
-    })();
+    try {
+      const stats = await referralsDB.getStats(user.id);
+      setInvitedCount(stats.invitedCount);
+      setCreditsEarned(stats.creditsEarned);
+      setStatsError(null);
+    } catch (err) {
+      setStatsError(err instanceof Error ? err.message : "Could not load referral stats");
+      toast.error("Could not load referral stats");
+    } finally {
+      setStatsLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadStats();
   }, [user?.id]);
 
   const code =
@@ -64,8 +67,12 @@ export default function Referrals() {
       />
 
       {statsError && (
-        <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {statsError}
+        <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <span className="flex-1">{statsError}</span>
+          <Button variant="outline" size="sm" onClick={() => void loadStats()} disabled={statsLoading}>
+            <RefreshCw className={cn("mr-2 h-4 w-4", statsLoading && "animate-spin")} />
+            Retry
+          </Button>
         </div>
       )}
 

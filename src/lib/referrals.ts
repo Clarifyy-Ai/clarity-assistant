@@ -1,4 +1,4 @@
-import { supabase } from "@/lib/supabase/client";
+import { profilesDB, referralsDB } from "@/lib/supabase/database";
 
 const REF_CODE_PATTERN = /^[A-Z0-9]{6,16}$/;
 
@@ -20,29 +20,17 @@ export async function recordReferral(userId: string, codeRaw: string | null | un
   if (!code) return;
 
   try {
-    const { data: referrerProfiles } = await supabase
-      .from("profiles")
-      .select("id")
-      .eq("referral_code", code)
-      .limit(1);
-
     clearStoredRefCode();
 
-    if (!referrerProfiles || referrerProfiles.length === 0) return;
-    const referrerId = referrerProfiles[0].id;
+    const referrerId = await profilesDB.getIdByReferralCode(code);
+    if (!referrerId) return;
     if (referrerId === userId) return;
 
-    const { error } = await supabase.from("referrals").upsert(
-      {
-        referrer_id:     referrerId,
-        referred_id:     userId,
-        referred_email:  "",
-        credits_awarded: 0,
-      },
-      { onConflict: "referred_id" as any, ignoreDuplicates: true }
-    );
-
-    if (error) console.warn("[referrals] Insert failed:", error.message);
+    await referralsDB.upsertReferred({
+      referrerId,
+      referredId: userId,
+      referredEmail: "",
+    });
   } catch (e) {
     console.warn("[referrals] Recording error:", e);
   }

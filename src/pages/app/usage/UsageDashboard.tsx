@@ -13,8 +13,7 @@ import {
   type LucideIcon,
 } from "lucide-react";
 
-import { supabase } from "@/lib/supabase/client";
-import { creditsDB } from "@/lib/supabase/database";
+import { creditsDB, sessionsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/Button";
 import {
@@ -254,9 +253,14 @@ export default function UsageDashboard(): JSX.Element {
   const planId = useAuthStore((state) => state.planId);
   const refreshCredits = useAuthStore((state) => state.refreshCredits);
 
+  const TX_PAGE = 20;
+
   const [transactions, setTransactions] = useState<CreditTransaction[]>([]);
   const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoadingMoreTx, setIsLoadingMoreTx] = useState(false);
+  const [txOffset, setTxOffset] = useState(0);
+  const [txHasMore, setTxHasMore] = useState(false);
   const [isPortalLoading, setIsPortalLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -269,25 +273,30 @@ export default function UsageDashboard(): JSX.Element {
     setError(null);
 
     try {
-      const [txData, sessionsResult] = await Promise.all([
-        creditsDB.listByUserIdWithBalance(user.id, 100),
-
-        supabase
-          .from("sessions")
-          .select(
-            "id, type, status, title, duration_seconds, credits_consumed, created_at, started_at, ended_at"
-          )
-          .eq("user_id", user.id)
-          .order("created_at", { ascending: false })
-          .limit(50),
+      const [txData, sessionRows] = await Promise.all([
+        creditsDB.listByUserIdWithBalancePage(user.id, {
+          limit: TX_PAGE,
+          offset: 0,
+        }),
+        sessionsDB.listSummariesByUserId(user.id, 50),
       ]);
 
-      if (sessionsResult.error) {
-        throw sessionsResult.error;
-      }
-
       setTransactions((txData ?? []) as CreditTransaction[]);
-      setSessions((sessionsResult.data ?? []) as unknown as SessionSummary[]);
+      setTxOffset(txData.length);
+      setTxHasMore(txData.length >= TX_PAGE);
+      setSessions(
+        sessionRows.map((s) => ({
+          id: s.id,
+          type: s.type,
+          status: s.status,
+          title: s.title,
+          duration_seconds: s.duration_seconds ?? null,
+          credits_consumed: s.credits_consumed ?? null,
+          created_at: s.created_at,
+          started_at: s.started_at ?? null,
+          ended_at: s.ended_at ?? null,
+        })),
+      );
 
       await refreshCredits();
     } catch (loadError) {
@@ -298,6 +307,32 @@ export default function UsageDashboard(): JSX.Element {
       );
     } finally {
       setIsLoading(false);
+    }
+  }
+
+  async function loadMoreTransactions(): Promise<void> {
+    if (!user?.id || !txHasMore || isLoadingMoreTx) return;
+
+    setIsLoadingMoreTx(true);
+    try {
+      const page = await creditsDB.listByUserIdWithBalancePage(user.id, {
+        limit: TX_PAGE,
+        offset: txOffset,
+      });
+      setTransactions((prev) => [
+        ...prev,
+        ...(page as CreditTransaction[]),
+      ]);
+      setTxOffset((o) => o + page.length);
+      setTxHasMore(page.length >= TX_PAGE);
+    } catch (loadError) {
+      setError(
+        loadError instanceof Error
+          ? loadError.message
+          : "Failed to load more transactions."
+      );
+    } finally {
+      setIsLoadingMoreTx(false);
     }
   }
 
@@ -365,9 +400,15 @@ export default function UsageDashboard(): JSX.Element {
       </div>
 
       {error && (
-        <div className="flex items-center gap-2 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4" />
-          {error}
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          <div className="flex items-center gap-2 flex-1">
+            <AlertCircle className="h-4 w-4 shrink-0" />
+            {error}
+          </div>
+          <Button variant="outline" size="sm" onClick={() => void loadUsage()}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            Retry
+          </Button>
         </div>
       )}
 
@@ -487,7 +528,7 @@ export default function UsageDashboard(): JSX.Element {
               </thead>
 
               <tbody>
-                {transactions.slice(0, 20).map((transaction) => {
+                {transactions.map((transaction) => {
                   const amount = transaction.amount ?? 0;
                   const isPositive = amount >= 0;
 
@@ -530,6 +571,19 @@ export default function UsageDashboard(): JSX.Element {
             {!isLoading && transactions.length === 0 && (
               <div className="py-8 text-center text-sm text-muted-foreground">
                 No credit transactions found yet.
+              </div>
+            )}
+
+            {txHasMore && !isLoading && (
+              <div className="pt-4 flex justify-center">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  loading={isLoadingMoreTx}
+                  onClick={() => void loadMoreTransactions()}
+                >
+                  Load more transactions
+                </Button>
               </div>
             )}
           </div>

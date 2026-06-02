@@ -13,6 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import type { LiveSessionConfig } from "@/types/session.types";
 import type { PreferredAIModel, HintStyle, UserProfile } from "@/types/user.types";
+import { acknowledgeTabAudioGuide } from "@/lib/audio/tabAudioGuide";
 
 interface PreSessionSetupWizardProps {
   onStart: (config: LiveSessionConfig) => void;
@@ -145,6 +146,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
 
   function handleStart() {
     if (micPermission === "denied") return;
+    if (enableSystemAudio) acknowledgeTabAudioGuide();
     const contextDocIds = [
       ...(resumeId ? [resumeId] : []),
       ...(jdId ? [jdId] : []),

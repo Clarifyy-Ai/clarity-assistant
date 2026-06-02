@@ -19,6 +19,7 @@ import { toast } from "sonner";
 import { normalizeExamTypeForStorage } from "@/lib/mock-test/examTypes";
 
 import { supabase } from "@/lib/supabase/client";
+import { questionsDB } from "@/lib/supabase/database";
 import { SUPABASE_URL } from "@/lib/env";
 import { useAuthStore } from "@/store/userStore";
 
@@ -257,7 +258,7 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
     setSaving(true);
 
     try {
-      const { error } = await supabase.from("questions").insert({
+      await questionsDB.create({
         question_text: form.question_text.trim(),
         question_type: form.question_type,
         options: form.question_type === "MCQ" ? form.options : null,
@@ -278,8 +279,6 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
         is_public: false,
         is_verified: false,
       });
-
-      if (error) throw error;
 
       toast.success("Question saved to your bank.");
       setForm({
@@ -897,8 +896,7 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
         is_verified: false,
       }));
 
-      const { error } = await supabase.from("questions").insert(rows);
-      if (error) throw error;
+      await questionsDB.createMany(rows);
 
       toast.success(summary ?? `${toSave.length} questions saved.`);
       setReviewItems(null);

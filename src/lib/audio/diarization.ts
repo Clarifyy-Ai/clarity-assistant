@@ -238,9 +238,10 @@ export function buildDiarizationSegment(
  */
 export function processUtteranceForDiarization(
   utterance: TranscriptUtterance,
+  options?: { forcedSpeaker?: TranscriptUtterance["speaker"] },
 ): TranscriptUtterance {
   const store  = useAudioStore.getState();
-  const speaker = classifySpeaker(utterance);
+  const speaker = options?.forcedSpeaker ?? classifySpeaker(utterance);
 
   const enriched: TranscriptUtterance = {
     ...utterance,

@@ -206,7 +206,9 @@ export const useAudioStore = create<AudioStore>()(
     // ── Transcript actions ─────────────────────────────────
     addUtterance: (utterance) =>
       set((s) => {
-        const utterances = [...s.transcript.utterances, utterance].slice(-MAX_UTTERANCES);
+        const utterances = [...s.transcript.utterances, utterance]
+          .sort((a, b) => a.start_ms - b.start_ms)
+          .slice(-MAX_UTTERANCES);
         const full_transcript = utterances
           .filter((u) => u.is_final)
           .map((u) => `[${u.speaker}]: ${u.text}`)

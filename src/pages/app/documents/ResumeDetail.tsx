@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { FileText, Download, Trash2, CheckCircle, Clock, Edit, Save, X, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { resumesDB } from "@/lib/supabase/database";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 
 // ─── Matches actual `resumes` table schema ────────────────────────────────────
 interface Resume {
@@ -57,6 +59,8 @@ export default function ResumeDetail() {
   const [editing,    setEditing]    = useState(false);
   const [editName,   setEditName]   = useState("");
   const [savingEdit, setSavingEdit] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   useEffect(() => {
     if (!id || !user?.id) return;
@@ -101,17 +105,17 @@ export default function ResumeDetail() {
   }
 
   async function handleDelete() {
-    if (!id || !user?.id || !confirm("Delete this resume?")) return;
-    const { error } = await supabase
-      .from("resumes")
-      .delete()
-      .eq("id", id)
-      .eq("user_id", user.id);
-    if (error) {
-      toast.error("Failed to delete resume. Please try again.");
-    } else {
+    if (!id) return;
+    setDeleting(true);
+    try {
+      await resumesDB.delete(id);
       toast.success("Resume deleted");
       navigate("/app/documents");
+    } catch {
+      toast.error("Failed to delete resume. Please try again.");
+    } finally {
+      setDeleting(false);
+      setDeleteOpen(false);
     }
   }
 
@@ -176,7 +180,7 @@ export default function ResumeDetail() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={handleDelete}
+              onClick={() => setDeleteOpen(true)}
               className="text-red-400 hover:text-red-300"
             >
               <Trash2 className="w-4 h-4" />
@@ -282,6 +286,17 @@ export default function ResumeDetail() {
           </Card>
         )}
       </div>
+
+      <ConfirmDialog
+        open={deleteOpen}
+        onOpenChange={setDeleteOpen}
+        title="Delete this resume?"
+        description="This cannot be undone."
+        confirmLabel="Delete"
+        variant="destructive"
+        isLoading={deleting}
+        onConfirm={handleDelete}
+      />
     </div>
   );
 }
