@@ -140,7 +140,7 @@ export default function Interviews() {
       </div>
 
       {/* Loading */}
-      {store.isLoading ? (
+      {store.is_loading ? (
         <div className="space-y-3">
           {[...Array(3)].map((_, i) => <SkeletonCard key={i} />)}
         </div>
