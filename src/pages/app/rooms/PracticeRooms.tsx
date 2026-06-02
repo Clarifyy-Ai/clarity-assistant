@@ -67,9 +67,11 @@ export default function PracticeRooms() {
         title="Practice Rooms"
         subtitle="Coordinate practice sessions with other candidates (chat-based)"
         action={
-          <Button as={Link} to="/app/rooms/new" variant="primary" size="sm" leftIcon={<Plus className="w-4 h-4" />}>
-            New Room
-          </Button>
+          <Link to="/app/rooms/new">
+            <Button variant="primary" size="sm" leftIcon={<Plus className="w-4 h-4" />}>
+              New Room
+            </Button>
+          </Link>
         }
       />
 
