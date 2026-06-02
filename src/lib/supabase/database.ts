@@ -338,7 +338,7 @@ export const sessionsDB = {
     userId: string,
     limit = 50,
   ): Promise<
-    Pick<
+    (Pick<
       Tables<"sessions">,
       | "id"
       | "type"
@@ -350,14 +350,12 @@ export const sessionsDB = {
       | "questions_asked"
       | "status"
       | "tags"
-      | "duration_seconds"
-      | "credits_consumed"
-    >[]
+    > & { duration_seconds: number; credits_consumed: number })[]
   > {
     const { data, error } = await supabase
       .from("sessions")
       .select(
-        "id, type, title, overall_score, created_at, started_at, ended_at, questions_asked, status, tags, duration_seconds, credits_consumed",
+        "id, type, title, overall_score, created_at, started_at, ended_at, questions_asked, status, tags, credits_used",
       )
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
@@ -370,21 +368,30 @@ export const sessionsDB = {
       });
     }
 
-    return (data ?? []) as Pick<
-      Tables<"sessions">,
-      | "id"
-      | "type"
-      | "title"
-      | "overall_score"
-      | "created_at"
-      | "started_at"
-      | "ended_at"
-      | "questions_asked"
-      | "status"
-      | "tags"
-      | "duration_seconds"
-      | "credits_consumed"
-    >[];
+    return (data ?? []).map((r: any) => ({
+      id: r.id,
+      type: r.type,
+      title: r.title,
+      overall_score: r.overall_score,
+      created_at: r.created_at,
+      started_at: r.started_at,
+      ended_at: r.ended_at,
+      questions_asked: r.questions_asked,
+      status: r.status,
+      tags: r.tags,
+      credits_consumed: r.credits_used ?? 0,
+      duration_seconds:
+        r.started_at && r.ended_at
+          ? Math.max(
+              0,
+              Math.round(
+                (new Date(r.ended_at).getTime() -
+                  new Date(r.started_at).getTime()) /
+                  1000,
+              ),
+            )
+          : 0,
+    }));
   },
 
   async listMetaByIds(
