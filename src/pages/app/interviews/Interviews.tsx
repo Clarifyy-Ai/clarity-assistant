@@ -49,17 +49,20 @@ export default function Interviews() {
   }
 
   const filtered = store.interviews.filter((iv) => {
-    const d = new Date(iv.scheduled_at);
-    if (filter === "upcoming")  return isFuture(d) && !isToday(d) && iv.status !== "cancelled";
+    const scheduledAt = iv.next_round?.scheduled_at ?? iv.created_at;
+    const status = iv.next_round?.status ?? "scheduled";
+    const d = new Date(scheduledAt);
+    if (filter === "upcoming")  return isFuture(d) && !isToday(d) && status !== "cancelled";
     if (filter === "today")     return isToday(d);
-    if (filter === "completed") return iv.status === "completed";
-    if (filter === "cancelled") return iv.status === "cancelled";
+    if (filter === "completed") return status === "completed";
+    if (filter === "cancelled") return status === "cancelled";
     return true;
   });
 
   // Group by month
   const grouped = filtered.reduce<Record<string, any[]>>((acc, iv) => {
-    const key = format(new Date(iv.scheduled_at), "MMMM yyyy");
+    const scheduledAt = iv.next_round?.scheduled_at ?? iv.created_at;
+    const key = format(new Date(scheduledAt), "MMMM yyyy");
     if (!acc[key]) acc[key] = [];
     acc[key].push(iv);
     return acc;
@@ -128,7 +131,7 @@ export default function Interviews() {
           >
             {f}
             {f === "today" && store.interviews.some(
-              (iv) => isToday(new Date(iv.scheduled_at))
+              (iv) => isToday(new Date(iv.next_round?.scheduled_at ?? iv.created_at))
             ) && (
               <span className="ml-1.5 w-1.5 h-1.5 bg-violet-500 rounded-full inline-block" />
             )}
@@ -137,7 +140,7 @@ export default function Interviews() {
       </div>
 
       {/* Loading */}
-      {store.isLoading ? (
+      {store.is_loading ? (
         <div className="space-y-3">
           {[...Array(3)].map((_, i) => <SkeletonCard key={i} />)}
         </div>

@@ -67,9 +67,11 @@ export default function PracticeRooms() {
         title="Practice Rooms"
         subtitle="Coordinate practice sessions with other candidates (chat-based)"
         action={
-          <Button as={Link} to="/app/rooms/new" variant="primary" size="sm" leftIcon={<Plus className="w-4 h-4" />}>
-            New Room
-          </Button>
+          <Link to="/app/rooms/new">
+            <Button variant="primary" size="sm" leftIcon={<Plus className="w-4 h-4" />}>
+              New Room
+            </Button>
+          </Link>
         }
       />
 
@@ -102,9 +104,11 @@ export default function PracticeRooms() {
           <Video className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
           <p className="text-foreground font-medium">No rooms yet</p>
           <p className="text-sm text-muted-foreground mt-1">Create one to start practicing live.</p>
-          <Button as={Link} to="/app/rooms/new" variant="primary" size="sm" className="mt-4">
-            Create Room
-          </Button>
+          <Link to="/app/rooms/new">
+            <Button variant="primary" size="sm" className="mt-4">
+              Create Room
+            </Button>
+          </Link>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

@@ -159,7 +159,7 @@ export const userRolesDB = {
       .from("user_roles")
       .select("role")
       .eq("user_id", userId)
-      .eq("role", role)
+      .eq("role", role as any)
       .maybeSingle();
 
     if (error) {
@@ -338,7 +338,7 @@ export const sessionsDB = {
     userId: string,
     limit = 50,
   ): Promise<
-    Pick<
+    (Pick<
       Tables<"sessions">,
       | "id"
       | "type"
@@ -350,14 +350,12 @@ export const sessionsDB = {
       | "questions_asked"
       | "status"
       | "tags"
-      | "duration_seconds"
-      | "credits_consumed"
-    >[]
+    > & { duration_seconds: number; credits_consumed: number })[]
   > {
     const { data, error } = await supabase
       .from("sessions")
       .select(
-        "id, type, title, overall_score, created_at, started_at, ended_at, questions_asked, status, tags, duration_seconds, credits_consumed",
+        "id, type, title, overall_score, created_at, started_at, ended_at, questions_asked, status, tags, credits_used",
       )
       .eq("user_id", userId)
       .order("created_at", { ascending: false })
@@ -370,21 +368,30 @@ export const sessionsDB = {
       });
     }
 
-    return (data ?? []) as Pick<
-      Tables<"sessions">,
-      | "id"
-      | "type"
-      | "title"
-      | "overall_score"
-      | "created_at"
-      | "started_at"
-      | "ended_at"
-      | "questions_asked"
-      | "status"
-      | "tags"
-      | "duration_seconds"
-      | "credits_consumed"
-    >[];
+    return (data ?? []).map((r: any) => ({
+      id: r.id,
+      type: r.type,
+      title: r.title,
+      overall_score: r.overall_score,
+      created_at: r.created_at,
+      started_at: r.started_at,
+      ended_at: r.ended_at,
+      questions_asked: r.questions_asked,
+      status: r.status,
+      tags: r.tags,
+      credits_consumed: r.credits_used ?? 0,
+      duration_seconds:
+        r.started_at && r.ended_at
+          ? Math.max(
+              0,
+              Math.round(
+                (new Date(r.ended_at).getTime() -
+                  new Date(r.started_at).getTime()) /
+                  1000,
+              ),
+            )
+          : 0,
+    }));
   },
 
   async listMetaByIds(
@@ -423,9 +430,9 @@ export const sessionTranscriptsDB = {
     const { error } = await supabase.from("session_transcripts").insert({
       session_id: row.session_id,
       user_id: row.user_id,
-      transcript: row.transcript,
+      content: row.transcript,
       ...(row.utterances !== undefined ? { utterances: row.utterances } : {}),
-    } as TablesInsert<"session_transcripts">);
+    } as unknown as TablesInsert<"session_transcripts">);
 
     if (error) {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
@@ -1799,7 +1806,7 @@ export const questionsDB = {
         operation: "list",
       });
     }
-    return (data ?? []) as Tables<"questions">[];
+    return (data ?? []) as unknown as Tables<"questions">[];
   },
 
   async getById(id: string): Promise<Tables<"questions"> | null> {
@@ -2128,7 +2135,7 @@ export const scorecardsDB = {
   async markShared(sessionId: string, token: string): Promise<void> {
     const { error } = await supabase
       .from("scorecards")
-      .update({ is_shared: true, share_token: token })
+      .update({ is_shared: true, share_token: token } as any)
       .eq("session_id", sessionId);
     if (error) {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
