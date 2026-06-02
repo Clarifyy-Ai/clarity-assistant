@@ -162,7 +162,7 @@ export function useLiveCopilot({
         };
       }
     }
-    const talkingPoints = generateResumeTalkingPoints(parsed, {
+    const talkingPoints = generateResumeTalkingPoints(parsed as any, {
       company: cfg.company,
       role: cfg.role,
       interview_type: cfg.interview_type as any,
