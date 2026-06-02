@@ -25,7 +25,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatDistanceToNow } from "date-fns";
-import type { Tables } from "@/types/database.types";
+import type { Tables } from "@/integrations/supabase";
 
 const SESSION_TYPES = ["all", "live", "mock", "practice"] as const;
 type FilterType = (typeof SESSION_TYPES)[number];
