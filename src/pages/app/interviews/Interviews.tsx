@@ -49,17 +49,20 @@ export default function Interviews() {
   }
 
   const filtered = store.interviews.filter((iv) => {
-    const d = new Date(iv.scheduled_at);
-    if (filter === "upcoming")  return isFuture(d) && !isToday(d) && iv.status !== "cancelled";
+    const scheduledAt = iv.next_round?.scheduled_at ?? iv.created_at;
+    const status = iv.next_round?.status ?? "scheduled";
+    const d = new Date(scheduledAt);
+    if (filter === "upcoming")  return isFuture(d) && !isToday(d) && status !== "cancelled";
     if (filter === "today")     return isToday(d);
-    if (filter === "completed") return iv.status === "completed";
-    if (filter === "cancelled") return iv.status === "cancelled";
+    if (filter === "completed") return status === "completed";
+    if (filter === "cancelled") return status === "cancelled";
     return true;
   });
 
   // Group by month
   const grouped = filtered.reduce<Record<string, any[]>>((acc, iv) => {
-    const key = format(new Date(iv.scheduled_at), "MMMM yyyy");
+    const scheduledAt = iv.next_round?.scheduled_at ?? iv.created_at;
+    const key = format(new Date(scheduledAt), "MMMM yyyy");
     if (!acc[key]) acc[key] = [];
     acc[key].push(iv);
     return acc;
