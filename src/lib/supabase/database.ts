@@ -1806,7 +1806,7 @@ export const questionsDB = {
         operation: "list",
       });
     }
-    return (data ?? []) as Tables<"questions">[];
+    return (data ?? []) as unknown as Tables<"questions">[];
   },
 
   async getById(id: string): Promise<Tables<"questions"> | null> {
