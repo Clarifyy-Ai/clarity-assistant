@@ -2135,7 +2135,7 @@ export const scorecardsDB = {
   async markShared(sessionId: string, token: string): Promise<void> {
     const { error } = await supabase
       .from("scorecards")
-      .update({ is_shared: true, share_token: token })
+      .update({ is_shared: true, share_token: token } as any)
       .eq("session_id", sessionId);
     if (error) {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
