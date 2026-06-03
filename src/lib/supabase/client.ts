@@ -173,8 +173,7 @@ export async function uploadFile(
       url,
       path: safePath,
     };
-  } catch (error) {
-    console.error("[uploadFile] Upload failed:", error);
+  } catch {
     return null;
   }
 }
