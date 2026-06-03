@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
       const msg = err instanceof Error ? err.message : "Gemini PDF parse failed";
       console.error("[parse-question-pdf] Gemini error:", msg);
       return errorResponse(
-        msg.includes("API key") ? msg : "PDF parsing failed. Credits refunded.",
+        "PDF parsing failed. Credits refunded.",
         "AI_ERROR",
         502,
         req
