@@ -82,7 +82,7 @@ export function MobileNav(): JSX.Element {
               "flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-all",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",
               isActive
-                ? "text-violet-500 dark:text-violet-400"
+                ? "text-primary"
                 : "text-muted-foreground hover:text-foreground"
             )}
           >
