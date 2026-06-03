@@ -151,7 +151,7 @@ function ListView() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm min-w-[640px]">
               <thead className="border-b border-border bg-muted/30">
                 <tr>
                   {["Question", "Exam", "Subject", "Difficulty", "Status", ""].map((h) => (
@@ -191,7 +191,7 @@ function ListView() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </div>
         )}
       </Card>

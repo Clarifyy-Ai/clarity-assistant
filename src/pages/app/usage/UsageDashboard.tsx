@@ -516,7 +516,7 @@ export default function UsageDashboard(): JSX.Element {
 
         <CardContent>
           <div className="overflow-x-auto">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm min-w-[640px]">
               <thead>
                 <tr className="border-b border-border text-left text-muted-foreground">
                   <th className="py-2 pr-4 font-medium">Date</th>
@@ -566,7 +566,7 @@ export default function UsageDashboard(): JSX.Element {
                   );
                 })}
               </tbody>
-            </table>
+            </table></div>
 
             {!isLoading && transactions.length === 0 && (
               <div className="py-8 text-center text-sm text-muted-foreground">

@@ -527,7 +527,7 @@ export default function Landing() {
             </p>
           </motion.div>
           <motion.div {...fadeUp(0.1)} className="overflow-x-auto rounded-2xl border border-border">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto"><table className="w-full text-sm min-w-[640px]">
               <thead>
                 <tr className="border-b border-border bg-secondary/30">
                   <th className="text-left px-5 py-4 font-semibold text-foreground w-1/2">Feature</th>
@@ -563,7 +563,7 @@ export default function Landing() {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
           </motion.div>
         </div>
       </section>

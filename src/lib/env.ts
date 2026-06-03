@@ -18,12 +18,10 @@ type RawEnv = Record<string, string | undefined>;
 
 const rawEnv = import.meta.env as RawEnv;
 
-// Public Supabase config for the connected Clarify.AI project.
-// These values are browser-safe anon/publishable values and keep published
-// builds working even when the managed Vite .env file is not present.
-const CONNECTED_SUPABASE_URL = "https://qzgvjrvtkwlzxpmlddkx.supabase.co";
-const CONNECTED_SUPABASE_PUBLISHABLE_KEY =
-  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6Z3ZqcnZ0a3dsenhwbWxkZGt4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MDE4MzAsImV4cCI6MjA4OTM3NzgzMH0.hsDv4Sk7L8on5zlr9K6LT1FQe3bEEzmav5bCYes-0so";
+// Supabase URL/anon key are auto-populated into VITE_SUPABASE_URL and
+// VITE_SUPABASE_PUBLISHABLE_KEY by Lovable Cloud at build time. We do NOT
+// hardcode fallbacks here so missing config fails loudly instead of silently
+// pointing production at a stale project.
 
 export type AppEnvironment =
   | "development"
@@ -110,19 +108,19 @@ function normalizePathOrUrl(value: string, fallback: string): string {
 }
 
 const SUPABASE_URL_VALUE = assertValidUrl(
-  optional(["VITE_SUPABASE_URL"], CONNECTED_SUPABASE_URL),
+  firstDefined(["VITE_SUPABASE_URL"]),
   "VITE_SUPABASE_URL"
 );
 
-const SUPABASE_ANON_KEY_VALUE = optional(
-  ["VITE_SUPABASE_ANON_KEY", "VITE_SUPABASE_PUBLISHABLE_KEY"],
-  CONNECTED_SUPABASE_PUBLISHABLE_KEY
-);
+const SUPABASE_ANON_KEY_VALUE = firstDefined([
+  "VITE_SUPABASE_ANON_KEY",
+  "VITE_SUPABASE_PUBLISHABLE_KEY",
+]);
 
-const SUPABASE_PUBLISHABLE_KEY_VALUE = optional(
-  ["VITE_SUPABASE_PUBLISHABLE_KEY", "VITE_SUPABASE_ANON_KEY"],
-  CONNECTED_SUPABASE_PUBLISHABLE_KEY
-);
+const SUPABASE_PUBLISHABLE_KEY_VALUE = firstDefined([
+  "VITE_SUPABASE_PUBLISHABLE_KEY",
+  "VITE_SUPABASE_ANON_KEY",
+]);
 
 const APP_ENV_VALUE = parseAppEnvironment(
   optional(["VITE_APP_ENV"], "development")

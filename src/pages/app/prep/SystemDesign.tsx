@@ -145,7 +145,7 @@ export default function SystemDesign() {
       />
 
       <div className="flex flex-col lg:flex-row gap-5">
-        <div className="lg:w-[320px] space-y-2 flex-shrink-0 max-h-[600px] overflow-y-auto pr-1">
+        <div className="w-full lg:w-80 lg:max-w-full space-y-2 flex-shrink-0 max-h-[600px] overflow-y-auto pr-1">
           {topics === null && (
             <div className="space-y-2">
               {[0, 1, 2, 3, 4].map((i) => (

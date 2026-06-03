@@ -948,7 +948,7 @@ export default function TestSession() {
                 <Menu className="h-4 w-4" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="flex w-[280px] flex-col p-0">
+            <SheetContent side="left" className="flex w-[85vw] max-w-xs flex-col p-0">
               <div className="border-b p-4 font-bold bg-muted/20">Questions Navigator</div>
               <div className="flex-1 overflow-y-auto p-4">
                 <NavigatorGrid />

@@ -47,7 +47,7 @@ export function Avatar({ src, name, size = "md", className, online }: AvatarProp
         />
       ) : (
         <div className={cn(
-          "w-full h-full rounded-full flex items-center justify-center text-white font-bold",
+          "w-full h-full rounded-full flex items-center justify-center text-primary-foreground font-bold",
           bg
         )}>
           {initials}

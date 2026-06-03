@@ -176,7 +176,7 @@ export default function AdminUsers() {
 
       <Card padding="none" className="overflow-hidden">
         <div className="overflow-x-auto">
-          <table className="w-full text-sm">
+          <div className="overflow-x-auto"><table className="w-full text-sm min-w-[640px]">
             <thead className="border-b border-border">
               <tr>
                 {["Name", "Email", "Plan", "Credits", "Admin", "Joined", ""].map((h) => (
@@ -254,7 +254,7 @@ export default function AdminUsers() {
                 ))
               )}
             </tbody>
-          </table>
+          </table></div>
         </div>
       </Card>
 
