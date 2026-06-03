@@ -53,7 +53,7 @@ export function Tooltip({
         <div
           className={cn(
             "absolute z-50 px-2.5 py-1.5 bg-popover border border-border",
-            "rounded-lg text-xs text-gray-200 whitespace-nowrap shadow-xl",
+            "rounded-lg text-xs text-popover-foreground whitespace-nowrap shadow-xl",
             "pointer-events-none animate-in fade-in duration-100",
             SIDE_CLASSES[side] ?? SIDE_CLASSES.top,
             className
