@@ -1,58 +1,73 @@
-# Clarity.AI Production Hardening — Phased Plan
+# Audit Fix Plan — Phased
 
-Per your standing rules I'm planning first, breaking this into small component-scoped passes, and adding explicit guardrails. This sprint is too large for one loop — attempting all of P0–P7 at once would risk regressing the 59 working surfaces. I'll execute one priority group per turn, you approve, we move on.
+Per your standing rules, I'm splitting the audit fixes into small, component-scoped phases. Each phase ships only the named files; I'll wait for "go phase N" before moving on so you can verify no regressions.
 
 ## Guardrails (apply to every phase)
-- **Do not modify** any working feature outside the named files for that phase.
-- **Do not touch** locked migrations, `docs/COMPLIANCE_GATING.md`, stealth shims, or memory'd "do not re-add" items (P0-2 stealth, dashboard re-add, etc.).
-- **Do not** blanket-remove `@ts-nocheck` — only remove on files actually edited in the phase, and only if types compile.
-- **Do not** rewrite shared utilities (`fetchEdge`, `database.ts`, `authStore`) unless the phase explicitly requires it — additive changes only.
-- Every edit ships full file contents per your request; no partial diffs.
+- Do NOT modify any working feature outside the named files for that phase.
+- Do NOT touch locked items: stealth shims (`src/lib/stealth/*`), `docs/COMPLIANCE_GATING.md`, memory'd "do not re-add" entries (P0-2 stealth, dashboard re-add), edge functions unless explicitly named.
+- Do NOT blanket-remove `@ts-nocheck` — only on files actually edited in the phase, and only if types still compile.
+- Additive changes only to shared utilities (`fetchEdge`, `database.ts`, `authStore`).
+- No new features. No design overhauls. No DB migrations unless explicitly listed.
 
-## Phase order (one per approval)
+---
 
-### Phase 1 — P0 Bootstrap & Dashboard
-Files: `src/App.tsx`, `src/main.tsx`, `src/pages/app/Dashboard.tsx`, `src/components/common/LoadingScreen.tsx` (new `AppLoadingFallback`), `src/hooks/useGamification.ts`.
-- Route-level `React.lazy` + `Suspense` for `/app/*` only; marketing eager.
-- Shell-shaped skeleton fallback.
-- De-dup profile/session fetch (canonical hook).
-- Per-section skeletons + retry on Dashboard.
+## Phase A — CRITICAL: Supabase client consolidation
+**Files:** `src/lib/supabase/client.ts`, `src/lib/supabase/index.ts`, `src/lib/env.ts`
+- Make `src/lib/supabase/client.ts` re-export from `src/integrations/supabase/client.ts` (single instance, no duplicate auth listener).
+- Remove duplicate `uploadFile` / `subscribeToTable` / `getSignedUrl` from `lib/supabase/client.ts` (keep the canonical ones in `lib/supabase/storage.ts` and `lib/supabase/realtime.ts`).
+- Remove hardcoded Supabase URL/key fallbacks in `src/lib/env.ts` — fail loudly if env missing.
+- Strip stray `console.log/warn` in `lib/supabase/client.ts:126,132,179`.
 
-### Phase 2 — P1 Live Co-Pilot (dual-channel audio + layout)
-Files: `src/lib/audio/audioCapture.ts` (or equivalent), `src/hooks/useDeepgramStream.ts`, `src/store/audioStore.ts`, `src/pages/app/live/*`, `src/components/overlay/OverlayPanel.tsx`.
-- Two `MediaStream`s, two Deepgram sockets, merged labelled transcript.
-- Graceful mic-only fallback + dismissible banner.
-- Cleanup on unmount.
-- Stable overlay layout; memoised subcomponents.
+**Risk:** any consumer importing the removed helpers from `lib/supabase/client` will break. I'll grep and fix call sites in the same phase.
 
-### Phase 3 — P2 Mock Interviews
-Files: `src/pages/app/mock/MockSession.tsx` + related session hooks.
-- Explicit state machine, cached question set, persisted session on end.
+## Phase B — CRITICAL: Mobile table overflow
+**Files (one fix per file, no other changes):**
+- `src/pages/app/usage/UsageDashboard.tsx`
+- `src/pages/app/mock-test/TestResults.tsx`
+- `src/pages/marketing/Landing.tsx`
+- `src/pages/app/admin/AdminUsers.tsx`
+- `src/pages/app/admin/AdminQuestionEditor.tsx`
 
-### Phase 4 — P3 Admin Exam Scraper UI
-Files: `src/pages/app/admin/AdminSeed.tsx`, new `scrape_jobs` realtime subscription.
-- Migration needed for `scrape_jobs` table if it doesn't exist (will surface separately for approval).
+Wrap raw `<table>` in `<div className="overflow-x-auto">` or swap to shadcn `<Table>`. No logic changes.
 
-### Phase 5 — P4 Call Sessions
-Files: `src/pages/app/live/*`, new `src/hooks/useCallSession.ts`.
-- Single-init hook, cached device enumeration, lifecycle states.
+## Phase C — IMPORTANT: Fixed-width responsive fixes
+**Files:**
+- `src/pages/app/prep/CodingHints.tsx:180` — `lg:w-[380px]` → `lg:w-80 lg:max-w-full`
+- `src/pages/app/prep/SystemDesign.tsx:148` — `lg:w-[320px]` → `lg:w-80 lg:max-w-full`
+- `src/pages/app/mock-test/TestSession.tsx:951` — `w-[280px]` → `w-[85vw] max-w-xs`
 
-### Phase 6 — P5 Reports / Sprint Review
-Files: `src/pages/app/analytics/*`.
-- Date range, real queries, CSV export.
+## Phase D — IMPORTANT: Hardcoded color tokens (UI primitives only)
+**Files:**
+- `src/components/ui/tooltip.tsx:56` — `text-gray-200` → `text-popover-foreground`
+- `src/components/ui/avatar.tsx:50` — `text-white` → `text-primary-foreground`
+- `src/components/layout/MobileNav.tsx:85` — `text-violet-500` → `text-primary`
 
-### Phase 7 — P6 Broken Pages (sub-phased per page)
-P6-A Usage → P6-B Debrief → P6-C Referrals → P6-D Documents → P6-E Knowledge Base → P6-F Calendar → P6-G Rooms → P6-H Guide → P6-I Inbox → P6-J Settings.
-Each shipped individually so you can verify no regressions before moving on.
+(Skipping `PreSessionSetupWizard` full refactor — too risky for one pass; I'll flag it separately if you want it as Phase D2.)
 
-### Phase 8 — P7 Cross-cutting
-`GlobalErrorBoundary`, sonner standardisation pass, `getAuthHeaders` consolidation in `src/lib/api/headers.ts`.
+## Phase E — NICE-TO-HAVE: Credit threshold unification + console cleanup
+**Files:**
+- `src/pages/app/Dashboard.tsx:212` and `src/hooks/useCredits.ts:110` — align both to a single threshold constant (warn <50, critical <20, exhausted <5).
+- `src/App.tsx:423-434` — narrow the `console.warn` override to React Router future-flag messages only (don't blanket-suppress).
 
-## Scope confirmations needed before Phase 1
+## Phase F — NICE-TO-HAVE: Routing consolidation
+**Files:** `src/App.tsx`
+- Replace eager marketing imports with `React.lazy`.
+- Keep manual `lazy()` calls but group them via the existing `src/pages/app/index.ts` barrel where possible.
+- No route changes, no auth changes.
 
-1. **Confirm phased execution** — one priority group per turn, you review preview, then say "continue" for the next. (Recommended; matches your stated workflow.)
-2. **Confirm Phase 4 migration** — `scrape_jobs` table likely doesn't exist; I'll propose a migration when we reach P3. OK?
-3. **Audio refactor risk (Phase 2)** — dual-channel will touch `audioStore` shape. Any existing consumers (overlay pill, mock flow) will be updated in the same phase. Confirm acceptable.
-4. **Skip / defer anything?** — e.g. if Sprint Review page (P5-B) doesn't exist yet, I'll note and skip rather than invent.
+---
 
-Reply "go" (or "go phase 1") to start Phase 1, or adjust scope.
+## Explicitly DEFERRED (not in this plan)
+- **Admin / Analytics UI gaps** — feature work, not bug fix. Needs a separate spec.
+- **Stripe checkout** — blocked on secrets you chose to skip.
+- **`as any` / `@ts-nocheck` sweep** — high regression risk; tackle file-by-file later.
+- **Zustand store decoupling** (`authStore` ↔ `overlayStore`) — touches the auth-init resilience memory; needs its own phase.
+- **`PreSessionSetupWizard` token refactor** — large visual surface; flag if wanted.
+- **Design-token HSL migration** in `tailwind.config.ts` / `index.css` — theme-wide; needs visual QA.
+
+---
+
+## Order I recommend
+A → B → C → D → E → F, with you saying "go phase X" between each.
+
+Reply with **"go phase A"** (or pick a different starting phase, or adjust scope) to begin.
