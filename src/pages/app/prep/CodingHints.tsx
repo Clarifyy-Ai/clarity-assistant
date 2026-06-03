@@ -177,7 +177,7 @@ export default function CodingHints() {
       />
 
       <div className="flex flex-col lg:flex-row gap-5">
-        <div className="lg:w-[380px] space-y-4 flex-shrink-0">
+        <div className="w-full lg:w-80 lg:max-w-full space-y-4 flex-shrink-0">
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
             <input
