@@ -123,13 +123,11 @@ export async function getSignedUrl(
       .createSignedUrl(safePath, expiresInSeconds);
 
     if (error || !data?.signedUrl) {
-      console.warn("[getSignedUrl] Failed to create signed URL:", error?.message);
       return null;
     }
 
     return data.signedUrl;
-  } catch (error) {
-    console.error("[getSignedUrl] Unexpected failure:", error);
+  } catch {
     return null;
   }
 }
