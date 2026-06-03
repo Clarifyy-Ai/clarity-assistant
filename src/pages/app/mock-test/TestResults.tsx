@@ -524,7 +524,7 @@ export default function TestResults() {
           <CardContent className="py-4">
             <h3 className="mb-3 text-sm font-semibold text-foreground">Subject Breakdown</h3>
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <div className="overflow-x-auto"><table className="w-full text-sm min-w-[640px]">
                 <thead>
                   <tr className="border-b border-border text-xs text-muted-foreground">
                     <th className="pb-2 text-left">Subject</th>
@@ -566,7 +566,7 @@ export default function TestResults() {
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </table></div>
             </div>
           </CardContent>
         </Card>
