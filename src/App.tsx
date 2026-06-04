@@ -206,9 +206,7 @@ const SettingsSecurityConfig = lazy(
 const SettingsIntegrations = lazy(
   () => import("@/pages/app/settings/SettingsIntegrations")
 );
-const SettingsBYOK = lazy(
-  () => import("@/pages/app/settings/SettingsBYOK")
-);
+// SettingsBYOK route intentionally removed — lazy import deleted to avoid dead code.
 const SettingsAppearance = lazy(
   () => import("@/pages/app/settings/SettingsAppearance")
 );
