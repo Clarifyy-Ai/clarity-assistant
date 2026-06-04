@@ -3229,6 +3229,20 @@ export type Database = {
           p99_ms: number
         }[]
       }
+      get_my_referrals: {
+        Args: never
+        Returns: {
+          converted_at: string
+          created_at: string
+          credits_awarded: number
+          id: string
+          referred_email_masked: string
+          referred_id: string
+          rewarded_at: string
+          signed_up_at: string
+          status: Database["public"]["Enums"]["referral_status"]
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -3245,6 +3259,7 @@ export type Database = {
         Args: { p_user_id: string }
         Returns: undefined
       }
+      mask_email: { Args: { p_email: string }; Returns: string }
       refund_credits: { Args: { p_cost: number }; Returns: Json }
       update_topic_performance: {
         Args: {
