@@ -17,3 +17,6 @@ export { default as SettingsSecurity }      from "./SettingsSecurity";
 export { default as SettingsPrivacy }       from "./SettingsPrivacy";
 export { default as SettingsData }          from "./SettingsData";
 export { default as SettingsDanger }        from "./SettingsDanger";
+export { default as SettingsHotkeys }       from "./SettingsHotkeys";
+export { default as SettingsPolish }        from "./SettingsPolish";
+export { default as SettingsSecurityConfig } from "./SettingsSecurityConfig";
