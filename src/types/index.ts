@@ -15,3 +15,4 @@ export * from "./error.types";
 export * from "./overlay.types";
 export * from "./constants.types";
 export * from "./supabase.types";
+export * from "./onboarding.types";
