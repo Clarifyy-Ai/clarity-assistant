@@ -194,7 +194,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const isLastStep = step === 6;
 
   return (
-    <div className="min-h-screen bg-[#0a0a0f] text-white flex items-center justify-center p-6">
+    <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
       <div className="w-full max-w-lg space-y-6">
 
         {/* Header */}
