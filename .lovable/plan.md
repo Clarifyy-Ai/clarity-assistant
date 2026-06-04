@@ -1,73 +1,69 @@
-# Audit Fix Plan — Phased
+# Audit Fix Plan
 
-Per your standing rules, I'm splitting the audit fixes into small, component-scoped phases. Each phase ships only the named files; I'll wait for "go phase N" before moving on so you can verify no regressions.
+Per your saved preference (investigate first, component-by-component, with guardrails), here is the staged plan. **Guardrails for every step: do not modify working features, do not change business logic, no DB schema changes, no behavioral changes to Auth/Onboarding/Live/Mock/Prep/Sessions/Documents pipelines.**
 
-## Guardrails (apply to every phase)
-- Do NOT modify any working feature outside the named files for that phase.
-- Do NOT touch locked items: stealth shims (`src/lib/stealth/*`), `docs/COMPLIANCE_GATING.md`, memory'd "do not re-add" entries (P0-2 stealth, dashboard re-add), edge functions unless explicitly named.
-- Do NOT blanket-remove `@ts-nocheck` — only on files actually edited in the phase, and only if types still compile.
-- Additive changes only to shared utilities (`fetchEdge`, `database.ts`, `authStore`).
-- No new features. No design overhauls. No DB migrations unless explicitly listed.
+I will pause after each phase for review before proceeding.
 
 ---
 
-## Phase A — CRITICAL: Supabase client consolidation
-**Files:** `src/lib/supabase/client.ts`, `src/lib/supabase/index.ts`, `src/lib/env.ts`
-- Make `src/lib/supabase/client.ts` re-export from `src/integrations/supabase/client.ts` (single instance, no duplicate auth listener).
-- Remove duplicate `uploadFile` / `subscribeToTable` / `getSignedUrl` from `lib/supabase/client.ts` (keep the canonical ones in `lib/supabase/storage.ts` and `lib/supabase/realtime.ts`).
-- Remove hardcoded Supabase URL/key fallbacks in `src/lib/env.ts` — fail loudly if env missing.
-- Strip stray `console.log/warn` in `lib/supabase/client.ts:126,132,179`.
+## Phase 1 — 🔴 Critical (safe, mechanical)
 
-**Risk:** any consumer importing the removed helpers from `lib/supabase/client` will break. I'll grep and fix call sites in the same phase.
+**1A. Consolidate Supabase client** (#1)
+- Make `src/integrations/supabase/client.ts` re-export from `src/lib/supabase/client.ts` (single `createClient` instance). Keep both import paths working — no caller changes.
 
-## Phase B — CRITICAL: Mobile table overflow
-**Files (one fix per file, no other changes):**
-- `src/pages/app/usage/UsageDashboard.tsx`
-- `src/pages/app/mock-test/TestResults.tsx`
-- `src/pages/marketing/Landing.tsx`
-- `src/pages/app/admin/AdminUsers.tsx`
-- `src/pages/app/admin/AdminQuestionEditor.tsx`
+**1B. Consolidate `use-toast`** (#2)
+- Delete `src/hooks/use-toast.ts`; re-point any importers to `@/components/ui/use-toast`. (Or vice-versa — I'll pick whichever has more importers.)
 
-Wrap raw `<table>` in `<div className="overflow-x-auto">` or swap to shadcn `<Table>`. No logic changes.
+**1C. Remove `@ts-nocheck` from barrels** (#3)
+- Replace `export *` in `src/types/index.ts` and `src/lib/utils/index.ts` with explicit named re-exports; resolve name collisions by aliasing.
 
-## Phase C — IMPORTANT: Fixed-width responsive fixes
-**Files:**
-- `src/pages/app/prep/CodingHints.tsx:180` — `lg:w-[380px]` → `lg:w-80 lg:max-w-full`
-- `src/pages/app/prep/SystemDesign.tsx:148` — `lg:w-[320px]` → `lg:w-80 lg:max-w-full`
-- `src/pages/app/mock-test/TestSession.tsx:951` — `w-[280px]` → `w-[85vw] max-w-xs`
+**1D. Split `/forgot-password` vs `/reset-password`** (#4)
+- `ResetPassword.tsx` already handles both flows via URL token; verify, and if not, add a `mode` prop / separate `ForgotPassword.tsx` wrapper.
 
-## Phase D — IMPORTANT: Hardcoded color tokens (UI primitives only)
-**Files:**
-- `src/components/ui/tooltip.tsx:56` — `text-gray-200` → `text-popover-foreground`
-- `src/components/ui/avatar.tsx:50` — `text-white` → `text-primary-foreground`
-- `src/components/layout/MobileNav.tsx:85` — `text-violet-500` → `text-primary`
+**1E. `AdminUsers.fetchUsers` finally block** (#5)
+- Wrap in try/finally so `loading=false` always runs.
 
-(Skipping `PreSessionSetupWizard` full refactor — too risky for one pass; I'll flag it separately if you want it as Phase D2.)
+**1F. Fix stale-closure `useEffect` deps** (#6)
+- Add missing deps in `AdminDashboard`, `Interviews`, `AdminSeedQuestions` and ~7 others (will list each fix).
 
-## Phase E — NICE-TO-HAVE: Credit threshold unification + console cleanup
-**Files:**
-- `src/pages/app/Dashboard.tsx:212` and `src/hooks/useCredits.ts:110` — align both to a single threshold constant (warn <50, critical <20, exhausted <5).
-- `src/App.tsx:423-434` — narrow the `console.warn` override to React Router future-flag messages only (don't blanket-suppress).
+**1G. Theme-ize `PreSessionSetupWizard`** (#7)
+- Replace `bg-[#0a0a0f] text-white` with `bg-background text-foreground`.
 
-## Phase F — NICE-TO-HAVE: Routing consolidation
-**Files:** `src/App.tsx`
-- Replace eager marketing imports with `React.lazy`.
-- Keep manual `lazy()` calls but group them via the existing `src/pages/app/index.ts` barrel where possible.
-- No route changes, no auth changes.
+**1H. Tailwind safelist** (#8)
+- Add safelist entries to `tailwind.config.ts` for the dynamic color classes used in `Signup`, `ResetPassword`, `ProgressBar`, `avatar`.
 
 ---
 
-## Explicitly DEFERRED (not in this plan)
-- **Admin / Analytics UI gaps** — feature work, not bug fix. Needs a separate spec.
-- **Stripe checkout** — blocked on secrets you chose to skip.
-- **`as any` / `@ts-nocheck` sweep** — high regression risk; tackle file-by-file later.
-- **Zustand store decoupling** (`authStore` ↔ `overlayStore`) — touches the auth-init resilience memory; needs its own phase.
-- **`PreSessionSetupWizard` token refactor** — large visual surface; flag if wanted.
-- **Design-token HSL migration** in `tailwind.config.ts` / `index.css` — theme-wide; needs visual QA.
+## Phase 2 — 🟠 Important (cleanup, no behavior change)
+
+**2A. Decouple authStore→overlayStore** (#9) — move `syncOverlayFromProfile` into a `useEffect` in `App.tsx`.
+**2B. Delete 9 orphaned files** (#10) — verified zero importers.
+**2C. Remove `userStore.ts` ghost alias** (#11) — only if zero importers; otherwise skip.
+**2D. Complete barrel exports** (#12).
+**2E. Remove dead `SettingsBYOK` lazy import** (#13).
+**2F. Silence-error fix in `CompanyResearch`** (#17) — add toast on fetch failure.
+**2G. Add `.catch()` to high-risk awaits** (#18) — `TestSession`, `useStreakTracker`, `useAnalytics`, `ResumeDetail`. *No logic change, only error swallow → toast/log.*
+**2H. Overlay color tokens** (#20, #21) — replace 6 near-black hex values + inline rgba in `OverlayQuickStart`/`OverlayHotkeyHelp` with `--overlay-bg` / semantic tokens.
+**2I. Compress favicon + logo** (#22).
+
+**Skipped from Phase 2 (require feature work, not cleanup):**
+- #14 Rooms WebRTC — needs product decision.
+- #15 Integration stubs — intentional "coming soon".
+- #16 Unused edge functions — need your call (wire UI vs delete).
+- #19 Responsive classes on 40 pages — too broad; should be done page-by-page per your guardrail.
 
 ---
 
-## Order I recommend
-A → B → C → D → E → F, with you saying "go phase X" between each.
+## Phase 3 — 🟡 Nice-to-have
 
-Reply with **"go phase A"** (or pick a different starting phase, or adjust scope) to begin.
+Defer unless you approve individually: memoization sweep, virtualization, lazy marketing routes, `as any` cleanup, file splits, utils consolidation, `glass-card`/`gradient-text` tokenization, `ErrorBoundary` destructive token, `net-dot-*` tokens, `SettingsAppearance` swatches, `screenShare.ts` console.info removal.
+
+---
+
+## Confirmation needed
+
+Reply with one of:
+- **"go phase 1"** — I execute Phase 1 only, then stop for review.
+- **"go phase 1+2"** — both cleanup phases, stop before Phase 3.
+- **"go all"** — execute Phases 1–3 (still skipping the four feature-work items in Phase 2).
+- Or edit the plan (e.g. "skip 1D", "include #19 for Login only").
