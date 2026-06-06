@@ -33,20 +33,23 @@ export * from "./supabase.types";
 export * from "./onboarding.types";
 
 // ─── error.types (AudioError aliased) ─────────────────────────────────────────
+export { ERROR_CODES, ok, err, isOk, isErr, createAppError, fromUnknown } from "./error.types";
 export type {
-  AppError,
   ErrorCode,
   ErrorSeverity,
   ErrorCategory,
-  ErrorContext,
-  ErrorHandler,
-  ErrorReport,
+  AppError,
+  ErrorAction,
+  HTTPError,
   ValidationError,
-  ApiError,
-  NetworkError,
-  AuthError,
-  PermissionError,
-  RateLimitError,
+  FormErrors,
+  PlanGateError,
+  CreditError,
+  AIError,
+  ErrorBoundaryState,
+  ErrorEvent,
+  Result,
+  AsyncResult,
   AudioError as AudioErrorReport,
 } from "./error.types";
 
