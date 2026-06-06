@@ -42,7 +42,31 @@ export * from "./arrayUtils";
 export * from "./objectUtils";
 
 // ─── URL Utilities ────────────────────────────────────────────────────────────
-export * from "./urlUtils";
+// NOTE: `getExtension` exists in both ./urlUtils and ./fileUtils. The fileUtils
+// version is canonical at the barrel; the urlUtils version is aliased as
+// `getUrlExtension`. Modules needing the original should import directly.
+export type { QueryParams } from "./urlUtils";
+export {
+  buildQueryString,
+  appendQuery,
+  parseQueryString,
+  getQueryParam,
+  getAllQueryParams,
+  setQueryParam,
+  parseURL,
+  getDomain,
+  isExternalURL,
+  isValidURL,
+  normalizeURL,
+  joinPaths,
+  getExtension as getUrlExtension,
+  getFilename,
+  getBasename,
+  buildDeepLink,
+  buildStorageURL,
+  copyToClipboard,
+  readFromClipboard,
+} from "./urlUtils";
 
 // ─── File Utilities ───────────────────────────────────────────────────────────
 export * from "./fileUtils";
