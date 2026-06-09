@@ -53,6 +53,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
   const levelAnalyserRef = useRef<ReturnType<typeof createLevelAnalyser> | null>(null);
   const cleanupMicRef = useRef<(() => void) | null>(null);
   const cleanupSysRef = useRef<(() => void) | null>(null);
+  const toggleSystemAudioRef = useRef<(() => Promise<void>) | null>(null);
   const isStartedRef = useRef(false);
 
   // ── Handle final utterance ────────────────────────────────────
@@ -136,7 +137,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       // 2) optional system audio — separate stream + Deepgram channel (P1-A)
       let sysStream: MediaStream | null = null;
       if (opts.enableSystemAudio && isSystemAudioSupported()) {
-        const proceed = confirmTabAudioCapture();
+        const proceed = await confirmTabAudioCapture();
         if (proceed) {
           try {
             sysStream = await captureSystemAudio();
@@ -151,16 +152,28 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
             });
           } catch (err) {
             const message = err instanceof Error ? err.message : "Tab audio capture failed";
+            const isNoAudioTrack =
+              (err as { code?: string } | null)?.code === "NO_SHARE_AUDIO_TICKED";
             store.setSystemAudioAvailable(false);
             store.setStreamError({
               code: "SYSTEM_AUDIO_FAILED",
               message,
               recoverable: true,
-              suggestion: "Share the interview tab and check \"Share tab audio\", then retry from the toolbar.",
+              suggestion: isNoAudioTrack
+                ? "In the share dialog, tick \"Share tab audio\" (or \"Share audio\") before clicking Share."
+                : "Share the interview tab and check \"Share tab audio\", then retry from the toolbar.",
             });
             toast.error(
-              "Interviewer audio not captured — only your mic is active. Use the toolbar to retry tab audio.",
-              { duration: 6000 }
+              isNoAudioTrack
+                ? "Interviewer audio not captured — \"Share tab audio\" wasn't ticked."
+                : "Interviewer audio not captured — only your mic is active.",
+              {
+                duration: Infinity,
+                action: {
+                  label: "Retry",
+                  onClick: () => { void toggleSystemAudioRef.current?.(); },
+                },
+              }
             );
           }
         } else {
@@ -383,6 +396,11 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     }
   }, [connectDeepgram]);
 
+  // Expose toggleSystemAudio to the `start` closure (for "Retry" toast action)
+  useEffect(() => {
+    toggleSystemAudioRef.current = toggleSystemAudio;
+  }, [toggleSystemAudio]);
+
   const isSystemAudioActive = useAudioStore((s) => s.streams.system_stream !== null);
 
   // ── Reconnect ─────────────────────────────────────────────────
@@ -416,6 +434,13 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         message: "Interviewer audio not detected — only your microphone is active.",
         recoverable: true,
         suggestion: "Share the interview tab with \"Share tab audio\" enabled using the toolbar button.",
+      });
+      toast.warning("Still only hearing your mic — interviewer audio isn't being captured.", {
+        duration: Infinity,
+        action: {
+          label: "Enable tab audio",
+          onClick: () => { void toggleSystemAudioRef.current?.(); },
+        },
       });
     }, 25_000);
 
