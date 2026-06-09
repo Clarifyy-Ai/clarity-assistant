@@ -53,6 +53,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
   const levelAnalyserRef = useRef<ReturnType<typeof createLevelAnalyser> | null>(null);
   const cleanupMicRef = useRef<(() => void) | null>(null);
   const cleanupSysRef = useRef<(() => void) | null>(null);
+  const toggleSystemAudioRef = useRef<(() => Promise<void>) | null>(null);
   const isStartedRef = useRef(false);
 
   // ── Handle final utterance ────────────────────────────────────
