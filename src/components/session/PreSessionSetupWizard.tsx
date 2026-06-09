@@ -146,7 +146,10 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
 
   function handleStart() {
     if (micPermission === "denied") return;
-    if (enableSystemAudio) acknowledgeTabAudioGuide();
+    // NOTE: tab-audio guidance modal is shown at capture time via
+    // confirmTabAudioCapture() inside useAudioSession.start(). We no longer
+    // auto-acknowledge here so the user always sees the "tick Share tab
+    // audio" instructions before the share picker appears.
     const contextDocIds = [
       ...(resumeId ? [resumeId] : []),
       ...(jdId ? [jdId] : []),
@@ -690,7 +693,9 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                       <Volume2 className="w-3.5 h-3.5" /> System Audio
                     </p>
                     <p className="text-[10px] text-gray-400 mt-0.5">
-                      {systemAudioSupported ? "Capture interviewer audio" : "Not supported in this browser"}
+                      {systemAudioSupported
+                        ? "We'll ask you to share the interview tab and tick \"Share audio\"."
+                        : "Not supported in this browser"}
                     </p>
                   </div>
                 </label>
