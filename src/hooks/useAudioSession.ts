@@ -396,6 +396,11 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     }
   }, [connectDeepgram]);
 
+  // Expose toggleSystemAudio to the `start` closure (for "Retry" toast action)
+  useEffect(() => {
+    toggleSystemAudioRef.current = toggleSystemAudio;
+  }, [toggleSystemAudio]);
+
   const isSystemAudioActive = useAudioStore((s) => s.streams.system_stream !== null);
 
   // ── Reconnect ─────────────────────────────────────────────────
