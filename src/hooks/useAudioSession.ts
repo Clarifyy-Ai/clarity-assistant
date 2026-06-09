@@ -435,6 +435,13 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         recoverable: true,
         suggestion: "Share the interview tab with \"Share tab audio\" enabled using the toolbar button.",
       });
+      toast.warning("Still only hearing your mic — interviewer audio isn't being captured.", {
+        duration: Infinity,
+        action: {
+          label: "Enable tab audio",
+          onClick: () => { void toggleSystemAudioRef.current?.(); },
+        },
+      });
     }, 25_000);
 
     return () => clearTimeout(timer);
