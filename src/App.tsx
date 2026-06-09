@@ -33,6 +33,7 @@ import { GlobalErrorBoundary } from "@/components/layout/GlobalErrorBoundary";
 import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
 import { Toaster } from "@/components/ui/sonner";
 import { CookieConsent } from "@/components/common/CookieConsent";
+import { TabAudioGuideHost } from "@/components/audio/TabAudioGuideHost";
 
 // ✅ FIX P0-A: Marketing routes load eagerly (no lazy chunk on first paint).
 import Landing from "@/pages/marketing/Landing";
@@ -773,6 +774,7 @@ export default function App(): JSX.Element {
         />
 
         <CookieConsent />
+        <TabAudioGuideHost />
         </QueryClientProvider>
       </ErrorBoundary>
     </GlobalErrorBoundary>
