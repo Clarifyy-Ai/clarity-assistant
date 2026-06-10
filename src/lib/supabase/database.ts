@@ -1318,7 +1318,8 @@ export const referralsDB = {
   async getStats(userId: string): Promise<{ invitedCount: number; creditsEarned: number }> {
     const { count, error: countErr } = await supabase
       .from("referrals")
-      .select("*", { count: "exact", head: true })
+      // Column-scoped: referred_email is no longer client-readable (security hardening)
+      .select("id", { count: "exact", head: true })
       .eq("referrer_id", userId);
 
     if (countErr) {

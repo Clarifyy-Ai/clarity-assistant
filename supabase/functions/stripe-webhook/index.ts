@@ -28,6 +28,16 @@ async function verifyStripeSignature(
 
   const timestamp     = timestampPart.slice(2);
   const expectedSig   = sigPart.slice(3);
+
+  // Reject stale timestamps (>5 min skew) to prevent replay attacks,
+  // mirroring Stripe's official SDK behaviour.
+  const nowSec = Math.floor(Date.now() / 1000);
+  const tsSec  = parseInt(timestamp, 10);
+  if (!Number.isFinite(tsSec) || Math.abs(nowSec - tsSec) > 300) {
+    console.error("[stripe-webhook] Stale or invalid timestamp — possible replay attack");
+    return false;
+  }
+
   const signedPayload = `${timestamp}.${payload}`;
 
   const key = await crypto.subtle.importKey(
