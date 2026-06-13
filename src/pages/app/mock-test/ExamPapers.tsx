@@ -128,6 +128,7 @@ export default function ExamPapers() {
   const [loading,     setLoading]     = useState(true);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
   const [questionCounts, setQuestionCounts] = useState<Record<string, number>>({});
+  const [onlyReady,   setOnlyReady]   = useState<boolean>(true);
 
   // Filters
   const [yearFilter,       setYearFilter]       = useState<number | null>(null);
