@@ -28,6 +28,9 @@ verify_jwt = true
 [functions.collect-exam-papers]
 verify_jwt = true
 
+[functions.bulk-import-questions]
+verify_jwt = false
+
 [functions.company-research]
 verify_jwt = true
 
