@@ -248,13 +248,14 @@ export default function ExamPapers() {
   async function launchDirectTest(paper: ExamPaper, isPractice: boolean) {
     if (!user?.id) return;
 
-    // Guard: no questions in DB for this year
-    if (paper.year > QUESTIONS_MAX_YEAR) {
+    // Guard: bank has no questions for this paper (Testbook-style readiness)
+    if ((questionCounts[paper.id] ?? 0) === 0) {
       toast.error(
-        `Questions for ${paper.year} haven't been added yet. Available years: 2018–${QUESTIONS_MAX_YEAR}.`,
+        `Questions for ${paper.exam_name} ${paper.year} haven't been imported yet.`,
       );
       return;
     }
+
 
     setLaunchingId(paper.id);
 
