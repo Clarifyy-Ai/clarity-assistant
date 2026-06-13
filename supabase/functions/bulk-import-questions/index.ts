@@ -154,18 +154,35 @@ Deno.serve(async (req) => {
         : null,
     };
 
-    const { data: upserted, error: paperErr } = await db
+    // Find-or-insert (no unique constraint on exam_papers to upsert against)
+    let existingQuery = db
       .from("exam_papers")
-      .upsert(paperRow, { onConflict: "exam_type,exam_name,year,shift" })
       .select("id")
-      .maybeSingle();
+      .eq("exam_type", paperRow.exam_type)
+      .eq("exam_name", paperRow.exam_name)
+      .eq("year", paperRow.year);
+    existingQuery = paperRow.shift
+      ? existingQuery.eq("shift", paperRow.shift)
+      : existingQuery.is("shift", null);
 
-    if (paperErr) {
-      console.error("[bulk-import-questions] exam_papers upsert:", paperErr.message);
-      // continue — paper metadata is best-effort
+    const { data: existing } = await existingQuery.maybeSingle();
+
+    if (existing?.id) {
+      paperId = existing.id;
     } else {
-      paperId = upserted?.id ?? null;
+      const { data: inserted, error: paperErr } = await db
+        .from("exam_papers")
+        .insert(paperRow)
+        .select("id")
+        .maybeSingle();
+
+      if (paperErr) {
+        console.error("[bulk-import-questions] exam_papers insert:", paperErr.message);
+      } else {
+        paperId = inserted?.id ?? null;
+      }
     }
+
   }
 
   // ── Build & insert question rows ────────────────────────────────────────
