@@ -1,84 +1,83 @@
-# Gov Exam Mock Tests → Testbook-style Flow
 
-## Audit findings (root causes)
+# Gov Exam Scraper — Integration & Hardening Plan
 
-1. **"No questions" on most gov papers** — `exam_papers` has 33 gov rows (UPSC, SSC CGL, IBPS PO, JEE, NEET) but `questions` only has PYQs for a few years:
-   - SSC CGL → only 2019 (91 Qs). Papers for 2020–2025 all hard-fail.
-   - IBPS PO → only 2021. UPSC → only 2020/2021.
-   - `select-test-questions` correctly returns `"Question bank is short by N"` because **AI gap-fill is policy-disabled** (intentional).
-   - So the user-visible bug is **UX, not data**: paper cards launch even when 0 questions exist for that year, then crash.
-
-2. **"Collect from source" admin scraper crashes** — `supabase/functions/collect-exam-papers/index.ts` references `totalImported` on lines 246/254 but the variable is **never declared** → ReferenceError on every run. (Gov sites also block scraping anyway — the user is replacing this with their own FastAPI scraper.)
-
-3. **Exam Papers list "empty"** — only appears empty for exams the user clicks where bank is empty. The exam_papers rows themselves are present and the query is correct.
-
-4. **Testbook-like UX gap** — `TestSession.tsx` (1420 lines) already has question palette + mark-for-review + section timer + solutions in `TestResults.tsx`. Mostly there; just needs the "instant start, only ready papers" front door.
+Per your standing preference, this is an audit-first, component-scoped plan. I will NOT change `ExamPapers.tsx`, `TestSession.tsx`, the existing `bulk-import-questions` edge function, or the working `questions`/`exam_papers` read paths. Each phase below is a separate approval gate — confirm which phases to execute, in what order.
 
 ---
 
-## Plan (4 components, isolated)
+## Phase 0 — Decisions needed from you (blockers)
 
-### Component 1 — Exam Papers UI: "only show ready papers" (frontend only)
-**File:** `src/pages/app/mock-test/ExamPapers.tsx`
-- Replace the `QUESTIONS_MAX_YEAR = 2025` hardcoded gate with the **actual** `questionCounts[paper.id]` value already loaded.
-- If `questionCounts[paper.id] === 0`:
-  - Show a "Coming soon — questions not yet imported" badge.
-  - Disable both **Practice** and **Exam Mode** buttons (no toast spam, no failed launches).
-- If `0 < count < paper.total_questions`: show "Partial — N of M questions ready" badge but allow launch.
-- Add a top-bar toggle: **"Show only ready papers"** (default ON for gov exams) so users browsing UPSC/SSC see a clean Testbook-style ready list.
-- **Guardrail:** no changes to `launchMockTest()`, `TestSession`, `TestResults`, or any DB schema.
-
-### Component 2 — Fix the broken admin scraper (edge function only)
-**File:** `supabase/functions/collect-exam-papers/index.ts`
-- Declare `let totalImported = 0;` before the for-loop (one-line fix for the ReferenceError).
-- Add a clear warning to the response when gov sites return 0 PDFs (most do — they block bots): `"Government portals block automated scraping. Use the FastAPI ingest endpoint or Excel upload instead."`
-- **Guardrail:** allowlist, admin gate, Gemini parsing, and existing import logic untouched.
-
-### Component 3 — New `bulk-import-questions` edge function for the FastAPI scraper
-**New file:** `supabase/functions/bulk-import-questions/index.ts`
-- POST endpoint that accepts:
-  ```json
-  {
-    "exam_type": "SSC CGL",
-    "source_year": 2024,
-    "paper": { "exam_name": "SSC CGL Tier 1", "session": "Sep", "shift": "1", "total_questions": 100, "duration_minutes": 60 },
-    "questions": [
-      { "question_text": "...", "options": [{"label":"A","text":"..."}, ...], "correct_answer": "B",
-        "explanation": "...", "subject": "Quant", "topic": "Algebra", "difficulty": "MEDIUM",
-        "image_url": "https://...", "latex_present": false }
-    ]
-  }
-  ```
-- Auth: requires a header `x-ingest-key` matching a new `INGEST_API_KEY` secret (so the user's FastAPI service can authenticate without a user JWT).
-- Uses service-role client → bypasses RLS, inserts into `questions` with `is_public=true, is_verified=true, source='Previous Year Paper'`, and upserts `exam_papers` for the year.
-- Returns `{ paper_id, inserted_count, skipped_count }`.
-- **Guardrail:** does not touch existing tables' schema, RLS, or any user-facing code paths.
-- After deploy I'll ask the user to add the `INGEST_API_KEY` secret.
-
-### Component 4 — Document the schema for the FastAPI scraper
-**New file:** `docs/FASTAPI_INGEST.md`
-- Exact column list for `questions` and `exam_papers`.
-- Example `requests.post(...)` snippet hitting the new edge function.
-- Image-upload guidance (use the public `question-images` bucket, return public URL as `image_url`).
-- Naming conventions: `exam_type` values must match the canonical labels (`"SSC Exams (CGL/CHSL)"`, `"Banking (IBPS/SBI/RBI)"`, etc.) — list provided.
-- **Guardrail:** docs-only, no code or DB change.
+1. **Where will FastAPI actually run?** Lovable's sandbox cannot host a long-running Python service. Options:
+   - (a) You self-host (Fly.io / Render / your VPS) and give me the public URL → I set `VITE_SCRAPER_URL`.
+   - (b) Drop FastAPI; move scraping into a Supabase Edge Function (Deno) that calls into `bulk-import-questions`. Simpler, no second service, but no OCR/pdf2image.
+   - (c) Keep FastAPI as a one-shot CLI run locally by an admin; remove the web-trigger UI entirely.
+2. **Auth model for the scraper endpoint:** verify Supabase JWT + check `user_roles.role='admin'` (current design), or a shared `INGEST_API_KEY` only? JWT+admin is correct; confirming before I wire it.
+3. **Scope of this turn:** P0 only (wiring + schema + CORS), or also P1 (UPSC answer-key parser)? Recommend P0 first, ship, then P1.
 
 ---
 
-## Out of scope (explicit guardrails)
-- No changes to `TestSession.tsx`, `TestResults.tsx`, timer logic, palette UI, scoring, or analytics.
-- No changes to `launchMockTest`, `select-test-questions` core selection logic, or credit/free-plan limits.
-- No schema migrations (existing `questions`/`exam_papers` already fit the Testbook model).
-- No re-enabling of AI gap-fill (stays disabled per existing policy).
+## Phase 1 (P0) — DB schema (migration, isolated)
+
+New tables only — does NOT touch `exam_papers`, `questions`, or any read path:
+
+- `public.scrape_jobs` (id, exam_type, year_from, year_to, status, progress jsonb, logs jsonb, created_by, timestamps)
+- `public.scrape_ingested` (source_url unique, file_hash, paper_id fk, job_id fk, ingested_at) — replaces the `scrape_failures` "INGESTED:" marker hack
+- `public.scrape_failures` (id, job_id, source_url, status_code, error, created_at) — clean version, drop misuse
+- `public.exam_images` (id, paper_id fk, question_id fk nullable, storage_path, public_url, alt_text, timestamps)
+- Unique index on `questions (exam_type, source_year, md5(question_text))` to block duplicates
+- GRANTs: `service_role` ALL; `authenticated` SELECT gated by `has_role(auth.uid(),'admin')` RLS
+- RLS: admin-only read/write on all four tables
+
+## Phase 2 (P0) — FastAPI CORS + JWT-only auth contract
+
+Files: `scraper/app/main.py`, `scraper/app/core/security.py`, `scraper/app/core/config.py`
+
+- Add `CORSMiddleware` allowing preview + published Lovable origins (env-configurable list).
+- Confirm `verify_supabase_jwt` enforces `user_roles.role='admin'` via service-role client.
+- Validate required env at startup; fail fast with clear message.
+
+## Phase 3 (P0) — Frontend wiring (admin-only, additive)
+
+New files only; legacy `collect-exam-papers` button stays as fallback until you confirm removal:
+
+- `.env.example`: add `VITE_SCRAPER_URL`
+- `src/lib/scraper/client.ts`: `startJob`, `getJob`, `pauseJob`, `resumeJob`, `cancelJob` — pass `Authorization: Bearer ${session.access_token}`
+- `src/hooks/useScrapeJob.ts`: polls `/scrape/{id}` every 2s while `running|queued|paused`
+- `src/pages/app/admin/AdminSeedQuestions.tsx`: add a new "FastAPI Scraper" card next to (not replacing) existing controls — exam picker, year range, Start, progress bar, pause/resume/cancel, last 20 log lines, error retry. Hidden unless `useAuth().isAdmin`.
+
+## Phase 4 (P1) — UPSC parser correctness (separate turn)
+
+- Fetch matching Answer Key PDF, parse `1.(b) 2.(c)…` grid, map by index.
+- Tighten question regex; reject stems <20 chars or with <4 distinct options.
+- Mark paper `partial` instead of inserting wrong answers on failure.
+
+## Phase 5 (P1) — Storage layer fixes
+
+- Use new `scrape_ingested` table for idempotency (drop `INGESTED:` marker).
+- Update `total_questions` on re-ingest.
+- Insert into `exam_images` (now exists post-Phase 1); stop swallowing errors silently.
+
+## Phase 6 (P2) — Worker hardening
+
+- Persist `JobHandle` snapshots to `scrape_jobs` on every progress tick.
+- Pipe pipeline structlog events into `log_buffer` so `/scrape/{id}.logs` is non-empty.
+- Register additional sources (SSC/IBPS) as no-op stubs returning a clear "not implemented" error instead of 500.
+
+## Phase 7 (P3) — Container (only if you self-host FastAPI)
+
+- Add `poppler-utils` + `tesseract-ocr` to `scraper/Dockerfile`.
+- Document required env vars in `scraper/README.md`.
 
 ---
 
-## What you do separately
-Build the FastAPI scraper to:
-1. Download PDFs/images for the past papers you target.
-2. Extract MCQs + diagrams.
-3. POST to `https://<project>.functions.supabase.co/bulk-import-questions` with `x-ingest-key` header.
+## Guardrails (will not change)
 
-Once data is imported, the Exam Papers page (Component 1) will automatically show those papers as ready and they'll launch instantly with real PYQs in the existing Testbook-style player.
+- `src/pages/app/mock-test/ExamPapers.tsx`
+- `src/pages/app/mock-test/TestSession.tsx` and orchestrator hook
+- `supabase/functions/bulk-import-questions/*`
+- `questions` / `exam_papers` table shape (only adding an index)
+- The legacy `collect-exam-papers` button (kept until you say remove)
 
-Approve and I'll implement Components 1 → 4 in order.
+## My recommendation
+
+Answer the three questions in Phase 0, then I execute **Phase 1 → 2 → 3** in one focused turn (DB migration + CORS + admin UI wiring). Phases 4–7 in follow-up turns so each stays reviewable.
