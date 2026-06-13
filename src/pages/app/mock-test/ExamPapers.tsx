@@ -384,16 +384,24 @@ export default function ExamPapers() {
         </Card>
       </div>
 
-      {/* ── QUESTIONS AVAILABILITY NOTICE ────────────────────────────────── */}
-      {papers.some((p) => p.year > QUESTIONS_MAX_YEAR) && (
-        <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
-          <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+      {/* ── READINESS NOTICE + TOGGLE ────────────────────────────────────── */}
+      <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+        <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="flex-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <span>
-            Questions are currently available for <strong>2018–{QUESTIONS_MAX_YEAR}</strong>.
-            Papers for 2023 and beyond are shown for reference — questions will be added soon.
+            <strong>{readyCount}</strong> of {papers.length} papers are ready to launch (questions imported).
+            Empty papers are hidden by default.
           </span>
+          <button
+            type="button"
+            onClick={() => setOnlyReady((v) => !v)}
+            className="text-xs font-semibold underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-300 self-start sm:self-auto"
+          >
+            {onlyReady ? "Show all papers" : "Show only ready"}
+          </button>
         </div>
-      )}
+      </div>
+
 
       {/* ── FILTER BAR ───────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-center justify-between bg-card p-3 rounded-xl border border-border">
