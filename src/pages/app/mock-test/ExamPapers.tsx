@@ -232,6 +232,7 @@ export default function ExamPapers() {
   const years           = [...new Set(papers.map((p) => p.year))].sort((a, b) => b - a);
 
   const filtered = papers.filter((p) => {
+    if (onlyReady && (questionCounts[p.id] ?? 0) === 0) return false;
     if (yearFilter && p.year !== yearFilter) return false;
     if (difficultyFilter !== "All" && p.difficulty_level !== difficultyFilter) return false;
     if (durationFilter !== "All") {
@@ -242,6 +243,8 @@ export default function ExamPapers() {
     }
     return true;
   });
+
+  const readyCount = papers.filter((p) => (questionCounts[p.id] ?? 0) > 0).length;
 
   /* ── ONE-CLICK LAUNCH ──────────────────────────────────────────────────── */
 
