@@ -66,11 +66,11 @@ interface OfficialSetting {
 /* ─── CONSTANTS ────────────────────────────────────────────────────────────── */
 
 /**
- * Questions in the DB only cover up to this year.
- * Papers beyond this year will show a "Coming Soon" badge and
- * launch buttons will be disabled to prevent empty test sessions.
+ * Testbook-style readiness: a paper is launchable only if the bank already has
+ * questions for it. AI gap-fill is disabled by policy, so cards with bank=0
+ * are surfaced as "Coming soon" and the launch buttons are disabled.
  */
-const QUESTIONS_MAX_YEAR = 2025;
+
 
 const EXAM_LABELS: Record<string, string> = {
   JEE_MAIN: "JEE Main",
@@ -128,6 +128,7 @@ export default function ExamPapers() {
   const [loading,     setLoading]     = useState(true);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
   const [questionCounts, setQuestionCounts] = useState<Record<string, number>>({});
+  const [onlyReady,   setOnlyReady]   = useState<boolean>(true);
 
   // Filters
   const [yearFilter,       setYearFilter]       = useState<number | null>(null);
@@ -231,6 +232,7 @@ export default function ExamPapers() {
   const years           = [...new Set(papers.map((p) => p.year))].sort((a, b) => b - a);
 
   const filtered = papers.filter((p) => {
+    if (onlyReady && (questionCounts[p.id] ?? 0) === 0) return false;
     if (yearFilter && p.year !== yearFilter) return false;
     if (difficultyFilter !== "All" && p.difficulty_level !== difficultyFilter) return false;
     if (durationFilter !== "All") {
@@ -242,18 +244,21 @@ export default function ExamPapers() {
     return true;
   });
 
+  const readyCount = papers.filter((p) => (questionCounts[p.id] ?? 0) > 0).length;
+
   /* ── ONE-CLICK LAUNCH ──────────────────────────────────────────────────── */
 
   async function launchDirectTest(paper: ExamPaper, isPractice: boolean) {
     if (!user?.id) return;
 
-    // Guard: no questions in DB for this year
-    if (paper.year > QUESTIONS_MAX_YEAR) {
+    // Guard: bank has no questions for this paper (Testbook-style readiness)
+    if ((questionCounts[paper.id] ?? 0) === 0) {
       toast.error(
-        `Questions for ${paper.year} haven't been added yet. Available years: 2018–${QUESTIONS_MAX_YEAR}.`,
+        `Questions for ${paper.exam_name} ${paper.year} haven't been imported yet.`,
       );
       return;
     }
+
 
     setLaunchingId(paper.id);
 
@@ -379,16 +384,24 @@ export default function ExamPapers() {
         </Card>
       </div>
 
-      {/* ── QUESTIONS AVAILABILITY NOTICE ────────────────────────────────── */}
-      {papers.some((p) => p.year > QUESTIONS_MAX_YEAR) && (
-        <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
-          <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+      {/* ── READINESS NOTICE + TOGGLE ────────────────────────────────────── */}
+      <div className="flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/5 px-4 py-3 text-sm text-amber-700 dark:text-amber-400">
+        <Lock className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="flex-1 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
           <span>
-            Questions are currently available for <strong>2018–{QUESTIONS_MAX_YEAR}</strong>.
-            Papers for 2023 and beyond are shown for reference — questions will be added soon.
+            <strong>{readyCount}</strong> of {papers.length} papers are ready to launch (questions imported).
+            Empty papers are hidden by default.
           </span>
+          <button
+            type="button"
+            onClick={() => setOnlyReady((v) => !v)}
+            className="text-xs font-semibold underline underline-offset-2 hover:text-amber-900 dark:hover:text-amber-300 self-start sm:self-auto"
+          >
+            {onlyReady ? "Show all papers" : "Show only ready"}
+          </button>
         </div>
-      )}
+      </div>
+
 
       {/* ── FILTER BAR ───────────────────────────────────────────────────── */}
       <div className="flex flex-col sm:flex-row flex-wrap gap-3 items-center justify-between bg-card p-3 rounded-xl border border-border">
@@ -467,9 +480,9 @@ export default function ExamPapers() {
             const qsCount      = paper.total_questions ?? officialSetting?.questions ?? 30;
             const timeLimit    = paper.duration_minutes ?? officialSetting?.duration ?? 60;
             const hasAttempted = attemptedIds.has(String(paper.year));
-            const isComingSoon = paper.year > QUESTIONS_MAX_YEAR;
+            const isComingSoon = bankCount === 0;
             const isLaunching  = launchingId === paper.id;
-            const needsBankSeed = !isComingSoon && bankCount === 0;
+            const needsBankSeed = false;
 
             return (
               <Card
