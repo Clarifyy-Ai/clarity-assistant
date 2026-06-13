@@ -201,7 +201,7 @@ Deno.serve(async (req) => {
       );
     }
 
-
+    let totalImported = 0;
 
     for (const pdfUrl of uniquePdfs) {
       try {
