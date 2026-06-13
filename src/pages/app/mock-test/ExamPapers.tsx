@@ -480,9 +480,9 @@ export default function ExamPapers() {
             const qsCount      = paper.total_questions ?? officialSetting?.questions ?? 30;
             const timeLimit    = paper.duration_minutes ?? officialSetting?.duration ?? 60;
             const hasAttempted = attemptedIds.has(String(paper.year));
-            const isComingSoon = paper.year > QUESTIONS_MAX_YEAR;
+            const isComingSoon = bankCount === 0;
             const isLaunching  = launchingId === paper.id;
-            const needsBankSeed = !isComingSoon && bankCount === 0;
+            const needsBankSeed = false;
 
             return (
               <Card
