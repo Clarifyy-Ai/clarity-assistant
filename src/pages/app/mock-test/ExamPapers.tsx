@@ -66,11 +66,11 @@ interface OfficialSetting {
 /* ─── CONSTANTS ────────────────────────────────────────────────────────────── */
 
 /**
- * Questions in the DB only cover up to this year.
- * Papers beyond this year will show a "Coming Soon" badge and
- * launch buttons will be disabled to prevent empty test sessions.
+ * Testbook-style readiness: a paper is launchable only if the bank already has
+ * questions for it. AI gap-fill is disabled by policy, so cards with bank=0
+ * are surfaced as "Coming soon" and the launch buttons are disabled.
  */
-const QUESTIONS_MAX_YEAR = 2025;
+
 
 const EXAM_LABELS: Record<string, string> = {
   JEE_MAIN: "JEE Main",
