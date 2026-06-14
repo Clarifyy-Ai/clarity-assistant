@@ -9,12 +9,14 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Database, Upload, RefreshCw, Sparkles, FileText, Loader2, CheckCircle2 } from "lucide-react";
+import { Database, Upload, RefreshCw, Sparkles, FileText, Loader2, CheckCircle2, Server, Play, Pause, Square } from "lucide-react";
 import ExcelImportTab from "@/pages/app/mock-test/ExcelImportTab";
 import { cn } from "@/lib/utils";
 import { unwrapEdgePayload } from "@/lib/network/edgeResult";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { normalizeExamTypeForStorage } from "@/lib/mock-test/examTypes";
+import { scraperApi, ScraperNotConfiguredError } from "@/lib/scraper/client";
+import { useScrapeJob } from "@/hooks/useScrapeJob";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 
