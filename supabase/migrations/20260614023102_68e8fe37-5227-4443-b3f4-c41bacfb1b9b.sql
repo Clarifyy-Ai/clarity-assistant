@@ -1,0 +1,1 @@
+ALTER TABLE public.profiles DROP COLUMN IF EXISTS byok_openai_hint, DROP COLUMN IF EXISTS byok_anthropic_hint, DROP COLUMN IF EXISTS byok_gemini_hint;

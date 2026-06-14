@@ -1464,9 +1464,6 @@ export type Database = {
           avatar_url: string | null
           ban_reason: string | null
           bio: string | null
-          byok_anthropic_hint: string | null
-          byok_gemini_hint: string | null
-          byok_openai_hint: string | null
           created_at: string
           credits: number
           credits_reset_at: string | null
@@ -1543,9 +1540,6 @@ export type Database = {
           avatar_url?: string | null
           ban_reason?: string | null
           bio?: string | null
-          byok_anthropic_hint?: string | null
-          byok_gemini_hint?: string | null
-          byok_openai_hint?: string | null
           created_at?: string
           credits?: number
           credits_reset_at?: string | null
@@ -1622,9 +1616,6 @@ export type Database = {
           avatar_url?: string | null
           ban_reason?: string | null
           bio?: string | null
-          byok_anthropic_hint?: string | null
-          byok_gemini_hint?: string | null
-          byok_openai_hint?: string | null
           created_at?: string
           credits?: number
           credits_reset_at?: string | null
