@@ -3,7 +3,7 @@ from __future__ import annotations
 
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -30,9 +30,20 @@ class Settings(BaseSettings):
         "clarity-exam-scraper/1.0 (+admin)", alias="SCRAPE_USER_AGENT"
     )
 
+    # CORS — comma-separated list of allowed origins
+    cors_origins: list[str] = Field(default_factory=list, alias="CORS_ORIGINS")
+    cors_origin_regex: str = Field("", alias="CORS_ORIGIN_REGEX")
+
     # Service
     port: int = Field(8000, alias="PORT")
     log_level: str = Field("INFO", alias="LOG_LEVEL")
+
+    @field_validator("cors_origins", mode="before")
+    @classmethod
+    def _split_csv(cls, v):
+        if isinstance(v, str):
+            return [s.strip() for s in v.split(",") if s.strip()]
+        return v or []
 
 
 @lru_cache

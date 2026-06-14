@@ -20,14 +20,11 @@ PAPERS = Counter("scrape_papers_total", "Papers successfully ingested")
 QUESTIONS = Counter("scrape_questions_total", "Questions inserted")
 IMAGES = Counter("scrape_images_total", "Images uploaded")
 ERRORS = Counter("scrape_errors_total", "Errors encountered")
-RETRIES = Counter("scrape_retries_total", "HTTP retries performed")
 
 log = get_logger(__name__)
 
 
 class ScrapePipeline:
-    """Coordinates a single scrape job for one exam_type."""
-
     def __init__(
         self,
         *,
@@ -38,6 +35,7 @@ class ScrapePipeline:
         year_to: int | None,
         job_id: str,
         progress_cb: Callable[[JobProgress], None],
+        log_cb: Callable[[str], None],
         pause_event: asyncio.Event,
         cancel_event: asyncio.Event,
     ) -> None:
@@ -48,6 +46,7 @@ class ScrapePipeline:
         self.job_id = job_id
         self.progress = JobProgress()
         self.progress_cb = progress_cb
+        self.log_cb = log_cb
         self.pause_event = pause_event
         self.cancel_event = cancel_event
         self.limiter = AsyncRateLimiter(
@@ -61,13 +60,13 @@ class ScrapePipeline:
         if scraper_cls is None:
             raise RuntimeError(f"No parser registered for exam_type={self.exam_type}")
 
+        self.log_cb(f"discovering papers for {self.exam_type}")
         scraper: BaseScraper = scraper_cls(self.settings, self.limiter)
         try:
             async for candidate in scraper.discover(self.year_from, self.year_to):
                 if self.cancel_event.is_set():
-                    log.info("job_cancelled", job_id=self.job_id)
+                    self.log_cb("job cancelled")
                     return
-                # Pause loop
                 while self.pause_event.is_set():
                     await asyncio.sleep(0.5)
                     if self.cancel_event.is_set():
@@ -75,6 +74,7 @@ class ScrapePipeline:
 
                 self.progress.total_papers += 1
                 self.progress_cb(self.progress)
+                self.log_cb(f"queued {candidate.year} {candidate.exam_name[:60]}")
                 async with self.global_sem:
                     await self._process_one(scraper, candidate)
         finally:
@@ -86,15 +86,16 @@ class ScrapePipeline:
             parsed = await scraper.parse(candidate)
         except Exception as exc:
             ERRORS.inc()
-            log.error("parse_failed", url=url, error=str(exc))
+            self.progress.failed_papers += 1
+            self.progress_cb(self.progress)
+            self.log_cb(f"parse_failed {url}: {exc}")
             self.storage.record_failure(self.job_id, url, None, f"parse:{exc}")
             return
 
         if self.storage.already_ingested(url, parsed.file_hash):
-            log.info("skip_already_ingested", url=url)
+            self.log_cb(f"skip already_ingested {url}")
             return
 
-        # Upload raw PDF (best effort)
         pdf_public_url = None
         if parsed.pdf_bytes:
             path = (
@@ -105,20 +106,21 @@ class ScrapePipeline:
                 pdf_public_url = self.storage.upload_pdf(path, parsed.pdf_bytes)
             except Exception as exc:
                 ERRORS.inc()
-                log.warning("pdf_upload_failed", url=url, error=str(exc))
+                self.log_cb(f"pdf_upload_failed {url}: {exc}")
 
-        # Insert paper + questions
         try:
             paper_id = self.storage.upsert_paper(parsed, pdf_public_url)
             question_ids = self.storage.insert_questions(parsed, paper_id)
         except Exception as exc:
             ERRORS.inc()
-            log.error("db_insert_failed", url=url, error=str(exc))
+            self.progress.failed_papers += 1
+            self.progress_cb(self.progress)
+            self.log_cb(f"db_insert_failed {url}: {exc}")
             self.storage.record_failure(self.job_id, url, None, f"db:{exc}")
             return
 
-        # Upload images
         image_urls: list[str] = []
+        image_paths: list[str] = []
         for idx, img in enumerate(parsed.images):
             path = (
                 f"{sanitize_filename(candidate.exam_type)}/{candidate.year}/"
@@ -126,15 +128,17 @@ class ScrapePipeline:
             )
             try:
                 image_urls.append(self.storage.upload_image(path, img))
+                image_paths.append(path)
             except Exception as exc:
                 ERRORS.inc()
-                log.warning("image_upload_failed", url=url, error=str(exc))
+                self.log_cb(f"image_upload_failed {url}: {exc}")
 
         saved_imgs = self.storage.insert_images(
-            paper_id, question_ids, parsed.images, image_urls
+            paper_id, question_ids, parsed.images[: len(image_urls)],
+            image_urls, image_paths,
         )
 
-        self.storage.mark_ingested(self.job_id, url, parsed.file_hash)
+        self.storage.mark_ingested(self.job_id, url, parsed.file_hash, paper_id)
 
         PAPERS.inc()
         QUESTIONS.inc(len(question_ids))
@@ -143,6 +147,11 @@ class ScrapePipeline:
         self.progress.extracted_questions += len(question_ids)
         self.progress.saved_images += saved_imgs
         self.progress_cb(self.progress)
+        partial = " (partial answers)" if parsed.answers_partial else ""
+        self.log_cb(
+            f"ingested {candidate.year} {candidate.exam_name[:50]} — "
+            f"{len(question_ids)} Qs, {saved_imgs} imgs{partial}"
+        )
 
 
 def hash_bytes(data: bytes) -> str:

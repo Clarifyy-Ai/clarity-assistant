@@ -23,14 +23,11 @@ log = get_logger(__name__)
 
 
 def sanitize_filename(name: str, max_len: int = 120) -> str:
-    """Strip path-traversal characters and limit filename length."""
     cleaned = _FILENAME_SAFE.sub("_", name).strip("._-")
     return (cleaned or "file")[:max_len]
 
 
 class BaseScraper(abc.ABC):
-    """Common fetch / retry / politeness scaffolding for source parsers."""
-
     exam_type: str = "UNKNOWN"
 
     def __init__(self, settings: Settings, limiter: AsyncRateLimiter) -> None:
@@ -50,6 +47,7 @@ class BaseScraper(abc.ABC):
         """Fetch a URL with politeness + retry. Returns text or bytes."""
         await self.limiter.acquire(url)
         try:
+            result: bytes | str = b"" if expect_binary else ""
             async for attempt in AsyncRetrying(
                 stop=stop_after_attempt(3),
                 wait=wait_exponential_jitter(initial=1, max=10),
@@ -65,18 +63,15 @@ class BaseScraper(abc.ABC):
                         log.warning("rate_limited", url=url, retry_after=retry_after)
                         raise httpx.TransportError("429")
                     res.raise_for_status()
-                    return res.content if expect_binary else res.text
+                    result = res.content if expect_binary else res.text
+            return result
         finally:
             self.limiter.release(url)
-        return b"" if expect_binary else ""
-
-    # ── Subclass contract ────────────────────────────────────────────────
 
     @abc.abstractmethod
     async def discover(
         self, year_from: int | None, year_to: int | None
     ) -> AsyncIterator[PaperCandidate]:
-        """Yield paper candidates discovered from listing pages."""
         if False:  # pragma: no cover
             yield  # type: ignore[unreachable]
 
