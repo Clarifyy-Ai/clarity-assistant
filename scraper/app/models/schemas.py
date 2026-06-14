@@ -29,6 +29,7 @@ class JobProgress(BaseModel):
     processed_papers: int = 0
     extracted_questions: int = 0
     saved_images: int = 0
+    failed_papers: int = 0
 
 
 class JobState(BaseModel):
@@ -37,6 +38,7 @@ class JobState(BaseModel):
     status: JobStatus
     progress: JobProgress = JobProgress()
     logs: list[str] = []
+    error: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -47,8 +49,6 @@ class StartScrapeResponse(BaseModel):
 
 
 class PaperCandidate(BaseModel):
-    """A discovered paper, before download/parse."""
-
     exam_type: str
     exam_name: str
     year: int
@@ -56,12 +56,13 @@ class PaperCandidate(BaseModel):
     paper_code: str | None = None
     session: str | None = None
     shift: str | None = None
+    answer_key_url: str | None = None  # NEW: linked official answer-key PDF
 
 
 class ParsedQuestion(BaseModel):
     question_text: str
     options: list[dict[str, str]]
-    correct_answer: Literal["A", "B", "C", "D"]
+    correct_answer: Literal["A", "B", "C", "D"] | None = None  # None = answer unknown
     explanation: str = ""
     subject: str = "General"
     topic: str = "PYQ"
@@ -83,3 +84,4 @@ class ParsedPaper(BaseModel):
     questions: list[ParsedQuestion]
     images: list[ParsedImage] = []
     file_hash: str
+    answers_partial: bool = False  # True if answer-key extraction was incomplete

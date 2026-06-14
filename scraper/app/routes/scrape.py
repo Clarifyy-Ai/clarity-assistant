@@ -12,15 +12,21 @@ from app.models.schemas import (
     StartScrapeRequest,
     StartScrapeResponse,
 )
+from app.scraper.sources import supported_exam_types
 from app.workers.scrape_worker import registry
 
 router = APIRouter(prefix="/scrape", tags=["scrape"])
 
 
+@router.get("/sources")
+async def sources(_admin: dict = Depends(get_admin_user)) -> dict[str, list[str]]:
+    return {"supported": supported_exam_types()}
+
+
 @router.post("/start", response_model=StartScrapeResponse, status_code=202)
 async def start(
     body: StartScrapeRequest,
-    _admin: dict = Depends(get_admin_user),
+    admin: dict = Depends(get_admin_user),
     settings: Settings = Depends(get_settings),
     db: Client = Depends(supabase_admin),
 ) -> StartScrapeResponse:
@@ -30,6 +36,7 @@ async def start(
         year_to=body.year_to,
         settings=settings,
         supabase=db,
+        created_by=admin.get("id"),
     )
     return StartScrapeResponse(job_id=state.job_id, status="queued")
 
@@ -49,18 +56,18 @@ async def get_job(
 async def pause(job_id: str, _admin: dict = Depends(get_admin_user)) -> dict[str, str]:
     if not registry.pause(job_id):
         raise HTTPException(status_code=409, detail="Job not running")
-    return {"status": JobStatus.PAUSED}
+    return {"status": JobStatus.PAUSED.value}
 
 
 @router.post("/{job_id}/resume")
 async def resume(job_id: str, _admin: dict = Depends(get_admin_user)) -> dict[str, str]:
     if not registry.resume(job_id):
         raise HTTPException(status_code=409, detail="Job not paused")
-    return {"status": JobStatus.RUNNING}
+    return {"status": JobStatus.RUNNING.value}
 
 
 @router.post("/{job_id}/cancel")
 async def cancel(job_id: str, _admin: dict = Depends(get_admin_user)) -> dict[str, str]:
     if not registry.cancel(job_id):
         raise HTTPException(status_code=404, detail="Unknown job")
-    return {"status": JobStatus.CANCELLED}
+    return {"status": JobStatus.CANCELLED.value}

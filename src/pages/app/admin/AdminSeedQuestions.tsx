@@ -9,12 +9,14 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
-import { Database, Upload, RefreshCw, Sparkles, FileText, Loader2, CheckCircle2 } from "lucide-react";
+import { Database, Upload, RefreshCw, Sparkles, FileText, Loader2, CheckCircle2, Server, Play, Pause, Square } from "lucide-react";
 import ExcelImportTab from "@/pages/app/mock-test/ExcelImportTab";
 import { cn } from "@/lib/utils";
 import { unwrapEdgePayload } from "@/lib/network/edgeResult";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { normalizeExamTypeForStorage } from "@/lib/mock-test/examTypes";
+import { scraperApi, ScraperNotConfiguredError } from "@/lib/scraper/client";
+import { useScrapeJob } from "@/hooks/useScrapeJob";
 
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL as string;
 
@@ -29,6 +31,15 @@ interface BankStat {
 
 const TARGET_EXAMS = ["JEE_MAIN", "JEE_ADVANCED", "NEET", "UPSC", "SSC_CGL", "IBPS_PO", "NDA"];
 
+function Stat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-md bg-muted/40 px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="font-mono font-bold text-foreground">{value}</div>
+    </div>
+  );
+}
+
 export default function AdminSeedQuestions() {
   const user = useAuthStore((s) => s.user);
   const [stats, setStats] = useState<BankStat[]>([]);
@@ -42,7 +53,47 @@ export default function AdminSeedQuestions() {
   const [sourceYear, setSourceYear] = useState<string>(new Date().getFullYear().toString());
   const [parsingPdf, setParsingPdf] = useState(false);
 
+  // FastAPI scraper state
+  const [scraperJobId, setScraperJobId] = useState<string | null>(null);
+  const [scraperStarting, setScraperStarting] = useState(false);
+  const [yearTo, setYearTo] = useState<string>(new Date().getFullYear().toString());
+  const { state: scrapeState, error: scrapeError } = useScrapeJob(scraperJobId);
+  const scraperConfigured = scraperApi.isConfigured();
+
   useEffect(() => { void loadStats(); }, []);
+
+  async function startScrapeJob() {
+    setScraperStarting(true);
+    try {
+      const res = await scraperApi.start({
+        exam_type: examType,
+        year_from: Number(sourceYear) || undefined,
+        year_to: Number(yearTo) || undefined,
+      });
+      setScraperJobId(res.job_id);
+      toast.success(`Scrape job started: ${res.job_id.slice(0, 8)}…`);
+    } catch (err) {
+      if (err instanceof ScraperNotConfiguredError) {
+        toast.error("Set VITE_SCRAPER_URL to your FastAPI scraper URL first.");
+      } else {
+        toast.error(err instanceof Error ? err.message : "Failed to start scrape");
+      }
+    } finally {
+      setScraperStarting(false);
+    }
+  }
+
+  async function controlJob(action: "pause" | "resume" | "cancel") {
+    if (!scraperJobId) return;
+    try {
+      if (action === "pause") await scraperApi.pause(scraperJobId);
+      else if (action === "resume") await scraperApi.resume(scraperJobId);
+      else await scraperApi.cancel(scraperJobId);
+      toast.success(`Job ${action}d`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `${action} failed`);
+    }
+  }
 
   async function loadStats() {
     setLoading(true);
@@ -245,6 +296,111 @@ export default function AdminSeedQuestions() {
             </Button>
           </CardContent>
         </Card>
+
+        {/* FastAPI Scraper (admin, optional) */}
+        <Card className="border-sky-500/30 bg-sky-500/5 shadow-sm lg:col-span-2">
+          <CardContent className="p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Server className="h-5 w-5 text-sky-500" />
+                <h3 className="font-bold text-foreground text-lg">FastAPI Scraper (self-hosted)</h3>
+              </div>
+              {!scraperConfigured && (
+                <span className="text-xs px-2 py-1 rounded bg-amber-500/10 text-amber-600 font-medium">
+                  VITE_SCRAPER_URL not set
+                </span>
+              )}
+            </div>
+            <p className="text-sm text-muted-foreground">
+              Long-running scraper for official PYQ papers with answer-key extraction and image capture.
+              Uses the Target Exam above. Set a Year From / Year To to bound the run.
+            </p>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground uppercase">Year From</label>
+                <Input type="number" value={sourceYear} onChange={(e) => setSourceYear(e.target.value)} className="bg-background" />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs font-semibold text-foreground uppercase">Year To</label>
+                <Input type="number" value={yearTo} onChange={(e) => setYearTo(e.target.value)} className="bg-background" />
+              </div>
+            </div>
+
+            <div className="flex flex-wrap gap-2">
+              <Button
+                onClick={() => void startScrapeJob()}
+                disabled={scraperStarting || !scraperConfigured || (scrapeState?.status === "running" || scrapeState?.status === "queued")}
+                className="bg-sky-600 hover:bg-sky-700 text-white"
+              >
+                {scraperStarting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Play className="w-4 h-4 mr-2" />}
+                Start scrape
+              </Button>
+              {scraperJobId && scrapeState?.status === "running" && (
+                <Button variant="outline" onClick={() => void controlJob("pause")}>
+                  <Pause className="w-4 h-4 mr-2" /> Pause
+                </Button>
+              )}
+              {scraperJobId && scrapeState?.status === "paused" && (
+                <Button variant="outline" onClick={() => void controlJob("resume")}>
+                  <Play className="w-4 h-4 mr-2" /> Resume
+                </Button>
+              )}
+              {scraperJobId && scrapeState && !["completed", "failed", "cancelled"].includes(scrapeState.status) && (
+                <Button variant="outline" onClick={() => void controlJob("cancel")}>
+                  <Square className="w-4 h-4 mr-2" /> Cancel
+                </Button>
+              )}
+            </div>
+
+            {scrapeError && (
+              <p className="text-xs text-destructive">Polling error: {scrapeError}</p>
+            )}
+
+            {scrapeState && (
+              <div className="rounded-lg border bg-background p-4 space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="font-mono text-xs text-muted-foreground">{scrapeState.job_id}</span>
+                  <span className={cn(
+                    "text-xs px-2 py-1 rounded font-medium",
+                    scrapeState.status === "running" && "bg-sky-500/10 text-sky-600",
+                    scrapeState.status === "completed" && "bg-green-500/10 text-green-600",
+                    scrapeState.status === "failed" && "bg-destructive/10 text-destructive",
+                    scrapeState.status === "paused" && "bg-amber-500/10 text-amber-600",
+                    scrapeState.status === "cancelled" && "bg-muted text-muted-foreground",
+                    scrapeState.status === "queued" && "bg-muted text-muted-foreground",
+                  )}>
+                    {scrapeState.status}
+                  </span>
+                </div>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                  <Stat label="Papers" value={`${scrapeState.progress.processed_papers}/${scrapeState.progress.total_papers}`} />
+                  <Stat label="Questions" value={scrapeState.progress.extracted_questions} />
+                  <Stat label="Images" value={scrapeState.progress.saved_images} />
+                  <Stat label="Failed" value={scrapeState.progress.failed_papers} />
+                </div>
+                {scrapeState.error && (
+                  <p className="text-xs text-destructive">Error: {scrapeState.error}</p>
+                )}
+                {scrapeState.logs.length > 0 && (
+                  <details className="text-xs">
+                    <summary className="cursor-pointer text-muted-foreground">Recent logs ({scrapeState.logs.length})</summary>
+                    <pre className="mt-2 max-h-48 overflow-auto rounded bg-muted/40 p-2 font-mono text-[11px] leading-tight">
+                      {scrapeState.logs.slice(-30).join("\n")}
+                    </pre>
+                  </details>
+                )}
+                {scrapeState.status === "completed" && (
+                  <Button size="sm" variant="outline" onClick={() => void loadStats()}>
+                    <RefreshCw className="w-3 h-3 mr-1.5" /> Refresh question bank stats
+                  </Button>
+                )}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+
 
         {/* Standard Excel Import */}
         <Card className="shadow-sm">

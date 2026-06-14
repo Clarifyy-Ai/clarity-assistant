@@ -801,6 +801,54 @@ export type Database = {
           },
         ]
       }
+      exam_images: {
+        Row: {
+          alt_text: string | null
+          created_at: string
+          id: string
+          paper_id: string | null
+          public_url: string | null
+          question_id: string | null
+          storage_path: string
+          updated_at: string
+        }
+        Insert: {
+          alt_text?: string | null
+          created_at?: string
+          id?: string
+          paper_id?: string | null
+          public_url?: string | null
+          question_id?: string | null
+          storage_path: string
+          updated_at?: string
+        }
+        Update: {
+          alt_text?: string | null
+          created_at?: string
+          id?: string
+          paper_id?: string | null
+          public_url?: string | null
+          question_id?: string | null
+          storage_path?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_images_paper_id_fkey"
+            columns: ["paper_id"]
+            isOneToOne: false
+            referencedRelation: "exam_papers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exam_images_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       exam_papers: {
         Row: {
           created_at: string | null
@@ -2258,6 +2306,125 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      scrape_failures: {
+        Row: {
+          created_at: string
+          error: string | null
+          id: string
+          job_id: string | null
+          source_url: string
+          status_code: number | null
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          job_id?: string | null
+          source_url: string
+          status_code?: number | null
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          id?: string
+          job_id?: string | null
+          source_url?: string
+          status_code?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scrape_failures_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "scrape_jobs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scrape_ingested: {
+        Row: {
+          file_hash: string
+          id: string
+          ingested_at: string
+          job_id: string | null
+          paper_id: string | null
+          source_url: string
+        }
+        Insert: {
+          file_hash: string
+          id?: string
+          ingested_at?: string
+          job_id?: string | null
+          paper_id?: string | null
+          source_url: string
+        }
+        Update: {
+          file_hash?: string
+          id?: string
+          ingested_at?: string
+          job_id?: string | null
+          paper_id?: string | null
+          source_url?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "scrape_ingested_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "scrape_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "scrape_ingested_paper_id_fkey"
+            columns: ["paper_id"]
+            isOneToOne: false
+            referencedRelation: "exam_papers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      scrape_jobs: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          error: string | null
+          exam_type: string
+          id: string
+          logs: Json
+          progress: Json
+          status: string
+          updated_at: string
+          year_from: number | null
+          year_to: number | null
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          exam_type: string
+          id?: string
+          logs?: Json
+          progress?: Json
+          status?: string
+          updated_at?: string
+          year_from?: number | null
+          year_to?: number | null
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          exam_type?: string
+          id?: string
+          logs?: Json
+          progress?: Json
+          status?: string
+          updated_at?: string
+          year_from?: number | null
+          year_to?: number | null
+        }
+        Relationships: []
       }
       session_ai_interactions: {
         Row: {

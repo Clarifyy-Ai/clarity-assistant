@@ -1,7 +1,6 @@
 """Supabase Storage + Database writes for parsed papers."""
 from __future__ import annotations
 
-import hashlib
 from typing import Any
 
 from supabase import Client
@@ -20,31 +19,37 @@ class StorageGateway:
         self.db = client
         self.settings = settings
 
-    # ── Idempotency ─────────────────────────────────────────────────────
+    # ── Idempotency (dedicated table) ───────────────────────────────────
 
     def already_ingested(self, source_url: str, file_hash: str) -> bool:
-        """True if a paper with this URL+hash was already processed."""
-        marker = hashlib.sha256(f"{source_url}|{file_hash}".encode()).hexdigest()
         res = (
-            self.db.table("scrape_failures")  # reused as a generic marker; safe
+            self.db.table("scrape_ingested")
             .select("id")
             .eq("source_url", source_url)
-            .eq("error", f"INGESTED:{marker}")
+            .eq("file_hash", file_hash)
             .limit(1)
             .execute()
         )
         return bool(res.data)
 
-    def mark_ingested(self, job_id: str | None, source_url: str, file_hash: str) -> None:
-        marker = hashlib.sha256(f"{source_url}|{file_hash}".encode()).hexdigest()
-        self.db.table("scrape_failures").insert(
-            {
-                "job_id": job_id,
-                "source_url": source_url,
-                "status_code": 200,
-                "error": f"INGESTED:{marker}",
-            }
-        ).execute()
+    def mark_ingested(
+        self,
+        job_id: str | None,
+        source_url: str,
+        file_hash: str,
+        paper_id: str | None,
+    ) -> None:
+        try:
+            self.db.table("scrape_ingested").insert(
+                {
+                    "job_id": job_id,
+                    "source_url": source_url,
+                    "file_hash": file_hash,
+                    "paper_id": paper_id,
+                }
+            ).execute()
+        except Exception as exc:  # pragma: no cover - unique violation is fine
+            log.info("ingested_marker_skipped", url=source_url, reason=str(exc)[:120])
 
     # ── Binary uploads ──────────────────────────────────────────────────
 
@@ -66,20 +71,29 @@ class StorageGateway:
     # ── DB rows ─────────────────────────────────────────────────────────
 
     def upsert_paper(self, paper: ParsedPaper, pdf_public_url: str | None) -> str | None:
-        """Find-or-insert the exam_papers row. Returns the row id."""
+        """Find-or-update the exam_papers row. Returns the row id."""
         c = paper.candidate
-        existing_q = (
+        q = (
             self.db.table("exam_papers")
-            .select("id")
+            .select("id, total_questions")
             .eq("exam_type", c.exam_type)
             .eq("exam_name", c.exam_name)
             .eq("year", c.year)
         )
         if c.shift:
-            existing_q = existing_q.eq("shift", c.shift)
-        existing = existing_q.limit(1).execute()
+            q = q.eq("shift", c.shift)
+        existing = q.limit(1).execute()
+
         if existing.data:
-            return existing.data[0]["id"]
+            row_id = existing.data[0]["id"]
+            # Update total_questions if scraper found more this run
+            new_total = len(paper.questions)
+            old_total = existing.data[0].get("total_questions") or 0
+            if new_total and new_total != old_total:
+                self.db.table("exam_papers").update(
+                    {"total_questions": new_total}
+                ).eq("id", row_id).execute()
+            return row_id
 
         row = {
             "exam_type": c.exam_type,
@@ -100,6 +114,9 @@ class StorageGateway:
         c = paper.candidate
         rows: list[dict[str, Any]] = []
         for q in paper.questions:
+            # Skip questions with unknown answers when the whole paper is marked partial.
+            if q.correct_answer is None:
+                continue
             rows.append(
                 {
                     "question_text": q.question_text[:4000],
@@ -113,7 +130,7 @@ class StorageGateway:
                     "exam_type": c.exam_type,
                     "source": "Previous Year Paper",
                     "source_year": c.year,
-                    "is_verified": True,
+                    "is_verified": not paper.answers_partial,
                     "is_public": True,
                     "marks_positive": 4,
                     "marks_negative": 1,
@@ -134,34 +151,37 @@ class StorageGateway:
         question_ids: list[str],
         images: list[ParsedImage],
         public_urls: list[str],
+        storage_paths: list[str],
     ) -> int:
         if not images:
             return 0
         rows = []
-        for idx, (img, url) in enumerate(zip(images, public_urls, strict=False)):
+        for img, url, path in zip(images, public_urls, storage_paths, strict=False):
             qid = (
                 question_ids[img.question_index]
-                if img.question_index is not None and img.question_index < len(question_ids)
+                if img.question_index is not None
+                and img.question_index < len(question_ids)
                 else None
             )
             rows.append(
                 {
                     "paper_id": paper_id,
                     "question_id": qid,
-                    "storage_path": url.split("/")[-1],
+                    "storage_path": path,
                     "public_url": url,
                     "alt_text": img.alt_text,
                 }
             )
-        # exam_images is created by the DDL in README.md; skip silently if absent.
         try:
-            self.db.table("exam_images").insert(rows).execute()
+            self.db.table("exam_images").upsert(
+                rows, on_conflict="storage_path"
+            ).execute()
             return len(rows)
-        except Exception as exc:  # pragma: no cover
-            log.warning("exam_images_insert_failed", error=str(exc))
+        except Exception as exc:
+            log.error("exam_images_insert_failed", error=str(exc))
             return 0
 
-    # ── Failures ────────────────────────────────────────────────────────
+    # ── Failures + job persistence ──────────────────────────────────────
 
     def record_failure(
         self,
@@ -170,11 +190,44 @@ class StorageGateway:
         status_code: int | None,
         error: str,
     ) -> None:
-        self.db.table("scrape_failures").insert(
-            {
-                "job_id": job_id,
-                "source_url": url,
-                "status_code": status_code,
-                "error": error[:1000],
-            }
-        ).execute()
+        try:
+            self.db.table("scrape_failures").insert(
+                {
+                    "job_id": job_id,
+                    "source_url": url,
+                    "status_code": status_code,
+                    "error": error[:1000],
+                }
+            ).execute()
+        except Exception as exc:  # pragma: no cover
+            log.warning("record_failure_failed", error=str(exc))
+
+    def upsert_job(
+        self,
+        job_id: str,
+        *,
+        exam_type: str,
+        year_from: int | None,
+        year_to: int | None,
+        status: str,
+        progress: dict,
+        logs: list[str],
+        error: str | None = None,
+        created_by: str | None = None,
+    ) -> None:
+        try:
+            self.db.table("scrape_jobs").upsert(
+                {
+                    "id": job_id,
+                    "exam_type": exam_type,
+                    "year_from": year_from,
+                    "year_to": year_to,
+                    "status": status,
+                    "progress": progress,
+                    "logs": logs[-50:],
+                    "error": error,
+                    "created_by": created_by,
+                }
+            ).execute()
+        except Exception as exc:  # pragma: no cover
+            log.warning("upsert_job_failed", job_id=job_id, error=str(exc))
