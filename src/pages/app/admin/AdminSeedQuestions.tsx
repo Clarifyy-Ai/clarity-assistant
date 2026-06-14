@@ -31,6 +31,15 @@ interface BankStat {
 
 const TARGET_EXAMS = ["JEE_MAIN", "JEE_ADVANCED", "NEET", "UPSC", "SSC_CGL", "IBPS_PO", "NDA"];
 
+function Stat({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="rounded-md bg-muted/40 px-3 py-2">
+      <div className="text-[10px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="font-mono font-bold text-foreground">{value}</div>
+    </div>
+  );
+}
+
 export default function AdminSeedQuestions() {
   const user = useAuthStore((s) => s.user);
   const [stats, setStats] = useState<BankStat[]>([]);
