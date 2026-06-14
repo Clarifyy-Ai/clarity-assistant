@@ -44,7 +44,47 @@ export default function AdminSeedQuestions() {
   const [sourceYear, setSourceYear] = useState<string>(new Date().getFullYear().toString());
   const [parsingPdf, setParsingPdf] = useState(false);
 
+  // FastAPI scraper state
+  const [scraperJobId, setScraperJobId] = useState<string | null>(null);
+  const [scraperStarting, setScraperStarting] = useState(false);
+  const [yearTo, setYearTo] = useState<string>(new Date().getFullYear().toString());
+  const { state: scrapeState, error: scrapeError } = useScrapeJob(scraperJobId);
+  const scraperConfigured = scraperApi.isConfigured();
+
   useEffect(() => { void loadStats(); }, []);
+
+  async function startScrapeJob() {
+    setScraperStarting(true);
+    try {
+      const res = await scraperApi.start({
+        exam_type: examType,
+        year_from: Number(sourceYear) || undefined,
+        year_to: Number(yearTo) || undefined,
+      });
+      setScraperJobId(res.job_id);
+      toast.success(`Scrape job started: ${res.job_id.slice(0, 8)}…`);
+    } catch (err) {
+      if (err instanceof ScraperNotConfiguredError) {
+        toast.error("Set VITE_SCRAPER_URL to your FastAPI scraper URL first.");
+      } else {
+        toast.error(err instanceof Error ? err.message : "Failed to start scrape");
+      }
+    } finally {
+      setScraperStarting(false);
+    }
+  }
+
+  async function controlJob(action: "pause" | "resume" | "cancel") {
+    if (!scraperJobId) return;
+    try {
+      if (action === "pause") await scraperApi.pause(scraperJobId);
+      else if (action === "resume") await scraperApi.resume(scraperJobId);
+      else await scraperApi.cancel(scraperJobId);
+      toast.success(`Job ${action}d`);
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : `${action} failed`);
+    }
+  }
 
   async function loadStats() {
     setLoading(true);
