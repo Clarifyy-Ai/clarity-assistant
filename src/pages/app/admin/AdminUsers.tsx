@@ -98,12 +98,6 @@ export default function AdminUsers() {
           .upsert({ user_id: userId, role: "admin" }, { onConflict: "user_id,role" });
         if (roleErr) throw roleErr;
 
-        const { error: profileErr } = await supabase
-          .from("profiles")
-          .update({ is_admin: true })
-          .eq("id", userId);
-        if (profileErr) throw profileErr;
-
         toast.success("User promoted to admin");
       } else {
         const patch: Record<string, unknown> = {};
