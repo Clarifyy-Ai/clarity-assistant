@@ -53,8 +53,9 @@ function wrapper({ children }: { children: React.ReactNode }) {
 function seedProfile(plan: string, isAdmin = false) {
   useAuthStore.setState({
     user:    { id: "u1", email: "u@x.com" } as never,
-    profile: { id: "u1", plan_id: plan, is_admin: isAdmin, credits: 10 } as never,
+    profile: { id: "u1", plan_id: plan, credits: 10 } as never,
     session: { access_token: "tok" } as never,
+    isAdmin,
     isAuthenticated: true,
     isLoading: false,
   });
@@ -161,7 +162,7 @@ describe("useAuth — canAccessFeature [T-0050]", () => {
 });
 
 describe("useAuth — role flags [T-0051]", () => {
-  it("isAdmin reflects profile.is_admin", () => {
+  it("isAdmin reflects authStore.isAdmin", () => {
     seedProfile("pro", true);
     const { result } = renderHook(() => useAuth(), { wrapper });
     expect(result.current.isAdmin).toBe(true);
