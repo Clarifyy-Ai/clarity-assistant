@@ -95,8 +95,8 @@ export interface UserProfile {
   data_retention_days: number | null; // null = keep forever
   privacy_mode_default: boolean;
 
-  // Admin
-  is_admin: boolean;
+  // Admin (derived from user_roles table, not stored on profile)
+
 
   // Referral
   referral_code: string | null;
