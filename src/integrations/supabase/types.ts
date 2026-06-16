@@ -1486,7 +1486,6 @@ export type Database = {
           interview_strengths: string[] | null
           interview_weaknesses: string[] | null
           is_actively_looking: boolean | null
-          is_admin: boolean
           is_banned: boolean
           last_active_date: string | null
           last_login_at: string | null
@@ -1562,7 +1561,6 @@ export type Database = {
           interview_strengths?: string[] | null
           interview_weaknesses?: string[] | null
           is_actively_looking?: boolean | null
-          is_admin?: boolean
           is_banned?: boolean
           last_active_date?: string | null
           last_login_at?: string | null
@@ -1638,7 +1636,6 @@ export type Database = {
           interview_strengths?: string[] | null
           interview_weaknesses?: string[] | null
           is_actively_looking?: boolean | null
-          is_admin?: boolean
           is_banned?: boolean
           last_active_date?: string | null
           last_login_at?: string | null
