@@ -37,7 +37,7 @@ export interface ProfileRow {
   overlay_settings?:  JSONB | null;
   hotkey_overrides?:  JSONB | null;
   onboarding_completed: boolean;
-  is_admin:           boolean;
+  
   referral_code:      string | null;
   referred_by:        string | null;
   created_at:         ISODate;
