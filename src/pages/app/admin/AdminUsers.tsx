@@ -24,7 +24,7 @@ interface UserRow {
   plan_id: string | null;
   created_at: string;
   credits: number | null;
-  is_admin: boolean | null;
+  is_admin: boolean;
   is_banned: boolean | null;
 }
 
@@ -47,7 +47,7 @@ export default function AdminUsers() {
     try {
       let q = supabase
         .from("profiles")
-        .select("id, full_name, email, plan_id, created_at, credits, is_admin, is_banned", {
+        .select("id, full_name, email, plan_id, created_at, credits, is_banned", {
           count: "exact",
         })
         .order("created_at", { ascending: false })
@@ -66,7 +66,20 @@ export default function AdminUsers() {
       const { data, count, error } = await q;
       if (error) throw error;
 
-      setUsers((data as UserRow[]) ?? []);
+      const rows = (data ?? []) as Omit<UserRow, "is_admin">[];
+      const ids = rows.map((r) => r.id);
+      let adminIds = new Set<string>();
+      if (ids.length > 0) {
+        const { data: roles, error: roleErr } = await supabase
+          .from("user_roles")
+          .select("user_id")
+          .eq("role", "admin")
+          .in("user_id", ids);
+        if (roleErr) throw roleErr;
+        adminIds = new Set((roles ?? []).map((r: { user_id: string }) => r.user_id));
+      }
+
+      setUsers(rows.map((r) => ({ ...r, is_admin: adminIds.has(r.id) })));
       setTotal(count ?? 0);
     } catch (err) {
       console.error("[AdminUsers] fetch failed:", err);
