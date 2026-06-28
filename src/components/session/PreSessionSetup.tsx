@@ -389,11 +389,31 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
         </div>
 
         {micPermission === "denied" && (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 text-center">
-            <p className="text-sm text-red-400 font-medium mb-1">Microphone access denied</p>
-            <p className="text-xs text-red-400/60">
-              Please allow microphone access in your browser settings, then reload this page.
-            </p>
+          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 space-y-3">
+            <div className="flex items-start gap-2.5">
+              <Volume2 className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+              <div>
+                <p className="text-sm text-red-400 font-semibold">Microphone access blocked</p>
+                <p className="text-xs text-red-400/70 mt-0.5 leading-relaxed">
+                  Click the camera/lock icon in the browser address bar, set Microphone to "Allow", then click "Try again".
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={checkMicPermission}
+                className="flex-1 py-2.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-300 font-medium rounded-xl transition-all text-sm flex items-center justify-center gap-1.5"
+              >
+                <Volume2 className="w-4 h-4" />
+                Try again
+              </button>
+              <button
+                onClick={() => window.location.reload()}
+                className="flex-1 py-2.5 bg-secondary/40 hover:bg-secondary/60 border border-border text-muted-foreground font-medium rounded-xl transition-all text-sm"
+              >
+                Reload page
+              </button>
+            </div>
           </div>
         )}
 
@@ -411,7 +431,7 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
             ) : (
               <>
                 <Volume2 className="w-4 h-4" />
-                Check microphone access
+                Allow microphone access
               </>
             )}
           </button>

@@ -810,7 +810,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
               {preflightLoading && (
                 <p className="text-xs text-muted-foreground text-center">Checking audio readiness…</p>
               )}
-              {preflight && preflight.errors.length > 0 && (
+              {preflight && preflight.errors.length > 0 && micPermission !== "denied" && (
                 <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 space-y-1">
                   {preflight.errors.map((err) => (
                     <p key={err} className="text-xs text-red-400">{err}</p>
@@ -859,11 +859,31 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
               </label>
 
               {micPermission === "denied" && (
-                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-3 text-center">
-                  <p className="text-xs text-red-400 font-medium mb-1">Microphone access denied</p>
-                  <p className="text-[10px] text-red-400/60">
-                    Please allow microphone access in your browser settings, then reload this page.
-                  </p>
+                <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 space-y-3">
+                  <div className="flex items-start gap-2.5">
+                    <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                    <div>
+                      <p className="text-xs text-red-400 font-semibold">Microphone access blocked</p>
+                      <p className="text-[11px] text-red-400/70 mt-0.5 leading-relaxed">
+                        Your browser has blocked microphone access. Click the camera/lock icon in the address bar and allow microphone, then click "Try again" below.
+                      </p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={checkMicPermission}
+                      className="flex-1 py-2 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-300 font-medium rounded-lg transition-all text-xs flex items-center justify-center gap-1.5"
+                    >
+                      <Volume2 className="w-3.5 h-3.5" />
+                      Try again
+                    </button>
+                    <button
+                      onClick={() => window.location.reload()}
+                      className="flex-1 py-2 bg-secondary/40 hover:bg-secondary/60 border border-border text-muted-foreground font-medium rounded-lg transition-all text-xs"
+                    >
+                      Reload page
+                    </button>
+                  </div>
                 </div>
               )}
 
@@ -881,7 +901,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   ) : (
                     <>
                       <Volume2 className="w-4 h-4" />
-                      Check microphone access
+                      Allow microphone access
                     </>
                   )}
                 </button>
