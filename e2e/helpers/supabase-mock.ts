@@ -122,7 +122,7 @@ export async function setupSupabaseMocks(
 
     // ── Auth ──────────────────────────────────────────────────────────────
     if (url.includes("/auth/v1/signup") && method === "POST") {
-      let email = E2E_TEST_USER.email;
+      let email: string = E2E_TEST_USER.email;
       try {
         const body = route.request().postDataJSON() as { email?: string };
         email = (body.email ?? email).toLowerCase();
