@@ -33,7 +33,8 @@ export default defineConfig(({ mode }) => {
         : []),
     ],
 
-    base: isElectron ? "./" : "/",
+    // Always relative so file:// loads work in Electron packaged builds.
+    base: isElectron ? "./" : "./",
 
     // Silence verbose console.log / console.debug calls in production builds.
     // console.error and console.warn are kept intact (Sentry breadcrumbs).

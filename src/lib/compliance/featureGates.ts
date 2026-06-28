@@ -10,3 +10,11 @@
  * Safe for practice privacy at home; does not conceal the app from others.
  */
 export const DISCRETE_UI_LABELS_ENABLED = true;
+
+/**
+ * Stealth capture-evasion is permanently disabled by compliance policy.
+ * This always returns false; callers should treat it as a hard gate.
+ */
+export function isStealthCaptureFeatureAllowed(): boolean {
+  return false;
+}
