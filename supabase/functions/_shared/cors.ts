@@ -61,6 +61,15 @@ const LOCAL_DEV_ORIGINS = [
   "http://127.0.0.1:5173",
 ];
 
+/** Known production browser origins — merged even if ALLOWED_ORIGINS secret is missing. */
+const KNOWN_PRODUCTION_ORIGINS = [
+  "https://clarify.ai.sltfinanceindia.com",
+  "https://clarityapp.ai",
+  "https://www.clarityapp.ai",
+  "https://app.clarityapp.ai",
+  "https://preview--clarify-aii.lovable.app",
+];
+
 const ALLOWED_METHODS = [
   "GET",
   "POST",
@@ -140,6 +149,12 @@ function getAllowedOrigins(): Set<string> {
 
   if (!isProduction) {
     for (const origin of LOCAL_DEV_ORIGINS) {
+      addOriginIfValid(origins, origin);
+    }
+  }
+
+  if (isProduction) {
+    for (const origin of KNOWN_PRODUCTION_ORIGINS) {
       addOriginIfValid(origins, origin);
     }
   }
