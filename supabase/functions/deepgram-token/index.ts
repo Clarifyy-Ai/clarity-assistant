@@ -5,6 +5,9 @@
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
+import {
+  enforceSessionRateLimit,
+} from "../_shared/rateLimit.ts";
 
 const TOKEN_TTL_SECONDS = 60; // 1 minute
 const CACHE_SAFETY_BUFFER_S = 8;
@@ -27,6 +30,9 @@ Deno.serve(async (req: Request) => {
     if (auth.error) return auth.error;
     const user = auth.context.user;
 
+    const rateLimited = enforceSessionRateLimit("deepgram-token", user.id);
+    if (rateLimited) return rateLimited;
+
     /* ── ENV VALIDATION ────────────────────────────────────────────────── */
     const DEEPGRAM_API_KEY = Deno.env.get("DEEPGRAM_API_KEY");
     const DEEPGRAM_PROJECT_ID = Deno.env.get("DEEPGRAM_PROJECT_ID");
@@ -34,7 +40,7 @@ Deno.serve(async (req: Request) => {
     if (!DEEPGRAM_API_KEY) {
       console.error("[deepgram-token] DEEPGRAM_API_KEY secret is not set");
       return new Response(
-        JSON.stringify({ error: "Transcription service is not configured" }),
+        JSON.stringify({ error: "Transcription service is not configured", code: "SERVICE_UNAVAILABLE" }),
         { status: 503, headers: { ...headers, "Content-Type": "application/json" } },
       );
     }
@@ -100,9 +106,7 @@ Deno.serve(async (req: Request) => {
       return new Response(
         JSON.stringify({
           error: "Could not create transcription session. Please retry.",
-          details:
-            "If this persists, ensure DEEPGRAM_API_KEY can create keys (see Deepgram API key creation docs).",
-          status: tempKeyRes.status,
+          code: "SERVICE_UNAVAILABLE",
         }),
         { status: 502, headers: { ...headers, "Content-Type": "application/json" } },
       );
@@ -117,7 +121,7 @@ Deno.serve(async (req: Request) => {
         JSON.stringify(keyData),
       );
       return new Response(
-        JSON.stringify({ error: "Invalid response from transcription service" }),
+        JSON.stringify({ error: "Invalid response from transcription service", code: "SERVICE_UNAVAILABLE" }),
         { status: 502, headers: { ...headers, "Content-Type": "application/json" } },
       );
     }
@@ -143,7 +147,7 @@ Deno.serve(async (req: Request) => {
   } catch (err) {
     console.error("[deepgram-token] Unhandled error:", err);
     return new Response(
-      JSON.stringify({ error: "Internal server error" }),
+      JSON.stringify({ error: "Internal server error", code: "INTERNAL_ERROR" }),
       { status: 500, headers: { ...headers, "Content-Type": "application/json" } },
     );
   }

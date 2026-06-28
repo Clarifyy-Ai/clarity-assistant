@@ -31,7 +31,7 @@ export function CodeScratchpad({ initial = "", className }: Props) {
   return (
     <div className={cn("rounded-xl border border-border bg-card overflow-hidden", className)}>
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border bg-secondary/50">
-        <Code2 className="w-3.5 h-3.5 text-violet-400" />
+        <Code2 className="w-3.5 h-3.5 text-primary" />
         <select
           value={lang}
           onChange={(e) => setLang(e.target.value as any)}

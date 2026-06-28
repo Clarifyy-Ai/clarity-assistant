@@ -122,7 +122,7 @@ describe("deductCreditsForAction – pre-flight checks", () => {
     const { deductCreditsForAction } = await import(
       "@/lib/billing/creditsManager"
     );
-    const r = await deductCreditsForAction("hintgeneration");
+    const r = await deductCreditsForAction("generate_hint");
     expect(r.success).toBe(false);
     expect(r.error).toMatch(/not authenticated/i);
   });

@@ -1,13 +1,91 @@
-// src/lib/billing/creditsManager.ts
-
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { EDGE_BASE } from "@/lib/env";
 import { creditsDB } from "@/lib/supabase/database";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { useUIStore } from "@/store/uiStore";
 import type { PreferredAIModel } from "@/types/user.types";
+/** Server-aligned credit costs (see supabase/functions/_shared/creditEconomics.ts). */
+export const SERVER_AI_CREDIT_COSTS = {
+  hint: AI_CREDIT_COSTS.live_hint,
+  fullAnswer: AI_CREDIT_COSTS.live_answer,
+  screenshotAnswer: AI_CREDIT_COSTS.screenshot_answer,
+} as const;
+
 function getCreditCost(_model: PreferredAIModel): number {
-  return 1;
+  return SERVER_AI_CREDIT_COSTS.hint;
+}
+
+export function checkCreditsForAction(
+  action: keyof typeof SERVER_AI_CREDIT_COSTS,
+): CreditCheckResult {
+  const { profile } = useAuthStore.getState();
+  const required = SERVER_AI_CREDIT_COSTS[action];
+
+  if (!profile) {
+    return {
+      canProceed: false,
+      creditsRequired: required,
+      creditsAvailable: 0,
+      isLow: false,
+      isBYOKActive: false,
+      reason: "Not authenticated",
+    };
+  }
+
+  const isBYOKActive = !!(
+    profile.byok_gemini ||
+    profile.byok_openai ||
+    profile.byok_anthropic
+  );
+
+  if (isBYOKActive) {
+    return {
+      canProceed: true,
+      creditsRequired: 0,
+      creditsAvailable: profile.credits,
+      isLow: false,
+      isBYOKActive: true,
+      reason: null,
+    };
+  }
+
+  const isPaidPlan = profile.plan && profile.plan !== "free";
+  const subStatus = profile.subscription_status as string | undefined;
+
+  if (isPaidPlan && subStatus && !["active", "trialing"].includes(subStatus)) {
+    return {
+      canProceed: false,
+      creditsRequired: required,
+      creditsAvailable: profile.credits,
+      isLow: profile.credits < LOW_CREDIT_THRESHOLD,
+      isBYOKActive: false,
+      reason: `Subscription is ${subStatus}. Complete checkout to use credits.`,
+    };
+  }
+
+  const available = profile.credits;
+  const isLow = available - required < LOW_CREDIT_THRESHOLD;
+
+  if (available < required) {
+    return {
+      canProceed: false,
+      creditsRequired: required,
+      creditsAvailable: available,
+      isLow: true,
+      isBYOKActive: false,
+      reason: `Not enough credits. Need ${required}, have ${available}.`,
+    };
+  }
+
+  return {
+    canProceed: true,
+    creditsRequired: required,
+    creditsAvailable: available,
+    isLow,
+    isBYOKActive: false,
+    reason: null,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -17,7 +95,7 @@ function getCreditCost(_model: PreferredAIModel): number {
 export type CreditAction =
   | "liveanswershort"
   | "liveanswerlong"
-  | "hintgeneration"
+  | "generate_hint"
   | "starbuilder"
   | "documentparse"
   | "companyresearch"
@@ -26,15 +104,15 @@ export type CreditAction =
   | "mocksessionquestion";
 
 export const CREDIT_COSTS: Record<CreditAction, number> = {
-  liveanswershort:   5,  // 200 tokens short [file:3]
-  liveanswerlong:   12,  // 200 tokens long
-  hintgeneration:    8,
-  starbuilder:      10,
-  documentparse:    15,
-  companyresearch:  20,
-  rephraser:        6,
-  projectbuilder:  10,
-  mocksessionquestion: 3,
+  liveanswershort:   AI_CREDIT_COSTS.live_answer,
+  liveanswerlong:    AI_CREDIT_COSTS.live_answer + 4,
+  generate_hint:     AI_CREDIT_COSTS.live_hint,
+  starbuilder:       AI_CREDIT_COSTS.star_builder,
+  documentparse:     AI_CREDIT_COSTS.parse_question_pdf,
+  companyresearch:   AI_CREDIT_COSTS.company_research,
+  rephraser:         AI_CREDIT_COSTS.rephraser,
+  projectbuilder:    AI_CREDIT_COSTS.project_builder,
+  mocksessionquestion: AI_CREDIT_COSTS.generate_questions,
 };
 
 export interface CreditCheckResult {

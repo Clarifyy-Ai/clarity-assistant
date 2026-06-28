@@ -207,7 +207,9 @@ export function sanitizeFileName(input: string): string {
   const cleaned = stripControlCharacters(input);
 
   return cleaned
-    .replace(/[<>:"/\\|?*]/g, "")
+    .replace(/\.\.[/\\]/g, "")
+    .replace(/[/\\]/g, "")
+    .replace(/[<>:"|?*]/g, "")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 255);

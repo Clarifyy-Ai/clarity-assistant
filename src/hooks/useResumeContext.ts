@@ -1,6 +1,16 @@
-import { useCallback } from "react";
+import { useCallback, useMemo } from "react";
 import { useDocumentStore } from "@/store/documentStore";
 import type { ParsedResume, ParsedJD } from "@/types/ai.types";
+
+function parseResumeContent(content: unknown): ParsedResume | null {
+  if (!content || typeof content !== "string") return null;
+  try {
+    const parsed = JSON.parse(content) as ParsedResume;
+    return parsed && typeof parsed === "object" ? parsed : null;
+  } catch {
+    return null;
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────
 // useResumeContext
@@ -14,7 +24,13 @@ export function useResumeContext() {
   const activeResume  = docStore.active_context.resume;
   const activeVersion = docStore.active_context.resume_version;
 
-  const parsedResume: ParsedResume | null = activeVersion?.parsed_data ?? null;
+  const parsedResume: ParsedResume | null = useMemo(() => {
+    if (activeVersion?.parsed_data) {
+      return activeVersion.parsed_data as ParsedResume;
+    }
+    const content = (activeResume as { content?: string | null } | null)?.content;
+    return parseResumeContent(content);
+  }, [activeVersion?.parsed_data, activeResume]);
   const activeJD      = docStore.active_context.jd;
   const parsedJD: ParsedJD | null = activeJD?.parsed_data ?? null;
 

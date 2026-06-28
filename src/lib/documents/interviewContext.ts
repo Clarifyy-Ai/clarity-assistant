@@ -1,4 +1,9 @@
 import { supabase } from "@/lib/supabase/client";
+import {
+  formatParsedResumeForAI,
+  parseResumeContentString,
+} from "@/lib/documents/resumeParse";
+import type { ParsedResume } from "@/types/ai.types";
 
 /** Primary cover letter text for AI interview context. */
 export async function loadPrimaryCoverLetterText(
@@ -25,20 +30,47 @@ export async function loadPrimaryCoverLetterText(
   return text;
 }
 
-/** Combined resume + cover letter block for generate-answer / generate-hint. */
+/** Combined resume + JD + instructions + cover letter for generate-answer / generate-hint. */
 export async function buildResumeContextForAI(
   userId: string,
-  resumeSummary: string | null | undefined
+  options?: {
+    resumeSummary?: string | null;
+    resumeContent?: string | null;
+    parsedResume?: ParsedResume | null;
+    jdSnippet?: string | null;
+    instructions?: string | null;
+    role?: string | null;
+    company?: string | null;
+  },
 ): Promise<string> {
-  const parts: string[] = [];
-  if (resumeSummary?.trim()) {
-    parts.push(`Resume summary:\n${resumeSummary.trim()}`);
-  }
+  const parsed =
+    options?.parsedResume ??
+    parseResumeContentString(options?.resumeContent ?? null);
 
   const cover = await loadPrimaryCoverLetterText(userId);
-  if (cover) {
-    parts.push(`Cover letter:\n${cover.slice(0, 8000)}`);
+
+  const fromParsed = formatParsedResumeForAI(parsed, {
+    jdSnippet: options?.jdSnippet,
+    instructions: options?.instructions,
+    coverLetter: cover,
+    role: options?.role,
+    company: options?.company,
+  });
+
+  if (fromParsed !== "None provided.") return fromParsed;
+
+  if (options?.resumeSummary?.trim()) {
+    return formatParsedResumeForAI(null, {
+      jdSnippet: options.jdSnippet,
+      instructions: options?.instructions,
+      coverLetter: cover,
+      role: options?.role,
+      company: options?.company,
+    }).replace(
+      "None provided.",
+      `Resume summary:\n${options.resumeSummary.trim()}`,
+    );
   }
 
-  return parts.join("\n\n") || "None provided.";
+  return fromParsed;
 }

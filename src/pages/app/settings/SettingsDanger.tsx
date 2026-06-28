@@ -3,6 +3,7 @@ import { fetchEdge } from "@/lib/network/fetchEdge";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
+import { supabase } from "@/lib/supabase/client";
 import {
   answerBankDB,
   sessionAnswersDB,
@@ -17,6 +18,8 @@ import {
   LogOut, RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsDanger — delete account, export data, reset
@@ -29,6 +32,8 @@ export default function SettingsDanger() {
   const [deleteOpen,  setDeleteOpen]  = useState(false);
   const [resetOpen,   setResetOpen]   = useState(false);
   const [confirm,     setConfirm]     = useState("");
+  const [deletePassword, setDeletePassword] = useState("");
+  const [usePasswordConfirm, setUsePasswordConfirm] = useState(false);
   const [deleting,    setDeleting]    = useState(false);
   const [resetting,   setResetting]   = useState(false);
   const [exporting,   setExporting]   = useState(false);
@@ -85,11 +90,30 @@ export default function SettingsDanger() {
   // ── Delete account ───────────────────────────────────────────
 
   async function handleDelete() {
-    if (!user || confirm !== user.email) return;
+    if (!user?.email) return;
+
+    if (usePasswordConfirm) {
+      if (!deletePassword.trim()) {
+        toast.error("Enter your password to confirm deletion.");
+        return;
+      }
+      const { error: authErr } = await supabase.auth.signInWithPassword({
+        email: user.email,
+        password: deletePassword,
+      });
+      if (authErr) {
+        toast.error("Incorrect password. Account was not deleted.");
+        return;
+      }
+    } else if (confirm !== user.email) {
+      return;
+    }
+
     setDeleting(true);
     try {
-      
-      const res = await fetchEdge("delete-account", {});
+      const res = await fetchEdge("delete-account", {
+        confirmation: usePasswordConfirm ? "DELETE" : confirm,
+      });
 
       if (!res.ok) throw new Error(`Account deletion failed: ${res.statusText}`);
 
@@ -103,8 +127,7 @@ export default function SettingsDanger() {
   }
 
   return (
-    <div className="space-y-5">
-      <h2 className="text-lg font-bold text-foreground">Danger zone</h2>
+    <SettingsPageShell title="Danger zone">
 
       {/* Export */}
       <Card className="flex items-start gap-4 border-blue-500/15">
@@ -207,7 +230,7 @@ export default function SettingsDanger() {
       {/* Delete confirm modal */}
       <Modal
         open={deleteOpen}
-        onClose={() => { setDeleteOpen(false); setConfirm(""); }}
+        onClose={() => { setDeleteOpen(false); setConfirm(""); setDeletePassword(""); }}
         title="Delete account permanently?"
         size="sm"
       >
@@ -218,22 +241,61 @@ export default function SettingsDanger() {
             will be permanently deleted.
           </p>
         </div>
-        <div className="mb-5">
-          <p className="text-xs text-muted-foreground mb-1.5">
-            Type your email <span className="text-foreground font-mono">{user?.email}</span> to confirm
-          </p>
-          <Input
-            value={confirm}
-            onChange={(e) => setConfirm(e.target.value)}
-            placeholder={user?.email ?? "your@email.com"}
-          />
+        <div className="flex gap-2 mb-4">
+          <button
+            type="button"
+            onClick={() => setUsePasswordConfirm(false)}
+            className={cn(
+              "flex-1 text-xs py-2 rounded-lg border transition-colors",
+              !usePasswordConfirm
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-border text-muted-foreground",
+            )}
+          >
+            Confirm with email
+          </button>
+          <button
+            type="button"
+            onClick={() => setUsePasswordConfirm(true)}
+            className={cn(
+              "flex-1 text-xs py-2 rounded-lg border transition-colors",
+              usePasswordConfirm
+                ? "border-primary/40 bg-primary/10 text-primary"
+                : "border-border text-muted-foreground",
+            )}
+          >
+            Confirm with password
+          </button>
         </div>
+        {usePasswordConfirm ? (
+          <div className="mb-5">
+            <p className="text-xs text-muted-foreground mb-1.5">Enter your account password</p>
+            <Input
+              type="password"
+              value={deletePassword}
+              onChange={(e) => setDeletePassword(e.target.value)}
+              placeholder="Your password"
+              autoComplete="current-password"
+            />
+          </div>
+        ) : (
+          <div className="mb-5">
+            <p className="text-xs text-muted-foreground mb-1.5">
+              Type your email <span className="text-foreground font-mono">{user?.email}</span> to confirm
+            </p>
+            <Input
+              value={confirm}
+              onChange={(e) => setConfirm(e.target.value)}
+              placeholder={user?.email ?? "your@email.com"}
+            />
+          </div>
+        )}
         <div className="flex gap-3">
           <Button
             variant="secondary"
             size="sm"
             fullWidth
-            onClick={() => { setDeleteOpen(false); setConfirm(""); }}
+            onClick={() => { setDeleteOpen(false); setConfirm(""); setDeletePassword(""); }}
           >
             Cancel
           </Button>
@@ -242,13 +304,13 @@ export default function SettingsDanger() {
             size="sm"
             fullWidth
             loading={deleting}
-            disabled={confirm !== user?.email}
+            disabled={usePasswordConfirm ? !deletePassword.trim() : confirm !== user?.email}
             onClick={handleDelete}
           >
             Delete account
           </Button>
         </div>
       </Modal>
-    </div>
+    </SettingsPageShell>
   );
 }

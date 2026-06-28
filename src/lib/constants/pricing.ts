@@ -1,58 +1,177 @@
 // src/lib/constants/pricing.ts
+
 //
+
 // SINGLE SOURCE OF TRUTH for launch pricing, credits and plan-tier limits.
-// All UI (marketing Pricing page, Settings → Billing, Upgrade modal, Plan badge)
-// and any billing/credit logic MUST import from this file — never hardcode.
+
+// Plan credits and prices are defined in creditEconomics.ts (50% margin model).
+
 //
-// Launch model (per production audit Path A):
-//   Free        — 200 credits / month, $0
-//   Pro         — 2,000 credits / month, $29 / mo  (or $290 / yr)
-//   Enterprise  — Unlimited credits, $79 / mo per seat (contact sales)
-//
-// `starter` and `elite` exist only as legacy types so older code references do
-// not break; they are NOT displayed and NOT sold. Treat them as deprecated.
+
+// Launch model:
+
+//   Free        — 50 credits / month, $0
+
+//   Pro         — 1,400 credits / month, $29 / mo  (or $290 / yr)
+
+//   Enterprise  — 4,000 credits / month, $79 / mo per seat
+
+
+
+import {
+
+  PLAN_MONTHLY_CREDITS as ECON_PLAN_CREDITS,
+
+  PLAN_PRICE_CENTS_MONTHLY as ECON_MONTHLY,
+
+  PLAN_PRICE_CENTS_YEARLY as ECON_YEARLY,
+
+  CREDIT_ECONOMICS,
+
+  estimatedSubscriptionMargin,
+
+} from "@/lib/constants/creditEconomics";
+
+
 
 export type PlanId = "free" | "starter" | "pro" | "elite" | "enterprise";
 
+
+
 /** Plans actually offered to users at launch, in display order. */
+
 export const LAUNCH_PLANS: PlanId[] = ["free", "pro", "enterprise"];
 
+
+
 /** Legacy plan ids retained for backwards compatibility; never shown in UI. */
+
 export const DEPRECATED_PLANS: PlanId[] = ["starter", "elite"];
 
-/** Monthly credit allotment per plan. `null` means unlimited. */
-export const PLAN_MONTHLY_CREDITS: Record<PlanId, number | null> = {
-  free:       200,
-  starter:    200,   // deprecated — treated as free
-  pro:        2_000,
-  elite:      2_000, // deprecated — treated as pro
-  enterprise: null,  // unlimited
+
+
+/** User-facing tier labels. DB enum values unchanged for backward compat. */
+
+export const PLAN_DISPLAY_NAMES: Record<PlanId, string> = {
+
+  free: "Free",
+
+  starter: "Pro",
+
+  pro: "Pro",
+
+  elite: "Pro",
+
+  enterprise: "Enterprise",
+
 };
 
-/** Prices are stored in cents (USD). 0 = free; null = contact sales (no self-serve). */
-export const PLAN_PRICE_CENTS_MONTHLY: Record<PlanId, number | null> = {
-  free:       0,
-  starter:    0,
-  pro:        2_900,
-  elite:      2_900,
-  enterprise: 7_900,
+
+
+export type DisplayTier = "free" | "pro" | "enterprise";
+
+
+
+export function normalizeToDisplayTier(planId: PlanId | string | null | undefined): DisplayTier {
+
+  if (planId === "enterprise") return "enterprise";
+
+  if (planId === "free") return "free";
+
+  return "pro";
+
+}
+
+
+
+export function getPlanDisplayName(planId: PlanId | string | null | undefined): string {
+
+  if (typeof planId === "string" && planId in PLAN_DISPLAY_NAMES) {
+
+    return PLAN_DISPLAY_NAMES[planId as PlanId];
+
+  }
+
+  return PLAN_DISPLAY_NAMES.free;
+
+}
+
+
+
+/** Monthly credit allotment per plan. `null` = legacy unlimited display only. */
+
+export const PLAN_MONTHLY_CREDITS: Record<PlanId, number | null> = {
+
+  free: ECON_PLAN_CREDITS.free,
+
+  starter: ECON_PLAN_CREDITS.starter,
+
+  pro: ECON_PLAN_CREDITS.pro,
+
+  elite: ECON_PLAN_CREDITS.elite,
+
+  enterprise: ECON_PLAN_CREDITS.enterprise,
+
 };
+
+
+
+/** Prices in cents (USD). 0 = free; null = contact sales. */
+
+export const PLAN_PRICE_CENTS_MONTHLY: Record<PlanId, number | null> = {
+
+  free: ECON_MONTHLY.free,
+
+  starter: ECON_MONTHLY.starter,
+
+  pro: ECON_MONTHLY.pro,
+
+  elite: ECON_MONTHLY.elite,
+
+  enterprise: ECON_MONTHLY.enterprise,
+
+};
+
+
 
 export const PLAN_PRICE_CENTS_YEARLY: Record<PlanId, number | null> = {
-  free:       0,
-  starter:    0,
-  pro:        29_000,   // ~2 months free
-  elite:      29_000,
-  enterprise: 79_000,
+
+  free: ECON_YEARLY.free,
+
+  starter: ECON_YEARLY.starter,
+
+  pro: ECON_YEARLY.pro,
+
+  elite: ECON_YEARLY.elite,
+
+  enterprise: ECON_YEARLY.enterprise,
+
 };
 
-/** Human-readable label for credit balance UI ("∞" for unlimited). */
+
+
+export { CREDIT_ECONOMICS, estimatedSubscriptionMargin };
+
+
+
+/** Human-readable label for credit balance UI. */
+
 export function formatMonthlyCredits(planId: PlanId): string {
+
   const v = PLAN_MONTHLY_CREDITS[planId];
+
   return v === null ? "Unlimited" : `${v.toLocaleString()} / mo`;
+
 }
 
-/** Returns true if a plan id has no monthly credit cap. */
+
+
+/** Enterprise uses a high monthly cap (not unlimited). */
+
 export function isUnlimited(planId: PlanId): boolean {
-  return PLAN_MONTHLY_CREDITS[planId] === null;
+
+  return false;
+
 }
+
+

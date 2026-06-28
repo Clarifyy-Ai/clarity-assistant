@@ -7,6 +7,12 @@
 import { supabase } from "@/lib/supabase/client";
 import { DatabaseError, ErrorCode, tryCatch } from "@/lib/errors";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase";
+import {
+  mapRowToScorecard,
+  mapScorecardToInsert,
+  type Scorecard,
+  type ScorecardRow,
+} from "@/types/scorecard.types";
 
 // ─── Generic Query Helper ─────────────────────────────────────────────────────
 
@@ -305,6 +311,25 @@ export const sessionsDB = {
     return count ?? 0;
   },
 
+  async countTodayByUserId(userId: string): Promise<number> {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const { count, error } = await supabase
+      .from("sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .gte("created_at", today.toISOString());
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "sessions",
+        operation: "countTodayByUserId",
+      });
+    }
+    return count ?? 0;
+  },
+
   async listRecentSummary(
     userId: string,
     limit = 5
@@ -440,6 +465,49 @@ export const sessionTranscriptsDB = {
         operation: "create",
       });
     }
+  },
+
+  async getBySessionId(sessionId: string): Promise<string | null> {
+    const { data, error } = await supabase
+      .from("session_transcripts")
+      .select("content")
+      .eq("session_id", sessionId)
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "session_transcripts",
+        operation: "getBySessionId",
+      });
+    }
+
+    if (!data?.length) return null;
+    return data.map((row) => row.content).filter(Boolean).join("\n\n");
+  },
+
+  async listSegmentsBySessionId(sessionId: string): Promise<
+    Array<{
+      content: string;
+      offset_ms?: number | null;
+      speaker?: string;
+      wpm?: number | null;
+      filler_count?: number | null;
+    }>
+  > {
+    const { data, error } = await supabase
+      .from("session_transcripts")
+      .select("content, offset_ms, speaker, wpm, filler_count")
+      .eq("session_id", sessionId)
+      .order("offset_ms", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: true });
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "session_transcripts",
+        operation: "listSegmentsBySessionId",
+      });
+    }
+    return data ?? [];
   },
 };
 
@@ -645,6 +713,31 @@ export const documentsDB = {
       });
     }
   },
+
+  async getPrimaryByType(
+    userId: string,
+    type: string
+  ): Promise<Pick<
+    Tables<"documents">,
+    "title" | "parsed_summary" | "content" | "updated_at"
+  > | null> {
+    const { data, error } = await supabase
+      .from("documents")
+      .select("title, parsed_summary, content, updated_at")
+      .eq("user_id", userId)
+      .eq("type", type as Tables<"documents">["type"])
+      .eq("is_primary", true)
+      .maybeSingle();
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "documents",
+        operation: "getPrimaryByType",
+      });
+    }
+
+    return data;
+  },
 };
 
 // ─── Resumes ──────────────────────────────────────────────────────────────────
@@ -697,6 +790,51 @@ export const resumesDB = {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
         table: "resumes",
         operation: "delete",
+      });
+    }
+  },
+};
+
+// ─── Resume versions ──────────────────────────────────────────────────────────
+
+export const resumeVersionsDB = {
+  async create(row: TablesInsert<"resume_versions">): Promise<Tables<"resume_versions">> {
+    return query(
+      () => supabase.from("resume_versions").insert(row).select().single(),
+      { table: "resume_versions", operation: "create" },
+    );
+  },
+
+  async getById(id: string): Promise<Tables<"resume_versions">> {
+    return query(
+      () => supabase.from("resume_versions").select("*").eq("id", id).single(),
+      { table: "resume_versions", operation: "getById" },
+    );
+  },
+
+  async getByResumeId(resumeId: string): Promise<Tables<"resume_versions">[]> {
+    const { data, error } = await supabase
+      .from("resume_versions")
+      .select("*")
+      .eq("resume_id", resumeId)
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "resume_versions",
+        operation: "getByResumeId",
+      });
+    }
+
+    return data ?? [];
+  },
+
+  async update(id: string, updates: TablesUpdate<"resume_versions">): Promise<void> {
+    const { error } = await supabase.from("resume_versions").update(updates).eq("id", id);
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "resume_versions",
+        operation: "update",
       });
     }
   },
@@ -811,6 +949,64 @@ export const sessionDebriefsDB = {
       Tables<"session_debriefs">,
       "id" | "created_at" | "overall_grade" | "priority_focus" | "session_id"
     >[];
+  },
+
+  async getByShareToken(token: string): Promise<Tables<"session_debriefs"> | null> {
+    const { data, error } = await (supabase.rpc as (
+      name: string,
+      args: Record<string, unknown>,
+    ) => ReturnType<typeof supabase.rpc>)("get_shared_debrief", {
+      p_token: token,
+    });
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "session_debriefs",
+        operation: "getByShareToken",
+      });
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    return (row as Tables<"session_debriefs"> | undefined) ?? null;
+  },
+
+  async updateShareToken(
+    debriefId: string,
+    userId: string,
+    token: string,
+  ): Promise<void> {
+    const { data: cur, error: fetchErr } = await supabase
+      .from("session_debriefs")
+      .select("detailed_report")
+      .eq("id", debriefId)
+      .eq("user_id", userId)
+      .maybeSingle();
+
+    if (fetchErr) {
+      throw new DatabaseError(fetchErr.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "session_debriefs",
+        operation: "updateShareToken",
+      });
+    }
+
+    const next = {
+      ...((cur?.detailed_report as Record<string, unknown>) ?? {}),
+      share_token: token,
+      is_shared: true,
+    };
+
+    const { error } = await supabase
+      .from("session_debriefs")
+      .update({ detailed_report: next })
+      .eq("id", debriefId)
+      .eq("user_id", userId);
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "session_debriefs",
+        operation: "updateShareToken",
+      });
+    }
   },
 };
 
@@ -1778,9 +1974,104 @@ export const adminAnalyticsDB = {
   },
 };
 
+// ─── Mock tests (exam engine) ─────────────────────────────────────────────────
+
+export type MockTestSummary = Pick<
+  Tables<"mock_tests">,
+  "id" | "test_name" | "status" | "created_at" | "config"
+>;
+
+export const mockTestsDB = {
+  async listRecentByUserId(userId: string, limit = 5): Promise<MockTestSummary[]> {
+    const { data, error } = await supabase
+      .from("mock_tests")
+      .select("id, test_name, status, created_at, config")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "mock_tests",
+        operation: "listRecentByUserId",
+      });
+    }
+    return (data ?? []) as MockTestSummary[];
+  },
+
+  async countCompletedByUserId(userId: string): Promise<number> {
+    const { count, error } = await supabase
+      .from("mock_tests")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", userId)
+      .eq("status", "COMPLETED");
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "mock_tests",
+        operation: "countCompletedByUserId",
+      });
+    }
+    return count ?? 0;
+  },
+
+  async listSubmittedAtByUserId(userId: string, limit = 90): Promise<string[]> {
+    const { data, error } = await supabase
+      .from("mock_tests")
+      .select("submitted_at")
+      .eq("user_id", userId)
+      .eq("status", "COMPLETED")
+      .not("submitted_at", "is", null)
+      .order("submitted_at", { ascending: false })
+      .limit(limit);
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "mock_tests",
+        operation: "listSubmittedAtByUserId",
+      });
+    }
+    return (data ?? [])
+      .map((r) => r.submitted_at)
+      .filter((d): d is string => typeof d === "string" && d.length > 0);
+  },
+};
+
+export const testAnalysesDB = {
+  async listAccuracyByUserId(userId: string): Promise<number[]> {
+    const { data, error } = await supabase
+      .from("test_analyses")
+      .select("accuracy")
+      .eq("user_id", userId);
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "test_analyses",
+        operation: "listAccuracyByUserId",
+      });
+    }
+    return (data ?? []).map((r) => Number(r.accuracy ?? 0));
+  },
+};
+
 // ─── Questions (mock-test bank) ───────────────────────────────────────────────
 
 export const questionsDB = {
+  async countByUploadedBy(userId: string): Promise<number> {
+    const { count, error } = await supabase
+      .from("questions")
+      .select("id", { count: "exact", head: true })
+      .eq("uploaded_by", userId);
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "questions",
+        operation: "countByUploadedBy",
+      });
+    }
+    return count ?? 0;
+  },
+
   async list(params: {
     uploadedBy?: string;
     examType?: string;
@@ -2103,12 +2394,13 @@ export const supportDB = {
 
 // ─── Scorecards ───────────────────────────────────────────────────────────────
 
-// NOTE: useScorecard currently reads/writes columns that are not present in the
-// generated Supabase types for `scorecards`. To keep the UI off raw supabase
-// calls without blocking on a types regeneration, we treat scorecards rows as
-// unknown at the DB boundary.
+type ScorecardShareUpdate = {
+  is_shared: boolean;
+  share_token: string;
+};
+
 export const scorecardsDB = {
-  async getBySessionId(sessionId: string): Promise<any | null> {
+  async getBySessionId(sessionId: string): Promise<Scorecard | null> {
     const { data, error } = await supabase
       .from("scorecards")
       .select("*")
@@ -2120,11 +2412,17 @@ export const scorecardsDB = {
         operation: "getBySessionId",
       });
     }
-    return data;
+    if (!data) {
+      return null;
+    }
+    return mapRowToScorecard(data as unknown as ScorecardRow);
   },
 
-  async create(row: any): Promise<void> {
-    const { error } = await supabase.from("scorecards").insert(row);
+  async create(scorecard: Scorecard): Promise<void> {
+    const row = mapScorecardToInsert(scorecard);
+    const { error } = await supabase
+      .from("scorecards")
+      .insert(row as TablesInsert<"scorecards">);
     if (error) {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
         table: "scorecards",
@@ -2134,9 +2432,13 @@ export const scorecardsDB = {
   },
 
   async markShared(sessionId: string, token: string): Promise<void> {
+    const patch: ScorecardShareUpdate = {
+      is_shared: true,
+      share_token: token,
+    };
     const { error } = await supabase
       .from("scorecards")
-      .update({ is_shared: true, share_token: token } as any)
+      .update(patch as TablesUpdate<"scorecards">)
       .eq("session_id", sessionId);
     if (error) {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
@@ -2144,6 +2446,76 @@ export const scorecardsDB = {
         operation: "markShared",
       });
     }
+  },
+
+  async getByShareToken(token: string): Promise<Scorecard | null> {
+    const { data, error } = await (supabase.rpc as (
+      name: string,
+      args: Record<string, unknown>,
+    ) => ReturnType<typeof supabase.rpc>)("get_shared_scorecard", {
+      p_token: token,
+    });
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "scorecards",
+        operation: "getByShareToken",
+      });
+    }
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row) return null;
+    return mapRowToScorecard(row as unknown as ScorecardRow);
+  },
+};
+
+// ─── Help articles (marketing FAQ) ───────────────────────────────────────────
+
+export type HelpArticlePublic = Pick<
+  Tables<"help_articles">,
+  | "slug"
+  | "question"
+  | "answer"
+  | "body_md"
+  | "category_slug"
+  | "category_title"
+  | "sort_order"
+>;
+
+export const helpArticlesDB = {
+  async listPublished(): Promise<HelpArticlePublic[]> {
+    const { data, error } = await supabase
+      .from("help_articles")
+      .select(
+        "slug, question, answer, body_md, category_slug, category_title, sort_order",
+      )
+      .eq("published", true)
+      .order("sort_order", { ascending: true });
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "help_articles",
+        operation: "listPublished",
+      });
+    }
+    return data ?? [];
+  },
+
+  async getBySlug(slug: string): Promise<HelpArticlePublic | null> {
+    const { data, error } = await supabase
+      .from("help_articles")
+      .select(
+        "slug, question, answer, body_md, category_slug, category_title, sort_order",
+      )
+      .eq("slug", slug)
+      .eq("published", true)
+      .maybeSingle();
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "help_articles",
+        operation: "getBySlug",
+      });
+    }
+    return data;
   },
 };
 

@@ -98,6 +98,7 @@ export interface ProfileRow {
   is_banned?:         boolean;
   deleted_at?:        ISODate | null;
   subscription_id?:   string | null;
+  payment_failed_at?: ISODate | null;
 }
 
 export interface ProfileInsert extends Partial<Omit<ProfileRow, "id" | "created_at" | "updated_at">> {

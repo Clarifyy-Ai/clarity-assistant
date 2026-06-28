@@ -13,8 +13,9 @@ import {
   BarChart2, TrendingUp, TrendingDown,
   Flame, Zap, Brain, Mic,
   AlertTriangle, CheckCircle, Target,
-  Calendar, Clock, Volume2, Download,
-} from "lucide-react";
+  Calendar, Clock, Volume2, Download, GitCompare,
+} from "lucide-react";import { EmptyState } from "@/components/common/EmptyState";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import {
   Select,
@@ -33,6 +34,7 @@ import { format, subDays } from "date-fns";
 
 export default function Analytics() {
   const analytics  = useAnalytics();
+  const navigate = useNavigate();
   const { profile } = useAuthStore();
 
   if (analytics.isLoading) {
@@ -55,10 +57,36 @@ export default function Analytics() {
           <button
             type="button"
             onClick={() => analytics.reload()}
-            className="mt-3 text-xs font-medium text-violet-400 hover:underline"
+            className="mt-3 text-xs font-medium text-primary hover:underline"
           >
             Retry
           </button>
+        </Card>
+      </div>
+    );
+  }
+
+  const hasSessions =
+    (analytics.data?.total_sessions ?? 0) > 0 ||
+    (analytics.data?.recent_sessions?.length ?? 0) > 0;
+
+  if (!hasSessions) {
+    return (
+      <div className="space-y-6 max-w-5xl">
+        <PageHeader
+          title="Analytics"
+          subtitle="Track your interview performance over time"
+        />
+        <Card>
+          <EmptyState
+            icon={BarChart2}
+            title="No sessions yet"
+            description="Complete a mock interview or practice session to unlock performance trends, speech metrics, and activity insights."
+            actionLabel="Start mock interview"
+            onAction={() => navigate("/app/mock")}
+            secondaryActionLabel="Practice Coach"
+            onSecondaryAction={() => navigate("/app/live")}
+          />
         </Card>
       </div>
     );
@@ -104,7 +132,7 @@ export default function Analytics() {
           label={`Avg score (${analytics.filter.period})`}
           value={`${analytics.avgScore30d ?? 0}`}
           delta={analytics.scoreDelta}
-          icon={<BarChart2 className="w-4 h-4 text-violet-400" />}
+          icon={<BarChart2 className="w-4 h-4 text-primary" />}
         />
         <KPICard
           label="Sessions this week"
@@ -132,6 +160,7 @@ export default function Analytics() {
           <TabsTrigger value="categories">🗂️ Categories</TabsTrigger>
           <TabsTrigger value="speech">🎙️ Speech metrics</TabsTrigger>
           <TabsTrigger value="heatmap">🔥 Activity</TabsTrigger>
+          <TabsTrigger value="compare">⚖️ Compare</TabsTrigger>
         </TabsList>
 
         {/* ── Score trends ────────────────────────────── */}
@@ -159,6 +188,11 @@ export default function Analytics() {
           <PlanGate requiredPlan="pro">
             <ActivityHeatmap data={analytics.activityByDay ?? {}} />
           </PlanGate>
+        </TabsContent>
+
+        {/* ── Session comparison ──────────────────────── */}
+        <TabsContent value="compare">
+          <SessionComparePanel analytics={analytics} />
         </TabsContent>
       </Tabs>
     </div>
@@ -225,7 +259,7 @@ function ScoreTrendChart({ data }: { data: { date: string; score: number }[] }) 
     <Card>
       <div className="flex items-center justify-between mb-5">
         <h3 className="text-sm font-semibold text-foreground">Score over time</h3>
-        <Badge variant="violet" size="sm">Last 30 sessions</Badge>
+        <Badge variant="primary" size="sm">Last 30 sessions</Badge>
       </div>
 
       {/* Bar chart */}
@@ -408,7 +442,7 @@ function SpeechMetrics({ analytics }: { analytics: any }) {
         </Card>
 
         <Card className="text-center">
-          <div className="text-2xl sm:text-3xl font-black text-violet-400 mb-1">
+          <div className="text-2xl sm:text-3xl font-black text-primary mb-1">
             {analytics.avgConfidence ?? "—"}%
           </div>
           <p className="text-xs text-muted-foreground">Avg confidence score</p>
@@ -516,5 +550,191 @@ function ActivityHeatmap({ data }: { data: Record<string, number> }) {
         <span className="text-[10px] text-muted-foreground">More</span>
       </div>
     </Card>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────────
+// SessionComparePanel — side-by-side session comparison
+// ─────────────────────────────────────────────────────────────────
+
+function SessionComparePanel({ analytics }: { analytics: ReturnType<typeof useAnalytics> }) {
+  const sessions = analytics.data?.recent_sessions ?? [];
+  const [sessionA, setSessionA] = useState("");
+  const [sessionB, setSessionB] = useState("");
+  const comparison = analytics.comparison;
+
+  useEffect(() => {
+    if (sessions.length >= 2 && !sessionA && !sessionB) {
+      setSessionA(sessions[sessions.length - 2].session_id);
+      setSessionB(sessions[sessions.length - 1].session_id);
+    }
+  }, [sessions, sessionA, sessionB]);
+
+  if (sessions.length < 2) {
+    return (
+      <Card className="text-center py-10">
+        <GitCompare className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
+        <p className="text-muted-foreground text-sm">Complete at least two sessions to compare.</p>
+      </Card>
+    );
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <div className="flex items-center gap-2 mb-4">
+          <GitCompare className="w-4 h-4 text-primary" />
+          <h3 className="text-sm font-semibold text-foreground">Compare sessions</h3>
+        </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+          <SessionPicker
+            label="Session A (baseline)"
+            value={sessionA}
+            sessions={sessions}
+            onChange={setSessionA}
+          />
+          <SessionPicker
+            label="Session B (compare)"
+            value={sessionB}
+            sessions={sessions}
+            onChange={setSessionB}
+          />
+        </div>
+        <Button
+          variant="primary"
+          size="sm"
+          disabled={!sessionA || !sessionB || sessionA === sessionB}
+          onClick={() => void analytics.compareSessions(sessionA, sessionB)}
+        >
+          Compare
+        </Button>
+      </Card>
+
+      {comparison && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <CompareSessionCard session={comparison.session_a} label="Session A" />
+          <CompareSessionCard session={comparison.session_b} label="Session B" />
+        </div>
+      )}
+
+      {comparison && (
+        <Card>
+          <h3 className="text-sm font-semibold text-foreground mb-3">Delta summary</h3>
+          <div className="grid grid-cols-3 gap-3 text-center mb-4">
+            <DeltaStat label="Score" value={comparison.score_delta} invert={false} />
+            <DeltaStat label="Fillers/min" value={comparison.filler_delta} invert />
+            <DeltaStat label="WPM" value={comparison.wpm_delta} invert={false} />
+          </div>
+          {comparison.improvement_areas.length > 0 && (
+            <div className="mb-3">
+              <p className="text-xs font-semibold text-emerald-400 mb-1">Improvements in B</p>
+              <ul className="text-xs text-foreground space-y-1">
+                {comparison.improvement_areas.map((a) => (
+                  <li key={a}>↑ {a}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {comparison.regression_areas.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-red-400 mb-1">Regressions in B</p>
+              <ul className="text-xs text-foreground space-y-1">
+                {comparison.regression_areas.map((a) => (
+                  <li key={a}>↓ {a}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Card>
+      )}
+    </div>
+  );
+}
+
+function SessionPicker({
+  label, value, sessions, onChange,
+}: {
+  label: string;
+  value: string;
+  sessions: { session_id: string; date: string; company?: string | null; overall_score: number }[];
+  onChange: (id: string) => void;
+}) {
+  return (
+    <div>
+      <label className="text-[10px] text-muted-foreground uppercase tracking-widest mb-1 block">
+        {label}
+      </label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full h-9 rounded-md border border-border bg-background px-2 text-xs"
+      >
+        <option value="">Select session…</option>
+        {sessions.map((s) => (
+          <option key={s.session_id} value={s.session_id}>
+            {format(new Date(s.date), "MMM d")} · {s.overall_score} · {s.company ?? s.session_id.slice(0, 8)}
+          </option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+function CompareSessionCard({
+  session, label,
+}: {
+  session: {
+    date: string;
+    mode: string;
+    interview_type: string;
+    company: string | null;
+    overall_score: number;
+    filler_rate: number;
+    wpm_avg: number;
+    duration_minutes: number;
+    question_count: number;
+  };
+  label: string;
+}) {
+  return (
+    <Card>
+      <Badge variant="gray" size="sm" className="mb-3">{label}</Badge>
+      <p className="text-xs text-muted-foreground mb-2">
+        {format(new Date(session.date), "MMM d, yyyy")} · {session.mode} · {session.interview_type}
+      </p>
+      {session.company && (
+        <p className="text-sm font-medium text-foreground mb-3">{session.company}</p>
+      )}
+      <div className="text-3xl font-black text-primary mb-3">{session.overall_score}</div>
+      <div className="space-y-2 text-xs">
+        <div className="flex justify-between"><span className="text-muted-foreground">WPM</span><span>{session.wpm_avg}</span></div>
+        <div className="flex justify-between"><span className="text-muted-foreground">Fillers/min</span><span>{session.filler_rate.toFixed(1)}</span></div>
+        <div className="flex justify-between"><span className="text-muted-foreground">Duration</span><span>{session.duration_minutes}m</span></div>
+        <div className="flex justify-between"><span className="text-muted-foreground">Questions</span><span>{session.question_count}</span></div>
+      </div>
+    </Card>
+  );
+}
+
+function DeltaStat({
+  label, value, invert,
+}: {
+  label: string;
+  value: number;
+  invert?: boolean;
+}) {
+  const positive = invert ? value < 0 : value > 0;
+  const formatted = label.includes("Fillers") ? value.toFixed(1) : value;
+  return (
+    <div className="rounded-lg bg-secondary p-3">
+      <p className="text-[10px] text-muted-foreground">{label}</p>
+      <p className={cn(
+        "text-lg font-black tabular-nums",
+        value === 0 ? "text-muted-foreground" :
+        positive ? "text-emerald-400" : "text-red-400",
+      )}>
+        {value > 0 ? "+" : ""}{formatted}
+      </p>
+    </div>
   );
 }

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   ChevronRight,
   ArrowLeft,
@@ -92,7 +92,19 @@ const EXAM_DB_MAP: Record<string, string> = {
   NEET:     "NEET UG",
   UPSC:     "UPSC CSE",
   SSC_CGL:  "SSC CGL",
-  IBPS_PO:  "IBPS PO",
+  HPCL_ENGINEER: "HPCL Engineer",
+  PSU:             "PSU",
+};
+
+const EXAM_SUBJECT_LABELS: Record<string, string[]> = {
+  JEE_MAIN:      ["Physics", "Chemistry", "Math"],
+  JEE_ADV:       ["Physics", "Chemistry", "Math"],
+  NEET:          ["Biology", "Physics", "Chemistry"],
+  UPSC:          ["GS Paper 1", "GS Paper 2", "Current Affairs"],
+  SSC_CGL:       ["Reasoning", "Quant", "English", "GK"],
+  IBPS_PO:       ["Reasoning", "Quant", "English", "Banking"],
+  HPCL_ENGINEER: ["Technical", "English", "Quant", "Reasoning"],
+  PSU:           ["Domain", "English", "Quant", "Reasoning"],
 };
 
 /** exam_papers.exam_type → TestConfigure URL id */
@@ -123,6 +135,7 @@ export default function ExamPapers() {
   const { examType } = useParams<{ examType: string }>();
   const navigate     = useNavigate();
   const user         = useAuthStore((s) => s.user);
+  const isAdmin      = useAuthStore((s) => s.isAdmin);
 
   const [papers,      setPapers]      = useState<ExamPaper[]>([]);
   const [loading,     setLoading]     = useState(true);
@@ -267,6 +280,8 @@ export default function ExamPapers() {
         EXAM_ROUTE_FROM_PAPER[paper.exam_type] ??
         (examType ?? paper.exam_type.replace(/\s+/g, "_").toUpperCase());
 
+      const available = questionCounts[paper.id] ?? 0;
+
       const s = officialSetting ?? {
         questions: paper.total_questions ?? 30,
         duration:  paper.duration_minutes ?? 60,
@@ -274,19 +289,21 @@ export default function ExamPapers() {
         negative:  1,
       };
 
+      const questionCount = Math.max(1, Math.min(s.questions, available));
+
       const testName =
         `${paper.exam_name} ${paper.year}${paper.shift ? ` Shift ${paper.shift}` : ""}`.trim() +
         (isPractice ? " (Practice Mode)" : "");
 
-      const { test_id, warning, ai_generated_count } = await launchMockTest({
+      const { test_id, warning } = await launchMockTest({
         exam_type: routeExamId,
         test_name: testName,
         subjects: [],
         topics: [],
-        source_types: ["OFFICIAL_PYP", "AI_GENERATED"],
+        source_types: ["OFFICIAL_PYP"],
         year_range: { min: paper.year, max: paper.year },
         difficulty_distribution: { EASY: 30, MEDIUM: 40, HARD: 30 },
-        question_count: s.questions,
+        question_count: questionCount,
         duration_minutes: isPractice ? 0 : s.duration,
         marks_positive: s.positive,
         marks_negative: s.negative,
@@ -296,8 +313,8 @@ export default function ExamPapers() {
       });
 
       if (warning) toast.warning(warning);
-      if (ai_generated_count && ai_generated_count > 0) {
-        toast.info(`Added ${ai_generated_count} AI-generated questions to fill the paper.`);
+      if (questionCount < s.questions) {
+        toast.info(`Started with ${questionCount} questions (${available} in bank for ${paper.year}).`);
       }
 
       toast.success(
@@ -462,15 +479,43 @@ export default function ExamPapers() {
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-16 text-center space-y-3">
             <Layers className="h-10 w-10 text-muted-foreground" />
-            <p className="font-medium text-foreground">No papers match your filters</p>
-            <Button
-              size="sm"
-              onClick={() =>
-                navigate(`/app/mock-test/configure?exam=${normalised}`)
-              }
-            >
-              Create Custom AI Test <ChevronRight className="h-4 w-4 ml-1.5" />
-            </Button>
+            {papers.length > 0 && readyCount === 0 ? (
+              <>
+                <p className="font-medium text-foreground">No questions imported yet</p>
+                <p className="text-sm text-muted-foreground max-w-md">
+                  These papers exist but the question bank is empty.
+                  {isAdmin ? (
+                    <>
+                      {" "}
+                      <Link
+                        to="/app/admin/seed-questions"
+                        className="text-primary font-medium underline underline-offset-2 hover:opacity-90"
+                      >
+                        Seed questions in Admin
+                      </Link>
+                      .
+                    </>
+                  ) : (
+                    " An admin needs to seed questions before these papers can launch."
+                  )}
+                </p>
+                <Button size="sm" variant="outline" onClick={() => setOnlyReady(false)}>
+                  Show all papers
+                </Button>
+              </>
+            ) : (
+              <>
+                <p className="font-medium text-foreground">No papers match your filters</p>
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    navigate(`/app/mock-test/configure?exam=${normalised}`)
+                  }
+                >
+                  Create Custom AI Test <ChevronRight className="h-4 w-4 ml-1.5" />
+                </Button>
+              </>
+            )}
           </CardContent>
         </Card>
       ) : (
@@ -510,7 +555,7 @@ export default function ExamPapers() {
                       className="text-[10px] border-amber-500/40 text-amber-600 bg-amber-500/10"
                     >
                       <Lock className="w-2.5 h-2.5 mr-1" />
-                      Coming Soon
+                      No questions
                     </Badge>
                   </div>
                 )}
@@ -582,23 +627,37 @@ export default function ExamPapers() {
                   {/* Subject chips */}
                   {officialSetting && !isComingSoon && (
                     <div className="flex gap-1.5 mb-5 flex-wrap">
-                      <span className="text-[10px] px-1.5 py-0.5 bg-muted rounded-md text-muted-foreground font-medium">
-                        Phys: {Math.floor(qsCount / 3)}
-                      </span>
-                      <span className="text-[10px] px-1.5 py-0.5 bg-muted rounded-md text-muted-foreground font-medium">
-                        Chem: {Math.floor(qsCount / 3)}
-                      </span>
-                      <span className="text-[10px] px-1.5 py-0.5 bg-muted rounded-md text-muted-foreground font-medium">
-                        Math: {Math.floor(qsCount / 3)}
-                      </span>
+                      {(EXAM_SUBJECT_LABELS[normalised] ?? ["Section A", "Section B", "Section C"]).map(
+                        (label, idx, arr) => (
+                          <span
+                            key={label}
+                            className="text-[10px] px-1.5 py-0.5 bg-muted rounded-md text-muted-foreground font-medium"
+                          >
+                            {label}: {Math.max(1, Math.floor(qsCount / arr.length))}
+                          </span>
+                        ),
+                      )}
                     </div>
                   )}
 
                                     {/* Coming soon message */}
                   {isComingSoon && (
-                    <p className="text-xs text-muted-foreground mb-4 italic">
-                      Questions for {paper.year} will be available soon. You can still
-                      create a custom AI-generated test for this exam.
+                    <p className="text-xs text-muted-foreground mb-4">
+                      Question bank is empty for {paper.year}.
+                      {isAdmin ? (
+                        <>
+                          {" "}
+                          <Link
+                            to="/app/admin/seed-questions"
+                            className="text-primary font-medium underline underline-offset-2 hover:opacity-90"
+                          >
+                            Seed questions in Admin
+                          </Link>
+                          .
+                        </>
+                      ) : (
+                        " Questions will appear once an admin imports them."
+                      )}
                     </p>
                   )}
 

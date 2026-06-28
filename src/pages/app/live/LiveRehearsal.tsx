@@ -1,6 +1,6 @@
 // src/pages/app/live/LiveRehearsal.tsx — PRODUCTION READY
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 import { useCallSession } from "@/hooks/useCallSession";
 import { CallSessionLifecycleBanner } from "@/components/live/CallSessionLifecycleBanner";
 import { useSessionStore } from "@/store/sessionStore";
@@ -9,7 +9,6 @@ import { useAudioStore } from "@/store/audioStore";
 import { OverlayWindow } from "@/components/overlay/OverlayWindow";
 import { OverlayKeyboardHandler } from "@/components/overlay/OverlayKeyboardHandler";
 import { LiveSessionController } from "@/components/live/LiveSessionController";
-import { ScreenCaptureBlocker } from "@/components/overlay/ScreenCaptureBlocker";
 import { PreSessionSetupWizard } from "@/components/session/PreSessionSetupWizard";
 import { Button } from "@/components/ui/Button";
 import {
@@ -20,9 +19,16 @@ import {
   Sparkles,
   Pause,
   Play,
+  ExternalLink,
 } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
+import { handleSessionStartError } from "@/lib/billing/sessionStartErrors";
 import type { LiveSessionConfig } from "@/types/session.types";
+import { notifyOverlayVisibilityOnMobile } from "@/lib/overlay/overlayVisibilityNotice";
+import { getDefaultOverlayEnabled } from "@/lib/overlay/defaultOverlayPreference";
+import { setGenerateAnswerHandler } from "@/lib/overlay/hotkeys";
+import { useHotkeys } from "@/hooks/useHotkeys";
 
 const DEFAULT_CONFIG: LiveSessionConfig = {
   company: null,
@@ -40,8 +46,6 @@ const DEFAULT_CONFIG: LiveSessionConfig = {
 };
 
 export default function LiveRehearsal() {
-  const navigate = useNavigate();
-
   const sessionStatus = useSessionStore((s) => s.status);
   const isVisible = useOverlayStore((s) => s.is_visible);
   const streamError = useAudioStore((s) => s.streams?.error ?? null);
@@ -49,6 +53,11 @@ export default function LiveRehearsal() {
   const [phase, setPhase] = useState<"setup" | "active" | "restarting">("setup");
   const [config, setConfig] = useState<LiveSessionConfig>(DEFAULT_CONFIG);
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
+  const [defaultOverlay, setDefaultOverlay] = useState(false);
+
+  useEffect(() => {
+    setDefaultOverlay(getDefaultOverlayEnabled());
+  }, []);
 
   const hasStartedRef = useRef(false);
   const didEndRef = useRef(false);
@@ -96,8 +105,21 @@ export default function LiveRehearsal() {
     useOverlayStore.getState().showOverlay();
 
     call.startSession().catch((err: unknown) => {
+      if (handleSessionStartError(err)) {
+        hasStartedRef.current = false;
+        useSessionStore.getState().resetSession();
+        useOverlayStore.getState().hideOverlay();
+        useOverlayStore.getState().resetSessionState();
+        setPhase("setup");
+        return;
+      }
       const message = err instanceof Error ? err.message : "Failed to start live session";
       toast.error(message);
+      hasStartedRef.current = false;
+      useSessionStore.getState().resetSession();
+      useOverlayStore.getState().hideOverlay();
+      useOverlayStore.getState().resetSessionState();
+      setPhase("setup");
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
@@ -120,18 +142,33 @@ export default function LiveRehearsal() {
   }, [copilot]);
 
   const handleGenerate = useCallback(() => {
-    const question = useOverlayStore.getState().current_question;
-    if (question) {
-      copilot.requestLiveHint(question);
-    } else {
-      toast.info("Speak a question or type one in Chat first");
+    const store = useOverlayStore.getState();
+    let question = store.current_question?.trim() ?? "";
+    if (!question) {
+      const utterances = useAudioStore.getState().transcript?.utterances ?? [];
+      const lastThem = [...utterances].reverse().find((u) => u.speaker === "interviewer");
+      question = lastThem?.text?.trim() ?? "";
+      if (question) store.setCurrentQuestion(question);
     }
+    if (question) copilot.requestLiveHint(question);
+    else toast.info("Speak a question or type one in Chat first");
   }, [copilot]);
 
   const handleManualQuestion = useCallback(
     (question: string) => copilot.submitManualQuestion(question),
     [copilot],
   );
+
+  useEffect(() => {
+    setGenerateAnswerHandler(handleGenerate);
+    return () => setGenerateAnswerHandler(null);
+  }, [handleGenerate]);
+
+  useHotkeys(undefined, isActive || isPaused);
+
+  useEffect(() => {
+    if (phase === "setup") notifyOverlayVisibilityOnMobile();
+  }, [phase]);
 
   if (phase === "setup") {
     return (
@@ -142,10 +179,43 @@ export default function LiveRehearsal() {
         >
           <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" />
           <span>
-            <strong>Practice only.</strong> Live Co-Pilot is designed for interview rehearsal with an
+            <strong>Practice only.</strong> Practice Coach is designed for interview rehearsal with an
             AI coach. Do not use during real interviews — covert AI assistance violates most
             employer and assessment policies.
           </span>
+        </div>
+        <div
+          role="note"
+          className={cn(
+            "mx-auto max-w-2xl mb-4 flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border px-4 py-3 text-sm",
+            defaultOverlay
+              ? "border-primary bg-primary/10 ring-1 ring-primary/20"
+              : "border-primary/30 bg-primary/10",
+          )}
+        >
+          <p className="flex-1 text-foreground">
+            {defaultOverlay ? (
+              <>
+                <strong className="text-primary">Your default:</strong> overlay mode opens Practice Coach
+                full-screen without the app sidebar — best for focused rehearsal.
+              </>
+            ) : (
+              <>
+                <strong className="text-primary">Overlay mode</strong> opens Practice Coach full-screen
+                without the app sidebar — best for focused rehearsal.
+              </>
+            )}
+          </p>
+          <Link
+            to="/app/live/overlay"
+            className={cn(
+              "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-opacity",
+              defaultOverlay ? "bg-primary shadow-md shadow-primary/25" : "bg-primary",
+            )}
+          >
+            {defaultOverlay ? "Start in overlay mode" : "Open overlay mode"}
+            <ExternalLink className="w-3.5 h-3.5" />
+          </Link>
         </div>
         <PreSessionSetupWizard onStart={handleSetup} sessionType="live" />
       </>
@@ -154,14 +224,23 @@ export default function LiveRehearsal() {
 
   return (
     <>
-      <ScreenCaptureBlocker isActive={isActive} />
       <LiveSessionController isActive={isActive} onAutoEnd={handleStop} />
-      <OverlayKeyboardHandler enabled={isActive} onToggleMute={copilot.toggleMute} />
+      <OverlayKeyboardHandler
+        enabled={isActive || isPaused}
+        onToggleMute={copilot.toggleMute}
+        onCaptureCoding={() => void copilot.captureCodingAnswer()}
+        onGenerate={handleGenerate}
+      />
 
       <OverlayWindow
         onToggleMic={copilot.toggleMute}
         onToggleSystemAudio={copilot.toggleSystemAudio}
         onGenerate={handleGenerate}
+        onRegenerate={() => copilot.requestAnswerModification("regenerate")}
+        onShorten={() => copilot.requestAnswerModification("shorten")}
+        onExpand={() => copilot.requestAnswerModification("expand")}
+        onCaptureCoding={() => void copilot.captureCodingAnswer()}
+        onAdjustRegion={() => void copilot.adjustRegionCodingAnswer()}
         onEndSession={handleStop}
         onManualQuestion={handleManualQuestion}
         onStartSession={handleSetup}
@@ -169,6 +248,7 @@ export default function LiveRehearsal() {
         lastSessionId={lastSessionId}
         isPreparingSession={copilot.isPreparingSession}
         prepStepIndex={copilot.prepStepIndex}
+        interviewType={config.interview_type}
       />
 
       {streamErrorMessage && (
@@ -209,7 +289,7 @@ export default function LiveRehearsal() {
                 <Sparkles className="w-6 h-6 text-primary" />
               </div>
               <p className="text-lg font-semibold text-foreground">
-                {isPaused ? "Session Paused" : "Overlay Mode Active"}
+                {isPaused ? "Session Paused" : "Practice Session Active"}
               </p>
               <p className="text-sm text-muted-foreground">
                 {isPaused ? (

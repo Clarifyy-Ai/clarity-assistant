@@ -1,4 +1,4 @@
-import { ReactNode } from "react";
+import { ReactNode, useMemo } from "react";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store/uiStore";
@@ -23,6 +23,29 @@ interface PageHeaderProps {
   badge?: string;
 }
 
+const MAX_BREADCRUMB_LEVELS = 4;
+
+function truncateBreadcrumbs(
+  breadcrumbs: Breadcrumb[],
+  maxLevels: number,
+): { display: Breadcrumb[]; hiddenLabels: string[] } {
+  if (breadcrumbs.length <= maxLevels) {
+    return { display: breadcrumbs, hiddenLabels: [] };
+  }
+
+  const tailCount = maxLevels - 2;
+  const hidden = breadcrumbs.slice(1, -tailCount);
+
+  return {
+    display: [
+      breadcrumbs[0],
+      { label: "…" },
+      ...breadcrumbs.slice(-tailCount),
+    ],
+    hiddenLabels: hidden.map((b) => b.label),
+  };
+}
+
 export function PageHeader({
   title,
   description,
@@ -39,24 +62,41 @@ export function PageHeader({
   const stealth = useUIStore((s) => s.stealth_mode);
   const displayTitle = getStealthLabel(title, stealth);
 
-  const displayBreadcrumbs = breadcrumbs?.map((b) => ({
-    ...b,
-    label: getStealthLabel(b.label, stealth),
-  }));
+  const { displayBreadcrumbs, hiddenBreadcrumbLabels } = useMemo(() => {
+    if (!breadcrumbs?.length) {
+      return { displayBreadcrumbs: undefined, hiddenBreadcrumbLabels: [] as string[] };
+    }
+
+    const labeled = breadcrumbs.map((b) => ({
+      ...b,
+      label: getStealthLabel(b.label, stealth),
+    }));
+
+    const { display, hiddenLabels } = truncateBreadcrumbs(labeled, MAX_BREADCRUMB_LEVELS);
+    return { displayBreadcrumbs: display, hiddenBreadcrumbLabels: hiddenLabels };
+  }, [breadcrumbs, stealth]);
 
   return (
     <div className={cn("space-y-4 mb-6 md:mb-8", className)}>
       {displayBreadcrumbs && displayBreadcrumbs.length > 0 && (
-        <nav className="flex items-center gap-1 text-xs sm:text-sm">
+        <nav className="flex items-center gap-1 text-xs sm:text-sm" aria-label="Breadcrumb">
           {displayBreadcrumbs.map((breadcrumb, index) => (
             <div key={index} className="flex items-center gap-1">
               {index > 0 && (
                 <ChevronRight className="h-3.5 w-3.5 text-muted-foreground mx-0.5" />
               )}
-              {breadcrumb.href ? (
+              {breadcrumb.label === "…" ? (
+                <span
+                  className="text-muted-foreground px-0.5"
+                  title={hiddenBreadcrumbLabels.join(" › ")}
+                  aria-label={`Hidden: ${hiddenBreadcrumbLabels.join(", ")}`}
+                >
+                  …
+                </span>
+              ) : breadcrumb.href ? (
                 <a
                   href={breadcrumb.href}
-                  className="text-blue-400 hover:text-blue-300 transition"
+                  className="text-primary hover:text-primary/80 transition-colors duration-150"
                 >
                   {breadcrumb.label}
                 </a>
@@ -73,7 +113,7 @@ export function PageHeader({
           {icon && (
             <div className={cn(
               "mt-1 p-2 rounded-lg",
-              stealth ? "bg-blue-500/10" : "bg-violet-500/10"
+              stealth ? "bg-primary/10" : "bg-primary/10"
             )}>
               {icon}
             </div>
@@ -84,7 +124,7 @@ export function PageHeader({
                 {displayTitle}
               </h1>
               {badge && !stealth && (
-                <span className="px-2 py-1 text-xs font-semibold bg-violet-500/20 text-violet-300 rounded-full">
+                <span className="px-2 py-1 text-xs font-semibold bg-primary/15 text-primary rounded-full">
                   {badge}
                 </span>
               )}

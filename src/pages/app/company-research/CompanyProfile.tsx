@@ -3,6 +3,10 @@ import { useEffect, useState, useCallback } from "react";
 import { useParams, useSearchParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { PageContent } from "@/components/layout/PageContent";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -114,113 +118,95 @@ export default function CompanyProfile() {
 
   if (loading) {
     return (
-      <div className="max-w-3xl space-y-5">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="w-10 h-10 bg-violet-600/20 rounded-xl animate-pulse" />
-          <div className="space-y-2">
-            <div className="h-5 w-32 bg-secondary rounded animate-pulse" />
-            <div className="h-3 w-48 bg-accent/5 rounded animate-pulse" />
-          </div>
-        </div>
+      <PageContent className="max-w-3xl space-y-5">
+        <PageHeader
+          title={companyName || "Company research"}
+          subtitle="Generating AI brief…"
+          breadcrumbs={[
+            { label: "Company Research", href: "/app/companies" },
+            { label: companyName || "Loading" },
+          ]}
+        />
         {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
-        <div className="text-center">
-          <p className="text-xs text-muted-foreground animate-pulse">
-            Generating AI brief for {companyName}…
-          </p>
-        </div>
-      </div>
+      </PageContent>
     );
   }
-
-  // ── Error state ───────────────────────────────────────────────
 
   if (error) {
     return (
-      <div className="max-w-3xl text-center py-20 space-y-4">
-        <p className="text-red-400 text-sm">{error}</p>
-        <div className="flex items-center justify-center gap-3">
+      <PageContent className="max-w-3xl space-y-5">
+        <PageHeader
+          title={companyName || "Company research"}
+          breadcrumbs={[
+            { label: "Company Research", href: "/app/companies" },
+            { label: companyName || "Error" },
+          ]}
+        />
+        <InlineErrorRetry message={error} onRetry={() => void generateBrief(true)} />
+        <div className="flex justify-center">
           <Button variant="secondary" size="sm" onClick={() => navigate("/app/companies")}>
             <ChevronLeft className="w-3 h-3 mr-1" />
-            Back
-          </Button>
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => generateBrief(true)}
-            leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
-          >
-            Try again
+            Back to companies
           </Button>
         </div>
-      </div>
+      </PageContent>
     );
   }
-
-  // ── Not found state ───────────────────────────────────────────
 
   if (!brief) {
     return (
-      <div className="max-w-3xl text-center py-20 space-y-4">
-        <Building2 className="w-10 h-10 text-muted-foreground/40 mx-auto" />
-        <p className="text-sm text-muted-foreground">
-          No brief available for {companyName || "this company"}.
-        </p>
-        <div className="flex items-center justify-center gap-3">
-          <Button variant="secondary" size="sm" onClick={() => navigate("/app/companies")}>
-            <ChevronLeft className="w-3 h-3 mr-1" />
-            Back
-          </Button>
+      <PageContent className="max-w-3xl space-y-5">
+        <PageHeader
+          title={companyName || "Company research"}
+          breadcrumbs={[
+            { label: "Company Research", href: "/app/companies" },
+            { label: companyName || "Not found" },
+          ]}
+        />
+        <Card>
+          <EmptyState
+            icon={Building2}
+            title="No brief available"
+            description={`We couldn't find a research brief for ${companyName || "this company"}.`}
+            actionLabel="Generate brief"
+            onAction={() => void generateBrief(true)}
+            secondaryActionLabel="Back to companies"
+            onSecondaryAction={() => navigate("/app/companies")}
+          />
+        </Card>
+      </PageContent>
+    );
+  }
+
+  return (
+    <PageContent className="max-w-3xl space-y-5">
+      <PageHeader
+        title={companyName}
+        subtitle={brief.industry || "AI-generated interview prep brief"}
+        breadcrumbs={[
+          { label: "Company Research", href: "/app/companies" },
+          { label: companyName },
+        ]}
+        actions={
           <Button
-            variant="primary"
+            variant="ghost"
             size="sm"
             onClick={() => generateBrief(true)}
             leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
           >
-            Generate Brief
+            Refresh
           </Button>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Render ────────────────────────────────────────────────────
-
-  return (
-    <div className="max-w-3xl space-y-5">
-
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <button
-          onClick={() => navigate("/app/companies")}
-          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          Company Research
-        </button>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => generateBrief(true)}
-          leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
-        >
-          Refresh
-        </Button>
-      </div>
+        }
+      />
 
       {/* Company header */}
       <div className="flex items-center gap-4">
-        <div className="w-14 h-14 bg-gradient-to-br from-violet-600/30 to-blue-600/30 border border-border rounded-2xl flex items-center justify-center text-2xl font-black text-foreground shrink-0">
+        <div className="w-14 h-14 bg-gradient-to-br from-primary/30 to-blue-600/30 border border-border rounded-2xl flex items-center justify-center text-2xl font-black text-foreground shrink-0">
           {companyName[0]?.toUpperCase()}
         </div>
         <div>
-          <h1 className="text-2xl font-bold text-foreground capitalize">
-            {companyName}
-          </h1>
-          {brief.industry && (
-            <p className="text-muted-foreground text-sm mt-0.5">{brief.industry}</p>
-          )}
           {brief.tags?.length > 0 && (
-            <div className="flex gap-2 mt-2 flex-wrap">
+            <div className="flex gap-2 flex-wrap">
               {brief.tags.map((t: string) => (
                 <Badge key={t} variant="default" size="sm">{t}</Badge>
               ))}
@@ -233,7 +219,7 @@ export default function CompanyProfile() {
       {brief.overview && (
         <Card>
           <div className="flex items-center gap-2 mb-3">
-            <Building2 className="w-4 h-4 text-violet-400" />
+            <Building2 className="w-4 h-4 text-primary" />
             <h3 className="text-sm font-semibold text-foreground">Overview</h3>
           </div>
           <p className="text-sm text-foreground leading-relaxed">{brief.overview}</p>
@@ -316,13 +302,13 @@ export default function CompanyProfile() {
         {brief.tips?.length > 0 && (
           <Card>
             <div className="flex items-center gap-2 mb-3">
-              <Brain className="w-4 h-4 text-violet-400" />
+              <Brain className="w-4 h-4 text-primary" />
               <h3 className="text-sm font-semibold text-foreground">Pro tips</h3>
             </div>
             <ul className="space-y-2">
               {brief.tips.map((t: string, i: number) => (
                 <li key={i} className="text-xs text-foreground flex items-start gap-2">
-                  <span className="text-violet-400 shrink-0 mt-0.5">→</span>
+                  <span className="text-primary shrink-0 mt-0.5">→</span>
                   {t}
                 </li>
               ))}
@@ -348,8 +334,8 @@ export default function CompanyProfile() {
       </div>
 
       {/* CTA */}
-      <Card className="flex items-center gap-4 bg-gradient-to-r from-violet-600/10 to-blue-600/10 border-violet-500/20">
-        <Sparkles className="w-5 h-5 text-violet-400 shrink-0" />
+      <Card className="flex items-center gap-4 bg-gradient-to-r from-primary/10 to-blue-600/10 border-primary/20">
+        <Sparkles className="w-5 h-5 text-primary shrink-0" />
         <div className="flex-1">
           <p className="text-sm font-semibold text-foreground">
             Ready to practice for {companyName}?
@@ -366,6 +352,6 @@ export default function CompanyProfile() {
           Practice now →
         </Button>
       </Card>
-    </div>
+    </PageContent>
   );
 }

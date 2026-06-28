@@ -10,8 +10,10 @@ import {
 } from "@/lib/api/functions";
 
 export type StartSessionRequest = {
-  session_type?: "mock" | "live";
-  type?: "mock" | "live";
+  session_type?: "mock" | "live" | "warmup" | "rehearsal" | "room" | "practice";
+  type?: "mock" | "live" | "warmup" | "rehearsal" | "room" | "practice";
+  /** Required for type=live practice overlay — server sets DB practice tag. */
+  is_practice?: boolean;
   interview_type?:
     | "behavioral"
     | "behavioural"

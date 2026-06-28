@@ -1,10 +1,17 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useUIStore, type Theme } from "@/store/uiStore";
 import { useThemeStore } from "@/store/themeStore";
+import { applyAppearancePreferences } from "@/lib/theme/applyAppearance";
+import {
+  getDefaultOverlayEnabled,
+  setDefaultOverlayEnabled,
+} from "@/lib/overlay/defaultOverlayPreference";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { CheckCircle, Palette, Monitor, Sun, Moon } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { CheckCircle, Palette, Monitor, Sun, Moon, Layers } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 
 const THEMES = [
   { id: "light"  as const, label: "Light",  icon: Sun,     preview: "bg-[#fafafa]" },
@@ -13,7 +20,7 @@ const THEMES = [
 ];
 
 const ACCENT_COLORS = [
-  { id: "violet", label: "Violet",  cls: "bg-violet-500" },
+  { id: "violet", label: "Violet",  cls: "bg-primary" },
   { id: "blue",   label: "Blue",    cls: "bg-blue-500"   },
   { id: "emerald",label: "Emerald", cls: "bg-emerald-500"},
   { id: "rose",   label: "Rose",    cls: "bg-rose-500"   },
@@ -34,6 +41,14 @@ export default function SettingsAppearance() {
   const [density,  setDensity]  = useState(extras.density ?? "Default");
   const [saved,    setSaved]    = useState(false);
 
+  useEffect(() => {
+    applyAppearancePreferences({
+      accentColor: extras.accentColor,
+      fontSize: extras.fontSize,
+      density: extras.density,
+    });
+  }, [extras.accentColor, extras.fontSize, extras.density]);
+
   function handleThemeClick(t: Theme) {
     setUITheme(t);
   }
@@ -42,13 +57,13 @@ export default function SettingsAppearance() {
     extras.setAccentColor(accent);
     extras.setFontSize(fontSize);
     extras.setDensity(density);
+    applyAppearancePreferences({ accentColor: accent, fontSize, density });
     setSaved(true);
     setTimeout(() => setSaved(false), 2000);
   }
 
   return (
-    <div className="space-y-5">
-      <h2 className="text-lg font-bold text-foreground">Appearance</h2>
+    <SettingsPageShell title="Appearance">
 
       <Card>
         <h3 className="text-sm font-semibold text-foreground mb-4">Theme</h3>
@@ -60,7 +75,7 @@ export default function SettingsAppearance() {
               className={cn(
                 "relative overflow-hidden rounded-xl border-2 aspect-video transition-all",
                 currentTheme === t.id
-                  ? "border-violet-500"
+                  ? "border-primary"
                   : "border-border hover:border-muted-foreground/30"
               )}
             >
@@ -72,7 +87,7 @@ export default function SettingsAppearance() {
                 </div>
               </div>
               {currentTheme === t.id && (
-                <div className="absolute top-2 right-2 w-4 h-4 bg-violet-500 rounded-full flex items-center justify-center">
+                <div className="absolute top-2 right-2 w-4 h-4 bg-primary rounded-full flex items-center justify-center">
                   <CheckCircle className="w-3 h-3 text-white" />
                 </div>
               )}
@@ -115,7 +130,7 @@ export default function SettingsAppearance() {
               className={cn(
                 "flex-1 py-2 rounded-xl border text-xs font-medium transition-all",
                 fontSize === f
-                  ? "bg-violet-600/20 border-violet-500/30 text-violet-400 dark:text-violet-300"
+                  ? "bg-primary/20 border-primary/30 text-primary dark:text-primary/80"
                   : "bg-secondary/60 border-border text-muted-foreground hover:text-foreground"
               )}
             >
@@ -135,7 +150,7 @@ export default function SettingsAppearance() {
               className={cn(
                 "flex-1 py-2 rounded-xl border text-xs font-medium transition-all",
                 density === d
-                  ? "bg-violet-600/20 border-violet-500/30 text-violet-400 dark:text-violet-300"
+                  ? "bg-primary/20 border-primary/30 text-primary dark:text-primary/80"
                   : "bg-secondary/60 border-border text-muted-foreground hover:text-foreground"
               )}
             >
@@ -156,6 +171,6 @@ export default function SettingsAppearance() {
       >
         {saved ? "Applied!" : "Apply changes"}
       </Button>
-    </div>
+    </SettingsPageShell>
   );
 }

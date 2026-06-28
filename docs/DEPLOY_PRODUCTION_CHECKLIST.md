@@ -22,6 +22,16 @@ Required migrations include:
 - `20260527000000_revoke_increment_profile_credits.sql`
 - `20260527000001_pg_trgm_extensions_schema.sql`
 - `20260527120000_revoke_credit_transactions_client_insert.sql`
+- `20260628120000_session_ai_enforcement.sql` (AI session-type policy comments)
+- `20260628130000_production_hardening.sql` (indexes, soft-delete, free-tier RPC)
+- `20260628140000_debrief_stripe_idempotency.sql` (idempotency_log, session_transcripts)
+- `20260628160000_refund_credits_service_role.sql` (service_role refund RPC, MAX_REFUND=25)
+- `20260628161000_public_share_token_rls.sql` (token-scoped share RPCs; drops broad anon SELECT)
+- `20260628161500_check_free_tier_limits_auth_guard.sql` (IDOR guard on free-tier RPC)
+- `20260628162000_audit_logs_baseline.sql` (compliance audit trail — required for export/delete)
+- `20260628163000_fix_questions_index.sql` (drops invalid questions category index)
+- `20260628164000_ai_usage_logs_rls_fix.sql` (restrict AI usage inserts to service_role)
+- `20260628165000_retention_cron_jobs.sql` (document + idempotency cleanup cron)
 
 ## 2. Supabase secrets
 

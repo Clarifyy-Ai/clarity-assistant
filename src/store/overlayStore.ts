@@ -3,6 +3,7 @@ import { create } from "zustand";
 import { persist, subscribeWithSelector } from "zustand/middleware";
 import type { HintStyle, PreferredAIModel } from "@/types/user.types";
 import type { ResumeTalkingPoints, ResumeContext } from "@/lib/ai/resumeFallback";
+import { clearLastFullScreenshot } from "@/lib/audio/screenshotCapture";
 
 // ─────────────────────────────────────────────────────────────────
 // Overlay Position
@@ -41,6 +42,16 @@ export interface ChatMessage {
   timestamp: number;
 }
 
+export interface CaptureAnswerRecord {
+  id: string;
+  question: string;
+  answer: string;
+  thumbnail_base64?: string;
+  captured_at: number;
+}
+
+const MAX_CAPTURE_ANSWER_HISTORY = 3;
+
 interface OverlayStore {
   is_visible: boolean;
   is_stealth_mode: boolean;
@@ -61,6 +72,8 @@ interface OverlayStore {
   overlay_height: number;
 
   auto_generate: boolean;
+  /** Seconds of silence after interviewer stops before auto-generating (1–10). */
+  auto_answer_silence_seconds: number;
   simple_language: boolean;
   save_transcript: boolean;
   session_call_type: "interview" | "regular_call";
@@ -79,16 +92,23 @@ interface OverlayStore {
 
   is_screenshot_loading: boolean;
   screenshot_hint: string | null;
+  capture_answer_history: CaptureAnswerRecord[];
+  capture_answer_index: number;
+  has_recrop_source: boolean;
+  capture_coding_handler: (() => void) | null;
+  adjust_region_handler: (() => void) | null;
 
   session_start_time: number | null;
   activity_log: ActivityLogEntry[];
 
   stealth_opacity: number;
+  font_size: number;
 
   is_peek_active: boolean;
   is_minimal_mode: boolean;
   is_hotkey_help_visible: boolean;
   is_pip_active: boolean;
+  pip_opt_in: boolean;
 
   chat_history: ChatMessage[];
   is_chat_generating: boolean;
@@ -128,6 +148,7 @@ interface OverlayStore {
   setOverlaySize: (width: number, height: number) => void;
 
   setAutoGenerate: (enabled: boolean) => void;
+  setAutoAnswerSilenceSeconds: (seconds: number) => void;
   setSimpleLanguage: (enabled: boolean) => void;
   setSaveTranscript: (enabled: boolean) => void;
   setSessionCallType: (type: "interview" | "regular_call") => void;
@@ -153,11 +174,20 @@ interface OverlayStore {
 
   setScreenshotLoading: (loading: boolean) => void;
   setScreenshotHint: (hint: string | null) => void;
+  pushCaptureAnswer: (entry: Omit<CaptureAnswerRecord, "id" | "captured_at"> & {
+    id?: string;
+    captured_at?: number;
+  }) => void;
+  selectCaptureAnswer: (index: number) => void;
+  setHasRecropSource: (has: boolean) => void;
+  setCaptureCodingHandler: (handler: (() => void) | null) => void;
+  setAdjustRegionHandler: (handler: (() => void) | null) => void;
 
   startActivityTimer: () => void;
   logActivity: (event: string) => void;
 
   setStealthOpacity: (opacity: number) => void;
+  setFontSize: (size: number) => void;
 
   setPeekActive: (active: boolean) => void;
 
@@ -167,6 +197,7 @@ interface OverlayStore {
   toggleHotkeyHelp: () => void;
 
   setPipActive: (active: boolean) => void;
+  setPipOptIn: (enabled: boolean) => void;
 }
 
 const DEFAULT_POSITION: OverlayPosition = (() => {
@@ -211,6 +242,7 @@ export const useOverlayStore = create<OverlayStore>()(
       overlay_height: DEFAULT_HEIGHT,
 
       auto_generate: true,
+      auto_answer_silence_seconds: 3,
       simple_language: false,
       save_transcript: true,
       session_call_type: "interview",
@@ -229,17 +261,24 @@ export const useOverlayStore = create<OverlayStore>()(
 
       is_screenshot_loading: false,
       screenshot_hint: null,
+      capture_answer_history: [],
+      capture_answer_index: -1,
+      has_recrop_source: false,
+      capture_coding_handler: null,
+      adjust_region_handler: null,
 
       session_start_time: null,
       activity_log: [],
 
       stealth_opacity: 90,
+      font_size: 13,
 
       is_peek_active: false,
       is_minimal_mode: false,
 
       is_hotkey_help_visible: false,
       is_pip_active: false,
+      pip_opt_in: false,
 
       chat_history: [],
       is_chat_generating: false,
@@ -485,6 +524,13 @@ export const useOverlayStore = create<OverlayStore>()(
         }),
 
       setAutoGenerate: (auto_generate) => set({ auto_generate }),
+      setAutoAnswerSilenceSeconds: (auto_answer_silence_seconds) =>
+        set({
+          auto_answer_silence_seconds: Math.max(
+            1,
+            Math.min(10, Math.round(auto_answer_silence_seconds)),
+          ),
+        }),
       setSimpleLanguage: (simple_language) => set({ simple_language }),
       setSaveTranscript: (save_transcript) => set({ save_transcript }),
       setSessionCallType: (session_call_type) => set({ session_call_type }),
@@ -533,7 +579,8 @@ export const useOverlayStore = create<OverlayStore>()(
         }),
       hidePanic: () => set({ is_panic_visible: false }),
 
-      resetSessionState: () =>
+      resetSessionState: () => {
+        clearLastFullScreenshot();
         set({
           current_question: "",
           current_hint: "",
@@ -551,6 +598,9 @@ export const useOverlayStore = create<OverlayStore>()(
 
           screenshot_hint: null,
           is_screenshot_loading: false,
+          capture_answer_history: [],
+          capture_answer_index: -1,
+          has_recrop_source: false,
 
           network_color: "green",
           active_tab: "answer",
@@ -571,12 +621,53 @@ export const useOverlayStore = create<OverlayStore>()(
           pinned_hints: [],
 
           session_call_type: "interview",
-        }),
+        });
+      },
 
       setScreenshotLoading: (is_screenshot_loading) =>
         set({ is_screenshot_loading }),
       setScreenshotHint: (screenshot_hint) =>
         set({ screenshot_hint, is_screenshot_loading: false }),
+
+      pushCaptureAnswer: (entry) =>
+        set((s) => {
+          const record: CaptureAnswerRecord = {
+            id: entry.id ?? `cap-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            question: entry.question,
+            answer: entry.answer,
+            thumbnail_base64: entry.thumbnail_base64,
+            captured_at: entry.captured_at ?? Date.now(),
+          };
+          const next = [...s.capture_answer_history, record].slice(
+            -MAX_CAPTURE_ANSWER_HISTORY,
+          );
+          return {
+            capture_answer_history: next,
+            capture_answer_index: next.length - 1,
+          };
+        }),
+
+      selectCaptureAnswer: (index) =>
+        set((s) => {
+          const entry = s.capture_answer_history[index];
+          if (!entry) return {};
+          return {
+            capture_answer_index: index,
+            current_hint: entry.answer,
+            current_question: entry.question,
+            hint_state: "ready" as HintState,
+            streaming_buffer: "",
+            active_tab: "answer",
+          };
+        }),
+
+      setHasRecropSource: (has_recrop_source) => set({ has_recrop_source }),
+
+      setCaptureCodingHandler: (capture_coding_handler) =>
+        set({ capture_coding_handler }),
+
+      setAdjustRegionHandler: (adjust_region_handler) =>
+        set({ adjust_region_handler }),
 
       startActivityTimer: () =>
         set({
@@ -591,6 +682,11 @@ export const useOverlayStore = create<OverlayStore>()(
       setStealthOpacity: (opacity) =>
         set({
           stealth_opacity: Math.max(20, Math.min(100, opacity)),
+        }),
+
+      setFontSize: (font_size) =>
+        set({
+          font_size: Math.max(11, Math.min(20, font_size)),
         }),
 
       setPeekActive: (is_peek_active) =>
@@ -618,6 +714,7 @@ export const useOverlayStore = create<OverlayStore>()(
         set((s) => ({ is_hotkey_help_visible: !s.is_hotkey_help_visible })),
 
       setPipActive: (is_pip_active) => set({ is_pip_active }),
+      setPipOptIn: (pip_opt_in) => set({ pip_opt_in }),
     })),
     {
       name: "clarify-overlay",
@@ -629,11 +726,14 @@ export const useOverlayStore = create<OverlayStore>()(
         is_stealth_mode: state.is_stealth_mode,
         is_proctor_safe: state.is_proctor_safe,
         auto_generate: state.auto_generate,
+        auto_answer_silence_seconds: state.auto_answer_silence_seconds,
         simple_language: state.simple_language,
         save_transcript: state.save_transcript,
         session_language: state.session_language,
         stealth_opacity: state.stealth_opacity,
+        font_size: state.font_size,
         is_minimal_mode: state.is_minimal_mode,
+        pip_opt_in: state.pip_opt_in,
       }),
     }
   )

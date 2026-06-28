@@ -1,4 +1,3 @@
-// @ts-nocheck
 // ─────────────────────────────────────────────────────────────────────────────
 // useAuth.test.ts — Tests for current useAuth hook surface:
 //   signInWithEmail/login, signup, signOut, sendPasswordReset,
@@ -11,40 +10,75 @@ import { renderHook, act } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
 import React from "react";
 
-// ── Mock Supabase ────────────────────────────────────────────────────────────
-const mockSignIn  = vi.fn();
-const mockSignUp  = vi.fn();
+// ── Mock Supabase auth ───────────────────────────────────────────────────────
+const mockSignIn = vi.fn();
+const mockSignUp = vi.fn();
 const mockSignOut = vi.fn().mockResolvedValue({ error: null });
-const mockReset   = vi.fn().mockResolvedValue({ error: null });
-const mockUpdate  = vi.fn();
-const mockEq      = vi.fn();
+const mockReset = vi.fn().mockResolvedValue({ error: null });
+
+const mockProfile = {
+  id: "u1",
+  email: "u@x.com",
+  full_name: "Test User",
+  plan_id: "free",
+  credits: 10,
+  onboarding_completed: true,
+};
+
+const mockGetByIdMaybe = vi.fn();
+const mockProfilesUpdate = vi.fn();
+const mockHasRole = vi.fn().mockResolvedValue(false);
 
 vi.mock("@/lib/supabase/client", () => ({
   supabase: {
     auth: {
-      signInWithPassword:    (...a: unknown[]) => mockSignIn(...a),
-      signUp:                (...a: unknown[]) => mockSignUp(...a),
-      signOut:               () => mockSignOut(),
+      signInWithPassword: (...a: unknown[]) => mockSignIn(...a),
+      signUp: (...a: unknown[]) => mockSignUp(...a),
+      signOut: () => mockSignOut(),
       resetPasswordForEmail: (...a: unknown[]) => mockReset(...a),
-      signInWithOAuth:       vi.fn().mockResolvedValue({ error: null }),
-      updateUser:            vi.fn().mockResolvedValue({ error: null }),
-      verifyOtp:             vi.fn().mockResolvedValue({ error: null }),
-      resend:                vi.fn().mockResolvedValue({ error: null }),
+      signInWithOAuth: vi.fn().mockResolvedValue({ error: null }),
+      updateUser: vi.fn().mockResolvedValue({ error: null }),
+      verifyOtp: vi.fn().mockResolvedValue({ error: null }),
+      resend: vi.fn().mockResolvedValue({ error: null }),
     },
-    from: vi.fn(() => ({
-      update: (...a: unknown[]) => { mockUpdate(...a); return { eq: mockEq }; },
-    })),
     storage: {
       from: vi.fn(() => ({
-        upload:        vi.fn().mockResolvedValue({ error: null }),
-        getPublicUrl:  vi.fn(() => ({ data: { publicUrl: "https://cdn/x.png" } })),
+        upload: vi.fn().mockResolvedValue({ error: null }),
+        getPublicUrl: vi.fn(() => ({ data: { publicUrl: "https://cdn/x.png" } })),
       })),
     },
   },
+  STORAGE_BUCKETS: { AVATARS: "avatars" },
+  uploadFile: vi.fn(),
 }));
 
-import { useAuthStore } from "@/store/userStore";
+vi.mock("@/lib/supabase/database", () => ({
+  profilesDB: {
+    getByIdMaybe: (...a: unknown[]) => mockGetByIdMaybe(...a),
+    update: (...a: unknown[]) => mockProfilesUpdate(...a),
+  },
+  userRolesDB: {
+    hasRole: (...a: unknown[]) => mockHasRole(...a),
+  },
+}));
+
+import { useAuthStore } from "@/store/authStore";
 import { useAuth } from "@/hooks/useAuth";
+
+const mockUser = {
+  id: "u1",
+  email: "u@x.com",
+  app_metadata: {},
+  user_metadata: { full_name: "Test User" },
+};
+
+const mockSession = {
+  access_token: "test-access-token",
+  refresh_token: "test-refresh-token",
+  expires_in: 3600,
+  token_type: "bearer",
+  user: mockUser,
+};
 
 function wrapper({ children }: { children: React.ReactNode }) {
   return React.createElement(MemoryRouter, null, children);
@@ -52,12 +86,16 @@ function wrapper({ children }: { children: React.ReactNode }) {
 
 function seedProfile(plan: string, isAdmin = false) {
   useAuthStore.setState({
-    user:    { id: "u1", email: "u@x.com" } as never,
-    profile: { id: "u1", plan_id: plan, credits: 10 } as never,
-    session: { access_token: "tok" } as never,
+    user: mockUser as never,
+    profile: { ...mockProfile, plan_id: plan } as never,
+    session: mockSession as never,
+    credits: 10,
+    planId: plan,
     isAdmin,
     isAuthenticated: true,
     isLoading: false,
+    status: "authenticated",
+    isProfileLoaded: true,
   });
 }
 
@@ -65,32 +103,44 @@ beforeEach(() => {
   vi.clearAllMocks();
   mockReset.mockResolvedValue({ error: null });
   mockSignOut.mockResolvedValue({ error: null });
-  mockEq.mockResolvedValue({ error: null });
+  mockGetByIdMaybe.mockResolvedValue(mockProfile);
+  mockProfilesUpdate.mockImplementation(async (_userId, patch) => ({
+    ...mockProfile,
+    ...patch,
+  }));
+  mockHasRole.mockResolvedValue(false);
   seedProfile("free");
 });
 
 describe("useAuth — sign in [T-0010]", () => {
-  it("calls signInWithPassword", async () => {
-    mockSignIn.mockResolvedValueOnce({ error: null });
+  it("calls signInWithPassword with full session payload", async () => {
+    mockSignIn.mockResolvedValueOnce({
+      data: { session: mockSession, user: mockUser },
+      error: null,
+    });
     const { result } = renderHook(() => useAuth(), { wrapper });
 
-    let res: any;
+    let res: Awaited<ReturnType<typeof result.current.login>>;
     await act(async () => {
       res = await result.current.login("a@b.com", "pw");
     });
 
     expect(mockSignIn).toHaveBeenCalledWith({ email: "a@b.com", password: "pw" });
-    expect(res.error).toBeNull();
+    expect(mockGetByIdMaybe).toHaveBeenCalledWith("u1");
+    expect(res!.error).toBeNull();
+    expect(useAuthStore.getState().user?.id).toBe("u1");
   });
 
   it("propagates error", async () => {
-    mockSignIn.mockResolvedValueOnce({ error: new Error("bad") });
+    mockSignIn.mockResolvedValueOnce({ data: { session: null, user: null }, error: new Error("bad") });
     const { result } = renderHook(() => useAuth(), { wrapper });
 
-    let res: any;
-    await act(async () => { res = await result.current.login("a@b.com", "pw"); });
+    let res: Awaited<ReturnType<typeof result.current.login>>;
+    await act(async () => {
+      res = await result.current.login("a@b.com", "pw");
+    });
 
-    expect(res.error?.message).toBe("bad");
+    expect(res!.error?.message).toBe("bad");
   });
 });
 
@@ -113,7 +163,9 @@ describe("useAuth — signup [T-0011]", () => {
 describe("useAuth — signOut [T-0020]", () => {
   it("invokes supabase signOut", async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
-    await act(async () => { await result.current.signOut(); });
+    await act(async () => {
+      await result.current.signOut();
+    });
     expect(mockSignOut).toHaveBeenCalled();
   });
 });
@@ -121,7 +173,9 @@ describe("useAuth — signOut [T-0020]", () => {
 describe("useAuth — password reset [T-0030]", () => {
   it("requests password reset email", async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
-    await act(async () => { await result.current.sendPasswordReset("a@b.com"); });
+    await act(async () => {
+      await result.current.sendPasswordReset("a@b.com");
+    });
     expect(mockReset).toHaveBeenCalledWith("a@b.com", expect.objectContaining({
       redirectTo: expect.stringContaining("/reset-password"),
     }));
@@ -129,12 +183,13 @@ describe("useAuth — password reset [T-0030]", () => {
 });
 
 describe("useAuth — updateProfile [T-0040]", () => {
-  it("updates profile in DB and store", async () => {
+  it("updates profile via profilesDB and store", async () => {
     const { result } = renderHook(() => useAuth(), { wrapper });
     await act(async () => {
       await result.current.updateProfile({ full_name: "New" });
     });
-    expect(mockUpdate).toHaveBeenCalled();
+    expect(mockProfilesUpdate).toHaveBeenCalledWith("u1", { full_name: "New" });
+    expect(useAuthStore.getState().profile?.full_name).toBe("New");
   });
 });
 
@@ -151,13 +206,18 @@ describe("useAuth — canAccessFeature [T-0050]", () => {
     expect(result.current.canAccessFeature("live_copilot")).toBe(true);
   });
 
-  it("only team/enterprise can access team_rooms", () => {
+  it("only elite/enterprise can access team_rooms", () => {
     seedProfile("pro");
     const { result } = renderHook(() => useAuth(), { wrapper });
     expect(result.current.canAccessFeature("team_rooms")).toBe(false);
-    seedProfile("team");
-    const { result: r2 } = renderHook(() => useAuth(), { wrapper });
-    expect(r2.current.canAccessFeature("team_rooms")).toBe(true);
+
+    seedProfile("elite");
+    const { result: eliteResult } = renderHook(() => useAuth(), { wrapper });
+    expect(eliteResult.current.canAccessFeature("team_rooms")).toBe(true);
+
+    seedProfile("enterprise");
+    const { result: entResult } = renderHook(() => useAuth(), { wrapper });
+    expect(entResult.current.canAccessFeature("team_rooms")).toBe(true);
   });
 });
 

@@ -185,7 +185,7 @@ export default function AuthCallback(): JSX.Element {
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
       <div className="text-center space-y-4">
-        <div className="h-10 w-10 animate-spin rounded-full border-2 border-violet-500 border-t-transparent mx-auto" />
+        <div className="h-10 w-10 animate-spin rounded-full border-2 border-primary border-t-transparent mx-auto" />
 
         <div>
           <p className="text-sm text-foreground font-medium">

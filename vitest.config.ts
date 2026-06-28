@@ -37,6 +37,22 @@ export default defineConfig({
         "src/**/index.tsx",
         "**/*.d.ts",
       ],
+      // Incremental targets for billing/auth — raise as unit tests expand.
+      // Run `npm run test:coverage` locally to inspect current percentages.
+      thresholds: {
+        "src/lib/billing/**": {
+          lines: 25,
+          functions: 20,
+          branches: 15,
+          statements: 25,
+        },
+        "src/store/authStore.ts": {
+          lines: 8,
+          functions: 8,
+          branches: 5,
+          statements: 8,
+        },
+      },
     },
   },
 });

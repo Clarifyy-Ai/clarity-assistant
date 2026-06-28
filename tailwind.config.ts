@@ -215,6 +215,7 @@ const config: Config = {
         dropdown:        "500",
         tooltip:         "400",
         banner:          "300",
+        "overlay-root":  "1100",
         "overlay-pip":   "9998",
         "overlay-above": "9999",
       },

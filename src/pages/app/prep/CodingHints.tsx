@@ -13,6 +13,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { CodeScratchpad } from "@/components/prep/CodeScratchpad";
+import { CodeHighlight, renderTextWithCodeBlocks } from "@/components/prep/CodeHighlight";
 import { supabase } from "@/lib/supabase/client";
 
 const CATEGORIES = [
@@ -174,6 +175,11 @@ export default function CodingHints() {
       <PageHeader
         title="Coding Problems"
         description="Browse interview coding problems, get AI hints and solution explanations"
+        breadcrumbs={[
+          { label: "Dashboard", href: "/app/dashboard" },
+          { label: "Prep Lab", href: "/app/prep" },
+          { label: "Coding Hints" },
+        ]}
       />
 
       <div className="flex flex-col lg:flex-row gap-5">
@@ -240,7 +246,7 @@ export default function CodingHints() {
                 className={cn(
                   "w-full text-left px-4 py-3 rounded-xl border transition-all",
                   selected === p.id
-                    ? "bg-violet-600/10 border-violet-500/30"
+                    ? "bg-primary/10 border-primary/30"
                     : "bg-secondary/50 border-border hover:bg-secondary"
                 )}
               >
@@ -289,9 +295,11 @@ export default function CodingHints() {
                 </div>
                 <p className="text-sm text-foreground leading-relaxed">{activeProblem.description}</p>
                 {activeProblem.examples && (
-                  <div className="mt-4 bg-muted/40 rounded-xl p-4 font-mono text-xs text-foreground whitespace-pre-wrap">
-                    {activeProblem.examples}
-                  </div>
+                  <CodeHighlight
+                    language="python"
+                    code={activeProblem.examples}
+                    className="mt-4"
+                  />
                 )}
               </Card>
 
@@ -316,7 +324,7 @@ export default function CodingHints() {
                     className={cn(
                       "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
                       depth === d.id
-                        ? "bg-violet-500/20 border-violet-500/30 text-violet-300"
+                        ? "bg-primary/20 border-primary/30 text-primary"
                         : "bg-secondary border-border text-muted-foreground hover:text-foreground"
                     )}
                   >
@@ -380,7 +388,7 @@ export default function CodingHints() {
                       <Copy className="w-3.5 h-3.5" />
                     </button>
                   </div>
-                  <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">{solutionText}</p>
+                  <div className="space-y-2">{renderTextWithCodeBlocks(solutionText)}</div>
                 </Card>
               )}
 

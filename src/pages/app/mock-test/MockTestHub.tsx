@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
@@ -6,23 +5,27 @@ import {
   ChevronRight, Zap, Target, Clock,
   FlaskConical, BarChart2, Flame,
 } from "lucide-react";
-import { supabase } from "@/lib/supabase/client";
+import {
+  mockTestsDB,
+  testAnalysesDB,
+  questionsDB,
+  type MockTestSummary,
+} from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { GovExamShowcase } from "@/components/marketing/GovExamShowcase";
 import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface RecentTest {
-  id: string;
-  test_name: string;
-  status: string;
-  created_at: string;
-  config: Record<string, unknown>;
-}
+interface RecentTest extends MockTestSummary {}
 
 interface HubStats {
   totalTests: number;
@@ -67,10 +70,10 @@ const EXAM_TYPES = [
     id: "SSC_CGL",
     name: "SSC CGL",
     description: "Reasoning · Quant · English · GK",
-    color: "from-violet-500/20 to-violet-600/10",
-    border: "border-violet-500/30",
+    color: "from-primary/20 to-primary/10",
+    border: "border-primary/30",
     badge: "Government",
-    badgeColor: "bg-violet-500/10 text-violet-600",
+    badgeColor: "bg-primary/10 text-primary",
   },
   {
     id: "IBPS_PO",
@@ -168,62 +171,21 @@ export default function MockTestHub(): React.ReactElement {
     setLoading(true);
     setLoadError(null);
     try {
-      const [recentRes, questionsRes, analysesRes, completedCountRes, streakRes] = await Promise.all([
-        // Recent tests for the list (last 5 any status)
-        supabase
-          .from("mock_tests")
-          .select("id, test_name, status, created_at, config")
-          .eq("user_id", user!.id)
-          .order("created_at", { ascending: false })
-          .limit(5),
-        // My questions count
-        supabase
-          .from("questions")
-          .select("id", { count: "exact", head: true })
-          .eq("uploaded_by", user!.id),
-        // All test analyses for avg accuracy
-        supabase
-          .from("test_analyses")
-          .select("accuracy")
-          .eq("user_id", user!.id),
-        // Total completed test count (not limited to 5)
-        supabase
-          .from("mock_tests")
-          .select("id", { count: "exact", head: true })
-          .eq("user_id", user!.id)
-          .eq("status", "COMPLETED"),
-        // Submitted_at dates for streak calculation (last 90 days)
-        supabase
-          .from("mock_tests")
-          .select("submitted_at")
-          .eq("user_id", user!.id)
-          .eq("status", "COMPLETED")
-          .not("submitted_at", "is", null)
-          .order("submitted_at", { ascending: false })
-          .limit(90),
-      ]);
+      const [recentTests, totalQuestions, accuracies, totalTests, completedDates] =
+        await Promise.all([
+          mockTestsDB.listRecentByUserId(user.id, 5),
+          questionsDB.countByUploadedBy(user.id),
+          testAnalysesDB.listAccuracyByUserId(user.id),
+          mockTestsDB.countCompletedByUserId(user.id),
+          mockTestsDB.listSubmittedAtByUserId(user.id, 90),
+        ]);
 
-      const queryError =
-        recentRes.error ??
-        questionsRes.error ??
-        analysesRes.error ??
-        completedCountRes.error ??
-        streakRes.error;
-      if (queryError) throw queryError;
+      setRecentTests(recentTests);
 
-      setRecentTests((recentRes.data ?? []) as RecentTest[]);
-
-      const totalTests = completedCountRes.count ?? 0;
-      const totalQuestions = questionsRes.count ?? 0;
-      const analyses = analysesRes.data ?? [];
-      const avgAccuracy = analyses.length > 0
-        ? Math.round(analyses.reduce((s, a) => s + (a.accuracy ?? 0), 0) / analyses.length)
+      const avgAccuracy = accuracies.length > 0
+        ? Math.round(accuracies.reduce((s, a) => s + a, 0) / accuracies.length)
         : 0;
 
-      // Use submitted_at for streak (actual completion date)
-      const completedDates = (streakRes.data ?? [])
-        .map((r) => (r as unknown as { submitted_at: string }).submitted_at)
-        .filter(Boolean);
       const streakDays = calcStreakDays(completedDates);
 
       setStats({ totalTests, totalQuestions, avgAccuracy, streakDays });
@@ -253,17 +215,14 @@ export default function MockTestHub(): React.ReactElement {
 
   return (
     <div className="space-y-6">
-      {/* ── Header ─────────────────────────────────────────── */}
-      <div className="space-y-3">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="min-w-0">
-            <h1 className="text-xl font-bold text-foreground sm:text-2xl md:text-3xl">
-              Mock Test Engine
-            </h1>
-            <p className="mt-1 text-sm text-muted-foreground line-clamp-2">
-              Practice with previous year papers and AI-generated questions for JEE, NEET, UPSC, SSC, and more.
-            </p>
-          </div>
+      <PageHeader
+        title="Mock Tests"
+        description="Practice with previous year papers and AI-generated questions for JEE, NEET, UPSC, SSC, and more."
+        breadcrumbs={[
+          { label: "Dashboard", href: "/app/dashboard" },
+          { label: "Mock Tests" },
+        ]}
+        actions={
           <div className="flex gap-2 shrink-0">
             <Link
               to="/app/mock-test/my-questions"
@@ -277,17 +236,16 @@ export default function MockTestHub(): React.ReactElement {
               Quick Drill
             </Button>
           </div>
-        </div>
-      </div>
+        }
+      />
 
+      <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
       {loadError && (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-3">
-          <span className="flex-1">{loadError}</span>
-          <Button size="sm" variant="outline" onClick={() => void loadData()}>
-            Retry
-          </Button>
-        </div>
+        <InlineErrorRetry message={loadError} onRetry={() => void loadData()} />
       )}
+
+      {/* ── Animated feature preview ───────────────────────── */}
+      <GovExamShowcase compact className="mb-2" />
 
       {/* ── Stats bar: 4 stats including streak ───────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -310,11 +268,11 @@ export default function MockTestHub(): React.ReactElement {
       </div>
 
       {/* ── Quick Drill callout ───────────────────────────── */}
-      <Card className="border-violet-500/30 bg-gradient-to-r from-violet-500/10 to-violet-600/5">
+      <Card className="border-primary/30 bg-gradient-to-r from-primary/10 to-primary/5">
         <CardContent className="flex items-center justify-between py-4 px-5">
           <div className="flex items-center gap-3">
-            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-600/20">
-              <Zap className="h-5 w-5 text-violet-600" />
+            <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary/20">
+              <Zap className="h-5 w-5 text-primary" />
             </div>
             <div>
               <p className="font-semibold text-foreground">Quick Drill</p>
@@ -384,21 +342,22 @@ export default function MockTestHub(): React.ReactElement {
         {loading ? (
           <div className="space-y-2">
             {[1, 2, 3].map((i) => (
-              <div key={i} className="h-14 rounded-xl bg-muted/30 animate-pulse" />
+              <SkeletonCard key={i} />
             ))}
           </div>
         ) : recentTests.length === 0 ? (
           <Card className="border-dashed">
-            <CardContent className="flex flex-col items-center justify-center py-10 text-center">
-              <FlaskConical className="h-10 w-10 text-muted-foreground mb-3" />
-              <p className="font-medium text-foreground">No tests yet</p>
-              <p className="text-sm text-muted-foreground mt-1">Pick an exam type above to take your first test.</p>
-            </CardContent>
+            <EmptyState
+              icon={FlaskConical}
+              title="No tests yet"
+              description="Pick an exam type above to take your first test."
+              compact
+            />
           </Card>
         ) : (
           <div className="space-y-2">
             {recentTests.map((test) => (
-              <Card key={test.id} className="hover:border-violet-500/30 transition-colors">
+              <Card key={test.id} className="hover:border-primary/30 transition-colors">
                 <CardContent className="flex items-center justify-between py-3 px-4">
                   <div className="flex items-center gap-3 min-w-0">
                     <ClipboardList className="h-4 w-4 shrink-0 text-muted-foreground" />
@@ -422,7 +381,7 @@ export default function MockTestHub(): React.ReactElement {
                     {test.status === "IN_PROGRESS" && (
                       <Link
                         to={`/app/mock-test/session/${test.id}`}
-                        className="inline-flex items-center rounded-xl bg-violet-600/15 border border-violet-500/20 px-2.5 py-1 text-xs font-medium text-violet-600 hover:bg-violet-600/25 transition-colors"
+                        className="inline-flex items-center rounded-xl bg-primary/15 border border-primary/20 px-2.5 py-1 text-xs font-medium text-primary hover:bg-primary/25 transition-colors"
                       >Resume</Link>
                     )}
                   </div>
@@ -462,7 +421,7 @@ export default function MockTestHub(): React.ReactElement {
             <Link
               key={to}
               to={to}
-              className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 transition-all hover:border-violet-500/30 hover:bg-accent/5"
+              className="flex items-center gap-3 rounded-xl border bg-card px-4 py-3 transition-all hover:border-primary/30 hover:bg-accent/5"
             >
               <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-muted">
                 <Icon className="h-4 w-4 text-muted-foreground" />
@@ -476,6 +435,7 @@ export default function MockTestHub(): React.ReactElement {
           ))}
         </div>
       </section>
+      </div>
     </div>
   );
 }

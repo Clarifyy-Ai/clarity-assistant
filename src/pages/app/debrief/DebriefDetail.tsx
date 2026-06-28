@@ -1,25 +1,45 @@
-// @ts-nocheck -- retained: complex Supabase row types with manual schema columns
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
-import { sessionDebriefsDB, sessionsDB } from "@/lib/supabase/database";
+import {
+  sessionDebriefsDB,
+  sessionsDB,
+  sessionTranscriptsDB,
+  sessionAnswersDB,
+  scorecardsDB,
+} from "@/lib/supabase/database";
+import { enrichDetailedReport } from "@/lib/debrief/enrichDetailedReport";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import {
-  Brain, ChevronLeft, TrendingUp,
+  Brain, TrendingUp,
   AlertTriangle, CheckCircle, Target,
   BookOpen, Zap, Star, Clock,
   BarChart2, FlaskConical, ChevronRight,
-  Lightbulb, Calendar, RefreshCw,
+  Lightbulb, Calendar, ScrollText,
+  MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { toast } from "sonner";
 import { DebriefExtras } from "@/components/session/DebriefExtras";
 import { DebriefLoadingSteps } from "@/components/debrief/DebriefLoadingSteps";
+import {
+  DebriefSessionMeta,
+  DebriefQuestionsList,
+  DebriefEventTimeline,
+  DebriefMissedKeywords,
+  DebriefVocalCharts,
+  DebriefConfidenceBreakdown,
+  DebriefShareButton,
+  buildSessionEvents,
+  type DetailedReport,
+} from "@/components/debrief/DebriefAnalyticsPanels";
 
 export default function DebriefDetail() {
   const { id }   = useParams<{ id: string }>();
@@ -32,6 +52,10 @@ export default function DebriefDetail() {
   const [genning,    setGenning]    = useState(false);
   const [loadStep,   setLoadStep]   = useState(0);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [transcript, setTranscript] = useState<string | null>(null);
+  const [answers, setAnswers] = useState<any[]>([]);
+  const [scorecard, setScorecard] = useState<any>(null);
+  const [transcriptSegments, setTranscriptSegments] = useState<any[]>([]);
 
   // ── Generate debrief from edge function ──────────────────────
   // FIX 1: fetchEdge returns parsed data directly — no .ok / .json()
@@ -74,10 +98,28 @@ export default function DebriefDetail() {
         setDebrief(db);
         if (db.session_id) {
           try {
-            const sess = await sessionsDB.getById(db.session_id);
+            const [sess, ans, sc, segments] = await Promise.all([
+              sessionsDB.getById(db.session_id),
+              sessionAnswersDB.listBySessionId(db.session_id),
+              scorecardsDB.getBySessionId(db.session_id).catch(() => null),
+              sessionTranscriptsDB.listSegmentsBySessionId(db.session_id).catch(() => []),
+            ]);
             setSession(sess);
+            setAnswers(ans);
+            setScorecard(sc);
+            setTranscriptSegments(segments);
+            try {
+              const tx = await sessionTranscriptsDB.getBySessionId(db.session_id);
+              setTranscript(tx ?? sess?.notes ?? null);
+            } catch {
+              setTranscript(sess?.notes ?? null);
+            }
           } catch {
             setSession(null);
+            setTranscript(null);
+            setAnswers([]);
+            setScorecard(null);
+            setTranscriptSegments([]);
           }
         }
       } else {
@@ -106,10 +148,47 @@ export default function DebriefDetail() {
     debrief?.overall_grade?.startsWith("B") ? "blue"    :
     debrief?.overall_grade?.startsWith("C") ? "amber"   : "red";
 
+  const detailedReport = useMemo(() => {
+    const raw = (debrief?.detailed_report ?? {}) as DetailedReport;
+    return enrichDetailedReport(raw, session, transcriptSegments);
+  }, [debrief?.detailed_report, session, transcriptSegments]);
+
+  const sessionEvents = useMemo(
+    () => buildSessionEvents(session, answers, transcriptSegments),
+    [session, answers, transcriptSegments],
+  );
+
+  const handleShareToken = useCallback(async (token: string) => {
+    if (!debrief?.id || !user?.id) return;
+    await sessionDebriefsDB.updateShareToken(debrief.id, user.id, token);
+    setDebrief((d: any) => ({
+      ...d,
+      detailed_report: { ...(d.detailed_report ?? {}), share_token: token, is_shared: true },
+    }));
+  }, [debrief?.id, user?.id]);
+
+  const debriefTitle = session?.session_type
+    ? `${session.session_type.charAt(0).toUpperCase() + session.session_type.slice(1)} Interview`
+    : "Session Debrief";
+  const debriefSubtitle = debrief?.created_at
+    ? format(new Date(debrief.created_at), "EEEE, MMMM d yyyy")
+    : undefined;
+
+  const debriefBreadcrumbs = [
+    { label: "Dashboard", href: "/app/dashboard" },
+    { label: "Debriefs", href: "/app/debrief" },
+    { label: debriefTitle },
+  ];
+
   // ── Loading state — initial DB fetch ─────────────────────────
   if (loading) {
     return (
-      <div className="max-w-3xl space-y-5 py-12">
+      <div className="max-w-3xl space-y-5">
+        <PageHeader
+          title="Session Debrief"
+          description="Loading debrief…"
+          breadcrumbs={debriefBreadcrumbs.slice(0, 2).concat([{ label: "Loading…" }])}
+        />
         <DebriefLoadingSteps activeIndex={loadStep} />
         <SkeletonCard />
       </div>
@@ -120,8 +199,8 @@ export default function DebriefDetail() {
   if (genning) {
     return (
       <div className="max-w-3xl flex flex-col items-center justify-center py-24 gap-5">
-        <div className="w-14 h-14 rounded-2xl bg-violet-600/20 flex items-center justify-center">
-          <Brain className="w-7 h-7 text-violet-400 animate-pulse" />
+        <div className="w-14 h-14 rounded-2xl bg-primary/20 flex items-center justify-center">
+          <Brain className="w-7 h-7 text-primary animate-pulse" />
         </div>
         <div className="text-center space-y-2">
           <p className="text-sm font-semibold text-foreground">
@@ -139,22 +218,22 @@ export default function DebriefDetail() {
   // ── Error state ───────────────────────────────────────────────
   if (fetchError && !debrief) {
     return (
-      <div className="text-center py-20 space-y-4">
-        <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto" />
-        <p className="text-sm text-muted-foreground">{fetchError}</p>
-        <div className="flex gap-2 justify-center">
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={fetchDebrief}
-            leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
-          >
-            Retry
-          </Button>
-          <Button variant="secondary" size="sm" onClick={() => navigate("/app/debrief")}>
-            ← Back to debriefs
-          </Button>
-        </div>
+      <div className="max-w-3xl space-y-5">
+        <PageHeader
+          title="Session Debrief"
+          breadcrumbs={debriefBreadcrumbs.slice(0, 2).concat([{ label: "Error" }])}
+        />
+        <Card>
+          <EmptyState
+            icon={AlertTriangle}
+            title="Couldn't load debrief"
+            description={fetchError}
+            actionLabel="Retry"
+            onAction={fetchDebrief}
+            secondaryActionLabel="Back to debriefs"
+            onSecondaryAction={() => navigate("/app/debrief")}
+          />
+        </Card>
       </div>
     );
   }
@@ -162,11 +241,20 @@ export default function DebriefDetail() {
   // ── Not found state ───────────────────────────────────────────
   if (!debrief) {
     return (
-      <div className="text-center py-20 space-y-4">
-        <p className="text-muted-foreground">Debrief not found.</p>
-        <Button variant="secondary" size="sm" onClick={() => navigate("/app/debrief")}>
-          ← Back to debriefs
-        </Button>
+      <div className="max-w-3xl space-y-5">
+        <PageHeader
+          title="Session Debrief"
+          breadcrumbs={debriefBreadcrumbs.slice(0, 2).concat([{ label: "Not found" }])}
+        />
+        <Card>
+          <EmptyState
+            icon={Brain}
+            title="Debrief not found"
+            description="This debrief may have been deleted or you may not have access."
+            actionLabel="Back to debriefs"
+            onAction={() => navigate("/app/debrief")}
+          />
+        </Card>
       </div>
     );
   }
@@ -174,19 +262,30 @@ export default function DebriefDetail() {
   // ── Render ────────────────────────────────────────────────────
 
   return (
-    <div className="max-w-3xl space-y-5">
+    <div className="max-w-3xl space-y-5 animate-in fade-in slide-in-from-bottom-2 duration-200">
 
-      {/* Back nav */}
-      <button
-        onClick={() => navigate("/app/debrief")}
-        className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-      >
-        <ChevronLeft className="w-4 h-4" />
-        Debriefs
-      </button>
+      <PageHeader
+        title={debriefTitle + (session?.target_company ? ` — ${session.target_company}` : "")}
+        description={debriefSubtitle || undefined}
+        breadcrumbs={debriefBreadcrumbs}
+        actions={
+          <DebriefShareButton
+            debriefId={debrief.id}
+            report={detailedReport}
+            onShareToken={handleShareToken}
+            previewTitle={debriefTitle + (session?.target_company ? ` — ${session.target_company}` : "")}
+            previewScore={debrief.overall_grade ?? scorecard?.overall_score ?? null}
+            previewSummary={debrief.summary ?? null}
+          />
+        }
+      />
+
+      {fetchError && (
+        <InlineErrorRetry message={fetchError} onRetry={fetchDebrief} />
+      )}
 
       {/* Hero grade card */}
-      <Card className="bg-gradient-to-br from-violet-600/10 to-blue-600/10 border-violet-500/20">
+      <Card className="bg-gradient-to-br from-primary/10 to-blue-600/10 border-primary/20">
         <div className="flex items-start gap-3 sm:gap-5">
           <div className={cn(
             "w-14 h-14 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center text-2xl sm:text-4xl font-black border-2 shrink-0",
@@ -202,15 +301,11 @@ export default function DebriefDetail() {
             <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-widest">
               AI Debrief
             </p>
-            <h1 className="text-base sm:text-xl font-bold text-foreground mt-1">
-              {session?.session_type
-                ? `${session.session_type.charAt(0).toUpperCase() + session.session_type.slice(1)} Interview`
-                : "Session Debrief"}
-              {session?.target_company && ` — ${session.target_company}`}
-            </h1>
-            <p className="text-xs text-muted-foreground mt-1">
-              {format(new Date(debrief.created_at), "EEEE, MMMM d yyyy")}
-            </p>
+            {debrief.overall_grade && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Overall grade: {debrief.overall_grade}
+              </p>
+            )}
             {debrief.summary && (
               <p className="text-sm text-foreground leading-relaxed mt-3">
                 {debrief.summary}
@@ -219,6 +314,9 @@ export default function DebriefDetail() {
           </div>
         </div>
       </Card>
+
+      {/* Session metadata, overall score, category breakdown */}
+      <DebriefSessionMeta session={session} debrief={debrief} scorecard={scorecard} />
 
       {/* Priority focus */}
       {debrief.priority_focus && (
@@ -252,7 +350,7 @@ export default function DebriefDetail() {
                 </div>
                 <div className="relative h-2 bg-secondary rounded-full overflow-hidden">
                   <div
-                    className="absolute top-0 h-full w-0.5 bg-violet-400 z-10"
+                    className="absolute top-0 h-full w-0.5 bg-primary z-10"
                     style={{ left: `${gap.target * 10}%` }}
                   />
                   <div
@@ -344,7 +442,7 @@ export default function DebriefDetail() {
       {debrief.resources?.length > 0 && (
         <Card>
           <div className="flex items-center gap-2 mb-4">
-            <BookOpen className="w-4 h-4 text-violet-400" />
+            <BookOpen className="w-4 h-4 text-primary" />
             <h3 className="text-sm font-semibold text-foreground">Recommended resources</h3>
           </div>
           <div className="space-y-2">
@@ -369,7 +467,7 @@ export default function DebriefDetail() {
                     href={r.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-xs text-violet-400 hover:text-violet-300 transition-colors shrink-0 ml-3"
+                    className="text-xs text-primary hover:text-primary/80 transition-colors shrink-0 ml-3"
                   >
                     Open ↗
                   </a>
@@ -400,12 +498,54 @@ export default function DebriefDetail() {
 
       {/* AI insight */}
       {debrief.insight && (
-        <Card className="flex items-start gap-4 bg-violet-600/10 border-violet-500/20">
-          <Lightbulb className="w-5 h-5 text-violet-400 shrink-0 mt-0.5" />
+        <Card className="flex items-start gap-4 bg-primary/10 border-primary/20">
+          <Lightbulb className="w-5 h-5 text-primary shrink-0 mt-0.5" />
           <div>
-            <p className="text-xs font-semibold text-violet-300 mb-1">AI insight</p>
+            <p className="text-xs font-semibold text-primary mb-1">AI insight</p>
             <p className="text-sm text-foreground leading-relaxed italic">
               "{debrief.insight}"
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {/* Questions + timeline + analytics */}
+      {answers.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon={MessageSquare}
+            title="No Q&A recorded"
+            description="This session has no question-and-answer pairs to review."
+            compact
+          />
+        </Card>
+      ) : (
+        <DebriefQuestionsList
+          answers={answers.map((a) => ({
+            id: a.id,
+            question: a.question,
+            answer: a.answer,
+            score: a.score,
+            ai_feedback: a.ai_feedback,
+            created_at: a.created_at,
+          }))}
+        />
+      )}
+      <DebriefEventTimeline events={sessionEvents} />
+      <DebriefMissedKeywords report={detailedReport} transcript={transcript} />
+      <DebriefVocalCharts report={detailedReport} />
+      <DebriefConfidenceBreakdown scorecard={scorecard} session={session} />
+
+      {/* Full transcript */}
+      {transcript && (
+        <Card>
+          <div className="flex items-center gap-2 mb-3">
+            <ScrollText className="w-4 h-4 text-blue-400" />
+            <h3 className="text-sm font-semibold text-foreground">Full transcript</h3>
+          </div>
+          <div className="max-h-72 overflow-y-auto rounded-xl bg-secondary/50 border border-border p-4">
+            <p className="text-xs text-foreground leading-relaxed whitespace-pre-wrap font-mono">
+              {transcript}
             </p>
           </div>
         </Card>
@@ -414,10 +554,10 @@ export default function DebriefDetail() {
       {/* Sprint B extras */}
       <DebriefExtras
         debriefId={debrief.id}
-        wpmSeries={debrief.detailed_report?.wpm_series}
-        missedKeywords={debrief.detailed_report?.missed_keywords}
-        speakers={debrief.detailed_report?.speakers}
-        initialRating={debrief.detailed_report?.rating ?? null}
+        wpmSeries={detailedReport.wpm_series}
+        missedKeywords={detailedReport.missed_keywords}
+        speakers={detailedReport.speakers}
+        initialRating={detailedReport.rating ?? null}
       />
 
       {/* CTA row */}

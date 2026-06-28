@@ -17,7 +17,7 @@ interface ProgressBarProps {
 }
 
 const COLORS = {
-  violet:  "bg-violet-500",
+  violet:  "bg-primary",
   emerald: "bg-emerald-500",
   amber:   "bg-amber-500",
   red:     "bg-red-500",

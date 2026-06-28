@@ -5,14 +5,15 @@ import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";
 import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 import { PANIC_RESPONSE } from "@/types/session.types";
-import { captureAndAnalyseCodingProblem } from "@/lib/audio/screenshotCapture";
 
 interface OverlayKeyboardHandlerProps {
   enabled: boolean;
   onToggleMute?: () => void;
+  onCaptureCoding?: () => void;
+  onGenerate?: () => void;
 }
 
-export function OverlayKeyboardHandler({ enabled, onToggleMute }: OverlayKeyboardHandlerProps) {
+export function OverlayKeyboardHandler({ enabled, onToggleMute, onCaptureCoding, onGenerate }: OverlayKeyboardHandlerProps) {
   const is_visible = useOverlayStore((s) => s.is_visible);
   const is_panic_visible = useOverlayStore((s) => s.is_panic_visible);
   const hidePanic = useOverlayStore((s) => s.hidePanic);
@@ -20,21 +21,31 @@ export function OverlayKeyboardHandler({ enabled, onToggleMute }: OverlayKeyboar
   const cycleHintStyle = useOverlayStore((s) => s.cycleHintStyle);
   const sessionStatus = useSessionStore((s) => s.status);
 
-  // ✅ Ctrl+Shift+H: Smart toggle (restores from minimize/peek correctly)
+  // ✅ Ctrl+Shift+H / Ctrl+Shift+C: Smart toggle (restores from minimize/peek correctly)
   useHotkey(
     ["ctrl", "shift", "h"],
     () => {
-      const os = useOverlayStore.getState();
-      // toggleMinimize handles:
-      // - visible -> minimize(peek)
-      // - peek -> restore
-      // - hidden -> show
-      os.toggleMinimize();
+      useOverlayStore.getState().toggleMinimize();
     },
     enabled
   );
 
-  // ✅ Ctrl+Shift+J: explicit minimize/restore
+  useHotkey(
+    ["ctrl", "shift", "c"],
+    () => {
+      if (sessionStatus === "active") onCaptureCoding?.();
+    },
+    enabled && is_visible && !!onCaptureCoding
+  );
+
+  useHotkey(
+    ["ctrl", "shift", "g"],
+    () => {
+      if (sessionStatus === "active") onCaptureCoding?.();
+    },
+    enabled && is_visible && !!onCaptureCoding
+  );
+
   useHotkey(
     ["ctrl", "shift", "j"],
     () => {
@@ -43,7 +54,21 @@ export function OverlayKeyboardHandler({ enabled, onToggleMute }: OverlayKeyboar
     enabled
   );
 
-  useHotkey(["ctrl", "shift", "s"], toggleAppStealthMode, enabled && is_visible);
+  useHotkey(["ctrl", "shift", "t"], toggleAppStealthMode, enabled && is_visible);
+
+  useHotkey(["ctrl", "shift", "s"], () => {
+    const el = document.getElementById("clarify-overlay-root")?.querySelector<HTMLElement>(".scroll-container");
+    el?.scrollBy({ top: -120, behavior: "smooth" });
+  }, enabled && is_visible);
+
+  useHotkey(["ctrl", "shift", "d"], () => {
+    const el = document.getElementById("clarify-overlay-root")?.querySelector<HTMLElement>(".scroll-container");
+    el?.scrollBy({ top: 120, behavior: "smooth" });
+  }, enabled && is_visible);
+
+  useHotkey(["ctrl", "shift", "q"], () => {
+    useOverlayStore.getState().clearHint();
+  }, enabled && is_visible);
 
   useHotkey(["ctrl", "shift", "p"], () => {
     useOverlayStore.getState().showPanic(PANIC_RESPONSE);
@@ -66,15 +91,13 @@ export function OverlayKeyboardHandler({ enabled, onToggleMute }: OverlayKeyboar
 
   useHotkey(["ctrl", "shift", "y"], () => cycleHintStyle?.(), enabled && is_visible);
 
-  useHotkey(
-    ["ctrl", "shift", "c"],
-    () => {
-      if (sessionStatus === "active") captureAndAnalyseCodingProblem();
-    },
-    enabled && is_visible
-  );
-
   useHotkey(["ctrl", "shift", "m"], () => onToggleMute?.(), enabled);
+
+  useHotkey(
+    ["ctrl", "shift", "a"],
+    () => onGenerate?.(),
+    enabled && is_visible && !!onGenerate,
+  );
 
   // Quick dock positions
   useHotkey(["ctrl", "1"], () => useOverlayStore.getState().setPosition({ x: 24, y: 80 }), enabled && is_visible);

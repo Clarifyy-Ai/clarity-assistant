@@ -48,7 +48,7 @@ export const NEUTRAL = {
 export const PLAN_COLORS = {
   free:       { bg: "bg-slate-100",  text: "text-slate-700",  border: "border-slate-300",  hex: "#64748b" },
   starter:    { bg: "bg-blue-100",   text: "text-blue-700",   border: "border-blue-300",   hex: "#3b82f6" },
-  pro:        { bg: "bg-violet-100", text: "text-violet-700", border: "border-violet-300", hex: "#8b5cf6" },
+  pro:        { bg: "bg-indigo-100", text: "text-indigo-700", border: "border-indigo-300", hex: "#6366f1" },
   elite:      { bg: "bg-amber-100",  text: "text-amber-700",  border: "border-amber-300",  hex: "#f59e0b" },
   enterprise: { bg: "bg-emerald-100",text: "text-emerald-700",border: "border-emerald-300",hex: "#10b981" },
 } as const;
@@ -57,7 +57,7 @@ export const PLAN_COLORS = {
 
 export const INTERVIEW_TYPE_COLORS = {
   behavioral:    { bg: "bg-blue-100",   text: "text-blue-700",   hex: "#3b82f6" },
-  technical:     { bg: "bg-violet-100", text: "text-violet-700", hex: "#8b5cf6" },
+  technical:     { bg: "bg-indigo-100", text: "text-indigo-700", hex: "#6366f1" },
   "system-design":{ bg:"bg-indigo-100", text:"text-indigo-700",  hex: "#6366f1" },
   coding:        { bg: "bg-cyan-100",   text: "text-cyan-700",   hex: "#06b6d4" },
   hr:            { bg: "bg-rose-100",   text: "text-rose-700",   hex: "#f43f5e" },

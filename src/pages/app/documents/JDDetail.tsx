@@ -1,11 +1,14 @@
 // @ts-nocheck
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
   FileText, Trash2, Building2, MapPin, DollarSign,
   CheckCircle, Clock, Edit, Save, X, Loader2,
@@ -54,28 +57,30 @@ export default function JDDetail() {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
-  useEffect(() => {
+  const loadJd = useCallback(async () => {
     if (!id || !user?.id) return;
-    (async () => {
-      setLoading(true);
-      setFetchError(null);
-      const { data, error } = await supabase
-        .from("job_descriptions")
-        .select("*")
-        .eq("id", id)
-        .eq("user_id", user.id)
-        .maybeSingle();
-      if (error) {
-        setFetchError(error.message);
-        setJd(null);
-      } else {
-        setJd(data as JobDescription | null);
-        setEditRole(data?.target_role ?? data?.title ?? "");
-        setEditCompany(data?.company ?? "");
-      }
-      setLoading(false);
-    })();
+    setLoading(true);
+    setFetchError(null);
+    const { data, error } = await supabase
+      .from("job_descriptions")
+      .select("*")
+      .eq("id", id)
+      .eq("user_id", user.id)
+      .maybeSingle();
+    if (error) {
+      setFetchError(error.message);
+      setJd(null);
+    } else {
+      setJd(data as JobDescription | null);
+      setEditRole(data?.target_role ?? data?.title ?? "");
+      setEditCompany(data?.company ?? "");
+    }
+    setLoading(false);
   }, [id, user?.id]);
+
+  useEffect(() => {
+    void loadJd();
+  }, [loadJd]);
 
   async function handleSaveEdit() {
     if (!id || !user?.id) return;
@@ -114,27 +119,37 @@ export default function JDDetail() {
     }
   }
 
-  if (loading) return <Card className="animate-pulse h-48" />;
+  if (loading) {
+    return (
+      <div className="space-y-4">
+        <SkeletonCard />
+        <SkeletonCard />
+      </div>
+    );
+  }
 
   if (fetchError) {
     return (
-      <Card className="text-center py-12 border-destructive/30 bg-destructive/5">
-        <p className="text-foreground font-medium">Could not load job description</p>
-        <p className="text-sm text-muted-foreground mt-1">{fetchError}</p>
-        <Link to="/app/documents" className="text-sm text-violet-500 hover:underline mt-3 inline-block">
+      <div className="space-y-4">
+        <InlineErrorRetry message={fetchError} onRetry={() => void loadJd()} />
+        <Link to="/app/documents" className="text-sm text-primary hover:underline inline-block">
           Back to Documents
         </Link>
-      </Card>
+      </div>
     );
   }
 
   if (!jd) {
     return (
-      <Card className="text-center py-12">
-        <p className="text-foreground font-medium">Job description not found</p>
-        <Link to="/app/documents" className="text-sm text-violet-500 hover:underline mt-2 inline-block">
-          Back to Documents
-        </Link>
+      <Card>
+        <EmptyState
+          icon={FileText}
+          title="Job description not found"
+          description="This job description may have been deleted or the link is invalid."
+          actionLabel="Back to Documents"
+          onAction={() => navigate("/app/documents")}
+          compact
+        />
       </Card>
     );
   }
@@ -149,7 +164,7 @@ export default function JDDetail() {
       <PageHeader
         title={jd.target_role || jd.title || "Job Description"}
         description={jd.company ?? ""}
-        icon={<FileText className="w-5 h-5 text-violet-400" />}
+        icon={<FileText className="w-5 h-5 text-primary" />}
         breadcrumbs={[
           { label: "Documents", href: "/app/documents" },
           { label: jd.target_role || "JD" },
@@ -198,14 +213,14 @@ export default function JDDetail() {
                 value={editRole}
                 onChange={(e) => setEditRole(e.target.value)}
                 placeholder="Job title / role"
-                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
               <input
                 type="text"
                 value={editCompany}
                 onChange={(e) => setEditCompany(e.target.value)}
                 placeholder="Company name"
-                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
               />
             </div>
             <div className="flex gap-2">
@@ -273,7 +288,7 @@ export default function JDDetail() {
             <ul className="space-y-1.5">
               {requirements.map((r: string, i: number) => (
                 <li key={i} className="flex items-start gap-2 text-sm text-muted-foreground">
-                  <span className="w-1.5 h-1.5 rounded-full bg-violet-500 mt-1.5 flex-shrink-0" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-primary mt-1.5 flex-shrink-0" />
                   {r}
                 </li>
               ))}

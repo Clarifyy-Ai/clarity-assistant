@@ -7,8 +7,11 @@ import {
   errorResponse,
   deductCredits,
   log,
+  getAdminClient,
 } from "../_shared/utils.ts";
 import { geminiGenerate } from "../_shared/gemini.ts";
+import { logAICost } from "../_shared/aiProvider.ts";
+import { AI_CREDIT_COSTS } from "../_shared/creditEconomics.ts";
 
 /* -------------------------------------------------------------------------- */
 /*                          SANITIZATION HELPERS                              */
@@ -35,11 +38,12 @@ function sanitizeAIOutput(text: string): string {
 /* -------------------------------------------------------------------------- */
 
 const TOOL_COSTS: Record<string, number> = {
-  coding_hint:   8,
-  rephrase:      6,
-  project_build: 10,
-  star_method:   10,
-  system_design: 5,
+  coding_hint:     AI_CREDIT_COSTS.coding_hint,
+  coding_solution: AI_CREDIT_COSTS.live_answer,
+  rephrase:        AI_CREDIT_COSTS.rephraser,
+  project_build:   AI_CREDIT_COSTS.project_builder,
+  star_method:     AI_CREDIT_COSTS.star_builder,
+  system_design:   AI_CREDIT_COSTS.system_design,
 };
 
 function getToolCost(tool_id: string): number {
@@ -226,6 +230,7 @@ Deno.serve(async (req: Request) => {
 
     /* ----------------------- AI CALL ----------------------- */
     let raw: string;
+    const aiStartMs = Date.now();
     try {
       raw = await geminiGenerate(prompt, undefined, 0.6, 1200, auth.byok?.gemini);
       if (!raw || raw.trim().length === 0) {
@@ -242,6 +247,16 @@ Deno.serve(async (req: Request) => {
         req
       );
     }
+
+    void logAICost(getAdminClient(), {
+      userId,
+      action: `prep_tool_${tool_id}`,
+      model: "gemini-2.0-flash",
+      inputTokens: Math.ceil(prompt.length / 4),
+      outputTokens: Math.ceil(raw.length / 4),
+      latencyMs: Date.now() - aiStartMs,
+      wasFallback: false,
+    });
 
     const cleaned = sanitizeAIOutput(raw);
 

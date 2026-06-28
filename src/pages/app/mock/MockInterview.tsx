@@ -1,8 +1,3 @@
-// @ts-nocheck -- retained: useSessionOrchestrator return type is inferred as any[] by TS due to
-// conditional generic resolution; removing suppression causes ~30 cascading "implicit any" errors
-// across destructured hook values (warmupQuestions, sessionQuestions, etc.). Full typing requires
-// rewriting the orchestrator generics — tracked as future refactor.
-
 // src/pages/app/mock/MockInterview.tsx — PRODUCTION FIXED
 // Fixes (F3):
 // - config.type, config.role, config.company, config.count aligned to generate-questions schema
@@ -11,7 +6,6 @@
 // - smart_routing: false → true (was disabling modelRouter entirely)
 // - role pre-filled from profile.target_role instead of hardcoded null
 // - navigate() only called inside try block (was reachable even after catch)
-// - @ts-nocheck retained per orchestrator refactor comment
 
 import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
@@ -125,10 +119,14 @@ export default function MockInterview() {
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-200">
       <PageHeader
         title="Mock Interview"
-        subtitle="Configure your practice session"
+        description="Configure your practice session"
+        breadcrumbs={[
+          { label: "Dashboard", href: "/app/dashboard" },
+          { label: "Mock Interview" },
+        ]}
       />
 
       {/* Mock sessions are free */}

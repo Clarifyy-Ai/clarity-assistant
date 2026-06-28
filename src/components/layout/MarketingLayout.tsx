@@ -1,20 +1,34 @@
 import { useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { BrandLogo } from "@/components/marketing";
 import { Menu, X, Twitter, Github } from "lucide-react";
+import { SALES_EMAIL, STATUS_PAGE_URL, LEGAL_ENTITY_NAME } from "@/lib/constants/contact";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { useIndiaRegion } from "@/hooks/useIndiaRegion";
 import { cn } from "@/lib/utils";
 
-const NAV_LINKS = [
+const NAV_LINKS: Array<{ to?: string; href?: string; label: string; indiaOnly?: boolean }> = [
+  { href: "/#features", label: "Features" },
+  { to: "/gov-exams", label: PRODUCT_NAMES.govExams, indiaOnly: true },
   { to: "/pricing", label: "Pricing" },
+  { to: "/shortcuts", label: "Shortcuts" },
   { to: "/blog", label: "Blog" },
   { to: "/help", label: "Help" },
 ];
 
-const FOOTER_COLUMNS = [
+const FOOTER_COLUMNS: Array<{
+  heading: string;
+  links: Array<
+    | { href: string; label: string; external?: boolean }
+    | { to: string; label: string; indiaOnly?: boolean }
+  >;
+}> = [
   {
     heading: "Product",
     links: [
       { href: "/#features", label: "Features" },
+      { to: "/gov-exams", label: PRODUCT_NAMES.govExams, indiaOnly: true },
       { to: "/pricing", label: "Pricing" },
       { to: "/shortcuts", label: "Shortcuts" },
       { to: "/signup", label: "Get started free" },
@@ -32,7 +46,7 @@ const FOOTER_COLUMNS = [
   {
     heading: "Company",
     links: [
-      { href: "mailto:sales@clarifyai.com", label: "Contact Sales" },
+      { href: `mailto:${SALES_EMAIL}`, label: "Contact Sales" },
       { to: "/terms", label: "Terms of Service" },
       { to: "/privacy", label: "Privacy Policy" },
       { to: "/signup", label: "Sign up free" },
@@ -55,29 +69,40 @@ interface MarketingLayoutProps {
 export function MarketingLayout({ children }: MarketingLayoutProps) {
   const { pathname } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
+  const { isIndia } = useIndiaRegion();
+  const navLinks = NAV_LINKS.filter((link) => !link.indiaOnly || isIndia);
 
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
-      <nav className="fixed top-0 inset-x-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:text-sm focus:font-medium">
+        Skip to content
+      </a>
+      <nav aria-label="Main navigation" className="fixed top-0 inset-x-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 sm:px-6 h-16">
           <Link to="/" className="flex items-center gap-2.5">
-            <img src="/images/clarify-logo.png" alt="Clarify AI" className="h-10 sm:h-12 w-auto" />
+            <BrandLogo size="md" />
           </Link>
           <div className="hidden md:flex items-center gap-8 text-sm text-muted-foreground">
-            {NAV_LINKS.map((link) => {
-              const isActive =
-                link.to === "/"
+            {navLinks.map((link) => {
+              const key = link.to ?? link.href ?? link.label;
+              const isActive = link.to
+                ? link.to === "/"
                   ? pathname === "/"
-                  : pathname.startsWith(link.to);
+                  : pathname.startsWith(link.to)
+                : false;
+              const className = cn(
+                "transition-colors",
+                isActive ? "text-foreground" : "hover:text-foreground",
+              );
+              if (link.href) {
+                return (
+                  <a key={key} href={link.href} className={className}>
+                    {link.label}
+                  </a>
+                );
+              }
               return (
-                <Link
-                  key={link.to}
-                  to={link.to}
-                  className={cn(
-                    "transition-colors",
-                    isActive ? "text-foreground" : "hover:text-foreground"
-                  )}
-                >
+                <Link key={key} to={link.to!} className={className}>
                   {link.label}
                 </Link>
               );
@@ -110,19 +135,33 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
 
         {menuOpen && (
           <div className="md:hidden border-t border-border bg-background/95 backdrop-blur-xl px-4 py-3 space-y-1">
-            {NAV_LINKS.map((link) => {
-              const isActive = pathname.startsWith(link.to);
+            {navLinks.map((link) => {
+              const key = link.to ?? link.href ?? link.label;
+              const isActive = link.to ? pathname.startsWith(link.to) : false;
+              const className = cn(
+                "block px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                isActive
+                  ? "bg-primary/10 text-foreground"
+                  : "text-muted-foreground hover:text-foreground hover:bg-secondary/40",
+              );
+              if (link.href) {
+                return (
+                  <a
+                    key={key}
+                    href={link.href}
+                    onClick={() => setMenuOpen(false)}
+                    className={className}
+                  >
+                    {link.label}
+                  </a>
+                );
+              }
               return (
                 <Link
-                  key={link.to}
-                  to={link.to}
+                  key={key}
+                  to={link.to!}
                   onClick={() => setMenuOpen(false)}
-                  className={cn(
-                    "block px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                    isActive
-                      ? "bg-primary/10 text-foreground"
-                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/40"
-                  )}
+                  className={className}
                 >
                   {link.label}
                 </Link>
@@ -146,10 +185,10 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
           <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-10">
             <div className="col-span-2 md:col-span-1">
               <Link to="/" className="inline-block mb-3">
-                <img src="/images/clarify-logo.png" alt="Clarify AI" className="h-9 w-auto" />
+                <BrandLogo size="sm" />
               </Link>
               <p className="text-xs text-muted-foreground leading-relaxed max-w-[180px]">
-                AI-powered interview preparation and real-time coaching.
+                AI interview coaching, gov exam mock tests, and live practice for every career stage.
               </p>
               <div className="flex gap-3 mt-4">
                 <a
@@ -178,7 +217,9 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
                   {col.heading}
                 </p>
                 <ul className="space-y-2.5">
-                  {col.links.map((link) => (
+                  {col.links
+                    .filter((link) => !("indiaOnly" in link && link.indiaOnly) || isIndia)
+                    .map((link) => (
                     <li key={link.label}>
                       {"href" in link ? (
                         <a
@@ -204,13 +245,20 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
             ))}
           </div>
           <div className="border-t border-border pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
-            <span>&copy; {new Date().getFullYear()} Payara Labs. All rights reserved.</span>
+            <span>&copy; {new Date().getFullYear()} {LEGAL_ENTITY_NAME}. All rights reserved.</span>
             <div className="flex gap-4 flex-wrap justify-center">
               <Link to="/terms" className="hover:text-foreground transition-colors">Terms</Link>
               <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
               <Link to="/help" className="hover:text-foreground transition-colors">Help</Link>
               <Link to="/pricing" className="hover:text-foreground transition-colors">Pricing</Link>
               <Link to="/blog" className="hover:text-foreground transition-colors">Blog</Link>
+              {isIndia && (
+                <Link to="/gov-exams" className="hover:text-foreground transition-colors">
+                  {PRODUCT_NAMES.govExams}
+                </Link>
+              )}
+              <Link to="/shortcuts" className="hover:text-foreground transition-colors">Shortcuts</Link>
+              <a href={STATUS_PAGE_URL} target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Status</a>
             </div>
           </div>
         </div>

@@ -1,5 +1,6 @@
 // @ts-nocheck
 import { useEffect, useState, useRef } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase/client";
 import { questionsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
@@ -221,15 +222,27 @@ export default function AdminSeedQuestions() {
 
   return (
     <div className="space-y-6 max-w-6xl pb-20">
-      <PageHeader title="Seed Question Bank" description="Automated pipeline for building the public previous-year exam database." />
+      <PageHeader
+        title="Seed Question Bank"
+        description="Automated pipeline for building the public previous-year exam database."
+        actions={
+          <Link
+            to="/app/admin/bulk-upload"
+            className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
+          >
+            <Upload className="w-3.5 h-3.5" />
+            Bulk upload (Excel / PDF)
+          </Link>
+        }
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         
         {/* Phase 1 & 2: Official Paper AI Pipeline */}
-        <Card className="border-violet-500/30 bg-violet-500/5 shadow-sm">
+        <Card className="border-primary/30 bg-primary/5 shadow-sm">
           <CardContent className="p-6 space-y-5">
             <div className="flex items-center gap-2">
-              <FileText className="h-5 w-5 text-violet-500" />
+              <FileText className="h-5 w-5 text-primary" />
               <h3 className="font-bold text-foreground text-lg">AI Paper Extraction Pipeline</h3>
             </div>
             <p className="text-sm text-muted-foreground">
@@ -262,7 +275,7 @@ export default function AdminSeedQuestions() {
                   onChange={(e) => setPdfFile(e.target.files?.[0] || null)}
                   className="bg-background cursor-pointer"
                 />
-                <Button onClick={handleProcessPDF} disabled={!pdfFile || parsingPdf} className="shrink-0 bg-violet-600 hover:bg-violet-700 text-white">
+                <Button onClick={handleProcessPDF} disabled={!pdfFile || parsingPdf} className="shrink-0 bg-primary hover:bg-primary/90 text-white">
                   {parsingPdf ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Sparkles className="w-4 h-4 mr-2" />}
                   {parsingPdf ? "Parsing..." : "Extract & Save"}
                 </Button>
@@ -471,7 +484,7 @@ export default function AdminSeedQuestions() {
                         <Button 
                           variant="outline" 
                           size="sm" 
-                          className="h-8 text-xs border-violet-500/30 text-violet-600 hover:bg-violet-500/10"
+                          className="h-8 text-xs border-primary/30 text-primary hover:bg-primary/10"
                           onClick={() => triggerGapFill(s.exam_type)}
                         >
                           <Sparkles className="w-3 h-3 mr-1.5" /> Gap Fill

@@ -2,6 +2,7 @@ npx supabase functions deploy ai-coach-chat
 npx supabase functions deploy ai-feedback
 npx supabase functions deploy analytics-dashboard
 npx supabase functions deploy analyze-test-performance
+npx supabase functions deploy bulk-import-questions
 npx supabase functions deploy cancel-subscription
 npx supabase functions deploy collect-exam-papers
 npx supabase functions deploy company-research

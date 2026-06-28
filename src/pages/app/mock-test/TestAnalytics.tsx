@@ -235,7 +235,7 @@ export default function TestAnalytics() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-violet-500 border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
       </div>
     );
   }
@@ -270,7 +270,7 @@ export default function TestAnalytics() {
               improvementVsAverage >= 0
                 ? `+${improvementVsAverage}%`
                 : `${improvementVsAverage}%`,
-            icon: <TrendingUp className="h-5 w-5 text-violet-400" />,
+            icon: <TrendingUp className="h-5 w-5 text-primary" />,
           },
         ].map((item) => (
           <Card key={item.label} className="py-4 text-center">

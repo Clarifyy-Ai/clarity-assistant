@@ -72,19 +72,12 @@ export const useDocumentStore = create<DocumentStore>()(
     setActiveResumeId: (active_resume_id) => {
       const resume = get().resumes.find((r) => r.id === active_resume_id) ?? null;
 
-      // ★ FIX: DB returns resume_versions (relation name), not .versions
-      const versions = (resume as any)?.resume_versions ?? [];
-      const active_version =
-        versions.find((v: any) => v.id === resume?.active_version_id)
-        ?? versions[0]
-        ?? null;
-
       set((s) => ({
         active_resume_id,
         active_context: {
           ...s.active_context,
           resume,
-          resume_version: active_version,
+          resume_version: null,
         },
       }));
     },

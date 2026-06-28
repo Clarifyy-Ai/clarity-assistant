@@ -21,6 +21,7 @@ import {
 } from "../_shared/cors.ts";
 
 import { authenticateRequest } from "../_shared/auth.ts";
+import { PLAN_MONTHLY_CREDITS } from "../_shared/creditEconomics.ts";
 
 import {
   checkRateLimit,
@@ -152,49 +153,49 @@ function buildPriceAllowlist(): Map<string, PriceEntitlement> {
   add("STRIPE_PRICE_STARTER_MONTHLY", {
     mode: "subscription",
     planId: "starter",
-    monthlyCredits: 100,
+    monthlyCredits: PLAN_MONTHLY_CREDITS.starter,
   });
 
   add("STRIPE_PRICE_STARTER_YEARLY", {
     mode: "subscription",
     planId: "starter",
-    monthlyCredits: 100,
+    monthlyCredits: PLAN_MONTHLY_CREDITS.starter,
   });
 
   add("STRIPE_PRICE_PRO_MONTHLY", {
     mode: "subscription",
     planId: "pro",
-    monthlyCredits: 300,
+    monthlyCredits: PLAN_MONTHLY_CREDITS.pro,
   });
 
   add("STRIPE_PRICE_PRO_YEARLY", {
     mode: "subscription",
     planId: "pro",
-    monthlyCredits: 300,
+    monthlyCredits: PLAN_MONTHLY_CREDITS.pro,
   });
 
   add("STRIPE_PRICE_ELITE_MONTHLY", {
     mode: "subscription",
     planId: "elite",
-    monthlyCredits: 1_000,
+    monthlyCredits: PLAN_MONTHLY_CREDITS.elite,
   });
 
   add("STRIPE_PRICE_ELITE_YEARLY", {
     mode: "subscription",
     planId: "elite",
-    monthlyCredits: 1_000,
+    monthlyCredits: PLAN_MONTHLY_CREDITS.elite,
   });
 
   add("STRIPE_PRICE_ENTERPRISE_MONTHLY", {
     mode: "subscription",
     planId: "enterprise",
-    monthlyCredits: 9_999,
+    monthlyCredits: PLAN_MONTHLY_CREDITS.enterprise,
   });
 
   add("STRIPE_PRICE_ENTERPRISE_YEARLY", {
     mode: "subscription",
     planId: "enterprise",
-    monthlyCredits: 9_999,
+    monthlyCredits: PLAN_MONTHLY_CREDITS.enterprise,
   });
 
   // Credit packs
@@ -597,6 +598,10 @@ Deno.serve(async (req: Request) => {
       };
     }
 
+    if (data.coupon_code?.trim()) {
+      params.discounts = [{ coupon: data.coupon_code.trim() }];
+    }
+
     const session = await stripe.checkout.sessions.create(params, {
       idempotencyKey,
     });
@@ -646,8 +651,3 @@ Deno.serve(async (req: Request) => {
     });
   }
 });
-``
-// - CORS handling
-// - POST-only method enforcement
-// - centralized JWT authentication
-// - strict request validation

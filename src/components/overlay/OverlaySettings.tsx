@@ -50,32 +50,42 @@ export function OverlaySettings({
   const hintStyle = useOverlayStore((s) => s.hint_style);
   const simpleLanguage = useOverlayStore((s) => s.simple_language);
   const autoGenerate = useOverlayStore((s) => s.auto_generate);
+  const autoAnswerSilenceSeconds = useOverlayStore((s) => s.auto_answer_silence_seconds);
   const stealthOpacity = useOverlayStore((s) => s.stealth_opacity);
+  const fontSize = useOverlayStore((s) => s.font_size);
   const isMinimalMode = useOverlayStore((s) => s.is_minimal_mode);
+  const pipOptIn = useOverlayStore((s) => s.pip_opt_in);
 
   const [localSettings, setLocalSettings] =
     useState<LocalOnlySettings>(DEFAULT_LOCAL_SETTINGS);
   const [showWarnings, setShowWarnings] = useState(true);
+  const [pipConsentOpen, setPipConsentOpen] = useState(false);
 
   const currentSettings = useMemo(
     () => ({
       stealthMode: isStealthMode,
       proctorSafe: isProctorSafe,
       opacity: stealthOpacity,
+      fontSize,
       hintStyle,
       simpleLanguage,
       autoGenerate,
+      autoAnswerSilenceSeconds,
       minimalMode: isMinimalMode,
+      pipOptIn,
       ...localSettings,
     }),
     [
       isStealthMode,
       isProctorSafe,
       stealthOpacity,
+      fontSize,
       hintStyle,
       simpleLanguage,
       autoGenerate,
+      autoAnswerSilenceSeconds,
       isMinimalMode,
+      pipOptIn,
       localSettings,
     ]
   );
@@ -96,11 +106,17 @@ export function OverlaySettings({
       case "opacity":
         os.setStealthOpacity(Number(value));
         break;
+      case "fontSize":
+        os.setFontSize(Number(value));
+        break;
       case "simpleLanguage":
         os.setSimpleLanguage?.(Boolean(value));
         break;
       case "autoGenerate":
         os.setAutoGenerate?.(Boolean(value));
+        break;
+      case "autoAnswerSilenceSeconds":
+        os.setAutoAnswerSilenceSeconds(Number(value));
         break;
       case "minimalMode":
         os.setMinimalMode?.(Boolean(value));
@@ -121,9 +137,11 @@ export function OverlaySettings({
     setAppStealthMode(false);
     os.setProctorSafe?.(false);
     os.setStealthOpacity(90);
+    os.setFontSize(13);
     os.setHintStyle?.("short_hints");
     os.setSimpleLanguage?.(false);
     os.setAutoGenerate?.(false);
+    os.setAutoAnswerSilenceSeconds(3);
     os.setMinimalMode?.(false);
 
     setLocalSettings(DEFAULT_LOCAL_SETTINGS);
@@ -134,7 +152,7 @@ export function OverlaySettings({
   return (
     <div
       className={cn(
-        "rounded-2xl overflow-hidden border border-white/[0.1] bg-[#0d0d1e] shadow-2xl max-w-sm",
+        "rounded-2xl overflow-hidden border border-white/[0.1] bg-[#0d0d1e] shadow-2xl max-w-sm relative",
         className
       )}
       role="dialog"
@@ -202,14 +220,62 @@ export function OverlaySettings({
           />
         </SettingRow>
 
+        {currentSettings.autoGenerate && (
+          <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-[12px] font-semibold text-white/60">
+                Silence trigger
+              </p>
+              <span className="text-[12px] font-mono text-white/40">
+                {currentSettings.autoAnswerSilenceSeconds}s
+              </span>
+            </div>
+            <input
+              type="range"
+              min="1"
+              max="10"
+              step="1"
+              value={currentSettings.autoAnswerSilenceSeconds}
+              onChange={(e) =>
+                handleStoreSettingChange(
+                  "autoAnswerSilenceSeconds",
+                  parseInt(e.target.value, 10),
+                )
+              }
+              aria-label="Auto-answer silence trigger seconds"
+              className="w-full accent-indigo-500 h-1.5 rounded-full bg-white/10 appearance-none cursor-pointer"
+            />
+            <p className="text-[10px] text-white/25 mt-1.5">
+              Wait this long after the interviewer stops speaking before generating
+            </p>
+          </div>
+        )}
+
         <SettingRow
           label="Minimal Mode"
-          description="Hides toolbar, tabs, chat for compact view"
+          description="Compact pill view — toolbar collapses; expand to restore full panel"
         >
           <Toggle
             checked={currentSettings.minimalMode}
             onChange={(v) => handleStoreSettingChange("minimalMode", v)}
             ariaLabel="Toggle minimal mode"
+          />
+        </SettingRow>
+
+        <SettingRow
+          label="Picture-in-Picture"
+          description="Float assistant in a separate always-on-top window (Chrome 116+)"
+        >
+          <Toggle
+            checked={pipOptIn}
+            onChange={(v) => {
+              if (v && !pipOptIn) {
+                setPipConsentOpen(true);
+                return;
+              }
+              useOverlayStore.getState().setPipOptIn(false);
+            }}
+            ariaLabel="Toggle picture-in-picture"
           />
         </SettingRow>
 
@@ -220,7 +286,7 @@ export function OverlaySettings({
           description="Lower opacity until hover — still visible on screen share"
           icon={
             currentSettings.stealthMode ? (
-              <EyeOff className="h-3.5 w-3.5 text-violet-400" aria-hidden="true" />
+              <EyeOff className="h-3.5 w-3.5 text-primary" aria-hidden="true" />
             ) : (
               <Eye className="h-3.5 w-3.5 text-white/30" aria-hidden="true" />
             )
@@ -229,7 +295,7 @@ export function OverlaySettings({
           <Toggle
             checked={currentSettings.stealthMode}
             onChange={(v) => handleStoreSettingChange("stealthMode", v)}
-            color="bg-violet-500"
+            color="bg-primary"
             ariaLabel="Toggle discrete UI mode"
           />
         </SettingRow>
@@ -269,6 +335,27 @@ export function OverlaySettings({
               </button>
             ))}
           </div>
+        </div>
+
+        <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-[12px] font-semibold text-white/60">Font Size</p>
+            <span className="text-[12px] font-mono text-white/40">
+              {currentSettings.fontSize}px
+            </span>
+          </div>
+          <input
+            type="range"
+            min="11"
+            max="20"
+            step="1"
+            value={currentSettings.fontSize}
+            onChange={(e) =>
+              handleStoreSettingChange("fontSize", parseInt(e.target.value, 10))
+            }
+            aria-label="Overlay font size"
+            className="w-full accent-indigo-500 h-1.5 rounded-full bg-white/10 appearance-none cursor-pointer"
+          />
         </div>
 
         <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
@@ -332,8 +419,11 @@ export function OverlaySettings({
             Shortcuts
           </p>
           <div className="space-y-1 text-[11px] font-mono text-white/25">
-            <p>Ctrl+Shift+H — Toggle Overlay</p>
-            <p>Ctrl+Shift+S — Discrete UI</p>
+            <p>Ctrl+Shift+A — Generate answer</p>
+            <p>Ctrl+Shift+H / C — Toggle Overlay</p>
+            <p>Ctrl+Shift+S / D — Scroll answer up / down</p>
+            <p>Ctrl+Shift+Q — Clear answer</p>
+            <p>Ctrl+Shift+T — Discrete UI</p>
             <p>Ctrl+Shift+P — Calm coaching steps</p>
             <p>Ctrl+Shift+Y — Cycle Hint Style</p>
             <p>Escape — Clear / Hide</p>
@@ -358,6 +448,37 @@ export function OverlaySettings({
           Reset to Defaults
         </button>
       </div>
+
+      {pipConsentOpen && (
+        <div className="absolute inset-0 z-10 flex items-end sm:items-center justify-center bg-black/60 p-3">
+          <div className="w-full max-w-sm rounded-2xl border border-white/10 bg-[#0d0d1e] p-4 shadow-2xl space-y-3">
+            <p className="text-sm font-semibold text-white">Enable Picture-in-Picture?</p>
+            <p className="text-[11px] text-white/60 leading-relaxed">
+              PiP opens a separate floating window that stays on top when you minimize the browser.
+              It remains visible on screen share and recordings — same as the main overlay.
+            </p>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => setPipConsentOpen(false)}
+                className="flex-1 py-2 text-[12px] font-medium text-white/50 hover:text-white/80 rounded-xl border border-white/10"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  useOverlayStore.getState().setPipOptIn(true);
+                  setPipConsentOpen(false);
+                }}
+                className="flex-1 py-2 text-[12px] font-semibold text-white bg-indigo-600 hover:bg-indigo-500 rounded-xl"
+              >
+                Enable PiP
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -6,7 +6,7 @@
 import { describe, it } from "vitest";
 
 describe("Interview Preparation Tools — pending (P2/P3)", () => {
-  it.todo("[T-0183] (P2) Navigate to /app/prep/star loads page");
+  it.todo("[T-0183] (P2) Navigate to /app/prep/star-builder loads page");
   it.todo("[T-0184] (P2) Form has 4 fields: Situation, Task, Action, Result");
   it.todo("[T-0185] (P2) Each field has character count indicator");
   it.todo("[T-0186] (P2) Generate button disabled until all fields filled");

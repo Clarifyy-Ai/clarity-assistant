@@ -133,7 +133,7 @@ export default function Interviews() {
             {f === "today" && store.interviews.some(
               (iv) => isToday(new Date(iv.next_round?.scheduled_at ?? iv.created_at))
             ) && (
-              <span className="ml-1.5 w-1.5 h-1.5 bg-violet-500 rounded-full inline-block" />
+              <span className="ml-1.5 w-1.5 h-1.5 bg-primary rounded-full inline-block" />
             )}
           </button>
         ))}
@@ -211,7 +211,7 @@ function InterviewRow({
     <div className={cn(
       "flex items-start gap-4 p-4 rounded-2xl border transition-all group",
       isNow
-        ? "bg-violet-600/10 border-violet-500/30"
+        ? "bg-primary/10 border-primary/30"
         : isCancelled
         ? "bg-card border-border opacity-60"
         : "bg-card border-border hover:bg-secondary/60"
@@ -220,12 +220,12 @@ function InterviewRow({
       <div className={cn(
         "w-12 h-14 rounded-xl flex flex-col items-center justify-center shrink-0 border",
         isNow
-          ? "bg-violet-600 border-violet-500"
+          ? "bg-primary border-primary"
           : "bg-accent/5 border-border"
       )}>
         <p className={cn(
           "text-[10px] font-semibold uppercase",
-          isNow ? "text-violet-200" : "text-muted-foreground"
+          isNow ? "text-primary/80" : "text-muted-foreground"
         )}>
           {format(d, "MMM")}
         </p>

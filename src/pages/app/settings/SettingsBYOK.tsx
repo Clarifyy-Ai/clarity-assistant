@@ -17,7 +17,7 @@ export default function SettingsBYOK() {
 
       <Card>
         <div className="flex items-start gap-3">
-          <ShieldCheck className="w-5 h-5 text-violet-500 flex-shrink-0 mt-0.5" />
+          <ShieldCheck className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
           <div className="space-y-1">
             <h3 className="text-sm font-semibold text-foreground">
               Bring-your-own-key is not available at launch

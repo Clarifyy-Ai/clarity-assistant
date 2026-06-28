@@ -147,7 +147,6 @@ export type FeatureFlagId =
   | "ai_coach"
   | "resume_analysis"
   | "overlay"
-  | "stealth_mode"
   | "screenshot_capture"
   | "audio_analysis"
   | "filler_detection"

@@ -2,21 +2,21 @@ import { useState } from "react";
 import { Link } from "react-router-dom";
 import { PLANS, type PlanId } from "@/lib/billing/subscriptionManager";
 import { Check, X, ArrowRight, Zap } from "lucide-react";
-import { motion } from "framer-motion";
+import { ComplianceBanner } from "@/components/marketing";
+import { LazyMotion, domAnimation, m } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { usePageMeta } from "@/hooks/usePageMeta";
 
 import { LAUNCH_PLANS } from "@/lib/constants/pricing";
+import { SALES_EMAIL } from "@/lib/constants/contact";
 
-// Per production audit (Path A): launch sells only Free / Pro / Enterprise.
-// Per-credit packs removed — manual sells subscriptions, not à-la-carte credits.
 const DISPLAY_PLANS: PlanId[] = LAUNCH_PLANS;
 
 const PLAN_COLORS: Record<string, string> = {
   slate: "from-gray-500 to-gray-600",
   blue: "from-blue-500 to-blue-600",
-  violet: "from-violet-500 to-purple-600",
+  violet: "from-primary to-purple-600",
   amber: "from-amber-500 to-orange-500",
   emerald: "from-emerald-500 to-teal-500",
 };
@@ -26,22 +26,22 @@ const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
 export default function Pricing() {
   usePageMeta({
     title: "Pricing — Clarify AI",
-    description: "Simple, transparent pricing for interview prep. Start free, upgrade when ready.",
+    description: "Simple, transparent pricing for interview prep and rehearsal. Start free, upgrade when ready.",
     canonical: `${SITE_URL}/pricing`,
     jsonLd: {
       "@context": "https://schema.org",
       "@type": "Product",
       name: "Clarify AI",
-      description: "AI-powered interview preparation platform with live coaching, mock interviews, and a prep lab.",
+      description: "AI-powered interview preparation platform with live practice coaching, mock interviews, and a prep lab.",
       brand: { "@type": "Brand", name: "Clarify AI" },
       offers: DISPLAY_PLANS.map((planId) => {
         const plan = PLANS[planId];
         return {
           "@type": "Offer",
           name: plan.name,
-          price: (plan.monthlyPrice / 100).toFixed(2),
+          price: planId === "enterprise" ? "0" : (plan.monthlyPrice / 100).toFixed(2),
           priceCurrency: "USD",
-          url: `${SITE_URL}/signup${planId === "free" ? "" : `?plan=${planId}`}`,
+          url: `${SITE_URL}/signup${planId === "free" ? "" : planId === "enterprise" ? "" : `?plan=${planId}`}`,
         };
       }),
     },
@@ -50,20 +50,22 @@ export default function Pricing() {
 
   return (
     <MarketingLayout>
+      <LazyMotion features={domAnimation} strict>
       <section className="pt-20 sm:pt-28 pb-14 px-4 sm:px-6">
         <div className="max-w-3xl mx-auto text-center">
-          <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
+          <m.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight">
               Simple, transparent pricing
             </h1>
             <p className="mt-4 text-sm md:text-base text-muted-foreground max-w-lg mx-auto">
               Start free. Upgrade when you're ready. Cancel anytime.
             </p>
-          </motion.div>
+          </m.div>
 
           <div className="mt-8 inline-flex items-center gap-1 p-1 rounded-xl bg-secondary/60 border border-border">
             <button
               onClick={() => setAnnual(false)}
+              aria-pressed={!annual}
               className={cn(
                 "px-5 py-2 rounded-lg text-sm font-medium transition-all",
                 !annual ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
@@ -73,6 +75,7 @@ export default function Pricing() {
             </button>
             <button
               onClick={() => setAnnual(true)}
+              aria-pressed={annual}
               className={cn(
                 "px-5 py-2 rounded-lg text-sm font-medium transition-all",
                 annual ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
@@ -84,15 +87,30 @@ export default function Pricing() {
         </div>
       </section>
 
+      <section className="pb-8 px-4 sm:px-6">
+        <div className="max-w-3xl mx-auto">
+          <ComplianceBanner />
+        </div>
+      </section>
+
       <section className="pb-16 sm:pb-20 px-4 sm:px-6">
-        <div className="max-w-6xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5">
+        <div className="max-w-5xl mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5">
           {DISPLAY_PLANS.map((planId, i) => {
             const plan = PLANS[planId];
-            const price = annual ? plan.yearlyPrice : plan.monthlyPrice;
-            const priceDisplay = price === 0 ? "Free" : `$${(price / 100).toFixed(0)}`;
+            const monthlyPrice = plan.monthlyPrice;
+            const effectiveMonthly = annual
+              ? Math.round(plan.yearlyPrice)
+              : monthlyPrice;
+            const priceDisplay =
+              planId === "enterprise"
+                ? "Custom"
+                : effectiveMonthly === 0
+                  ? "Free"
+                  : `$${(effectiveMonthly / 100).toFixed(0)}`;
+            const isContactSales = planId === "enterprise";
 
             return (
-              <motion.div
+              <m.div
                 key={plan.id}
                 className={cn(
                   "relative flex flex-col rounded-2xl border p-6",
@@ -119,23 +137,37 @@ export default function Pricing() {
 
                 <div className="mt-5">
                   <span className="text-3xl font-extrabold">{priceDisplay}</span>
-                  {price > 0 && <span className="text-sm text-muted-foreground ml-1">/mo</span>}
+                  {effectiveMonthly > 0 && !isContactSales && (
+                    <span className="text-sm text-muted-foreground ml-1">/mo</span>
+                  )}
+                  {annual && effectiveMonthly > 0 && !isContactSales && (
+                    <p className="text-[11px] text-muted-foreground/70 mt-0.5">billed annually</p>
+                  )}
                 </div>
                 <p className="text-[11px] text-muted-foreground/70 mt-1">
-                  {plan.creditsPerMonth === -1 ? "Unlimited credits" : `${plan.creditsPerMonth} credits/mo`}
+                  {plan.creditsPerMonth.toLocaleString()} credits/mo
                 </p>
 
-                <Link
-                  to={planId === "free" ? "/signup" : "/signup?plan=" + planId}
-                  className={cn(
-                    "mt-5 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all",
-                    plan.isPopular
-                      ? "bg-primary text-primary-foreground hover:opacity-90"
-                      : "bg-secondary text-foreground hover:bg-secondary/80"
-                  )}
-                >
-                  {planId === "free" ? "Start Free" : "Get Started"} <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
+                {isContactSales ? (
+                  <a
+                    href={`mailto:${SALES_EMAIL}?subject=Enterprise%20plan`}
+                    className="mt-5 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all bg-secondary text-foreground hover:bg-secondary/80"
+                  >
+                    Contact Sales <ArrowRight className="w-3.5 h-3.5" />
+                  </a>
+                ) : (
+                  <Link
+                    to={planId === "free" ? "/signup" : `/signup?plan=${planId}`}
+                    className={cn(
+                      "mt-5 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all",
+                      plan.isPopular
+                        ? "bg-primary text-primary-foreground hover:opacity-90"
+                        : "bg-secondary text-foreground hover:bg-secondary/80"
+                    )}
+                  >
+                    {planId === "free" ? "Start Free" : "Get Started"} <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
+                )}
 
                 <div className="mt-6 pt-5 border-t border-border space-y-2.5 flex-1">
                   {plan.features.map((f) => (
@@ -154,37 +186,12 @@ export default function Pricing() {
                     </div>
                   ))}
                 </div>
-              </motion.div>
+              </m.div>
             );
           })}
         </div>
       </section>
-
-      <section className="pb-16 sm:pb-20 px-4 sm:px-6">
-        <div className="max-w-6xl mx-auto">
-          <div className="rounded-2xl border border-border bg-card p-5 sm:p-8 flex flex-col md:flex-row items-center justify-between gap-4 sm:gap-6">
-            <div>
-              <h3 className="text-xl font-bold">Enterprise</h3>
-              <p className="text-sm text-muted-foreground mt-1">{PLANS.enterprise.tagline}</p>
-              <div className="flex flex-wrap gap-3 mt-4">
-                {PLANS.enterprise.features.map((f) => (
-                  <span key={f.key} className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                    <Check className="w-3.5 h-3.5 text-primary" /> {f.label}
-                  </span>
-                ))}
-              </div>
-            </div>
-            <a
-              href="mailto:sales@clarifyai.com"
-              className="flex-shrink-0 px-6 py-3 rounded-xl bg-secondary text-sm font-semibold hover:bg-secondary/80 transition-all"
-            >
-              Contact Sales
-            </a>
-          </div>
-        </div>
-      </section>
-
-      {/* Credit packs section removed at launch — pricing is subscription-only. */}
+      </LazyMotion>
     </MarketingLayout>
   );
 }

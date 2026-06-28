@@ -1,4 +1,3 @@
-// @ts-nocheck -- retained: complex Supabase row types with manual schema columns not in generated types; removing suppression produces implicit-any cascade across all data accesses.
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { useDocumentStore } from "@/store/documentStore";
@@ -41,6 +40,10 @@ export default function PrepLab() {
       <PageHeader
         title="Prep Lab"
         description="Build STAR answers, study questions, and use AI tools"
+        breadcrumbs={[
+          { label: "Dashboard", href: "/app/dashboard" },
+          { label: "Prep Lab" },
+        ]}
       />
       <div className="flex flex-wrap gap-2 -mt-2">
         {[
@@ -249,7 +252,7 @@ function STARBuilder() {
                 <span className={cn(
                   "text-xs font-black uppercase px-2 py-0.5 rounded-lg",
                   key === "situation" ? "bg-blue-500/10 text-blue-400" :
-                  key === "task"      ? "bg-violet-500/10 text-violet-400" :
+                  key === "task"      ? "bg-primary/10 text-primary" :
                   key === "action"    ? "bg-emerald-500/10 text-emerald-400" :
                                         "bg-amber-500/10 text-amber-400"
                 )}>
@@ -265,7 +268,7 @@ function STARBuilder() {
                   <button
                     onClick={() => polishSection(key)}
                     disabled={aiLoading === key || !credits.canAfford("star_analyse")}
-                    className="flex items-center gap-1 text-[10px] text-violet-400 hover:text-violet-300 transition-colors disabled:opacity-40"
+                    className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 transition-colors disabled:opacity-40"
                   >
                     {aiLoading === key ? (
                       <RefreshCw className="w-3 h-3 animate-spin" />
@@ -538,11 +541,11 @@ function QuestionBank() {
               Starter examples — add your own answers to build your bank.
             </p>
             {STARTER_ANSWER_TEMPLATES.map((starter) => (
-              <Card key={starter.id} padding="sm" className="border-dashed border-violet-500/30">
+              <Card key={starter.id} padding="sm" className="border-dashed border-primary/30">
                 <p className="text-sm font-medium text-foreground">{starter.text}</p>
                 <div className="flex items-center gap-2 mt-2">
                   <Badge variant="default" size="sm">{starter.category}</Badge>
-                  <Badge variant="violet" size="sm">Example</Badge>
+                  <Badge variant="primary" size="sm">Example</Badge>
                 </div>
                 <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
                   {starter.answerPreview}
@@ -550,7 +553,7 @@ function QuestionBank() {
               </Card>
             ))}
             <div className="text-center pt-2">
-              <Link to="/app/answers" className="text-sm text-violet-500 hover:underline">
+              <Link to="/app/answers" className="text-sm text-primary hover:underline">
                 Open Answer Bank →
               </Link>
             </div>
@@ -651,7 +654,7 @@ function QuestionBank() {
               className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
             />
             {feedbackText && (
-              <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-3 text-sm text-foreground whitespace-pre-wrap leading-relaxed">
+              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm text-foreground whitespace-pre-wrap leading-relaxed">
                 {feedbackText}
               </div>
             )}
@@ -950,7 +953,7 @@ function CompanyPrep() {
           {brief.overview && (
             <Card>
               <h3 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-violet-400" />
+                <Building2 className="w-4 h-4 text-primary" />
                 Company overview
               </h3>
               <p className="text-sm text-foreground leading-relaxed">{brief.overview}</p>

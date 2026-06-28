@@ -1,10 +1,15 @@
-import { useEffect, type ReactNode } from "react";
+import { type ReactNode } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  Dialog,
+  DialogContent,
+  DialogTitle,
+} from "./dialog";
 
 // ─────────────────────────────────────────────────────────────────
 // Modal
-// Accessible modal dialog with backdrop, focus trap, ESC close.
+// Accessible modal dialog — Radix Dialog with app styling.
 // ─────────────────────────────────────────────────────────────────
 
 interface ModalProps {
@@ -26,55 +31,44 @@ const SIZES = {
 export function Modal({
   open, onClose, title, children, size = "md", className,
 }: ModalProps) {
-  // ESC to close
-  useEffect(() => {
-    if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
-  }, [open, onClose]);
-
-  // Prevent body scroll
-  useEffect(() => {
-    document.body.style.overflow = open ? "hidden" : "";
-    return () => { document.body.style.overflow = ""; };
-  }, [open]);
-
-  if (!open) return null;
-
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
-      {/* Backdrop */}
-      <div
-        className="absolute inset-0 bg-black/60 backdrop-blur-sm"
-        onClick={onClose}
-      />
-
-      {/* Panel */}
-      <div className={cn(
-        "relative w-full bg-popover border border-border rounded-2xl shadow-2xl",
-        "animate-in fade-in zoom-in-95 duration-150",
-        SIZES[size],
-        className
-      )}>
-        {/* Header */}
-        {title && (
+    <Dialog open={open} onOpenChange={(next) => { if (!next) onClose(); }}>
+      <DialogContent
+        showClose={false}
+        overlayClassName="z-[100] bg-black/60 backdrop-blur-sm"
+        className={cn(
+          "z-[100] w-full p-0 gap-0 overflow-hidden",
+          SIZES[size],
+          className,
+        )}
+      >
+        {title ? (
           <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-            <h2 className="text-base font-semibold text-foreground">{title}</h2>
+            <DialogTitle className="text-base font-semibold text-foreground">
+              {title}
+            </DialogTitle>
             <button
+              type="button"
               onClick={onClose}
-              className="w-7 h-7 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-all"
+              aria-label="Close dialog"
+              className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors duration-150"
             >
-              <X className="w-4 h-4" />
+              <X className="w-4 h-4" aria-hidden="true" />
             </button>
           </div>
+        ) : (
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close dialog"
+            className="absolute right-4 top-4 z-10 w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors duration-150"
+          >
+            <X className="w-4 h-4" aria-hidden="true" />
+          </button>
         )}
 
-        {/* Body */}
         <div className="p-6">{children}</div>
-      </div>
-    </div>
+      </DialogContent>
+    </Dialog>
   );
 }

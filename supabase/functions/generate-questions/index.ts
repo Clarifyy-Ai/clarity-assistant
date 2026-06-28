@@ -44,9 +44,10 @@ import {
 } from "../_shared/supabase.ts";
 
 import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
+import { creditCost } from "../_shared/creditEconomics.ts";
 
 const FUNCTION_NAME = "generate-questions";
-const CREDIT_COST = 3;
+const CREDIT_COST = creditCost("generate_questions");
 const AI_TIMEOUT_MS = 22_000;
 
 const SYSTEM_PROMPT = `

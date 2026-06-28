@@ -81,7 +81,8 @@ export function useCalendarSync() {
   }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ── Connect Google Calendar ───────────────────────────────────
-  const connectGoogle = useCallback(async (): Promise<void> => {
+  const connectGoogle = useCallback(async (): Promise<{ error: string | null }> => {
+    setError(null);
     const { error: oauthError } = await supabase.auth.signInWithOAuth({
       provider: "google",
       options: {
@@ -90,7 +91,11 @@ export function useCalendarSync() {
         queryParams: { access_type: "offline", prompt: "consent" },
       },
     });
-    if (oauthError) setError(oauthError.message);
+    if (oauthError) {
+      setError(oauthError.message);
+      return { error: oauthError.message };
+    }
+    return { error: null };
   }, []);
 
   // ── Sync calendar events ──────────────────────────────────────

@@ -1,5 +1,5 @@
 // @ts-nocheck
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { companyProfilePath } from "@/lib/company/slug";
 import { supabase } from "@/lib/supabase/client";
@@ -9,6 +9,8 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import {
   Building2, Search, ChevronRight,
   Plus, Sparkles, Clock, Star,
@@ -35,24 +37,33 @@ export default function CompanyResearch() {
   const [loading,   setLoading]   = useState(false);
   const [saved,     setSaved]     = useState<any[]>([]);
   const [loadingSaved, setLoadingSaved] = useState(true);
+  const [savedError, setSavedError] = useState<string | null>(null);
 
-  // Fetch previously generated briefs
-  useEffect(() => {
-    if (!user) return;
-    void supabase
+  const loadSavedBriefs = useCallback(async () => {
+    if (!user?.id) return;
+    setLoadingSaved(true);
+    setSavedError(null);
+    const { data, error } = await supabase
       .from("company_research")
       .select("id, company_name, role_title, created_at, overview")
       .eq("user_id", user.id)
       .order("created_at", { ascending: false })
-      .limit(20)
-      .then(({ data, error }) => {
-        if (error) {
-          console.error("[CompanyResearch] saved briefs:", error);
-        }
-        setSaved(data ?? []);
-        setLoadingSaved(false);
-      });
+      .limit(20);
+    if (error) {
+      console.error("[CompanyResearch] saved briefs:", error);
+      setSavedError(error.message);
+      setSaved([]);
+    } else {
+      setSaved(data ?? []);
+    }
+    setLoadingSaved(false);
   }, [user?.id]);
+
+  // Fetch previously generated briefs
+  useEffect(() => {
+    if (!user) return;
+    void loadSavedBriefs();
+  }, [user, loadSavedBriefs]);
 
   useEffect(() => {
     const q = searchParams.get("q")?.trim();
@@ -119,11 +130,15 @@ export default function CompanyResearch() {
       </Card>
 
       {/* Previously generated */}
+      {savedError && (
+        <InlineErrorRetry message={savedError} onRetry={() => void loadSavedBriefs()} />
+      )}
+
       {loadingSaved ? (
         <div className="space-y-3">
           {[...Array(3)].map((_, i) => <SkeletonCard key={i} />)}
         </div>
-      ) : saved.length > 0 && (
+      ) : saved.length > 0 ? (
         <div>
           <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-3">
             Recent briefs
@@ -137,8 +152,8 @@ export default function CompanyResearch() {
                 onClick={() => navigate(`/app/companies/${s.company_name.toLowerCase().replace(/\s+/g, "-")}?name=${encodeURIComponent(s.company_name)}`)}
               >
                 <div className="flex items-center gap-4">
-                  <div className="w-9 h-9 bg-violet-500/10 rounded-xl flex items-center justify-center shrink-0">
-                    <Building2 className="w-4 h-4 text-violet-400" />
+                  <div className="w-9 h-9 bg-primary/10 rounded-xl flex items-center justify-center shrink-0">
+                    <Building2 className="w-4 h-4 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-semibold text-foreground">{s.company_name}</p>
@@ -153,7 +168,16 @@ export default function CompanyResearch() {
             ))}
           </div>
         </div>
-      )}
+      ) : !savedError ? (
+        <Card>
+          <EmptyState
+            icon={Building2}
+            title="No saved briefs yet"
+            description="Search for a company above to generate your first AI interview brief."
+            compact
+          />
+        </Card>
+      ) : null}
     </div>
   );
 }

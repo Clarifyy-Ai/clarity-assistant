@@ -1,7 +1,7 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { supabase } from "@/integrations/supabase/client";
 import { refreshCredits } from "@/lib/billing/creditsManager";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -10,12 +10,13 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import {
   Server, ChevronRight, Sparkles, Copy, Save, CheckCircle,
-  AlertCircle, Network, Database, Globe, Shield,
+  AlertCircle, Network, Database, Globe, Shield, LayoutTemplate,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { answerBankDB } from "@/lib/supabase/database";
-import { Whiteboard } from "@/components/prep/Whiteboard";
+import { Whiteboard, type WhiteboardHandle } from "@/components/prep/Whiteboard";
+import { SYSTEM_DESIGN_PRESETS } from "@/lib/prep/systemDesignPresets";
 
 type Difficulty = "easy" | "medium" | "hard";
 
@@ -56,6 +57,8 @@ function normalizeDifficulty(value: string | null | undefined): Difficulty {
 export default function SystemDesign() {
   const credits = useCredits();
   const { user } = useAuthStore();
+  const whiteboardRef = useRef<WhiteboardHandle>(null);
+  const [activePreset, setActivePreset] = useState<string | null>(null);
 
   const [topics, setTopics]       = useState<DesignTopic[] | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -142,7 +145,43 @@ export default function SystemDesign() {
       <PageHeader
         title="System Design"
         description="Practice system design interviews with AI-guided breakdowns"
+        breadcrumbs={[
+          { label: "Dashboard", href: "/app/dashboard" },
+          { label: "Prep Lab", href: "/app/prep" },
+          { label: "System Design" },
+        ]}
       />
+
+      <Card>
+        <div className="flex items-center gap-2 mb-3">
+          <LayoutTemplate className="w-4 h-4 text-primary" />
+          <p className="text-xs font-semibold text-foreground uppercase tracking-widest">
+            Template presets
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {SYSTEM_DESIGN_PRESETS.map((preset) => (
+            <button
+              key={preset.id}
+              type="button"
+              onClick={() => {
+                whiteboardRef.current?.loadPreset(preset.id);
+                setActivePreset(preset.id);
+                toast.success(`${preset.label} template loaded on whiteboard`);
+              }}
+              className={cn(
+                "px-3 py-2 rounded-xl border text-xs font-medium transition-all text-left",
+                activePreset === preset.id
+                  ? "bg-primary/20 border-primary/30 text-primary"
+                  : "bg-secondary border-border text-muted-foreground hover:text-foreground"
+              )}
+            >
+              <span className="block font-semibold">{preset.label}</span>
+              <span className="block text-[10px] opacity-80 mt-0.5">{preset.description}</span>
+            </button>
+          ))}
+        </div>
+      </Card>
 
       <div className="flex flex-col lg:flex-row gap-5">
         <div className="w-full lg:w-80 lg:max-w-full space-y-2 flex-shrink-0 max-h-[600px] overflow-y-auto pr-1">
@@ -168,7 +207,7 @@ export default function SystemDesign() {
               className={cn(
                 "w-full text-left px-4 py-3 rounded-xl border transition-all",
                 selected === topic.id
-                  ? "bg-violet-600/10 border-violet-500/30"
+                  ? "bg-primary/10 border-primary/30"
                   : "bg-secondary/50 border-border hover:bg-secondary"
               )}
             >
@@ -247,9 +286,9 @@ export default function SystemDesign() {
               </div>
 
               {breakdown && (
-                <Card className="border-violet-500/20 bg-violet-500/5">
+                <Card className="border-primary/20 bg-primary/5">
                   <div className="flex items-center justify-between mb-3">
-                    <p className="text-xs font-semibold text-violet-400 uppercase tracking-widest flex items-center gap-1.5">
+                    <p className="text-xs font-semibold text-primary uppercase tracking-widest flex items-center gap-1.5">
                       <Sparkles className="w-3.5 h-3.5" /> AI Design Breakdown
                     </p>
                     <button
@@ -267,7 +306,7 @@ export default function SystemDesign() {
                 <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">
                   Sketch your design
                 </p>
-                <Whiteboard height={380} />
+                <Whiteboard ref={whiteboardRef} height={380} />
               </div>
             </>
           ) : (

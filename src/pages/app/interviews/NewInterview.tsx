@@ -13,9 +13,12 @@
 // - @ts-nocheck preserved
 
 import { useState, useMemo, useRef, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useInterviewScheduler } from "@/hooks/useInterviewScheduler";
+import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
 import { useCalendarSync } from "@/hooks/useCalendarSync";
+import { useDocuments } from "@/hooks/useDocuments";
+import { useDocumentStore } from "@/store/documentStore";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -24,7 +27,7 @@ import {
   CalendarDays, Building2, Clock,
   User, ChevronLeft,
   Globe, Link as LinkIcon,
-  AlertCircle, X,
+  AlertCircle, X, FileText, Briefcase,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -47,6 +50,45 @@ const PLATFORMS = [
 ];
 
 const ROUND_NUMBERS = [1, 2, 3, 4, 5];
+
+function todayDateString(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function buildHalfHourSlots(): string[] {
+  const slots: string[] = [];
+  for (let h = 0; h < 24; h++) {
+    for (const m of [0, 30]) {
+      slots.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+    }
+  }
+  return slots;
+}
+
+function combineSchedule(date: string, time: string): Date | null {
+  if (!date || !time) return null;
+  const parsed = new Date(`${date}T${time}:00`);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getDefaultTimeSlot(date: string): string {
+  const now = new Date();
+  const isToday = date === todayDateString();
+  const slots = buildHalfHourSlots();
+
+  if (!isToday) return "09:00";
+
+  const mins = now.getHours() * 60 + now.getMinutes();
+  const next = slots.find((slot) => {
+    const [h, m] = slot.split(":").map(Number);
+    return h * 60 + m > mins;
+  });
+  return next ?? slots[slots.length - 1];
+}
 
 /* ─── HELPERS ───────────────────────────────────────────────────────────── */
 
@@ -71,22 +113,68 @@ function toStageFromType(label: string): string {
   }
 }
 
+function fromInterviewTypeSlug(slug: string): string {
+  const match = INTERVIEW_TYPES.find((t) => toInterviewTypeSlug(t) === slug);
+  return match ?? "Other";
+}
+
+function formatDateInput(iso: string | null | undefined): string {
+  if (!iso) return todayDateString();
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return todayDateString();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+function formatTimeInput(iso: string | null | undefined): string {
+  if (!iso) return "09:00";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "09:00";
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 /* ─── COMPONENT ─────────────────────────────────────────────────────────── */
 
 export default function NewInterview() {
   const navigate  = useNavigate();
+  const { id: editId } = useParams<{ id?: string }>();
+  const isEditMode = Boolean(editId);
   const scheduler = useInterviewScheduler();
+  const interviewStore = useInterviewSchedulerStore();
   const calendar  = useCalendarSync();
+  useDocuments();
+  const resumes = useDocumentStore((s) => s.resumes);
+  const jds = useDocumentStore((s) => s.jds);
+  const activeResumeId = useDocumentStore((s) => s.active_resume_id);
+  const activeJdId = useDocumentStore((s) => s.active_jd_id);
+
+  const editingInterview = useMemo(
+    () => (editId ? interviewStore.interviews.find((iv) => iv.id === editId) : undefined),
+    [editId, interviewStore.interviews],
+  );
+  const editingRound = editingInterview?.next_round ?? editingInterview?.rounds?.[0] ?? null;
 
   // ✅ FIX: Mounted ref so we never call toast/setState after navigate() unmounts us
   const mountedRef = useRef(true);
+  const prefilledRef = useRef(false);
   useEffect(() => () => { mountedRef.current = false; }, []);
+
+  useEffect(() => {
+    if (isEditMode && editId && !interviewStore.interviews.find((iv) => iv.id === editId)) {
+      void scheduler.reload();
+    }
+  }, [isEditMode, editId, interviewStore.interviews, scheduler]);
 
   const [company,         setCompany]         = useState("");
   const [roleTitle,       setRoleTitle]        = useState("");
   const [interviewType,   setInterviewType]    = useState("Behavioural");
   const [platform,        setPlatform]         = useState("zoom");
-  const [scheduledAt,     setScheduledAt]      = useState("");
+  const [scheduleDate,    setScheduleDate]      = useState(todayDateString());
+  const [scheduleTime,    setScheduleTime]      = useState(() => getDefaultTimeSlot(todayDateString()));
+  const [resumeId,        setResumeId]          = useState<string | null>(activeResumeId);
+  const [jdId,            setJdId]              = useState<string | null>(activeJdId);
   const [duration,        setDuration]         = useState(45);
   const [roundNumber,     setRoundNumber]      = useState(1);
   const [interviewerName, setInterviewerName]  = useState("");
@@ -97,11 +185,68 @@ export default function NewInterview() {
   // ✅ FIX: Calendar not-connected banner dismiss state
   const [calendarBannerDismissed, setCalendarBannerDismissed] = useState(false);
 
-  // ✅ FIX: useMemo so handleSubmit always reads the current truthiness without
-  // relying on a stale closure value captured at function-definition time.
+  useEffect(() => {
+    setResumeId(activeResumeId);
+  }, [activeResumeId]);
+
+  useEffect(() => {
+    setJdId(activeJdId);
+  }, [activeJdId]);
+
+  useEffect(() => {
+    if (!isEditMode || !editingInterview || prefilledRef.current) return;
+    prefilledRef.current = true;
+
+    setCompany(editingInterview.company_name ?? "");
+    setRoleTitle(editingInterview.role_title ?? "");
+    setNotes(editingInterview.notes ?? "");
+    setResumeId(editingInterview.resume_id ?? null);
+    setJdId(editingInterview.jd_id ?? null);
+
+    if (editingRound) {
+      setInterviewType(fromInterviewTypeSlug(editingRound.interview_type ?? "behavioural"));
+      setRoundNumber(editingRound.round_number ?? 1);
+      setScheduleDate(formatDateInput(editingRound.scheduled_at));
+      setScheduleTime(formatTimeInput(editingRound.scheduled_at));
+      setDuration(editingRound.duration_minutes ?? 45);
+      setInterviewerName(editingRound.interviewer_name ?? "");
+      setMeetingLink(editingRound.meeting_link ?? "");
+      setPlatform(editingRound.platform ?? "zoom");
+    }
+  }, [isEditMode, editingInterview, editingRound]);
+
+  const minDate = todayDateString();
+  const timeSlots = useMemo(() => {
+    const all = buildHalfHourSlots();
+    if (scheduleDate !== minDate) return all;
+    const now = new Date();
+    const mins = now.getHours() * 60 + now.getMinutes();
+    return all.filter((slot) => {
+      const [h, m] = slot.split(":").map(Number);
+      return h * 60 + m > mins;
+    });
+  }, [scheduleDate, minDate]);
+
+  useEffect(() => {
+    if (timeSlots.length > 0 && !timeSlots.includes(scheduleTime)) {
+      setScheduleTime(timeSlots[0]);
+    }
+  }, [timeSlots, scheduleTime]);
+
+  const scheduledAtIso = useMemo(() => {
+    const dt = combineSchedule(scheduleDate, scheduleTime);
+    return dt?.toISOString() ?? "";
+  }, [scheduleDate, scheduleTime]);
+
   const canSubmit = useMemo(
-    () => Boolean(company.trim() && roleTitle.trim() && scheduledAt),
-    [company, roleTitle, scheduledAt],
+    () => {
+      const dt = combineSchedule(scheduleDate, scheduleTime);
+      const scheduleValid = isEditMode
+        ? Boolean(scheduleDate && scheduleTime && dt)
+        : Boolean(scheduleDate && scheduleTime && dt && dt.getTime() > Date.now());
+      return Boolean(company.trim() && roleTitle.trim() && scheduleValid);
+    },
+    [company, roleTitle, scheduleDate, scheduleTime, isEditMode],
   );
 
   async function handleSubmit(e: React.FormEvent) {
@@ -110,6 +255,47 @@ export default function NewInterview() {
 
     setLoading(true);
     setError(null);
+
+    if (isEditMode && editId && editingRound) {
+      const { error: updateErr } = await scheduler.updateInterview(editId, {
+        company_name: company.trim(),
+        role_title: roleTitle.trim(),
+        stage: toStageFromType(interviewType),
+        notes: notes.trim(),
+        resume_id: resumeId,
+        jd_id: jdId,
+        is_remote: platform !== "onsite",
+      });
+
+      if (updateErr) {
+        if (mountedRef.current) {
+          setError(updateErr);
+          setLoading(false);
+        }
+        toast.error(updateErr);
+        return;
+      }
+
+      const { error: roundErr } = await scheduler.updateRound(editingRound.id, {
+        round_number: roundNumber,
+        round_label: `Round ${roundNumber} — ${interviewType}`,
+        interview_type: toInterviewTypeSlug(interviewType),
+        scheduled_at: scheduledAtIso,
+        duration_minutes: duration,
+        interviewer_name: interviewerName.trim(),
+        platform,
+        meeting_link: meetingLink.trim(),
+      });
+
+      if (roundErr) {
+        toast.warning(`Interview updated, but round details failed: ${roundErr}`);
+      } else {
+        toast.success("Interview updated!");
+      }
+
+      navigate(`/app/interviews/${editId}`);
+      return;
+    }
 
     // ── Step 1: Create parent scheduled_interviews row ────────────────────
     const { id, error: createErr } = await scheduler.createInterview({
@@ -122,8 +308,8 @@ export default function NewInterview() {
       job_posting_url: "",
       salary_range:    "",
       notes:           notes.trim(),
-      resume_id:       null,
-      jd_id:           null,
+      resume_id:       resumeId,
+      jd_id:           jdId,
     });
 
     if (createErr || !id) {
@@ -141,7 +327,7 @@ export default function NewInterview() {
       round_number:      roundNumber,
       round_label:       `Round ${roundNumber} — ${interviewType}`,
       interview_type:    toInterviewTypeSlug(interviewType),
-      scheduled_at:      new Date(scheduledAt).toISOString(),
+      scheduled_at:      scheduledAtIso,
       duration_minutes:  duration,
       interviewer_name:  interviewerName.trim(),
       interviewer_title: "",
@@ -163,7 +349,7 @@ export default function NewInterview() {
             interview_id: id,
             company_name: company.trim(),
             role_title: roleTitle.trim(),
-            scheduled_at: new Date(scheduledAt).toISOString(),
+            scheduled_at: scheduledAtIso,
           }
         );
       } catch (remErr) {
@@ -225,8 +411,8 @@ export default function NewInterview() {
           <ChevronLeft className="w-4 h-4" aria-hidden="true" />
         </button>
         <PageHeader
-          title="Schedule interview"
-          subtitle="Add a new interview to your tracker"
+          title={isEditMode ? "Edit interview" : "Schedule interview"}
+          subtitle={isEditMode ? "Update your scheduled interview details" : "Add a new interview to your tracker"}
           className="mb-0"
         />
       </div>
@@ -285,7 +471,7 @@ export default function NewInterview() {
         {/* Company + role */}
         <Card>
           <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-            <Building2 className="w-4 h-4 text-violet-400" aria-hidden="true" />
+            <Building2 className="w-4 h-4 text-primary" aria-hidden="true" />
             Company &amp; Role
           </h3>
           <div className="space-y-4">
@@ -295,6 +481,7 @@ export default function NewInterview() {
               onChange={(e) => setCompany(e.target.value)}
               placeholder="e.g. Google"
               required
+              aria-required={true}
               autoFocus
             />
             <Input
@@ -303,6 +490,7 @@ export default function NewInterview() {
               onChange={(e) => setRoleTitle(e.target.value)}
               placeholder="e.g. Senior Software Engineer"
               required
+              aria-required={true}
             />
           </div>
         </Card>
@@ -366,19 +554,44 @@ export default function NewInterview() {
           <div className="space-y-4">
             <div>
               <label
-                htmlFor="scheduled-at"
+                htmlFor="schedule-date"
                 className="text-xs font-medium text-foreground mb-1.5 block"
               >
-                Date &amp; time
+                Date
               </label>
               <input
-                id="scheduled-at"
-                type="datetime-local"
-                value={scheduledAt}
-                onChange={(e) => setScheduledAt(e.target.value)}
+                id="schedule-date"
+                type="date"
+                value={scheduleDate}
+                min={minDate}
+                onChange={(e) => setScheduleDate(e.target.value)}
                 required
+                aria-required={true}
                 className="w-full bg-background border border-input text-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
               />
+            </div>
+
+            <div>
+              <label
+                htmlFor="schedule-time"
+                className="text-xs font-medium text-foreground mb-1.5 block"
+              >
+                Time (30-min intervals)
+              </label>
+              <select
+                id="schedule-time"
+                value={scheduleTime}
+                onChange={(e) => setScheduleTime(e.target.value)}
+                required
+                aria-required={true}
+                className="w-full bg-background border border-input text-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
+              >
+                {timeSlots.map((slot) => (
+                  <option key={slot} value={slot}>
+                    {slot}
+                  </option>
+                ))}
+              </select>
             </div>
 
             <div>
@@ -404,6 +617,58 @@ export default function NewInterview() {
                 ))}
               </div>
             </div>
+          </div>
+        </Card>
+
+        {/* Linked documents */}
+        <Card>
+          <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+            <FileText className="w-4 h-4 text-primary" aria-hidden="true" />
+            Linked documents
+          </h3>
+          <div className="space-y-4">
+            <div>
+              <label htmlFor="linked-jd" className="text-xs font-medium text-foreground mb-1.5 block">
+                Job description (optional)
+              </label>
+              <select
+                id="linked-jd"
+                value={jdId ?? ""}
+                onChange={(e) => setJdId(e.target.value || null)}
+                className="w-full bg-background border border-input text-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
+              >
+                <option value="">No JD linked</option>
+                {jds.map((jd) => (
+                  <option key={jd.id} value={jd.id}>
+                    {jd.title || jd.company || jd.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label htmlFor="linked-resume" className="text-xs font-medium text-foreground mb-1.5 block">
+                Resume (optional)
+              </label>
+              <select
+                id="linked-resume"
+                value={resumeId ?? ""}
+                onChange={(e) => setResumeId(e.target.value || null)}
+                className="w-full bg-background border border-input text-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
+              >
+                <option value="">No resume linked</option>
+                {resumes.map((resume) => (
+                  <option key={resume.id} value={resume.id}>
+                    {resume.title || resume.file_name || resume.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {jds.length === 0 && resumes.length === 0 && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Briefcase className="w-3.5 h-3.5" />
+                Upload documents in Documents to link them here.
+              </p>
+            )}
           </div>
         </Card>
 
@@ -504,7 +769,7 @@ export default function NewInterview() {
             disabled={!canSubmit || loading}
             leftIcon={<CalendarDays className="w-4 h-4" aria-hidden="true" />}
           >
-            Schedule interview
+            {isEditMode ? "Save changes" : "Schedule interview"}
           </Button>
         </div>
       </form>

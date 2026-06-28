@@ -6,15 +6,18 @@ import { useCredits } from "@/hooks/useCredits";
 
 import {
   PLANS,
-  PLAN_ORDER,
   type PlanId,
   getUserSubscription,
   type Subscription,
 } from "@/lib/billing/subscriptionManager";
 
+import { LAUNCH_PLANS } from "@/lib/constants/pricing";
+
 import {
   formatPrice,
   CREDIT_PACKS as TOPUP_PACKS,
+  getCostPerCredit,
+  getBestValueCreditPack,
 } from "@/lib/billing/priceCalculator";
 
 import {
@@ -23,6 +26,10 @@ import {
   openCheckoutForPrice,
   openBillingPortal,
 } from "@/lib/api/billing";
+import {
+  openRazorpayCheckout,
+  type RazorpayProductType,
+} from "@/lib/api/payments";
 
 import { PricingCard } from "@/components/billing/PricingCard";
 import { Card } from "@/components/ui/Card";
@@ -146,6 +153,8 @@ export default function SettingsBilling(): JSX.Element {
   const [loadingSub, setLoadingSub] = useState(true);
   const [subError, setSubError] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [promoCode, setPromoCode] = useState("");
+  const [razorpayLoading, setRazorpayLoading] = useState<string | null>(null);
 
   const effectivePlanId = (planId as PlanId) || "free";
   const currentPlan = PLANS[effectivePlanId] ?? PLANS.free;
@@ -182,9 +191,10 @@ export default function SettingsBilling(): JSX.Element {
     const legacyCanceled = searchParams.get("canceled");
 
     if (checkoutStatus === "success" || legacySuccess === "1") {
-      toast.success("Payment successful! Your plan or credits will update shortly.");
+      toast.success("Payment successful! Your balance is updating now.");
       setSearchParams({}, { replace: true });
       void reloadBillingState();
+      void refreshCredits();
       return;
     }
 
@@ -197,8 +207,7 @@ export default function SettingsBilling(): JSX.Element {
   const statusInfo = STATUS_LABELS[subscription?.status ?? ""] ?? null;
 
   const creditsRemaining = credits.balance;
-  const creditsMonthly =
-    currentPlan.creditsPerMonth === -1 ? 999 : currentPlan.creditsPerMonth;
+  const creditsMonthly = currentPlan.creditsPerMonth;
 
   const creditsUsed = Math.max(0, creditsMonthly - creditsRemaining);
 
@@ -211,6 +220,32 @@ export default function SettingsBilling(): JSX.Element {
     () => isSubscriptionCancelable(subscription, effectivePlanId),
     [subscription, effectivePlanId]
   );
+
+  const bestValuePackId = useMemo(
+    () => getBestValueCreditPack().id,
+    []
+  );
+
+  async function handleRazorpayCheckout(productType: RazorpayProductType): Promise<void> {
+    setRazorpayLoading(productType);
+    try {
+      await openRazorpayCheckout({
+        productType,
+        promoCode: promoCode.trim() || undefined,
+        userEmail: profile?.email ?? user?.email ?? undefined,
+        userName: profile?.full_name ?? undefined,
+        onSuccess: () => {
+          toast.success("Payment received — credits will appear shortly.");
+          void credits.refresh();
+        },
+      });
+    } catch (error) {
+      console.error("[SettingsBilling] Razorpay", error);
+      toast.error("Checkout failed. Try again or contact support.");
+    } finally {
+      setRazorpayLoading(null);
+    }
+  }
 
   async function handleUpgrade(targetPlanId: string): Promise<void> {
     if (!STRIPE_CONFIGURED) {
@@ -344,6 +379,11 @@ export default function SettingsBilling(): JSX.Element {
       <PageHeader
         title="Billing & Subscription"
         description="Manage your plan, subscription, credits, and invoices"
+        breadcrumbs={[
+          { label: "Dashboard", href: "/app/dashboard" },
+          { label: "Settings", href: "/app/settings" },
+          { label: "Billing" },
+        ]}
       />
 
       {!STRIPE_CONFIGURED && (
@@ -371,6 +411,34 @@ export default function SettingsBilling(): JSX.Element {
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-red-400 mt-0.5 shrink-0" />
             <p className="text-sm text-red-300">{subError}</p>
+          </div>
+        </Card>
+      )}
+
+      {!loadingSub && subscription?.status === "past_due" && (
+        <Card className="border-amber-500/30 bg-amber-500/5">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+            <div className="flex items-start gap-3 flex-1">
+              <AlertTriangle className="w-5 h-5 text-amber-400 mt-0.5 shrink-0" />
+              <div>
+                <p className="text-sm font-semibold text-amber-300">Payment failed</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Your last payment could not be processed. Update your payment method to
+                  keep your subscription active.
+                </p>
+              </div>
+            </div>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => void handleOpenBillingPortal()}
+              loading={actionLoading === "portal"}
+              disabled={!STRIPE_CONFIGURED}
+              className="shrink-0"
+            >
+              <RefreshCw className="w-3.5 h-3.5 mr-1" />
+              Retry payment
+            </Button>
           </div>
         </Card>
       )}
@@ -443,7 +511,7 @@ export default function SettingsBilling(): JSX.Element {
 
                 <p className="text-xs text-muted-foreground">
                   {creditsUsed} /{" "}
-                  {currentPlan.creditsPerMonth === -1 ? "∞" : creditsMonthly}
+                  {creditsMonthly.toLocaleString()}
                 </p>
               </div>
 
@@ -457,8 +525,8 @@ export default function SettingsBilling(): JSX.Element {
 
             <div className="flex items-center justify-between pt-2">
               <div className="flex items-center gap-2">
-                <Zap className="w-4 h-4 text-violet-400" />
-                <span className="text-sm font-bold text-violet-400">
+                <Zap className="w-4 h-4 text-primary" />
+                <span className="text-sm font-bold text-primary">
                   {creditsRemaining} credits remaining
                 </span>
               </div>
@@ -467,12 +535,12 @@ export default function SettingsBilling(): JSX.Element {
                 <Button
                   variant="primary"
                   size="sm"
-                  onClick={() => void handleUpgrade("starter")}
-                  loading={actionLoading === "starter"}
+                  onClick={() => void handleUpgrade("pro")}
+                  loading={actionLoading === "pro"}
                   disabled={!STRIPE_CONFIGURED}
                 >
                   <ArrowUpRight className="w-3.5 h-3.5 mr-1" />
-                  Upgrade
+                  Upgrade to Pro
                 </Button>
               )}
 
@@ -592,8 +660,8 @@ export default function SettingsBilling(): JSX.Element {
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
-          {PLAN_ORDER.filter((id) => id !== "enterprise").map((id) => {
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+          {LAUNCH_PLANS.map((id) => {
             const plan = PLANS[id];
             const isCurrent = effectivePlanId === id;
             const color = PLAN_COLORS[id] ?? "violet";
@@ -609,11 +677,7 @@ export default function SettingsBilling(): JSX.Element {
                     : formatPrice(plan.monthlyPrice, true)
                 }
                 period={plan.monthlyPrice === 0 ? "" : "/mo"}
-                credits={
-                  plan.creditsPerMonth === -1
-                    ? undefined
-                    : plan.creditsPerMonth
-                }
+                credits={plan.creditsPerMonth}
                 color={color}
                 features={plan.features.slice(0, 5).map((feature) => ({
                   label: feature.label,
@@ -645,8 +709,115 @@ export default function SettingsBilling(): JSX.Element {
 
       <div>
         <h3 className="text-sm font-semibold text-foreground mb-3">
-          Buy Credit Packs
+          Checkout (Razorpay — India)
         </h3>
+        <Card className="p-4 mb-4 space-y-3">
+          <p className="text-xs text-muted-foreground">
+            Pay in INR via Razorpay. Referral codes and admin offers apply at checkout.
+            Credits auto-deduct when you use AI features.
+          </p>
+          <input
+            className="w-full max-w-xs rounded-lg border border-border bg-background px-3 py-2 text-sm"
+            placeholder="Promo / referral code"
+            value={promoCode}
+            onChange={(e) => setPromoCode(e.target.value.toUpperCase())}
+          />
+          <div className="flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              loading={razorpayLoading === "pro_monthly"}
+              onClick={() => void handleRazorpayCheckout("pro_monthly")}
+            >
+              Pro — Razorpay
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={razorpayLoading === "credits_150"}
+              onClick={() => void handleRazorpayCheckout("credits_150")}
+            >
+              150 credits
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              loading={razorpayLoading === "credits_500"}
+              onClick={() => void handleRazorpayCheckout("credits_500")}
+            >
+              500 credits
+            </Button>
+          </div>
+        </Card>
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-foreground mb-3">
+          Buy Credit Packs (Stripe)
+        </h3>
+
+        <Card className="mb-3 overflow-hidden p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[520px]">
+              <thead>
+                <tr className="border-b border-border bg-secondary/30 text-left text-xs text-muted-foreground">
+                  <th className="py-3 px-4 font-medium">Pack</th>
+                  <th className="py-3 px-4 font-medium text-right">Credits</th>
+                  <th className="py-3 px-4 font-medium text-right">Price</th>
+                  <th className="py-3 px-4 font-medium text-right">$/credit</th>
+                  <th className="py-3 px-4 font-medium text-right">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {TOPUP_PACKS.map((pack) => {
+                  const centsPerCredit = getCostPerCredit(pack);
+                  const isBestValue = pack.id === bestValuePackId;
+                  return (
+                    <tr
+                      key={pack.id}
+                      className={cn(
+                        "border-b border-border/60 last:border-0",
+                        isBestValue && "bg-primary/5"
+                      )}
+                    >
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2">
+                          <span className="font-medium text-foreground">{pack.label}</span>
+                          {isBestValue && (
+                            <Badge variant="primary" size="sm">
+                              Best value
+                            </Badge>
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-right font-semibold text-foreground">
+                        {pack.credits.toLocaleString()}
+                      </td>
+                      <td className="py-3 px-4 text-right font-semibold text-foreground">
+                        {formatPrice(pack.priceUsdCents)}
+                      </td>
+                      <td className="py-3 px-4 text-right text-muted-foreground">
+                        {formatPrice(Math.round(centsPerCredit), true)}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <Button
+                          variant="secondary"
+                          size="xs"
+                          loading={actionLoading === pack.id}
+                          disabled={!STRIPE_CONFIGURED || !pack.stripePriceId}
+                          onClick={() =>
+                            void handleBuyCredits(pack.id, pack.stripePriceId)
+                          }
+                        >
+                          Buy
+                        </Button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </Card>
 
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           {TOPUP_PACKS.map((pack) => (
@@ -654,26 +825,36 @@ export default function SettingsBilling(): JSX.Element {
               key={pack.id}
               className={cn(
                 "flex flex-col gap-2",
-                pack.badge && "border-violet-500/30 bg-violet-600/5"
+                pack.badge && "border-primary/30 bg-primary/5"
               )}
             >
               {pack.badge && (
-                <Badge variant="violet" size="sm" className="self-start">
+                <Badge variant="primary" size="sm" className="self-start">
                   {pack.badge}
+                </Badge>
+              )}
+              {pack.id === bestValuePackId && !pack.badge && (
+                <Badge variant="primary" size="sm" className="self-start">
+                  Best value
                 </Badge>
               )}
 
               <div className="flex items-baseline justify-between">
                 <div>
                   <p className="text-lg font-black text-foreground">
-                    {pack.credits}
+                    {pack.credits.toLocaleString()}
                   </p>
                   <p className="text-xs text-muted-foreground">credits</p>
                 </div>
 
-                <p className="text-lg font-bold text-foreground">
-                  {formatPrice(pack.priceUsdCents)}
-                </p>
+                <div className="text-right">
+                  <p className="text-lg font-bold text-foreground">
+                    {formatPrice(pack.priceUsdCents)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {formatPrice(Math.round(getCostPerCredit(pack)), true)}/credit
+                  </p>
+                </div>
               </div>
 
               <Button

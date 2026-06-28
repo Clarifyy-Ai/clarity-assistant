@@ -21,9 +21,9 @@ interface CardSectionProps {
 
 const PADDING = {
   none: "",
-  sm: "p-3",
-  md: "p-5",
-  lg: "p-6",
+  sm: "density-card p-[calc(0.75rem*var(--spacing-scale))]",
+  md: "density-card p-[calc(1.25rem*var(--spacing-scale))]",
+  lg: "density-card p-[calc(1.5rem*var(--spacing-scale))]",
 };
 
 export function Card({
@@ -37,9 +37,14 @@ export function Card({
     <div
       onClick={onClick}
       className={cn(
-        "bg-card border border-border rounded-2xl",
+        "bg-card border border-border rounded-2xl shadow-sm",
         PADDING[padding],
-        hover && "hover:bg-accent/10 hover:border-accent/20 transition-all cursor-pointer",
+        hover && [
+          "hover:bg-accent/5 hover:border-accent/20 hover:shadow-md",
+          "transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out",
+          "active:scale-[0.995] motion-reduce:active:scale-100",
+          "cursor-pointer",
+        ],
         onClick && "cursor-pointer",
         className
       )}

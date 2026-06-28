@@ -30,12 +30,12 @@ export { useSessionContext } from "./useSessionContext";
 export { useSessionOrchestrator } from "./useSessionOrchestrator";
 export { useRoom } from "./useRoom";
 
-// ─── Overlay & Stealth ────────────────────────────────────────────────────────
+// ─── Overlay ──────────────────────────────────────────────────────────────────
 export { useOverlayVisibility } from "./useOverlayVisibility";
-export { useStealthMouse } from "./useStealthMouse";
 export { useHotkeys } from "./useHotkeys";
 export { useNetworkMonitor } from "./useNetworkMonitor";
 export { useOfflineFallback } from "./useOfflineFallback";
+export { useIsOffline } from "./useIsOffline";
 
 // ─── AI & Analysis ────────────────────────────────────────────────────────────
 export { useConfidenceScore } from "./useConfidenceScore";

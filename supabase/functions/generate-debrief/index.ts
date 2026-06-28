@@ -27,8 +27,11 @@ import {
 
 import {
   authenticateRequest,
-  enforceResourceOwnership,
 } from "../_shared/auth.ts";
+
+import {
+  enforceAiSessionAccess,
+} from "../_shared/sessionEnforcement.ts";
 
 import {
   checkRateLimit,
@@ -48,14 +51,25 @@ import {
 } from "../_shared/audit.ts";
 
 import {
+  createServiceClient,
   deductCreditsAtomic,
   refundCredits,
 } from "../_shared/supabase.ts";
 
-import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
+import { parseJSON } from "../_shared/gemini.ts";
+import {
+  generateWithFallback,
+  logAICost,
+  moderateOutput,
+  type AIProviderResult,
+} from "../_shared/aiProvider.ts";
+import { resolveModel } from "../_shared/resolveModel.ts";
+import { extractBYOK } from "../_shared/utils.ts";
 
 const FUNCTION_NAME = "generate-debrief";
-const CREDIT_COST = 10;
+import { creditCost } from "../_shared/creditEconomics.ts";
+
+const CREDIT_COST = creditCost("session_debrief");
 
 const SYSTEM_PROMPT = `
 You are a world-class interview coach.
@@ -222,18 +236,9 @@ function getByokGeminiKey(req: Request): string | undefined {
   return value && value.length > 0 ? value : undefined;
 }
 
-function sanitizeModel(input?: string): string | undefined {
+function sanitizeModelInput(input?: string): string | undefined {
   const model = String(input ?? "").trim();
-
-  if (!model) {
-    return undefined;
-  }
-
-  if (!/^gemini-[a-z0-9.-]+$/i.test(model)) {
-    return undefined;
-  }
-
-  return model;
+  return model.length > 0 ? model : undefined;
 }
 
 function zodErrors(error: z.ZodError): Record<string, string[]> {
@@ -525,34 +530,28 @@ Return ONLY valid JSON in this exact schema:
 `.trim();
 }
 
-async function generateWithRetry(options: {
+async function generateDebriefText(options: {
   prompt: string;
-  byokGeminiKey?: string;
-  model?: string;
-}): Promise<string | null> {
+  userId: string;
+  model: string;
+  byok?: ReturnType<typeof extractBYOK>;
+}): Promise<{ text: string; aiResult: AIProviderResult } | null> {
   try {
-    return await geminiGenerate(
-      options.prompt,
-      SYSTEM_PROMPT,
-      0.4,
-      3_000,
-      options.byokGeminiKey,
-      options.model
-    );
+    const result = await generateWithFallback({
+      prompt: options.prompt,
+      systemPrompt: SYSTEM_PROMPT,
+      temperature: 0.4,
+      maxTokens: 3000,
+      userId: options.userId,
+      action: "generate_debrief",
+      model: options.model,
+      jsonMode: true,
+      byok: options.byok,
+    });
+    const moderated = moderateOutput(result.text);
+    return { text: moderated.filtered, aiResult: result };
   } catch {
-    // retry once
-    try {
-      return await geminiGenerate(
-        options.prompt,
-        SYSTEM_PROMPT,
-        0.4,
-        3_000,
-        options.byokGeminiKey,
-        options.model
-      );
-    } catch {
-      return null;
-    }
+    return null;
   }
 }
 
@@ -619,27 +618,25 @@ Deno.serve(async (req: Request) => {
   }
 
   const { session_id, model } = validation.data;
-  const safeModel = sanitizeModel(model);
-  const byokGeminiKey = getByokGeminiKey(req);
+  const byok = extractBYOK(req);
   const idempotencyKey = getIdempotencyKey(req);
 
-  const ownershipFailure = await enforceResourceOwnership({
-    table: "sessions",
-    resourceId: session_id,
+  const sessionEnforcementFailure = await enforceAiSessionAccess({
+    sessionId: session_id,
     authenticatedUserId: user.id,
   });
 
-  if (ownershipFailure) {
+  if (sessionEnforcementFailure) {
     await logPermissionDenied({
       req,
       userId: user.id,
       functionName: FUNCTION_NAME,
       resourceType: "session",
       resourceId: session_id,
-      reason: "Session ownership check failed.",
+      reason: "Session type not permitted for AI debrief.",
     });
 
-    return withCorsHeaders(req, ownershipFailure);
+    return withCorsHeaders(req, sessionEnforcementFailure);
   }
 
   const db = createServiceClient();
@@ -750,19 +747,22 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    const resolvedModel = await resolveModel(db, user.id, sanitizeModelInput(model));
+
     const prompt = buildPrompt({
       session,
       answersSummary: answerSummary,
       answerCount: answers.length,
     });
 
-    const raw = await generateWithRetry({
+    const debriefAi = await generateDebriefText({
       prompt,
-      byokGeminiKey,
-      model: safeModel,
+      userId: user.id,
+      model: resolvedModel,
+      byok,
     });
 
-    if (!raw) {
+    if (!debriefAi) {
       await refundCredits({
         userId: user.id,
         cost: CREDIT_COST,
@@ -789,7 +789,17 @@ Deno.serve(async (req: Request) => {
       });
     }
 
-    const parsed = parseJSON<DebriefPayload>(raw, DEFAULT_DEBRIEF);
+    void logAICost(db, {
+      userId: user.id,
+      action: "generate_debrief",
+      model: debriefAi.aiResult.model,
+      inputTokens: debriefAi.aiResult.inputTokens,
+      outputTokens: debriefAi.aiResult.outputTokens,
+      latencyMs: debriefAi.aiResult.latencyMs,
+      wasFallback: debriefAi.aiResult.wasFallback,
+    });
+
+    const parsed = parseJSON<DebriefPayload>(debriefAi.text, DEFAULT_DEBRIEF);
     const debriefPayload = normalizeDebrief(parsed);
 
     const { data: debrief, error: debriefError } = await db

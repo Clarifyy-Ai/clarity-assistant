@@ -98,6 +98,11 @@ export default function Rephraser() {
       <PageHeader
         title="Answer Rephraser"
         description="Paste an interview answer and get three AI-improved alternatives — formal, confident, and concise"
+        breadcrumbs={[
+          { label: "Dashboard", href: "/app/dashboard" },
+          { label: "Prep Lab", href: "/app/prep" },
+          { label: "Rephraser" },
+        ]}
       />
 
       {/* Input */}
@@ -144,19 +149,19 @@ export default function Rephraser() {
           {(["formal", "confident", "concise"] as const).map((style) => {
             const styleConfig = {
               formal:    { label: "Formal",    icon: "📋", color: "blue"   },
-              confident: { label: "Confident", icon: "💪", color: "violet" },
+              confident: { label: "Confident", icon: "💪", color: "primary" },
               concise:   { label: "Concise",   icon: "✂️",  color: "emerald" },
             }[style];
 
             const borderClass = {
               blue:    "border-blue-500/20 bg-blue-500/5",
-              violet:  "border-violet-500/20 bg-violet-500/5",
+              primary: "border-primary/20 bg-primary/5",
               emerald: "border-emerald-500/20 bg-emerald-500/5",
             }[styleConfig.color];
 
             const headerClass = {
               blue:    "text-blue-400",
-              violet:  "text-violet-400",
+              primary: "text-primary",
               emerald: "text-emerald-400",
             }[styleConfig.color];
 
@@ -208,7 +213,7 @@ export default function Rephraser() {
                 <p className="text-[10px] text-muted-foreground mt-0.5">Original words</p>
               </div>
               <div className="flex items-center justify-center">
-                <ArrowRight className="w-5 h-5 text-violet-500" />
+                <ArrowRight className="w-5 h-5 text-primary" />
               </div>
               <div>
                 <p className="text-2xl font-bold text-emerald-400">

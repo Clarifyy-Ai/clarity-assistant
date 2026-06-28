@@ -10,6 +10,8 @@ import {
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const FROM_EMAIL = "Clarify AI <hello@confideq.app>";
+/** Public legal operator name — not "Payara Innovations Private Limited". */
+const LEGAL_ENTITY_NAME = "Payara Labs";
 
 /* -------------------------------------------------------------------------- */
 /*                              HELPERS                                       */
@@ -85,7 +87,7 @@ function renderTemplate(type: EmailType, data: any) {
   <div class="logo">⚡ Clarify AI</div>
   ${inner}
   <div class="footer">
-    © 2025 Payara Labs · <a href="https://confideq.app/unsubscribe" style="color:#4b5563;">Unsubscribe</a>
+    © ${new Date().getFullYear()} ${LEGAL_ENTITY_NAME} · <a href="https://confideq.app/unsubscribe" style="color:#4b5563;">Unsubscribe</a>
   </div>
 </div>
 </body>

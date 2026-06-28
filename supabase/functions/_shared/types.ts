@@ -102,17 +102,17 @@ export type FeatureKey =
   | "polish_star";
 
 export const CREDIT_COSTS: Record<FeatureKey, number> = {
-  generate_answer:    2,
-  generate_hint:      1,
+  generate_answer:    8,
+  generate_hint:      2,
   generate_feedback:  3,
-  generate_star:      2,
-  generate_debrief:   5,
+  generate_star:      10,
+  generate_debrief:   15,
   coach_message:      2,
-  company_research:   3,
-  resume_analysis:    5,
-  rephrase:           1,
+  company_research:  20,
+  resume_analysis:   12,
+  rephrase:           3,
   schedule_interview: 1,
-  polish_star:        1,
+  polish_star:        2,
 };
 
 // ─── STAR Framework ──────────────────────────────────────────────────────────

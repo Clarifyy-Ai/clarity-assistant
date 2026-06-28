@@ -84,7 +84,14 @@ export {
   SidebarMenuSubButton, SidebarMenuSubItem, SidebarProvider, SidebarRail,
   SidebarSeparator, SidebarTrigger, useSidebar,
 } from "./sidebar";
-export { Skeleton } from "./skeleton";
+export {
+  Skeleton,
+  SkeletonCard,
+  SkeletonTable,
+  SkeletonText,
+} from "./SkeletonLoader";
+export { Skeleton as SkeletonLoader } from "./SkeletonLoader";
+export { Skeleton as SkeletonPrimitive } from "./skeleton";
 export { Slider } from "./slider";
 export { Toaster as Sonner } from "./sonner";
 export { Switch } from "./switch";
@@ -92,7 +99,17 @@ export {
   Table, TableHeader, TableBody, TableFooter, TableHead,
   TableRow, TableCell, TableCaption,
 } from "./table";
-export { Textarea } from "./textarea";
+export {
+  DataTable,
+  TableHeader as DataTableHeader,
+  TableHead as DataTableHead,
+  TableBody as DataTableBody,
+  TableRow as DataTableRow,
+  TableCell as DataTableCell,
+  TableFooter as DataTableFooter,
+  TableCaption as DataTableCaption,
+} from "./DataTable";
+export { Textarea } from "./Input";
 export { ToastContainer } from "./toast-container";
 export { Toast, ToastAction, ToastClose, ToastDescription, ToastProvider, ToastTitle, ToastViewport } from "./toast";
 export { Toaster } from "./toaster";
@@ -102,12 +119,11 @@ export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./tool
 // ─── Custom UI Components ─────────────────────────────────────────────────────
 export { Badge } from "./Badge";
 export { Button } from "./Button";
-export { Card, CardHeader, CardTitle } from "./Card";
+export { Card, CardHeader, CardTitle, CardContent, CardFooter } from "./Card";
 export { Dropdown } from "./Dropdown";
 export { Input } from "./Input";
 export { Modal } from "./Modal";
 export { ProgressBar } from "./ProgressBar";
-export { Skeleton as SkeletonLoader } from "./skeleton";
 export { Spinner } from "./Spinner";
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./Tabs";
 export { ThemeToggle } from "./ThemeToggle";

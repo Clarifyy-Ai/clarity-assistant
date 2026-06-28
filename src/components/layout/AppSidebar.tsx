@@ -2,6 +2,7 @@ import {
   type ComponentType,
   type SVGProps,
   useEffect,
+  useState,
 } from "react";
 import { NavLink, useLocation } from "react-router-dom";
 import {
@@ -18,7 +19,8 @@ import {
   ChevronLeft,
   ChevronRight,
   LogOut,
-  Star,
+  Phone,
+  Gift,
   Users,
   Bell,
   Briefcase,
@@ -34,6 +36,7 @@ import {
   BookMarked,
   ShieldAlert,
   CreditCard,
+  Star,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -48,6 +51,9 @@ import {
 } from "@/lib/stealth/stealthConfig";
 
 import type { ProfileRow } from "@/types";
+import { getPlanDisplayName } from "@/lib/constants/pricing";
+import { PRODUCT_NAMES, NAV_SECTION_LABELS } from "@/lib/constants/productNames";
+import { useIndiaRegion } from "@/hooks/useIndiaRegion";
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -57,6 +63,8 @@ type NavItem = {
   stealthIcon: IconComponent;
   label: string;
   exact?: boolean;
+  tourId?: string;
+  indiaOnly?: boolean;
 };
 
 type NavSection = {
@@ -72,6 +80,14 @@ type SidebarLinkProps = {
   exact?: boolean;
   stealth?: boolean;
   onClick?: () => void;
+  onMouseEnter?: () => void;
+};
+
+/** Prefetch heavy route chunks on sidebar hover. */
+const ROUTE_PREFETCH: Record<string, () => Promise<unknown>> = {
+  "/app/dashboard": () => import("@/pages/app/Dashboard"),
+  "/app/live": () => import("@/pages/app/live/LiveRehearsal"),
+  "/app/mock-test": () => import("@/pages/app/mock-test/MockTestHub"),
 };
 
 interface AppSidebarProps {
@@ -80,113 +96,118 @@ interface AppSidebarProps {
 
 const NAV_SECTIONS: NavSection[] = [
   {
-    label: "Core",
+    label: NAV_SECTION_LABELS.core,
     items: [
       {
         to: "/app/dashboard",
         icon: LayoutDashboard,
         stealthIcon: Briefcase,
-        label: "Dashboard",
+        label: PRODUCT_NAMES.dashboard,
       },
       {
         to: "/app/live",
         icon: Mic,
         stealthIcon: ListTodo,
-        label: "Live Co-Pilot",
+        label: PRODUCT_NAMES.practiceCoach,
+        tourId: "nav-practice-coach",
       },
       {
         to: "/app/mock",
         icon: ClipboardList,
         stealthIcon: PenTool,
-        label: "Mock Interview",
+        label: PRODUCT_NAMES.mockInterview,
+        tourId: "nav-mock-interview",
       },
       {
         to: "/app/prep",
         icon: FlaskConical,
         stealthIcon: FolderOpen,
-        label: "Prep Lab",
+        label: PRODUCT_NAMES.prepLab,
+        tourId: "nav-prep-lab",
       },
       {
         to: "/app/mock-test",
         icon: ClipboardList,
         stealthIcon: PenTool,
-        label: "Gov Exam Mock Tests",
+        label: PRODUCT_NAMES.govExams,
+        indiaOnly: true,
       },
     ],
   },
   {
-    label: "Growth",
+    label: NAV_SECTION_LABELS.progress,
     items: [
       {
         to: "/app/sessions",
-        icon: Star,
+        icon: Phone,
         stealthIcon: FileSpreadsheet,
-        label: "Call Sessions",
+        label: PRODUCT_NAMES.sessionHistory,
       },
       {
         to: "/app/analytics",
         icon: BarChart2,
         stealthIcon: BarChart3,
-        label: "Analytics",
+        label: PRODUCT_NAMES.analytics,
       },
       {
         to: "/app/usage",
         icon: CreditCard,
         stealthIcon: BarChart3,
-        label: "Usage",
+        label: PRODUCT_NAMES.creditsUsage,
       },
       {
         to: "/app/debrief",
         icon: BookMarked,
         stealthIcon: Inbox,
-        label: "Debrief",
+        label: PRODUCT_NAMES.debrief,
       },
       {
         to: "/app/referrals",
-        icon: Star,
+        icon: Gift,
         stealthIcon: Star,
-        label: "Referrals",
+        label: PRODUCT_NAMES.referrals,
       },
       {
         to: "/app/documents",
         icon: FileText,
         stealthIcon: FileText,
-        label: "Documents",
+        label: PRODUCT_NAMES.documents,
+        tourId: "nav-documents",
       },
       {
         to: "/app/answers",
         icon: BookOpen,
         stealthIcon: FolderOpen,
-        label: "Answer Bank",
+        label: PRODUCT_NAMES.answerBank,
       },
     ],
   },
   {
-    label: "Planner",
+    label: NAV_SECTION_LABELS.planner,
     items: [
       {
         to: "/app/interview-day",
         icon: CalendarDays,
         stealthIcon: Calendar,
-        label: "Interview Day",
+        label: PRODUCT_NAMES.interviewDay,
       },
       {
         to: "/app/interviews",
         icon: CalendarDays,
         stealthIcon: Calendar,
-        label: "Interviews",
+        label: PRODUCT_NAMES.interviews,
       },
       {
         to: "/app/companies",
         icon: Building2,
         stealthIcon: Building,
-        label: "Companies",
+        label: PRODUCT_NAMES.companyResearch,
       },
       {
         to: "/app/rooms",
         icon: Users,
         stealthIcon: Users,
-        label: "Practice Rooms",
+        label: PRODUCT_NAMES.groupPractice,
       },
     ],
   },
@@ -205,13 +226,7 @@ function getProfileInitial(profile: ProfileRow | null | undefined): string {
 }
 
 function getPlanLabel(profile: ProfileRow | null | undefined): string {
-  const planId = profile?.plan_id;
-
-  if (typeof planId === "string" && planId.trim().length > 0) {
-    return planId;
-  }
-
-  return "free";
+  return getPlanDisplayName(profile?.plan_id);
 }
 
 function isPathActive(currentPath: string, itemPath: string): boolean {
@@ -230,10 +245,14 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
 
   const profile = useAuthStore((state) => state.profile);
   const isAdmin = useAuthStore((state) => state.isAdmin);
+  const { isIndia } = useIndiaRegion();
 
   const signOut = useAuthStore((state) => state.signOut);
 
+  const [hoverExpanded, setHoverExpanded] = useState(false);
+
   const collapsed = onNavClick ? false : sidebarCollapsed;
+  const visuallyCollapsed = collapsed && !hoverExpanded;
   const initial = getProfileInitial(profile);
   const planLabel = getPlanLabel(profile);
 
@@ -274,15 +293,21 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
         "flex flex-col flex-shrink-0",
         onNavClick ? "flex" : "hidden md:flex",
         "h-screen bg-sidebar-background border-r border-sidebar-border",
-        "transition-all duration-200 relative z-30",
-        onNavClick ? "w-56" : collapsed ? "w-16" : "w-56"
+        "transition-all duration-200 relative z-[200]",
+        onNavClick ? "w-56" : visuallyCollapsed ? "w-16" : "w-56"
       )}
+      onMouseEnter={() => {
+        if (!onNavClick && collapsed && window.matchMedia("(min-width: 1024px)").matches) {
+          setHoverExpanded(true);
+        }
+      }}
+      onMouseLeave={() => setHoverExpanded(false)}
     >
       <div className="flex min-h-[56px] items-center gap-3 border-b border-sidebar-border px-4 py-4">
         <div
           className={cn(
             "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
-            stealthMode ? "bg-blue-600" : "bg-violet-600"
+            stealthMode ? "bg-blue-600" : "bg-primary"
           )}
         >
           {stealthMode ? (
@@ -292,9 +317,9 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
           )}
         </div>
 
-        {!collapsed && (
+        {!visuallyCollapsed && (
           <span className="text-lg font-bold tracking-tight text-sidebar-foreground">
-            {stealthMode ? STEALTH_BRAND.name : "Clarify AI"}
+            {stealthMode ? STEALTH_BRAND.name : PRODUCT_NAMES.brand}
           </span>
         )}
       </div>
@@ -302,7 +327,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
       <nav className="flex-1 space-y-4 overflow-y-auto py-3">
         {NAV_SECTIONS.map((section) => (
           <div key={section.label}>
-            {!collapsed && (
+            {!visuallyCollapsed && (
               <p className="mb-1 px-4 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
                 {stealthMode
                   ? STEALTH_SECTION_LABELS[section.label] ?? section.label
@@ -310,7 +335,9 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
               </p>
             )}
 
-            {section.items.map((item) => {
+            {section.items
+              .filter((item) => !item.indiaOnly || isIndia)
+              .map((item) => {
               const isItemActive = isPathActive(location.pathname, item.to);
               const Icon = stealthMode ? item.stealthIcon : item.icon;
 
@@ -319,8 +346,12 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
                   <NavLink
                     to={item.to}
                     end={item.exact}
-                    title={collapsed ? item.label : undefined}
+                    title={visuallyCollapsed ? item.label : undefined}
+                    data-tour={item.tourId}
                     onClick={onNavClick}
+                    onMouseEnter={() => {
+                      ROUTE_PREFETCH[item.to]?.();
+                    }}
                     className={({ isActive }) => {
                       const active =
                         isActive &&
@@ -332,15 +363,15 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
                         active || isItemActive
                           ? stealthMode
                             ? "border border-blue-500/20 bg-blue-600/15 text-blue-600 dark:text-blue-300"
-                            : "border border-violet-500/20 bg-violet-600/15 text-violet-600 dark:text-violet-300"
+                            : "border border-primary/20 bg-primary/15 text-primary dark:text-primary/90"
                           : "text-muted-foreground hover:bg-accent/10 hover:text-foreground",
-                        collapsed && "justify-center"
+                        visuallyCollapsed && "justify-center"
                       );
                     }}
                   >
                     <Icon className="h-4 w-4 shrink-0" />
 
-                    {!collapsed && (
+                    {!visuallyCollapsed && (
                       <span className="truncate flex-1">
                         {stealthMode
                           ? STEALTH_NAV_LABELS[item.label] ?? item.label
@@ -360,7 +391,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
           to="/help"
           icon={BookMarked}
           label="Guide"
-          collapsed={collapsed}
+          collapsed={visuallyCollapsed}
           stealth={stealthMode}
           onClick={onNavClick}
         />
@@ -369,7 +400,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
           to="/app/notifications"
           icon={stealthMode ? Inbox : Bell}
           label={stealthMode ? "Inbox" : "Notifications"}
-          collapsed={collapsed}
+          collapsed={visuallyCollapsed}
           stealth={stealthMode}
           onClick={onNavClick}
         />
@@ -378,7 +409,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
           to="/app/settings"
           icon={stealthMode ? Wrench : Settings}
           label={stealthMode ? "Preferences" : "Settings"}
-          collapsed={collapsed}
+          collapsed={visuallyCollapsed}
           stealth={stealthMode}
           onClick={onNavClick}
         />
@@ -388,7 +419,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
             to="/app/admin"
             icon={ShieldAlert}
             label="Admin Panel"
-            collapsed={collapsed}
+            collapsed={visuallyCollapsed}
             stealth={stealthMode}
             onClick={onNavClick}
           />
@@ -397,41 +428,49 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
         <div
           className={cn(
             "mx-1 flex items-center gap-2 rounded-xl px-3 py-2 transition-all hover:bg-accent/10",
-            collapsed && "justify-center"
+            visuallyCollapsed && "justify-center"
           )}
         >
-          <div
-            className={cn(
-              "flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-bold text-white",
-              stealthMode ? "bg-blue-600" : "bg-violet-700"
-            )}
+          <NavLink
+            to="/app/profile"
+            onClick={onNavClick}
+            title={visuallyCollapsed ? "Profile" : undefined}
+            className="shrink-0"
           >
-            {initial}
-          </div>
+            <div
+              className={cn(
+                "flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold text-white",
+                stealthMode ? "bg-blue-600" : "bg-primary"
+              )}
+            >
+              {initial}
+            </div>
+          </NavLink>
 
-          {!collapsed && (
+          {!visuallyCollapsed && (
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-medium text-sidebar-foreground">
                 {profile?.full_name ?? "User"}
               </p>
 
-              <p className="text-[10px] capitalize text-muted-foreground">
+              <p className="text-[10px] text-muted-foreground">
                 {planLabel}
               </p>
             </div>
           )}
 
-          {!collapsed && (
-            <button
-              type="button"
-              onClick={() => void handleLogout()}
-              title="Sign out"
-              aria-label="Sign out"
-              className="p-1 text-muted-foreground transition-colors hover:text-red-400"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-            </button>
-          )}
+          <button
+            type="button"
+            onClick={() => void handleLogout()}
+            title="Log out"
+            aria-label="Log out"
+            className={cn(
+              "p-1.5 rounded-lg text-muted-foreground transition-colors hover:text-red-400 hover:bg-red-500/10",
+              visuallyCollapsed && "mx-auto",
+            )}
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
         </div>
       </div>
 
@@ -474,7 +513,7 @@ function SidebarLink({
           isActive
             ? stealth
               ? "border border-blue-500/20 bg-blue-600/15 text-blue-600 dark:text-blue-300"
-              : "border border-violet-500/20 bg-violet-600/15 text-violet-600 dark:text-violet-300"
+              : "border border-primary/20 bg-primary/15 text-primary dark:text-primary/90"
             : "text-muted-foreground hover:bg-accent/10 hover:text-foreground",
           collapsed && "justify-center"
         )

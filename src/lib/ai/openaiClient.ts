@@ -5,6 +5,7 @@ import type { CoachingContext } from "@/types/ai.types";
 export interface OpenAIStreamOptions {
   question: string;
   context: CoachingContext;
+  model?: string;
   isLive: boolean;
   sessionId: string;
   questionId: string;
@@ -26,13 +27,12 @@ export async function streamOpenAIHint(opts: OpenAIStreamOptions): Promise<void>
 
   const body = {
     question,
+    model: opts.model ?? "gpt-4o",
     interview_type: context.session_type ?? "behavioral",
     target_company: context.target_company ?? null,
     transcript: context.last_transcript ?? null,
     resume_context: context.resume_experience_summary ?? null,
     simple_language: simpleLanguage ?? false,
-    // Optional: allow router to pass model override if you support it later
-    model: undefined,
   };
 
   try {

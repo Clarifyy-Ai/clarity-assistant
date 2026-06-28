@@ -18,13 +18,13 @@ export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const VARIANTS = {
-  primary:     "bg-primary hover:bg-primary/90 text-primary-foreground border-transparent",
-  secondary:   "bg-secondary hover:bg-secondary/80 text-secondary-foreground border-border",
-  ghost:       "bg-transparent hover:bg-secondary text-muted-foreground hover:text-foreground border-transparent",
-  danger:      "bg-red-600/20 hover:bg-red-600/30 text-red-500 dark:text-red-400 border-red-500/30",
-  destructive: "bg-red-600/20 hover:bg-red-600/30 text-red-500 dark:text-red-400 border-red-500/30",
-  success:     "bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
-  outline:     "bg-transparent hover:bg-secondary text-foreground border-border hover:border-primary/30",
+  primary:     "bg-primary hover:bg-primary/90 active:bg-primary/80 text-primary-foreground border-transparent shadow-sm hover:shadow-md",
+  secondary:   "bg-secondary hover:bg-secondary/80 active:bg-secondary/70 text-secondary-foreground border-border",
+  ghost:       "bg-transparent hover:bg-secondary active:bg-secondary/80 text-muted-foreground hover:text-foreground border-transparent",
+  danger:      "bg-destructive/15 hover:bg-destructive/25 active:bg-destructive/30 text-destructive border-destructive/30",
+  destructive: "bg-destructive/15 hover:bg-destructive/25 active:bg-destructive/30 text-destructive border-destructive/30",
+  success:     "bg-emerald-600/15 hover:bg-emerald-600/25 active:bg-emerald-600/30 text-emerald-600 dark:text-emerald-400 border-emerald-500/30",
+  outline:     "bg-transparent hover:bg-secondary active:bg-secondary/80 text-foreground border-border hover:border-primary/40",
 };
 
 const SIZES = {
@@ -58,9 +58,11 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         ref={ref}
         disabled={disabled || loading}
         className={cn(
-          "inline-flex items-center justify-center font-medium border transition-all",
-          "disabled:opacity-40 disabled:cursor-not-allowed",
-          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50",
+          "inline-flex items-center justify-center font-medium border",
+          "transition-[color,background-color,border-color,box-shadow,transform] duration-150 ease-out",
+          "active:scale-[0.98] motion-reduce:active:scale-100",
+          "disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
           VARIANTS[resolvedVariant],
           SIZES[size],
           fullWidth && "w-full",

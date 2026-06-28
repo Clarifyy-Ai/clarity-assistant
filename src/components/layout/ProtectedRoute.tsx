@@ -1,10 +1,11 @@
 import { memo } from "react";
-import { Navigate, Outlet, useLocation } from "react-router-dom";
+import { Navigate, Outlet, useLocation, Link } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { Spinner } from "@/components/ui/Spinner";
 import { Card } from "@/components/ui/Card";
 import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
 import { AlertCircle } from "lucide-react";
+import { isBillingSuspended } from "@/lib/billing/subscriptionAccess";
 
 interface ProtectedRouteProps {
   requireOnboarding?: boolean;
@@ -66,6 +67,44 @@ export const ProtectedRoute = memo(function ProtectedRoute({
   // 3) Not authenticated
   if (!user || status === "unauthenticated") {
     return <Navigate to={loginPath} state={{ from: location }} replace />;
+  }
+
+  // 3a) Billing suspension — past_due beyond 3-day grace (stripe-webhook sets payment_failed_at)
+  const billingSuspended =
+    isProfileLoaded && isBillingSuspended(profile);
+  const onBillingRecoveryPath =
+    location.pathname.startsWith("/app/settings/billing") ||
+    location.pathname.startsWith("/app/settings/credits");
+
+  if (billingSuspended && !onBillingRecoveryPath) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <Card className="w-full max-w-md p-6">
+          <div className="flex gap-3">
+            <AlertCircle className="h-5 w-5 text-destructive mt-1 flex-shrink-0" />
+            <div>
+              <h2 className="text-lg font-semibold mb-2">Account suspended</h2>
+              <p className="text-sm text-muted-foreground mb-4">
+                Your subscription payment is overdue. Update your billing details to restore access.
+              </p>
+              <Link
+                to="/app/settings/billing"
+                className="inline-block px-4 py-2 bg-primary rounded-lg text-sm font-medium text-primary-foreground hover:opacity-90 transition mr-2"
+              >
+                Update billing
+              </Link>
+              <button
+                type="button"
+                onClick={() => useAuthStore.getState().signOut()}
+                className="inline-block px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-secondary transition"
+              >
+                Sign out
+              </button>
+            </div>
+          </div>
+        </Card>
+      </div>
+    );
   }
 
   // 3b) Banned users — block all protected routes

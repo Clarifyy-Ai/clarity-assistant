@@ -1,28 +1,26 @@
 // src/pages/app/live/LiveOverlay.tsx — PRODUCTION READY
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 
 import { useCallSession } from "@/hooks/useCallSession";
-import { CallSessionLifecycleBanner } from "@/components/live/CallSessionLifecycleBanner";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useAudioStore } from "@/store/audioStore";
-import { useAuthStore } from "@/store/userStore";
 
 import { OverlayWindow } from "@/components/overlay/OverlayWindow";
 import { OverlayKeyboardHandler } from "@/components/overlay/OverlayKeyboardHandler";
+import { WindowVisibilityManager } from "@/components/overlay/WindowVisibilityManager";
 import { LiveSessionController } from "@/components/live/LiveSessionController";
-import { ScreenCaptureBlocker } from "@/components/overlay/ScreenCaptureBlocker";
 import { PreSessionSetupWizard } from "@/components/session/PreSessionSetupWizard";
 import { Button } from "@/components/ui/Button";
 
-import { getOrCreateSession } from "@/lib/session/sessionLifecycle";
-import { toDbModel } from "@/lib/ai/modelMapping";
-
-import { ClipboardCheck, AlertTriangle, RefreshCw, Eye } from "lucide-react";
+import { ClipboardCheck, AlertTriangle, RefreshCw, Eye, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { Skeleton } from "@/components/ui/SkeletonLoader";
 import type { LiveSessionConfig } from "@/types/session.types";
+import { notifyOverlayVisibilityOnMobile } from "@/lib/overlay/overlayVisibilityNotice";
+import { setGenerateAnswerHandler } from "@/lib/overlay/hotkeys";
+import { useHotkeys } from "@/hooks/useHotkeys";
 
 const PREP_LABELS = [
   "Analysing your profile…",
@@ -45,22 +43,19 @@ const DEFAULT_CONFIG: LiveSessionConfig = {
 };
 
 export default function LiveOverlay() {
-  const profile = useAuthStore((s) => s.profile);
+  const navigate = useNavigate();
   const sessionStatus = useSessionStore((s) => s.status);
 
   const [phase, setPhase] = useState<"setup" | "starting" | "active">("setup");
   const [config, setConfig] = useState<LiveSessionConfig>(DEFAULT_CONFIG);
   const [lastSessionId, setLastSessionId] = useState<string | null>(null);
-  const [preparedSessionId, setPreparedSessionId] = useState<string | null>(null);
 
   const hasStartedRef = useRef(false);
   const didEndRef = useRef(false);
-  const isPreparingSessionRef = useRef(false);
 
   const call = useCallSession({
     config,
-    sessionType: "live",
-    existingSessionId: preparedSessionId,
+    sessionType: "rehearsal",
   });
   const copilot = call.copilot;
 
@@ -94,54 +89,16 @@ export default function LiveOverlay() {
 
     hasStartedRef.current = false;
     didEndRef.current = false;
-    isPreparingSessionRef.current = false;
 
     setLastSessionId(null);
-    setPreparedSessionId(null);
     setConfig(sessionConfig);
     setPhase("starting");
   }, []);
 
-  // ── Prepare DB session then start live session ───────────────────────────
+  // ── Start live session (creation handled by start-session edge via useLiveCopilot) ──
   useEffect(() => {
     if (phase !== "starting" || hasStartedRef.current) return;
 
-    if (!profile?.id) {
-      toast.error("Please sign in to start a live session.");
-      setPhase("setup");
-      return;
-    }
-
-    // 1) Prepare session record first (best-effort reuse)
-    if (!preparedSessionId) {
-      if (isPreparingSessionRef.current) return;
-      isPreparingSessionRef.current = true;
-
-      getOrCreateSession({
-        user_id: profile.id,
-        type: "live",
-        title: config.company ? `Live — ${config.company}` : "Live co-pilot",
-        document_id: null,
-        jd_id: config.jd_id ?? null,
-        model_used: toDbModel(config.model) as any,
-      })
-        .then(({ session, reused }) => {
-          setPreparedSessionId(session.id);
-          if (reused) toast.message("Resuming your in-progress live session");
-        })
-        .catch((err: unknown) => {
-          const message = err instanceof Error ? err.message : "Failed to prepare live session";
-          toast.error(message);
-          setPhase("setup");
-        })
-        .finally(() => {
-          isPreparingSessionRef.current = false;
-        });
-
-      return;
-    }
-
-    // 2) Now start live session exactly once
     hasStartedRef.current = true;
 
     call
@@ -158,7 +115,7 @@ export default function LiveOverlay() {
         setPhase("setup");
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [phase, profile?.id, preparedSessionId, config]);
+  }, [phase]);
 
   // Ensure overlay is visible in active phase by default
   useEffect(() => {
@@ -207,9 +164,41 @@ export default function LiveOverlay() {
     [copilot]
   );
 
+  useEffect(() => {
+    setGenerateAnswerHandler(handleGenerate);
+    return () => setGenerateAnswerHandler(null);
+  }, [handleGenerate]);
+
+  useHotkeys(undefined, isActive || isPaused);
+
   // ── Setup screen ─────────────────────────────────────────────────────────
+  useEffect(() => {
+    if (phase === "setup") notifyOverlayVisibilityOnMobile();
+  }, [phase]);
+
   if (phase === "setup") {
-    return <PreSessionSetupWizard onStart={handleSetup} sessionType="live" />;
+    return (
+      <div className="relative min-h-screen bg-background">
+        <header className="sticky top-0 z-[300] flex items-center gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
+          <button
+            type="button"
+            onClick={() => navigate("/app/dashboard")}
+            className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <ArrowLeft className="w-3.5 h-3.5" />
+            Dashboard
+          </button>
+          <span className="text-sm font-semibold text-foreground">Overlay practice mode</span>
+          <Link
+            to="/app/guide/practice-coach"
+            className="ml-auto text-[10px] font-medium text-primary hover:underline"
+          >
+            Install guide
+          </Link>
+        </header>
+        <PreSessionSetupWizard onStart={handleSetup} sessionType="live" />
+      </div>
+    );
   }
 
   if (phase === "starting") {
@@ -236,16 +225,49 @@ export default function LiveOverlay() {
   // ── Active / ended screen ────────────────────────────────────────────────
   return (
     <>
-      <ScreenCaptureBlocker isActive={isActive} />
+      <header className="fixed top-0 left-0 right-0 z-[300] flex items-center gap-3 border-b border-border bg-background/95 px-4 py-2.5 backdrop-blur">
+        <button
+          type="button"
+          onClick={() => {
+            if (isActive || isPaused) {
+              void handleStop().then(() => navigate("/app/dashboard"));
+            } else {
+              navigate("/app/dashboard");
+            }
+          }}
+          className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          Dashboard
+        </button>
+        <span className="text-xs text-muted-foreground truncate">
+          {isActive ? "Session active" : "Session ended"}
+        </span>
+      </header>
+
       <LiveSessionController isActive={isActive} onAutoEnd={handleStop} />
 
-      {/* Enable hotkeys when active (and safe if you later allow paused) */}
-      <OverlayKeyboardHandler enabled={isActive || isPaused} onToggleMute={copilot.toggleMute} />
+      <OverlayKeyboardHandler
+        enabled={isActive || isPaused}
+        onToggleMute={copilot.toggleMute}
+        onCaptureCoding={() => void copilot.captureCodingAnswer()}
+        onGenerate={handleGenerate}
+      />
+
+      <WindowVisibilityManager
+        autoHideOnBlur={false}
+        trackIdleTime={false}
+      />
 
       <OverlayWindow
         onToggleMic={copilot.toggleMute}
         onToggleSystemAudio={copilot.toggleSystemAudio}
         onGenerate={handleGenerate}
+        onRegenerate={() => copilot.requestAnswerModification("regenerate")}
+        onShorten={() => copilot.requestAnswerModification("shorten")}
+        onExpand={() => copilot.requestAnswerModification("expand")}
+        onCaptureCoding={() => void copilot.captureCodingAnswer()}
+        onAdjustRegion={() => void copilot.adjustRegionCodingAnswer()}
         onEndSession={handleStop}
         onManualQuestion={handleManualQuestion}
         onStartSession={handleSetup}
@@ -253,16 +275,24 @@ export default function LiveOverlay() {
         lastSessionId={lastSessionId}
         isPreparingSession={copilot.isPreparingSession}
         prepStepIndex={copilot.prepStepIndex}
+        interviewType={config.interview_type}
       />
 
       {/* Recovery pill — visible when overlay is hidden during an active/paused session */}
       {(isActive || isPaused) && !overlayVisible && (
         <button
-          onClick={() => useOverlayStore.getState().showOverlay()}
+          onClick={() => {
+            const store = useOverlayStore.getState();
+            if (store.is_peek_active) {
+              store.restoreOverlay?.();
+            } else {
+              store.showOverlay();
+            }
+          }}
           className="fixed bottom-6 right-6 z-50 inline-flex items-center gap-2 rounded-full bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground shadow-lg shadow-primary/30 hover:opacity-90 transition-opacity"
         >
           <Eye className="w-4 h-4" />
-          Show Overlay
+          Restore Overlay
         </button>
       )}
 
@@ -282,7 +312,7 @@ export default function LiveOverlay() {
       )}
 
       {/* Centre content */}
-      <div className="flex items-center justify-center h-[60vh]">
+      <div className="flex items-center justify-center min-h-[60vh] pt-14 px-4">
         <div className="text-center space-y-3">
           {isActive ? (
             <>

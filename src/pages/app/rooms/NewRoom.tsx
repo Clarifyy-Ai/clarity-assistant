@@ -20,6 +20,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Video, Globe, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
 // ✅ FIX: Interview type is a required field in createRoom — was entirely missing
 // from the original form, causing the hook to receive undefined for interview_type.
@@ -98,9 +99,9 @@ export default function NewRoom() {
       <PageHeader
         title="New Practice Room"
         subtitle="Host a live mock interview session"
-        icon={<Video className="w-5 h-5 text-violet-400" aria-hidden="true" />}
+        icon={<Video className="w-5 h-5 text-primary" aria-hidden="true" />}
         breadcrumbs={[
-          { label: "Practice Rooms", href: "/app/rooms" },
+          { label: PRODUCT_NAMES.groupPractice, href: "/app/rooms" },
           { label: "New Room" },
         ]}
       />
@@ -120,7 +121,7 @@ export default function NewRoom() {
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="e.g. Frontend Interview Prep"
-            className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+            className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
 
           <label
@@ -135,7 +136,7 @@ export default function NewRoom() {
             onChange={(e) => setDescription(e.target.value)}
             placeholder="What will you practice?"
             rows={3}
-            className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+            className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
           />
         </Card>
 
@@ -152,7 +153,7 @@ export default function NewRoom() {
                 className={cn(
                   "px-3 py-1.5 rounded-lg border text-xs font-medium transition-all",
                   interviewType === t.value
-                    ? "border-violet-500/50 bg-violet-500/10 text-violet-400"
+                    ? "border-primary/50 bg-primary/10 text-primary"
                     : "border-border text-muted-foreground hover:text-foreground",
                 )}
               >
@@ -178,11 +179,11 @@ export default function NewRoom() {
                 className={cn(
                   "p-3 rounded-xl border text-left transition",
                   isPublic === opt.value
-                    ? "border-violet-500/50 bg-violet-500/5"
+                    ? "border-primary/50 bg-primary/5"
                     : "border-border hover:border-border/80",
                 )}
               >
-                <opt.icon className="w-4 h-4 mb-1 text-violet-400" aria-hidden="true" />
+                <opt.icon className="w-4 h-4 mb-1 text-primary" aria-hidden="true" />
                 <p className="text-sm font-medium text-foreground">{opt.label}</p>
                 <p className="text-xs text-muted-foreground">{opt.desc}</p>
               </button>

@@ -28,15 +28,6 @@ export type {
   OverlaySizeConfig,
 } from "./overlayCompositor";
 
-// ─── Screen Capture Evasion ───────────────────────────────────────────────────
-export {
-  STEALTH_ATTR,               // constant — prevents hardcoding "stealthActive" everywhere
-  applyStealthToElement,
-  removeStealthFromElement,
-  isStealthActive,
-  toggleStealthOnElement,     // new helper: apply+remove in one call
-} from "./screenCaptureEvasion";
-
 // ─── Stealth Mouse ────────────────────────────────────────────────────────────
 export {
   createDragHandler,
@@ -76,9 +67,10 @@ export {
   Z_LAYERS,
   LAYER_GROUPS,
   z,
+  getOverlayPortalZIndex,
   injectZIndexVariables,
   isObscured,
   hoistToBody,
 } from "./zIndexManager";
 
-export type { ZLayer, ZValue } from "./zIndexManager";
+export type { ZLayer, ZValue, OverlayStackContext } from "./zIndexManager";

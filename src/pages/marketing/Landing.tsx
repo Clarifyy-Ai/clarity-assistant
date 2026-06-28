@@ -3,15 +3,27 @@ import { usePageMeta } from "@/hooks/usePageMeta";
 import {
   Brain, BarChart2, Shield, Zap, ArrowRight, CheckCircle2,
   Mic, Star, Play, TrendingUp, Clock, Target,
-  Upload, Cpu, MessageSquare,
+  Upload, Cpu, MessageSquare, Landmark,
   Check, X, ChevronRight,
 } from "lucide-react";
-import { motion } from "framer-motion";
+import { LazyMotion, domAnimation, m } from "framer-motion";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import {
   Accordion, AccordionItem, AccordionTrigger, AccordionContent,
 } from "@/components/ui/accordion";
 import { cn } from "@/lib/utils";
+import { PLANS, type PlanId } from "@/lib/billing/subscriptionManager";
+import { LAUNCH_PLANS } from "@/lib/constants/pricing";
+import { SALES_EMAIL } from "@/lib/constants/contact";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { useIndiaRegion } from "@/hooks/useIndiaRegion";
+import {
+  AiProviderStrip,
+  ProductDemoHero,
+  PracticeCoachWalkthrough,
+  FeatureShowcase,
+  GovExamShowcase,
+} from "@/components/marketing";
 
 // ─── Data ─────────────────────────────────────────────────────────────────────
 
@@ -19,10 +31,10 @@ const STEPS = [
   {
     num: "01",
     icon: Upload,
-    title: "Install & set up",
-    desc: "Download Clarify AI, paste your job description, and upload your resume. The AI generates a tailored question bank and gap analysis in seconds.",
-    color: "text-violet-400",
-    bg: "bg-violet-500/10",
+    title: "Sign up & set up",
+    desc: "Create your free Clarify AI account, paste your job description, and upload your resume. The AI generates a tailored question bank and gap analysis in seconds.",
+    color: "text-primary",
+    bg: "bg-primary/10",
   },
   {
     num: "02",
@@ -35,7 +47,7 @@ const STEPS = [
   {
     num: "03",
     icon: Cpu,
-    title: "Rehearse with the live coach",
+    title: "Rehearse with Practice Coach",
     desc: "Run a live practice session with the AI coach. Hear yourself, get instant talking-point hints, then review a full debrief — so the real interview feels like a re-run.",
     color: "text-emerald-400",
     bg: "bg-emerald-500/10",
@@ -45,21 +57,21 @@ const STEPS = [
 const FEATURES = [
   {
     icon: Mic,
-    title: "Live Practice Coach",
+    title: "Practice Coach",
     desc: "Real-time AI talking-point hints streamed to an on-screen prep overlay during your practice sessions.",
     details: [
       "Sub-1-second hint latency",
-      "Powered by Google Gemini 2.0 Flash",
+      "Multi-model routing (Gemini, GPT-4o, Claude)",
       "STAR-format answers auto-structured",
       "Practice-only — not for use in real interviews",
     ],
-    color: "text-violet-400",
-    bg: "bg-violet-500/10",
-    border: "border-violet-500/20",
+    color: "text-primary",
+    bg: "bg-primary/10",
+    border: "border-primary/20",
   },
   {
     icon: Brain,
-    title: "Mock Engine",
+    title: PRODUCT_NAMES.mockInterview,
     desc: "Full interview simulations with AI-generated scorecards, filler-word tracking, and WPM monitoring.",
     details: [
       "Behavioral, technical, and system design modes",
@@ -99,13 +111,28 @@ const FEATURES = [
     bg: "bg-emerald-500/10",
     border: "border-emerald-500/20",
   },
+  {
+    icon: Landmark,
+    title: PRODUCT_NAMES.govExams,
+    desc: "Timed MCQ sessions for UPSC, SSC, IBPS, JEE, NEET, and PSU exams with official previous year papers.",
+    details: [
+      "Full exam simulation with question palette",
+      "UPSC · SSC · IBPS · JEE · NEET · PSU",
+      "Practice and strict exam modes",
+      "Accuracy analytics and revision queue",
+    ],
+    color: "text-amber-400",
+    bg: "bg-amber-500/10",
+    border: "border-amber-500/20",
+    indiaOnly: true,
+  },
 ];
 
 const STATS = [
-  { value: "< 1s",   label: "AI hint latency",          icon: Clock },
-  { value: "Gemini", label: "2.0 Flash, low-latency",   icon: Brain },
+  { value: "< 1s",   label: "AI hint latency",            icon: Clock },
+  { value: "3+",     label: "AI providers routed",        icon: Brain },
   { value: "6",      label: "Practice coaching features", icon: Target },
-  { value: "200",    label: "Free credits / month",     icon: Shield },
+  { value: "50",     label: "Free credits / month",       icon: Shield },
 ];
 
 const COMPARISON = [
@@ -128,6 +155,12 @@ const COMPARISON = [
     generic: false,
   },
   {
+    feature: "Gov exam MCQ mock tests (UPSC, SSC, IBPS)",
+    clarify: true,
+    competitor: false,
+    generic: false,
+  },
+  {
     feature: "Resume vs JD gap analysis",
     clarify: true,
     competitor: false,
@@ -146,7 +179,7 @@ const COMPARISON = [
     generic: false,
   },
   {
-    feature: "Powered by Google Gemini 2.0 Flash",
+    feature: "Multi-model AI (Gemini, GPT-4o, Claude)",
     clarify: true,
     competitor: false,
     generic: false,
@@ -166,7 +199,7 @@ const TESTIMONIALS = [
     role: "Software Engineer, FAANG",
     rating: 5,
     initials: "MT",
-    color: "bg-violet-500",
+    color: "bg-primary",
     persona: "Senior candidate",
   },
   {
@@ -199,20 +232,20 @@ const FAQS = [
     a: "No. Clarify AI is built strictly for practice. Using AI assistance covertly during a real interview violates most employer and assessment policies and may breach the terms of platforms like Zoom, Teams, Google Meet, HackerRank, and CoderPad. The on-screen overlay is a normal window and is visible to screen-sharing tools.",
   },
   {
-    q: "Which AI model does Clarify use?",
-    a: "Clarify AI uses Google Gemini 2.0 Flash for hint generation, STAR answer drafting, and debriefs at launch. We chose Gemini 2.0 Flash for its sub-second latency and predictable cost. Additional providers are on the roadmap.",
+    q: "Which AI models does Clarify AI use?",
+    a: "Clarify AI routes each request to the best model for the job: Google Gemini 2.0 Flash for sub-second live hints, OpenAI GPT-4o for deep reasoning, and Anthropic Claude for system design and behavioural depth. Deepgram powers live transcription. Pro plans unlock full multi-model selection in Settings.",
   },
   {
     q: "How much does Clarify AI cost?",
-    a: "Free includes 200 credits per month — no credit card required. Pro is $29 / month for 2,000 credits and the full feature set. Enterprise is $79 / month per seat with unlimited credits and team controls.",
+    a: "Free includes 50 credits per month — enough to try Practice Coach and a mock session. Pro is $29 / month for 1,400 credits and the full feature set. Enterprise is $79 / month per seat with 4,000 credits and team controls.",
   },
   {
     q: "What is included in the free plan?",
-    a: "The free plan gives you 200 credits per month, full access to the mock engine, all prep lab tools, and basic analytics. You can upgrade anytime from Settings → Billing.",
+    a: "The free plan gives you 50 credits per month, access to the mock engine, prep lab tools, and basic analytics. Upgrade to Pro when you need more AI coaching volume.",
   },
   {
     q: "Can I bring my own AI API key (BYOK)?",
-    a: "BYOK is on our roadmap and not available at launch. All AI calls currently use Clarify's managed Gemini connection and count against your monthly credit balance.",
+    a: "BYOK is on our roadmap and not available at launch. All AI calls currently use Clarify AI's managed Gemini connection and count against your monthly credit balance.",
   },
   {
     q: "Does it work for all interview types?",
@@ -222,14 +255,30 @@ const FAQS = [
 
 const PROOF_POINTS = [
   "AI hints in under 1 second",
-  "Powered by Google Gemini 2.0 Flash",
+  "Gemini, GPT-4o, and Claude — intelligently routed",
   "Full STAR builder & answer rephraser",
   "Resume + JD gap analysis built in",
   "Gamified streaks, XP, and badges",
-  "200 free credits / month — no card required",
+  "50 free credits / month — upgrade to Pro for 1,400",
 ];
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
+
+function formatPlanTeaserFeatures(planId: PlanId): string[] {
+  const plan = PLANS[planId];
+  const creditsLabel = `${plan.creditsPerMonth.toLocaleString()} credits/month`;
+
+  const featureLabels = plan.features
+    .filter((f) => f.included)
+    .map((f) => {
+      if (f.limit === "unlimited") return `Unlimited ${f.label.toLowerCase()}`;
+      if (typeof f.limit === "number" && f.note) return `${f.label} (${f.note})`;
+      if (typeof f.limit === "number") return `${f.label} (${f.limit})`;
+      return f.label;
+    });
+
+  return [creditsLabel, ...featureLabels].slice(0, 4);
+}
 
 function fadeUp(delay = 0) {
   return {
@@ -249,9 +298,12 @@ function CellValue({ value }: { value: boolean | string }) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Landing() {
+  const { isIndia } = useIndiaRegion();
+  const visibleFeatures = FEATURES.filter((f) => !("indiaOnly" in f && f.indiaOnly) || isIndia);
+
   usePageMeta({
     title: "Clarify AI — Practice every interview with AI by your side",
-    description: "Live AI practice coach, full mock interview engine with analytics, and a complete prep lab. Powered by Google Gemini 2.0 Flash. Start free with 200 credits / month.",
+    description: "Live AI practice coach, full mock interview engine with analytics, and a complete prep lab. Multi-model routing across Gemini, GPT-4o, and Claude. Start free with 50 credits / month.",
     canonical: "https://clarify.ai.sltfinanceindia.com/",
     jsonLd: [
       {
@@ -278,9 +330,10 @@ export default function Landing() {
 
   return (
     <MarketingLayout>
+      <LazyMotion features={domAnimation} strict>
       {/* ── Hero ────────────────────────────────────────────────────────────── */}
       <section className="pt-20 sm:pt-28 pb-14 px-4 sm:px-6 text-center">
-        <motion.div
+        <m.div
           className="max-w-3xl mx-auto"
           initial={{ opacity: 0, y: 28 }}
           animate={{ opacity: 1, y: 0 }}
@@ -288,18 +341,21 @@ export default function Landing() {
         >
           <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-xs font-medium text-primary mb-6">
             <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-            Powered by Google Gemini 2.0 Flash
+            Gemini · GPT-4o · Claude — multi-model AI coaching
           </div>
 
           <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight leading-[1.08]">
             Practice every interview with{" "}
-            <span className="bg-gradient-to-r from-violet-400 via-fuchsia-400 to-blue-400 bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-primary via-fuchsia-400 to-blue-400 bg-clip-text text-transparent">
               AI by your side
             </span>
           </h1>
-          <p className="mt-5 text-sm md:text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            A live AI practice coach, mock sessions with deep analytics, and a full prep lab —
-            so you walk into the real interview ready, not anxious.
+            <p className="mt-5 text-sm md:text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+            A live AI practice coach, mock interviews, gov exam MCQ tests, and a full prep lab —
+            so you walk into the real interview or exam hall ready, not anxious.
+          </p>
+          <p className="mt-3 text-xs text-muted-foreground/80 max-w-xl mx-auto">
+            AI features are for rehearsal and preparation only — not for use during actual third-party interviews.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-8">
             <Link
@@ -316,116 +372,35 @@ export default function Landing() {
               <Play className="w-3.5 h-3.5" />
               See pricing
             </Link>
+            {isIndia && (
+            <Link
+              to="/gov-exams"
+              className="inline-flex items-center gap-2 text-sm font-medium px-5 py-2.5 rounded-xl border border-amber-500/30 text-amber-600 hover:bg-amber-500/10 transition-all"
+            >
+              <Landmark className="w-3.5 h-3.5" />
+              Gov exam mock tests
+            </Link>
+            )}
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
-            No credit card required &middot; Free plan includes 200 credits / month
+            No credit card required &middot; Free plan includes 50 credits / month
           </p>
-        </motion.div>
+        </m.div>
 
-        {/* Product mockup */}
-        <motion.div
-          className="mt-14 max-w-4xl mx-auto"
-          initial={{ opacity: 0, y: 40 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.3 }}
-        >
-          <div className="relative rounded-2xl border border-border bg-card shadow-2xl shadow-black/30 overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-border bg-secondary/30">
-              <div className="flex gap-1.5">
-                <span className="w-3 h-3 rounded-full bg-red-400/70" />
-                <span className="w-3 h-3 rounded-full bg-amber-400/70" />
-                <span className="w-3 h-3 rounded-full bg-emerald-400/70" />
-              </div>
-              <div className="flex-1 mx-4">
-                <div className="h-5 rounded-md bg-secondary/60 w-48 mx-auto text-[10px] text-muted-foreground/60 flex items-center justify-center">
-                  Clarify AI — Live Session
-                </div>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                <span className="text-[10px] text-emerald-400 font-medium">Live</span>
-              </div>
-            </div>
-            <div className="grid grid-cols-1 md:grid-cols-3 min-h-[280px] sm:min-h-[340px]">
-              <div className="md:col-span-2 border-r border-border p-6 flex flex-col gap-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
-                      <Mic className="w-4 h-4 text-primary" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold">Mock Interview — Software Engineer</p>
-                      <p className="text-[10px] text-muted-foreground">FAANG Behavioral Round</p>
-                    </div>
-                  </div>
-                  <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-[10px] font-medium text-primary border border-primary/20">
-                    Co-Pilot Active
-                  </span>
-                </div>
-                <div className="rounded-xl border border-border bg-secondary/20 p-4 flex-1 flex flex-col gap-3">
-                  <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide">Interviewer question</p>
-                  <p className="text-sm font-semibold leading-relaxed">
-                    "Tell me about a time you had to lead a project under a tight deadline with limited resources."
-                  </p>
-                  <div className="mt-auto pt-3 border-t border-border">
-                    <div className="flex items-center gap-1.5 mb-2">
-                      <Zap className="w-3 h-3 text-primary" />
-                      <p className="text-[10px] text-primary font-semibold uppercase tracking-wide">AI Co-Pilot — STAR Answer</p>
-                    </div>
-                    <div className="space-y-1.5 text-xs text-muted-foreground leading-relaxed">
-                      <p><span className="font-semibold text-foreground">Situation:</span> Led a 3-person team to ship a critical feature two weeks ahead of schedule...</p>
-                      <p><span className="font-semibold text-foreground">Task:</span> Coordinated across design, backend, and QA while managing stakeholder expectations...</p>
-                      <p><span className="font-semibold text-foreground">Action:</span> Ran daily standups, cut scope in half, and shipped an MVP first...</p>
-                      <p><span className="font-semibold text-foreground">Result:</span> Delivered on time, reduced bug count by 40%, received praise from VP of Eng...</p>
-                    </div>
-                  </div>
-                </div>
-              </div>
-              <div className="p-5 flex flex-col gap-4 bg-secondary/10">
-                <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">Live Metrics</p>
-                <div className="space-y-3">
-                  {[
-                    { label: "Confidence", value: 87, color: "bg-emerald-500" },
-                    { label: "Clarity", value: 92, color: "bg-blue-500" },
-                    { label: "Pacing (WPM)", value: 74, color: "bg-violet-500" },
-                  ].map((m) => (
-                    <div key={m.label}>
-                      <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
-                        <span>{m.label}</span>
-                        <span className="font-semibold text-foreground">{m.value}%</span>
-                      </div>
-                      <div className="h-1.5 rounded-full bg-secondary">
-                        <div
-                          className={cn("h-1.5 rounded-full", m.color)}
-                          style={{ width: `${m.value}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-                <div className="mt-auto space-y-2">
-                  <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">Topics covered</p>
-                  {["Leadership", "Time management", "Prioritization"].map((t) => (
-                    <div key={t} className="flex items-center gap-1.5 text-[11px] text-muted-foreground">
-                      <CheckCircle2 className="w-3 h-3 text-primary flex-shrink-0" />
-                      {t}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
-          <p className="mt-3 text-xs text-muted-foreground">
+        <div className="mt-14 max-w-4xl mx-auto">
+          <ProductDemoHero />
+          <p className="mt-3 text-xs text-muted-foreground text-center">
             A live AI coach guides every answer in your practice session.
           </p>
-        </motion.div>
+          <AiProviderStrip className="mt-6" compact />
+        </div>
       </section>
 
       {/* ── Stats ───────────────────────────────────────────────────────────── */}
       <section className="pb-14 px-4 sm:px-6">
         <div className="max-w-4xl mx-auto grid grid-cols-2 lg:grid-cols-4 gap-4">
           {STATS.map((stat, i) => (
-            <motion.div
+            <m.div
               key={stat.label}
               {...fadeUp(i * 0.08)}
               className="rounded-2xl border border-border bg-card p-5 text-center"
@@ -433,7 +408,7 @@ export default function Landing() {
               <stat.icon className="w-5 h-5 text-primary mx-auto mb-2" />
               <p className="text-xl sm:text-2xl font-extrabold text-foreground">{stat.value}</p>
               <p className="text-xs text-muted-foreground mt-1">{stat.label}</p>
-            </motion.div>
+            </m.div>
           ))}
         </div>
       </section>
@@ -441,15 +416,15 @@ export default function Landing() {
       {/* ── How It Works ────────────────────────────────────────────────────── */}
       <section className="pb-14 sm:pb-16 px-4 sm:px-6 bg-secondary/20">
         <div className="max-w-5xl mx-auto py-14">
-          <motion.div className="text-center mb-12" {...fadeUp()}>
+          <m.div className="text-center mb-12" {...fadeUp()}>
             <h2 className="text-2xl md:text-3xl font-bold">How it works</h2>
             <p className="mt-3 text-sm text-muted-foreground max-w-md mx-auto">
               From first upload to your next offer — three simple steps.
             </p>
-          </motion.div>
+          </m.div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8">
             {STEPS.map((step, i) => (
-              <motion.div key={step.num} {...fadeUp(i * 0.1)} className="relative">
+              <m.div key={step.num} {...fadeUp(i * 0.1)} className="relative">
                 {i < STEPS.length - 1 && (
                   <div className="hidden sm:flex absolute top-10 left-[calc(100%+8px)] w-8 items-center">
                     <ChevronRight className="w-4 h-4 text-muted-foreground/40 mx-auto" />
@@ -464,26 +439,65 @@ export default function Landing() {
                 <div className="text-3xl font-black text-primary/15 mb-2">{step.num}</div>
                 <h3 className="text-sm font-bold mb-2">{step.title}</h3>
                 <p className="text-xs text-muted-foreground leading-relaxed">{step.desc}</p>
-              </motion.div>
+              </m.div>
             ))}
           </div>
         </div>
       </section>
 
+      <PracticeCoachWalkthrough />
+
+      {isIndia && (
+      <section id="gov-exams" className="pb-14 sm:pb-16 px-4 sm:px-6 bg-amber-500/5 border-y border-amber-500/10">
+        <div className="max-w-5xl mx-auto py-14">
+          <m.div className="text-center mb-10" {...fadeUp()}>
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/20 text-xs font-medium text-amber-600 mb-4">
+              <Landmark className="w-3.5 h-3.5" />
+              UPSC · SSC · IBPS · JEE · NEET · PSU
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-bold">
+              Government & competitive exam mock tests
+            </h2>
+            <p className="mt-3 text-sm text-muted-foreground max-w-xl mx-auto">
+              Full-length timed MCQ sessions with official previous year papers, question palette,
+              and performance analytics — built for serious exam prep.
+            </p>
+          </m.div>
+          <m.div {...fadeUp(0.1)}>
+            <GovExamShowcase />
+          </m.div>
+          <m.div className="text-center mt-8" {...fadeUp(0.2)}>
+            <Link
+              to="/gov-exams"
+              className="inline-flex items-center gap-2 text-sm font-semibold text-amber-600 hover:underline"
+            >
+              Learn more about gov exam prep
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+          </m.div>
+        </div>
+      </section>
+      )}
+
       {/* ── Feature Pillars ─────────────────────────────────────────────────── */}
       <section id="features" className="pb-14 sm:pb-16 px-4 sm:px-6">
         <div className="max-w-6xl mx-auto">
-          <motion.div className="text-center mb-10" {...fadeUp()}>
+          <m.div className="text-center mb-10" {...fadeUp()}>
             <h2 className="text-2xl sm:text-3xl font-bold">
-              Four pillars. One complete prep system.
+              Five pillars. One complete prep system.
             </h2>
             <p className="mt-3 text-sm text-muted-foreground max-w-xl mx-auto">
-              Every feature works together — before, during, and after your interviews.
+              Interview coaching, gov exam mock tests, and analytics — every feature works together.
             </p>
-          </motion.div>
+          </m.div>
+
+          <m.div {...fadeUp(0.1)} className="mb-10">
+            <FeatureShowcase />
+          </m.div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            {FEATURES.map((f, i) => (
-              <motion.div
+            {visibleFeatures.map((f, i) => (
+              <m.div
                 key={f.title}
                 {...fadeUp(i * 0.08)}
                 className={cn(
@@ -511,7 +525,7 @@ export default function Landing() {
                     </li>
                   ))}
                 </ul>
-              </motion.div>
+              </m.div>
             ))}
           </div>
         </div>
@@ -520,13 +534,13 @@ export default function Landing() {
       {/* ── Comparison Table ────────────────────────────────────────────────── */}
       <section className="pb-14 px-4 sm:px-6 bg-secondary/20">
         <div className="max-w-4xl mx-auto py-14">
-          <motion.div className="text-center mb-10" {...fadeUp()}>
+          <m.div className="text-center mb-10" {...fadeUp()}>
             <h2 className="text-2xl md:text-3xl font-bold">How we compare</h2>
             <p className="mt-3 text-sm text-muted-foreground max-w-md mx-auto">
-              Clarify AI is the only platform built for real-time interview assistance, not just prep.
+              Clarify AI is built for live practice coaching and rehearsal — not covert assistance during real interviews.
             </p>
-          </motion.div>
-          <motion.div {...fadeUp(0.1)} className="overflow-x-auto rounded-2xl border border-border">
+          </m.div>
+          <m.div {...fadeUp(0.1)} className="overflow-x-auto rounded-2xl border border-border">
             <div className="overflow-x-auto"><table className="w-full text-sm min-w-[640px]">
               <thead>
                 <tr className="border-b border-border bg-secondary/30">
@@ -564,22 +578,22 @@ export default function Landing() {
                 ))}
               </tbody>
             </table></div>
-          </motion.div>
+          </m.div>
         </div>
       </section>
 
       {/* ── Testimonials ────────────────────────────────────────────────────── */}
       <section className="pb-14 sm:pb-16 px-4 sm:px-6">
         <div className="max-w-5xl mx-auto">
-          <motion.div className="text-center mb-10" {...fadeUp()}>
+          <m.div className="text-center mb-10" {...fadeUp()}>
             <h2 className="text-2xl sm:text-3xl font-bold">Candidates who got the offer</h2>
             <p className="mt-3 text-sm text-muted-foreground">
               Real results from people just like you.
             </p>
-          </motion.div>
+          </m.div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 sm:gap-5">
             {TESTIMONIALS.map((t, i) => (
-              <motion.div
+              <m.div
                 key={t.name}
                 {...fadeUp(i * 0.1)}
                 className="rounded-2xl border border-border bg-card p-5 flex flex-col gap-4"
@@ -609,7 +623,7 @@ export default function Landing() {
                     <p className="text-[10px] text-muted-foreground">{t.role}</p>
                   </div>
                 </div>
-              </motion.div>
+              </m.div>
             ))}
           </div>
         </div>
@@ -618,19 +632,19 @@ export default function Landing() {
       {/* ── Proof points ────────────────────────────────────────────────────── */}
       <section className="pb-14 px-4 sm:px-6">
         <div className="max-w-2xl mx-auto text-center">
-          <motion.h2 className="text-2xl sm:text-3xl font-bold mb-8" {...fadeUp()}>
+          <m.h2 className="text-2xl sm:text-3xl font-bold mb-8" {...fadeUp()}>
             Built for serious candidates
-          </motion.h2>
+          </m.h2>
           <div className="flex flex-wrap justify-center gap-x-6 gap-y-3">
             {PROOF_POINTS.map((point, i) => (
-              <motion.div
+              <m.div
                 key={point}
                 {...fadeUp(i * 0.05)}
                 className="inline-flex items-center gap-2 text-sm text-muted-foreground"
               >
                 <CheckCircle2 className="w-4 h-4 text-primary flex-shrink-0" />
                 {point}
-              </motion.div>
+              </m.div>
             ))}
           </div>
         </div>
@@ -639,56 +653,49 @@ export default function Landing() {
       {/* ── Pricing Teaser ──────────────────────────────────────────────────── */}
       <section className="pb-14 px-4 sm:px-6 bg-secondary/20">
         <div className="max-w-4xl mx-auto py-14">
-          <motion.div className="text-center mb-10" {...fadeUp()}>
+          <m.div className="text-center mb-10" {...fadeUp()}>
             <h2 className="text-2xl md:text-3xl font-bold">Simple, transparent pricing</h2>
             <p className="mt-3 text-sm text-muted-foreground max-w-md mx-auto">
               Start free. Upgrade when you're ready. No credit card required.
             </p>
-          </motion.div>
+          </m.div>
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-            {[
-              {
-                name: "Free",
-                price: "$0",
-                period: "forever",
-                tagline: "Get started without a card",
-                features: ["200 credits/month", "Mock interview engine", "Prep lab tools", "Basic analytics"],
-                cta: "Start Free",
-                to: "/signup",
-                highlight: false,
-              },
-              {
-                name: "Pro",
-                price: "$29",
-                period: "/month",
-                tagline: "Everything you need to land the role",
-                features: ["2,000 credits/month", "Live co-pilot", "Advanced analytics", "Priority support", "Calendar sync"],
-                cta: "Get Pro",
-                to: "/signup?plan=pro",
-                highlight: true,
-              },
-              {
-                name: "Enterprise",
-                price: "$79",
-                period: "/month",
-                tagline: "For teams and power users",
-                features: ["Unlimited credits", "All Pro features", "Priority AI routing", "Practice rooms", "Dedicated support"],
-                cta: "Contact Sales",
-                to: "mailto:sales@clarifyai.com?subject=Enterprise%20plan",
-                highlight: false,
-              },
-            ].map((plan, i) => (
-              <motion.div
-                key={plan.name}
+            {LAUNCH_PLANS.map((planId, i) => {
+              const plan = PLANS[planId];
+              const isEnterprise = planId === "enterprise";
+              const priceDisplay = isEnterprise
+                ? "$79"
+                : plan.monthlyPrice === 0
+                  ? "$0"
+                  : `$${(plan.monthlyPrice / 100).toFixed(0)}`;
+              const period = isEnterprise
+                ? "/month"
+                : plan.monthlyPrice === 0
+                  ? "forever"
+                  : "/month";
+              const cta = isEnterprise
+                ? "Contact Sales"
+                : planId === "free"
+                  ? "Start Free"
+                  : "Get Pro";
+              const to = isEnterprise
+                ? `mailto:${SALES_EMAIL}?subject=Enterprise%20plan`
+                : planId === "free"
+                  ? "/signup"
+                  : `/signup?plan=${planId}`;
+
+              return (
+              <m.div
+                key={planId}
                 {...fadeUp(i * 0.1)}
                 className={cn(
                   "relative rounded-2xl border p-6 flex flex-col",
-                  plan.highlight
+                  plan.isPopular
                     ? "border-primary/40 bg-primary/[0.04] shadow-lg shadow-primary/10"
                     : "border-border bg-card",
                 )}
               >
-                {plan.highlight && (
+                {plan.isPopular && (
                   <span className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full text-[10px] font-semibold bg-primary text-primary-foreground">
                     Most Popular
                   </span>
@@ -696,58 +703,59 @@ export default function Landing() {
                 <h3 className="text-base font-bold">{plan.name}</h3>
                 <p className="text-xs text-muted-foreground mt-1">{plan.tagline}</p>
                 <div className="mt-5 mb-5">
-                  <span className="text-3xl font-extrabold">{plan.price}</span>
-                  <span className="text-sm text-muted-foreground ml-1">{plan.period}</span>
+                  <span className="text-3xl font-extrabold">{priceDisplay}</span>
+                  <span className="text-sm text-muted-foreground ml-1">{period}</span>
                 </div>
                 <ul className="space-y-2 flex-1">
-                  {plan.features.map((f) => (
+                  {formatPlanTeaserFeatures(planId).map((f) => (
                     <li key={f} className="flex items-center gap-2 text-xs text-muted-foreground">
                       <Check className="w-3.5 h-3.5 text-primary flex-shrink-0" />
                       {f}
                     </li>
                   ))}
                 </ul>
-                {plan.to.startsWith("mailto:") ? (
+                {to.startsWith("mailto:") ? (
                   <a
-                    href={plan.to}
+                    href={to}
                     className={cn(
                       "mt-6 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all",
                       "bg-secondary text-foreground hover:bg-secondary/80",
                     )}
                   >
-                    {plan.cta} <ArrowRight className="w-3.5 h-3.5" />
+                    {cta} <ArrowRight className="w-3.5 h-3.5" />
                   </a>
                 ) : (
                   <Link
-                    to={plan.to}
+                    to={to}
                     className={cn(
                       "mt-6 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all",
-                      plan.highlight
+                      plan.isPopular
                         ? "bg-primary text-primary-foreground hover:opacity-90"
                         : "bg-secondary text-foreground hover:bg-secondary/80",
                     )}
                   >
-                    {plan.cta} <ArrowRight className="w-3.5 h-3.5" />
+                    {cta} <ArrowRight className="w-3.5 h-3.5" />
                   </Link>
                 )}
-              </motion.div>
-            ))}
+              </m.div>
+              );
+            })}
           </div>
-          <motion.div className="text-center mt-6" {...fadeUp(0.3)}>
+          <m.div className="text-center mt-6" {...fadeUp(0.3)}>
             <Link
               to="/pricing"
               className="inline-flex items-center gap-1.5 text-sm text-primary hover:underline"
             >
               See full pricing and all plan details <ChevronRight className="w-4 h-4" />
             </Link>
-          </motion.div>
+          </m.div>
         </div>
       </section>
 
       {/* ── FAQ ─────────────────────────────────────────────────────────────── */}
       <section className="pb-14 sm:pb-16 px-4 sm:px-6">
         <div className="max-w-2xl mx-auto">
-          <motion.div className="text-center mb-10" {...fadeUp()}>
+          <m.div className="text-center mb-10" {...fadeUp()}>
             <h2 className="text-2xl sm:text-3xl font-bold">Frequently asked questions</h2>
             <p className="mt-3 text-sm text-muted-foreground">
               Have more questions?{" "}
@@ -756,8 +764,8 @@ export default function Landing() {
               </Link>
               .
             </p>
-          </motion.div>
-          <motion.div {...fadeUp(0.1)}>
+          </m.div>
+          <m.div {...fadeUp(0.1)}>
             <Accordion type="single" collapsible className="w-full rounded-2xl border border-border bg-card overflow-hidden">
               {FAQS.map((faq, i) => (
                 <AccordionItem
@@ -774,15 +782,15 @@ export default function Landing() {
                 </AccordionItem>
               ))}
             </Accordion>
-          </motion.div>
+          </m.div>
         </div>
       </section>
 
       {/* ── CTA ─────────────────────────────────────────────────────────────── */}
       <section className="pb-16 sm:pb-20 px-4 sm:px-6">
-        <motion.div
+        <m.div
           {...fadeUp()}
-          className="max-w-2xl mx-auto text-center rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-violet-500/5 to-blue-500/10 p-8 sm:p-10"
+          className="max-w-2xl mx-auto text-center rounded-3xl border border-primary/20 bg-gradient-to-br from-primary/10 via-primary/5 to-blue-500/10 p-8 sm:p-10"
         >
           <TrendingUp className="w-8 h-8 text-primary mx-auto mb-4" />
           <h2 className="text-2xl sm:text-3xl font-extrabold mb-3">
@@ -801,8 +809,9 @@ export default function Landing() {
           <p className="mt-4 text-xs text-muted-foreground">
             Free plan &middot; No card required &middot; Cancel anytime
           </p>
-        </motion.div>
+        </m.div>
       </section>
+      </LazyMotion>
     </MarketingLayout>
   );
 }

@@ -1,4 +1,5 @@
 import { profilesDB, referralsDB } from "@/lib/supabase/database";
+import { recordReferralViaEdge } from "@/lib/api/payments";
 
 const REF_CODE_PATTERN = /^[A-Z0-9]{6,16}$/;
 
@@ -21,16 +22,16 @@ export async function recordReferral(userId: string, codeRaw: string | null | un
 
   try {
     clearStoredRefCode();
-
-    const referrerId = await profilesDB.getIdByReferralCode(code);
-    if (!referrerId) return;
-    if (referrerId === userId) return;
-
-    await referralsDB.upsertReferred({
-      referrerId,
-      referredId: userId,
-      referredEmail: "",
-    });
+    const result = await recordReferralViaEdge(code);
+    if (!result.success || result.result?.ok === false) {
+      const referrerId = await profilesDB.getIdByReferralCode(code);
+      if (!referrerId || referrerId === userId) return;
+      await referralsDB.upsertReferred({
+        referrerId,
+        referredId: userId,
+        referredEmail: "",
+      });
+    }
   } catch (e) {
     console.warn("[referrals] Recording error:", e);
   }

@@ -1,6 +1,9 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
+import {
+  enforceAccountDeletionRateLimit,
+} from "../_shared/rateLimit.ts";
 
 // delete-account — securely delete account and all linked data
 
@@ -12,11 +15,31 @@ Deno.serve(async (req) => {
     const auth = await authenticateRequest(req);
     if (auth.error) return auth.error;
     const authenticatedUserId = auth.context.user.id;
+    const userEmail = auth.context.user.email;
+
+    const rateLimited = enforceAccountDeletionRateLimit(authenticatedUserId);
+    if (rateLimited) return rateLimited;
+
     const db = createServiceClient();
 
     /* -------------------------------------------------------
-       VALIDATE BODY
+       VALIDATE BODY & CONFIRMATION
     ------------------------------------------------------- */
+    const body = await req.json().catch(() => ({}));
+    const confirmation = typeof body?.confirmation === "string"
+      ? body.confirmation.trim()
+      : "";
+
+    if (confirmation !== "DELETE" && confirmation !== userEmail) {
+      return new Response(
+        JSON.stringify({
+          error: "Confirmation required. Send { \"confirmation\": \"DELETE\" } or your email address to proceed.",
+          code: "CONFIRMATION_REQUIRED",
+        }),
+        { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
+      );
+    }
+
     const targetUserId = authenticatedUserId;
 
     /* -------------------------------------------------------
@@ -41,8 +64,8 @@ Deno.serve(async (req) => {
       if (error) {
         console.error(`Error deleting from ${table}:`, error);
         return new Response(
-          JSON.stringify({ error: `Failed deleting ${table}` }),
-          { status: 500, headers: getCorsHeaders(req) }
+          JSON.stringify({ error: `Failed deleting ${table}`, code: "INTERNAL_ERROR" }),
+          { status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
         );
       }
     }
@@ -79,8 +102,8 @@ Deno.serve(async (req) => {
     if (deleteErr) {
       console.error("auth delete error:", deleteErr);
       return new Response(
-        JSON.stringify({ error: "Failed to delete auth user" }),
-        { status: 500, headers: getCorsHeaders(req) }
+        JSON.stringify({ error: "Failed to delete auth user", code: "INTERNAL_ERROR" }),
+        { status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -94,12 +117,12 @@ Deno.serve(async (req) => {
     }).catch(() => {});
 
     return new Response(JSON.stringify({ success: true }), {
-      headers: getCorsHeaders(req) });
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
 
   } catch (err) {
     console.error("delete-account error:", err);
-    return new Response(JSON.stringify({ error: "Internal error" }), {
+    return new Response(JSON.stringify({ error: "Internal error", code: "INTERNAL_ERROR" }), {
       status: 500,
-      headers: getCorsHeaders(req) });
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
   }
 });

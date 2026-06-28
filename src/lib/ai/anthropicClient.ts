@@ -6,6 +6,7 @@ import type { CoachingContext } from "@/types/ai.types";
 export interface ClaudeStreamOptions {
   question: string;
   context: CoachingContext;
+  model?: string;
   isLive: boolean;
   sessionId: string;
   questionId: string;
@@ -24,6 +25,7 @@ export async function streamClaudeHint(opts: ClaudeStreamOptions): Promise<void>
 
   const body = {
     question,
+    model: opts.model ?? "claude-3-5-sonnet-20241022",
     interview_type: context.session_type ?? "behavioral",
     target_company: context.target_company ?? null,
     transcript: context.last_transcript ?? null,

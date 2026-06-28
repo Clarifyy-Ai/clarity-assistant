@@ -13,10 +13,15 @@
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
-import { createServiceClient } from "../_shared/supabase.ts";
+import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
 import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
 import { mapExamType } from "../_shared/examTypeMap.ts";
-
+import { requirePlan } from "../_shared/requirePlan.ts";
+import {
+  buildGapFillPrompt,
+  type WeakTopicStat,
+} from "../_shared/examAIPrompts.ts";
+import { creditCost } from "../_shared/creditEconomics.ts";
 /* ─── SANITIZATION ───────────────────────────────────────────────────────── */
 //
 // REGEX ESCAPING RULE for RegExp constructor strings:
@@ -100,14 +105,126 @@ function getSystemUserId(): string | null {
 // uploaded_by is set to SYSTEM_USER_ID (not null) for traceability.
 // is_public = false keeps AI questions out of the official PYQ bank until reviewed.
 
+const PYP_SOURCES = ["OFFICIAL_PYP", "Previous Year Paper", "PYP", "previous_year"];
+
+type QuestionRow = {
+  id: string;
+  topic: string | null;
+  subject: string | null;
+  difficulty: string | null;
+  source: string | null;
+  is_public: boolean | null;
+  uploaded_by: string | null;
+  source_year: number | null;
+};
+
+async function fetchBankQuestions(
+  db: ReturnType<typeof createServiceClient>,
+  opts: {
+    exam_type: string | null;
+    subjects: string[];
+    topics: string[];
+    year_range: { min: number; max: number } | null;
+    wantsPYP: boolean;
+    wantsAI: boolean;
+    includeUserUploads: boolean;
+    userId: string;
+  },
+): Promise<QuestionRow[]> {
+  const baseSelect =
+    "id, topic, subject, difficulty, source, is_public, uploaded_by, source_year";
+
+  function applyFilters<T extends ReturnType<typeof db.from>>(q: T): T {
+    let query = q;
+    if (opts.exam_type && opts.exam_type !== "CUSTOM") {
+      query = query.eq("exam_type", opts.exam_type) as T;
+    }
+    if (opts.subjects.length > 0) {
+      query = query.in("subject", opts.subjects) as T;
+    }
+    if (opts.topics.length > 0) {
+      query = query.in("topic", opts.topics) as T;
+    }
+    if (opts.year_range) {
+      query = query
+        .gte("source_year", opts.year_range.min)
+        .lte("source_year", opts.year_range.max) as T;
+    }
+    return query;
+  }
+
+  const merged = new Map<string, QuestionRow>();
+
+  async function addFromQuery(
+    builder: ReturnType<typeof db.from>,
+  ): Promise<void> {
+    const { data, error } = await applyFilters(builder).limit(2000);
+    if (error) {
+      console.warn("[select-test-questions] bank fetch partial error:", error.message);
+      return;
+    }
+    for (const row of (data ?? []) as QuestionRow[]) {
+      merged.set(row.id, row);
+    }
+  }
+
+  if (opts.wantsPYP) {
+    await addFromQuery(
+      db.from("questions").select(baseSelect).eq("is_public", true).in("source", PYP_SOURCES),
+    );
+  }
+  if (opts.wantsAI) {
+    await addFromQuery(
+      db.from("questions").select(baseSelect).eq("source", "AI_GENERATED"),
+    );
+  }
+  if (opts.includeUserUploads) {
+    await addFromQuery(
+      db
+        .from("questions")
+        .select(baseSelect)
+        .eq("source", "USER_UPLOAD")
+        .eq("uploaded_by", opts.userId),
+    );
+  }
+
+  // Default: public bank when no source flags (should not happen after validation)
+  if (!opts.wantsPYP && !opts.wantsAI && !opts.includeUserUploads) {
+    await addFromQuery(
+      db.from("questions").select(baseSelect).eq("is_public", true),
+    );
+  }
+
+  let questions = [...merged.values()];
+
+  // Broader fallback when filters are too tight
+  if (
+    questions.length === 0 &&
+    opts.exam_type &&
+    opts.exam_type !== "CUSTOM"
+  ) {
+    const { data: fallbackData } = await db
+      .from("questions")
+      .select(baseSelect)
+      .eq("exam_type", opts.exam_type)
+      .eq("is_public", true)
+      .limit(2000);
+    questions = (fallbackData ?? []) as QuestionRow[];
+  }
+
+  return questions;
+}
+
 async function generateGapQuestions(
   db:       ReturnType<typeof createServiceClient>,
   gapCount: number,
   subjects: string[],
   topics:   string[],
   examType: string | null,
-): Promise<{ ids: string[]; error?: string }> {
-  try {
+  difficultyMix: { EASY: number; MEDIUM: number; HARD: number },
+  weakTopics: WeakTopicStat[],
+  strongTopics: string[],
+): Promise<{ ids: string[]; error?: string }> {  try {
     const systemUserId = getSystemUserId();
     if (!Deno.env.get("GEMINI_API_KEY")?.trim()) {
       return {
@@ -116,42 +233,19 @@ async function generateGapQuestions(
       };
     }
     const subj         = subjects[0] ?? "General Subject";
-    const topicStr     = topics.slice(0, 3).join(", ") || "Mixed Topics";
     const examStr      = examType && examType !== "CUSTOM"
       ? examType
       : "General Competitive Exam";
 
-    const prompt = `
-Generate exactly ${gapCount} high-quality Multiple Choice Questions (MCQs).
-Subject: ${subj}
-Topics: ${topicStr}
-Exam Level: ${examStr}
-
-Requirements:
-1. Exactly ${gapCount} questions.
-2. Mix EASY, MEDIUM, HARD difficulties (roughly 30/40/30).
-3. 4 options per question labelled A, B, C, D.
-4. correct_answer must be exactly "A", "B", "C", or "D".
-5. Provide a clear explanation.
-6. Return ONLY valid JSON in this exact structure — no markdown, no code fences:
-{
-  "questions": [
-    {
-      "question_text": "...",
-      "options": [
-        { "label": "A", "text": "..." },
-        { "label": "B", "text": "..." },
-        { "label": "C", "text": "..." },
-        { "label": "D", "text": "..." }
-      ],
-      "correct_answer": "A",
-      "explanation": "...",
-      "difficulty": "MEDIUM",
-      "topic": "..."
-    }
-  ]
-}`.trim();
-
+    const prompt = buildGapFillPrompt({
+      examType: examStr,
+      subjects,
+      topics,
+      weakTopics,
+      strongTopics,
+      difficultyMix,
+      gapCount,
+    });
     const raw  = await geminiGenerate(prompt, undefined, 0.7, 4000);
     const data = parseJSON(raw, { questions: [] });
     const qs   = Array.isArray(data.questions) ? data.questions : [];
@@ -279,7 +373,7 @@ Deno.serve(async (req: Request) => {
     const medPct  = 100 - easyPct - hardPct;
 
     /* ── FREE PLAN MONTHLY LIMIT ───────────────────────────────────────── */
-    const FREE_TEST_LIMIT = 10;
+    const FREE_TEST_LIMIT = 3;
 
     const { data: profile } = await db
       .from("profiles")
@@ -287,7 +381,18 @@ Deno.serve(async (req: Request) => {
       .eq("id", userId)
       .single();
 
-    if ((profile?.plan_id ?? "free") === "free") {
+    const planId = profile?.plan_id ?? "free";
+
+    const includeUserUploads = source_types.includes("USER_UPLOAD");
+    const wantsPYP = source_types.includes("OFFICIAL_PYP");
+    const wantsAI = source_types.includes("AI_GENERATED");
+
+    if (wantsAI) {
+      const planGate = requirePlan(planId, "pro", req);
+      if (planGate) return planGate;
+    }
+
+    if ((planId) === "free") {
       const startOfMonth = new Date();
       startOfMonth.setDate(1);
       startOfMonth.setHours(0, 0, 0, 0);
@@ -309,14 +414,54 @@ Deno.serve(async (req: Request) => {
     }
 
     /* ── PERFORMANCE DATA (smart topic prioritisation) ─────────────────── */
-    const { data: perfData } = await db
+    let perfQuery = db
       .from("user_topic_performance")
-      .select("topic, accuracy")
+      .select("topic, subject, accuracy")
       .eq("user_id", userId);
 
+    if (exam_type && exam_type !== "CUSTOM") {
+      perfQuery = perfQuery.eq("exam_type", exam_type);
+    }
+
+    const { data: perfData } = await perfQuery;
+
     const topicAcc: Record<string, number> = {};
+    const weakTopics: WeakTopicStat[] = [];
+    const strongTopics: string[] = [];
+
     for (const p of perfData ?? []) {
-      topicAcc[p.topic as string] = p.accuracy as number ?? 0;
+      const topic = p.topic as string;
+      const acc = (p.accuracy as number) ?? 0;
+      topicAcc[topic] = acc;
+      if (acc < 60) {
+        weakTopics.push({
+          topic,
+          subject: (p.subject as string) ?? undefined,
+          accuracy: Math.round(acc),
+        });
+      } else if (acc >= 80) {
+        strongTopics.push(topic);
+      }
+    }
+
+    weakTopics.sort((a, b) => a.accuracy - b.accuracy);
+
+    // Recent test analysis weak topics (exam-specific coaching signal)
+    const { data: recentAnalyses } = await db
+      .from("test_analyses")
+      .select("weak_topics")
+      .eq("user_id", userId)
+      .order("created_at", { ascending: false })
+      .limit(3);
+
+    for (const row of recentAnalyses ?? []) {
+      const wt = row.weak_topics as string[] | null;
+      if (!Array.isArray(wt)) continue;
+      for (const topic of wt.slice(0, 5)) {
+        if (!weakTopics.some((w) => w.topic === topic)) {
+          weakTopics.push({ topic, accuracy: 0 });
+        }
+      }
     }
 
     /* ── DEDUP: avoid questions from last 3 tests ──────────────────────── */
@@ -332,58 +477,17 @@ Deno.serve(async (req: Request) => {
       for (const id of (t.question_ids ?? []) as string[]) recentQ.add(id);
     }
 
-    /* ── FETCH QUESTION BANK ───────────────────────────────────────────── */
-    let query = db
-      .from("questions")
-      .select("id, topic, subject, difficulty, source, is_public, uploaded_by, source_year")
-      .limit(2000);
-
-    if (exam_type && exam_type !== "CUSTOM") {
-      query = query.eq("exam_type", exam_type);
-    }
-
-    if (subjects.length > 0) query = query.in("subject", subjects);
-    if (topics.length > 0)   query = query.in("topic", topics);
-
-    if (year_range) {
-      query = query
-        .gte("source_year", year_range.min)
-        .lte("source_year", year_range.max);
-    }
-
-    const includeUserUploads = source_types.includes("USER_UPLOAD");
-    const wantsPYP = source_types.includes("OFFICIAL_PYP");
-    const wantsAI = source_types.includes("AI_GENERATED");
-    const includeOnlyPYP = wantsPYP && !wantsAI && !includeUserUploads;
-
-    // Source values used in the questions table vary: "OFFICIAL_PYP",
-    // "Previous Year Paper", "PYP", etc. Accept all common variants.
-    const PYP_SOURCES = ["OFFICIAL_PYP", "Previous Year Paper", "PYP", "previous_year"];
-
-    if (includeUserUploads) {
-      query = query.or(
-        `and(source.eq.USER_UPLOAD,uploaded_by.eq.${userId}),and(is_public.eq.true)`,
-      );
-    } else if (includeOnlyPYP) {
-      query = query
-        .eq("is_public", true)
-        .in("source", PYP_SOURCES);
-    } else {
-      query = query.eq("is_public", true);
-    }
-
-    const { data: questionData, error: qErr } = await query;
-
-    if (qErr) {
-      console.error("[select-test-questions] DB fetch error:", qErr.message);
-      return new Response(
-        JSON.stringify({ error: "Failed to fetch questions from database" }),
-        { status: 500, headers },
-      );
-    }
-
-    const questions = questionData ?? [];
-
+    /* ── FETCH QUESTION BANK (mixed manual + AI sources) ───────────────── */
+    const questions = await fetchBankQuestions(db, {
+      exam_type,
+      subjects,
+      topics,
+      year_range,
+      wantsPYP,
+      wantsAI,
+      includeUserUploads,
+      userId,
+    });
     /* ── SMART BUCKETING ───────────────────────────────────────────────── */
     type Pool = { priority: string[]; normal: string[] };
     const pools: Record<string, Pool> = {
@@ -424,29 +528,59 @@ Deno.serve(async (req: Request) => {
       ...pickQuestions(pools.HARD,   countHard),
     ];
 
-    /* ── NO AI GAP-FILL (policy) ───────────────────────────────────────────
-     * Exam papers must come from the official-source scraper
-     * (admin → collect-exam-papers). We no longer synthesize MCQs via Gemini
-     * to fill gaps — that yielded inconsistent quality and is disallowed
-     * per product policy.
-     */
+    /* ── AI GAP-FILL (Pro+ only, when AI_GENERATED source selected) ─────── */
     let finalIds         = [...selectedIds];
     const gap            = question_count - finalIds.length;
-    const generatedCount = 0;
+    let generatedCount   = 0;
     let gapFillError: string | undefined;
 
-    if (gap > 0) {
+    if (gap > 0 && wantsAI) {
+      const aiCreditCost = creditCost("mock_test_ai_gap_fill");
+      const credit = await deductCredits(userId, "mock_test_ai_gap_fill", aiCreditCost);
+      if (!credit.success) {
+        gapFillError =
+          `Need ${aiCreditCost} credits to generate ${gap} AI questions (have ${profile?.credits ?? 0}). ` +
+          `Bank provided ${finalIds.length} of ${question_count}.`;
+      } else {
+        const priorityTopics =
+          topics.length > 0
+            ? topics
+            : weakTopics.slice(0, 5).map((w) => w.topic);
+
+        const gapResult = await generateGapQuestions(
+          db,
+          gap,
+          subjects.length > 0 ? subjects : ["General Subject"],
+          priorityTopics,
+          exam_type,
+          { EASY: easyPct, MEDIUM: medPct, HARD: hardPct },
+          weakTopics,
+          strongTopics,
+        );
+
+        if (gapResult.ids.length > 0) {
+          finalIds.push(...gapResult.ids);
+          generatedCount = gapResult.ids.length;
+        } else if (gapResult.error) {
+          gapFillError = gapResult.error;
+          try {
+            await deductCredits(userId, "refund_mock_test_ai_gap_fill", -aiCreditCost);
+          } catch {
+            /* best-effort refund */
+          }
+        }
+      }
+    } else if (gap > 0 && !wantsAI) {
       console.warn(
         `[select-test-questions] Bank short by ${gap} for exam_type="${exam_type ?? "any"}". ` +
-        `AI gap-fill is disabled; admin must run collect-exam-papers.`,
+        `Enable AI-Generated source (Pro plan) for adaptive gap-fill.`,
       );
       gapFillError =
-        `Question bank is short by ${gap}. Ask an admin to import more official papers ` +
-        `(Admin → Seed Questions → Collect from public sources).`;
+        `Question bank is short by ${gap}. Select "AI-Generated" (Pro) for mixed papers, ` +
+        `or import more official papers via Admin → Seed Questions.`;
     }
-
-    /* ── FINAL SHUFFLE & TRIM ──────────────────────────────────────────── */
-    finalIds = shuffle(finalIds).slice(0, question_count);
+    /* ── FINAL DEDUP, SHUFFLE & TRIM ─────────────────────────────────── */
+    finalIds = shuffle([...new Set(finalIds)]).slice(0, question_count);
 
     if (finalIds.length === 0) {
       console.warn(

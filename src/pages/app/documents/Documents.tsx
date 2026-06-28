@@ -1,27 +1,89 @@
 // src/pages/app/documents/Documents.tsx
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useState, useRef, useCallback, useEffect, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { toast } from "sonner";
-import { jobDescriptionsDB } from "@/lib/supabase/database";
-import { supabase } from "@/integrations/supabase/client";
+import { jobDescriptionsDB, documentsDB, resumesDB } from "@/lib/supabase/database";
+import { getSignedUrl, STORAGE_BUCKETS } from "@/lib/supabase/client";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useDocumentStore } from "@/store/documentStore";
 import { useDocumentManager } from "@/hooks/useDocumentManager";
-import { Spinner } from "@/components/ui/Spinner";
-import { AlertCircle } from "lucide-react";
+import { sanitizeFileName } from "@/lib/security/sanitizer";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { UploadZone } from "@/components/common/UploadZone";
+import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
 import {
-  FileText, Upload, Trash2, RefreshCw, Eye,
-  Plus, Star, ClipboardList, Link2,
+  DocumentSearchBar,
+  DocumentPagination,
+  useDocumentListState,
+} from "@/components/documents/DocumentListControls";
+import {
+  FileText, Trash2, RefreshCw, Eye,
+  Plus, Star, ClipboardList, Link2, Download, Pencil,
+  LayoutGrid, Table2, ArrowUpDown, X,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, generateId } from "@/lib/utils";
+
+const MAX_UPLOAD_QUEUE = 5;
+
+type UploadQueueItem = {
+  id: string;
+  file: File;
+  progress: number;
+  status: "pending" | "uploading" | "done" | "error" | "cancelled";
+  error?: string;
+};
+
+type ResumeViewMode = "cards" | "table";
+type ResumeSortKey = "name" | "type" | "size" | "date" | "status";
+
+function formatFileSize(bytes: number | null | undefined): string {
+  if (!bytes || bytes <= 0) return "—";
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+}
 import { format } from "date-fns";
-import type { ResumeVersion } from "@/types/document.types";
+import {
+  getResumeParseStatus,
+  parseResumeContentString,
+} from "@/lib/documents/resumeParse";
+import type { ParsedResume } from "@/types/ai.types";
+
+// ─── File validation ─────────────────────────────────────────────────────────
+
+const FILE_LIMITS = {
+  resume: { maxMB: 10, types: [".pdf", ".docx", ".doc", ".txt"] },
+  jd: { maxMB: 5, types: [".pdf", ".docx", ".doc", ".txt"] },
+  cover_letter: { maxMB: 5, types: [".pdf", ".docx", ".doc", ".txt"] },
+  portfolio: { maxMB: 15, types: [".pdf", ".docx", ".doc", ".txt", ".html"] },
+} as const;
+
+function validateFile(
+  file: File,
+  category: keyof typeof FILE_LIMITS
+): string | null {
+  const { maxMB, types } = FILE_LIMITS[category];
+  if (file.size > maxMB * 1024 * 1024) {
+    return `File too large. Maximum size is ${maxMB} MB.`;
+  }
+  const safeName = sanitizeFileName(file.name);
+  if (!safeName || safeName.length === 0) {
+    return "Invalid file name.";
+  }
+  const ext = `.${safeName.split(".").pop()?.toLowerCase()}`;
+  if (!types.includes(ext as never) && !(types as readonly string[]).includes(ext)) {
+    return `Unsupported file type. Allowed: ${types.join(", ")}`;
+  }
+  return null;
+}
 
 // ─── URL validation helper ────────────────────────────────────────────────────
 
@@ -39,32 +101,27 @@ export default function Documents() {
       <PageHeader
         title="Documents"
         description="Manage your resume and job descriptions for AI context"
+        breadcrumbs={[
+          { label: "Dashboard", href: "/app/dashboard" },
+          { label: "Documents" },
+        ]}
       />
       {loadError && (
-        <div className="flex items-center gap-2 rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          <AlertCircle className="h-4 w-4 shrink-0" />
-          <span className="flex-1">{loadError}</span>
-          <button
-            type="button"
-            onClick={() => reload()}
-            className="text-xs font-medium underline hover:no-underline"
-          >
-            Retry
-          </button>
-        </div>
+        <InlineErrorRetry message={loadError} onRetry={() => reload()} />
       )}
       {isLoading && (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Spinner size="sm" />
-          Loading documents…
+        <div className="space-y-3">
+          {[...Array(3)].map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
         </div>
       )}
       <Tabs defaultValue="resumes">
         <TabsList>
-          <TabsTrigger value="resumes">📄 Resumes</TabsTrigger>
-          <TabsTrigger value="jds">📋 Job Descriptions</TabsTrigger>
-          <TabsTrigger value="cover_letter">✉️ Cover Letter</TabsTrigger>
-          <TabsTrigger value="portfolio">💼 Portfolio</TabsTrigger>
+          <TabsTrigger value="resumes"><span aria-hidden="true">📄 </span>Resumes</TabsTrigger>
+          <TabsTrigger value="jds"><span aria-hidden="true">📋 </span>Job Descriptions</TabsTrigger>
+          <TabsTrigger value="cover_letter"><span aria-hidden="true">✉️ </span>Cover Letter</TabsTrigger>
+          <TabsTrigger value="portfolio"><span aria-hidden="true">💼 </span>Portfolio</TabsTrigger>
         </TabsList>
         <TabsContent value="resumes"><ResumeManager /></TabsContent>
         <TabsContent value="jds"><JDManager /></TabsContent>
@@ -79,60 +136,221 @@ export default function Documents() {
 // ResumeManager
 // ─────────────────────────────────────────────────────────────────────────────
 
+function guessMimeType(filePath: string): string {
+  const ext = filePath.split(".").pop()?.toLowerCase();
+  if (ext === "pdf") return "application/pdf";
+  if (ext === "docx") return "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+  if (ext === "doc") return "application/msword";
+  return "text/plain";
+}
+
 function ResumeManager() {
   const docStore = useDocumentStore();
   const docMgr   = useDocumentManager({ skipInitialLoad: true });
 
-  const [dragOver,  setDragOver]  = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([]);
+  const [viewMode, setViewMode] = useState<ResumeViewMode>("cards");
+  const [sortKey, setSortKey] = useState<ResumeSortKey>("date");
+  const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
   const [previewId, setPreviewId] = useState<string | null>(null);
   const [deleteId,  setDeleteId]  = useState<string | null>(null);
+  const [renameId,  setRenameId]  = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const [renaming,  setRenaming]  = useState(false);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
   const [retrying,  setRetrying]  = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const cancelledUploadsRef = useRef<Set<string>>(new Set());
+  const processingRef = useRef(false);
 
   const resumes = docStore.resumes;
+  const isParsingGlobal = docMgr.isParsing;
+  const uploading = uploadQueue.some((item) => item.status === "pending" || item.status === "uploading");
+  const { pageItems, totalPages, total, safePage } = useDocumentListState(resumes, search, page);
 
-  // ★ FIX: derive from active_resume_id
-  const activeResumeId = docStore.active_resume_id;
+  const sortedPageItems = useMemo(() => {
+    const items = [...pageItems];
+    const dir = sortDir === "asc" ? 1 : -1;
 
-  async function handleFile(file: File) {
-    // ★ FIX: max 10 MB, accept PDF/DOCX/TXT
-    if (file.size > 10 * 1024 * 1024) {
-      toast.error("File too large. Maximum size is 10 MB.");
+    items.sort((a, b) => {
+      const rowA = a as { title?: string; name?: string; created_at: string; content?: string | null; file_size_bytes?: number };
+      const rowB = b as { title?: string; name?: string; created_at: string; content?: string | null; file_size_bytes?: number };
+
+      switch (sortKey) {
+        case "name":
+          return dir * (rowA.title || rowA.name || "").localeCompare(rowB.title || rowB.name || "");
+        case "type":
+          return dir * "Resume".localeCompare("Resume");
+        case "size":
+          return dir * ((rowA.file_size_bytes ?? 0) - (rowB.file_size_bytes ?? 0));
+        case "status": {
+          const statusA = getResumeParseStatus(rowA.content, isParsingGlobal);
+          const statusB = getResumeParseStatus(rowB.content, isParsingGlobal);
+          return dir * statusA.localeCompare(statusB);
+        }
+        case "date":
+        default:
+          return dir * (new Date(rowA.created_at).getTime() - new Date(rowB.created_at).getTime());
+      }
+    });
+
+    return items;
+  }, [pageItems, sortKey, sortDir, isParsingGlobal]);
+
+  const toggleSort = useCallback((key: ResumeSortKey) => {
+    setSortKey((prev) => {
+      if (prev === key) {
+        setSortDir((d) => (d === "asc" ? "desc" : "asc"));
+        return prev;
+      }
+      setSortDir(key === "name" ? "asc" : "desc");
+      return key;
+    });
+  }, []);
+
+  const processUploadQueue = useCallback(async (item: UploadQueueItem) => {
+    setUploadQueue((queue) =>
+      queue.map((entry) =>
+        entry.id === item.id ? { ...entry, status: "uploading", progress: 15 } : entry,
+      ),
+    );
+
+    const progressTimer = window.setInterval(() => {
+      setUploadQueue((queue) =>
+        queue.map((entry) =>
+          entry.id === item.id && entry.status === "uploading" && entry.progress < 90
+            ? { ...entry, progress: Math.min(entry.progress + 8, 90) }
+            : entry,
+        ),
+      );
+    }, 300);
+
+    const { error } = await docMgr.uploadResume(item.file);
+    window.clearInterval(progressTimer);
+
+    if (cancelledUploadsRef.current.has(item.id)) {
+      setUploadQueue((queue) =>
+        queue.map((entry) =>
+          entry.id === item.id ? { ...entry, status: "cancelled", progress: 0 } : entry,
+        ),
+      );
       return;
     }
-    const ext = file.name.split(".").pop()?.toLowerCase();
-    if (!["pdf", "docx", "txt"].includes(ext ?? "")) {
-      toast.error("Only PDF, DOCX or TXT files are supported.");
+
+    setUploadQueue((queue) =>
+      queue.map((entry) =>
+        entry.id === item.id
+          ? {
+              ...entry,
+              status: error ? "error" : "done",
+              progress: error ? entry.progress : 100,
+              error: error ?? undefined,
+            }
+          : entry,
+      ),
+    );
+
+    if (error) toast.error(`${item.file.name}: ${error}`);
+    else toast.success("Document uploaded successfully");
+  }, [docMgr]);
+
+  useEffect(() => {
+    const pending = uploadQueue.find(
+      (item) => item.status === "pending" && !cancelledUploadsRef.current.has(item.id),
+    );
+    if (!pending || processingRef.current) return;
+
+    processingRef.current = true;
+    void processUploadQueue(pending).finally(() => {
+      processingRef.current = false;
+    });
+  }, [uploadQueue, processUploadQueue]);
+
+  useEffect(() => {
+    if (!uploadQueue.length) return;
+    const allSettled = uploadQueue.every(
+      (item) => item.status === "done" || item.status === "error" || item.status === "cancelled",
+    );
+    if (allSettled) {
+      const timer = window.setTimeout(() => setUploadQueue([]), 4000);
+      return () => window.clearTimeout(timer);
+    }
+  }, [uploadQueue]);
+
+  const enqueueFiles = useCallback((files: FileList | File[]) => {
+    const incoming = Array.from(files);
+    const activeCount = uploadQueue.filter(
+      (item) => item.status === "pending" || item.status === "uploading",
+    ).length;
+    const room = MAX_UPLOAD_QUEUE - activeCount;
+
+    if (room <= 0) {
+      toast.error(`Upload queue full (max ${MAX_UPLOAD_QUEUE} files).`);
       return;
     }
-    setUploading(true);
-    try {
-      const { resumeId, error } = await docMgr.uploadResume(file);
-      if (error) toast.error(error);
-      else toast.success("Resume uploaded and parsing started.");
-    } catch {
-      toast.error("Failed to upload document. Please try again.");
-    } finally {
-      setUploading(false);
-      if (inputRef.current) inputRef.current.value = "";
+
+    const batch = incoming.slice(0, room);
+    if (incoming.length > room) {
+      toast.warning(`Only ${room} file(s) added — queue limit is ${MAX_UPLOAD_QUEUE}.`);
     }
+
+    const newItems: UploadQueueItem[] = [];
+    for (const file of batch) {
+      const error = validateFile(file, "resume");
+      if (error) {
+        toast.error(`${file.name}: ${error}`);
+        continue;
+      }
+      newItems.push({
+        id: generateId(),
+        file,
+        progress: 0,
+        status: "pending",
+      });
+    }
+
+    if (newItems.length) {
+      setUploadQueue((queue) => [...queue, ...newItems]);
+    }
+  }, [uploadQueue]);
+
+  function cancelUpload(itemId: string) {
+    cancelledUploadsRef.current.add(itemId);
+    setUploadQueue((queue) =>
+      queue.map((item) =>
+        item.id === itemId && item.status !== "done"
+          ? { ...item, status: "cancelled", progress: 0 }
+          : item,
+      ),
+    );
   }
 
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
+  useEffect(() => {
+    if (page !== safePage) setPage(safePage);
+  }, [page, safePage]);
+
+  const activeResumeId = docStore.active_resume_id;
+
   async function handleRetryParse(resumeId: string) {
-    const resume = resumes.find((r) => r.id === resumeId);
-    if (!resume) return;
-    const versions: ResumeVersion[] = (resume as any).resume_versions ?? [];
-    const ver = versions.find((v) => v.id === resume.active_version_id) ?? versions[0];
-    if (!ver) return;
+    const resume = resumes.find((r) => r.id === resumeId) as
+      | { file_path?: string; content?: string | null }
+      | undefined;
+    if (!resume?.file_path) {
+      toast.error("No file path found for this resume.");
+      return;
+    }
 
     setRetrying(resumeId);
     try {
       await fetchEdgeJson("parse-resume", {
-        resume_id:  resumeId,
-        version_id: ver.id,
-        file_url:   ver.file_url,
-        mime_type:  "application/pdf",
+        resume_id: resumeId,
+        file_path: resume.file_path,
+        mime_type: guessMimeType(resume.file_path),
       });
       await docMgr.reload();
       toast.success("Re-parsing started.");
@@ -143,84 +361,278 @@ function ResumeManager() {
     }
   }
 
-  const previewResume = resumes.find((r) => r.id === previewId);
-  const previewVer: ResumeVersion | undefined = previewResume
-    ? ((previewResume as any).resume_versions ?? []).find(
-        (v: ResumeVersion) => v.id === previewResume.active_version_id
-      ) ?? (previewResume as any).resume_versions?.[0]
-    : undefined;
+  async function handleDownload(resumeId: string, filePath: string) {
+    setDownloadingId(resumeId);
+    try {
+      const url = await getSignedUrl(STORAGE_BUCKETS.RESUMES, filePath);
+      if (!url) {
+        toast.error("Could not generate download link.");
+        return;
+      }
+      const fileName = filePath.split("/").pop() ?? "resume";
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = fileName;
+      anchor.target = "_blank";
+      anchor.rel = "noopener noreferrer";
+      anchor.click();
+      toast.success("Download started.");
+    } catch {
+      toast.error("Download failed.");
+    } finally {
+      setDownloadingId(null);
+    }
+  }
+
+  async function handleRename() {
+    if (!renameId || !renameValue.trim()) return;
+    setRenaming(true);
+    try {
+      const trimmed = renameValue.trim();
+      await resumesDB.update(renameId, { name: trimmed });
+      docStore.updateResume(renameId, { title: trimmed });
+      toast.success("Document renamed.");
+      setRenameId(null);
+    } catch {
+      toast.error("Rename failed.");
+    } finally {
+      setRenaming(false);
+    }
+  }
+
+  const previewResume = resumes.find((r) => r.id === previewId) as
+    | { content?: string | null; title?: string; name?: string }
+    | undefined;
+  const previewParsed: ParsedResume | null = previewResume
+    ? parseResumeContentString(previewResume.content ?? null)
+    : null;
 
   return (
     <div className="space-y-4">
-      {/* Upload zone */}
-      <div
-        onClick={() => inputRef.current?.click()}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-          const f = e.dataTransfer.files[0];
-          if (f) handleFile(f);
-        }}
-        className={cn(
-          "border-2 border-dashed rounded-2xl p-5 sm:p-8 text-center cursor-pointer transition-all",
-          dragOver
-            ? "border-violet-500/60 bg-violet-500/5"
-            : "border-border hover:border-border bg-card"
-        )}
-      >
-        {uploading ? (
+      <UploadZone
+        title="Drop resume here or browse"
+        description={`PDF, DOCX, DOC or TXT · Max 10 MB · Up to ${MAX_UPLOAD_QUEUE} files at once`}
+        accept=".pdf,.docx,.doc,.txt"
+        multiple
+        loading={uploading}
+        loadingContent={
           <div className="flex flex-col items-center gap-2">
-            <RefreshCw className="w-8 h-8 text-violet-400 animate-spin" />
+            <RefreshCw className="w-8 h-8 text-primary animate-spin" aria-hidden="true" />
             <p className="text-sm text-muted-foreground">Uploading and parsing…</p>
             {docStore.upload_progress > 0 && (
-              <div className="w-40 h-1.5 bg-white/10 rounded-full overflow-hidden">
+              <div className="w-40 h-1.5 bg-secondary rounded-full overflow-hidden">
                 <div
-                  className="h-full bg-violet-500 transition-all"
+                  className="h-full bg-primary transition-all"
                   style={{ width: `${docStore.upload_progress}%` }}
                 />
               </div>
             )}
           </div>
-        ) : (
-          <div className="flex flex-col items-center gap-2">
-            <Upload className="w-8 h-8 text-muted-foreground" />
-            <p className="text-sm font-medium text-foreground">
-              Drop resume here or{" "}
-              <span className="text-violet-400 underline">browse</span>
-            </p>
-            {/* ★ FIX: updated text — 10 MB, TXT supported */}
-            <p className="text-xs text-muted-foreground">PDF, DOCX or TXT · Max 10 MB</p>
-          </div>
-        )}
-      </div>
-      {/* ★ FIX: accept .txt */}
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".pdf,.docx,.txt"
-        className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
+        }
+        onFileSelect={(files) => {
+          enqueueFiles(files);
+        }}
       />
 
+      {uploadQueue.length > 0 && (
+        <Card padding="sm" className="space-y-2">
+          <p className="text-xs font-semibold text-foreground">Upload queue</p>
+          {uploadQueue.map((item) => (
+            <div key={item.id} className="flex items-center gap-3">
+              <FileText className="w-4 h-4 text-primary shrink-0" />
+              <div className="flex-1 min-w-0">
+                <p className="text-xs text-foreground truncate">{item.file.name}</p>
+                <div className="w-full h-1.5 bg-secondary rounded-full overflow-hidden mt-1">
+                  <div
+                    className={cn(
+                      "h-full transition-all",
+                      item.status === "error" ? "bg-red-500" :
+                      item.status === "cancelled" ? "bg-muted-foreground/40" :
+                      item.status === "done" ? "bg-emerald-500" : "bg-primary",
+                    )}
+                    style={{ width: `${item.progress}%` }}
+                  />
+                </div>
+              </div>
+              <span className="text-[10px] text-muted-foreground capitalize shrink-0">
+                {item.status}
+              </span>
+              {(item.status === "pending" || item.status === "uploading") && (
+                <button
+                  type="button"
+                  onClick={() => cancelUpload(item.id)}
+                  className="p-1 rounded-lg text-muted-foreground hover:text-red-400"
+                  title="Cancel upload"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          ))}
+        </Card>
+      )}
+
       {/* Resume list */}
+      {resumes.length > 0 && (
+        <div className="flex flex-col sm:flex-row sm:items-center gap-3">
+          <div className="flex-1">
+            <DocumentSearchBar value={search} onChange={setSearch} />
+          </div>
+          <div className="flex rounded-xl border border-border overflow-hidden shrink-0">
+            <button
+              type="button"
+              onClick={() => setViewMode("cards")}
+              className={cn(
+                "px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors",
+                viewMode === "cards"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <LayoutGrid className="w-3.5 h-3.5" />
+              Cards
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode("table")}
+              className={cn(
+                "px-3 py-1.5 text-xs font-medium flex items-center gap-1.5 transition-colors",
+                viewMode === "table"
+                  ? "bg-primary/10 text-primary"
+                  : "text-muted-foreground hover:text-foreground",
+              )}
+            >
+              <Table2 className="w-3.5 h-3.5" />
+              Table
+            </button>
+          </div>
+        </div>
+      )}
+
       {resumes.length === 0 ? (
-        <Card className="text-center py-10">
-          <FileText className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
-          <p className="text-muted-foreground text-sm">No resumes uploaded yet.</p>
+        <Card>
+          <EmptyState
+            icon={FileText}
+            title="No resumes uploaded yet"
+            description="Drop a file above or browse to add your first resume for AI context."
+            compact
+          />
+        </Card>
+      ) : viewMode === "table" ? (
+        <Card padding="sm" className="overflow-x-auto">
+          <table className="w-full text-left text-xs">
+            <thead>
+              <tr className="border-b border-border text-muted-foreground">
+                {([
+                  ["name", "Name"],
+                  ["type", "Type"],
+                  ["size", "Size"],
+                  ["date", "Date"],
+                  ["status", "Status"],
+                ] as const).map(([key, label]) => (
+                  <th key={key} className="py-2 pr-3 font-medium">
+                    <button
+                      type="button"
+                      onClick={() => toggleSort(key)}
+                      className="inline-flex items-center gap-1 hover:text-foreground"
+                    >
+                      {label}
+                      <ArrowUpDown className="w-3 h-3" />
+                    </button>
+                  </th>
+                ))}
+                <th className="py-2 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {sortedPageItems.map((r) => {
+                const row = r as {
+                  id: string;
+                  title?: string;
+                  name?: string;
+                  content?: string | null;
+                  file_path?: string;
+                  file_size_bytes?: number;
+                  created_at: string;
+                };
+                const parseStatus = getResumeParseStatus(row.content, isParsingGlobal);
+                const isActive = r.id === activeResumeId;
+
+                return (
+                  <tr key={r.id} className="border-b border-border/60 last:border-0">
+                    <td className="py-3 pr-3 font-medium text-foreground">
+                      {row.title || row.name || "Untitled"}
+                      {isActive && (
+                        <Badge variant="emerald" size="sm" dot className="ml-2">Active</Badge>
+                      )}
+                    </td>
+                    <td className="py-3 pr-3 text-muted-foreground">Resume</td>
+                    <td className="py-3 pr-3 text-muted-foreground tabular-nums">
+                      {formatFileSize(row.file_size_bytes)}
+                    </td>
+                    <td className="py-3 pr-3 text-muted-foreground">
+                      {format(new Date(row.created_at), "MMM d, yyyy")}
+                    </td>
+                    <td className="py-3 pr-3 capitalize text-muted-foreground">{parseStatus}</td>
+                    <td className="py-3">
+                      <div className="flex items-center gap-1">
+                        {!isActive && (
+                          <Button
+                            variant="secondary"
+                            size="xs"
+                            onClick={() => {
+                              void docMgr.setActiveResume(r.id)
+                                .then(() => toast.success("Active resume updated."))
+                                .catch(() => toast.error("Failed to set active resume."));
+                            }}
+                            leftIcon={<Star className="w-3 h-3" />}
+                          >
+                            Set active
+                          </Button>
+                        )}
+                        <Link
+                          to={`/app/documents/resume/${r.id}`}
+                          className="px-2 py-1 text-[10px] font-medium text-primary hover:underline"
+                        >
+                          Edit
+                        </Link>
+                        <button
+                          onClick={() => setDeleteId(r.id)}
+                          className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <DocumentPagination
+            page={safePage}
+            totalPages={totalPages}
+            total={total}
+            onPageChange={setPage}
+          />
         </Card>
       ) : (
         <div className="space-y-2">
-          {resumes.map((r) => {
-            const versions: ResumeVersion[] = (r as any).resume_versions ?? [];
-            const activeVer: ResumeVersion | undefined =
-              versions.find((v) => v.id === r.active_version_id) ?? versions[0];
+          {sortedPageItems.map((r) => {
+            const row = r as {
+              id: string;
+              title?: string;
+              name?: string;
+              content?: string | null;
+              file_path?: string;
+              created_at: string;
+            };
+            const parseStatus = getResumeParseStatus(row.content, isParsingGlobal);
+            const parsed = parseResumeContentString(row.content ?? null);
             const isActive  = r.id === activeResumeId;
-            const isParsing = activeVer?.parse_status === "parsing"
-                           || activeVer?.parse_status === "processing";
-            const isError   = activeVer?.parse_status === "error";
-            const isReady   = activeVer?.parse_status === "ready";
+            const isParsing = parseStatus === "parsing" || parseStatus === "pending";
+            const isError   = parseStatus === "error";
+            const isReady   = parseStatus === "ready";
 
             return (
               <Card key={r.id} padding="sm">
@@ -232,7 +644,7 @@ function ResumeManager() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-xs sm:text-sm font-medium text-foreground truncate">
-                        {r.title || activeVer?.file_name || "Untitled"}
+                        {row.title || row.name || "Untitled"}
                       </p>
                       {isActive  && <Badge variant="emerald" size="sm" dot>Active</Badge>}
                       {isParsing && <Badge variant="amber"   size="sm">Parsing…</Badge>}
@@ -241,33 +653,69 @@ function ResumeManager() {
                     </div>
                     <p className="text-xs text-muted-foreground mt-0.5">
                       {format(new Date(r.created_at), "MMM d, yyyy")}
-                      {activeVer?.file_size_bytes
-                        ? ` · ${(activeVer.file_size_bytes / 1024).toFixed(0)} KB`
-                        : ""}
+                      {parsed?.skills?.length ? ` · ${parsed.skills.length} skills` : ""}
                     </p>
+                    {isReady && parsed?.summary && (
+                      <p className="text-[11px] text-muted-foreground mt-1 line-clamp-2">
+                        {parsed.summary}
+                      </p>
+                    )}
                   </div>
 
                   <div className="flex items-center gap-1.5 shrink-0">
+                    {row.file_path && (
+                      <button
+                        onClick={() => void handleDownload(r.id, row.file_path!)}
+                        disabled={downloadingId === r.id}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/5 transition-all disabled:opacity-40"
+                        title="Download original file"
+                      >
+                        <Download className={cn("w-3.5 h-3.5", downloadingId === r.id && "animate-pulse")} />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        setRenameId(r.id);
+                        setRenameValue(row.title || row.name || "");
+                      }}
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/5 transition-all"
+                      title="Rename document"
+                    >
+                      <Pencil className="w-3.5 h-3.5" />
+                    </button>
                     {!isActive && (
                       <Button
                         variant="secondary"
                         size="xs"
-                        onClick={() => docMgr.setActiveResume(r.id)}
+                        onClick={() => {
+                          void docMgr.setActiveResume(r.id)
+                            .then(() => toast.success("Active resume updated."))
+                            .catch(() => toast.error("Failed to set active resume."));
+                        }}
                         leftIcon={<Star className="w-3 h-3" />}
                       >
                         Set active
                       </Button>
                     )}
                     {isReady && (
-                      <button
-                        onClick={() => setPreviewId(r.id)}
-                        className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/5 transition-all"
-                        title="Preview parsed data"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                      </button>
+                      <>
+                        <button
+                          onClick={() => setPreviewId(r.id)}
+                          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/5 transition-all"
+                          title="Preview parsed data"
+                        >
+                          <Eye className="w-3.5 h-3.5" />
+                        </button>
+                        <Link
+                          to={`/app/documents/resume/${r.id}`}
+                          className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-accent/5 transition-all text-[10px] font-medium"
+                          title="Edit extracted fields"
+                        >
+                          Edit
+                        </Link>
+                      </>
                     )}
-                    {isError && (
+                    {(isError || (!isReady && !isParsing)) && row.file_path && (
                       <button
                         onClick={() => handleRetryParse(r.id)}
                         disabled={retrying === r.id}
@@ -288,6 +736,12 @@ function ResumeManager() {
               </Card>
             );
           })}
+          <DocumentPagination
+            page={safePage}
+            totalPages={totalPages}
+            total={total}
+            onPageChange={setPage}
+          />
         </div>
       )}
 
@@ -295,30 +749,30 @@ function ResumeManager() {
       <Modal
         open={!!previewId}
         onClose={() => setPreviewId(null)}
-        title={previewVer?.file_name ?? "Preview"}
+        title={previewResume?.title ?? previewResume?.name ?? "Preview"}
         size="xl"
       >
-        {previewVer?.parsed_data ? (
+        {previewParsed ? (
           <div className="max-h-96 overflow-y-auto bg-secondary rounded-xl p-4 space-y-3">
-            {(previewVer.parsed_data as any).name && (
-              <p className="text-sm font-semibold text-foreground">{(previewVer.parsed_data as any).name}</p>
+            {previewParsed.full_name && (
+              <p className="text-sm font-semibold text-foreground">{previewParsed.full_name}</p>
             )}
-            {previewVer.parsed_data.summary && (
-              <p className="text-xs text-muted-foreground leading-relaxed">{previewVer.parsed_data.summary}</p>
+            {previewParsed.summary && (
+              <p className="text-xs text-muted-foreground leading-relaxed">{previewParsed.summary}</p>
             )}
-            {previewVer.parsed_data.skills?.length > 0 && (
+            {previewParsed.skills?.length > 0 && (
               <div className="flex flex-wrap gap-1.5">
-                {previewVer.parsed_data.skills.slice(0, 12).map((s: string) => (
-                  <span key={s} className="px-2 py-0.5 bg-violet-500/10 text-violet-300 text-[11px] rounded-md border border-violet-500/20">
+                {previewParsed.skills.slice(0, 12).map((s: string) => (
+                  <span key={s} className="px-2 py-0.5 bg-primary/10 text-primary text-[11px] rounded-md border border-primary/20">
                     {s}
                   </span>
                 ))}
               </div>
             )}
-            {previewVer.parsed_data.experience?.length > 0 && (
+            {previewParsed.experience?.length > 0 && (
               <div className="space-y-1.5">
                 <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Experience</p>
-                {previewVer.parsed_data.experience.slice(0, 3).map((exp: any, i: number) => (
+                {previewParsed.experience.slice(0, 3).map((exp, i) => (
                   <p key={i} className="text-xs text-foreground">
                     <span className="font-medium">{exp.title}</span>
                     {exp.company && <span className="text-muted-foreground"> @ {exp.company}</span>}
@@ -327,14 +781,49 @@ function ResumeManager() {
                 ))}
               </div>
             )}
+            <Link
+              to={`/app/documents/resume/${previewId}`}
+              className="inline-block text-xs text-primary hover:underline"
+              onClick={() => setPreviewId(null)}
+            >
+              Edit extracted fields →
+            </Link>
           </div>
         ) : (
           <p className="text-muted-foreground text-sm">
-            {previewVer?.parse_status === "parsing" || previewVer?.parse_status === "processing"
+            {isParsingGlobal
               ? "Still parsing… check back in a moment."
-              : "No parsed data available."}
+              : "No parsed data available. Try re-parsing or edit manually."}
           </p>
         )}
+      </Modal>
+
+      {/* Rename modal */}
+      <Modal open={!!renameId} onClose={() => setRenameId(null)} title="Rename document" size="sm">
+        <div className="space-y-4">
+          <input
+            value={renameValue}
+            onChange={(e) => setRenameValue(e.target.value)}
+            placeholder="Document name"
+            className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+            onKeyDown={(e) => e.key === "Enter" && void handleRename()}
+          />
+          <div className="flex gap-3">
+            <Button variant="secondary" size="sm" fullWidth onClick={() => setRenameId(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              fullWidth
+              loading={renaming}
+              disabled={!renameValue.trim()}
+              onClick={() => void handleRename()}
+            >
+              Save
+            </Button>
+          </div>
+        </div>
       </Modal>
 
       {/* Delete confirm */}
@@ -382,9 +871,20 @@ function JDManager() {
   const [jdUrl,     setJdUrl]     = useState("");
   const [saving,    setSaving]    = useState(false);
   const [deleteId,  setDeleteId]  = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
 
   const jds        = docStore.jds ?? [];
   const activeJdId = docStore.active_jd_id;
+  const { pageItems, totalPages, total, safePage } = useDocumentListState(jds, search, page);
+
+  useEffect(() => {
+    setPage(1);
+  }, [search]);
+
+  useEffect(() => {
+    if (page !== safePage) setPage(safePage);
+  }, [page, safePage]);
 
   // Validate: paste mode needs text, url mode needs valid URL
   const isAddValid = title.trim() && (
@@ -442,21 +942,34 @@ function JDManager() {
         </Button>
       </div>
 
+      {jds.length > 0 && (
+        <DocumentSearchBar
+          value={search}
+          onChange={setSearch}
+          placeholder="Search by role or company…"
+        />
+      )}
+
       {jds.length === 0 ? (
-        <Card className="text-center py-10">
-          <ClipboardList className="w-8 h-8 text-muted-foreground/40 mx-auto mb-2" />
-          <p className="text-muted-foreground text-sm">No job descriptions added yet.</p>
-          <p className="text-muted-foreground text-xs mt-1">Add a JD to improve AI answer relevance.</p>
+        <Card>
+          <EmptyState
+            icon={ClipboardList}
+            title="No job descriptions added yet"
+            description="Add a JD to improve AI answer relevance during interviews."
+            actionLabel="Add job description"
+            onAction={() => setAddOpen(true)}
+            compact
+          />
         </Card>
       ) : (
         <div className="space-y-2">
-          {jds.map((jd) => {
+          {pageItems.map((jd) => {
             const isActive = jd.id === activeJdId;
             return (
               <Card key={jd.id} padding="sm">
                 <div className="flex items-center gap-3 sm:gap-4">
-                  <div className="w-9 h-9 bg-violet-500/10 rounded-xl items-center justify-center shrink-0 hidden sm:flex">
-                    <ClipboardList className="w-4 h-4 text-violet-400" />
+                  <div className="w-9 h-9 bg-primary/10 rounded-xl items-center justify-center shrink-0 hidden sm:flex">
+                    <ClipboardList className="w-4 h-4 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -495,6 +1008,12 @@ function JDManager() {
               </Card>
             );
           })}
+          <DocumentPagination
+            page={safePage}
+            totalPages={totalPages}
+            total={total}
+            onPageChange={setPage}
+          />
         </div>
       )}
 
@@ -561,6 +1080,9 @@ function JDManager() {
                     jdUrl && !isValidUrl(jdUrl) ? "border-red-500/60" : "border-input"
                   )}
                 />
+                <p className="text-xs text-muted-foreground mt-2 leading-relaxed">
+                  The URL is saved for your reference. Automatic scraping is not available — paste the job description text for AI parsing.
+                </p>
                 {jdUrl && !isValidUrl(jdUrl) && (
                   <p className="text-xs text-red-400 mt-1">Please enter a valid URL (including https://)</p>
                 )}
@@ -620,7 +1142,6 @@ function CoverLetterManager() {
   const docMgr = useDocumentManager({ skipInitialLoad: true });
   const user = useAuthStore((s) => s.user);
   const [file, setFile] = useState<File | null>(null);
-  const [dragOver, setDragOver] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [coverDoc, setCoverDoc] = useState<{
     title: string;
@@ -628,82 +1149,51 @@ function CoverLetterManager() {
     content: string | null;
     updated_at: string;
   } | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (!user?.id) return;
-    void supabase
-      .from("documents")
-      .select("title, parsed_summary, content, updated_at")
-      .eq("user_id", user.id)
-      .eq("type", "cover_letter")
-      .eq("is_primary", true)
-      .maybeSingle()
-      .then(({ data, error }) => {
-        if (!error && data) setCoverDoc(data as typeof coverDoc);
+    void documentsDB
+      .getPrimaryByType(user.id, "cover_letter")
+      .then((data) => {
+        if (data) setCoverDoc(data as typeof coverDoc);
       });
   }, [user?.id, uploading]);
 
   async function handleFile(f: File) {
-    if (f.size > 5 * 1024 * 1024) {
-      toast.error("File too large. Maximum size is 5 MB.");
-      return;
-    }
-    const ext = f.name.split(".").pop()?.toLowerCase();
-    if (!["pdf", "docx"].includes(ext ?? "")) {
-      toast.error("Only PDF or DOCX files are supported for cover letters.");
+    const validationError = validateFile(f, "cover_letter");
+    if (validationError) {
+      toast.error(validationError);
       return;
     }
     setUploading(true);
     setFile(f);
-    const { documentId, error } = await docMgr.uploadCoverLetter(f);
+    const { documentId, error: uploadError } = await docMgr.uploadCoverLetter(f);
     setUploading(false);
-    if (error) toast.error(error);
+    if (uploadError) toast.error(uploadError);
     else if (documentId) {
-      toast.success("Cover letter uploaded and parsed for interview AI context.");
+      toast.success("Document uploaded successfully");
       setFile(null);
     }
   }
 
   return (
     <div className="space-y-4">
-      <div
-        onClick={() => inputRef.current?.click()}
-        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-        onDragLeave={() => setDragOver(false)}
-        onDrop={(e) => {
-          e.preventDefault();
-          setDragOver(false);
-          const f = e.dataTransfer.files[0];
-          if (f) handleFile(f);
+      <UploadZone
+        title="Drop cover letter here or browse"
+        description="PDF, DOCX, DOC or TXT · Max 5 MB"
+        accept=".pdf,.docx,.doc,.txt"
+        loading={uploading}
+        loadingContent={
+          <div className="flex flex-col items-center gap-2">
+            <RefreshCw className="w-8 h-8 text-primary animate-spin" aria-hidden="true" />
+            <p className="text-sm text-muted-foreground">Parsing cover letter…</p>
+          </div>
+        }
+        onFileSelect={(files) => {
+          const f = files[0];
+          if (f) void handleFile(f);
         }}
-        className={cn(
-          "border-2 border-dashed rounded-2xl p-5 sm:p-8 text-center cursor-pointer transition-all",
-          dragOver
-            ? "border-violet-500/60 bg-violet-500/5"
-            : "border-border hover:border-border bg-card"
-        )}
-      >
-        <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-        <p className="text-sm font-medium text-foreground">
-          Drop cover letter here or{" "}
-          <span className="text-violet-400 underline">browse</span>
-        </p>
-        <p className="text-xs text-muted-foreground mt-1">PDF or DOCX · Max 5 MB</p>
-      </div>
-      <input
-        ref={inputRef}
-        type="file"
-        accept=".pdf,.docx"
-        className="hidden"
-        onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
       />
-
-      {uploading && (
-        <p className="text-sm text-muted-foreground flex items-center gap-2">
-          <RefreshCw className="w-4 h-4 animate-spin" /> Parsing cover letter…
-        </p>
-      )}
 
       {coverDoc ? (
         <Card padding="sm" className="space-y-3">
@@ -715,15 +1205,17 @@ function CoverLetterManager() {
             {coverDoc.parsed_summary ?? coverDoc.content?.slice(0, 400) ?? "Parsed text available."}
           </p>
           <p className="text-[10px] text-muted-foreground">
-            Used in Live Co-Pilot and mock interviews with your resume.
+            Used in Practice Coach and mock interviews with your resume.
           </p>
         </Card>
       ) : !file ? (
-        <Card className="text-center py-8 bg-secondary/30">
-          <p className="text-sm text-muted-foreground">No cover letter uploaded.</p>
-          <p className="text-xs text-muted-foreground/70 mt-1">
-            Upload a PDF or DOCX — text is extracted and fed into interview AI context.
-          </p>
+        <Card className="bg-secondary/30">
+          <EmptyState
+            icon={FileText}
+            title="No cover letter uploaded"
+            description="Upload a PDF or DOCX — text is extracted and fed into interview AI context."
+            compact
+          />
         </Card>
       ) : null}
 
@@ -747,17 +1239,11 @@ function PortfolioManager() {
   const [mode,         setMode]         = useState<"file" | "url">("file");
   const [file,         setFile]         = useState<File | null>(null);
   const [portfolioUrl, setPortfolioUrl] = useState("");
-  const [dragOver,     setDragOver]     = useState(false);
-  const inputRef = useRef<HTMLInputElement>(null);
 
   function handleFile(f: File) {
-    if (f.size > 15 * 1024 * 1024) {
-      toast.error("File too large. Maximum size is 15 MB.");
-      return;
-    }
-    const ext = f.name.split(".").pop()?.toLowerCase();
-    if (!["pdf", "txt"].includes(ext ?? "")) {
-      toast.error("Only PDF or TXT files are supported for portfolios.");
+    const error = validateFile(f, "portfolio");
+    if (error) {
+      toast.error(error);
       return;
     }
     setFile(f);
@@ -786,42 +1272,20 @@ function PortfolioManager() {
 
       {mode === "file" ? (
         <>
-          <div
-            onClick={() => inputRef.current?.click()}
-            onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-            onDragLeave={() => setDragOver(false)}
-            onDrop={(e) => {
-              e.preventDefault();
-              setDragOver(false);
-              const f = e.dataTransfer.files[0];
+          <UploadZone
+            title="Drop portfolio PDF/TXT/HTML or browse"
+            description="PDF, DOCX, DOC, TXT or HTML · Max 15 MB"
+            accept=".pdf,.docx,.doc,.txt,.html"
+            onFileSelect={(files) => {
+              const f = files[0];
               if (f) handleFile(f);
             }}
-            className={cn(
-              "border-2 border-dashed rounded-2xl p-5 sm:p-8 text-center cursor-pointer transition-all",
-              dragOver
-                ? "border-violet-500/60 bg-violet-500/5"
-                : "border-border hover:border-border bg-card"
-            )}
-          >
-            <Upload className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-            <p className="text-sm font-medium text-foreground">
-              Drop portfolio PDF/TXT or{" "}
-              <span className="text-violet-400 underline">browse</span>
-            </p>
-            <p className="text-xs text-muted-foreground mt-1">PDF or TXT · Max 15 MB</p>
-          </div>
-          <input
-            ref={inputRef}
-            type="file"
-            accept=".pdf,.txt"
-            className="hidden"
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }}
           />
           {file && (
             <Card padding="sm">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-violet-500/10 rounded-xl flex items-center justify-center shrink-0">
-                  <FileText className="w-4 h-4 text-violet-400" />
+                <div className="w-8 h-8 bg-primary/10 rounded-xl flex items-center justify-center shrink-0">
+                  <FileText className="w-4 h-4 text-primary" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <p className="text-sm text-foreground truncate">{file.name}</p>

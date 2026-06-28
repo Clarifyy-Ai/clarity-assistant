@@ -44,6 +44,10 @@ dist-ssr
 # 🧪 Testing & Coverage
 # =========================
 coverage/
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
 
 # =========================
 # ⚙️ Cache / Build Tools

@@ -5,10 +5,10 @@ import { useOverlayStore } from "@/store/overlayStore";
 describe("Overlay pill (Parakeet) mode", () => {
   beforeEach(() => {
     useOverlayStore.getState().resetSessionState();
-    useOverlayStore.getState().setMinimalMode(true);
   });
 
-  it("defaults to minimal (pill) mode for new sessions", () => {
+  it("supports minimal (pill) mode via setMinimalMode", () => {
+    useOverlayStore.getState().setMinimalMode(true);
     expect(useOverlayStore.getState().is_minimal_mode).toBe(true);
   });
 

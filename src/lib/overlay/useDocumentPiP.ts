@@ -125,13 +125,13 @@ export function useDocumentPiP(enabled: boolean): Document | null {
         baseStyle.textContent = `
           *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
           html, body { background: transparent; overflow: hidden; height: 100%; width: 100%; }
-          #overlay-root { width: 100%; height: 100%; }
+          #clarify-overlay-root { width: 100%; height: 100%; }
         `;
         pipWin.document.head.appendChild(baseStyle);
 
         // ── Portal root ─────────────────────────────────────────────────
         const overlayRoot = pipWin.document.createElement("div");
-        overlayRoot.id    = "overlay-root";
+        overlayRoot.id    = "clarify-overlay-root";
         pipWin.document.body.appendChild(overlayRoot);
 
         // ── Expose to React ─────────────────────────────────────────────

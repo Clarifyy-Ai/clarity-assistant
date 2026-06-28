@@ -45,6 +45,10 @@ export function composeHint(
     if (trimmed.startsWith("```")) {
       inCodeBlock = !inCodeBlock;
       hasCode = true;
+      const lang = trimmed.slice(3).trim();
+      if (inCodeBlock && lang && !lang.includes("`")) {
+        lines.push({ type: "header", content: lang.toUpperCase(), indent: 0, bold: true });
+      }
       continue;
     }
 

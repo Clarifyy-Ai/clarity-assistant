@@ -214,7 +214,6 @@ const FEATURE_PLAN_GATES: Record<FeatureFlagId, PlanId> = {
   wpm_tracking: "starter",
   analytics: "starter",
 
-  stealth_mode: "pro",
   screenshot_capture: "pro",
   diarization: "pro",
   byok: "pro",

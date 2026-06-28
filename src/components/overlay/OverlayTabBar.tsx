@@ -44,7 +44,7 @@ export function OverlayTabBar() {
   }, [isSessionActive, activeTab]);
 
   return (
-    <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-white/[0.06] bg-[#0b0b18]/40 shrink-0">
+    <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-white/[0.06] bg-[#0b0b18]/40 shrink-0" data-no-drag>
       {TABS.map((tab) => {
         // Resume context tab should only appear during session to avoid confusion
         if (tab.id === "resume" && !isSessionActive) return null;

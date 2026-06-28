@@ -1,6 +1,53 @@
 // electron/main.cjs
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, session, globalShortcut } = require("electron");
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, session, globalShortcut, crashReporter } = require("electron");
 const path = require("path");
+const fs = require("fs");
+
+// ── Auto-updater (only available in packaged builds) ──────────────
+let autoUpdater;
+try {
+  autoUpdater = require("electron-updater").autoUpdater;
+} catch (e) {
+  autoUpdater = null;
+}
+
+// ── Crash reporting (local dumps only, no remote server) ──────────
+if (app.isPackaged) {
+  crashReporter.start({
+    productName: "Clarify AI",
+    submitURL: "",
+    uploadToServer: false,
+    compress: true,
+  });
+}
+
+process.on("uncaughtException", (error) => {
+  console.error("[Clarify AI] Uncaught exception:", error.message);
+});
+
+// ── Window state persistence (simple JSON file) ───────────────────
+const stateFilePath = path.join(app.getPath("userData"), "window-state.json");
+
+function getWindowBounds() {
+  const defaults = { width: 440, height: 680, x: undefined, y: undefined };
+  try {
+    const data = fs.readFileSync(stateFilePath, "utf-8");
+    return { ...defaults, ...JSON.parse(data) };
+  } catch {
+    return defaults;
+  }
+}
+
+function saveWindowBounds() {
+  if (overlayWindow && !overlayWindow.isDestroyed()) {
+    try {
+      fs.writeFileSync(stateFilePath, JSON.stringify(overlayWindow.getBounds()));
+    } catch { /* best-effort */ }
+  }
+}
+
+// ── Offline / Private mode ────────────────────────────────────────
+let isOfflineMode = false;
 
 // ── Strict Content Security Policy for the renderer ───────────────
 // Defends against XSS in markdown renderers and prevents the app from
@@ -30,16 +77,19 @@ let tray          = null;
 // ── Create the overlay window ─────────────────────────────────────
 
 function createOverlay() {
+  const bounds = getWindowBounds();
   overlayWindow = new BrowserWindow({
-    width:           440,
-    height:          680,
+    width:           bounds.width,
+    height:          bounds.height,
+    x:               bounds.x,
+    y:               bounds.y,
     minWidth:        320,
     minHeight:       400,
     transparent:     true,
     frame:           false,
     alwaysOnTop:     true,
-    // Per production audit (P0-2): overlay must behave as a normal floating
-    // window. Do NOT hide it from screen capture, taskbar, or OS UI.
+    // COMPLIANCE: "floating" level ensures the window appears in exposé/mission
+    // control and is visible to screen capture. Never use "screen-saver".
     skipTaskbar:     false,
     hasShadow:       true,
     resizable:       true,
@@ -51,15 +101,28 @@ function createOverlay() {
     },
   });
 
-  // NOTE: setContentProtection(true) and "panel"/"toolbar" window types were
-  // removed in P0-2 — they hid the overlay from screen sharing / recording,
-  // which enabled covert interview assistance. Overlay must be visible in
-  // any Zoom / Meet / Teams "share screen" so candidates cannot conceal it.
+  // T-0295/T-0305: click-through stealth and screen-capture evasion intentionally removed.
+  // Overlay must remain visible during screen share / proctoring (compliance P0-2).
 
   // Visible on all desktops/fullscreen apps — legitimate UX, not stealth.
   overlayWindow.setVisibleOnAllWorkspaces(true, {
     visibleOnFullScreen: true,
   });
+
+  // Explicitly set "floating" level (visible in exposé/mission control)
+  overlayWindow.setAlwaysOnTop(true, "floating");
+
+  // COMPLIANCE: Explicit negative assertions (verified by automated test)
+  // - No setContentProtection(true) anywhere
+  // - No skipTaskbar: true on any window
+  // - No setVisibleOnAllWorkspaces with stealth intent
+  // - overlayWindow.setAlwaysOnTop only uses "floating" level (visible in exposé/mission control)
+  // - No IPC for "hide-overlay" (removed)
+  // - No global hotkey for hiding from screen share
+
+  // Persist window position/size between sessions
+  overlayWindow.on("moved", saveWindowBounds);
+  overlayWindow.on("resized", saveWindowBounds);
 
 
   // Load app
@@ -86,9 +149,9 @@ function createOverlay() {
 // ── System tray ───────────────────────────────────────────────────
 
 function createTray() {
-  // Use a 16x16 blank image if no icon yet
-  const icon = nativeImage.createEmpty();
-  tray = new Tray(icon);
+  const iconPath = path.join(__dirname, "../public/icon.png");
+  const icon = nativeImage.createFromPath(iconPath);
+  tray = new Tray(icon.isEmpty() ? nativeImage.createEmpty() : icon);
 
   const menu = Menu.buildFromTemplate([
     {
@@ -137,23 +200,52 @@ app.whenReady().then(() => {
   createOverlay();
   createTray();
   registerGlobalShortcuts();
+
+  // ── Auto-update (packaged builds only) ─────────────────────────
+  if (autoUpdater && app.isPackaged) {
+    autoUpdater.checkForUpdatesAndNotify();
+
+    autoUpdater.on("update-available", () => {
+      overlayWindow?.webContents.send("app-update", { status: "available" });
+    });
+
+    autoUpdater.on("update-downloaded", () => {
+      overlayWindow?.webContents.send("app-update", { status: "ready" });
+    });
+
+    autoUpdater.on("error", (err) => {
+      console.error("Auto-update error:", err.message);
+    });
+  }
 });
 
 // ── Global shortcuts (system-wide, work even when app is not focused) ──
+// T-0313: overlay toggle + AI answer registered globally for Electron.
 function registerGlobalShortcuts() {
-  // Toggle overlay visibility — convenience hotkey.
-  // Renamed from "primary stealth hotkey" in P0-2; behaviour unchanged.
-  globalShortcut.register("CommandOrControl+Shift+H", () => {
-    if (!overlayWindow) return;
-    if (overlayWindow.isVisible()) overlayWindow.hide();
-    else { overlayWindow.show(); overlayWindow.focus(); }
-  });
-  // NOTE: Ctrl+Shift+P "panic hide" removed in P0-2 — it existed only to let a
-  // user instantly conceal the overlay from an on-screen interviewer.
-  // Forward Ctrl+Shift+A to renderer (request AI answer)
-  globalShortcut.register("CommandOrControl+Shift+A", () => {
-    overlayWindow?.webContents.send("global-shortcut", "request-ai-answer");
-  });
+  const shortcuts = [
+    { key: "CommandOrControl+Shift+H", action: "toggle-overlay" },
+    { key: "CommandOrControl+Shift+C", action: "toggle-overlay" },
+    { key: "CommandOrControl+Shift+A", action: "request-ai-answer" },
+  ];
+
+  const seenKeys = new Set();
+
+  for (const { key, action } of shortcuts) {
+    if (seenKeys.has(key)) {
+      console.warn(`[Hotkeys] Duplicate shortcut definition skipped: ${key}`);
+      continue;
+    }
+    seenKeys.add(key);
+
+    const success = globalShortcut.register(key, () => {
+      overlayWindow?.webContents.send("global-shortcut", action);
+    });
+
+    if (!success) {
+      console.warn(`[Hotkeys] Failed to register ${key} — may conflict with another app`);
+      overlayWindow?.webContents.send("hotkey-conflict", { key, action });
+    }
+  }
 }
 
 app.on("will-quit", () => {
@@ -171,10 +263,6 @@ app.on("before-quit", () => {
 
 // ── IPC handlers ──────────────────────────────────────────────────
 
-ipcMain.on("hide-overlay", () => {
-  overlayWindow?.hide();
-});
-
 ipcMain.on("show-overlay", () => {
   overlayWindow?.show();
   overlayWindow?.focus();
@@ -185,10 +273,32 @@ ipcMain.on("quit-app", () => {
   app.quit();
 });
 
-ipcMain.on("set-always-on-top", (_, value) => {
-  overlayWindow?.setAlwaysOnTop(value, "screen-saver");
-});
-
 ipcMain.on("resize-overlay", (_, { width, height }) => {
   overlayWindow?.setSize(width, height, true);
+});
+
+// ── Offline / Private mode IPC ────────────────────────────────────
+
+ipcMain.on("set-offline-mode", (_, enabled) => {
+  isOfflineMode = enabled;
+  if (enabled) {
+    overlayWindow?.webContents.session.webRequest.onBeforeRequest(
+      { urls: ["*://*/*"] },
+      (details, callback) => {
+        const url = new URL(details.url);
+        if (url.hostname === "localhost" || url.hostname === "127.0.0.1") {
+          callback({ cancel: false });
+        } else {
+          callback({ cancel: true });
+        }
+      }
+    );
+  } else {
+    overlayWindow?.webContents.session.webRequest.onBeforeRequest(null);
+  }
+  overlayWindow?.webContents.send("offline-mode-changed", enabled);
+});
+
+ipcMain.on("get-offline-mode", (event) => {
+  event.returnValue = isOfflineMode;
 });

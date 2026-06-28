@@ -18,6 +18,9 @@ export type SessionType = SessionRow["type"];
 
 const EXPIRY_MS = 24 * 60 * 60 * 1000;
 
+/** Session types permitted for sessionless AI calls (matches edge sessionEnforcement). */
+export type AiPracticeMode = "mock" | "warmup" | "rehearsal" | "practice";
+
 export interface GetOrCreateSessionInput {
   user_id: string;
   type: SessionType; // "live" | "mock" | "warmup" | "rehearsal" | "room"
@@ -26,6 +29,33 @@ export interface GetOrCreateSessionInput {
   document_id?: string | null;
   jd_id?: string | null;
   model_used?: SessionRow["model_used"];
+  /** When true on type=live, adds practice tag so AI generation is permitted. */
+  is_practice?: boolean;
+  tags?: string[] | null;
+}
+
+/** Mirrors start-session edge `buildSessionTags` for direct DB inserts. */
+export function buildSessionTags(
+  sessionType: SessionType,
+  isPractice = false,
+): string[] {
+  const tags: string[] = [];
+  const alwaysPractice: SessionType[] = ["mock", "warmup", "rehearsal", "room"];
+
+  if (isPractice || alwaysPractice.includes(sessionType)) {
+    tags.push("practice");
+  }
+  if (sessionType === "rehearsal") {
+    tags.push("rehearsal");
+  }
+  return tags;
+}
+
+/** Maps DB session type to sessionless AI `mode` param for generate-* endpoints. */
+export function aiModeForSessionType(type: SessionType): AiPracticeMode {
+  if (type === "mock") return "mock";
+  if (type === "warmup") return "warmup";
+  return "rehearsal";
 }
 
 export interface GetOrCreateSessionResult {
@@ -82,6 +112,23 @@ export async function getOrCreateSession(
     return { session: existing as SessionRow, reused: true };
   }
 
+  const { data: limitCheck, error: limitErr } = await (supabase.rpc as (
+    name: string,
+    args: Record<string, unknown>,
+  ) => ReturnType<typeof supabase.rpc>)(
+    "check_free_tier_limits",
+    { p_user_id: input.user_id, p_action: "start_session" },
+  );
+  const limitResult = limitCheck as { allowed?: boolean; message?: string } | null;
+  if (!limitErr && limitResult && limitResult.allowed === false) {
+    const msg = limitResult.message ?? "Free plan limit reached. Upgrade to Pro.";
+    throw new Error(msg);
+  }
+
+  const tags =
+    input.tags ??
+    buildSessionTags(input.type, input.is_practice ?? false);
+
   const insert: TablesInsert<"sessions"> = {
     user_id: input.user_id,
     type: input.type,
@@ -91,6 +138,7 @@ export async function getOrCreateSession(
     document_id: input.document_id ?? null,
     jd_id: input.jd_id ?? null,
     model_used: input.model_used ?? null,
+    tags: tags.length > 0 ? tags : null,
   };
 
   const { data: created, error: insertErr } = await supabase

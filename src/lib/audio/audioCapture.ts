@@ -44,14 +44,15 @@ export function watchAudioDevices(onChange: () => void): () => void {
 // ── Microphone capture ────────────────────────────────────────────
 
 export async function captureMicrophone(
-  deviceId?: string | null
+  deviceId?: string | null,
+  options?: { noiseSuppression?: boolean; autoGainControl?: boolean },
 ): Promise<MediaStream> {
   const constraints: MediaStreamConstraints = {
     audio: {
       deviceId: deviceId ? { exact: deviceId } : undefined,
       echoCancellation: true,
-      noiseSuppression: true,
-      autoGainControl: true,
+      noiseSuppression: options?.noiseSuppression ?? true,
+      autoGainControl: options?.autoGainControl ?? true,
       sampleRate: 16000, // Deepgram optimal
       channelCount: 1,
     },

@@ -4,6 +4,12 @@ import * as Sentry from "@sentry/react";
 import posthog from "posthog-js";
 import App from "./App";
 import "./index.css";
+import "@fontsource/inter/400.css";
+import "@fontsource/inter/500.css";
+import "@fontsource/inter/600.css";
+import "@fontsource/inter/700.css";
+import "@fontsource/jetbrains-mono/400.css";
+import "@fontsource/jetbrains-mono/500.css";
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -21,22 +27,29 @@ if (
   import.meta.env.VITE_APP_ENV !== "development"
 ) {
   Sentry.init({
-    dsn:         import.meta.env.VITE_SENTRY_DSN,
-    environment: import.meta.env.VITE_APP_ENV ?? "production",
+    dsn: import.meta.env.VITE_SENTRY_DSN,
+    environment: import.meta.env.VITE_APP_ENV || "development",
+    release: `Clarify AI@${import.meta.env.VITE_APP_VERSION || "1.0.0"}`,
     integrations: [
       Sentry.browserTracingIntegration(),
       Sentry.replayIntegration({
-        maskAllText:   true,  // Privacy — mask PII in replays
-        blockAllMedia: false,
+        maskAllText: true,
+        blockAllMedia: true,
       }),
     ],
-    tracesSampleRate:         import.meta.env.VITE_APP_ENV === "production" ? 0.2 : 1.0,
-    replaysSessionSampleRate: 0.05,
-    replaysOnErrorSampleRate: 1.0,
+    tracesSampleRate: import.meta.env.PROD ? 0.1 : 1.0,
+    replaysSessionSampleRate: 0,
+    replaysOnErrorSampleRate: import.meta.env.PROD ? 1.0 : 0,
     beforeSend(event) {
-      // Strip any audio stream data from error payloads
       if (event.extra && "audioStream" in event.extra) {
         delete event.extra.audioStream;
+      }
+      if (event.breadcrumbs) {
+        event.breadcrumbs = event.breadcrumbs.map((b) => {
+          if (b.data?.url)
+            b.data.url = b.data.url.replace(/token=[^&]+/, "token=[REDACTED]");
+          return b;
+        });
       }
       return event;
     },
@@ -95,10 +108,29 @@ if (!rootEl) {
     const el = document.createElement("div");
     el.id = id;
     el.style.cssText =
-      "position:fixed;inset:0;pointer-events:none;z-index:2147483647;isolation:isolate;";
+      `position:fixed;inset:0;pointer-events:none;z-index:1100;isolation:isolate;`;
     document.body.appendChild(el);
   }
 })();
+
+// ── Web Vitals — Core Web Vitals reporting ────────────────────────────────
+if (import.meta.env.PROD) {
+  import("web-vitals").then(({ onCLS, onINP, onLCP, onFCP, onTTFB }) => {
+    const reportMetric = (metric: { name: string; value: number }) => {
+      if ((window as any).posthog) {
+        (window as any).posthog.capture("web_vital", {
+          metric: metric.name,
+          value: metric.value,
+        });
+      }
+    };
+    onCLS(reportMetric);
+    onINP(reportMetric);
+    onLCP(reportMetric);
+    onFCP(reportMetric);
+    onTTFB(reportMetric);
+  });
+}
 
 // ── Mount React ───────────────────────────────────────────────────────────
 ReactDOM.createRoot(rootEl).render(

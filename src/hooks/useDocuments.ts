@@ -93,6 +93,12 @@ export function useDocuments(options?: UseDocumentsOptions) {
           updated_at: r.created_at,
         }));
         docStore.setResumes(mapped as ResumeDocument[]);
+        const activeId = docStore.active_resume_id;
+        if (activeId) {
+          docStore.setActiveResumeId(activeId);
+        } else if (mapped.length === 1) {
+          docStore.setActiveResumeId(mapped[0].id);
+        }
       }
       {
         const mapped = jdRows.map((j) => ({
@@ -170,6 +176,9 @@ export function useDocuments(options?: UseDocumentsOptions) {
       parseResume(resumeId, path, file.type);
 
       await loadDocuments();
+      if (!docStore.active_resume_id) {
+        docStore.setActiveResumeId(resumeId);
+      }
       return { resumeId, error: null };
 
     } catch (err) {
@@ -258,16 +267,23 @@ export function useDocuments(options?: UseDocumentsOptions) {
     if (!mountedRef.current) return;
     setIsParsing(true);
     try {
-      const data = await fetchEdgeJson<{ content?: string }>("parse-resume", {
-        resume_id: resumeId,
-        file_path: filePath,
-        mime_type: mimeType,
-      });
-      // Update content if parsed
-      if (data?.content) {
+      const data = await fetchEdgeJson<{ parsed?: Record<string, unknown>; content?: string }>(
+        "parse-resume",
+        {
+          resume_id: resumeId,
+          file_path: filePath,
+          mime_type: mimeType,
+        },
+      );
+      if (data?.parsed) {
+        await resumesDB.update(resumeId, { content: JSON.stringify(data.parsed) });
+      } else if (data?.content) {
         await resumesDB.update(resumeId, { content: data.content });
       }
-      if (mountedRef.current) await loadDocuments();
+      if (mountedRef.current) {
+        await loadDocuments();
+        docStore.setActiveResumeId(resumeId);
+      }
     } catch (err) {
       console.error("[useDocuments] parseResume failed:", err);
     } finally {
@@ -443,6 +459,30 @@ ${rawText.slice(0, 4000)}`;
     }
   }, [user]);
 
+  const setActiveResume = useCallback(async (resumeId: string): Promise<void> => {
+    if (!user) return;
+
+    try {
+      await supabase
+        .from("resumes")
+        .update({ is_primary: false })
+        .eq("user_id", user.id);
+
+      await resumesDB.update(resumeId, { is_primary: true });
+
+      docStore.setResumes(
+        docStore.resumes.map((r) => ({
+          ...r,
+          is_primary: r.id === resumeId,
+        })) as ResumeDocument[],
+      );
+      docStore.setActiveResumeId(resumeId);
+    } catch (err) {
+      console.error("[useDocuments] setActiveResume failed:", err);
+      throw err;
+    }
+  }, [user, docStore]);
+
   const deleteAnswer = useCallback(async (answerId: string): Promise<void> => {
     if (!user?.id) return;
     await answerBankDB.delete(user.id, answerId);
@@ -472,7 +512,7 @@ ${rawText.slice(0, 4000)}`;
     uploadResume,
     uploadCoverLetter,
     deleteResume,
-    setActiveResume: docStore.setActiveResumeId,
+    setActiveResume,
 
     addJobDescription,
     setActiveJD:     docStore.setActiveJDId,

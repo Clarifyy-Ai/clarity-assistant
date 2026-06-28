@@ -19,7 +19,7 @@ AI-powered interview preparation for students and job seekers: mock sessions, li
 - Floating overlay for mock and live **practice** sessions
 - Resizable, dockable UI with resume/JD context
 - **Discrete UI** (optional): neutral nav labels for private practice — does **not** hide the app from screen sharing
-- Screen-sharing **awareness** notices (capture evasion is disabled by policy)
+- Screen-sharing awareness notices (capture evasion disabled by policy)
 
 ### Audio & speech
 - Speech-to-text, filler-word detection, WPM tracking
@@ -40,9 +40,9 @@ AI-powered interview preparation for students and job seekers: mock sessions, li
 - Mock interviews, warm-ups, session history
 
 ### Billing & security
-- Credits and Stripe subscriptions
+- Credits and Stripe subscriptions (Free / Pro / Enterprise)
 - Supabase Auth, RLS, GDPR export/delete
-- BYOK for bring-your-own API keys
+- BYOK (bring-your-own-key) is on the roadmap — `/app/settings/byok` shows deprecation notice; managed provider keys only at launch
 - Private/offline mode for sensitive practice
 
 ---
@@ -93,4 +93,4 @@ Screen-capture exclusion, overlay hiding from interviewers, and anti-detection b
 
 ## License
 
-Proprietary — Clarifyy AI. See repository maintainers for terms.
+Proprietary — Clarify AI. See repository maintainers for terms.

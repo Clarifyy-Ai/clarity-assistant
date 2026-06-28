@@ -8,6 +8,9 @@ import { useOverlayStore } from "@/store/overlayStore";
 import { useAuthStore } from "@/store/userStore";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { buildResumeContextForAI } from "@/lib/documents/interviewContext";
+import { parseResumeContentString } from "@/lib/documents/resumeParse";
+import { useDocumentStore } from "@/store/documentStore";
+import { useAudioStore } from "@/store/audioStore";
 import type { SessionQuestion } from "@/types/session.types";
 
 interface CreateSessionParams {
@@ -76,14 +79,28 @@ export function useSessionOrchestrator() {
   const requestHint = useCallback(async (questionText: string) => {
     const overlay = useOverlayStore.getState();
     const session = store.getState();
+    const cfg = session.config as { instructions?: string; role?: string; company?: string } | null;
     const resumeSummary =
       typeof overlay.resume_context === "string"
         ? overlay.resume_context
         : overlay.resume_context?.summary ?? "";
     const userId = useAuthStore.getState().profile?.id ?? useAuthStore.getState().user?.id;
+    const activeResume = useDocumentStore.getState().active_context.resume as
+      | { content?: string | null }
+      | null;
+    const parsed = parseResumeContentString(activeResume?.content ?? null);
     const resumeCtx = userId
-      ? await buildResumeContextForAI(userId, resumeSummary)
+      ? await buildResumeContextForAI(userId, {
+          parsedResume: parsed,
+          resumeContent: activeResume?.content ?? null,
+          resumeSummary,
+          instructions: cfg?.instructions ?? null,
+          role: cfg?.role ?? null,
+          company: cfg?.company ?? null,
+        })
       : resumeSummary || "None provided.";
+    const transcript =
+      useAudioStore.getState().transcript?.full_transcript ?? "";
 
     // Record the user's question in chat history so it actually shows up
     overlay.addChatMessage({
@@ -96,18 +113,26 @@ export function useSessionOrchestrator() {
       overlay.setHintState("generating");
       overlay.setChatGenerating?.(true);
 
-      const data = await fetchEdgeJson<{ hint?: string; answer?: string; text?: string }>(
+      const data = await fetchEdgeJson<{
+        hints?: string | string[];
+        hint?: string;
+        answer?: string;
+        text?: string;
+      }>(
         "generate-hint",
         {
           question: questionText,
           resume_context: resumeCtx,
-          interview_type: (session.config as any)?.interview_type ?? "behavioural",
-          model: overlay.active_model ?? "gemini-2.0-flash",
+          transcript: transcript.length > 2500 ? transcript.slice(-2500) : transcript,
+          interview_type: (session.config as { interview_type?: string })?.interview_type ?? "behavioural",
+          model: overlay.active_model ?? "gemini-2.5-flash",
           session_id: session.session_id,
+          mode: session.session_id ? undefined : "rehearsal",
         }
       );
 
-      const hint = data?.hint ?? data?.answer ?? data?.text ?? "";
+      const rawHints = data?.hints ?? data?.hint ?? data?.answer ?? data?.text ?? "";
+      const hint = Array.isArray(rawHints) ? rawHints.join("\n") : rawHints;
       overlay.setCurrentQuestion(questionText);
       overlay.appendStreamChunk(hint);
       overlay.commitStreamedHint();

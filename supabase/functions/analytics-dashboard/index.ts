@@ -1,6 +1,10 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
+import {
+  enforceRateLimit,
+  createRateLimitKey,
+} from "../_shared/rateLimit.ts";
 
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
@@ -11,6 +15,14 @@ Deno.serve(async (req: Request) => {
     if (auth.error) return auth.error;
 
     const user = auth.context.user;
+
+    const rateLimited = enforceRateLimit({
+      key: createRateLimitKey("analytics-dashboard", user.id),
+      limit: 10,
+      windowMs: 60_000,
+    });
+    if (rateLimited) return rateLimited;
+
     const db = createServiceClient();
     const jsonHeaders = { ...getCorsHeaders(req), "Content-Type": "application/json" };
 
@@ -19,6 +31,13 @@ Deno.serve(async (req: Request) => {
     --------------------------- */
     const body = await req.json().catch(() => ({}));
     const filter = body?.filter ?? {};
+
+    const rawPage = Number(body?.page);
+    const rawPerPage = Number(body?.per_page);
+    const page = Number.isInteger(rawPage) && rawPage >= 1 ? rawPage : 1;
+    const perPage = Number.isInteger(rawPerPage) && rawPerPage >= 1
+      ? Math.min(rawPerPage, 100)
+      : 50;
 
     const periodDays: Record<string, number> = {
       "7d": 7,
@@ -34,12 +53,16 @@ Deno.serve(async (req: Request) => {
     /* ---------------------------
        FETCH SESSIONS
     --------------------------- */
-    const { data: sessions, error: sessErr } = await db
+    const offset = (page - 1) * perPage;
+
+    const { data: sessions, error: sessErr, count: totalCount } = await db
       .from("sessions")
-      .select("*")
+      .select("*", { count: "exact" })
       .eq("user_id", user.id)
       .gte("created_at", since.toISOString())
-      .order("created_at", { ascending: false });
+      .not("tags", "cs", "{private}")
+      .order("created_at", { ascending: false })
+      .range(offset, offset + perPage - 1);
 
     if (sessErr) throw sessErr;
 
@@ -163,9 +186,56 @@ Deno.serve(async (req: Request) => {
       }));
 
     /* ---------------------------
+       CREDIT RECONCILIATION CHECK
+    --------------------------- */
+    try {
+      const { data: creditProfile } = await db
+        .from("profiles")
+        .select("credits")
+        .eq("id", user.id)
+        .maybeSingle();
+
+      const { data: txnAgg } = await db
+        .from("credit_transactions")
+        .select("amount")
+        .eq("user_id", user.id);
+
+      if (creditProfile && txnAgg) {
+        const txnSum = (txnAgg as { amount: number }[]).reduce(
+          (sum, row) => sum + (row.amount ?? 0),
+          0,
+        );
+        const drift = Math.abs((creditProfile.credits ?? 0) - txnSum);
+
+        if (drift > 10) {
+          console.warn(
+            `[analytics-dashboard] Credit drift detected for user ${user.id}: profile=${creditProfile.credits}, txn_sum=${txnSum}, drift=${drift}`,
+          );
+          await db.from("audit_logs").insert({
+            user_id: user.id,
+            action: "credit_drift_warning",
+            details: {
+              profile_credits: creditProfile.credits,
+              transaction_sum: txnSum,
+              drift,
+            },
+          });
+        }
+      }
+    } catch (reconcileErr) {
+      console.error("[analytics-dashboard] Credit reconciliation failed (non-fatal):", reconcileErr);
+    }
+
+    /* ---------------------------
        FINAL RESULT
     --------------------------- */
     const result = {
+      pagination: {
+        page,
+        per_page: perPage,
+        total: totalCount ?? totalSessions,
+        total_pages: Math.ceil((totalCount ?? totalSessions) / perPage),
+      },
       total_sessions: profile?.total_sessions ?? totalSessions,
       total_practice_hours: Math.round((totalMinutes / 60) * 10) / 10,
       avg_confidence_score: avgScore,
@@ -197,7 +267,7 @@ Deno.serve(async (req: Request) => {
     });
   } catch (err) {
     console.error("analytics-dashboard error:", err);
-    return new Response(JSON.stringify({ error: "Internal server error" }), {
+    return new Response(JSON.stringify({ error: "Internal server error", code: "INTERNAL_ERROR" }), {
       status: 500,
       headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });

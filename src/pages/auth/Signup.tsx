@@ -13,6 +13,7 @@ import {
 
 import { useAuthStore } from "@/store/authStore";
 import { usePageMeta } from "@/hooks/usePageMeta";
+import { BrandLogo } from "@/components/marketing";
 import { FormWrapper } from "@/components/common/FormWrapper";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
@@ -129,17 +130,21 @@ function normalizeReferralCode(value: string | null): string | null {
 
 /**
  * FormData checkboxes arrive as string values like "true" or "on".
- * This local schema keeps the central signupSchema behavior while making
- * browser FormData checkbox submission compatible.
+ * Preprocess before the central signupSchema (a refined schema — not extendable).
  */
-const signupFormSchema = (signupSchema as any).extend({
-  acceptTerms: z.preprocess(
-    (value) => value === true || value === "true" || value === "on",
-    z.boolean().refine((accepted) => accepted === true, {
-      message: "You must accept the terms and privacy policy.",
-    })
-  ),
-});
+const signupFormSchema = z.preprocess(
+  (raw) => {
+    if (raw && typeof raw === "object") {
+      const data = { ...(raw as Record<string, unknown>) };
+      const value = data.acceptTerms;
+      data.acceptTerms =
+        value === true || value === "true" || value === "on";
+      return data;
+    }
+    return raw;
+  },
+  signupSchema
+);
 
 type SignupFormInput = z.infer<typeof signupFormSchema>;
 
@@ -158,7 +163,10 @@ export default function Signup(): JSX.Element {
   const authStatus = useAuthStore((state) => state.status);
   const signUpWithEmail = useAuthStore((state) => state.signUpWithEmail);
 
+  const [fullName, setFullName] = useState("");
+  const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [acceptTerms, setAcceptTerms] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
@@ -197,6 +205,18 @@ export default function Signup(): JSX.Element {
       special: /[^A-Za-z0-9]/.test(password),
     }),
     [password]
+  );
+
+  const isFormValid = useMemo(
+    () =>
+      signupFormSchema.safeParse({
+        fullName,
+        email,
+        password,
+        confirmPassword,
+        acceptTerms,
+      }).success,
+    [fullName, email, password, confirmPassword, acceptTerms]
   );
 
   async function handleSignup(data: SignupFormInput): Promise<void> {
@@ -253,7 +273,7 @@ export default function Signup(): JSX.Element {
   return (
     <div className="min-h-screen flex bg-background">
       {/* Left panel */}
-      <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] flex-col relative overflow-hidden bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-700 p-10">
+      <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] flex-col relative overflow-hidden bg-gradient-to-br from-primary via-indigo-600 to-blue-700 p-10">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 left-0 w-96 h-96 rounded-full bg-white blur-3xl -translate-x-1/2 -translate-y-1/2" />
           <div className="absolute bottom-0 right-0 w-80 h-80 rounded-full bg-white blur-3xl translate-x-1/2 translate-y-1/2" />
@@ -261,11 +281,7 @@ export default function Signup(): JSX.Element {
 
         <div className="relative z-10 flex flex-col h-full">
           <div className="flex items-center gap-3">
-            <img
-              src="/images/clarify-logo.png"
-              alt="Clarify AI"
-              className="h-9 w-auto brightness-0 invert"
-            />
+            <BrandLogo size="md" showText={false} />
             <span className="text-xl font-bold text-white">Clarify AI</span>
           </div>
 
@@ -317,7 +333,7 @@ export default function Signup(): JSX.Element {
             </div>
 
             <p className="text-indigo-200 text-xs">
-              Practice mock interviews, live co-pilot sessions, and gov exam prep in one place.
+              Practice mock interviews, Practice Coach sessions, and gov exam prep in one place.
             </p>
           </div>
         </div>
@@ -326,12 +342,8 @@ export default function Signup(): JSX.Element {
       {/* Right panel */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 sm:px-10 py-12">
         <div className="lg:hidden mb-8 w-full max-w-sm">
-          <div className="w-full py-4 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-2xl flex items-center justify-center gap-2">
-            <img
-              src="/images/clarify-logo.png"
-              alt="Clarify AI"
-              className="h-7 w-auto brightness-0 invert"
-            />
+          <div className="w-full py-4 bg-gradient-to-r from-primary to-indigo-600 rounded-2xl flex items-center justify-center gap-2">
+            <BrandLogo size="sm" showText={false} />
             <span className="text-lg font-bold text-white">Clarify AI</span>
           </div>
         </div>
@@ -384,10 +396,14 @@ export default function Signup(): JSX.Element {
                   placeholder="Jane Smith"
                   autoComplete="name"
                   required
+                  aria-required={true}
+                  aria-describedby={fieldErrors.fullName?.[0] ? "error-fullName" : undefined}
+                  aria-invalid={!!fieldErrors.fullName?.[0]}
+                  onChange={(event) => setFullName(event.target.value)}
                 />
 
                 {fieldErrors.fullName?.[0] && (
-                  <p className="text-xs text-destructive">
+                  <p id="error-fullName" role="alert" className="text-xs text-destructive">
                     {fieldErrors.fullName[0]}
                   </p>
                 )}
@@ -399,10 +415,14 @@ export default function Signup(): JSX.Element {
                   placeholder="you@example.com"
                   autoComplete="email"
                   required
+                  aria-required={true}
+                  aria-describedby={fieldErrors.email?.[0] ? "error-email" : undefined}
+                  aria-invalid={!!fieldErrors.email?.[0]}
+                  onChange={(event) => setEmail(event.target.value)}
                 />
 
                 {fieldErrors.email?.[0] && (
-                  <p className="text-xs text-destructive">
+                  <p id="error-email" role="alert" className="text-xs text-destructive">
                     {fieldErrors.email[0]}
                   </p>
                 )}
@@ -415,7 +435,12 @@ export default function Signup(): JSX.Element {
                     placeholder="Min. 8 characters"
                     autoComplete="new-password"
                     required
-                    onChange={(event) => setPassword(event.target.value)}
+                    aria-required={true}
+                    aria-describedby={fieldErrors.password?.[0] ? "error-password" : "password-requirements"}
+                    aria-invalid={!!fieldErrors.password?.[0]}
+                    onChange={(event) => {
+                      setPassword(event.target.value);
+                    }}
                     rightIcon={
                       <button
                         type="button"
@@ -435,13 +460,13 @@ export default function Signup(): JSX.Element {
                   />
 
                   {fieldErrors.password?.[0] && (
-                    <p className="text-xs text-destructive">
+                    <p id="error-password" role="alert" className="text-xs text-destructive">
                       {fieldErrors.password[0]}
                     </p>
                   )}
 
                   {password.length > 0 && (
-                    <div className="space-y-1.5">
+                    <div id="password-requirements" className="space-y-1.5">
                       <div className="flex gap-1">
                         {[1, 2, 3, 4, 5].map((level) => (
                           <div
@@ -509,10 +534,14 @@ export default function Signup(): JSX.Element {
                   placeholder="Re-enter your password"
                   autoComplete="new-password"
                   required
+                  aria-required={true}
+                  aria-describedby={fieldErrors.confirmPassword?.[0] ? "error-confirmPassword" : undefined}
+                  aria-invalid={!!fieldErrors.confirmPassword?.[0]}
+                  onChange={(event) => setConfirmPassword(event.target.value)}
                 />
 
                 {fieldErrors.confirmPassword?.[0] && (
-                  <p className="text-xs text-destructive">
+                  <p id="error-confirmPassword" role="alert" className="text-xs text-destructive">
                     {fieldErrors.confirmPassword[0]}
                   </p>
                 )}
@@ -525,6 +554,7 @@ export default function Signup(): JSX.Element {
                     checked={acceptTerms}
                     onChange={(event) => setAcceptTerms(event.target.checked)}
                     required
+                    aria-required={true}
                     className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/40 cursor-pointer"
                   />
 
@@ -532,6 +562,8 @@ export default function Signup(): JSX.Element {
                     I agree to the{" "}
                     <Link
                       to="/terms"
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="text-primary underline hover:opacity-80"
                     >
                       Terms of Service
@@ -539,6 +571,8 @@ export default function Signup(): JSX.Element {
                     and{" "}
                     <Link
                       to="/privacy"
+                      target="_blank"
+                      rel="noopener noreferrer"
                       className="text-primary underline hover:opacity-80"
                     >
                       Privacy Policy
@@ -548,13 +582,13 @@ export default function Signup(): JSX.Element {
                 </label>
 
                 {fieldErrors.acceptTerms?.[0] && (
-                  <p className="text-xs text-destructive">
+                  <p id="error-acceptTerms" role="alert" className="text-xs text-destructive">
                     {fieldErrors.acceptTerms[0]}
                   </p>
                 )}
 
                 {(formError || validationFormError) && (
-                  <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2.5">
+                  <div role="alert" className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2.5">
                     <AlertCircle className="w-4 h-4 shrink-0" />
                     <span>{formError ?? validationFormError}</span>
                   </div>
@@ -565,7 +599,7 @@ export default function Signup(): JSX.Element {
                   variant="primary"
                   size="md"
                   loading={isSubmitting}
-                  disabled={isSubmitting}
+                  disabled={isSubmitting || !isFormValid}
                   fullWidth
                 >
                   Create account

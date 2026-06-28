@@ -1,0 +1,44 @@
+import { ApiClientError } from "@/lib/api/apiClient";
+import { useUIStore } from "@/store/uiStore";
+import { toast } from "sonner";
+
+export const SESSION_LIMIT_ERROR_CODES = new Set([
+  "FREE_TIER_SESSION_LIMIT",
+  "daily_session_limit",
+]);
+
+export function isSessionLimitError(error: unknown): boolean {
+  if (error instanceof ApiClientError) {
+    if (SESSION_LIMIT_ERROR_CODES.has(error.code)) return true;
+    const msg = error.message.toLowerCase();
+    return msg.includes("session limit") || msg.includes("sessions per day");
+  }
+
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    return msg.includes("session limit") || msg.includes("sessions per day");
+  }
+
+  return false;
+}
+
+/** Returns true when the error was handled (upgrade prompt shown). */
+export function handleSessionStartError(error: unknown): boolean {
+  if (isSessionLimitError(error)) {
+    const message =
+      error instanceof ApiClientError
+        ? error.message
+        : "You've reached your session limit for today.";
+    toast.error(message);
+    useUIStore.getState().openUpgradeModal("session_limit");
+    return true;
+  }
+
+  if (error instanceof ApiClientError && error.code === "NO_CREDITS") {
+    toast.error(error.message);
+    useUIStore.getState().openUpgradeModal("out_of_credits");
+    return true;
+  }
+
+  return false;
+}

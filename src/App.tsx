@@ -12,22 +12,33 @@ import {
   Navigate,
   Outlet,
   useLocation,
+  useParams,
 } from "react-router-dom";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuthStore } from "@/store/authStore";
+import { useGlobalStore } from "@/store/globalStore";
 import { useUIStore } from "@/store/uiStore";
+import { useThemeStore } from "@/store/themeStore";
+import { applyAppearancePreferences } from "@/lib/theme/applyAppearance";
 import { syncStealthFromOverlay } from "@/lib/stealth/stealthActions";
+import type { PlanId } from "@/lib/constants/pricing";
+import { useOverlayStore } from "@/store/overlayStore";
+import { useSessionStore } from "@/store/sessionStore";
+import { toast } from "sonner";
 
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppTopBar } from "@/components/layout/AppTopBar";
 import { MobileNav } from "@/components/layout/MobileNav";
+import { IndiaRegionGate } from "@/components/layout/IndiaRegionGate";
 import { NetworkBanner } from "@/components/layout/NetworkBanner";
+import { SessionTimeoutBanner } from "@/components/layout/SessionTimeoutBanner";
+import { PageContent } from "@/components/layout/PageContent";
 import { SetupChecklist } from "@/components/layout/SetupChecklist";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
+import { AppWalkthrough, InstallPromptModal } from "@/components/onboarding";
 import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
 import { GlobalErrorBoundary } from "@/components/layout/GlobalErrorBoundary";
 import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
@@ -45,6 +56,7 @@ import Blog from "@/pages/marketing/Blog";
 import BlogPost from "@/pages/marketing/BlogPost";
 import Terms from "@/pages/marketing/Terms";
 import Privacy from "@/pages/marketing/Privacy";
+import GovExams from "@/pages/marketing/GovExams";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Electron typing
@@ -52,8 +64,11 @@ import Privacy from "@/pages/marketing/Privacy";
 
 type ElectronAPI = {
   isElectron?: boolean;
-  hide?: () => void;
-  setAlwaysOnTop?: (enabled: boolean) => void;
+  resize?: (w: number, h: number) => void;
+  onGlobalShortcut?: (callback: (action: string) => void) => void;
+  removeGlobalShortcutListener?: () => void;
+  onHotkeyConflict?: (callback: (info: { key: string; action: string }) => void) => void;
+  removeHotkeyConflictListener?: () => void;
 };
 
 type ElectronWindow = Window & {
@@ -121,9 +136,6 @@ const CodingHints = lazy(() => import("@/pages/app/prep/CodingHints"));
 const SystemDesign = lazy(() => import("@/pages/app/prep/SystemDesign"));
 
 // Sessions
-const SessionHistory = lazy(
-  () => import("@/pages/app/sessions/SessionHistory")
-);
 const CallSessions = lazy(
   () => import("@/pages/app/sessions/CallSessions")
 );
@@ -207,7 +219,6 @@ const SettingsSecurityConfig = lazy(
 const SettingsIntegrations = lazy(
   () => import("@/pages/app/settings/SettingsIntegrations")
 );
-// SettingsBYOK route intentionally removed — lazy import deleted to avoid dead code.
 const SettingsAppearance = lazy(
   () => import("@/pages/app/settings/SettingsAppearance")
 );
@@ -229,9 +240,15 @@ const SettingsHotkeys = lazy(
 const SettingsPolish = lazy(
   () => import("@/pages/app/settings/SettingsPolish")
 );
+const SettingsPracticeCoach = lazy(
+  () => import("@/pages/app/settings/SettingsPracticeCoach")
+);
 
 // Guide / Admin / Scorecard / 404
 const Guide = lazy(() => import("@/pages/app/guide/Guide"));
+const PracticeCoachGuide = lazy(
+  () => import("@/pages/app/guide/PracticeCoachGuide"),
+);
 const AdminDashboard = lazy(
   () => import("@/pages/app/admin/AdminDashboard")
 );
@@ -251,6 +268,9 @@ const AdminFeatureFlags = lazy(
 const AdminSeedQuestions = lazy(
   () => import("@/pages/app/admin/AdminSeedQuestions")
 );
+const AdminBulkUpload = lazy(
+  () => import("@/pages/app/admin/AdminBulkUpload")
+);
 const AdminLiveChat = lazy(
   () => import("@/pages/app/admin/AdminLiveChat")
 );
@@ -258,10 +278,18 @@ const AdminQuestionEditor = lazy(
   () => import("@/pages/app/admin/AdminQuestionEditor")
 );
 const AdminAuditLog = lazy(() => import("@/pages/app/admin/AdminAuditLog"));
+const AdminQAChecklist = lazy(
+  () => import("@/pages/app/admin/AdminQAChecklist")
+);
 const AdminSupport = lazy(() => import("@/pages/app/admin/AdminSupport"));
+const AdminPromoCodes = lazy(() => import("@/pages/app/admin/AdminPromoCodes"));
+const AdminBillingSettings = lazy(
+  () => import("@/pages/app/admin/AdminBillingSettings"),
+);
 const AdminLayout = lazy(() => import("@/pages/app/admin/AdminLayout"));
 const Scorecard = lazy(() => import("@/pages/Scorecard"));
 const NotFound = lazy(() => import("@/pages/NotFound"));
+const SharedDebrief = lazy(() => import("@/pages/marketing/SharedDebrief"));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Loaders
@@ -277,12 +305,17 @@ function PageLoader(): JSX.Element {
 
 function Page({ component: Component }: { component: ComponentType }): JSX.Element {
   const location = useLocation();
-  const isAppRoute =
+  const isShellRoute =
     location.pathname.startsWith("/app") ||
     location.pathname.startsWith("/onboarding");
 
+  // App shell routes suspend once at the AppShell <Outlet /> boundary.
+  if (isShellRoute) {
+    return <Component />;
+  }
+
   return (
-    <Suspense fallback={isAppRoute ? <AppLoadingFallback /> : <PageLoader />}>
+    <Suspense fallback={<PageLoader />}>
       <Component />
     </Suspense>
   );
@@ -292,9 +325,13 @@ function MarketingPage({ component: Component }: { component: ComponentType }): 
   return <Component />;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// QueryClient
-// ─────────────────────────────────────────────────────────────────────────────
+function IndiaAppPage({ component: Component }: { component: ComponentType }): JSX.Element {
+  return (
+    <IndiaRegionGate>
+      <Page component={Component} />
+    </IndiaRegionGate>
+  );
+}
 
 function OnboardingRedirect(): JSX.Element {
   const location = useLocation();
@@ -302,31 +339,10 @@ function OnboardingRedirect(): JSX.Element {
   return <Navigate to={`/onboarding${location.search}`} replace />;
 }
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 1000 * 60 * 2,
-      gcTime: 1000 * 60 * 10,
-      retry: (failureCount, error: unknown) => {
-        if (
-          typeof error === "object" &&
-          error !== null &&
-          "status" in error &&
-          typeof (error as { status: unknown }).status === "number" &&
-          (error as { status: number }).status < 500
-        ) {
-          return false;
-        }
-
-        return failureCount < 2;
-      },
-      refetchOnWindowFocus: false,
-    },
-    mutations: {
-      retry: 0,
-    },
-  },
-});
+function AnalyticsDebriefRedirect(): JSX.Element {
+  const { sessionId } = useParams<{ sessionId: string }>();
+  return <Navigate to={`/app/debrief/${sessionId ?? ""}`} replace />;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // App shell
@@ -335,24 +351,26 @@ const queryClient = new QueryClient({
 function AppShell(): JSX.Element {
   const profile = useAuthStore((state) => state.profile);
   const location = useLocation();
+  const sessionStatus = useSessionStore((state) => state.status);
 
   const mobileNavOpen = useUIStore((state) => state.mobile_nav_open);
   const setMobileNavOpen = useUIStore((state) => state.setMobileNavOpen);
 
+  const hideChromeForLiveSession =
+    location.pathname === "/app/live" &&
+    (sessionStatus === "active" || sessionStatus === "paused");
+
   const showSetupChecklist =
     Boolean(profile) &&
     !profile?.onboarding_completed &&
-    !location.pathname.startsWith("/app/dashboard");
+    !location.pathname.startsWith("/app/dashboard") &&
+    !hideChromeForLiveSession;
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
       if ((event.ctrlKey || event.metaKey) && event.key === "b") {
         event.preventDefault();
         useUIStore.getState().toggleSidebar();
-      }
-
-      if (IS_ELECTRON && event.key === "Escape") {
-        electronWindow.electronAPI?.hide?.();
       }
     };
 
@@ -363,6 +381,18 @@ function AppShell(): JSX.Element {
     };
   }, []);
 
+  if (hideChromeForLiveSession) {
+    return (
+      <div className="flex h-[100vh] w-full overflow-hidden bg-background">
+        <main id="main-content" className="flex-1 overflow-y-auto">
+          <Suspense fallback={<AppLoadingFallback />}>
+            <Outlet />
+          </Suspense>
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(
@@ -370,6 +400,9 @@ function AppShell(): JSX.Element {
         IS_ELECTRON ? "electron-shell" : "bg-background"
       )}
     >
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:text-sm focus:font-medium">
+        Skip to content
+      </a>
       {IS_ELECTRON && (
         <div
           style={{ WebkitAppRegion: "drag" } as CSSProperties}
@@ -380,11 +413,11 @@ function AppShell(): JSX.Element {
       {mobileNavOpen && (
         <>
           <div
-            className="fixed inset-0 z-40 bg-black/50 md:hidden"
+            className="fixed inset-0 z-[190] bg-black/50 md:hidden"
             onClick={() => setMobileNavOpen(false)}
           />
 
-          <div className="fixed inset-y-0 left-0 z-50 md:hidden">
+          <div className="fixed inset-y-0 left-0 z-[200] md:hidden">
             <AppSidebar onNavClick={() => setMobileNavOpen(false)} />
           </div>
         </>
@@ -394,23 +427,30 @@ function AppShell(): JSX.Element {
 
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
         <AppTopBar />
+        <SessionTimeoutBanner />
         <NetworkBanner />
 
-        <main className="flex-1 overflow-y-auto pb-16 md:pb-0">
+        <main id="main-content" className="flex-1 overflow-y-auto pb-16 md:pb-0">
           <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 md:py-6">
             {showSetupChecklist && (
               <div className="mb-6">
-                <SetupChecklist />
+                <SetupChecklist prominent dismissible />
               </div>
             )}
 
-            <Outlet />
+            <PageContent>
+              <Suspense fallback={<AppLoadingFallback />}>
+                <Outlet />
+              </Suspense>
+            </PageContent>
           </div>
         </main>
       </div>
 
       <MobileNav />
       <UpgradeModal />
+      <AppWalkthrough />
+      <InstallPromptModal />
     </div>
   );
 }
@@ -440,6 +480,7 @@ const routes = [
   // Marketing
   { path: "/", element: <MarketingPage component={Landing} /> },
   { path: "/pricing", element: <MarketingPage component={Pricing} /> },
+  { path: "/gov-exams", element: <MarketingPage component={GovExams} /> },
   { path: "/help", element: <MarketingPage component={Help} /> },
   { path: "/help/:slug", element: <MarketingPage component={HelpArticle} /> },
   { path: "/shortcuts", element: <MarketingPage component={Shortcuts} /> },
@@ -447,6 +488,7 @@ const routes = [
   { path: "/blog/:slug", element: <MarketingPage component={BlogPost} /> },
   { path: "/terms", element: <MarketingPage component={Terms} /> },
   { path: "/privacy", element: <MarketingPage component={Privacy} /> },
+  { path: "/share/:token", element: <Page component={SharedDebrief} /> },
 
   { path: "/dashboard", element: <Navigate to="/app/dashboard" replace /> },
 
@@ -485,7 +527,7 @@ const routes = [
       },
       {
         path: "/app/mock-test/session/:testId",
-        element: <Page component={MockTestSession} />,
+        element: <IndiaAppPage component={MockTestSession} />,
       },
     ],
   },
@@ -503,6 +545,10 @@ const routes = [
           { path: "dashboard", element: <Page component={Dashboard} /> },
           { path: "interview-day", element: <Page component={InterviewDay} /> },
           { path: "analytics", element: <Page component={Analytics} /> },
+          {
+            path: "analytics/:sessionId",
+            element: <AnalyticsDebriefRedirect />,
+          },
           { path: "usage", element: <Page component={UsageDashboard} /> },
           { path: "profile", element: <Page component={Profile} /> },
           { path: "notifications", element: <Page component={Notifications} /> },
@@ -513,15 +559,15 @@ const routes = [
           { path: "mock/warmup", element: <Page component={MockWarmup} /> },
           { path: "mock/session", element: <Page component={MockSession} /> },
 
-          // Mock Test (JEE/NEET MCQ)
-          { path: "mock-test", element: <Page component={MockTestHub} /> },
-          { path: "mock-test/configure", element: <Page component={MockTestConfigure} /> },
-          { path: "mock-test/results/:testId", element: <Page component={MockTestResults} /> },
-          { path: "mock-test/my-questions", element: <Page component={MockTestMyQuestions} /> },
-          { path: "mock-test/upload", element: <Page component={MockTestUpload} /> },
-          { path: "mock-test/revision", element: <Page component={MockTestRevision} /> },
-          { path: "mock-test/analytics", element: <Page component={MockTestAnalytics} /> },
-          { path: "mock-test/papers/:examType", element: <Page component={MockTestPapers} /> },
+          // Mock Test (Gov exams — India only)
+          { path: "mock-test", element: <IndiaAppPage component={MockTestHub} /> },
+          { path: "mock-test/configure", element: <IndiaAppPage component={MockTestConfigure} /> },
+          { path: "mock-test/results/:testId", element: <IndiaAppPage component={MockTestResults} /> },
+          { path: "mock-test/my-questions", element: <IndiaAppPage component={MockTestMyQuestions} /> },
+          { path: "mock-test/upload", element: <IndiaAppPage component={MockTestUpload} /> },
+          { path: "mock-test/revision", element: <IndiaAppPage component={MockTestRevision} /> },
+          { path: "mock-test/analytics", element: <IndiaAppPage component={MockTestAnalytics} /> },
+          { path: "mock-test/papers/:examType", element: <IndiaAppPage component={MockTestPapers} /> },
 
           { path: "prep", element: <Page component={PrepLab} /> },
           {
@@ -545,7 +591,11 @@ const routes = [
           { path: "sessions", element: <Page component={CallSessions} /> },
           {
             path: "sessions/history",
-            element: <Page component={SessionHistory} />,
+            element: <Navigate to="/app/sessions?tab=all" replace />,
+          },
+          {
+            path: "sessions/schedule",
+            element: <Navigate to="/app/interviews/new" replace />,
           },
           { path: "sessions/:id", element: <Page component={SessionDetail} /> },
 
@@ -562,6 +612,10 @@ const routes = [
           { path: "interviews", element: <Page component={Interviews} /> },
           {
             path: "interviews/new",
+            element: <Page component={NewInterview} />,
+          },
+          {
+            path: "interviews/:id/edit",
             element: <Page component={NewInterview} />,
           },
           {
@@ -584,6 +638,7 @@ const routes = [
           { path: "debrief/:id", element: <Page component={DebriefDetail} /> },
 
           { path: "guide", element: <Page component={Guide} /> },
+          { path: "guide/practice-coach", element: <Page component={PracticeCoachGuide} /> },
           { path: "rooms", element: <Page component={PracticeRooms} /> },
           { path: "rooms/new", element: <Page component={NewRoom} /> },
 
@@ -594,6 +649,10 @@ const routes = [
               { index: true, element: <Navigate to="profile" replace /> },
               { path: "profile", element: <Page component={SettingsProfile} /> },
               { path: "audio", element: <Page component={SettingsAudio} /> },
+              {
+                path: "practice-coach",
+                element: <Page component={SettingsPracticeCoach} />,
+              },
               { path: "models", element: <Page component={SettingsModels} /> },
               { path: "billing", element: <Page component={SettingsBilling} /> },
               {
@@ -610,10 +669,10 @@ const routes = [
                 path: "integrations",
                 element: <Page component={SettingsIntegrations} />,
               },
-              // P0-5: BYOK route removed from launch. SettingsBYOK file kept
-              // as a deprecation stub; do NOT re-register a route here without
-              // first shipping a server-side vault.
-              // { path: "byok", element: <Page component={SettingsBYOK} /> },
+              {
+                path: "byok",
+                element: <Navigate to="/app/settings/models" replace />,
+              },
               {
                 path: "appearance",
                 element: <Page component={SettingsAppearance} />,
@@ -660,6 +719,10 @@ const routes = [
             path: "seed-questions",
             element: <Page component={AdminSeedQuestions} />,
           },
+          {
+            path: "bulk-upload",
+            element: <Page component={AdminBulkUpload} />,
+          },
           { path: "live-chat", element: <Page component={AdminLiveChat} /> },
           {
             path: "questions",
@@ -670,7 +733,10 @@ const routes = [
             element: <Page component={AdminQuestionEditor} />,
           },
           { path: "audit-log", element: <Page component={AdminAuditLog} /> },
+          { path: "qa-checklist", element: <Page component={AdminQAChecklist} /> },
           { path: "support",   element: <Page component={AdminSupport} /> },
+          { path: "promo-codes", element: <Page component={AdminPromoCodes} /> },
+          { path: "billing-settings", element: <Page component={AdminBillingSettings} /> },
         ],
       },
     ],
@@ -690,6 +756,8 @@ const router = IS_ELECTRON
 
 export default function App(): JSX.Element {
   const initialize = useAuthStore((state) => state.initialize);
+  const profile = useAuthStore((state) => state.profile);
+  const resolveFeatureFlags = useGlobalStore((state) => state.resolveFeatureFlags);
 
   const theme = useUIStore((state) => state.theme);
   const resolvedTheme = useUIStore((state) => state.resolved_theme);
@@ -698,6 +766,12 @@ export default function App(): JSX.Element {
   useEffect(() => {
     void initialize();
   }, [initialize]);
+
+  useEffect(() => {
+    if (profile?.plan_id) {
+      resolveFeatureFlags(profile.plan_id as PlanId);
+    }
+  }, [profile?.plan_id, resolveFeatureFlags]);
 
   useEffect(() => {
     const handleVisibilityChange = () => {
@@ -711,6 +785,16 @@ export default function App(): JSX.Element {
     return () => {
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
+  }, []);
+
+  useEffect(() => {
+    const applyThemePrefs = () => {
+      const { accentColor, fontSize, density } = useThemeStore.getState();
+      applyAppearancePreferences({ accentColor, fontSize, density });
+    };
+
+    applyThemePrefs();
+    return useThemeStore.subscribe(applyThemePrefs);
   }, []);
 
   useEffect(() => {
@@ -738,6 +822,31 @@ export default function App(): JSX.Element {
   }, []);
 
   useEffect(() => {
+    if (!IS_ELECTRON) return;
+    const api = electronWindow.electronAPI;
+    if (!api?.onGlobalShortcut) return;
+
+    api.onGlobalShortcut((action: string) => {
+      if (action === "toggle-overlay") {
+        useOverlayStore.getState().toggleMinimize();
+        return;
+      }
+      if (action === "request-ai-answer") {
+        window.dispatchEvent(new CustomEvent("clarify:global-shortcut", { detail: { action } }));
+      }
+    });
+
+    api.onHotkeyConflict?.((info) => {
+      toast.warning(`Hotkey ${info.key} could not be registered — may conflict with another app.`);
+    });
+
+    return () => {
+      api.removeGlobalShortcutListener?.();
+      api.removeHotkeyConflictListener?.();
+    };
+  }, []);
+
+  useEffect(() => {
     const root = document.documentElement;
 
     root.classList.toggle("dark", resolvedTheme === "dark");
@@ -748,23 +857,19 @@ export default function App(): JSX.Element {
     const root = document.documentElement;
 
     root.setAttribute("data-stealth", stealthMode ? "true" : "false");
-
-    if (IS_ELECTRON) {
-      electronWindow.electronAPI?.setAlwaysOnTop?.(stealthMode);
-    }
   }, [stealthMode]);
 
   return (
     <GlobalErrorBoundary>
       <ErrorBoundary>
-        <QueryClientProvider client={queryClient}>
-          <RouterProvider router={router} />
+        <RouterProvider router={router} />
 
         <Toaster
           position="bottom-right"
           expand={false}
           richColors
           closeButton
+          visibleToasts={5}
           toastOptions={{
             duration: 4000,
             classNames: {
@@ -775,7 +880,6 @@ export default function App(): JSX.Element {
 
         <CookieConsent />
         <TabAudioGuideHost />
-        </QueryClientProvider>
       </ErrorBoundary>
     </GlobalErrorBoundary>
   );

@@ -6,13 +6,15 @@ import {
   sessionsDB,
 } from "@/lib/supabase/database";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageContent } from "@/components/layout/PageContent";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
   Brain, ChevronRight, AlertTriangle,
-  CalendarDays, RefreshCw,
+  CalendarDays,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -90,53 +92,38 @@ export default function Debrief() {
 
   if (loading) {
     return (
-      <div className="space-y-5 max-w-3xl">
+      <PageContent className="space-y-5 max-w-3xl">
         <PageHeader title="Debriefs" subtitle="Deep-dive AI analysis of each session" />
         <div className="space-y-3">
           {[...Array(3)].map((_, i) => <SkeletonCard key={i} />)}
         </div>
-      </div>
+      </PageContent>
     );
   }
 
   return (
-    <div className="space-y-5 max-w-3xl">
+    <PageContent className="space-y-5 max-w-3xl">
       <PageHeader
         title="Debriefs"
         subtitle="Deep-dive AI analysis of each session"
       />
 
       {fetchError && (
-        <Card className="text-center py-10">
-          <AlertTriangle className="w-8 h-8 text-amber-400 mx-auto mb-3" />
-          <p className="text-sm text-muted-foreground">{fetchError}</p>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="mt-4"
-            onClick={() => void fetchDebriefs()}
-            leftIcon={<RefreshCw className="w-3.5 h-3.5" />}
-          >
-            Retry
-          </Button>
-        </Card>
+        <InlineErrorRetry
+          message={fetchError}
+          onRetry={() => void fetchDebriefs()}
+        />
       )}
 
       {!fetchError && debriefs.length === 0 && (
-        <Card className="text-center py-16">
-          <Brain className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-          <p className="text-muted-foreground text-sm">No debriefs yet.</p>
-          <p className="text-muted-foreground text-xs mt-1">
-            Complete a mock session to get your first debrief.
-          </p>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="mt-4"
-            onClick={() => navigate("/app/mock")}
-          >
-            Start mock session
-          </Button>
+        <Card>
+          <EmptyState
+            icon={Brain}
+            title="No debriefs yet"
+            description="Complete a mock session to get your first AI debrief with grades, focus areas, and improvement tips."
+            actionLabel="Start mock session"
+            onAction={() => navigate("/app/mock")}
+          />
         </Card>
       )}
 
@@ -204,6 +191,6 @@ export default function Debrief() {
           })}
         </div>
       )}
-    </div>
+    </PageContent>
   );
 }

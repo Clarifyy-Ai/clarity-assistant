@@ -5,6 +5,9 @@ import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { Bell, Check, CheckCheck, CreditCard, AlertTriangle, Info, Trash2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -109,10 +112,14 @@ export default function Notifications() {
   const unreadCount = notifications.filter((n) => !n.is_read).length;
 
   return (
-    <div>
+    <div className="animate-in fade-in slide-in-from-bottom-2 duration-200">
       <PageHeader
         title="Notifications"
         description={unreadCount > 0 ? `${unreadCount} unread` : "All caught up"}
+        breadcrumbs={[
+          { label: "Dashboard", href: "/app/dashboard" },
+          { label: "Notifications" },
+        ]}
         actions={
           unreadCount > 0 ? (
             <Button variant="secondary" size="sm" onClick={markAllRead} leftIcon={<CheckCheck className="w-4 h-4" />}>
@@ -123,27 +130,22 @@ export default function Notifications() {
       />
 
       {loadError && (
-        <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-3">
-          <span className="flex-1">{loadError}</span>
-          <Button size="sm" variant="outline" onClick={() => void loadNotifications()}>
-            Retry
-          </Button>
-        </div>
+        <InlineErrorRetry message={loadError} onRetry={() => void loadNotifications()} className="mb-4" />
       )}
 
       {loading ? (
         <div className="space-y-3">
           {[1, 2, 3].map((i) => (
-            <Card key={i} className="animate-pulse h-20" />
+            <SkeletonCard key={i} />
           ))}
         </div>
       ) : notifications.length === 0 ? (
-        <Card className="text-center py-12">
-          <Bell className="w-10 h-10 text-muted-foreground mx-auto mb-3 opacity-40" />
-          <p className="text-foreground font-medium">No notifications yet</p>
-          <p className="text-sm text-muted-foreground mt-1">
-            You'll see session reminders, credit alerts, and updates here.
-          </p>
+        <Card>
+          <EmptyState
+            icon={Bell}
+            title="No notifications yet"
+            description="You'll see session reminders, credit alerts, and updates here."
+          />
         </Card>
       ) : (
         <div className="space-y-2">
@@ -152,14 +154,14 @@ export default function Notifications() {
             return (
               <Card
                 key={n.id}
-                className={cn(!n.is_read && "border-violet-500/30")}
+                className={cn(!n.is_read && "border-primary/30")}
               >
                 <div className="flex items-start gap-3">
                   <div className={cn(
                     "mt-0.5 p-2 rounded-lg flex-shrink-0",
-                    n.is_read ? "bg-muted" : "bg-violet-500/15"
+                    n.is_read ? "bg-muted" : "bg-primary/15"
                   )}>
-                    <Icon className={cn("w-4 h-4", n.is_read ? "text-muted-foreground" : "text-violet-500")} />
+                    <Icon className={cn("w-4 h-4", n.is_read ? "text-muted-foreground" : "text-primary")} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className={cn("text-sm font-medium", n.is_read ? "text-muted-foreground" : "text-foreground")}>

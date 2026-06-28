@@ -1,20 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { sessionsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
 import { toast } from "sonner";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { usePageMeta } from "@/hooks/usePageMeta";
+import { cn } from "@/lib/utils";
 import {
   Mic,
   Search,
-  AlertCircle,
-  RefreshCcw,
   Plus,
   Clock,
   Sparkles,
@@ -23,7 +24,7 @@ import {
   Trash2,
   Eye,
 } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { formatDistanceToNow } from "date-fns";
 import type { Tables } from "@/integrations/supabase";
 
@@ -44,11 +45,19 @@ type SessionRow = Pick<
   | "tags"
 >;
 
+const SESSION_TABS = ["recent", "all"] as const;
+type SessionTab = (typeof SESSION_TABS)[number];
+
 export default function CallSessions() {
   usePageMeta({
-    title: "Call Sessions | Clarify AI",
-    description: "View and manage your interview sessions.",
+    title: "Session History | Clarify AI",
+    description: "Review all your practice sessions — live coaching, mock interviews, and rehearsals.",
   });
+
+  const navigate = useNavigate();
+
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tab = (searchParams.get("tab") === "all" ? "all" : "recent") as SessionTab;
 
   const { user } = useAuthStore();
   const [sessions, setSessions] = useState<SessionRow[]>([]);
@@ -63,7 +72,8 @@ export default function CallSessions() {
     setLoading(true);
     setError(false);
     try {
-      const data = await sessionsDB.listSummariesByUserId(user.id, 50);
+      const limit = tab === "all" ? 500 : 20;
+      const data = await sessionsDB.listSummariesByUserId(user.id, limit);
       setSessions(data);
     } catch (err) {
       console.error("[CallSessions] fetch error:", err);
@@ -72,7 +82,7 @@ export default function CallSessions() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, tab]);
 
   useEffect(() => {
     void fetchSessions();
@@ -102,20 +112,40 @@ export default function CallSessions() {
   });
 
   return (
-    <div className="space-y-5 max-w-5xl">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <PageHeader
-          title="Call Sessions"
-          subtitle={`${sessions.length} total sessions`}
-        />
-        <div className="flex items-center gap-2">
+    <div className="space-y-5 max-w-5xl animate-in fade-in slide-in-from-bottom-2 duration-200">
+      <PageHeader
+        title={PRODUCT_NAMES.sessionHistory}
+        description={`${sessions.length} total sessions`}
+        breadcrumbs={[
+          { label: "Dashboard", href: "/app/dashboard" },
+          { label: "Sessions" },
+        ]}
+        actions={
           <Link to="/app/live">
             <Button size="sm" className="gap-1.5">
               <Plus className="w-3.5 h-3.5" />
               Start Session
             </Button>
           </Link>
-        </div>
+        }
+      />
+
+      <div className="flex gap-2">
+        {SESSION_TABS.map((t) => (
+          <button
+            key={t}
+            type="button"
+            onClick={() => setSearchParams(t === "recent" ? {} : { tab: t })}
+            className={cn(
+              "px-3 py-1.5 rounded-xl text-xs font-medium border transition-all capitalize",
+              tab === t
+                ? "bg-primary/10 border-primary/30 text-primary/80"
+                : "bg-card border-border text-muted-foreground hover:text-foreground",
+            )}
+          >
+            {t === "recent" ? "Recent" : "All history"}
+          </button>
+        ))}
       </div>
 
       <div className="flex flex-col sm:flex-row gap-3">
@@ -153,34 +183,23 @@ export default function CallSessions() {
           ))}
         </div>
       ) : error ? (
-        <Card className="text-center py-16 flex flex-col items-center justify-center border-destructive/20 bg-destructive/5">
-          <AlertCircle className="w-10 h-10 text-destructive/60 mb-3" />
-          <p className="text-foreground font-medium mb-1">Unable to load sessions</p>
-          <p className="text-muted-foreground text-sm mb-4">
-            There was a problem connecting to the database.
-          </p>
-          <Button onClick={() => void fetchSessions()} variant="outline" size="sm">
-            <RefreshCcw className="w-4 h-4 mr-2" />
-            Retry
-          </Button>
-        </Card>
+        <InlineErrorRetry
+          message="Unable to load sessions. There was a problem connecting to the database."
+          onRetry={() => void fetchSessions()}
+        />
       ) : filtered.length === 0 ? (
-        <Card className="text-center py-16">
-          <Phone className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-          <p className="text-foreground font-medium mb-1">No sessions yet</p>
-          <p className="text-muted-foreground text-sm mb-4">
-            {sessions.length === 0
-              ? "Start your first live session to see your history here."
-              : "No sessions match your filter."}
-          </p>
-          {sessions.length === 0 && (
-            <Link to="/app/live">
-              <Button size="sm" className="gap-1.5">
-                <Plus className="w-3.5 h-3.5" />
-                Start Session
-              </Button>
-            </Link>
-          )}
+        <Card>
+          <EmptyState
+            icon={Phone}
+            title="No sessions yet"
+            description={
+              sessions.length === 0
+                ? "Start your first live session to see your history here."
+                : "No sessions match your filter."
+            }
+            actionLabel={sessions.length === 0 ? "Start Session" : undefined}
+            onAction={sessions.length === 0 ? () => navigate("/app/live") : undefined}
+          />
         </Card>
       ) : (
         <div className="border border-border rounded-xl overflow-hidden">
@@ -206,7 +225,7 @@ export default function CallSessions() {
                 ? "bg-red-500/10 text-red-400 border-red-500/20"
                 : s.type === "mock"
                   ? "bg-blue-500/10 text-blue-400 border-blue-500/20"
-                  : "bg-violet-500/10 text-violet-400 border-violet-500/20";
+                  : "bg-primary/10 text-primary border-primary/20";
 
             return (
               <div

@@ -2,6 +2,9 @@
 //
 // Cancels a Stripe subscription at period end.
 
+import Stripe from "https://esm.sh/stripe@14.21.0?target=deno&deno-std=0.132.0";
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+
 import {
   handleCors,
   getCorsHeaders,

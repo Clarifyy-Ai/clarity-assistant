@@ -1,19 +1,29 @@
 // @ts-nocheck
-import { useState } from "react";
-import { useAuthStore } from "@/store/userStore";
+import { useEffect, useState } from "react";
+import { useAuthStore } from "@/store/authStore";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { PLANS, type PlanId } from "@/lib/billing/subscriptionManager";
+import {
+  PLANS,
+  type PlanId,
+  getUserSubscription,
+  type Subscription,
+} from "@/lib/billing/subscriptionManager";
+import {
+  cancelSubscription as cancelSubscriptionApi,
+  openCheckoutForPrice,
+  openBillingPortal,
+} from "@/lib/api/billing";
+import { ENV } from "@/lib/env";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import {
   CheckCircle, Zap,
-  Shield, ChevronRight,
-  Crown, AlertTriangle, ArrowRight,
+  Shield, Crown, AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
-import { Link } from "react-router-dom";
+import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsSubscription — uses the same PLANS from subscriptionManager
@@ -24,17 +34,96 @@ const DISPLAY_PLANS: PlanId[] = ["free", "pro", "enterprise"];
 const PLAN_COLORS: Record<string, string> = {
   slate: "from-gray-500 to-gray-600",
   blue: "from-blue-500 to-blue-600",
-  violet: "from-violet-500 to-purple-600",
+  violet: "from-primary to-purple-600",
   amber: "from-amber-500 to-orange-500",
 };
+
+const STRIPE_CONFIGURED =
+  Boolean(ENV.STRIPE_PRICE_PRO_MONTHLY) ||
+  Boolean(ENV.STRIPE_PRICE_STARTER_MONTHLY) ||
+  Boolean(ENV.STRIPE_PRICE_ELITE_MONTHLY);
+
+function getPlanPriceId(planId: PlanId, interval: "monthly" | "annual"): string | undefined {
+  const plan = PLANS[planId];
+  return interval === "annual" ? plan.stripePriceIdYearly : plan.stripePriceIdMonthly;
+}
 
 export default function SettingsSubscription() {
   usePageMeta({ title: "Subscription | Clarify AI" });
 
-  const { profile } = useAuthStore();
+  const user = useAuthStore((state) => state.user);
+  const profile = useAuthStore((state) => state.profile);
   const [billing, setBilling] = useState<"monthly" | "annual">("monthly");
-  const currentPlan = profile?.plan_id ?? "free";
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
+  const [actionLoading, setActionLoading] = useState<string | null>(null);
+
+  const currentPlan = (profile?.plan_id ?? "free") as PlanId;
   const renewDate   = profile?.subscription_renews_at;
+
+  useEffect(() => {
+    if (!user?.id) return;
+    void getUserSubscription(user.id)
+      .then(setSubscription)
+      .catch((err: unknown) => {
+        console.error("[SettingsSubscription] load subscription:", err);
+      });
+  }, [user?.id]);
+
+  async function handleUpgrade(targetPlanId: PlanId): Promise<void> {
+    if (!STRIPE_CONFIGURED) {
+      toast.error("Payment processing is not configured. Please contact support.");
+      return;
+    }
+
+    const priceId = getPlanPriceId(targetPlanId, billing);
+    if (!priceId) {
+      toast.error("No Stripe price is configured for this plan.");
+      return;
+    }
+
+    setActionLoading(targetPlanId);
+    try {
+      await openCheckoutForPrice(priceId);
+    } catch (error) {
+      console.error("[SettingsSubscription] handleUpgrade:", error);
+      toast.error("Failed to start checkout. Please try again later.");
+      setActionLoading(null);
+    }
+  }
+
+  async function handleOpenBillingPortal(): Promise<void> {
+    setActionLoading("portal");
+    try {
+      await openBillingPortal();
+    } catch (error) {
+      console.error("[SettingsSubscription] handleOpenBillingPortal:", error);
+      toast.error("Failed to open billing portal.");
+      setActionLoading(null);
+    }
+  }
+
+  async function handleCancel(): Promise<void> {
+    if (!subscription) {
+      toast.error("No active subscription found.");
+      return;
+    }
+
+    setActionLoading("cancel");
+    try {
+      await cancelSubscriptionApi({
+        subscription_id: subscription.stripeSubscriptionId,
+      });
+      toast.success("Subscription will cancel at the end of the billing period.");
+      setSubscription((current) =>
+        current ? { ...current, cancelAtPeriodEnd: true } : current
+      );
+    } catch (error) {
+      console.error("[SettingsSubscription] handleCancel:", error);
+      toast.error("Failed to cancel subscription. Please try again later.");
+    } finally {
+      setActionLoading(null);
+    }
+  }
 
   return (
     <div className="space-y-5">
@@ -50,7 +139,7 @@ export default function SettingsSubscription() {
               className={cn(
                 "px-3 py-1.5 rounded-lg text-xs font-medium transition-all capitalize",
                 billing === b
-                  ? "bg-violet-600/30 text-violet-300"
+                  ? "bg-primary/30 text-primary/80"
                   : "text-muted-foreground hover:text-foreground"
               )}
             >
@@ -65,8 +154,8 @@ export default function SettingsSubscription() {
 
       {/* Current plan status */}
       {currentPlan !== "free" && (
-        <Card className="flex items-center gap-4 border-violet-500/20 bg-violet-500/5">
-          <Crown className="w-5 h-5 text-violet-400 shrink-0" />
+        <Card className="flex items-center gap-4 border-primary/20 bg-primary/5">
+          <Crown className="w-5 h-5 text-primary shrink-0" />
           <div className="flex-1">
             <p className="text-sm font-semibold text-foreground capitalize">
               {currentPlan} plan active
@@ -77,7 +166,13 @@ export default function SettingsSubscription() {
               </p>
             )}
           </div>
-          <Button variant="ghost" size="sm">
+          <Button
+            variant="ghost"
+            size="sm"
+            loading={actionLoading === "portal"}
+            disabled={!STRIPE_CONFIGURED}
+            onClick={() => void handleOpenBillingPortal()}
+          >
             Manage billing
           </Button>
         </Card>
@@ -102,7 +197,7 @@ export default function SettingsSubscription() {
             >
               {plan.isPopular && (
                 <div className="absolute -top-3 left-1/2 -translate-x-1/2">
-                  <Badge variant="violet" size="sm">Most popular</Badge>
+                  <Badge variant="primary" size="sm">Most popular</Badge>
                 </div>
               )}
 
@@ -120,7 +215,7 @@ export default function SettingsSubscription() {
                   {price > 0 && <span className="text-xs text-muted-foreground">/mo</span>}
                 </div>
                 <p className="text-[10px] text-muted-foreground/70 mt-1">
-                  {plan.creditsPerMonth === -1 ? "Unlimited credits" : `${plan.creditsPerMonth} credits/mo`}
+                  {plan.creditsPerMonth.toLocaleString()} credits/mo
                 </p>
               </div>
 
@@ -144,7 +239,13 @@ export default function SettingsSubscription() {
                 size="sm"
                 fullWidth
                 className="mt-4"
-                disabled={isCurrent}
+                disabled={isCurrent || (planId !== "free" && !STRIPE_CONFIGURED)}
+                loading={actionLoading === planId}
+                onClick={
+                  !isCurrent && planId !== "free"
+                    ? () => void handleUpgrade(planId)
+                    : undefined
+                }
               >
                 {isCurrent ? "Current plan" :
                  currentPlan === "free" ? `Upgrade to ${plan.name}` :
@@ -165,8 +266,13 @@ export default function SettingsSubscription() {
               You can cancel your subscription at any time. Access continues until
               the end of your billing period.
             </p>
-            <button className="text-xs text-red-400 hover:text-red-300 mt-2 underline">
-              Cancel subscription
+            <button
+              type="button"
+              className="text-xs text-red-400 hover:text-red-300 mt-2 underline disabled:opacity-50"
+              disabled={actionLoading === "cancel" || subscription?.cancelAtPeriodEnd}
+              onClick={() => void handleCancel()}
+            >
+              {actionLoading === "cancel" ? "Cancelling…" : "Cancel subscription"}
             </button>
           </div>
         </Card>

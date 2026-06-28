@@ -1,7 +1,7 @@
 // @ts-nocheck
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { refreshCredits } from "@/lib/billing/creditsManager";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -10,16 +10,34 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import {
   Sparkles, Copy, Save, CheckCircle, AlertCircle,
-  Briefcase, Plus, X, Rocket,
+  Briefcase, Plus, X, Rocket, Pencil, Trash2, FolderOpen,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { answerBankDB } from "@/lib/supabase/database";
+import {
+  listSavedProjects,
+  saveProject,
+  deleteSavedProject,
+  type SavedProject,
+} from "@/lib/prep/projectBuilderStorage";
+
+const EMPTY_FORM = {
+  projectName: "",
+  role: "",
+  techStack: [] as string[],
+  description: "",
+  impact: "",
+  githubUrl: "",
+  showcase: "",
+};
 
 export default function ProjectBuilder() {
   const credits = useCredits();
   const { user } = useAuthStore();
 
+  const [projects, setProjects]         = useState<SavedProject[]>([]);
+  const [editingId, setEditingId]       = useState<string | null>(null);
   const [projectName, setProjectName]   = useState("");
   const [role, setRole]                 = useState("");
   const [techStack, setTechStack]       = useState<string[]>([]);
@@ -31,6 +49,44 @@ export default function ProjectBuilder() {
   const [loading, setLoading]           = useState(false);
   const [saved, setSaved]               = useState(false);
   const [error, setError]               = useState<string | null>(null);
+  const [showForm, setShowForm]         = useState(false);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    setProjects(listSavedProjects(user.id));
+  }, [user?.id]);
+
+  function resetForm() {
+    setEditingId(null);
+    setProjectName(EMPTY_FORM.projectName);
+    setRole(EMPTY_FORM.role);
+    setTechStack([]);
+    setDescription(EMPTY_FORM.description);
+    setImpact(EMPTY_FORM.impact);
+    setGithubUrl(EMPTY_FORM.githubUrl);
+    setShowcase(EMPTY_FORM.showcase);
+    setError(null);
+    setSaved(false);
+  }
+
+  function startNewProject() {
+    resetForm();
+    setShowForm(true);
+  }
+
+  function loadProject(project: SavedProject) {
+    setEditingId(project.id);
+    setProjectName(project.projectName);
+    setRole(project.role);
+    setTechStack(project.techStack);
+    setDescription(project.description);
+    setImpact(project.impact);
+    setGithubUrl(project.githubUrl);
+    setShowcase(project.showcase);
+    setShowForm(true);
+    setError(null);
+    setSaved(false);
+  }
 
   function addTech() {
     const tech = techInput.trim();
@@ -46,6 +102,35 @@ export default function ProjectBuilder() {
 
   const isFormValid = projectName.trim() && role.trim() && description.trim().length >= 20;
 
+  function persistDraft() {
+    if (!user?.id || !projectName.trim()) return;
+    const entry = saveProject(user.id, {
+      id: editingId ?? undefined,
+      projectName: projectName.trim(),
+      role: role.trim(),
+      techStack,
+      description,
+      impact,
+      githubUrl,
+      showcase,
+    });
+    setEditingId(entry.id);
+    setProjects(listSavedProjects(user.id));
+    toast.success("Project saved");
+  }
+
+  function handleDelete(id: string) {
+    if (!user?.id) return;
+    if (!window.confirm("Delete this project? This cannot be undone.")) return;
+    deleteSavedProject(user.id, id);
+    setProjects(listSavedProjects(user.id));
+    if (editingId === id) {
+      resetForm();
+      setShowForm(false);
+    }
+    toast.success("Project deleted");
+  }
+
   async function generateShowcase() {
     if (!isFormValid || !credits.canAfford("project_build")) return;
     setLoading(true);
@@ -60,10 +145,26 @@ export default function ProjectBuilder() {
         tool_id: "project_build",
         input,
       });
-      setShowcase(data.result ?? "Showcase generation unavailable.");
+      const result = data.result ?? "Showcase generation unavailable.";
+      setShowcase(result);
+      if (user?.id) {
+        const entry = saveProject(user.id, {
+          id: editingId ?? undefined,
+          projectName: projectName.trim(),
+          role: role.trim(),
+          techStack,
+          description,
+          impact,
+          githubUrl,
+          showcase: result,
+        });
+        setEditingId(entry.id);
+        setProjects(listSavedProjects(user.id));
+      }
       await refreshCredits();
     } catch (err) {
-      setShowcase(getOfflineShowcase(projectName, role, techStack, description, impact));
+      const offline = getOfflineShowcase(projectName, role, techStack, description, impact);
+      setShowcase(offline);
       toast.info("Using offline template — AI unavailable.");
     }
     setLoading(false);
@@ -82,6 +183,7 @@ export default function ProjectBuilder() {
       toast.error("Failed to save — please try again");
       return;
     }
+    persistDraft();
     setSaved(true);
     toast.success("Project showcase saved to Answer Bank");
     setTimeout(() => setSaved(false), 2500);
@@ -92,8 +194,80 @@ export default function ProjectBuilder() {
       <PageHeader
         title="Project Builder"
         description="Turn your project experience into polished interview showcases"
+        breadcrumbs={[
+          { label: "Dashboard", href: "/app/dashboard" },
+          { label: "Prep Lab", href: "/app/prep" },
+          { label: "Project Builder" },
+        ]}
+        action={
+          <Button variant="primary" size="sm" onClick={startNewProject} leftIcon={<Plus className="w-4 h-4" />}>
+            Add new project
+          </Button>
+        }
       />
 
+      {projects.length > 0 && (
+        <Card>
+          <div className="flex items-center gap-2 mb-3">
+            <FolderOpen className="w-4 h-4 text-primary" />
+            <p className="text-xs font-semibold text-foreground uppercase tracking-widest">
+              Saved projects ({projects.length})
+            </p>
+          </div>
+          <div className="space-y-2">
+            {projects.map((project) => (
+              <div
+                key={project.id}
+                className={cn(
+                  "flex items-center justify-between gap-3 rounded-xl border px-4 py-3 transition-all",
+                  editingId === project.id
+                    ? "border-primary/30 bg-primary/5"
+                    : "border-border bg-secondary/30 hover:bg-secondary/50"
+                )}
+              >
+                <button
+                  type="button"
+                  onClick={() => loadProject(project)}
+                  className="flex-1 text-left min-w-0"
+                >
+                  <p className="text-sm font-medium text-foreground truncate">{project.projectName}</p>
+                  <p className="text-xs text-muted-foreground truncate">{project.role}</p>
+                </button>
+                <div className="flex items-center gap-1 shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => loadProject(project)}
+                    className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary"
+                    aria-label={`Edit ${project.projectName}`}
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(project.id)}
+                    className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-red-500/10"
+                    aria-label={`Delete ${project.projectName}`}
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {!showForm && projects.length === 0 && (
+        <Card className="text-center py-12">
+          <Briefcase className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />
+          <p className="text-muted-foreground text-sm">No saved projects yet</p>
+          <Button variant="primary" size="sm" className="mt-4" onClick={startNewProject}>
+            Add your first project
+          </Button>
+        </Card>
+      )}
+
+      {showForm && (
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div className="space-y-4">
           <Card>
@@ -178,11 +352,20 @@ export default function ProjectBuilder() {
             <textarea
               value={impact}
               onChange={(e) => setImpact(e.target.value)}
-              placeholder="e.g. Reduced page load time by 40%, increased user engagement by 25%, saved $50K/month in infrastructure costs…"
+              placeholder="e.g. Reduced page load time by 40%, increased user engagement by 25%…"
               rows={3}
               className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
             />
           </Card>
+
+          <div className="flex gap-2">
+            <Button variant="secondary" size="sm" onClick={persistDraft} disabled={!projectName.trim()}>
+              Save draft
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => { resetForm(); setShowForm(false); }}>
+              Cancel
+            </Button>
+          </div>
         </div>
 
         <div className="space-y-4">
@@ -208,9 +391,9 @@ export default function ProjectBuilder() {
           </Button>
 
           {showcase ? (
-            <Card className="border-violet-500/20 bg-violet-500/5">
+            <Card className="border-primary/20 bg-primary/5">
               <div className="flex items-center justify-between mb-3">
-                <p className="text-xs font-semibold text-violet-400 uppercase tracking-widest flex items-center gap-1.5">
+                <p className="text-xs font-semibold text-primary uppercase tracking-widest flex items-center gap-1.5">
                   <Rocket className="w-3.5 h-3.5" /> Project Showcase
                 </p>
                 <div className="flex items-center gap-2">
@@ -244,6 +427,7 @@ export default function ProjectBuilder() {
           )}
         </div>
       </div>
+      )}
     </div>
   );
 }

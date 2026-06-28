@@ -8,6 +8,7 @@ import {
   requireFields, log
 } from "../_shared/utils.ts";
 import type { ModelId } from "../_shared/types.ts";
+import { creditCost } from "../_shared/creditEconomics.ts";
 
 type STARKey = "situation" | "task" | "action" | "result";
 
@@ -98,8 +99,8 @@ Deno.serve(async (req: Request) => {
     // AI model
     const model: ModelId = rawBody.model ?? "gpt-4o-mini";
 
-    // CREDITS (FIXED: cost must be explicit)
-    const credit = await deductCredits(auth.userId, "polish_star", 1);
+    const polishCost = creditCost("polish_star");
+    const credit = await deductCredits(auth.userId, "polish_star", polishCost);
     if (!credit.success) {
       return errorResponse(credit.error ?? "Insufficient credits.", "INSUFFICIENT_CREDITS", 402, req);
     }
@@ -146,7 +147,7 @@ Return ONLY the rewritten ${sectionLabel} text:
       });
     } catch (aiErr) {
       // Refund the credit since the AI provider failed
-      try { await deductCredits(auth.userId, "refund_polish_star" as any, -1); }
+      try { await deductCredits(auth.userId, "refund_polish_star" as any, -polishCost); }
       catch (refundErr) { log(FN, "error", "Refund failed", refundErr); }
       log(FN, "error", "AI provider failed", aiErr);
       return errorResponse(

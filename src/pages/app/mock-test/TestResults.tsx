@@ -20,6 +20,7 @@ import {
   Zap,
 } from "lucide-react";
 import { toast } from "sonner";
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
@@ -29,6 +30,11 @@ import { supabase } from "@/lib/supabase/client";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { SUPABASE_ANON_KEY, SUPABASE_URL } from "@/lib/env";
 import { useAuthStore } from "@/store/userStore";
+import { useUIStore } from "@/store/uiStore";
+import {
+  planHasFeature,
+  type PlanId,
+} from "@/lib/billing/subscriptionManager";
 
 type QuestionFilter = "all" | "wrong" | "marked";
 
@@ -125,6 +131,10 @@ export default function TestResults() {
   const { testId } = useParams<{ testId: string }>();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const profile = useAuthStore((s) => s.profile);
+  const openUpgradeModal = useUIStore((s) => s.openUpgradeModal);
+  const userPlan = (profile?.plan_id ?? profile?.plan ?? "free") as PlanId;
+  const canUseAiQuestions = planHasFeature(userPlan, "mock_test_ai");
 
   const [test, setTest] = useState<MockTest | null>(null);
   const [analysis, setAnalysis] = useState<TestAnalysis | null>(null);
@@ -281,6 +291,13 @@ export default function TestResults() {
   async function createRecommendedTest(kind: "weak" | "similar" | "hard") {
     if (!test || !analysis) return;
 
+    const usesAi = kind === "weak" || kind === "hard";
+    if (usesAi && !canUseAiQuestions) {
+      openUpgradeModal("pro");
+      toast.info("AI-assisted practice papers require a Pro plan or higher.");
+      return;
+    }
+
     setCreatingRecommendation(kind);
 
     try {
@@ -409,7 +426,7 @@ export default function TestResults() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-violet-500 border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
       </div>
     );
   }
@@ -420,7 +437,7 @@ export default function TestResults() {
         <p className="text-muted-foreground">Results not found.</p>
         <Link
           to="/app/mock-test"
-          className="mt-2 inline-block text-violet-400 hover:underline"
+          className="mt-2 inline-block text-primary hover:underline"
         >
           Back to Hub
         </Link>
@@ -467,8 +484,8 @@ export default function TestResults() {
           {
             label: "Percentile",
             value: `~${analysis.predicted_percentile ?? 0}th`,
-            icon: <TrendingUp className="h-5 w-5 text-violet-400" />,
-            color: "text-violet-400",
+            icon: <TrendingUp className="h-5 w-5 text-primary" />,
+            color: "text-primary",
           },
         ].map((item) => (
           <Card key={item.label} className="py-4 text-center">
@@ -482,10 +499,10 @@ export default function TestResults() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <Card className="border-violet-500/20 bg-violet-500/5">
+        <Card className="border-primary/20 bg-primary/5">
           <CardContent className="flex items-center gap-3 py-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-violet-500/20">
-              <Trophy className="h-5 w-5 text-violet-400" />
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-primary/20">
+              <Trophy className="h-5 w-5 text-primary" />
             </div>
             <div>
               <p className="text-xs text-muted-foreground">Estimated Rank Tier</p>
@@ -591,7 +608,7 @@ export default function TestResults() {
                     onClick={() => setTopicFilter(topicFilter === topic ? null : topic)}
                     className={cn(
                       "rounded-lg border px-3 py-1.5 text-xs font-semibold transition-all",
-                      topicFilter === topic ? "ring-2 ring-violet-500" : "",
+                      topicFilter === topic ? "ring-2 ring-primary" : "",
                       accuracy >= 80
                         ? "border-green-500/30 bg-green-500/20 text-green-400"
                         : accuracy >= 50
@@ -613,7 +630,7 @@ export default function TestResults() {
               <button
                 type="button"
                 onClick={() => setTopicFilter(null)}
-                className="mt-2 text-xs text-violet-400 hover:underline"
+                className="mt-2 text-xs text-primary hover:underline"
               >
                 Clear filter
               </button>
@@ -622,11 +639,11 @@ export default function TestResults() {
         </Card>
       )}
 
-      <Card className="border-violet-500/30">
+      <Card className="border-primary/30">
         <CardContent className="py-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Brain className="h-5 w-5 text-violet-400" />
+              <Brain className="h-5 w-5 text-primary" />
               <h3 className="text-sm font-semibold text-foreground">AI Coach Analysis</h3>
 
               {analysis.ai_analysis_text && (
@@ -661,7 +678,7 @@ export default function TestResults() {
                 ) : (
                   <Zap className="mr-1.5 h-3.5 w-3.5" />
                 )}
-                Generate (3 credits)
+                Generate ({AI_CREDIT_COSTS.analyze_test_performance} credits)
               </Button>
             )}
           </div>
@@ -681,7 +698,7 @@ export default function TestResults() {
                       key={`${heading}-${index}`}
                       className="rounded-xl border border-border bg-muted/10 p-4"
                     >
-                      <h4 className="mb-2 text-sm font-bold text-violet-300">{heading}</h4>
+                      <h4 className="mb-2 text-sm font-bold text-primary">{heading}</h4>
                       <p className="whitespace-pre-wrap text-sm text-foreground/80">
                         {content}
                       </p>
@@ -796,8 +813,8 @@ export default function TestResults() {
                   className={cn(
                     "rounded-lg border px-2.5 py-1 text-xs font-medium capitalize transition-all",
                     questionFilter === filter
-                      ? "border-violet-500/50 bg-violet-500/15 text-violet-300"
-                      : "border-border text-muted-foreground hover:border-violet-500/30"
+                      ? "border-primary/50 bg-primary/15 text-primary"
+                      : "border-border text-muted-foreground hover:border-primary/30"
                   )}
                 >
                   {filter}
@@ -954,7 +971,7 @@ function QuestionReviewCard({
 
           {question.explanation && (
             <div className="rounded-lg bg-muted/20 p-3 text-xs text-foreground/80">
-              <span className="mb-1 block font-semibold text-violet-400">
+              <span className="mb-1 block font-semibold text-primary">
                 Explanation
               </span>
               {question.explanation}

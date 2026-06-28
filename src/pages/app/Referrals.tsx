@@ -4,9 +4,10 @@ import { referralsDB } from "@/lib/supabase/database";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Gift, Copy, Users, Zap, Check, Share2, RefreshCw } from "lucide-react";
+import { PageContent } from "@/components/layout/PageContent";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { Gift, Copy, Users, Zap, Check, Share2 } from "lucide-react";
 import { toast } from "sonner";
-import { cn } from "@/lib/utils";
 
 export default function Referrals() {
   const { profile, user } = useAuthStore();
@@ -55,25 +56,23 @@ export default function Referrals() {
   const steps = [
     { icon: Share2, title: "Share your link", desc: "Send your unique referral link to friends" },
     { icon: Users, title: "They sign up", desc: "Your friend creates a free account" },
-    { icon: Zap, title: "You both earn credits", desc: "Get 25 bonus credits each when they complete onboarding" },
+    { icon: Zap, title: "You both earn credits", desc: "50% off first purchase + bonus credits when they join (admin-configurable)" },
   ];
 
   return (
-    <div>
+    <PageContent>
       <PageHeader
         title="Referrals"
         description="Invite friends and earn bonus credits"
-        icon={<Gift className="w-5 h-5 text-violet-400" />}
+        icon={<Gift className="w-5 h-5 text-primary" />}
       />
 
       {statsError && (
-        <div className="mb-4 flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          <span className="flex-1">{statsError}</span>
-          <Button variant="outline" size="sm" onClick={() => void loadStats()} disabled={statsLoading}>
-            <RefreshCw className={cn("mr-2 h-4 w-4", statsLoading && "animate-spin")} />
-            Retry
-          </Button>
-        </div>
+        <InlineErrorRetry
+          message={statsError}
+          onRetry={() => void loadStats()}
+          className="mb-4"
+        />
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -111,8 +110,8 @@ export default function Referrals() {
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               {steps.map((step, i) => (
                 <div key={i} className="text-center">
-                  <div className="w-10 h-10 mx-auto mb-2 rounded-xl bg-violet-500/15 flex items-center justify-center">
-                    <step.icon className="w-5 h-5 text-violet-500" />
+                  <div className="w-10 h-10 mx-auto mb-2 rounded-xl bg-primary/15 flex items-center justify-center">
+                    <step.icon className="w-5 h-5 text-primary" />
                   </div>
                   <p className="text-sm font-medium text-foreground">{step.title}</p>
                   <p className="text-xs text-muted-foreground mt-1">{step.desc}</p>
@@ -124,7 +123,7 @@ export default function Referrals() {
 
         <div className="space-y-4">
           <Card className="text-center">
-            <Users className="w-6 h-6 mx-auto text-violet-500 mb-2" />
+            <Users className="w-6 h-6 mx-auto text-primary mb-2" />
             {statsLoading ? (
               <div className="h-7 w-12 mx-auto bg-muted animate-pulse rounded" />
             ) : (
@@ -143,6 +142,6 @@ export default function Referrals() {
           </Card>
         </div>
       </div>
-    </div>
+    </PageContent>
   );
 }

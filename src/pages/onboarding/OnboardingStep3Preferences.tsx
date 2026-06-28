@@ -6,20 +6,15 @@
 import { useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
+import { useOverlayStore } from "@/store/overlayStore";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { StepProps } from "@/types/onboarding.types";
 import type { ProfileRow } from "@/types";
-
-// Mirrors the preferred_model column enum defined in Supabase types
-type PreferredModel =
-  | "gpt-4o"
-  | "gpt-4o-mini"
-  | "claude-3-5-sonnet"
-  | "claude-3-haiku"
-  | "gemini-1-5-pro"
-  | "gemini-1-5-flash";
+import type { PreferredAIModel } from "@/types/user.types";
+import { MODEL_OPTIONS, normalizePreferredModel } from "@/lib/ai/modelOptions";
+import { normalizeToDisplayTier } from "@/lib/constants/pricing";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -36,32 +31,55 @@ const COACH_TONES = [
   { value: "socratic",    label: "Socratic",    icon: "❓", sub: "Guides with questions"   },
 ] as const;
 
-// FIX: model values must match the ProfileRow preferred_model enum
-const MODELS = [
-  { value: "gemini-1-5-flash",   label: "Gemini Flash", badge: "Fastest ⚡",    free: true  },
-  { value: "gemini-1-5-pro",     label: "Gemini Pro",   badge: "Balanced",      free: false },
-  { value: "gpt-4o",             label: "GPT-4o",       badge: "Deep answers",  free: false },
-  { value: "claude-3-5-sonnet",  label: "Claude 3.5",   badge: "System design", free: false },
+const INTERVIEW_STYLES = [
+  { value: "behavioral", label: "Behavioral", icon: "💬", sub: "STAR stories & soft skills" },
+  { value: "technical",  label: "Technical",  icon: "💻", sub: "Role-specific depth"        },
+  { value: "case_study", label: "Case",       icon: "📊", sub: "Analytical & consulting"    },
+  { value: "mixed",      label: "Mixed",      icon: "🔀", sub: "Blend of question styles"   },
 ] as const;
+
+const PREP_BY_STYLE: Record<string, string> = {
+  behavioral: "Prep Lab → STAR Builder",
+  technical:  "Prep Lab → Coding Hints",
+  case_study: "Prep Lab → System Design",
+  mixed:      "Mock Interview + Prep Lab",
+};
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: StepProps) {
-  const { user, setProfile, planId } = useAuthStore();
+  const { user, setProfile, planId, profile } = useAuthStore();
 
-  // FIX: was `profile?.plan !== "free"` — authStore exposes `planId` directly
-  const isPro = planId !== "free";
+  const isPro = normalizeToDisplayTier(planId) !== "free";
+
+  const existingStyles = (() => {
+    const prefs = profile?.notification_prefs as { interview_styles?: string[] } | null;
+    return Array.isArray(prefs?.interview_styles) ? prefs.interview_styles : ["behavioral"];
+  })();
 
   const [hintStyle, setHintStyle] = useState<string>("short_hints");
   const [coachTone, setCoachTone] = useState<string>("encouraging");
-  const [model,     setModel]     = useState<PreferredModel>("gemini-1-5-flash");
+  const [model,     setModel]     = useState<PreferredAIModel>("gemini-flash");
+  const [styles,    setStyles]    = useState<string[]>(existingStyles);
   const [loading,   setLoading]   = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
+  function toggleStyle(value: string) {
+    setStyles((prev) => {
+      if (prev.includes(value)) {
+        return prev.length > 1 ? prev.filter((s) => s !== value) : prev;
+      }
+      return [...prev, value];
+    });
+  }
+
   async function handleNext() {
-    if (!user) return;
+    if (!user || styles.length === 0) return;
     setLoading(true);
     setSaveError(null);
+
+    const existingPrefs =
+      (profile?.notification_prefs as Record<string, unknown> | null) ?? {};
 
     const { data, error } = await supabase
       .from("profiles")
@@ -69,6 +87,7 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
         response_style:  hintStyle,
         coach_tone:      coachTone,
         preferred_model: model,
+        notification_prefs: { ...existingPrefs, interview_styles: styles },
         onboarding_step: 4,
       } as any)
       .eq("id", user.id)
@@ -83,9 +102,17 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
       return;
     }
 
-    if (data) setProfile(data as unknown as ProfileRow);
-    onNext({ preferredModel: model });
+    if (data) {
+      setProfile(data as unknown as ProfileRow);
+      useOverlayStore.getState().setActiveModel(normalizePreferredModel(model));
+    }
+    onNext({ preferredModel: model, interviewTypes: styles });
   }
+
+  const prepRecommendations = styles
+    .map((s) => PREP_BY_STYLE[s])
+    .filter(Boolean)
+    .filter((v, i, arr) => arr.indexOf(v) === i);
 
   return (
     <div className="max-w-lg mx-auto space-y-7">
@@ -98,6 +125,47 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
         <p className="text-muted-foreground text-sm">
           Customise how Clarify AI coaches you. You can change these any time in Settings.
         </p>
+      </div>
+
+      {/* ── Interview style preferences ───────────────────────────────── */}
+      <div>
+        <p className="text-xs font-medium text-muted-foreground mb-2">
+          Interview styles you want to practice
+        </p>
+        <div className="grid grid-cols-2 gap-2">
+          {INTERVIEW_STYLES.map((s) => {
+            const selected = styles.includes(s.value);
+            return (
+              <button
+                key={s.value}
+                type="button"
+                onClick={() => toggleStyle(s.value)}
+                className={cn(
+                  "flex items-start gap-3 p-3 rounded-xl border text-left transition-all",
+                  selected
+                    ? "bg-primary/20 border-primary/50"
+                    : "bg-secondary/50 border-border hover:border-primary/30",
+                )}
+              >
+                <span className="text-xl">{s.icon}</span>
+                <div>
+                  <p className={cn(
+                    "text-xs font-semibold",
+                    selected ? "text-primary" : "text-muted-foreground",
+                  )}>
+                    {s.label}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">{s.sub}</p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        {prepRecommendations.length > 0 && (
+          <p className="text-[11px] text-muted-foreground mt-2">
+            Recommended: {prepRecommendations.join(" · ")}
+          </p>
+        )}
       </div>
 
       {/* ── Hint style ──────────────────────────────────────────────────── */}
@@ -114,14 +182,14 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
               className={cn(
                 "flex flex-col items-center gap-1.5 p-3 rounded-xl border text-center transition-all",
                 hintStyle === h.value
-                  ? "bg-violet-600/20 border-violet-500/50"
+                  ? "bg-primary/20 border-primary/50"
                   : "bg-secondary/50 border-border hover:border-primary/30",
               )}
             >
               <span className="text-xl">{h.icon}</span>
               <span className={cn(
                 "text-xs font-semibold",
-                hintStyle === h.value ? "text-violet-200" : "text-muted-foreground",
+                hintStyle === h.value ? "text-primary" : "text-muted-foreground",
               )}>
                 {h.label}
               </span>
@@ -145,7 +213,7 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
               className={cn(
                 "flex items-center gap-3 p-3 rounded-xl border text-left transition-all",
                 coachTone === t.value
-                  ? "bg-violet-600/20 border-violet-500/50"
+                  ? "bg-primary/20 border-primary/50"
                   : "bg-secondary/50 border-border hover:border-primary/30",
               )}
             >
@@ -153,7 +221,7 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
               <div>
                 <p className={cn(
                   "text-xs font-semibold",
-                  coachTone === t.value ? "text-violet-200" : "text-muted-foreground",
+                  coachTone === t.value ? "text-primary" : "text-muted-foreground",
                 )}>
                   {t.label}
                 </p>
@@ -170,18 +238,18 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
           Preferred AI model
         </p>
         <div className="space-y-2">
-          {MODELS.map((m) => {
+          {MODEL_OPTIONS.map((m) => {
             const locked = !m.free && !isPro;
             return (
               <button
                 key={m.value}
                 type="button"
                 disabled={locked}
-                onClick={() => { if (!locked) setModel(m.value as PreferredModel); }}
+                onClick={() => { if (!locked) setModel(m.value); }}
                 className={cn(
                   "w-full flex items-center gap-3 p-3 rounded-xl border text-left transition-all",
                   model === m.value && !locked
-                    ? "bg-violet-600/20 border-violet-500/50"
+                    ? "bg-primary/20 border-primary/50"
                     : "bg-secondary/50 border-border",
                   locked
                     ? "opacity-40 cursor-not-allowed"
@@ -191,7 +259,7 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
                 <div className="flex-1">
                   <span className={cn(
                     "text-sm font-semibold",
-                    model === m.value && !locked ? "text-violet-200" : "text-muted-foreground",
+                    model === m.value && !locked ? "text-primary" : "text-muted-foreground",
                   )}>
                     {m.label}
                   </span>
@@ -200,7 +268,7 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
                   "text-[10px] px-2 py-0.5 rounded-full border",
                   m.free
                     ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
-                    : "bg-violet-500/10 border-violet-500/20 text-violet-400",
+                    : "bg-primary/10 border-primary/20 text-primary",
                 )}>
                   {locked ? "🔒 Pro" : m.badge}
                 </span>
@@ -228,6 +296,7 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
           size="md"
           fullWidth
           loading={loading}
+          disabled={styles.length === 0}
           onClick={handleNext}
         >
           Continue →

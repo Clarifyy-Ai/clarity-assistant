@@ -2,9 +2,8 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 /**
  * Returns true when the given user is currently banned.
- * Fails open (returns false) on transient DB errors so a transient outage
- * doesn't lock out the entire user base; the front-end ban flag is the
- * authoritative gate for admin actions, this is just a server-side belt.
+ * Fails closed (returns true) on DB errors for write/credit paths so a
+ * transient outage cannot bypass suspension checks.
  */
 export async function isUserBanned(
   db: SupabaseClient,
@@ -17,8 +16,8 @@ export async function isUserBanned(
     .maybeSingle();
 
   if (error) {
-    console.error("[banCheck] lookup failed:", error.message);
-    return false;
+    console.error("[banCheck] lookup failed — treating as banned:", error.message);
+    return true;
   }
   return !!(data as { is_banned?: boolean } | null)?.is_banned;
 }

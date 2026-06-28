@@ -7,6 +7,7 @@
 import { supabase } from "@/lib/supabase/client";
 import { BillingError, ErrorCode, tryCatch } from "@/lib/errors";
 import { ENV } from "@/lib/env";
+import { getPlanDisplayName } from "@/lib/constants/pricing";
 import {
   cancelSubscription as cancelSubscriptionApi,
   resumeSubscription as resumeSubscriptionApi,
@@ -53,34 +54,34 @@ export const PLANS: Record<PlanId, Plan> = {
     tagline: "Get started — no card required",
     monthlyPrice: 0,
     yearlyPrice: 0,
-    // Launch source of truth: src/lib/constants/pricing.ts
-    creditsPerMonth: 200,
+    // Launch source of truth: src/lib/constants/creditEconomics.ts
+    creditsPerMonth: 50,
     color: "slate",
     features: [
       {
         key: "live_assist",
-        label: "Live interview assist",
+        label: "Practice Coach sessions",
         included: true,
-        limit: 3,
-        note: "3 sessions/month",
+        limit: 2,
+        note: "2 sessions/month",
       },
       {
         key: "mock_sessions",
         label: "Mock sessions",
         included: true,
-        limit: 5,
+        limit: 2,
       },
       {
         key: "answer_bank",
         label: "Answer bank",
         included: true,
-        limit: 10,
+        limit: 5,
       },
       {
         key: "star_builder",
         label: "STAR answer builder",
         included: true,
-        limit: 5,
+        limit: 3,
       },
       {
         key: "company_research",
@@ -108,6 +109,11 @@ export const PLANS: Record<PlanId, Plan> = {
         included: false,
       },
       {
+        key: "mock_test_ai",
+        label: "AI gov exam question generation",
+        included: false,
+      },
+      {
         key: "calendar_sync",
         label: "Calendar sync",
         included: false,
@@ -116,19 +122,20 @@ export const PLANS: Record<PlanId, Plan> = {
   },
 
   starter: {
+    // Legacy catalog — not in LAUNCH_PLANS; retained for DB/Stripe backward compat only.
     id: "starter",
     name: "Starter",
-    tagline: "For active job seekers",
-    monthlyPrice: 1_900,
-    yearlyPrice: 1_500,
-    creditsPerMonth: 100,
+    tagline: "Legacy tier (deprecated)",
+    monthlyPrice: 0,
+    yearlyPrice: 0,
+    creditsPerMonth: 50,
     stripePriceIdMonthly: ENV.STRIPE_PRICE_STARTER_MONTHLY,
     stripePriceIdYearly: ENV.STRIPE_PRICE_STARTER_YEARLY,
     color: "blue",
     features: [
       {
         key: "live_assist",
-        label: "Live interview assist",
+        label: "Practice Coach sessions",
         included: true,
         limit: 10,
       },
@@ -177,6 +184,11 @@ export const PLANS: Record<PlanId, Plan> = {
         included: true,
       },
       {
+        key: "mock_test_ai",
+        label: "AI gov exam question generation",
+        included: false,
+      },
+      {
         key: "calendar_sync",
         label: "Calendar sync",
         included: false,
@@ -190,7 +202,7 @@ export const PLANS: Record<PlanId, Plan> = {
     tagline: "Everything you need to land the role",
     monthlyPrice: 2_900,
     yearlyPrice: 2_417, // $29,000/yr ÷ 12 — display only
-    creditsPerMonth: 2_000,
+    creditsPerMonth: 1_400,
     stripePriceIdMonthly: ENV.STRIPE_PRICE_PRO_MONTHLY,
     stripePriceIdYearly: ENV.STRIPE_PRICE_PRO_YEARLY,
     color: "violet",
@@ -198,7 +210,7 @@ export const PLANS: Record<PlanId, Plan> = {
     features: [
       {
         key: "live_assist",
-        label: "Live interview assist",
+        label: "Practice Coach sessions",
         included: true,
         limit: "unlimited",
       },
@@ -250,6 +262,12 @@ export const PLANS: Record<PlanId, Plan> = {
         key: "calendar_sync",
         label: "Calendar sync",
         included: true,
+      },
+      {
+        key: "mock_test_ai",
+        label: "AI gov exam question generation",
+        included: true,
+        note: "Mixed official + AI papers",
       },
     ],
   },
@@ -267,7 +285,7 @@ export const PLANS: Record<PlanId, Plan> = {
     features: [
       {
         key: "live_assist",
-        label: "Live interview assist",
+        label: "Practice Coach sessions",
         included: true,
         limit: "unlimited",
       },
@@ -319,6 +337,12 @@ export const PLANS: Record<PlanId, Plan> = {
         key: "calendar_sync",
         label: "Calendar sync",
         included: true,
+      },
+      {
+        key: "mock_test_ai",
+        label: "AI gov exam question generation",
+        included: true,
+        note: "Mixed official + AI papers",
       },
       {
         key: "priority_support",
@@ -341,12 +365,12 @@ export const PLANS: Record<PlanId, Plan> = {
     tagline: "For teams and bootcamps",
     monthlyPrice: 7_900,
     yearlyPrice: 6_583, // $79,000/yr ÷ 12 — display only
-    creditsPerMonth: -1,
+    creditsPerMonth: 4_000,
     color: "emerald",
     features: [
       {
         key: "everything",
-        label: "Everything in Elite",
+        label: "Everything in Pro",
         included: true,
       },
       {
@@ -391,6 +415,17 @@ export const PLAN_ORDER: PlanId[] = [
   "elite",
   "enterprise",
 ];
+
+/** Display-tier labels and launch plan helpers — DB enum values unchanged. */
+export {
+  LAUNCH_PLANS,
+  DEPRECATED_PLANS,
+  PLAN_DISPLAY_NAMES,
+  getPlanDisplayName,
+  normalizeToDisplayTier,
+} from "@/lib/constants/pricing";
+
+export type { DisplayTier } from "@/lib/constants/pricing";
 
 const VALID_PLAN_IDS = new Set<string>(PLAN_ORDER);
 
@@ -440,6 +475,7 @@ type SubscriptionRow = {
   user_id?: string | null;
   stripe_customer_id?: string | null;
   stripe_subscription_id?: string | null;
+  stripe_price_id?: string | null;
   plan_id?: string | null;
   status?: string | null;
   credits_monthly?: number | null;
@@ -495,13 +531,14 @@ function safeDate(value: unknown, fallback = new Date()): Date {
 }
 
 function inferIntervalFromPriceId(row: SubscriptionRow): BillingInterval {
+  const priceId = row.stripe_price_id?.trim();
+  if (!priceId) {
+    return "monthly";
+  }
+
   const plan = PLANS[normalizePlanId(row.plan_id)];
 
-  if (
-    row.stripe_subscription_id &&
-    plan.stripePriceIdYearly &&
-    row.stripe_subscription_id.includes(plan.stripePriceIdYearly)
-  ) {
+  if (plan.stripePriceIdYearly && priceId === plan.stripePriceIdYearly) {
     return "yearly";
   }
 
@@ -681,6 +718,7 @@ export async function getUserSubscription(
           "user_id",
           "stripe_customer_id",
           "stripe_subscription_id",
+          "stripe_price_id",
           "plan_id",
           "status",
           "credits_monthly",
@@ -768,7 +806,7 @@ export async function requireFeature(
     const requiredPlan = getRequiredPlanForFeature(featureKey);
 
     throw new BillingError(
-      `Feature "${featureKey}" requires the ${requiredPlan ?? "pro"} plan or higher.`,
+      `Feature "${featureKey}" requires the ${getPlanDisplayName(requiredPlan ?? "pro")} plan or higher.`,
       ErrorCode.BILLING_PLAN_GATE_BLOCKED,
       {
         featureKey,

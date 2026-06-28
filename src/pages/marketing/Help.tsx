@@ -1,75 +1,72 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { Link } from "react-router-dom";
 import { usePageMeta } from "@/hooks/usePageMeta";
-import { Search, ChevronDown, ChevronUp, HelpCircle, Mail } from "lucide-react";
+import { Search, ChevronDown, ChevronUp, HelpCircle, Mail, BookOpen } from "lucide-react";
 import { motion } from "framer-motion";
+import { SUPPORT_EMAIL, STATUS_PAGE_URL } from "@/lib/constants/contact";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
-import { supabase } from "@/lib/supabase/client";
-
-interface HelpRow {
-  slug: string;
-  question: string;
-  answer: string;
-  category_slug: string;
-  category_title: string;
-  sort_order: number;
-}
-
-interface FaqCategory {
-  title: string;
-  slug: string;
-  items: HelpRow[];
-}
+import { ComplianceBanner } from "@/components/marketing";
+import { Input } from "@/components/ui/Input";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import {
+  HELP_FAQ_CATEGORIES_FALLBACK,
+  HELP_ARTICLES_FALLBACK,
+  groupHelpArticlesIntoCategories,
+  type HelpFaqCategory,
+} from "@/lib/constants/helpArticlesFallback";
+import { helpArticlesDB } from "@/lib/supabase/database";
 
 const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
+const SEARCH_DEBOUNCE_MS = 300;
+
+const POPULAR_ARTICLES = [...HELP_ARTICLES_FALLBACK]
+  .sort((a, b) => a.sort_order - b.sort_order)
+  .slice(0, 5);
 
 export default function Help() {
   usePageMeta({
     title: "Help Center — Clarify AI",
-    description: "FAQs and guides for interview prep, live coaching, mock tests, and billing.",
+    description: "FAQs and guides for interview prep, live practice coaching, mock tests, and billing.",
     canonical: `${SITE_URL}/help`,
   });
 
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [openItems, setOpenItems] = useState<Set<string>>(new Set());
-  const [categories, setCategories] = useState<FaqCategory[] | null>(null);
+  const [categories, setCategories] = useState<HelpFaqCategory[] | null>(null);
   const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  const loadArticles = useCallback(async () => {
+    setLoading(true);
+    setFetchError(null);
+
+    try {
+      const rows = await helpArticlesDB.listPublished();
+      setCategories(
+        rows.length > 0
+          ? groupHelpArticlesIntoCategories(rows)
+          : HELP_FAQ_CATEGORIES_FALLBACK,
+      );
+    } catch {
+      setFetchError("Couldn't load help articles. Showing cached FAQs.");
+      setCategories(HELP_FAQ_CATEGORIES_FALLBACK);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      const { data, error } = await (supabase as any)
-        .from("help_articles")
-        .select("slug, question, answer, category_slug, category_title, sort_order")
-        .eq("published", true)
-        .order("sort_order", { ascending: true });
+    void loadArticles();
+  }, [loadArticles]);
 
-      if (cancelled) return;
-
-      if (error || !data) {
-        setCategories([]);
-        setLoading(false);
-        return;
-      }
-
-      const byCat = new Map<string, FaqCategory>();
-      (data as HelpRow[]).forEach((row) => {
-        if (!byCat.has(row.category_slug)) {
-          byCat.set(row.category_slug, {
-            slug: row.category_slug,
-            title: row.category_title,
-            items: [],
-          });
-        }
-        byCat.get(row.category_slug)!.items.push(row);
-      });
-      setCategories(Array.from(byCat.values()));
-      setLoading(false);
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      setDebouncedSearch(search);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => window.clearTimeout(timer);
+  }, [search]);
 
   function toggleItem(id: string) {
     setOpenItems((prev) => {
@@ -80,20 +77,26 @@ export default function Help() {
     });
   }
 
-  const filtered = !categories
-    ? []
-    : search.trim()
-      ? categories
-          .map((cat) => ({
-            ...cat,
-            items: cat.items.filter(
-              (item) =>
-                item.question.toLowerCase().includes(search.toLowerCase()) ||
-                item.answer.toLowerCase().includes(search.toLowerCase()),
-            ),
-          }))
-          .filter((cat) => cat.items.length > 0)
-      : categories;
+  const filtered = useMemo(() => {
+    if (!categories) return [];
+    const query = debouncedSearch.trim();
+    if (!query) return categories;
+
+    const lower = query.toLowerCase();
+    return categories
+      .map((cat) => ({
+        ...cat,
+        items: cat.items.filter(
+          (item) =>
+            item.question.toLowerCase().includes(lower) ||
+            item.answer.toLowerCase().includes(lower),
+        ),
+      }))
+      .filter((cat) => cat.items.length > 0);
+  }, [categories, debouncedSearch]);
+
+  const hasSearchQuery = debouncedSearch.trim().length > 0;
+  const showPopularArticles = !loading && !hasSearchQuery;
 
   return (
     <MarketingLayout>
@@ -105,23 +108,34 @@ export default function Help() {
             <p className="mt-4 text-sm md:text-base text-muted-foreground">Find answers to common questions about Clarify AI</p>
           </motion.div>
 
-          <div className="mt-8 relative max-w-md mx-auto">
-            <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground/60" />
-            <input
-              type="text"
+          <div className="mt-8 max-w-md mx-auto">
+            <Input
+              type="search"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Search help articles..."
-              className="w-full pl-11 pr-4 py-3 rounded-xl bg-secondary/60 border border-border text-sm text-foreground placeholder:text-muted-foreground/60 focus:outline-none focus:border-primary/40"
+              aria-label="Search help articles"
+              leftIcon={<Search className="w-4 h-4" />}
+              className="rounded-xl bg-secondary/60 border-border focus:border-primary/40"
             />
           </div>
         </div>
       </section>
 
+      <section className="pb-8 px-4 sm:px-6">
+        <div className="max-w-3xl mx-auto">
+          <ComplianceBanner />
+        </div>
+      </section>
+
       <section className="pb-14 px-4 sm:px-6">
         <div className="max-w-3xl mx-auto space-y-10">
+          {fetchError && (
+            <InlineErrorRetry message={fetchError} onRetry={() => void loadArticles()} />
+          )}
+
           {loading && (
-            <div className="space-y-6">
+            <div className="space-y-6" aria-busy="true" aria-label="Loading help articles">
               {[0, 1, 2].map((i) => (
                 <div key={i} className="space-y-2 animate-pulse">
                   <div className="h-5 w-40 rounded bg-secondary/60" />
@@ -130,6 +144,38 @@ export default function Help() {
                 </div>
               ))}
             </div>
+          )}
+
+          {!loading && showPopularArticles && (
+            <motion.div
+              initial={{ opacity: 0, y: 16 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.4 }}
+            >
+              <h2 className="text-xl font-bold mb-4">Popular articles</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {POPULAR_ARTICLES.map((article) => (
+                  <Link
+                    key={article.slug}
+                    to={`/help/${article.slug}`}
+                    className="group flex flex-col gap-2 rounded-xl border border-border bg-card p-4 hover:border-primary/30 hover:bg-secondary/30 transition-all text-left"
+                  >
+                    <div className="flex items-start gap-2">
+                      <BookOpen className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                      <span className="text-sm font-medium text-foreground group-hover:text-primary transition-colors">
+                        {article.question}
+                      </span>
+                    </div>
+                    <p className="text-xs text-muted-foreground line-clamp-2 pl-6">
+                      {article.answer}
+                    </p>
+                    <span className="text-[11px] text-primary pl-6 opacity-0 group-hover:opacity-100 transition-opacity">
+                      Read article &rarr;
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </motion.div>
           )}
 
           {!loading && filtered.map((category) => (
@@ -148,6 +194,7 @@ export default function Help() {
                     <div key={item.slug} className="rounded-xl border border-border bg-card overflow-hidden">
                       <button
                         onClick={() => toggleItem(item.slug)}
+                        aria-expanded={isOpen}
                         className="w-full flex items-center justify-between p-4 text-left hover:bg-secondary/40 transition-all"
                       >
                         <span className="text-sm font-medium pr-4">{item.question}</span>
@@ -172,11 +219,18 @@ export default function Help() {
           ))}
 
           {!loading && filtered.length === 0 && (
-            <div className="text-center py-12">
-              <p className="text-muted-foreground">
-                {search ? `No articles found for "${search}"` : "No help articles available yet."}
-              </p>
-            </div>
+            <EmptyState
+              icon={Search}
+              title={hasSearchQuery ? "No articles found" : "No help articles yet"}
+              description={
+                hasSearchQuery
+                  ? `Nothing matched "${debouncedSearch.trim()}". Try different keywords or browse all categories.`
+                  : "Check back soon — we're adding guides and FAQs regularly."
+              }
+              actionLabel={hasSearchQuery ? "Clear search" : undefined}
+              onAction={hasSearchQuery ? () => setSearch("") : undefined}
+              compact
+            />
           )}
         </div>
       </section>
@@ -187,11 +241,17 @@ export default function Help() {
           <h3 className="text-lg font-bold">Still need help?</h3>
           <p className="text-sm text-muted-foreground mt-2">Our support team is here to help you get the most out of Clarify AI.</p>
           <a
-            href="mailto:support@clarifyai.com"
+            href={`mailto:${SUPPORT_EMAIL}`}
             className="inline-flex items-center gap-2 mt-5 px-6 py-2.5 rounded-xl bg-secondary text-sm font-semibold hover:bg-secondary/80 transition-all"
           >
             <Mail className="w-4 h-4" /> Contact Support
           </a>
+          <p className="text-xs text-muted-foreground mt-4">
+            System status:{" "}
+            <a href={STATUS_PAGE_URL} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
+              status.clarifyprep.com
+            </a>
+          </p>
         </div>
       </section>
     </MarketingLayout>

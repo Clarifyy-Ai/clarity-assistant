@@ -13,6 +13,7 @@ import {
   getProctorSafePosition,
 } from "@/lib/overlay/stealthMouse";
 import type { OverlayPosition } from "@/store/overlayStore";
+import { getOverlayPortalZIndex, type OverlayStackContext } from "@/lib/overlay/zIndexManager";
 
 interface OverlayPositionManagerProps {
   position: OverlayPosition;
@@ -20,6 +21,7 @@ interface OverlayPositionManagerProps {
   isProctorSafe: boolean;
   overlayWidth: number;
   overlayHeight: number;
+  stackContext?: OverlayStackContext;
   children: ReactNode;
 }
 
@@ -38,7 +40,7 @@ function setRefs<T>(...refs: (Ref<T> | undefined)[]) {
 
 export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPositionManagerProps>(
   function OverlayPositionManager(
-    { position, onPositionChange, isProctorSafe, overlayWidth, overlayHeight, children },
+    { position, onPositionChange, isProctorSafe, overlayWidth, overlayHeight, stackContext = "fullscreen", children },
     ref
   ) {
     const localRef = useRef<HTMLDivElement | null>(null);
@@ -96,7 +98,7 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
         style={{
           left: `${position.x}px`,
           top: `${position.y}px`,
-          zIndex: 2147483647,
+          zIndex: getOverlayPortalZIndex(stackContext),
           // Wrapper passes through clicks; the inner panel toggles pointer-events
           // via `pointer-events-auto/none` based on visibility. This prevents the
           // hidden overlay from blocking underlying UI.

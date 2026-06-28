@@ -110,12 +110,12 @@ interface PricingCardProps {
 
 const colorMap = {
   violet: {
-    bg: 'bg-violet-500/5',
-    border: 'border-violet-500/30',
-    activeBg: 'bg-violet-600/20',
-    activeBorder: 'border-violet-500/50',
-    icon: 'bg-violet-500/15 text-violet-400',
-    button: 'bg-violet-600 hover:bg-violet-500 focus:ring-violet-500',
+    bg: 'bg-primary/5',
+    border: 'border-primary/30',
+    activeBg: 'bg-primary/20',
+    activeBorder: 'border-primary/50',
+    icon: 'bg-primary/15 text-primary',
+    button: 'bg-primary hover:bg-primary/90 focus:ring-primary',
   },
   amber: {
     bg: 'bg-amber-500/5',

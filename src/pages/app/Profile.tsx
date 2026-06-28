@@ -1,10 +1,13 @@
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useCallback, useEffect, useState } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { profilesDB, sessionsDB } from "@/lib/supabase/database";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PageContent } from "@/components/layout/PageContent";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   User,
@@ -65,6 +68,7 @@ function ProfilePageSkeleton() {
 }
 
 export default function Profile() {
+  const navigate = useNavigate();
   const { profile: storeProfile, user, setProfile } = useAuthStore();
   const [profile, setLocalProfile] = useState<any>(storeProfile);
   const [profileLoading, setProfileLoading] = useState(!storeProfile);
@@ -145,7 +149,7 @@ export default function Profile() {
       label: "Badges",
       value: (displayProfile?.badges as string[] | null)?.length ?? 0,
       icon: Star,
-      color: "text-violet-500",
+      color: "text-primary",
     },
   ];
 
@@ -165,15 +169,15 @@ export default function Profile() {
 
   if (pageLoading) {
     return (
-      <div>
+      <PageContent>
         <PageHeader title="Profile" description="Your public profile and stats" />
         <ProfilePageSkeleton />
-      </div>
+      </PageContent>
     );
   }
 
   return (
-    <div>
+    <PageContent>
       <PageHeader
         title="Profile"
         description="Your public profile and stats"
@@ -187,21 +191,19 @@ export default function Profile() {
       />
 
       {profileError && (
-        <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-3">
-          <span className="flex-1">{profileError}</span>
-          <Button size="sm" variant="outline" onClick={() => void loadProfile()}>
-            Retry
-          </Button>
-        </div>
+        <InlineErrorRetry
+          message={profileError}
+          onRetry={() => void loadProfile()}
+          className="mb-4"
+        />
       )}
 
       {sessionsError && (
-        <div className="mb-4 rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-3">
-          <span className="flex-1">{sessionsError}</span>
-          <Button size="sm" variant="outline" onClick={() => void loadSessions()}>
-            Retry
-          </Button>
-        </div>
+        <InlineErrorRetry
+          message={sessionsError}
+          onRetry={() => void loadSessions()}
+          className="mb-4"
+        />
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
@@ -218,7 +220,7 @@ export default function Profile() {
                 className="w-24 h-24 rounded-full object-cover border-2 border-border"
               />
             ) : (
-              <div className="w-24 h-24 rounded-full bg-violet-700 flex items-center justify-center text-3xl font-bold text-white">
+              <div className="w-24 h-24 rounded-full bg-primary flex items-center justify-center text-3xl font-bold text-primary-foreground">
                 {initial}
               </div>
             )}
@@ -227,7 +229,7 @@ export default function Profile() {
             </h2>
             <p className="text-sm text-muted-foreground">{displayProfile?.email}</p>
             {displayProfile?.experience_level && (
-              <span className="mt-2 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-violet-500/15 text-violet-500 dark:text-violet-300 capitalize">
+              <span className="mt-2 inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/15 text-primary capitalize">
                 {displayProfile.experience_level}
               </span>
             )}
@@ -279,7 +281,14 @@ export default function Profile() {
                 ))}
               </div>
             ) : sessions.length === 0 ? (
-              <p className="text-sm text-muted-foreground">No sessions yet.</p>
+              <EmptyState
+                icon={Video}
+                title="No sessions yet"
+                description="Complete a mock interview or practice session to see your history here."
+                actionLabel="View all sessions"
+                onAction={() => navigate("/app/sessions")}
+                compact
+              />
             ) : (
               <ul className="space-y-2">
                 {sessions.map((session) => (
@@ -323,6 +332,6 @@ export default function Profile() {
           </Card>
         </div>
       </div>
-    </div>
+    </PageContent>
   );
 }

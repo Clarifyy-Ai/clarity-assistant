@@ -21,7 +21,27 @@
 // Value example:
 // https://clarify.ai.sltfinanceindia.com,https://clarityapp.ai,https://www.clarityapp.ai
 //
-// Localhost origins are always allowed for local development.
+// Localhost origins are allowed only in non-production environments.
+
+function isProductionEnvironment(): boolean {
+  const environment = (Deno.env.get("ENVIRONMENT") ?? "").trim().toLowerCase();
+  const denoEnv = (Deno.env.get("DENO_ENV") ?? "").trim().toLowerCase();
+
+  if (["development", "dev", "local", "preview", "staging"].includes(environment)) {
+    return false;
+  }
+  if (["development", "dev", "local", "test"].includes(denoEnv)) {
+    return false;
+  }
+  if (environment === "production" || denoEnv === "production") {
+    return true;
+  }
+
+  // Default fail-closed when unset (typical Supabase Edge runtime).
+  return true;
+}
+
+const isProduction = isProductionEnvironment();
 
 let cachedOrigins: Set<string> | null = null;
 let cachedEnvString: string | null = null;
@@ -35,13 +55,6 @@ const LOCAL_DEV_ORIGINS = [
   "http://127.0.0.1:4173",
   "http://127.0.0.1:5000",
   "http://127.0.0.1:5173",
-];
-
-const FALLBACK_PRODUCTION_ORIGINS = [
-  "https://clarify.ai.sltfinanceindia.com",
-  "https://clarityapp.ai",
-  "https://www.clarityapp.ai",
-  "https://app.clarityapp.ai",
 ];
 
 const ALLOWED_METHODS = [
@@ -121,22 +134,25 @@ function getAllowedOrigins(): Set<string> {
 
   const origins = new Set<string>();
 
-  for (const origin of LOCAL_DEV_ORIGINS) {
-    addOriginIfValid(origins, origin);
+  if (!isProduction) {
+    for (const origin of LOCAL_DEV_ORIGINS) {
+      addOriginIfValid(origins, origin);
+    }
   }
 
   if (currentEnv.trim().length > 0) {
     for (const origin of currentEnv.split(",")) {
       addOriginIfValid(origins, origin);
     }
-  } else {
-    for (const origin of FALLBACK_PRODUCTION_ORIGINS) {
-      addOriginIfValid(origins, origin);
-    }
-
-    console.warn(
-      "[cors] ALLOWED_ORIGINS secret not set. Using fallback production origins. " +
+  } else if (isProduction) {
+    console.error(
+      "[cors] ALLOWED_ORIGINS secret not set in production. " +
+        "Non-localhost browser origins will be rejected. " +
         "Set ALLOWED_ORIGINS in Supabase Dashboard → Edge Functions → Secrets."
+    );
+  } else {
+    console.warn(
+      "[cors] ALLOWED_ORIGINS not set — only localhost dev origins are allowed."
     );
   }
 
@@ -156,14 +172,17 @@ function getRequestOrigin(req: Request): string | null {
   return normalizeOrigin(rawOrigin);
 }
 
-/** Lovable / preview staging hosts (e.g. preview--clarify-aii.lovable.app). */
-const PREVIEW_HOST_PATTERNS = [
-  /\.lovable\.app$/i,
-  /\.lovable\.dev$/i,
-  /\.lovableproject\.com$/i,
-];
+/** Lovable / preview staging hosts — only allowed in non-production environments. */
+const PREVIEW_HOST_PATTERNS: RegExp[] = isProduction
+  ? []
+  : [
+      /\.lovable\.app$/i,
+      /\.lovable\.dev$/i,
+      /\.lovableproject\.com$/i,
+    ];
 
 function isPreviewOrigin(origin: string): boolean {
+  if (PREVIEW_HOST_PATTERNS.length === 0) return false;
   try {
     const { protocol, hostname } = new URL(origin);
     if (protocol !== "https:") return false;
@@ -268,6 +287,55 @@ export function withCorsHeaders(req: Request, response: Response): Response {
 
   for (const [key, value] of Object.entries(corsHeaders)) {
     headers.set(key, value);
+  }
+
+  return new Response(response.body, {
+    status: response.status,
+    statusText: response.statusText,
+    headers,
+  });
+}
+
+/**
+ * Returns security headers that should be applied to all edge function responses.
+ * Optionally includes CORS headers if origin is provided and allowed.
+ */
+export function securityHeaders(origin?: string): Record<string, string> {
+  const headers: Record<string, string> = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "X-XSS-Protection": "0",
+    "Referrer-Policy": "strict-origin-when-cross-origin",
+    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
+  };
+
+  if (origin && isOriginAllowedForCors(origin)) {
+    headers["Access-Control-Allow-Origin"] = origin;
+    headers["Access-Control-Allow-Headers"] = ALLOWED_HEADERS;
+    headers["Access-Control-Allow-Methods"] = ALLOWED_METHODS;
+    headers["Access-Control-Max-Age"] = "86400";
+  }
+
+  return headers;
+}
+
+/**
+ * Wraps a Response with both CORS and security headers.
+ * Preferred over withCorsHeaders for new code.
+ */
+export function withSecurityHeaders(req: Request, response: Response): Response {
+  const headers = new Headers(response.headers);
+  const requestOrigin = getRequestOrigin(req);
+  const allHeaders = securityHeaders(requestOrigin ?? undefined);
+
+  for (const [key, value] of Object.entries(allHeaders)) {
+    headers.set(key, value);
+  }
+
+  headers.set("Vary", "Origin");
+  if (requestOrigin && isOriginAllowedForCors(requestOrigin)) {
+    headers.set("Access-Control-Allow-Credentials", "true");
   }
 
   return new Response(response.body, {

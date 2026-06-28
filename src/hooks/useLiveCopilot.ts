@@ -15,15 +15,23 @@ import { useAuthStore } from "@/store/userStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { useAudioSession } from "./useAudioSession";
 import { useAudioStore } from "@/store/audioStore";
-import { routeHint } from "@/lib/ai/modelRouter";
-import { streamFullAnswer } from "@/lib/ai/geminiClient";
-import { checkCredits, refreshCredits } from "@/lib/billing/creditsManager";
+import { routeHint, routeAnswerGeneration } from "@/lib/ai/modelRouter";
+import type { CoachingContext } from "@/types/ai.types";
+import type { InterviewType } from "@/types/session.types";
+import { checkCreditsForAction, refreshCredits } from "@/lib/billing/creditsManager";
+import { captureCodingQuestionAndGenerateAnswer } from "@/lib/audio/screenshotCapture";
+import { assertOnlineForCapture } from "@/lib/overlay/captureGating";
 import {
   buildResumeContext,
   generateResumeTalkingPoints,
   formatTalkingPointsAsHint,
 } from "@/lib/ai/resumeFallback";
-import { loadPrimaryCoverLetterText } from "@/lib/documents/interviewContext";
+import {
+  buildResumeContextForAI,
+  loadPrimaryCoverLetterText,
+} from "@/lib/documents/interviewContext";
+import { parseResumeContentString } from "@/lib/documents/resumeParse";
+import { getPrivateMode } from "@/hooks/usePrivateMode";
 import { createDragHandler } from "@/lib/overlay/stealthMouse";
 import { generateId } from "@/lib/utils";
 import {
@@ -31,9 +39,17 @@ import {
   jobDescriptionsDB,
   resumesDB,
   sessionTranscriptsDB,
+  answerBankDB,
 } from "@/lib/supabase/database";
-import { getOrCreateSession, activateSession } from "@/lib/session/sessionLifecycle";
+import {
+  activateSession,
+  aiModeForSessionType,
+  type SessionType,
+} from "@/lib/session/sessionLifecycle";
+import { startSession as startSessionApi } from "@/lib/api/sessions";
+import { handleSessionStartError } from "@/lib/billing/sessionStartErrors";
 import { toDbModel } from "@/lib/ai/modelMapping";
+import { toast } from "sonner";
 import type { LiveSessionConfig } from "@/types/session.types";
 
 interface UseLiveCopilotOptions {
@@ -62,6 +78,10 @@ export function useLiveCopilot({
   const lastQuestionRef = useRef<string | null>(null);
   const dragCleanupRef = useRef<(() => void) | null>(null);
   const sessionIdRef = useRef<string>(generateId());
+  const pendingCaptureMetaRef = useRef<{
+    question: string;
+    thumbnail?: string;
+  } | null>(null);
 
   const configRef = useRef(config);
   configRef.current = config;
@@ -102,7 +122,7 @@ export function useLiveCopilot({
       target_company: cfg.company ?? "",
       coach_tone: ((profile as any)?.coach_tone as any) ?? "supportive",
       hint_style: (cfg.hint_style as any) ?? "short_hints",
-      resume_skills: [],
+      resume_skills: overlay.resume_context?.top_skills ?? [],
       resume_projects: [],
       resume_experience_summary: summary || null,
       jd_required_skills: [],
@@ -117,6 +137,112 @@ export function useLiveCopilot({
     };
   }, [profile]);
 
+  /** Merge resume, JD, instructions, and live transcript into AI context. */
+  const enrichContextForAi = useCallback(
+    async (base: Record<string, unknown>): Promise<Record<string, unknown>> => {
+      const cfg = configRef.current;
+      const userId = profile?.id;
+      if (!userId) return base;
+
+      const overlay = useOverlayStore.getState();
+      const activeResume = useDocumentStore.getState().active_context.resume as
+        | { content?: string | null }
+        | null;
+      const parsed = parseResumeContentString(activeResume?.content ?? null);
+
+      const jdParts: string[] = [];
+      if (Array.isArray(base.jd_required_skills) && base.jd_required_skills.length) {
+        jdParts.push(`Required skills: ${(base.jd_required_skills as string[]).join(", ")}`);
+      }
+      if (cfg.role) jdParts.push(`Role: ${cfg.role}`);
+      if (cfg.company) jdParts.push(`Company: ${cfg.company}`);
+
+      const resumeBlock = await buildResumeContextForAI(userId, {
+        parsedResume: parsed,
+        resumeContent: activeResume?.content ?? null,
+        resumeSummary:
+          typeof overlay.resume_context === "object"
+            ? overlay.resume_context?.summary ?? null
+            : String(overlay.resume_context ?? ""),
+        jdSnippet: jdParts.join("\n") || null,
+        instructions: cfg.instructions ?? "",
+        role: cfg.role ?? null,
+        company: cfg.company ?? null,
+      });
+
+      const transcript =
+        useAudioStore.getState().transcript?.full_transcript ?? "";
+      const lastTranscript =
+        transcript.length > 2500 ? transcript.slice(-2500) : transcript;
+
+      let jdKeywords: string[] = [];
+      if (Array.isArray(base.jd_required_skills) && base.jd_required_skills.length) {
+        jdKeywords = base.jd_required_skills as string[];
+      }
+      if (cfg.jd_id) {
+        try {
+          const jd = await jobDescriptionsDB.getById(cfg.jd_id);
+          const raw = jd as Record<string, unknown>;
+          const kw = raw.keywords ?? raw.required_skills ?? raw.skills;
+          if (Array.isArray(kw)) {
+            jdKeywords = [
+              ...new Set([
+                ...jdKeywords,
+                ...kw.filter((s): s is string => typeof s === "string"),
+              ]),
+            ];
+          }
+        } catch {
+          /* non-fatal */
+        }
+      }
+
+      let starStoriesBlock = "";
+      try {
+        const entries = await answerBankDB.listByUserId(userId);
+        const lines = entries.slice(0, 5).map((entry) => {
+          const enriched = entry as typeof entry & {
+            star_situation?: string | null;
+            star_task?: string | null;
+            star_action?: string | null;
+            star_result?: string | null;
+            summary?: string | null;
+          };
+          const starParts = [
+            enriched.star_situation,
+            enriched.star_task,
+            enriched.star_action,
+            enriched.star_result,
+          ].filter(Boolean);
+          const starText =
+            starParts.length > 0
+              ? starParts.join(" → ")
+              : (enriched.summary ?? enriched.answer_text?.slice(0, 240) ?? "");
+          return `Q: ${entry.question_text}\nSTAR: ${starText}`;
+        });
+        if (lines.length) {
+          starStoriesBlock = `\n\nRelevant saved STAR stories:\n${lines.join("\n\n")}`;
+        }
+      } catch {
+        /* non-fatal */
+      }
+
+      const jdBlock =
+        jdKeywords.length > 0
+          ? `\n\nJD keywords to weave in: ${jdKeywords.join(", ")}`
+          : "";
+
+      return {
+        ...base,
+        resume_experience_summary: resumeBlock + jdBlock + starStoriesBlock,
+        resume_skills: parsed?.skills ?? base.resume_skills,
+        jd_required_skills: jdKeywords.length ? jdKeywords : base.jd_required_skills,
+        last_transcript: lastTranscript,
+      };
+    },
+    [profile],
+  );
+
   /**
    * Initialize overlay/session stores based on selected config & documents.
    */
@@ -126,14 +252,16 @@ export function useLiveCopilot({
     const cfg = configRef.current;
     setPrepStepIndex(0);
 
-    let parsed: unknown = null;
-    const { active_context } = useDocumentStore.getState();
-    parsed = (active_context?.resume as any)?.content ?? null;
+    const activeResume = useDocumentStore.getState().active_context.resume as
+      | { content?: string | null }
+      | null;
+    let parsed = parseResumeContentString(activeResume?.content ?? null);
 
     if (!parsed && cfg.resume_id) {
       try {
         const row = await resumesDB.getById(cfg.resume_id);
-        parsed = (row as { content?: unknown }).content ?? row;
+        const content = (row as { content?: string | null }).content;
+        parsed = parseResumeContentString(content ?? null);
       } catch (err) {
         console.warn("[useLiveCopilot] resume load failed:", err);
       }
@@ -141,7 +269,7 @@ export function useLiveCopilot({
 
     setPrepStepIndex(1);
 
-    let resumeCtx = buildResumeContext(parsed as any);
+    let resumeCtx = buildResumeContext(parsed);
     const coverText = profile.id ? await loadPrimaryCoverLetterText(profile.id) : null;
     if (coverText) {
       const coverSnippet = coverText.slice(0, 2500);
@@ -162,7 +290,7 @@ export function useLiveCopilot({
         };
       }
     }
-    const talkingPoints = generateResumeTalkingPoints(parsed as any, {
+    const talkingPoints = generateResumeTalkingPoints(parsed, {
       company: cfg.company,
       role: cfg.role,
       interview_type: cfg.interview_type as any,
@@ -202,7 +330,8 @@ export function useLiveCopilot({
     sessionStore.setSessionId(sessionIdRef.current);
     sessionStore.setMode("live");
     sessionStore.setConfig(cfg);
-    sessionStore.setStatus("active");
+    // Status becomes "active" only after audio pipeline starts (see startLiveSession).
+    sessionStore.setStatus("warming_up");
 
     if (profile?.id) {
       coachStore.initContext({
@@ -215,8 +344,8 @@ export function useLiveCopilot({
         target_company: cfg.company ?? null,
         coach_tone: ((profile as any).coach_tone as any) ?? "supportive",
         hint_style: (cfg.hint_style as any) ?? "short_hints",
-        resume_skills: [],
-        resume_projects: [],
+        resume_skills: parsed?.skills ?? [],
+        resume_projects: parsed?.projects?.map((p) => p.name).filter(Boolean) ?? [],
         resume_experience_summary:
           typeof resumeCtx === "string" ? resumeCtx : resumeCtx?.summary ?? null,
         jd_required_skills: jdRequiredSkills,
@@ -280,55 +409,54 @@ export function useLiveCopilot({
     },
   });
 
-  function mapOverlayModelToGeminiModel(active: string): "gemini-2.5-flash" | "gemini-2.5-pro" {
-    if (active === "gemini-pro" || active === "gemini-1-5-pro") return "gemini-2.5-pro";
-    return "gemini-2.5-flash";
-  }
-
-  async function requestFullAnswer(question: string, signal: AbortSignal): Promise<void> {
+  async function requestFullAnswer(
+    question: string,
+    signal: AbortSignal,
+    screenshotBase64?: string | null,
+  ): Promise<void> {
     const overlay = useOverlayStore.getState();
     overlay.setHintState("generating");
 
-    const resumeCtx = overlay.resume_context;
     const cfg = configRef.current;
-
-    const context = {
-      session_type: cfg.interview_type ?? "behavioral",
-      target_company: cfg.company ?? "",
-      last_transcript: (useAudioStore.getState().transcript?.full_transcript ?? "").slice(-2500),
-      resume_experience_summary: resumeCtx?.summary ?? "",
-      hint_style: "concise",
-      simple_language: overlay.simple_language ?? false,
-    } as unknown as Parameters<typeof streamFullAnswer>[0]["context"];
+    const baseContext = coachStore.getContext() ?? getSafeContext();
+    const context = await enrichContextForAi(baseContext as Record<string, unknown>);
 
     const selectedModel = useOverlayStore.getState().active_model;
-    const creditCheck = checkCredits(selectedModel);
+    const creditCheck = checkCreditsForAction("fullAnswer");
 
     if (!creditCheck.canProceed) {
       const tp = overlay.resume_talking_points;
       if (tp) overlay.setOfflineFallback(formatTalkingPointsAsHint(tp));
       else overlay.setError(creditCheck.reason ?? "Out of credits");
+      overlay.setHintState("idle");
       return;
     }
 
-    const activeModel = useOverlayStore.getState().active_model as any;
-    const geminiModel = mapOverlayModelToGeminiModel(activeModel);
+    overlay.setHintState("streaming");
 
-    let fullText = "";
-
-    await streamFullAnswer({
-      question,
-      context,
-      model: geminiModel,
-      simpleLanguage: overlay.simple_language ?? false,
-      onChunk: (chunk) => {
-        fullText += chunk;
-        useOverlayStore.getState().appendStreamChunk(chunk);
-      },
+    await routeAnswerGeneration({
+      questionText: question,
+      questionTypeHint: cfg.interview_type ?? "behavioral",
+      modelHint: selectedModel,
+      context: context as unknown as CoachingContext,
+      sessionId: sessionIdRef.current,
+      mode: aiModeForSessionType(sessionType as SessionType),
+      screenshotBase64: screenshotBase64 ?? null,
+      onToken: (chunk) => useOverlayStore.getState().appendStreamChunk(chunk),
       onDone: async () => {
-        if (fullText) useOverlayStore.getState().commitStreamedHint();
+        const overlayState = useOverlayStore.getState();
+        overlayState.commitStreamedHint();
 
-        // Credits deducted server-side in generate-answer edge function
+        const pendingCapture = pendingCaptureMetaRef.current;
+        if (screenshotBase64 && pendingCapture) {
+          overlayState.pushCaptureAnswer({
+            question: pendingCapture.question,
+            answer: overlayState.current_hint,
+            thumbnail_base64: pendingCapture.thumbnail,
+          });
+          pendingCaptureMetaRef.current = null;
+        }
+
         const remaining = await refreshCredits();
         if (remaining !== null) {
           useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
@@ -336,21 +464,43 @@ export function useLiveCopilot({
       },
       onError: (err) => {
         useOverlayStore.getState().setError(err.message || "Failed to generate full answer");
+        useOverlayStore.getState().setHintState("idle");
       },
       signal,
     });
   }
 
   const requestLiveHint = useCallback(
-    async (question: string) => {
+    async (question: string, modifier?: "regenerate" | "shorten" | "expand") => {
       if (!profile) return;
 
       // Prefer coach context; fallback if not initialized
-      const context = coachStore.getContext() ?? getSafeContext();
-      if (!context) return;
+      const baseContext = coachStore.getContext() ?? getSafeContext();
+      if (!baseContext) return;
+      let context = await enrichContextForAi(baseContext as Record<string, unknown>);
+
+      if (modifier === "shorten") {
+        context = {
+          ...context,
+          resume_experience_summary: `${String(context.resume_experience_summary ?? "")}\n\nInstruction: Rewrite the answer to be significantly shorter (about half the length) while keeping STAR structure.`,
+        };
+      } else if (modifier === "expand") {
+        context = {
+          ...context,
+          resume_experience_summary: `${String(context.resume_experience_summary ?? "")}\n\nInstruction: Expand the answer with more specific detail, metrics, and context while staying conversational.`,
+        };
+      } else if (modifier === "regenerate") {
+        context = {
+          ...context,
+          resume_experience_summary: `${String(context.resume_experience_summary ?? "")}\n\nInstruction: Provide a fresh alternative answer with different examples.`,
+        };
+      }
 
       const selectedModel = useOverlayStore.getState().active_model;
-      const creditCheck = checkCredits(selectedModel);
+      const answerMode = useOverlayStore.getState().answer_mode;
+      const creditCheck = checkCreditsForAction(
+        answerMode === "full_answer" ? "fullAnswer" : "hint",
+      );
 
       if (!creditCheck.canProceed) {
         const overlay = useOverlayStore.getState();
@@ -369,8 +519,6 @@ export function useLiveCopilot({
       overlay.setCurrentQuestion(question);
       overlay.setHintState("generating");
 
-      const answerMode = useOverlayStore.getState().answer_mode;
-
       try {
         if (answerMode === "full_answer") {
           await requestFullAnswer(question, controller.signal);
@@ -379,9 +527,9 @@ export function useLiveCopilot({
 
         await routeHint({
           question,
-          context,
+          context: context as unknown as CoachingContext,
           preferredModel: selectedModel,
-          interviewType: context.session_type,
+          interviewType: String(context.session_type ?? "behavioral") as InterviewType,
           isLive: true,
           sessionId: sessionIdRef.current,
           questionId: requestId,
@@ -406,8 +554,24 @@ export function useLiveCopilot({
         }
       }
     },
-    [profile, coachStore, getSafeContext],
-  );  
+    [profile, coachStore, getSafeContext, enrichContextForAi],
+  );
+
+  const requestAnswerModification = useCallback(
+    (modifier: "regenerate" | "shorten" | "expand") => {
+      const store = useOverlayStore.getState();
+      const question =
+        store.current_question?.trim() ||
+        store.hint_history[store.hint_history_index]?.question?.trim() ||
+        "";
+      if (!question) {
+        toast.error("No question to modify — generate an answer first.");
+        return;
+      }
+      void requestLiveHint(question, modifier);
+    },
+    [requestLiveHint],
+  );
 
   // keep latest ref for audio callback usage
   useEffect(() => {
@@ -418,8 +582,9 @@ export function useLiveCopilot({
     async (question: string) => {
       if (!profile) return;
 
-      const context = coachStore.getContext() ?? getSafeContext();
-      if (!context) return;
+      const baseContext = coachStore.getContext() ?? getSafeContext();
+      if (!baseContext) return;
+      const context = await enrichContextForAi(baseContext as Record<string, unknown>);
 
       useOverlayStore.getState().addChatMessage({
         role: "user",
@@ -428,7 +593,7 @@ export function useLiveCopilot({
       });
 
       const selectedModel = useOverlayStore.getState().active_model;
-      const creditCheck = checkCredits(selectedModel);
+      const creditCheck = checkCreditsForAction("fullAnswer");
 
       if (!creditCheck.canProceed) {
         const overlay = useOverlayStore.getState();
@@ -454,9 +619,9 @@ export function useLiveCopilot({
       try {
         await routeHint({
           question,
-          context,
+          context: context as unknown as CoachingContext,
           preferredModel: selectedModel,
-          interviewType: context.session_type,
+          interviewType: String(context.session_type ?? "behavioral") as InterviewType,
           isLive: true,
           sessionId: sessionIdRef.current,
           questionId: requestId,
@@ -500,7 +665,7 @@ export function useLiveCopilot({
         useOverlayStore.getState().setChatGenerating(false);
       }
     },
-    [profile, coachStore, getSafeContext],
+    [profile, coachStore, getSafeContext, enrichContextForAi],
   );  
 
   useEffect(() => {
@@ -516,41 +681,50 @@ export function useLiveCopilot({
     setPrepStepIndex(0);
 
     try {
+      const privateMode = getPrivateMode();
       const reusableSessionId = existingSessionIdRef.current;
-      if (reusableSessionId) {
+      if (reusableSessionId && !privateMode) {
         sessionIdRef.current = reusableSessionId;
         await activateSession(reusableSessionId);
-      } else {
-        const { session } = await getOrCreateSession({
-          user_id: userId,
-          type: sessionType,
-          title: cfg.company
-            ? `${sessionType === "mock" ? "Mock" : sessionType === "warmup" ? "Warmup" : "Live"} — ${cfg.company}`
-            : sessionType === "mock"
-              ? "Mock interview"
-              : sessionType === "warmup"
-                ? "Mock warmup"
-                : "Live co-pilot",
-          document_id: cfg.resume_id ?? null,
+      } else if (!privateMode) {
+        const apiSessionType = sessionType === "live" ? "rehearsal" : sessionType;
+
+        const result = await startSessionApi({
+          session_type: apiSessionType,
+          type: apiSessionType,
+          is_practice: sessionType === "live" ? true : undefined,
+          interview_type: (cfg.interview_type as string) ?? "behavioral",
+          company: cfg.company ?? null,
+          role: cfg.role ?? null,
+          resume_id: cfg.resume_id ?? null,
           jd_id: cfg.jd_id ?? null,
-          model_used: toDbModel(useOverlayStore.getState().active_model) as any,
+          model: useOverlayStore.getState().active_model,
+          duration_minutes: cfg.duration_minutes ?? 30,
         });
-        sessionIdRef.current = session.id;
-        await activateSession(session.id);
+        sessionIdRef.current = result.session_id;
+      } else {
+        sessionIdRef.current = generateId();
       }
 
       await initSessionFromConfig();
       setPrepStepIndex(2);
       useOverlayStore.getState().showOverlay();
       await audio.start();
+      useSessionStore.getState().setStatus("active");
     } catch (err) {
       console.error("[useLiveCopilot] Failed to start live session:", err);
-      throw err instanceof Error ? err : new Error("Failed to start live session");
+      audio.stop();
+      useSessionStore.getState().resetSession();
+      useOverlayStore.getState().hideOverlay();
+      useOverlayStore.getState().resetSessionState();
+      if (!handleSessionStartError(err)) {
+        throw err instanceof Error ? err : new Error("Failed to start live session");
+      }
     } finally {
       setIsPreparingSession(false);
       setPrepStepIndex(0);
     }
-  }, [audio.start, initSessionFromConfig, profile?.id, sessionType]);
+  }, [audio, initSessionFromConfig, profile?.id, sessionType]);
 
   const endLiveSession = useCallback(async () => {
     abortRef.current?.abort();
@@ -560,7 +734,7 @@ export function useLiveCopilot({
     const overlay = useOverlayStore.getState();
     const userId = profile?.id;
 
-    if (userId && session.session_id) {
+    if (userId && session.session_id && !getPrivateMode()) {
       try {
         const audioState = useAudioStore.getState();
         const fullTranscript = audioState.transcript?.full_transcript ?? "";
@@ -614,6 +788,86 @@ export function useLiveCopilot({
     useSessionStore.getState().setStatus("active");
   }, [audio]);
 
+  const captureCodingAnswer = useCallback(async () => {
+    if (!profile) return;
+    if (!assertOnlineForCapture()) return;
+
+    const creditCheck = checkCreditsForAction("screenshotAnswer");
+    if (!creditCheck.canProceed) {
+      useOverlayStore.getState().setError(creditCheck.reason ?? "Out of credits");
+      return;
+    }
+
+    const overlay = useOverlayStore.getState();
+    overlay.setAnswerMode("full_answer");
+    overlay.setHintStyle("full_answer");
+    overlay.setActiveTab("answer");
+    overlay.setScreenshotHint(null);
+    overlay.showOverlay();
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    await captureCodingQuestionAndGenerateAnswer({
+      mode: "new_capture",
+      onGenerate: async ({ question, screenshot }) => {
+        pendingCaptureMetaRef.current = {
+          question,
+          thumbnail: screenshot.base64,
+        };
+        await requestFullAnswer(question, controller.signal, screenshot.dataOnly);
+      },
+    });
+  }, [profile]);
+
+  const adjustRegionCodingAnswer = useCallback(async () => {
+    if (!profile) return;
+    if (!assertOnlineForCapture()) return;
+
+    const creditCheck = checkCreditsForAction("screenshotAnswer");
+    if (!creditCheck.canProceed) {
+      useOverlayStore.getState().setError(creditCheck.reason ?? "Out of credits");
+      return;
+    }
+
+    const overlay = useOverlayStore.getState();
+    overlay.setAnswerMode("full_answer");
+    overlay.setHintStyle("full_answer");
+    overlay.setActiveTab("answer");
+    overlay.setScreenshotHint(null);
+    overlay.showOverlay();
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    await captureCodingQuestionAndGenerateAnswer({
+      mode: "adjust_region",
+      onGenerate: async ({ question, screenshot }) => {
+        pendingCaptureMetaRef.current = {
+          question,
+          thumbnail: screenshot.base64,
+        };
+        await requestFullAnswer(question, controller.signal, screenshot.dataOnly);
+      },
+    });
+  }, [profile]);
+
+  useEffect(() => {
+    const store = useOverlayStore.getState();
+    store.setCaptureCodingHandler(() => {
+      void captureCodingAnswer();
+    });
+    store.setAdjustRegionHandler(() => {
+      void adjustRegionCodingAnswer();
+    });
+    return () => {
+      useOverlayStore.getState().setCaptureCodingHandler(null);
+      useOverlayStore.getState().setAdjustRegionHandler(null);
+    };
+  }, [captureCodingAnswer, adjustRegionCodingAnswer]);
+
   return {
     sessionStatus,
     elapsedSeconds,
@@ -626,10 +880,13 @@ export function useLiveCopilot({
     toggleSystemAudio: audio.toggleSystemAudio,
     reconnectAudio: audio.reconnect,
     requestLiveHint,
+    requestAnswerModification,
     submitManualQuestion,
     startLiveSession,
     endLiveSession,
     pauseLiveSession,
     resumeLiveSession,
+    captureCodingAnswer,
+    adjustRegionCodingAnswer,
   };
 }

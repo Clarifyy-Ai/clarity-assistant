@@ -97,8 +97,14 @@ function normalizeRow(raw: Record<string, unknown>, idx: number): ParsedRow {
 
 export default function ExcelImportTab({
   onImported,
+  adminMode = false,
+  defaultExamType,
+  defaultSourceYear,
 }: {
   onImported: (count: number) => void;
+  adminMode?: boolean;
+  defaultExamType?: string;
+  defaultSourceYear?: number | null;
 }) {
   const user = useAuthStore((s) => s.user);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -139,6 +145,12 @@ export default function ExcelImportTab({
 
         json.forEach((raw, idx) => {
           const row = normalizeRow(raw, idx);
+          if (row.exam_type === "CUSTOM" && defaultExamType) {
+            row.exam_type = defaultExamType.toUpperCase();
+          }
+          if (row.source_year == null && defaultSourceYear != null) {
+            row.source_year = defaultSourceYear;
+          }
           const validationError = validateRow(row);
 
           if (validationError) {
@@ -233,9 +245,9 @@ export default function ExcelImportTab({
           /\$|\\\(|\\\[/.test(row.question_text) ||
           /\$|\\\(|\\\[/.test(row.explanation),
         uploaded_by: user.id,
-        source: "USER_UPLOAD",
-        is_public: false,
-        is_verified: false,
+        source: adminMode ? "OFFICIAL_PYP" : "USER_UPLOAD",
+        is_public: adminMode,
+        is_verified: adminMode,
       }));
 
       for (let i = 0; i < rows.length; i += 50) {
@@ -243,7 +255,11 @@ export default function ExcelImportTab({
         await questionsDB.createMany(chunk);
       }
 
-      toast.success(`${rows.length} questions imported successfully.`);
+      toast.success(
+        adminMode
+          ? `${rows.length} questions published to the public bank.`
+          : `${rows.length} questions imported successfully.`
+      );
       onImported(rows.length);
       setParsed(null);
       setErrors([]);
@@ -261,27 +277,29 @@ export default function ExcelImportTab({
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
-        <div>
-          <p className="text-sm font-medium text-foreground">Download Template</p>
-          <p className="text-xs text-muted-foreground">
-            Pre-formatted Excel file with headers
-          </p>
+      {!adminMode && (
+        <div className="flex items-center justify-between rounded-xl border border-border bg-card p-4">
+          <div>
+            <p className="text-sm font-medium text-foreground">Download Template</p>
+            <p className="text-xs text-muted-foreground">
+              Pre-formatted Excel file with headers
+            </p>
+          </div>
+          <a href="/Clarify AI_Question_Template.csv" download>
+            <Button variant="outline" size="sm">
+              <Download className="mr-1.5 h-4 w-4" />
+              Template
+            </Button>
+          </a>
         </div>
-        <a href="/ClarifyAI_Question_Template.csv" download>
-          <Button variant="outline" size="sm">
-            <Download className="mr-1.5 h-4 w-4" />
-            Template
-          </Button>
-        </a>
-      </div>
+      )}
 
       {!parsed && (
         <div
           className={`flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 transition-colors ${
             dragging
-              ? "border-violet-500 bg-violet-500/10"
-              : "border-border hover:border-violet-500/50 hover:bg-muted/10"
+              ? "border-primary bg-primary/10"
+              : "border-border hover:border-primary/50 hover:bg-muted/10"
           }`}
           onDragOver={(e) => {
             e.preventDefault();
@@ -337,7 +355,7 @@ export default function ExcelImportTab({
                   ) : (
                     <Check className="mr-1.5 h-3.5 w-3.5" />
                   )}
-                  Save to Question Bank
+                  {adminMode ? "Publish to public bank" : "Save to Question Bank"}
                 </Button>
               </div>
             </div>

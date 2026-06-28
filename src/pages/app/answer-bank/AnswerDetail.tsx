@@ -107,7 +107,7 @@ export default function AnswerDetail() {
     return (
       <Card className="text-center py-12">
         <p className="text-foreground font-medium">Answer not found</p>
-        <Link to="/app/answers" className="text-sm text-violet-500 hover:underline mt-2 inline-block">
+        <Link to="/app/answers" className="text-sm text-primary hover:underline mt-2 inline-block">
           Back to Answer Bank
         </Link>
       </Card>
@@ -126,7 +126,7 @@ export default function AnswerDetail() {
       <PageHeader
         title={answer.question_text ?? "Saved answer"}
         description={`${answer.category ?? "General"} · ${answer.source === "prep_lab" ? "Prep Lab" : "Manual"}`}
-        icon={<BookOpen className="w-5 h-5 text-violet-400" />}
+        icon={<BookOpen className="w-5 h-5 text-primary" />}
         breadcrumbs={[
           { label: "Answer Bank", href: "/app/answers" },
           { label: "Detail" },
@@ -159,7 +159,7 @@ export default function AnswerDetail() {
                 value={editText}
                 onChange={(e) => setEditText(e.target.value)}
                 rows={8}
-                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/50 resize-none"
+                className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
               />
               <div className="flex gap-2">
                 <Button variant="primary" size="sm" onClick={handleSave} disabled={saving}
@@ -185,7 +185,7 @@ export default function AnswerDetail() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {(["situation", "task", "action", "result"] as const).map((key) => (
                 <div key={key} className="p-3 rounded-xl bg-muted/50 border border-border">
-                  <p className="text-[10px] font-semibold text-violet-500 uppercase mb-1">{key}</p>
+                  <p className="text-[10px] font-semibold text-primary uppercase mb-1">{key}</p>
                   <p className="text-xs text-foreground">{star[key] || "—"}</p>
                 </div>
               ))}

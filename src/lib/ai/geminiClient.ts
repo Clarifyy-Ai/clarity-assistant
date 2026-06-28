@@ -28,6 +28,8 @@ export interface GeminiStreamOptions {
   isLive?: boolean;
   sessionId?: string;
   questionId?: string;
+  /** Sessionless AI mode when sessionId is absent (mock | warmup | rehearsal | practice). */
+  mode?: string;
   screenshotBase64?: string | null;
   simpleLanguage?: boolean;
   callType?: "interview" | "regular_call";
@@ -77,14 +79,15 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
     screenshot_base64: screenshotBase64 ?? null,
     session_id: opts.sessionId ?? null,
     question_id: opts.questionId ?? null,
+    mode: opts.mode ?? null,
   };
 
   try {
     // Uses robust EDGE url handling + consistent auth headers
     const data = await retry(
       () => fetchEdgeJson<{ hints?: string; hint?: string }>("generate-hint", body, { signal }),
-      2,
-      300
+      1,
+      100,
     );
 
     const hints = data.hints ?? data.hint ?? "";
@@ -97,16 +100,18 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
 }
 
 export async function streamFullAnswer(opts: GeminiStreamOptions): Promise<void> {
-  const { question, context, simpleLanguage, onChunk, onDone, onError, signal, model } = opts;
+  const { question, context, simpleLanguage, onChunk, onDone, onError, signal, model, screenshotBase64 } = opts;
 
   const body = {
     question,
-    model: model ?? "gemini-2.0-flash",
+    model: model ?? "gemini-2.5-flash",
     interview_type: context.session_type ?? "behavioral",
     target_company: context.target_company ?? "",
     transcript: context.last_transcript ?? "",
     resume_context: context.resume_experience_summary ?? "",
+    screenshot_base64: screenshotBase64 ?? null,
     session_id: opts.sessionId ?? null,
+    mode: opts.mode ?? null,
   };
 
   try {

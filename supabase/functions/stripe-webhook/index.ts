@@ -1,6 +1,7 @@
 // stripe-webhook/index.ts — Handles Stripe webhook events
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { PLAN_MONTHLY_CREDITS } from "../_shared/creditEconomics.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 
 const STRIPE_SECRET_KEY      = Deno.env.get("STRIPE_SECRET_KEY")      ?? "";
@@ -86,8 +87,100 @@ async function getProfileByCustomer(
 // Helper: map Stripe subscription status → plan_id
 // ─────────────────────────────────────────────────────────────────
 
-function derivePlanId(metadata: Record<string, string>): string {
-  return metadata?.plan_id ?? "pro";
+function derivePlanId(metadata: Record<string, string> | null | undefined): string {
+  const planId = metadata?.plan_id?.trim();
+  if (!planId) {
+    console.warn("[stripe-webhook] Missing plan_id in metadata — defaulting to free");
+    return "free";
+  }
+  return planId;
+}
+
+type PricePlanEntitlement = {
+  planId: string;
+  monthlyCredits: number;
+};
+
+function buildPriceToPlanMap(): Map<string, PricePlanEntitlement> {
+  const map = new Map<string, PricePlanEntitlement>();
+
+  function add(envKey: string, planId: keyof typeof PLAN_MONTHLY_CREDITS): void {
+    const priceId = Deno.env.get(envKey)?.trim();
+    if (priceId) {
+      map.set(priceId, {
+        planId,
+        monthlyCredits: PLAN_MONTHLY_CREDITS[planId],
+      });
+    }
+  }
+
+  add("STRIPE_PRICE_STARTER_MONTHLY", "starter");
+  add("STRIPE_PRICE_STARTER_YEARLY", "starter");
+  add("STRIPE_PRICE_PRO_MONTHLY", "pro");
+  add("STRIPE_PRICE_PRO_YEARLY", "pro");
+  add("STRIPE_PRICE_ELITE_MONTHLY", "elite");
+  add("STRIPE_PRICE_ELITE_YEARLY", "elite");
+  add("STRIPE_PRICE_ENTERPRISE_MONTHLY", "enterprise");
+  add("STRIPE_PRICE_ENTERPRISE_YEARLY", "enterprise");
+
+  return map;
+}
+
+const PRICE_TO_PLAN = buildPriceToPlanMap();
+
+function resolvePlanFromPrice(
+  priceId: string | null | undefined,
+  priceMetadata: Record<string, string> | null | undefined,
+  fallbackMetadata?: Record<string, string> | null,
+): { planId: string; monthlyCredits: number } {
+  const metaPlanId = priceMetadata?.plan_id?.trim() ?? fallbackMetadata?.plan_id?.trim();
+  if (metaPlanId) {
+    const credits =
+      PLAN_MONTHLY_CREDITS[metaPlanId as keyof typeof PLAN_MONTHLY_CREDITS] ??
+      PLAN_MONTHLY_CREDITS.free;
+    return { planId: metaPlanId, monthlyCredits: credits };
+  }
+
+  if (priceId) {
+    const mapped = PRICE_TO_PLAN.get(priceId);
+    if (mapped) {
+      return mapped;
+    }
+    console.warn(
+      `[stripe-webhook] Unknown Stripe price ${priceId} — defaulting plan to free`,
+    );
+  } else {
+    console.warn("[stripe-webhook] No price id on subscription — defaulting plan to free");
+  }
+
+  return { planId: "free", monthlyCredits: PLAN_MONTHLY_CREDITS.free };
+}
+
+function stripeTimestampToIso(unixSeconds: number | null | undefined): string | null {
+  if (typeof unixSeconds !== "number" || !Number.isFinite(unixSeconds)) {
+    return null;
+  }
+  return new Date(unixSeconds * 1000).toISOString();
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Helper: idempotency guard via idempotency_log table
+// Returns true if this is the first time processing the event.
+// ─────────────────────────────────────────────────────────────────
+
+async function ensureIdempotent(
+  db: ReturnType<typeof createServiceClient>,
+  eventId: string,
+): Promise<boolean> {
+  const { data, error } = await db
+    .from("idempotency_log")
+    .insert({ key: `stripe_event_${eventId}`, created_at: new Date().toISOString() })
+    .select("key")
+    .single();
+
+  if (error?.code === "23505") return false; // unique violation → already processed
+  if (error) throw error;
+  return true;
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -152,6 +245,15 @@ Deno.serve(async (req) => {
 
     console.log(`[stripe-webhook] Processing: ${eventType} (id: ${event.id})`);
 
+    const isNew = await ensureIdempotent(db, event.id);
+    if (!isNew) {
+      console.log(`[stripe-webhook] Duplicate event ${event.id} — skipping`);
+      return new Response(
+        JSON.stringify({ received: true, duplicate: true }),
+        { status: 200, headers: { ...headers, "Content-Type": "application/json" } },
+      );
+    }
+
     switch (eventType) {
 
       // ── Checkout completed → activate subscription or credit purchase ──
@@ -164,6 +266,14 @@ Deno.serve(async (req) => {
 
         if (!userId) {
           console.error("[stripe-webhook] checkout.session.completed: no user_id in metadata");
+          break;
+        }
+
+        const linkedProfile = await getProfileByCustomer(db, customerId);
+        if (linkedProfile && linkedProfile.id !== userId) {
+          console.error(
+            `[stripe-webhook] checkout.session.completed: user_id mismatch — metadata=${userId}, customer profile=${linkedProfile.id}`,
+          );
           break;
         }
 
@@ -251,11 +361,12 @@ Deno.serve(async (req) => {
           updated_at: new Date().toISOString(),
         }).eq("user_id", profile.id);
 
-        // Monthly subscription credit grant — idempotent on invoice.id
+        // Monthly subscription credit refresh on renewal (invoice.paid fires each billing cycle).
+        // Grants plan credits via add_credits RPC; idempotent on invoice.id prevents double-grant.
         const monthlyCredits = parseInt(
           (invoice.lines?.data?.[0]?.metadata?.monthly_credits as string) ?? "0",
           10,
-        ) || 500; // default Pro grant; override via Stripe price metadata
+        ) || PLAN_MONTHLY_CREDITS.pro;
         if (monthlyCredits > 0 && invoice.id) {
           const { data: existing } = await db
             .from("credit_transactions")
@@ -314,46 +425,111 @@ Deno.serve(async (req) => {
         const profile = await getProfileByCustomer(db, customerId);
         if (!profile) break;
 
+        const priceItem = subscription.items?.data?.[0];
+        const priceId = (priceItem?.price?.id as string | undefined) ?? null;
+        const priceMetadata = (priceItem?.price?.metadata ?? {}) as Record<string, string>;
+        const subMetadata = (subscription.metadata ?? {}) as Record<string, string>;
+        const { planId, monthlyCredits } = resolvePlanFromPrice(
+          priceId,
+          priceMetadata,
+          subMetadata,
+        );
+
         const status = subscription.cancel_at_period_end
           ? "canceling"
           : (subscription.status as string);
 
+        const trialStart = stripeTimestampToIso(subscription.trial_start);
+        const trialEnd = stripeTimestampToIso(subscription.trial_end);
+
         await db.from("profiles").update({
           subscription_status: status,
+          plan_id:             planId,
           updated_at:          new Date().toISOString(),
         }).eq("id", profile.id);
 
-        await db.from("subscriptions").update({
+        const subscriptionUpdate: Record<string, unknown> = {
           status,
+          plan_id:          planId,
+          stripe_price_id:  priceId,
+          monthly_credits:  monthlyCredits,
           cancel_at: subscription.cancel_at
             ? new Date(subscription.cancel_at * 1000).toISOString()
             : null,
           updated_at: new Date().toISOString(),
-        }).eq("user_id", profile.id);
+        };
 
-        console.log(`[stripe-webhook] subscription.updated — customer: ${customerId}, status: ${status}`);
+        if (trialStart !== null) {
+          subscriptionUpdate.trial_start = trialStart;
+        }
+        if (trialEnd !== null) {
+          subscriptionUpdate.trial_end = trialEnd;
+        }
+
+        await db.from("subscriptions").update(subscriptionUpdate).eq("user_id", profile.id);
+
+        console.log(
+          `[stripe-webhook] subscription.updated — customer: ${customerId}, status: ${status}, plan: ${planId}`,
+        );
         break;
       }
 
-      // ── Payment failed → mark past_due so UI can warn user ──
+      // ── Payment failed → dunning: grace period then downgrade ──
       case "invoice.payment_failed": {
         const invoice    = event.data.object;
         const customerId = invoice.customer as string;
 
-        const profile = await getProfileByCustomer(db, customerId);
-        if (!profile) break;
+        const { data: failedProfile } = await db
+          .from("profiles")
+          .select("id, plan_id")
+          .eq("stripe_customer_id", customerId)
+          .single();
+        if (!failedProfile) break;
 
-        await db.from("profiles").update({
-          subscription_status: "past_due",
-          updated_at:          new Date().toISOString(),
-        }).eq("id", profile.id);
+        const nowIso = new Date().toISOString();
 
-        await db.from("subscriptions").update({
-          status:     "past_due",
-          updated_at: new Date().toISOString(),
-        }).eq("user_id", profile.id);
+        if ((invoice.attempt_count ?? 0) >= 3) {
+          await db.from("profiles").update({
+            plan_id:             "free",
+            credits:             PLAN_MONTHLY_CREDITS.free,
+            subscription_status: "past_due",
+            payment_failed_at:   nowIso,
+            updated_at:          nowIso,
+          }).eq("id", failedProfile.id);
 
-        console.log(`[stripe-webhook] invoice.payment_failed — customer: ${customerId}`);
+          await db.from("subscriptions").update({
+            status:     "past_due",
+            plan_id:    "free",
+            updated_at: nowIso,
+          }).eq("user_id", failedProfile.id);
+
+          await db.from("audit_logs").insert({
+            user_id: failedProfile.id,
+            action:  "payment_downgrade",
+            details: {
+              reason: "payment_failed_3x",
+              previous_plan: failedProfile.plan_id,
+              attempt_count: invoice.attempt_count,
+            },
+          });
+
+          console.log(`[stripe-webhook] invoice.payment_failed — downgraded customer: ${customerId}`);
+        } else {
+          await db.from("profiles").update({
+            subscription_status: "past_due",
+            payment_failed_at:   nowIso,
+            updated_at:          nowIso,
+          }).eq("id", failedProfile.id);
+
+          await db.from("subscriptions").update({
+            status:     "past_due",
+            updated_at: nowIso,
+          }).eq("user_id", failedProfile.id);
+
+          console.log(
+            `[stripe-webhook] invoice.payment_failed — grace period, attempt ${invoice.attempt_count ?? 1}, customer: ${customerId}`,
+          );
+        }
         break;
       }
 

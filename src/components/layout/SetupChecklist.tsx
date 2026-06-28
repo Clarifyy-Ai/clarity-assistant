@@ -1,9 +1,11 @@
 import { useState } from "react";
 import { Link } from "react-router-dom";
-import { CheckCircle, Circle, ChevronRight, ChevronDown } from "lucide-react";
+import { CheckCircle, Circle, ChevronRight, ChevronDown, X } from "lucide-react";
 import { useAuthStore } from "@/store/userStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { cn } from "@/lib/utils";
+
+const DISMISS_STORAGE_KEY = "clarify-setup-banner-dismissed";
 
 // ─────────────────────────────────────────────────────────────────
 // SetupChecklist
@@ -11,12 +13,32 @@ import { cn } from "@/lib/utils";
 // Collapsible on mobile so it doesn't dominate the viewport.
 // ─────────────────────────────────────────────────────────────────
 
-export function SetupChecklist() {
+interface SetupChecklistProps {
+  /** Stronger styling for dashboard / app-shell banner placement */
+  prominent?: boolean;
+  /** Allow user to dismiss until next session (localStorage) */
+  dismissible?: boolean;
+}
+
+export function SetupChecklist({ prominent = false, dismissible = false }: SetupChecklistProps) {
   const { profile } = useAuthStore();
   const docStore = useDocumentStore();
   const [expanded, setExpanded] = useState(false);
+  const [dismissed, setDismissed] = useState(
+    () => dismissible && localStorage.getItem(DISMISS_STORAGE_KEY) === "1",
+  );
+
+  const onboardingIncomplete = !profile?.onboarding_completed;
 
   const steps = [
+    ...(onboardingIncomplete
+      ? [{
+          id: "onboarding",
+          label: "Finish account setup",
+          done: false,
+          to: "/onboarding",
+        }]
+      : []),
     {
       id: "resume",
       label: "Upload your resume",
@@ -32,7 +54,7 @@ export function SetupChecklist() {
     {
       id: "mock",
       label: "Complete your first mock session",
-      done: ((profile as any)?.xp ?? 0) > 0,
+      done: ((profile as { xp?: number })?.xp ?? 0) > 0,
       to: "/app/mock",
     },
     {
@@ -45,31 +67,77 @@ export function SetupChecklist() {
 
   const completed = steps.filter((s) => s.done).length;
   if (completed === steps.length) return null;
+  if (dismissible && dismissed) return null;
 
   const pctRaw = Math.round((completed / steps.length) * 100);
   const pct = Math.max(0, Math.min(100, pctRaw));
 
+  function handleDismiss() {
+    localStorage.setItem(DISMISS_STORAGE_KEY, "1");
+    setDismissed(true);
+  }
+
   return (
-    <div className="rounded-2xl border border-border bg-secondary p-5">
-      <button
-        type="button"
-        onClick={() => setExpanded((v) => !v)}
-        className="mb-3 flex w-full items-center justify-between md:cursor-default"
-        aria-expanded={expanded}
-      >
-        <h3 className="text-sm font-semibold text-foreground">Complete your setup</h3>
-        <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">
-            {completed}/{steps.length}
-          </span>
-          <ChevronDown
-            className={cn(
-              "h-4 w-4 text-muted-foreground transition-transform md:hidden",
-              expanded && "rotate-180"
+    <div
+      className={cn(
+        "rounded-2xl border p-5",
+        prominent || onboardingIncomplete
+          ? "border-2 border-primary/40 bg-primary/5 shadow-sm shadow-primary/5"
+          : "border-border bg-secondary",
+      )}
+      role="region"
+      aria-label="Setup checklist"
+    >
+      <div className="mb-3 flex w-full items-start justify-between gap-3">
+        <button
+          type="button"
+          onClick={() => setExpanded((v) => !v)}
+          className="flex flex-1 items-center justify-between md:cursor-default text-left"
+          aria-expanded={expanded}
+        >
+          <div>
+            <h3 className="text-sm font-semibold text-foreground">
+              {onboardingIncomplete ? "Continue your setup" : "Complete your setup"}
+            </h3>
+            {onboardingIncomplete && prominent && (
+              <p className="text-xs text-muted-foreground mt-1">
+                Finish onboarding to unlock personalized coaching and interview prep.
+              </p>
             )}
-          />
-        </div>
-      </button>
+          </div>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-xs text-muted-foreground">
+              {completed}/{steps.length}
+            </span>
+            <ChevronDown
+              className={cn(
+                "h-4 w-4 text-muted-foreground transition-transform md:hidden",
+                expanded && "rotate-180",
+              )}
+            />
+          </div>
+        </button>
+        {dismissible && (
+          <button
+            type="button"
+            onClick={handleDismiss}
+            className="shrink-0 rounded-lg p-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary/80 transition-colors"
+            aria-label="Dismiss setup banner"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
+      </div>
+
+      {onboardingIncomplete && prominent && (
+        <Link
+          to="/onboarding"
+          className="mb-4 inline-flex items-center gap-1.5 rounded-lg bg-primary px-3 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
+        >
+          Continue setup
+          <ChevronRight className="h-3.5 w-3.5" />
+        </Link>
+      )}
 
       {/* Progress bar — always visible */}
       <div
@@ -82,7 +150,7 @@ export function SetupChecklist() {
         title={`${pct}% complete`}
       >
         <div
-          className="h-full rounded-full bg-violet-500 transition-all duration-500"
+          className="h-full rounded-full bg-primary transition-all duration-500"
           style={{ width: `${pct}%` }}
         />
       </div>
@@ -95,7 +163,7 @@ export function SetupChecklist() {
               to={step.to}
               className={cn(
                 "group flex items-center gap-3 rounded-xl px-2 py-1.5 transition-all hover:bg-secondary/80",
-                step.done && "opacity-50"
+                step.done && "opacity-50",
               )}
             >
               {step.done ? (
@@ -106,7 +174,7 @@ export function SetupChecklist() {
               <span
                 className={cn(
                   "flex-1 text-xs",
-                  step.done ? "text-muted-foreground line-through" : "text-muted-foreground"
+                  step.done ? "text-muted-foreground line-through" : "text-muted-foreground",
                 )}
               >
                 {step.label}

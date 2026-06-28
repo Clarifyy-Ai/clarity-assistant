@@ -183,7 +183,7 @@ export function DebriefExtras({
       {speakers.length > 0 && (
         <div className="rounded-xl border border-border bg-card p-4">
           <div className="flex items-center gap-2 mb-3">
-            <Mic className="w-4 h-4 text-violet-400" />
+            <Mic className="w-4 h-4 text-primary" />
             <h3 className="text-sm font-semibold">Speakers</h3>
           </div>
           <ul className="space-y-2">

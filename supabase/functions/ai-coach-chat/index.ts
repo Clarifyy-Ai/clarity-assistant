@@ -18,13 +18,16 @@ import {
   refundCredits,
 } from "../_shared/supabase.ts";
 
+import { logAICost } from "../_shared/aiProvider.ts";
+
 import {
   geminiChat,
   type GeminiMessage,
 } from "../_shared/gemini.ts";
+import { creditCost } from "../_shared/creditEconomics.ts";
 
 const FUNCTION_NAME = "ai-coach-chat";
-const CREDIT_COST = 1;
+const CREDIT_COST = creditCost("ai_coach_message");
 
 const DEFAULT_MODEL =
   Deno.env.get("GEMINI_MODEL_DEFAULT") ?? "gemini-2.0-flash";
@@ -549,6 +552,7 @@ Deno.serve(async (req: Request) => {
   const messages = buildGeminiMessages(body);
 
   try {
+    const aiStartMs = Date.now();
     const aiReply = await geminiChat(
       messages,
       SYSTEM_PROMPT,
@@ -559,6 +563,23 @@ Deno.serve(async (req: Request) => {
     );
 
     const reply = normalizeReply(aiReply);
+
+    const inputText = [
+      SYSTEM_PROMPT,
+      ...messages.flatMap((message) =>
+        message.parts.map((part) => part.text),
+      ),
+    ].join("\n");
+
+    void logAICost(db, {
+      userId: user.id,
+      action: "coach_message",
+      model,
+      inputTokens: Math.ceil(inputText.length / 4),
+      outputTokens: Math.ceil(aiReply.length / 4),
+      latencyMs: Date.now() - aiStartMs,
+      wasFallback: false,
+    });
 
     await logAiAudit({
       req,

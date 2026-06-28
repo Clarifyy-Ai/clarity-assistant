@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/Badge";
 import { CheckCircle, Shield, Eye, Database, Lock, WifiOff } from "lucide-react";
 import { toast } from "sonner";
 import { usePrivateMode } from "@/hooks/usePrivateMode";
+import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsPrivacy
@@ -110,14 +111,13 @@ export default function SettingsPrivacy() {
   }
 
   return (
-    <div className="space-y-5">
-      <h2 className="text-lg font-bold text-foreground">Privacy</h2>
+    <SettingsPageShell title="Privacy">
 
-      <Card className="border-violet-500/20">
+      <Card className="border-primary/20">
         <div className="flex items-start justify-between gap-4">
           <div className="flex gap-3">
-            <div className="w-9 h-9 rounded-xl bg-violet-500/10 flex items-center justify-center shrink-0">
-              <WifiOff className="w-4 h-4 text-violet-400" />
+            <div className="w-9 h-9 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+              <WifiOff className="w-4 h-4 text-primary" />
             </div>
             <div>
               <p className="text-sm font-semibold text-foreground">Private mode</p>
@@ -186,6 +186,6 @@ export default function SettingsPrivacy() {
       >
         {saved ? "Saved!" : "Save privacy settings"}
       </Button>
-    </div>
+    </SettingsPageShell>
   );
 }

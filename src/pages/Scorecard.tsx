@@ -1,10 +1,13 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { useScorecard } from "@/hooks/useScorecard";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
   Trophy, TrendingUp, TrendingDown, Share2,
-  Download, RefreshCw, BarChart2, MessageSquare,
+  Download, BarChart2, MessageSquare,
   CheckCircle, AlertTriangle, Mic, Clock,
-  ChevronDown, ChevronUp, Loader2, Star,
+  ChevronDown, ChevronUp, Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
@@ -17,9 +20,10 @@ import { useState } from "react";
 
 export default function Scorecard() {
   const { sessionId }   = useParams<{ sessionId: string }>();
+  const navigate = useNavigate();
   const {
     scorecard, isLoading, isGenerating, error,
-    isShared, shareUrl, shareScorecard, exportPDF,
+    isShared, shareUrl, shareScorecard, exportPDF, reload,
   } = useScorecard({ sessionId: sessionId! });
 
   const [expandedQ, setExpandedQ] = useState<string | null>(null);
@@ -38,24 +42,39 @@ export default function Scorecard() {
 
   if (isLoading || isGenerating) {
     return (
-      <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center gap-4">
-        <Loader2 className="w-10 h-10 text-violet-400 animate-spin" />
-        <p className="text-muted-foreground">
-          {isGenerating ? "Analysing your session…" : "Loading scorecard…"}
-        </p>
-        <p className="text-xs text-muted-foreground">This may take a few seconds</p>
+      <div className="min-h-screen bg-background text-foreground">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-4">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+          {isGenerating && (
+            <p className="text-sm text-muted-foreground text-center">
+              Analysing your session… This may take a few seconds.
+            </p>
+          )}
+        </div>
       </div>
     );
   }
 
   if (error || !scorecard) {
     return (
-      <div className="min-h-screen bg-background text-foreground flex flex-col items-center justify-center gap-4">
-        <AlertTriangle className="w-10 h-10 text-red-400" />
-        <p className="text-muted-foreground">Unable to load scorecard</p>
-        <Link to="/app/dashboard" className="text-sm text-violet-400 hover:underline">
-          Back to Dashboard
-        </Link>
+      <div className="min-h-screen bg-background text-foreground">
+        <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-4">
+          {error && (
+            <InlineErrorRetry message={error} onRetry={() => void reload()} />
+          )}
+          {!error && (
+            <EmptyState
+              icon={BarChart2}
+              title="Scorecard not found"
+              description="We couldn't find a scorecard for this session."
+              actionLabel="Back to Dashboard"
+              onAction={() => navigate("/app/dashboard")}
+              compact
+            />
+          )}
+        </div>
       </div>
     );
   }
@@ -191,8 +210,8 @@ export default function Scorecard() {
 
         {/* ── Coach note ─────────────────────────────── */}
         {scorecard.coach_note && (
-          <div className="bg-violet-600/10 border border-violet-500/20 rounded-2xl p-5">
-            <p className="text-xs text-violet-400 font-medium uppercase tracking-wider mb-2">
+          <div className="bg-primary/10 border border-primary/20 rounded-2xl p-5">
+            <p className="text-xs text-primary font-medium uppercase tracking-wider mb-2">
               Coach's Note
             </p>
             <p className="text-gray-200 text-sm leading-relaxed italic">
@@ -204,7 +223,7 @@ export default function Scorecard() {
         {/* ── Per-question breakdown ──────────────────── */}
         <div>
           <h2 className="text-lg font-semibold text-foreground mb-4 flex items-center gap-2">
-            <BarChart2 className="w-5 h-5 text-violet-400" />
+            <BarChart2 className="w-5 h-5 text-primary" />
             Question Breakdown
           </h2>
           <div className="space-y-3">
@@ -225,7 +244,7 @@ export default function Scorecard() {
         <div className="flex flex-col sm:flex-row gap-3 pt-4">
           <Link
             to="/app/mock"
-            className="flex-1 text-center py-3 bg-gradient-to-r from-violet-600 to-purple-600 hover:from-violet-500 hover:to-purple-500 text-foreground font-semibold rounded-xl transition-all"
+            className="flex-1 text-center py-3 bg-gradient-to-r from-primary to-purple-600 hover:from-primary hover:to-purple-500 text-foreground font-semibold rounded-xl transition-all"
           >
             Practice Again
           </Link>
@@ -289,7 +308,7 @@ function QuestionScoreCard({
             </div>
           </div>
           {question.coach_tip && (
-            <div className="bg-violet-600/10 rounded-lg p-3 text-xs text-violet-200">
+            <div className="bg-primary/10 rounded-lg p-3 text-xs text-primary/80">
               💡 {question.coach_tip}
             </div>
           )}

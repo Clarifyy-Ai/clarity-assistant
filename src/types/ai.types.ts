@@ -286,6 +286,8 @@ export interface ParsedExperience {
   start_date: string | null;
   end_date: string | null;
   duration_months: number | null;
+  /** Human-readable tenure when parsed from resume text */
+  duration?: string | null;
   description: string;
   impact_bullets: string[];
   tech_used: string[];

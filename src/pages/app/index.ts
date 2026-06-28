@@ -80,7 +80,7 @@ export {
 
 // ─── Sessions ────────────────────────────────────────────────────────────────
 
-export { SessionHistory, SessionDetail }    from "./sessions";
+export { SessionDetail } from "./sessions";
 
 // ─── Settings ─────────────────────────────────────────────────────────────────
 

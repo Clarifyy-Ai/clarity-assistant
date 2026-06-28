@@ -284,7 +284,7 @@ export default function TestRevision() {
   if (loading) {
     return (
       <div className="flex h-64 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-violet-500 border-t-transparent" />
+        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
       </div>
     );
   }
@@ -300,7 +300,7 @@ export default function TestRevision() {
         <div className="flex items-center gap-3">
           <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
             <div
-              className="h-full rounded-full bg-violet-500 transition-all duration-300"
+              className="h-full rounded-full bg-primary transition-all duration-300"
               style={{
                 width: `${progressPercent}%`,
               }}
@@ -421,7 +421,7 @@ export default function TestRevision() {
 
                   {currentItem.question.explanation && (
                     <div className="rounded-lg border border-border bg-muted/20 px-4 py-3 text-xs text-foreground/80">
-                      <span className="mb-1 block font-semibold text-violet-400">
+                      <span className="mb-1 block font-semibold text-primary">
                         Explanation
                       </span>
 
@@ -457,7 +457,7 @@ export default function TestRevision() {
               <Button
                 variant="outline"
                 onClick={() => void handleMastered()}
-                className="border-violet-500/30 text-violet-400 hover:bg-violet-500/10"
+                className="border-primary/30 text-primary hover:bg-primary/10"
                 disabled={updating}
               >
                 <Award className="mr-1.5 h-4 w-4" />

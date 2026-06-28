@@ -21,10 +21,12 @@ import {
   withCorsHeaders,
 } from "../_shared/cors.ts";
 
+import { authenticateRequest } from "../_shared/auth.ts";
+
 import {
-  authenticateRequest,
-  enforceResourceOwnership,
-} from "../_shared/auth.ts";
+  enforceAiSessionAccess,
+  validateSessionlessAiMode,
+} from "../_shared/sessionEnforcement.ts";
 
 import {
   checkRateLimit,
@@ -46,12 +48,21 @@ import {
 import {
   deductCreditsAtomic,
   refundCredits,
+  createServiceClient,
 } from "../_shared/supabase.ts";
 
-import { geminiGenerate } from "../_shared/gemini.ts";
+import {
+  generateWithFallback,
+  logAICost,
+  moderateOutput,
+} from "../_shared/aiProvider.ts";
+import { resolveModel } from "../_shared/resolveModel.ts";
+import { extractBYOK } from "../_shared/utils.ts";
 
 const FUNCTION_NAME = "generate-hint";
-const CREDIT_COST = 1;
+import { creditCost } from "../_shared/creditEconomics.ts";
+
+const CREDIT_COST = creditCost("live_hint");
 
 const SYSTEM_PROMPT = `You are a discreet interview assistant giving rapid coaching hints.
 
@@ -150,6 +161,12 @@ const generateHintSchema = z.object({
     .string()
     .uuid("Invalid question ID.")
     .nullable()
+    .optional(),
+
+  mode: z
+    .string()
+    .trim()
+    .max(40, "Mode is too long.")
     .optional(),
 
   model: z
@@ -252,18 +269,9 @@ function validateUntrustedText(
   return null;
 }
 
-function sanitizeModel(input?: string): string | undefined {
+function sanitizeModelInput(input?: string): string | undefined {
   const model = String(input ?? "").trim();
-
-  if (!model) {
-    return undefined;
-  }
-
-  if (!/^gemini-[a-z0-9.-]+$/i.test(model)) {
-    return undefined;
-  }
-
-  return model;
+  return model.length > 0 ? model : undefined;
 }
 
 function buildPrompt(input: GenerateHintRequest): string {
@@ -460,23 +468,28 @@ Deno.serve(async (req: Request) => {
   const body = validation.data;
 
   if (body.session_id) {
-    const ownershipFailure = await enforceResourceOwnership({
-      table: "sessions",
-      resourceId: body.session_id,
+    const sessionEnforcementFailure = await enforceAiSessionAccess({
+      sessionId: body.session_id,
       authenticatedUserId: user.id,
     });
 
-    if (ownershipFailure) {
+    if (sessionEnforcementFailure) {
       await logPermissionDenied({
         req,
         userId: user.id,
         functionName: FUNCTION_NAME,
         resourceType: "session",
         resourceId: body.session_id,
-        reason: "Session ownership check failed.",
+        reason: "Session type not permitted for AI generation.",
       });
 
-      return withCorsHeaders(req, ownershipFailure);
+      return withCorsHeaders(req, sessionEnforcementFailure);
+    }
+  } else {
+    const sessionlessFailure = validateSessionlessAiMode(body.mode);
+
+    if (sessionlessFailure) {
+      return withCorsHeaders(req, sessionlessFailure);
     }
   }
 
@@ -520,18 +533,38 @@ Deno.serve(async (req: Request) => {
   }
 
   const prompt = buildPrompt(body);
-  const byokGeminiKey = getByokGeminiKey(req);
-  const requestedModel = sanitizeModel(body.model);
+  const byok = extractBYOK(req);
+  const admin = createServiceClient();
+  const resolvedModel = await resolveModel(
+    admin,
+    user.id,
+    sanitizeModelInput(body.model),
+  );
 
   try {
-    const rawHints = await geminiGenerate(
+    const aiResult = await generateWithFallback({
       prompt,
-      SYSTEM_PROMPT,
-      0.5,
-      300,
-      byokGeminiKey,
-      requestedModel
-    );
+      systemPrompt: SYSTEM_PROMPT,
+      maxTokens: 300,
+      temperature: 0.5,
+      userId: user.id,
+      action: "generate_hint",
+      model: resolvedModel,
+      byok,
+    });
+
+    const moderated = moderateOutput(aiResult.text);
+    const rawHints = moderated.filtered;
+
+    void logAICost(admin, {
+      userId: user.id,
+      action: "generate_hint",
+      model: aiResult.model,
+      inputTokens: aiResult.inputTokens,
+      outputTokens: aiResult.outputTokens,
+      latencyMs: aiResult.latencyMs,
+      wasFallback: aiResult.wasFallback,
+    });
 
     const hints =
       rawHints && rawHints.trim().length > 0
@@ -547,6 +580,7 @@ Deno.serve(async (req: Request) => {
       metadata: {
         requestId,
         source: rawHints ? "ai" : "fallback",
+        model: aiResult.model,
         cost: CREDIT_COST,
         balanceAfter: creditResult.balanceAfter ?? null,
         transactionId: creditResult.transactionId ?? null,
@@ -559,6 +593,7 @@ Deno.serve(async (req: Request) => {
       request_id: requestId,
       hints,
       source: rawHints ? "ai" : "fallback",
+      model: aiResult.model,
     });
   } catch (error) {
     console.error(

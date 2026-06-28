@@ -22,7 +22,7 @@ const SIZES = {
 };
 
 const COLORS = [
-  "bg-violet-700", "bg-blue-700", "bg-emerald-700",
+  "bg-primary/90", "bg-blue-700", "bg-emerald-700",
   "bg-pink-700",   "bg-amber-700","bg-cyan-700",
 ];
 

@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
 import { practiceRoomsDB } from "@/lib/supabase/database";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -231,8 +232,8 @@ export default function RoomSession() {
     return (
       <Card className="text-center py-12">
         <p className="text-foreground font-medium">Room not found</p>
-        <Link to="/app/rooms" className="text-sm text-violet-500 hover:underline mt-2 inline-block">
-          Back to Practice Rooms
+        <Link to="/app/rooms" className="text-sm text-primary hover:underline mt-2 inline-block">
+          Back to {PRODUCT_NAMES.groupPractice}
         </Link>
       </Card>
     );
@@ -248,16 +249,16 @@ export default function RoomSession() {
       <PageHeader
         title={room.name}
         subtitle={room.description ?? "Live practice room"}
-        icon={<Video className="w-5 h-5 text-violet-400" />}
+        icon={<Video className="w-5 h-5 text-primary" />}
         breadcrumbs={[
-          { label: "Practice Rooms", href: "/app/rooms" },
+          { label: PRODUCT_NAMES.groupPractice, href: "/app/rooms" },
           { label: room.name },
         ]}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
-          <Card className="border-violet-500/20">
+          <Card className="border-primary/20">
             <div className="flex items-center justify-between mb-3">
               <div className="flex items-center gap-2">
                 <span
@@ -347,7 +348,7 @@ export default function RoomSession() {
                         className={cn(
                           "max-w-[80%] rounded-xl px-3 py-2 text-sm",
                           isMine
-                            ? "bg-violet-500/20 text-foreground"
+                            ? "bg-primary/20 text-foreground"
                             : "bg-muted/50 text-foreground border border-border",
                         )}
                       >
@@ -373,7 +374,7 @@ export default function RoomSession() {
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   placeholder="Type a message…"
-                  className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                  className="flex-1 rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                 />
                 <Button
                   type="submit"
@@ -409,14 +410,14 @@ export default function RoomSession() {
               <div className="space-y-2">
                 {participants.map((p) => (
                   <div key={p.id} className="flex items-center gap-2">
-                    <div className="w-7 h-7 rounded-full bg-violet-500/15 flex items-center justify-center text-[11px] font-bold text-violet-500">
+                    <div className="w-7 h-7 rounded-full bg-primary/15 flex items-center justify-center text-[11px] font-bold text-primary">
                       {p.user_id.slice(0, 2).toUpperCase()}
                     </div>
                     <span className="text-sm text-foreground truncate flex-1">
                       {p.user_id === user?.id ? "You" : `User ${p.user_id.slice(0, 6)}`}
                     </span>
                     {p.role === "host" && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-violet-500/15 text-violet-500">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/15 text-primary">
                         Host
                       </span>
                     )}

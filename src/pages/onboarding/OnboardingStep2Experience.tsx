@@ -109,13 +109,13 @@ export default function OnboardingStep2Experience({ onNext, onBack }: StepProps)
               className={cn(
                 "flex flex-col items-start gap-0.5 p-3 rounded-xl border text-left transition-all",
                 level === l.value
-                  ? "bg-violet-600/20 border-violet-500/50"
+                  ? "bg-primary/20 border-primary/50"
                   : "bg-secondary/50 border-border hover:border-primary/30",
               )}
             >
               <span className={cn(
                 "text-sm font-semibold",
-                level === l.value ? "text-violet-200" : "text-muted-foreground",
+                level === l.value ? "text-primary" : "text-muted-foreground",
               )}>
                 {l.label}
               </span>
@@ -140,7 +140,7 @@ export default function OnboardingStep2Experience({ onNext, onBack }: StepProps)
           <p className="text-xs font-medium text-muted-foreground">
             How do you feel about interviews?
           </p>
-          <span className="text-xs text-violet-300 font-medium">
+          <span className="text-xs text-primary font-medium">
             {ANXIETY_LABELS[anxiety]}
           </span>
         </div>
@@ -150,7 +150,7 @@ export default function OnboardingStep2Experience({ onNext, onBack }: StepProps)
           max={5}
           value={anxiety}
           onChange={(e) => setAnxiety(Number(e.target.value))}
-          className="w-full accent-violet-500 cursor-pointer"
+          className="w-full accent-primary cursor-pointer"
         />
         <div className="flex justify-between text-[10px] text-muted-foreground mt-1">
           <span>No anxiety</span>

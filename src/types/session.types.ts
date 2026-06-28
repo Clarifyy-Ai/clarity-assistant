@@ -8,14 +8,31 @@ import type { PreferredAIModel, HintStyle } from "./user.types";
 
 export type InterviewType =
   | "behavioural"
+  | "behavioral"
   | "technical"
+  | "coding"
   | "system_design"
   | "hr"
   | "mixed"
   | "product"
-  | "leadership";
+  | "leadership"
+  | "case_study"
+  | "sales"
+  | "customer_success"
+  | "internship"
+  | "academic"
+  | "government_exam";
 
 export type SessionMode = "mock" | "live" | "room";
+
+/** DB `session_type` values that permit server-side AI generation (see `sessionEnforcement.ts`). */
+export const AI_ALLOWED_SESSION_TYPES = [
+  "mock",
+  "warmup",
+  "rehearsal",
+  "room",
+  "practice",
+] as const;
 
 export type SessionStatus =
   | "idle"
@@ -56,6 +73,8 @@ export interface LiveSessionConfig {
   interview_type: string;
   instructions: string;
   enable_system_audio: boolean;
+  mic_device_id?: string | null;
+  noise_suppression?: boolean;
   simple_language?: boolean;
   save_transcript?: boolean;
   session_call_type?: "interview" | "regular_call";

@@ -10,7 +10,7 @@ import {
 import { formatPrice, CREDIT_PACKS } from "@/lib/billing/priceCalculator"
 import { Check, Zap } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { fetchEdgeJson } from "@/lib/network/fetchEdge"
+import { createCheckoutSession, getCheckoutUrls } from "@/lib/api/billing"
 import { toast } from "sonner"
 
 const STRIPE_CONFIGURED =
@@ -44,26 +44,24 @@ export function UpgradeModal() {
 
     setLoading(targetPlanId)
     try {
-      const data = await fetchEdgeJson<{ url?: string; error?: string }>("create-checkout", {
-        price_id: plan.stripePriceIdMonthly,
-        success_url: `${window.location.origin}/app/settings/billing?success=1`,
-        cancel_url: `${window.location.origin}/app/settings/billing?canceled=1`,
+      const urls = getCheckoutUrls()
+      const data = await createCheckoutSession({
+        price_id: plan.stripePriceIdMonthly!,
+        ...urls,
       })
 
       if (data?.url) {
         window.location.href = data.url
-      } else if (data?.error) {
-        const msg: string = data.error
-        toast.error(
-          msg.includes("not configured") || msg.includes("STRIPE_SECRET_KEY")
-            ? "Stripe is not configured on the server. Contact support to upgrade."
-            : msg
-        )
       } else {
         toast.error("Could not create checkout session.")
       }
-    } catch {
-      toast.error("Failed to start checkout. The checkout service may not be deployed yet.")
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : ""
+      toast.error(
+        msg.includes("not configured") || msg.includes("STRIPE_SECRET_KEY")
+          ? "Stripe is not configured on the server. Contact support to upgrade."
+          : "Failed to start checkout. The checkout service may not be deployed yet."
+      )
     } finally {
       setLoading(null)
       uiStore.setUpgradeModalOpen(false)
@@ -87,7 +85,7 @@ export function UpgradeModal() {
 
     setLoading("credits")
     try {
-      const data = await fetchEdgeJson<{ url?: string; error?: string }>("create-checkout", {
+      const data = await createCheckoutSession({
         price_id: priceId,
         success_url: `${window.location.origin}/app/settings/credits?success=1`,
         cancel_url: `${window.location.origin}/app/settings/billing?canceled=1`,
@@ -95,18 +93,16 @@ export function UpgradeModal() {
 
       if (data?.url) {
         window.location.href = data.url
-      } else if (data?.error) {
-        const msg: string = data.error
-        toast.error(
-          msg.includes("not configured") || msg.includes("STRIPE_SECRET_KEY")
-            ? "Stripe is not configured on the server. Contact support to buy credits."
-            : msg
-        )
       } else {
         toast.error("Could not create checkout session.")
       }
-    } catch {
-      toast.error("Failed to start checkout. The checkout service may not be deployed yet.")
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : ""
+      toast.error(
+        msg.includes("not configured") || msg.includes("STRIPE_SECRET_KEY")
+          ? "Stripe is not configured on the server. Contact support to buy credits."
+          : "Failed to start checkout. The checkout service may not be deployed yet."
+      )
     } finally {
       setLoading(null)
       uiStore.setUpgradeModalOpen(false)
@@ -143,7 +139,7 @@ export function UpgradeModal() {
                 "flex flex-col gap-4 rounded-2xl border p-5 transition-all",
                 isHighlighted
                   ? mp.color === "violet"
-                    ? "border-violet-500/50 bg-violet-500/5"
+                    ? "border-primary/50 bg-primary/5"
                     : "border-amber-500/50 bg-amber-500/5"
                   : "border-border bg-secondary/50"
               )}
@@ -153,7 +149,7 @@ export function UpgradeModal() {
                   className={cn(
                     "flex h-9 w-9 items-center justify-center rounded-xl",
                     mp.color === "violet"
-                      ? "bg-violet-500/15 text-violet-400"
+                      ? "bg-primary/15 text-primary"
                       : "bg-amber-500/15 text-amber-400"
                   )}
                 >
@@ -196,7 +192,7 @@ export function UpgradeModal() {
                   isCurrentPlan
                     ? "cursor-not-allowed bg-secondary text-muted-foreground"
                     : mp.color === "violet"
-                    ? "bg-violet-600 text-white hover:bg-violet-500 focus:ring-violet-500"
+                    ? "bg-primary text-white hover:bg-primary/90 focus:ring-primary"
                     : "bg-amber-500 text-black hover:bg-amber-400 focus:ring-amber-500"
                 )}
               >

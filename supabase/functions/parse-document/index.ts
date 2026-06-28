@@ -4,6 +4,10 @@ import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { parseJSON } from "../_shared/gemini.ts";
 import { requireAuth } from "../_shared/utils.ts";
+import {
+  enforceAiRateLimit,
+} from "../_shared/rateLimit.ts";
+import { validateUploadMime } from "../_shared/uploadValidation.ts";
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
@@ -73,15 +77,26 @@ Deno.serve(async (req) => {
 
   try {
     const { userId } = await requireAuth(req);
+
+    const rateLimited = enforceAiRateLimit("parse-document", userId);
+    if (rateLimited) return rateLimited;
+
     const body = await req.json();
     const documentId = body?.document_id as string | undefined;
-    const filePath = body?.file_path as string | undefined;
     const mimeType = (body?.mime_type as string) || "application/pdf";
 
-    if (!documentId || !filePath) {
+    const mimeCheck = validateUploadMime(mimeType);
+    if (!mimeCheck.ok) {
       return new Response(
-        JSON.stringify({ error: "Missing document_id or file_path" }),
-        { status: 400, headers: getCorsHeaders(req) }
+        JSON.stringify({ error: mimeCheck.reason, code: "BAD_REQUEST" }),
+        { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+      );
+    }
+
+    if (!documentId) {
+      return new Response(
+        JSON.stringify({ error: "Missing document_id", code: "BAD_REQUEST" }),
+        { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -93,8 +108,42 @@ Deno.serve(async (req) => {
 
     if (!doc || doc.user_id !== userId) {
       return new Response(
-        JSON.stringify({ error: "Document not found" }),
-        { status: 403, headers: getCorsHeaders(req) }
+        JSON.stringify({ error: "Document not found", code: "FORBIDDEN" }),
+        { status: 403, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
+      );
+    }
+
+    // Derive storage path server-side — never trust client-supplied paths (IDOR).
+    const storagePrefix = `${userId}/cover-letters`;
+    const { data: objects, error: listError } = await db.storage
+      .from("documents")
+      .list(storagePrefix, { search: documentId, limit: 10 });
+
+    if (listError || !objects?.length) {
+      return new Response(
+        JSON.stringify({ error: "Document file not found in storage", code: "NOT_FOUND" }),
+        { status: 404, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
+      );
+    }
+
+    const match = objects.find((obj) => obj.name.includes(documentId));
+    if (!match) {
+      return new Response(
+        JSON.stringify({ error: "Document file not found in storage", code: "NOT_FOUND" }),
+        { status: 404, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
+      );
+    }
+
+    const filePath = `${storagePrefix}/${match.name}`;
+
+    if (
+      filePath.includes("..") ||
+      !filePath.startsWith(`${userId}/`) ||
+      !filePath.includes(documentId)
+    ) {
+      return new Response(
+        JSON.stringify({ error: "Invalid storage path", code: "FORBIDDEN" }),
+        { status: 403, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -104,29 +153,29 @@ Deno.serve(async (req) => {
 
     if (downloadError || !fileData) {
       return new Response(
-        JSON.stringify({ error: "Failed to download file from storage" }),
-        { status: 502, headers: getCorsHeaders(req) }
+        JSON.stringify({ error: "Failed to download file from storage", code: "SERVICE_UNAVAILABLE" }),
+        { status: 502, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
     const buf = await fileData.arrayBuffer();
     if (!buf.byteLength || buf.byteLength > MAX_FILE_BYTES) {
       return new Response(
-        JSON.stringify({ error: "File empty or too large" }),
-        { status: 400, headers: getCorsHeaders(req) }
+        JSON.stringify({ error: "File empty or too large", code: "BAD_REQUEST" }),
+        { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
     const extracted = await extractWithGemini(
       safeBase64(new Uint8Array(buf)),
-      mimeType,
+      mimeCheck.mimeType,
       doc.type ?? "other"
     );
 
     if (!extracted) {
       return new Response(
-        JSON.stringify({ error: "Could not extract text from document" }),
-        { status: 500, headers: getCorsHeaders(req) }
+        JSON.stringify({ error: "Could not extract text from document", code: "INTERNAL_ERROR" }),
+        { status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
       );
     }
 
@@ -150,8 +199,8 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error("[parse-document]", err);
     return new Response(
-      JSON.stringify({ error: "Internal error" }),
-      { status: 500, headers: getCorsHeaders(req) }
+      JSON.stringify({ error: "Internal error", code: "INTERNAL_ERROR" }),
+      { status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
     );
   }
 });

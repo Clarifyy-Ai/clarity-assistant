@@ -4,17 +4,15 @@ import { ArrowLeft } from "lucide-react";
 import { motion } from "framer-motion";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { usePageMeta } from "@/hooks/usePageMeta";
-import { supabase } from "@/lib/supabase/client";
+import {
+  getFallbackArticleBySlug,
+  getFallbackArticlesByCategory,
+  HELP_ARTICLES_FALLBACK,
+  type HelpArticleItem,
+} from "@/lib/constants/helpArticlesFallback";
+import { helpArticlesDB, type HelpArticlePublic } from "@/lib/supabase/database";
 
-interface Article {
-  slug: string;
-  question: string;
-  answer: string;
-  body_md: string | null;
-  category_slug: string;
-  category_title: string;
-  sort_order: number;
-}
+type Article = HelpArticlePublic | HelpArticleItem;
 
 const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
 
@@ -108,54 +106,69 @@ export default function HelpArticle() {
     setLoading(true);
 
     (async () => {
-      // Try category match first
-      const { data: catRows } = await (supabase as any)
-        .from("help_articles")
-        .select("slug, question, answer, body_md, category_slug, category_title, sort_order")
-        .eq("category_slug", slug)
-        .eq("published", true)
-        .order("sort_order", { ascending: true });
+      try {
+        const allPublished = await helpArticlesDB.listPublished();
+
+        if (cancelled) return;
+
+        const catRows = allPublished.filter((a) => a.category_slug === slug);
+        if (catRows.length > 0) {
+          setCategoryArticles(catRows);
+          setArticle(null);
+          setRelated([]);
+          setLoading(false);
+          return;
+        }
+
+        const data = await helpArticlesDB.getBySlug(slug);
+
+        if (cancelled) return;
+
+        if (data) {
+          setArticle(data);
+          setCategoryArticles(null);
+          setRelated(
+            allPublished
+              .filter(
+                (a) => a.category_slug === data.category_slug && a.slug !== slug,
+              )
+              .slice(0, 3),
+          );
+          setLoading(false);
+          return;
+        }
+      } catch {
+        // fall through to static fallback below
+      }
 
       if (cancelled) return;
 
-      if (catRows && catRows.length > 0) {
-        setCategoryArticles(catRows as Article[]);
+      const fallbackCat = getFallbackArticlesByCategory(slug);
+      if (fallbackCat.length > 0) {
+        setCategoryArticles(fallbackCat);
         setArticle(null);
         setRelated([]);
         setLoading(false);
         return;
       }
 
-      // Single article lookup
-      const { data } = await (supabase as any)
-        .from("help_articles")
-        .select("slug, question, answer, body_md, category_slug, category_title, sort_order")
-        .eq("slug", slug)
-        .eq("published", true)
-        .maybeSingle();
-
-      if (cancelled) return;
-
-      if (!data) {
-        setArticle(null);
+      const fallbackArticle = getFallbackArticleBySlug(slug);
+      if (fallbackArticle) {
+        setArticle(fallbackArticle);
         setCategoryArticles(null);
+        setRelated(
+          HELP_ARTICLES_FALLBACK.filter(
+            (a) =>
+              a.category_slug === fallbackArticle.category_slug &&
+              a.slug !== slug,
+          ).slice(0, 3),
+        );
         setLoading(false);
         return;
       }
 
-      setArticle(data as Article);
+      setArticle(null);
       setCategoryArticles(null);
-
-      const { data: siblings } = await (supabase as any)
-        .from("help_articles")
-        .select("slug, question, answer, body_md, category_slug, category_title, sort_order")
-        .eq("category_slug", (data as Article).category_slug)
-        .eq("published", true)
-        .neq("slug", slug)
-        .order("sort_order", { ascending: true })
-        .limit(3);
-
-      if (!cancelled) setRelated((siblings as Article[]) ?? []);
       setLoading(false);
     })();
 

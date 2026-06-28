@@ -3,6 +3,9 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
+import {
+  enforceDataExportRateLimit,
+} from "../_shared/rateLimit.ts";
 
 Deno.serve(async (req) => {
   const cors = handleCors(req);
@@ -12,6 +15,10 @@ Deno.serve(async (req) => {
     const auth = await authenticateRequest(req);
     if (auth.error) return auth.error;
     const user = auth.context.user;
+
+    const rateLimited = enforceDataExportRateLimit(user.id);
+    if (rateLimited) return rateLimited;
+
     const db = createServiceClient();
 
     /* ---------------------------------------------------
@@ -145,7 +152,7 @@ Deno.serve(async (req) => {
   } catch (err) {
     console.error("[export-user-data] error:", err);
     return new Response(
-      JSON.stringify({ error: "Internal server error" }),
+      JSON.stringify({ error: "Internal server error", code: "INTERNAL_ERROR" }),
       {
         status: 500,
         headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },

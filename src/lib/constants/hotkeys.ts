@@ -36,6 +36,15 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
     category:    "overlay",
     global:      true,
   },
+  /** T-0293/T-0307/T-0308 — alias for overlay toggle (also registered globally in Electron) */
+  TOGGLE_OVERLAY_ALIAS: {
+    keys:        "Ctrl+Shift+C",
+    mac:         "⌘+Shift+C",
+    action:      "overlay:toggle",
+    description: "Show / hide the overlay window (alternate shortcut)",
+    category:    "overlay",
+    global:      true,
+  },
   PANIC_CALM: {
     keys:        "Ctrl+Shift+P",
     mac:         "⌘+Shift+P",
@@ -52,18 +61,32 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
     category:    "overlay",
     global:      true,
   },
-  SNAP_LEFT: {
-    keys:        "Ctrl+Shift+ArrowLeft",
-    mac:         "⌘+Shift+←",
-    action:      "overlay:snap_left",
-    description: "Snap overlay to left edge",
+  DOCK_TOP_LEFT: {
+    keys:        "Ctrl+1",
+    mac:         "⌘+1",
+    action:      "overlay:dock_top_left",
+    description: "Dock overlay to top-left corner",
     category:    "overlay",
   },
-  SNAP_RIGHT: {
-    keys:        "Ctrl+Shift+ArrowRight",
-    mac:         "⌘+Shift+→",
-    action:      "overlay:snap_right",
-    description: "Snap overlay to right edge",
+  DOCK_TOP_RIGHT: {
+    keys:        "Ctrl+2",
+    mac:         "⌘+2",
+    action:      "overlay:dock_top_right",
+    description: "Dock overlay to top-right corner",
+    category:    "overlay",
+  },
+  DOCK_BOTTOM_LEFT: {
+    keys:        "Ctrl+3",
+    mac:         "⌘+3",
+    action:      "overlay:dock_bottom_left",
+    description: "Dock overlay to bottom-left corner",
+    category:    "overlay",
+  },
+  DOCK_BOTTOM_RIGHT: {
+    keys:        "Ctrl+4",
+    mac:         "⌘+4",
+    action:      "overlay:dock_bottom_right",
+    description: "Dock overlay to bottom-right corner",
     category:    "overlay",
   },
   INCREASE_OPACITY: {
@@ -80,13 +103,35 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
     description: "Decrease overlay opacity",
     category:    "overlay",
   },
-
-  // ── Live Session ─────────────────────────────────────────────────────────────
-  START_SESSION: {
+  SCROLL_ANSWER_UP: {
     keys:        "Ctrl+Shift+S",
     mac:         "⌘+Shift+S",
-    action:      "session:start",
-    description: "Start a live interview session",
+    action:      "overlay:scroll_up",
+    description: "Scroll answer panel up",
+    category:    "overlay",
+  },
+  SCROLL_ANSWER_DOWN: {
+    keys:        "Ctrl+Shift+D",
+    mac:         "⌘+Shift+D",
+    action:      "overlay:scroll_down",
+    description: "Scroll answer panel down",
+    category:    "overlay",
+  },
+  CLEAR_ANSWER: {
+    keys:        "Ctrl+Shift+Q",
+    mac:         "⌘+Shift+Q",
+    action:      "overlay:clear_answer",
+    description: "Clear current answer / hint",
+    category:    "overlay",
+  },
+
+  // ── Practice Session ─────────────────────────────────────────────────────────────
+  // T-0295/T-0305: click-through stealth removed for compliance — discrete UI is opacity-only.
+  TOGGLE_STEALTH: {
+    keys:        "Ctrl+Shift+T",
+    mac:         "⌘+Shift+T",
+    action:      "overlay:toggle_stealth",
+    description: "Toggle discrete UI mode (lower opacity until hover)",
     category:    "session",
   },
   END_SESSION: {
@@ -94,13 +139,6 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
     mac:         "⌘+Shift+E",
     action:      "session:end",
     description: "End the current session",
-    category:    "session",
-  },
-  PAUSE_SESSION: {
-    keys:        "Ctrl+Shift+P",
-    mac:         "⌘+Shift+P",
-    action:      "session:pause",
-    description: "Pause / resume session",
     category:    "session",
   },
   NEXT_QUESTION: {
@@ -141,18 +179,26 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
     description: "Rephrase the current answer",
     category:    "ai",
   },
-  COPY_ANSWER: {
-    keys:        "Ctrl+Shift+C",
-    mac:         "⌘+Shift+C",
-    action:      "ai:copy_answer",
-    description: "Copy generated answer to clipboard",
+  CAPTURE_CODING: {
+    keys:        "Ctrl+Shift+G",
+    mac:         "⌘+Shift+G",
+    action:      "ai:capture_coding",
+    description: "Capture coding problem screenshot for AI analysis",
     category:    "ai",
   },
-  SAVE_ANSWER: {
+  REQUEST_AI_ANSWER: {
     keys:        "Ctrl+Shift+A",
     mac:         "⌘+Shift+A",
-    action:      "ai:save_answer",
-    description: "Save answer to answer bank",
+    action:      "ai:request_answer",
+    description: "Request AI answer (global shortcut in Electron)",
+    category:    "ai",
+    global:      true,
+  },
+  CYCLE_HINT_STYLE: {
+    keys:        "Ctrl+Shift+Y",
+    mac:         "⌘+Shift+Y",
+    action:      "ai:cycle_hint_style",
+    description: "Cycle hint style (Full → Short → Keywords)",
     category:    "ai",
   },
   CYCLE_MODEL: {
@@ -269,7 +315,7 @@ export function getHotkeyDisplay(hotkey: HotkeyDefinition): string {
 
 export const HOTKEY_CATEGORIES: Record<HotkeyCategory, string> = {
   overlay:    "Overlay Controls",
-  session:    "Live Session",
+  session:    "Practice Session",
   ai:         "AI Actions",
   audio:      "Audio Controls",
   navigation: "Navigation",

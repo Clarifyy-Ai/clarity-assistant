@@ -5,9 +5,12 @@ import { Button } from "@/components/ui/Button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
 import { Badge } from "@/components/ui/Badge";
 import {
-  BarChart2, Activity, Cpu, FileText, MessageSquare, RefreshCw, Loader2,
+  BarChart2, Activity, Cpu, FileText, MessageSquare, RefreshCw,
 } from "lucide-react";
 import { format, subDays } from "date-fns";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 
 type Period = 1 | 7 | 30 | 90;
 
@@ -18,7 +21,7 @@ export default function AdminAnalytics() {
     <div className="space-y-5">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-          <BarChart2 className="w-5 h-5 text-violet-400" /> Platform Analytics
+          <BarChart2 className="w-5 h-5 text-primary" /> Platform Analytics
         </h1>
         <div className="flex gap-1 p-1 bg-secondary rounded-xl border border-border">
           {([1, 7, 30, 90] as Period[]).map((p) => (
@@ -26,7 +29,7 @@ export default function AdminAnalytics() {
               key={p}
               onClick={() => setPeriod(p)}
               className={`px-3 py-1 text-xs font-semibold rounded-lg transition ${
-                period === p ? "bg-violet-500/20 text-violet-300" : "text-muted-foreground hover:text-foreground"
+                period === p ? "bg-primary/20 text-primary/80" : "text-muted-foreground hover:text-foreground"
               }`}
             >
               {p === 1 ? "24h" : `${p}d`}
@@ -107,10 +110,7 @@ function OverviewTab({ period }: { period: Period }) {
     return (
       <div className="space-y-4">
         {loadError && (
-          <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-3">
-            <span className="flex-1">{loadError}</span>
-            <Button size="sm" variant="outline" onClick={() => void load()}>Retry</Button>
-          </div>
+          <InlineErrorRetry message={loadError} onRetry={() => void load()} />
         )}
         <SkeletonGrid />
       </div>
@@ -134,7 +134,7 @@ function OverviewTab({ period }: { period: Period }) {
           {signupSeries.map((d) => (
             <div key={d.day} className="flex-1 flex flex-col items-center gap-1 group relative">
               <div
-                className="w-full bg-violet-500/50 hover:bg-violet-500 rounded-sm transition-all"
+                className="w-full bg-primary/50 hover:bg-primary rounded-sm transition-all"
                 style={{ height: `${(d.count / max) * 100}%`, minHeight: "2px" }}
               />
             </div>
@@ -178,10 +178,7 @@ function PerfTab({ period }: { period: Period }) {
   return (
     <div className="space-y-4">
       {loadError && (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-3">
-          <span className="flex-1">{loadError}</span>
-          <Button size="sm" variant="outline" onClick={() => void load()}>Retry</Button>
-        </div>
+        <InlineErrorRetry message={loadError} onRetry={() => void load()} />
       )}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
         <Stat label="Total calls" value={totalCalls.toLocaleString()} sub={`last ${period}d`} />
@@ -196,9 +193,12 @@ function PerfTab({ period }: { period: Period }) {
           <Button size="xs" variant="secondary" onClick={load} leftIcon={<RefreshCw className="w-3 h-3" />}>Refresh</Button>
         </div>
         {rows.length === 0 ? (
-          <div className="p-12 text-center text-sm text-muted-foreground">
-            No request metrics yet — they'll appear here once edge-function calls are logged.
-          </div>
+          <EmptyState
+            icon={Cpu}
+            title="No request metrics yet"
+            description="Edge-function performance data will appear here once calls are logged."
+            compact
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -248,27 +248,35 @@ type AIModelRow = {
 function AITab({ period }: { period: Period }) {
   const [rows, setRows] = useState<AIModelRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   useEffect(() => { void load(); }, [period]);
 
   async function load() {
     setLoading(true);
-    const since = new Date(Date.now() - period * 86400_000).toISOString();
-    const data = await adminAnalyticsDB.getModelCostLogsSince(since);
-    const map: Record<string, AIModelRow> = {};
-    data.forEach((r) => {
-      const model = r.model ?? "unknown";
-      if (!map[model]) {
-        map[model] = { model, calls: 0, tokens_in: 0, tokens_out: 0, cost: 0, credits: 0 };
-      }
-      map[model].calls++;
-      map[model].tokens_in += Number(r.tokens_in ?? 0);
-      map[model].tokens_out += Number(r.tokens_out ?? 0);
-      map[model].cost += Number(r.cost_usd ?? 0);
-      map[model].credits += Number(r.credits_charged ?? 0);
-    });
-    setRows(Object.values(map).sort((a, b) => b.cost - a.cost));
-    setLoading(false);
+    setLoadError(null);
+    try {
+      const since = new Date(Date.now() - period * 86400_000).toISOString();
+      const data = await adminAnalyticsDB.getModelCostLogsSince(since);
+      const map: Record<string, AIModelRow> = {};
+      data.forEach((r) => {
+        const model = r.model ?? "unknown";
+        if (!map[model]) {
+          map[model] = { model, calls: 0, tokens_in: 0, tokens_out: 0, cost: 0, credits: 0 };
+        }
+        map[model].calls++;
+        map[model].tokens_in += Number(r.tokens_in ?? 0);
+        map[model].tokens_out += Number(r.tokens_out ?? 0);
+        map[model].cost += Number(r.cost_usd ?? 0);
+        map[model].credits += Number(r.credits_charged ?? 0);
+      });
+      setRows(Object.values(map).sort((a, b) => b.cost - a.cost));
+    } catch (err) {
+      setLoadError(err instanceof Error ? err.message : "Failed to load AI usage");
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
   }
 
   if (loading) return <SkeletonGrid />;
@@ -278,6 +286,9 @@ function AITab({ period }: { period: Period }) {
 
   return (
     <div className="space-y-4">
+      {loadError && (
+        <InlineErrorRetry message={loadError} onRetry={() => void load()} />
+      )}
       <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
         <Stat label="Total AI cost" value={`$${totalCost.toFixed(2)}`} sub={`last ${period}d`} />
         <Stat label="Credits charged" value={totalCredits.toFixed(0)} />
@@ -294,7 +305,14 @@ function AITab({ period }: { period: Period }) {
           </thead>
           <tbody className="divide-y divide-white/5">
             {rows.length === 0 ? (
-              <tr><td colSpan={6} className="px-3 py-8 text-center text-sm text-muted-foreground">No AI activity in this period</td></tr>
+              <tr><td colSpan={6}>
+                <EmptyState
+                  icon={Cpu}
+                  title="No AI activity in this period"
+                  description="Model usage will show up here after users run AI features."
+                  compact
+                />
+              </td></tr>
             ) : rows.map((r) => (
               <tr key={r.model} className="hover:bg-muted/20">
                 <td className="px-3 py-2 font-mono text-xs">{r.model}</td>
@@ -358,7 +376,7 @@ function MockTab({ period }: { period: Period }) {
               <div key={e.exam} className="flex items-center gap-3">
                 <span className="text-xs text-foreground w-32 truncate">{e.exam.replace(/_/g, " ")}</span>
                 <div className="flex-1 h-2 bg-muted/30 rounded-full overflow-hidden">
-                  <div className="h-full bg-violet-500" style={{ width: `${(e.count / stats.byExam[0].count) * 100}%` }} />
+                  <div className="h-full bg-primary" style={{ width: `${(e.count / stats.byExam[0].count) * 100}%` }} />
                 </div>
                 <span className="text-xs font-bold w-10 text-right">{e.count}</span>
               </div>
@@ -415,7 +433,7 @@ function SkeletonGrid() {
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
       {[...Array(4)].map((_, i) => (
-        <div key={i} className="h-24 rounded-2xl bg-card border border-border animate-pulse" />
+        <SkeletonCard key={i} />
       ))}
     </div>
   );

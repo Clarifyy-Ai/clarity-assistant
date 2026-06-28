@@ -1,23 +1,22 @@
 # Clarify AI
 
-> AI-powered interview preparation platform: real-time coaching during live interviews via a stealth overlay, full mock-interview engine with AI-graded scorecards, and a prep lab covering behavioral, technical, and system-design rounds.
+> AI-powered interview preparation platform: live practice coaching during mock and rehearsal sessions, full mock-interview engine with AI-graded scorecards, and a prep lab covering behavioral, technical, and system-design rounds. AI features are for preparation only — not for use during actual third-party interviews.
 
 ## Pages
 
 - [Home](/): Product overview, features, comparison, testimonials, FAQ.
-- [Pricing](/pricing): Free, Starter, Pro, and Elite plan details and credits.
+- [Pricing](/pricing): Free, Pro, and Enterprise plan details and credits.
 - [Blog](/blog): Articles on interview prep, AI coaching, and career strategy.
 - [Help](/help): Help center with how-tos, troubleshooting, and FAQs.
-- [Shortcuts](/shortcuts): Keyboard shortcuts for the live overlay and app.
+- [Shortcuts](/shortcuts): Keyboard shortcuts for the practice overlay and app.
 - [Terms](/terms): Terms of Service.
 - [Privacy](/privacy): Privacy Policy and data handling.
-- [Sign up](/signup): Create a free account (20 credits/month).
+- [Sign up](/signup): Create a free account (200 credits/month).
 - [Log in](/login): Sign in to your Clarify AI account.
 
 ## Key features
 
-- Stealth overlay invisible to Zoom, Google Meet, and Microsoft Teams screen capture.
-- Multi-model routing across GPT-4o, Claude 3.5 Sonnet, and Gemini 1.5 Pro.
+- Live AI practice coach with sub-second hint latency for mock and rehearsal sessions.
+- Multi-model routing across GPT-4o, Claude 3.5 Sonnet, and Gemini 2.0 Flash.
 - Mock interview engine with WPM, filler-word, and confidence scoring.
 - Resume vs job-description gap analysis.
-- BYOK (bring your own API key) on Pro and Elite plans.

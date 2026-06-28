@@ -9,11 +9,13 @@ import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { toast } from "sonner";
 import {
   BookOpen, Search, Star, Trash2,
   ChevronDown, ChevronUp, Copy,
-  Edit2, Check, Filter, Plus,
+  Edit2, Check, Plus,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -101,9 +103,7 @@ export default function AnswerBank() {
   return (
     <div className="space-y-5 max-w-4xl">
       {loadError && (
-        <div className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          {loadError}
-        </div>
+        <InlineErrorRetry message={loadError} onRetry={() => void fetchAnswers()} />
       )}
 
       <PageHeader
@@ -155,12 +155,14 @@ export default function AnswerBank() {
           {[...Array(3)].map((_, i) => <SkeletonCard key={i} />)}
         </div>
       ) : filtered.length === 0 ? (
-        <Card className="text-center py-16">
-          <BookOpen className="w-10 h-10 text-muted-foreground/40 mx-auto mb-3" />
-          <p className="text-muted-foreground text-sm">No saved answers yet.</p>
-          <p className="text-muted-foreground text-xs mt-1">
-            Save answers from sessions or build them in Prep Lab.
-          </p>
+        <Card>
+          <EmptyState
+            icon={BookOpen}
+            title="No saved answers yet"
+            description="Save answers from sessions or build them in Prep Lab."
+            actionLabel="Add answer"
+            onAction={() => setAddOpen(true)}
+          />
         </Card>
       ) : (
         <div className="space-y-3">
@@ -173,8 +175,8 @@ export default function AnswerBank() {
               <Card key={ans.id}>
                 {/* Header row */}
                 <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-violet-500/10 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
-                    <Star className="w-3.5 h-3.5 text-violet-400" />
+                  <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                    <Star className="w-3.5 h-3.5 text-primary" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-medium text-foreground leading-snug">
@@ -281,7 +283,7 @@ export default function AnswerBank() {
                             key={k}
                             className="bg-secondary border border-border rounded-xl p-3"
                           >
-                            <p className="text-[10px] font-bold text-violet-400 uppercase mb-1">
+                            <p className="text-[10px] font-bold text-primary uppercase mb-1">
                               {k}
                             </p>
                             <p className="text-xs text-muted-foreground">{v as string}</p>

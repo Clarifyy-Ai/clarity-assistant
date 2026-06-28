@@ -9,6 +9,7 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
   const hasSystem = useAudioStore((s) => !!s.streams?.system_stream);
   const isMuted = useAudioStore((s) => s.is_muted ?? false);
+  const currentLevel = useAudioStore((s) => s.levels?.current_level ?? 0);
   const deepgramStatus = useAudioStore((s) => s.deepgram_status ?? "disconnected");
   const streamError = useAudioStore((s) => s.streams?.error ?? null);
 
@@ -36,6 +37,27 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
         {isMuted ? <MicOff className="w-2.5 h-2.5" /> : <Mic className="w-2.5 h-2.5" />}
         {isMuted ? "Muted" : "Mic"}
       </span>
+
+      {!isMuted && isCapturing && (
+        <span
+          className="inline-flex items-center gap-1 rounded-md px-1.5 py-0.5 font-mono text-[10px] border border-white/10 bg-white/[0.04]"
+          title="Microphone input level"
+          aria-label={`Mic level ${Math.round(currentLevel)} percent`}
+        >
+          <span className="flex items-end gap-0.5 h-3">
+            {[0.25, 0.5, 0.75, 1].map((threshold) => (
+              <span
+                key={threshold}
+                className={cn(
+                  "w-0.5 rounded-sm transition-all",
+                  currentLevel / 100 >= threshold ? "bg-emerald-400" : "bg-white/15",
+                )}
+                style={{ height: `${threshold * 12}px` }}
+              />
+            ))}
+          </span>
+        </span>
+      )}
 
       <span
         className={cn(

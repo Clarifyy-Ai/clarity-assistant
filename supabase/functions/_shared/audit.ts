@@ -49,6 +49,8 @@ export type AuditAction =
   | "AI_COACH_CHAT"
   | "RESUME_UPLOAD"
   | "RESUME_PARSE"
+  | "DOCUMENT_UPLOAD"
+  | "DOCUMENT_DOWNLOAD"
   | "DOCUMENT_DELETE"
   | "CREDITS_DEDUCT"
   | "CREDITS_ADD"
@@ -57,9 +59,12 @@ export type AuditAction =
   | "SUBSCRIPTION_RESUME"
   | "STRIPE_WEBHOOK_RECEIVED"
   | "STRIPE_WEBHOOK_PROCESSED"
+  | "SETTINGS_UPDATE"
   | "ACCOUNT_DELETE"
   | "DATA_EXPORT"
   | "ADMIN_ACTION"
+  | "ADMIN_FEATURE_FLAG_CHANGE"
+  | "ADMIN_USER_IMPERSONATE"
   | "RATE_LIMIT_BLOCK"
   | "VALIDATION_FAILURE"
   | "AUTH_FAILURE"
@@ -79,6 +84,7 @@ export type AuditResourceType =
   | "credits"
   | "webhook"
   | "account"
+  | "settings"
   | "admin"
   | "system"
   | "unknown";
@@ -507,5 +513,85 @@ export async function logDataExportAudit(options: {
     resourceId: options.userId,
     status: options.status ?? "success",
     metadata: options.metadata ?? {},
+  });
+}
+
+/**
+ * Helper for document access audit events (upload, download, delete).
+ */
+export async function logDocumentAudit(options: {
+  req: Request;
+  userId: string;
+  action: "DOCUMENT_UPLOAD" | "DOCUMENT_DOWNLOAD" | "DOCUMENT_DELETE";
+  documentId?: string | null;
+  documentType?: string;
+  status?: AuditStatus;
+  metadata?: Record<string, unknown>;
+}): Promise<void> {
+  await logAuditEventFromRequest({
+    req: options.req,
+    userId: options.userId,
+    action: options.action,
+    resourceType: "document",
+    resourceId: options.documentId ?? null,
+    status: options.status ?? "success",
+    metadata: {
+      documentType: options.documentType,
+      ...options.metadata,
+    },
+  });
+}
+
+/**
+ * Helper for settings change audit events.
+ */
+export async function logSettingsAudit(options: {
+  req: Request;
+  userId: string;
+  settingKey: string;
+  oldValue?: unknown;
+  newValue?: unknown;
+  status?: AuditStatus;
+  metadata?: Record<string, unknown>;
+}): Promise<void> {
+  await logAuditEventFromRequest({
+    req: options.req,
+    userId: options.userId,
+    action: "SETTINGS_UPDATE",
+    resourceType: "settings",
+    resourceId: options.settingKey,
+    status: options.status ?? "success",
+    metadata: {
+      settingKey: options.settingKey,
+      oldValue: sanitizeMetadataValue(options.oldValue),
+      newValue: sanitizeMetadataValue(options.newValue),
+      ...options.metadata,
+    },
+  });
+}
+
+/**
+ * Helper for admin action audit events.
+ */
+export async function logAdminAudit(options: {
+  req: Request;
+  userId: string;
+  action: "ADMIN_ACTION" | "ADMIN_FEATURE_FLAG_CHANGE" | "ADMIN_USER_IMPERSONATE";
+  targetUserId?: string | null;
+  resourceId?: string | null;
+  status?: AuditStatus;
+  metadata?: Record<string, unknown>;
+}): Promise<void> {
+  await logAuditEventFromRequest({
+    req: options.req,
+    userId: options.userId,
+    action: options.action,
+    resourceType: "admin",
+    resourceId: options.resourceId ?? null,
+    status: options.status ?? "success",
+    metadata: {
+      targetUserId: options.targetUserId,
+      ...options.metadata,
+    },
   });
 }

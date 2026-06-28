@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { creditsDB } from "@/lib/supabase/database";
+import { supabase } from "@/integrations/supabase/client";
 import { formatNumber, formatCents, formatPercent } from "@/lib/utils/formatters";
+import { subDays } from "date-fns";
 
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
@@ -76,7 +78,18 @@ export default function AdminModelCosts() {
     else             setIsLoading(true);
 
     try {
-      const data = await creditsDB.listRecent(2000);
+      const days = dateRange === "7d" ? 7 : dateRange === "30d" ? 30 : 90;
+      const since = subDays(new Date(), days).toISOString();
+
+      const [creditData, usageRes] = await Promise.all([
+        creditsDB.listRecent(2000),
+        supabase
+          .from("ai_usage_logs" as "profiles")
+          .select("model, input_tokens, output_tokens, cost_microcents, latency_ms")
+          .gte("created_at", since),
+      ]);
+
+      const data = creditData;
 
       if (data.length > 0) {
         const featureMap: Record<string, number> = {};
@@ -97,8 +110,51 @@ export default function AdminModelCosts() {
         );
       }
 
-      // Per-model token/cost telemetry is not stored in Postgres yet; show real credit data only.
-      setModelStats([]);
+      const usageRows = (usageRes.data ?? []) as Array<{
+        model?: string | null;
+        input_tokens?: number | null;
+        output_tokens?: number | null;
+        cost_microcents?: number | null;
+        latency_ms?: number | null;
+      }>;
+      const modelMap = new Map<string, ModelUsageStat>();
+
+      for (const row of usageRows) {
+        const modelId = String(row.model ?? "unknown");
+        const provider = modelId.startsWith("gpt")
+          ? "openai"
+          : modelId.startsWith("claude")
+            ? "anthropic"
+            : modelId.startsWith("gemini")
+              ? "gemini"
+              : "other";
+
+        const existing = modelMap.get(modelId) ?? {
+          modelId,
+          provider,
+          callCount: 0,
+          tokensIn: 0,
+          tokensOut: 0,
+          costUSDCents: 0,
+          revenueCredits: 0,
+          avgLatencyMs: 0,
+          errorRate: 0,
+        };
+
+        existing.callCount += 1;
+        existing.tokensIn += Number(row.input_tokens) || 0;
+        existing.tokensOut += Number(row.output_tokens) || 0;
+        existing.costUSDCents += Math.round((Number(row.cost_microcents) || 0) / 10_000);
+        existing.avgLatencyMs += Number(row.latency_ms) || 0;
+        modelMap.set(modelId, existing);
+      }
+
+      setModelStats(
+        [...modelMap.values()].map((m) => ({
+          ...m,
+          avgLatencyMs: m.callCount ? Math.round(m.avgLatencyMs / m.callCount) : 0,
+        })).sort((a, b) => b.costUSDCents - a.costUSDCents),
+      );
     } catch (err) {
       console.error("[AdminModelCosts] fetch error:", err);
     } finally {

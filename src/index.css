@@ -27,6 +27,14 @@
     --input:              220 13% 91%;
     --ring:               239 84% 67%;
     --radius:             0.625rem;
+    --spacing-scale:      1;
+
+    /* Motion tokens — consistent micro-interaction timing */
+    --motion-fast:        150ms;
+    --motion-base:        200ms;
+    --motion-slow:        300ms;
+    --motion-ease:        cubic-bezier(0.4, 0, 0.2, 1);
+    --motion-ease-out:    cubic-bezier(0, 0, 0.2, 1);
 
     --chart-1: 239 84% 67%;
     --chart-2: 189 94% 43%;
@@ -214,7 +222,15 @@
   pre { @apply bg-muted rounded-lg p-4 overflow-x-auto; }
 
   a { @apply text-primary underline-offset-4 transition-colors; }
-  a:hover { @apply opacity-80; }
+  a:hover { @apply underline; }
+
+  tbody tr {
+    @apply transition-colors duration-150;
+  }
+
+  tbody tr:hover {
+    @apply bg-muted/50;
+  }
 }
 
 /* ─────────────────────────────────────────────────────────────────
@@ -294,6 +310,19 @@
     50%       { transform: scale(1.12); opacity: 1;   }
   }
 
+  /* Streak flame pulse on dashboard */
+  @keyframes streak-flame {
+    0%, 100% { transform: scale(1) rotate(0deg); opacity: 1; }
+    25%       { transform: scale(1.18) rotate(-4deg); opacity: 0.85; }
+    50%       { transform: scale(1.1) rotate(4deg); opacity: 1; }
+    75%       { transform: scale(1.14) rotate(-2deg); opacity: 0.9; }
+  }
+
+  .animate-streak-flame {
+    animation: streak-flame 1.4s ease-in-out infinite;
+    transform-origin: center bottom;
+  }
+
   /* Gradient text */
   .gradient-text {
     @apply bg-clip-text text-transparent;
@@ -351,14 +380,58 @@
     @apply rounded-full h-full transition-all duration-700;
   }
 
-  .page-section { @apply px-4 py-6 md:px-6 lg:px-8; }
+  .page-section {
+    padding-inline: calc(1rem * var(--spacing-scale));
+    padding-block: calc(1.5rem * var(--spacing-scale));
+  }
+
+  @media (min-width: 768px) {
+    .page-section {
+      padding-inline: calc(1.5rem * var(--spacing-scale));
+    }
+  }
+
+  @media (min-width: 1024px) {
+    .page-section {
+      padding-inline: calc(2rem * var(--spacing-scale));
+    }
+  }
+
+  /* Density aliases — applyAppearance sets data-density + these classes on html */
+  html[data-density="compact"],
+  html.density-compact {
+    --spacing-scale: 0.875;
+  }
+
+  html[data-density="comfortable"],
+  html.density-comfortable {
+    --spacing-scale: 1.125;
+  }
+
+  html[data-density="compact"] .density-card,
+  html.density-compact .density-card,
+  html[data-density="comfortable"] .density-card,
+  html.density-comfortable .density-card {
+    padding: calc(1.25rem * var(--spacing-scale));
+  }
 
   .nav-item {
     @apply flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium
-           text-muted-foreground transition-all duration-150
+           text-muted-foreground transition-all duration-150 ease-out
            hover:bg-secondary hover:text-foreground;
   }
-  .nav-item.active { @apply bg-primary/10 text-primary; }
+  .nav-item.active { @apply bg-primary/10 text-primary font-semibold; }
+
+  /* Premium interactive surfaces */
+  .interactive-surface {
+    @apply transition-[background-color,border-color,box-shadow,transform] duration-200 ease-out;
+  }
+  .interactive-surface:hover {
+    @apply shadow-md;
+  }
+  .interactive-surface:active {
+    @apply scale-[0.995] motion-reduce:scale-100;
+  }
 
   .hotkey-badge {
     @apply inline-flex items-center justify-center rounded border border-border
@@ -395,7 +468,8 @@
 /* ─────────────────────────────────────────────────────────────────
    Overlay Compositor Layer
    ───────────────────────────────────────────────────────────────── */
-#overlay-root {
+#overlay-root,
+#clarify-overlay-root {
   position: fixed;
   top: 0;
   left: 0;
@@ -403,7 +477,7 @@
   height: 0;
   overflow: visible;
   pointer-events: none;
-  z-index: 2147483647;
+  z-index: 1100;
   isolation: isolate;
   will-change: transform;
   transform: translateZ(0);

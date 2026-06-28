@@ -5,37 +5,28 @@ import { useOverlayStore } from "@/store/overlayStore";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Cpu, Check, Loader2 } from "lucide-react";
+import { Cpu, Check, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { PreferredAIModel } from "@/types/user.types";
-
-const LAUNCH_MODELS: { value: PreferredAIModel; label: string; desc: string; badge: string }[] = [
-  {
-    value: "gemini-flash",
-    label: "Gemini Flash",
-    desc: "Fastest responses — best for live interviews and quick hints.",
-    badge: "Recommended",
-  },
-  {
-    value: "gemini-pro",
-    label: "Gemini Pro",
-    desc: "Deeper reasoning — system design and complex behavioural answers.",
-    badge: "Pro quality",
-  },
-];
+import { MODEL_OPTIONS, normalizePreferredModel } from "@/lib/ai/modelOptions";
+import { normalizeToDisplayTier } from "@/lib/constants/pricing";
+import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 
 export default function SettingsModels() {
   const profile = useAuthStore((s) => s.profile);
+  const planId = useAuthStore((s) => s.planId);
   const setProfile = useAuthStore((s) => s.setProfile);
+  const isPro = normalizeToDisplayTier(planId) !== "free";
+
   const [selected, setSelected] = useState<PreferredAIModel>(
-    (profile?.preferred_model as PreferredAIModel) ?? "gemini-flash"
+    normalizePreferredModel(profile?.preferred_model)
   );
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (profile?.preferred_model) {
-      setSelected(profile.preferred_model as PreferredAIModel);
+      setSelected(normalizePreferredModel(profile.preferred_model));
     }
   }, [profile?.preferred_model]);
 
@@ -53,9 +44,7 @@ export default function SettingsModels() {
       if (error) throw error;
       if (data) setProfile(data as unknown as typeof profile);
 
-      useOverlayStore.getState().setActiveModel(
-        selected === "gemini-pro" ? "gemini-pro" : "gemini-flash"
-      );
+      useOverlayStore.getState().setActiveModel(normalizePreferredModel(selected));
 
       toast.success("AI model preference saved.");
     } catch (err) {
@@ -66,43 +55,54 @@ export default function SettingsModels() {
   }
 
   return (
-    <div className="space-y-5">
-      <h2 className="text-lg font-bold text-foreground">AI Models</h2>
-
+    <SettingsPageShell title="AI Models">
       <Card>
         <div className="flex items-start gap-3 mb-4">
-          <Cpu className="w-5 h-5 text-violet-500 flex-shrink-0 mt-0.5" />
+          <Cpu className="w-5 h-5 text-primary flex-shrink-0 mt-0.5" />
           <div>
             <h3 className="text-sm font-semibold text-foreground">Default model</h3>
             <p className="text-xs text-muted-foreground mt-1">
-              Launch uses Google Gemini only. Your choice applies to live co-pilot, mock
-              interviews, and prep tools.
+              Gemini Flash is the default for sub-second live hints. Pro plans unlock GPT-4o and
+              Claude for deeper reasoning — routed automatically per task.
             </p>
           </div>
         </div>
 
         <div className="space-y-2">
-          {LAUNCH_MODELS.map((m) => (
-            <button
-              key={m.value}
-              type="button"
-              onClick={() => setSelected(m.value)}
-              className={cn(
-                "w-full text-left rounded-xl border p-3 transition-all",
-                selected === m.value
-                  ? "border-violet-500/50 bg-violet-500/10"
-                  : "border-border hover:border-violet-500/30"
-              )}
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm font-semibold text-foreground">{m.label}</span>
-                <Badge variant="secondary" size="sm">
-                  {m.badge}
-                </Badge>
-              </div>
-              <p className="text-xs text-muted-foreground mt-1">{m.desc}</p>
-            </button>
-          ))}
+          {MODEL_OPTIONS.map((m) => {
+            const locked = !m.free && !isPro;
+            return (
+              <button
+                key={m.value}
+                type="button"
+                disabled={locked}
+                onClick={() => {
+                  if (!locked) setSelected(m.value);
+                }}
+                className={cn(
+                  "w-full text-left rounded-xl border p-3 transition-all",
+                  selected === m.value && !locked
+                    ? "border-primary/50 bg-primary/10"
+                    : "border-border hover:border-primary/30",
+                  locked && "opacity-50 cursor-not-allowed"
+                )}
+              >
+                <div className="flex items-center justify-between gap-2">
+                  <span className="text-sm font-semibold text-foreground">{m.label}</span>
+                  <Badge variant="secondary" size="sm" className="gap-1">
+                    {locked ? (
+                      <>
+                        <Lock className="w-3 h-3" /> Pro
+                      </>
+                    ) : (
+                      m.badge
+                    )}
+                  </Badge>
+                </div>
+                <p className="text-xs text-muted-foreground mt-1">{m.desc}</p>
+              </button>
+            );
+          })}
         </div>
 
         <Button
@@ -110,7 +110,10 @@ export default function SettingsModels() {
           size="sm"
           className="mt-4"
           onClick={handleSave}
-          disabled={saving || selected === profile?.preferred_model}
+          disabled={
+            saving ||
+            selected === normalizePreferredModel(profile?.preferred_model ?? null)
+          }
           leftIcon={
             saving ? (
               <Loader2 className="w-4 h-4 animate-spin" />
@@ -122,6 +125,6 @@ export default function SettingsModels() {
           {saving ? "Saving…" : "Save preference"}
         </Button>
       </Card>
-    </div>
+    </SettingsPageShell>
   );
 }

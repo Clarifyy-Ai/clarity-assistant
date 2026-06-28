@@ -10,40 +10,33 @@ import { useCallback, useEffect, useMemo, useRef } from "react";
 import { toast } from "sonner";
 
 import { deductCredits as deductCreditsApi } from "@/lib/api/billing";
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { useAuthStore } from "@/store/authStore";
 
+/** UI-facing action keys — costs mirror creditEconomics.ts / edge functions. */
 export const CREDIT_COSTS = {
-  // Live / AI
-  live_answer: 2,
-  live_hint: 1,
-  live_feedback: 2,
-
-  // AI generation
-  generate_questions: 3,
-  generate_hint: 1,
-  generate_debrief: 10,
-  ai_coach_message: 1,
-
-  // Mock / scorecard
-  mock_question: 1,
-  mock_full_answer: 2,
-  mock_session: 10,
-  scorecard_generate: 2,
-  gap_analysis: 3,
-
-  // Prep tools
-  star_generate: 2,
-  star_analyse: 1,
-  company_brief: 5,
-  screenshot_analyse: 1,
-  coding_hint: 2,
-  coding_solution: 2,
-  system_design: 5,
-  rephrase: 1,
-  project_build: 2,
-
-  // Documents
-  resume_analysis: 5,
+  live_answer: AI_CREDIT_COSTS.live_answer,
+  live_hint: AI_CREDIT_COSTS.live_hint,
+  live_feedback: AI_CREDIT_COSTS.live_feedback,
+  generate_questions: AI_CREDIT_COSTS.generate_questions,
+  generate_hint: AI_CREDIT_COSTS.live_hint,
+  generate_debrief: AI_CREDIT_COSTS.session_debrief,
+  ai_coach_message: AI_CREDIT_COSTS.ai_coach_message,
+  mock_question: AI_CREDIT_COSTS.generate_questions,
+  mock_full_answer: AI_CREDIT_COSTS.live_answer,
+  mock_session: AI_CREDIT_COSTS.mock_session,
+  scorecard_generate: AI_CREDIT_COSTS.session_debrief,
+  gap_analysis: AI_CREDIT_COSTS.analyze_test_performance,
+  star_generate: AI_CREDIT_COSTS.star_builder,
+  star_analyse: AI_CREDIT_COSTS.polish_star,
+  company_brief: AI_CREDIT_COSTS.company_research,
+  screenshot_analyse: AI_CREDIT_COSTS.screenshot_answer,
+  coding_hint: AI_CREDIT_COSTS.coding_hint,
+  coding_solution: AI_CREDIT_COSTS.live_answer,
+  system_design: AI_CREDIT_COSTS.system_design,
+  rephrase: AI_CREDIT_COSTS.rephraser,
+  project_build: AI_CREDIT_COSTS.project_builder,
+  resume_analysis: AI_CREDIT_COSTS.resume_analysis,
 } as const;
 
 export type CreditAction = keyof typeof CREDIT_COSTS;

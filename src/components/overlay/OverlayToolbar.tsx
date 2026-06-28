@@ -7,8 +7,10 @@ import { useAudioStore } from "@/store/audioStore";
 import { useSessionStore } from "@/store/sessionStore";
 
 import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
-import { captureAndAnalyseCodingProblem } from "@/lib/audio/screenshotCapture";
 import { formatHotkeyLabel } from "@/lib/overlay/hotkeys";
+import { isCapturePrimaryForInterviewType } from "@/lib/constants/interviewTypes";
+import { SERVER_AI_CREDIT_COSTS } from "@/lib/billing/creditsManager";
+import { isCaptureBlockedByNetwork } from "@/lib/overlay/captureGating";
 import { cn } from "@/lib/utils";
 
 import { PANIC_RESPONSE } from "@/types/session.types";
@@ -36,6 +38,7 @@ import {
   Settings2,
   Sparkles,
   MessageSquare,
+  Crop,
 } from "lucide-react";
 
 import { OverlayActivityTimer } from "./OverlayActivityTimer";
@@ -54,11 +57,17 @@ const HINT_STYLE_LABELS: Record<string, string> = {
   keywords_only: "Keys",
 };
 
+const HINT_STYLE_ARIA_LABELS: Record<string, string> = {
+  full_answer: "Full answer hint style",
+  short_hints: "Short hints style",
+  keywords_only: "Keywords only hint style",
+};
+
 const HOTKEY_REFERENCE = [
   { keys: ["ctrl", "shift", "h"], label: "Minimize / restore overlay" },
   { keys: ["ctrl", "shift", "s"], label: "Discrete UI (opacity)" },
   { keys: ["ctrl", "shift", "y"], label: "Cycle hint style" },
-  { keys: ["ctrl", "shift", "c"], label: "Screenshot + analyse" },
+  { keys: ["ctrl", "shift", "c"], label: "Screenshot + full answer (2 cr)" },
   { keys: ["ctrl", "shift", "p"], label: "Calm coaching steps" },
   { keys: ["ctrl", "shift", "m"], label: "Mute / unmute" },
   { keys: ["ctrl", "1-4"], label: "Snap to corner" },
@@ -70,16 +79,22 @@ interface OverlayToolbarProps {
   onToggleMic?: () => void;
   onToggleSystemAudio?: () => void;
   onGenerate?: () => void;
+  onCaptureCoding?: () => void;
+  onAdjustRegion?: () => void;
   onEndSession?: () => void;
   onSetupNewSession?: () => void;
+  interviewType?: string;
 }
 
 export function OverlayToolbar({
   onToggleMic,
   onToggleSystemAudio,
   onGenerate,
+  onCaptureCoding,
+  onAdjustRegion,
   onEndSession,
   onSetupNewSession,
+  interviewType = "behavioral",
 }: OverlayToolbarProps) {
   const isMuted = useAudioStore((s) => s.is_muted);
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
@@ -94,6 +109,8 @@ export function OverlayToolbar({
   const isMinimal = useOverlayStore((s) => s.is_minimal_mode);
   const simpleLanguage = useOverlayStore((s) => s.simple_language);
   const isScreenshotLoading = useOverlayStore((s) => s.is_screenshot_loading);
+  const hasRecropSource = useOverlayStore((s) => s.has_recrop_source);
+  const networkColor = useOverlayStore((s) => s.network_color);
 
   const activeTab = useOverlayStore((s) => s.active_tab);
   const pinnedHints = useOverlayStore((s) => s.pinned_hints);
@@ -118,6 +135,33 @@ export function OverlayToolbar({
   const resumeQuickPeekRef = useRef<HTMLDivElement>(null);
 
   const isGenerating = hintState === "generating" || hintState === "streaming";
+  const captureCreditCost = SERVER_AI_CREDIT_COSTS.screenshotAnswer;
+  const capturePrimary = isCapturePrimaryForInterviewType(interviewType);
+  const captureOffline = networkColor === "red" || isCaptureBlockedByNetwork();
+
+  const runCapture = () => {
+    if (captureOffline) {
+      toast.error("You're offline — screen capture is paused until your connection returns.");
+      return;
+    }
+    if (!onCaptureCoding) {
+      toast.error("Start a Practice Coach session before capturing the screen.");
+      return;
+    }
+    void onCaptureCoding();
+  };
+
+  const runAdjustRegion = () => {
+    if (captureOffline) {
+      toast.error("You're offline — screen capture is paused until your connection returns.");
+      return;
+    }
+    if (!onAdjustRegion) {
+      toast.error("Capture the screen first, then adjust the region.");
+      return;
+    }
+    void onAdjustRegion();
+  };
 
   const pillToggleTitle = useMemo(() => {
     if (isPeekActive && !isVisible) return "Restore overlay";
@@ -169,36 +213,45 @@ export function OverlayToolbar({
           disabled={isGenerating || !onGenerate}
           className={
             isGenerating
-              ? "bg-gradient-to-r from-indigo-600/40 to-violet-600/30 border-indigo-500/40 text-indigo-200"
-              : "bg-gradient-to-r from-indigo-600/25 to-violet-600/15 border-indigo-500/30 text-indigo-300 hover:from-indigo-600/35 hover:to-violet-600/25 hover:text-indigo-200"
+              ? "bg-gradient-to-r from-indigo-600/40 to-primary/30 border-indigo-500/40 text-indigo-200"
+              : "bg-gradient-to-r from-indigo-600/25 to-primary/15 border-indigo-500/30 text-indigo-300 hover:from-indigo-600/35 hover:to-primary/25 hover:text-indigo-200"
           }
         />
 
-        <PrimaryButton
-          icon={Monitor}
-          label="Screen"
-          isActive={isScreenshotLoading}
-          onClick={async () => {
-            try {
-              await captureAndAnalyseCodingProblem();
-            } catch (err) {
-              const msg = err instanceof Error ? err.message : "Screen capture failed";
-              if (/permission|denied|NotAllowed/i.test(msg)) {
-                toast.error(
-                  "Screen capture permission denied. Please allow screen sharing and try again."
-                );
-              } else {
-                toast.error(msg);
+        {capturePrimary && (
+          <>
+            <PrimaryButton
+              icon={Monitor}
+              label={`Capture · ${captureCreditCost} cr`}
+              isActive={isScreenshotLoading}
+              onClick={runCapture}
+              disabled={isScreenshotLoading || !onCaptureCoding || captureOffline}
+              title={
+                captureOffline
+                  ? "Offline — capture paused"
+                  : `Select the question on screen and generate a full answer (${captureCreditCost} credits)`
               }
-            }
-          }}
-          disabled={isScreenshotLoading}
-          className={
-            isScreenshotLoading
-              ? "bg-sky-500/20 border-sky-500/40 text-sky-300"
-              : "bg-white/6 border-white/10 text-white/60 hover:bg-white/10 hover:text-white/90"
-          }
-        />
+              className={
+                isScreenshotLoading
+                  ? "bg-sky-500/20 border-sky-500/40 text-sky-300"
+                  : captureOffline
+                    ? "bg-white/4 border-white/8 text-white/30 cursor-not-allowed"
+                    : "bg-white/6 border-white/10 text-white/60 hover:bg-white/10 hover:text-white/90"
+              }
+            />
+            {hasRecropSource && onAdjustRegion && (
+              <PrimaryButton
+                icon={Crop}
+                label="Adjust"
+                isActive={false}
+                onClick={runAdjustRegion}
+                disabled={isScreenshotLoading || captureOffline}
+                title={`Re-draw the selection box without re-sharing your screen (${captureCreditCost} credits)`}
+                className="bg-white/6 border-white/10 text-white/50 hover:bg-white/10 hover:text-white/80"
+              />
+            )}
+          </>
+        )}
 
         <PrimaryButton
           icon={MessageSquare}
@@ -272,6 +325,34 @@ export function OverlayToolbar({
                 />
               )}
 
+              {!capturePrimary && onCaptureCoding && (
+                <MenuRow
+                  icon={Monitor}
+                  label={
+                    captureOffline
+                      ? "Screen capture (offline)"
+                      : `Screen capture (${captureCreditCost} cr)`
+                  }
+                  active={false}
+                  onClick={() => {
+                    runCapture();
+                    setShowMoreMenu(false);
+                  }}
+                />
+              )}
+
+              {!capturePrimary && hasRecropSource && onAdjustRegion && (
+                <MenuRow
+                  icon={Crop}
+                  label={`Adjust region (${captureCreditCost} cr)`}
+                  active={false}
+                  onClick={() => {
+                    runAdjustRegion();
+                    setShowMoreMenu(false);
+                  }}
+                />
+              )}
+
               {onToggleSystemAudio && (
                 <MenuRow
                   icon={hasSystemAudio ? Volume2 : VolumeX}
@@ -298,7 +379,7 @@ export function OverlayToolbar({
                 icon={isStealth ? EyeOff : Eye}
                 label={isStealth ? "Exit discrete UI" : "Discrete UI (opacity)"}
                 active={isStealth}
-                activeColor="text-violet-400"
+                activeColor="text-primary"
                 onClick={() => {
                   toggleAppStealthMode();
                   setShowMoreMenu(false);
@@ -333,6 +414,7 @@ export function OverlayToolbar({
                       key={style}
                       type="button"
                       onClick={() => useOverlayStore.getState().setHintStyle(style)}
+                      aria-label={HINT_STYLE_ARIA_LABELS[style]}
                       aria-pressed={hintStyle === style}
                       className={cn(
                         "flex-1 py-1 rounded-lg text-[11px] font-semibold transition-all",
@@ -362,6 +444,7 @@ export function OverlayToolbar({
                         useOverlayStore.getState().setActiveModel(m.id);
                         setShowMoreMenu(false);
                       }}
+                      aria-label={`Select ${m.label} AI model${m.note ? ` (${m.note})` : ""}`}
                       aria-pressed={activeModel === m.id}
                       className={cn(
                         "w-full text-left px-2.5 py-1.5 rounded-lg text-[12px] transition-all flex items-center justify-between",
@@ -554,6 +637,7 @@ export function OverlayToolbar({
                           useOverlayStore.getState().setActiveTab("answer");
                           setShowPinnedMenu(false);
                         }}
+                        aria-label={`Jump to pinned hint: ${pin.question || "No question"}`}
                         className="text-[11px] text-brand-300/60 hover:text-brand-300 transition-colors font-medium"
                       >
                         Jump to →
@@ -656,6 +740,7 @@ function PrimaryButton({
   onClick,
   disabled,
   className,
+  title,
 }: {
   icon: LucideIcon;
   label: string;
@@ -663,14 +748,15 @@ function PrimaryButton({
   onClick?: () => void;
   disabled?: boolean;
   className?: string;
+  title?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      title={label}
-      aria-label={label}
+      title={title ?? label}
+      aria-label={title ?? label}
       aria-pressed={isActive}
       className={cn(
         "flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-[12px] font-semibold border transition-all shrink-0 h-8",

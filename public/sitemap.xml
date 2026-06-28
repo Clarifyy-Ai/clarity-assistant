@@ -6,6 +6,11 @@
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>https://clarify.ai.sltfinanceindia.com/gov-exams</loc>
+    <changefreq>monthly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
     <loc>https://clarify.ai.sltfinanceindia.com/pricing</loc>
     <changefreq>monthly</changefreq>
     <priority>0.9</priority>

@@ -9,6 +9,9 @@ import {
   getAdminClient, 
   log 
 } from "../_shared/utils.ts";
+import {
+  enforceAiRateLimit,
+} from "../_shared/rateLimit.ts";
 
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
@@ -22,6 +25,10 @@ Deno.serve(async (req: Request) => {
     ------------------------------------------------------- */
     const auth = await requireAuth(req);
     const userId = auth.userId;
+
+    const rateLimited = enforceAiRateLimit("gap-analysis", userId);
+    if (rateLimited) return rateLimited;
+
     const db = getAdminClient();
 
     /* -------------------------------------------------------

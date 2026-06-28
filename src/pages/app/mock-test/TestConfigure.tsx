@@ -1,15 +1,19 @@
 // src/pages/app/mock-test/TestConfigure.tsx
 import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
-import { Loader2, Zap } from "lucide-react";
-import { supabase } from "@/lib/supabase/client";
+import { Loader2, Lock, Zap } from "lucide-react";
 import { useAuthStore } from "@/store/userStore";
+import { useUIStore } from "@/store/uiStore";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { toast } from "sonner";
 import { resolveExamConfigId } from "@/lib/mock-test/examTypes";
 import { launchMockTest } from "@/lib/mock-test/launchMockTest";
+import {
+  planHasFeature,
+  type PlanId,
+} from "@/lib/billing/subscriptionManager";
 
 interface DifficultyDistribution {
   EASY: number;
@@ -69,11 +73,11 @@ const EXAM_SUBJECTS: Record<string, string[]> = {
   JEE_MAIN: ["Physics", "Chemistry", "Mathematics"],
   JEE_ADV: ["Physics", "Chemistry", "Mathematics"],
   NEET: ["Biology", "Physics", "Chemistry"],
-  UPSC: ["Current Affairs", "GS Paper 1 & 2"],
-  SSC_CGL: ["Reasoning", "Quant", "English", "GK"],
-  IBPS_PO: ["Reasoning", "Quant", "English", "Banking"],
-  HPCL_ENGINEER: ["Civil Engineering", "English", "Quantitative Aptitude", "Reasoning"],
-  PSU: ["Domain Knowledge", "English Language", "Intellectual Potential Test", "Quantitative Aptitude"],
+  UPSC: ["General Studies", "Current Affairs"],
+  SSC_CGL: ["Reasoning", "Quantitative Aptitude", "English", "General Awareness"],
+  IBPS_PO: ["Reasoning", "Quantitative Aptitude", "English", "Banking Awareness"],
+  HPCL_ENGINEER: ["Technical", "English", "Quantitative Aptitude", "Reasoning"],
+  PSU: ["General Awareness", "English", "Quantitative Aptitude", "Reasoning"],
   CUSTOM: [],
 };
 
@@ -171,9 +175,32 @@ const EXAM_TOPICS: Record<string, string[]> = {
 };
 
 const SOURCE_OPTIONS = [
-  { id: "OFFICIAL_PYP", label: "Previous Year Papers" },
-  { id: "AI_GENERATED", label: "AI-Generated" },
-  { id: "USER_UPLOAD", label: "My Uploads" },
+  { id: "OFFICIAL_PYP", label: "Previous Year Papers", premiumOnly: false },
+  { id: "AI_GENERATED", label: "AI-Generated", premiumOnly: true },
+  { id: "USER_UPLOAD", label: "My Uploads", premiumOnly: false },
+] as const;
+
+const SOURCE_PRESETS = [
+  {
+    id: "official",
+    label: "Official papers only",
+    sources: ["OFFICIAL_PYP"] as string[],
+    premiumOnly: false,
+  },
+  {
+    id: "mixed",
+    label: "Mixed (Official + AI)",
+    sources: ["OFFICIAL_PYP", "AI_GENERATED"] as string[],
+    premiumOnly: true,
+    description: "Pro — fills gaps with analytics-driven AI questions",
+  },
+  {
+    id: "full",
+    label: "All sources",
+    sources: ["OFFICIAL_PYP", "AI_GENERATED", "USER_UPLOAD"] as string[],
+    premiumOnly: true,
+    description: "Pro — official, your uploads, and AI gap-fill",
+  },
 ];
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -188,6 +215,10 @@ export default function TestConfigure() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const profile = useAuthStore((s) => s.profile);
+  const openUpgradeModal = useUIStore((s) => s.openUpgradeModal);
+  const userPlan = (profile?.plan_id ?? profile?.plan ?? "free") as PlanId;
+  const canUseAiQuestions = planHasFeature(userPlan, "mock_test_ai");
 
   const examFromURL = resolveExamConfigId(searchParams.get("exam"));
   const isQuick = searchParams.get("quick") === "true";
@@ -208,9 +239,9 @@ export default function TestConfigure() {
   const [config, setConfig] = useState<TestConfig>({
     exam_type: isQuick ? "CUSTOM" : examFromURL,
     test_name: isQuick ? "Quick Drill" : `${examFromURL.replace(/_/g, " ")} Practice Test`,
-    subjects: isQuick ? [] : EXAM_SUBJECTS[examFromURL] ?? [],
+    subjects: [],
     topics: [],
-    source_types: ["OFFICIAL_PYP", "AI_GENERATED"],
+    source_types: ["OFFICIAL_PYP"],
     year_range:
       yearMinFromURL || yearMaxFromURL
         ? { min: yearMinFromURL, max: yearMaxFromURL }
@@ -255,12 +286,26 @@ export default function TestConfigure() {
   }
 
   function toggleSource(source: string) {
+    if (source === "AI_GENERATED" && !canUseAiQuestions) {
+      openUpgradeModal("pro");
+      toast.info("AI-generated exam questions require a Pro plan or higher.");
+      return;
+    }
     setConfig((prev) => ({
       ...prev,
       source_types: prev.source_types.includes(source)
         ? prev.source_types.filter((s) => s !== source)
         : [...prev.source_types, source],
     }));
+  }
+
+  function applySourcePreset(sources: string[], premiumOnly: boolean) {
+    if (premiumOnly && !canUseAiQuestions) {
+      openUpgradeModal("pro");
+      toast.info("Mixed AI papers require a Pro plan or higher.");
+      return;
+    }
+    setConfig((prev) => ({ ...prev, source_types: sources }));
   }
 
   function setDifficulty(key: keyof DifficultyDistribution, value: number) {
@@ -286,6 +331,12 @@ export default function TestConfigure() {
 
     if (config.source_types.length === 0) {
       toast.error("Please select at least one question source.");
+      return;
+    }
+
+    if (config.source_types.includes("AI_GENERATED") && !canUseAiQuestions) {
+      toast.error("AI-generated questions require a Pro plan. Upgrade or use official papers only.");
+      openUpgradeModal("pro");
       return;
     }
 
@@ -331,11 +382,13 @@ export default function TestConfigure() {
         });
 
       if (warning) toast.warning(warning);
-      if (ai_generated_count && ai_generated_count > 0) {
-        toast.info(`Included ${ai_generated_count} AI-generated questions.`);
-      }
 
       toast.success(`Test created with ${question_count} questions.`);
+      if (ai_generated_count && ai_generated_count > 0) {
+        toast.info(
+          `${ai_generated_count} AI questions added from your analytics profile.`,
+        );
+      }
       navigate(`/app/mock-test/session/${testId}`);
     } catch (err) {
       console.error("[TestConfigure] start error:", err);
@@ -353,7 +406,7 @@ export default function TestConfigure() {
   if (isQuick && loading) {
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center gap-4">
-        <Loader2 className="h-10 w-10 animate-spin text-violet-500" />
+        <Loader2 className="h-10 w-10 animate-spin text-primary" />
         <p className="text-lg font-semibold text-foreground">
           Selecting your quick drill questions…
         </p>
@@ -388,7 +441,7 @@ export default function TestConfigure() {
               onClick={() => setStep(n)}
               className={`flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
                 step === n
-                  ? "border-violet-500/50 bg-violet-500/15 text-violet-300"
+                  ? "border-primary/50 bg-primary/15 text-primary"
                   : step > n
                   ? "border-green-500/30 bg-green-500/10 text-green-400"
                   : "border-border text-muted-foreground"
@@ -399,7 +452,7 @@ export default function TestConfigure() {
                   step > n
                     ? "bg-green-500/20 text-green-400"
                     : step === n
-                    ? "bg-violet-500/20 text-violet-300"
+                    ? "bg-primary/20 text-primary"
                     : "bg-muted text-muted-foreground"
                 }`}
               >
@@ -434,8 +487,8 @@ export default function TestConfigure() {
                   }}
                   className={`rounded-xl border p-3 text-left transition-all ${
                     selectedPreset === key
-                      ? "border-violet-500/50 bg-violet-500/10"
-                      : "border-border hover:border-violet-500/30"
+                      ? "border-primary/50 bg-primary/10"
+                      : "border-border hover:border-primary/30"
                   }`}
                 >
                   <p className="text-sm font-semibold text-foreground">{key}</p>
@@ -474,7 +527,7 @@ export default function TestConfigure() {
                 onChange={(e) =>
                   setConfig((prev) => ({ ...prev, test_name: e.target.value }))
                 }
-                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
                 placeholder="My Practice Test"
               />
             </CardContent>
@@ -492,7 +545,7 @@ export default function TestConfigure() {
                       setConfig((prev) => ({
                         ...prev,
                         exam_type: examType,
-                        subjects: EXAM_SUBJECTS[examType] ?? [],
+                        subjects: [],
                         topics: [],
                         test_name:
                           examType === "CUSTOM"
@@ -502,8 +555,8 @@ export default function TestConfigure() {
                     }
                     className={`rounded-xl border px-3 py-2 text-xs font-semibold transition-all ${
                       config.exam_type === examType
-                        ? "border-violet-500/50 bg-violet-500/15 text-violet-300"
-                        : "border-border text-muted-foreground hover:border-violet-500/30"
+                        ? "border-primary/50 bg-primary/15 text-primary"
+                        : "border-border text-muted-foreground hover:border-primary/30"
                     }`}
                   >
                     {examType.replace(/_/g, " ")}
@@ -525,8 +578,8 @@ export default function TestConfigure() {
                       onClick={() => toggleSubject(subject)}
                       className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
                         config.subjects.includes(subject)
-                          ? "border-violet-500/50 bg-violet-500/15 text-violet-300"
-                          : "border-border text-muted-foreground hover:border-violet-500/30"
+                          ? "border-primary/50 bg-primary/15 text-primary"
+                          : "border-border text-muted-foreground hover:border-primary/30"
                       }`}
                     >
                       {subject}
@@ -574,21 +627,62 @@ export default function TestConfigure() {
           <Card>
             <CardContent className="space-y-3 py-4">
               <SectionLabel>Question Source</SectionLabel>
+              <p className="text-xs text-muted-foreground">
+                Free users: official previous-year papers and your uploads.
+                Pro users can add AI-generated questions — mixed with manual papers and
+                tailored to your weak topics from analytics.
+              </p>
               <div className="flex flex-wrap gap-2">
-                {SOURCE_OPTIONS.map((src) => (
+                {SOURCE_PRESETS.map((preset) => (
+                  <button
+                    key={preset.id}
+                    type="button"
+                    onClick={() => applySourcePreset(preset.sources, preset.premiumOnly)}
+                    className={`rounded-xl border px-3 py-2 text-left text-xs transition-all ${
+                      preset.sources.every((s) => config.source_types.includes(s)) &&
+                      config.source_types.length === preset.sources.length
+                        ? "border-primary/50 bg-primary/15 text-primary"
+                        : "border-border text-muted-foreground hover:border-primary/30"
+                    }`}
+                  >
+                    <span className="flex items-center gap-1 font-medium">
+                      {preset.premiumOnly && !canUseAiQuestions && (
+                        <Lock className="h-3 w-3 text-amber-400" />
+                      )}
+                      {preset.label}
+                    </span>
+                    {"description" in preset && preset.description && (
+                      <span className="mt-0.5 block text-[10px] opacity-80">
+                        {preset.description}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {SOURCE_OPTIONS.map((src) => {
+                  const locked = src.premiumOnly && !canUseAiQuestions;
+                  return (
                   <button
                     key={src.id}
                     type="button"
                     onClick={() => toggleSource(src.id)}
                     className={`rounded-full border px-3 py-1 text-xs font-medium transition-all ${
                       config.source_types.includes(src.id)
-                        ? "border-violet-500/50 bg-violet-500/15 text-violet-300"
-                        : "border-border text-muted-foreground hover:border-violet-500/30"
+                        ? "border-primary/50 bg-primary/15 text-primary"
+                        : locked
+                          ? "border-amber-500/30 text-amber-500/80 hover:border-amber-500/50"
+                          : "border-border text-muted-foreground hover:border-primary/30"
                     }`}
                   >
+                    {locked && <Lock className="mr-1 inline h-3 w-3" />}
                     {src.label}
+                    {src.id === "AI_GENERATED" && (
+                      <span className="ml-1 text-[10px] opacity-70">Pro</span>
+                    )}
                   </button>
-                ))}
+                  );
+                })}
               </div>
             </CardContent>
           </Card>
@@ -614,7 +708,7 @@ export default function TestConfigure() {
                         },
                       }))
                     }
-                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
                 </div>
                 <div>
@@ -634,7 +728,7 @@ export default function TestConfigure() {
                         },
                       }))
                     }
-                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
                 </div>
               </div>
@@ -659,7 +753,7 @@ export default function TestConfigure() {
                           question_count: Number(e.target.value),
                         }))
                       }
-                      className="flex-1 accent-violet-500"
+                      className="flex-1 accent-primary"
                     />
                     <span className="w-8 text-right text-sm font-bold text-foreground">
                       {config.question_count}
@@ -681,7 +775,7 @@ export default function TestConfigure() {
                           duration_minutes: Number(e.target.value),
                         }))
                       }
-                      className="flex-1 accent-violet-500"
+                      className="flex-1 accent-primary"
                     />
                     <span className="w-8 text-right text-sm font-bold text-foreground">
                       {config.duration_minutes}
@@ -717,7 +811,7 @@ export default function TestConfigure() {
                     onChange={(e) =>
                       setDifficulty(difficulty, Number(e.target.value))
                     }
-                    className="flex-1 accent-violet-500"
+                    className="flex-1 accent-primary"
                   />
                   <span className="w-8 text-right text-xs font-bold text-foreground">
                     {config.difficulty_distribution[difficulty]}%
@@ -751,7 +845,7 @@ export default function TestConfigure() {
                         marks_positive: Number(e.target.value),
                       }))
                     }
-                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
                 </div>
                 <div>
@@ -768,7 +862,7 @@ export default function TestConfigure() {
                         marks_negative: Number(e.target.value),
                       }))
                     }
-                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-violet-500/50"
+                    className="w-full rounded-xl border border-border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
                   />
                 </div>
               </div>
@@ -787,7 +881,7 @@ export default function TestConfigure() {
                       randomize_order: e.target.checked,
                     }))
                   }
-                  className="h-4 w-4 accent-violet-500"
+                  className="h-4 w-4 accent-primary"
                 />
                 <span className="text-sm text-foreground">Randomize question order</span>
               </label>
@@ -802,7 +896,7 @@ export default function TestConfigure() {
                       shuffle_options: e.target.checked,
                     }))
                   }
-                  className="h-4 w-4 accent-violet-500"
+                  className="h-4 w-4 accent-primary"
                 />
                 <span className="text-sm text-foreground">
                   Shuffle answer options (A/B/C/D)
@@ -824,8 +918,8 @@ export default function TestConfigure() {
                     }
                     className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
                       config.question_count === n
-                        ? "border-violet-500/50 bg-violet-500/15 text-violet-300"
-                        : "border-border text-muted-foreground hover:border-violet-500/30"
+                        ? "border-primary/50 bg-primary/15 text-primary"
+                        : "border-border text-muted-foreground hover:border-primary/30"
                     }`}
                   >
                     {n} Qs
@@ -844,8 +938,8 @@ export default function TestConfigure() {
                     }
                     className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
                       config.duration_minutes === m
-                        ? "border-violet-500/50 bg-violet-500/15 text-violet-300"
-                        : "border-border text-muted-foreground hover:border-violet-500/30"
+                        ? "border-primary/50 bg-primary/15 text-primary"
+                        : "border-border text-muted-foreground hover:border-primary/30"
                     }`}
                   >
                     {m} min
@@ -858,8 +952,8 @@ export default function TestConfigure() {
                   }
                   className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-all ${
                     config.duration_minutes === 0
-                      ? "border-violet-500/50 bg-violet-500/15 text-violet-300"
-                      : "border-border text-muted-foreground hover:border-violet-500/30"
+                      ? "border-primary/50 bg-primary/15 text-primary"
+                      : "border-border text-muted-foreground hover:border-primary/30"
                   }`}
                 >
                   No limit
@@ -868,9 +962,9 @@ export default function TestConfigure() {
             </CardContent>
           </Card>
 
-          <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 px-4 py-3">
+          <div className="rounded-xl border border-primary/20 bg-primary/5 px-4 py-3">
             <p className="text-xs text-muted-foreground">
-              <span className="font-semibold text-violet-300">2 credits</span> will be
+              <span className="font-semibold text-primary">2 credits</span> will be
               deducted when the test is created successfully. Free plan: up to 2 tests
               per month.
             </p>

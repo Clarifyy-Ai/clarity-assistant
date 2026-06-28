@@ -6,6 +6,7 @@ import { useAudioSession } from "@/hooks/useAudioSession";
 import { useFillerWordDetection } from "@/hooks/useFillerWordDetection";
 import { useWPMTracker } from "@/hooks/useWPMTracker";
 import { useHotkeys } from "@/hooks/useHotkeys";
+import { useGamification } from "@/hooks/useGamification";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";
 import { useAuthStore } from "@/store/authStore";
@@ -27,6 +28,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { Skeleton } from "@/components/ui/SkeletonLoader";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { PANIC_RESPONSE } from "@/types/session.types";
 import type { LiveSessionConfig, SessionQuestion } from "@/types/session.types";
 import {
@@ -39,9 +41,21 @@ import {
   Timer,
   RefreshCw,
   AlertTriangle,
+  CheckCircle,
+  Clock,
+  Coins,
+  StickyNote,
+  Pause,
+  Play,
+  BarChart2,
 } from "lucide-react";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import {
+  maxSessionSecondsForPlan,
+  isFreePlan,
+} from "@/lib/constants/freeTier";
 
 type MockSessionPhase = "idle" | "configuring" | "active" | "completed";
 
@@ -58,12 +72,27 @@ interface QuestionAnswer {
   timestamp: string;
 }
 
+interface MockSessionSummaryStats {
+  questionsAnswered: number;
+  timeTakenSeconds: number;
+  creditsUsed: number;
+  sessionId: string | null;
+}
+
+function formatDuration(seconds: number): string {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${String(secs).padStart(2, "0")}`;
+}
+
 /* ─── COMPONENT ─────────────────────────────────────────────────────────── */
 
 export default function MockSession() {
   const navigate = useNavigate();
   const location = useLocation();
   const profile = useAuthStore((s) => s.profile);
+  const planId = profile?.plan_id ?? "free";
+  const { checkPostSessionAchievements } = useGamification();
 
   const orchestrator = useSessionOrchestrator();
   const interimText = useAudioStore((s) => s.transcript?.interim_text ?? "");
@@ -80,8 +109,14 @@ export default function MockSession() {
   const fillerHook = useFillerWordDetection(interimText);
   const wpmHook = useWPMTracker(candidateTranscript);
 
+  const sessionConfigRef = useRef<LiveSessionConfig | null>(null);
+  const [micDeviceId, setMicDeviceId] = useState<string | null>(null);
+  const [noiseSuppression, setNoiseSuppression] = useState(true);
+
   const audio = useAudioSession({
     enableSystemAudio: false,
+    micDeviceId,
+    noiseSuppression,
     onQuestionDetected: () => {},
     onFillerDetected: (count) => useSessionStore.getState().setFillerCount(count),
     onWPMUpdate: (wpm) => useSessionStore.getState().setCurrentWPM(wpm),
@@ -90,18 +125,23 @@ export default function MockSession() {
   const startTimeRef = useRef<string>(new Date().toISOString());
 
   const [phase, setPhase] = useState<MockSessionPhase>("idle");
+  const [summaryStats, setSummaryStats] = useState<MockSessionSummaryStats | null>(null);
+  const [isSavingSummary, setIsSavingSummary] = useState(false);
   const [calmMode, setCalmMode] = useState(false);
   const [skipConfirm, setSkipConfirm] = useState(false);
   const [endConfirm, setEndConfirm] = useState(false);
   const [questionsError, setQuestionsError] = useState<string | null>(null);
+  const [sessionNotes, setSessionNotes] = useState("");
 
-  const sessionConfigRef = useRef<LiveSessionConfig | null>(null);
   const questionsCacheRef = useRef<SessionQuestion[] | null>(null);
   const isStartingRef = useRef(false);
   const autoStartedRef = useRef(false);
 
-  const SESSION_DURATION = 5 * 60;
+  const SESSION_DURATION = maxSessionSecondsForPlan(planId);
+  const [timerMode, setTimerMode] = useState<"countdown" | "countup">("countdown");
   const [sessionTimeLeft, setSessionTimeLeft] = useState(SESSION_DURATION);
+  const [sessionElapsed, setSessionElapsed] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
   const sessionTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const endCalledRef = useRef(false);
@@ -123,23 +163,46 @@ export default function MockSession() {
 
   // Timer
   useEffect(() => {
-    if (phase !== "active") return;
+    if (phase !== "active" || isPaused) return;
 
     sessionTimerRef.current = setInterval(() => {
-      setSessionTimeLeft((t) => {
-        if (t <= 1) {
-          if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
-          handleEndSessionRef.current?.();
-          return 0;
-        }
-        return t - 1;
-      });
+      if (timerMode === "countdown") {
+        setSessionTimeLeft((t) => {
+          if (t <= 1) {
+            if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+            handleEndSessionRef.current?.();
+            return 0;
+          }
+          return t - 1;
+        });
+      } else {
+        setSessionElapsed((t) => t + 1);
+      }
     }, 1000);
 
     return () => {
       if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
     };
-  }, [phase]);
+  }, [phase, isPaused, timerMode]);
+
+  const handleTogglePause = useCallback(async () => {
+    if (phase !== "active") return;
+
+    if (isPaused) {
+      try {
+        await audio.start();
+        setIsPaused(false);
+        toast.message("Session resumed");
+      } catch (err) {
+        toast.error(err instanceof Error ? err.message : "Failed to resume recording");
+      }
+    } else {
+      if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+      audio.stop();
+      setIsPaused(true);
+      toast.message("Session paused — timer and recording stopped");
+    }
+  }, [phase, isPaused, audio]);
 
   const injectInterviewerQuestion = useCallback(
     (qText: string, index: number) => {
@@ -181,11 +244,16 @@ export default function MockSession() {
       const overlay = useOverlayStore.getState();
       overlay.is_visible ? overlay.hideOverlay() : overlay.showOverlay();
     },
+    "ctrl+shift+c": () => {
+      if (phase !== "active") return;
+      const overlay = useOverlayStore.getState();
+      overlay.is_visible ? overlay.hideOverlay() : overlay.showOverlay();
+    },
     "ctrl+shift+p": () => {
       if (phase !== "active") return;
       setCalmMode((p) => !p);
     },
-    "ctrl+shift+s": () => {
+    "ctrl+shift+m": () => {
       if (phase !== "active") return;
       audio.toggleMute();
     },
@@ -215,7 +283,20 @@ export default function MockSession() {
   }, [phase, question, qIndex, injectInterviewerQuestion]);
 
   const timeColor =
-    sessionTimeLeft > 120 ? "emerald" : sessionTimeLeft > 30 ? "amber" : "red";
+    timerMode === "countup"
+      ? "emerald"
+      : sessionTimeLeft > 120
+        ? "emerald"
+        : sessionTimeLeft > 30
+          ? "amber"
+          : "red";
+
+  const timerDisplay =
+    timerMode === "countup"
+      ? formatDuration(sessionElapsed)
+      : sessionTimeLeft <= 0
+        ? "Saving..."
+        : `${Math.floor(sessionTimeLeft / 60)}:${String(sessionTimeLeft % 60).padStart(2, "0")}`;
 
   function captureAnswer(skipped = false) {
     const qText = typeof question === "string" ? question : question?.question_text ?? "";
@@ -283,6 +364,8 @@ export default function MockSession() {
     setQuestionsError(null);
 
     sessionConfigRef.current = config;
+    setMicDeviceId(config.mic_device_id ?? null);
+    setNoiseSuppression(config.noise_suppression ?? true);
     startTimeRef.current = new Date().toISOString();
     endCalledRef.current = false;
     useAudioStore.getState().clearTranscript();
@@ -347,6 +430,9 @@ export default function MockSession() {
 
     try {
       await audio.start();
+      setSessionTimeLeft(SESSION_DURATION);
+      setSessionElapsed(0);
+      setIsPaused(false);
       setPhase("active");
       overlay.showOverlay();
     } catch (err) {
@@ -367,20 +453,58 @@ export default function MockSession() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.state, phase]);
 
-  async function handleNextQuestion() {
-    captureAnswer();
+  async function finalizeSession(skipCapture = false) {
+    if (endCalledRef.current) return;
+    endCalledRef.current = true;
 
-    if (isLastQ) {
-      if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
-      setPhase("completed");
-      audio.stop();
-      useOverlayStore.getState().hideOverlay();
+    if (!skipCapture) captureAnswer();
+    if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
+    audio.stop();
+    useOverlayStore.getState().hideOverlay();
+
+    const startedMs = startTimeRef.current
+      ? new Date(startTimeRef.current).getTime()
+      : Date.now();
+    const timeTakenSeconds = Math.max(1, Math.round((Date.now() - startedMs) / 1000));
+    const questionsAnswered = answersRef.current.filter((a) => !a.skipped).length;
+    const creditsUsed = useSessionStore.getState().credits_consumed;
+    const sessionId = useSessionStore.getState().session_id;
+
+    setSummaryStats({
+      questionsAnswered,
+      timeTakenSeconds,
+      creditsUsed,
+      sessionId,
+    });
+    setPhase("completed");
+    setIsSavingSummary(true);
+
+    try {
       await persistMockSession();
       await orchestrator.completeSession();
+
+      const userId = profile?.id;
       const sessionId = useSessionStore.getState().session_id;
-      if (sessionId) navigate(`/app/scorecard/${sessionId}`);
-      else navigate("/app/sessions");
+      if (userId) {
+        const totalSessions = await sessionsDB.countCompletedByUserId(userId);
+        await checkPostSessionAchievements({
+          sessionType: "mock",
+          sessionId: sessionId ?? undefined,
+          totalSessions,
+          durationMinutes: Math.round(timeTakenSeconds / 60),
+          fillerWordCount: fillerHook.totalCount,
+        });
+      }
+    } finally {
+      setIsSavingSummary(false);
+    }
+  }
+
+  async function handleNextQuestion() {
+    if (isLastQ) {
+      await finalizeSession();
     } else {
+      captureAnswer();
       orchestrator.nextQuestion();
     }
   }
@@ -424,7 +548,7 @@ export default function MockSession() {
         hints_used: overlay.hint_history.length,
         answers_generated: answersRef.current.filter((a) => !a.skipped).length,
         questions_asked: questionCount,
-        notes: transcript || null,
+        notes: sessionNotes.trim() || transcript || null,
         session_type: "mock",
       } as any);
 
@@ -456,27 +580,14 @@ export default function MockSession() {
   }
 
   async function handleEndSession() {
-    if (endCalledRef.current) return;
-    endCalledRef.current = true;
-
-    captureAnswer();
-    if (sessionTimerRef.current) clearInterval(sessionTimerRef.current);
-    setPhase("completed");
-    audio.stop();
-    useOverlayStore.getState().hideOverlay();
-    await persistMockSession();
-    await orchestrator.completeSession();
-    const sessionId = useSessionStore.getState().session_id;
-    if (sessionId) navigate(`/app/scorecard/${sessionId}`);
-    else navigate("/app/sessions");
+    await finalizeSession();
   }
 
   useEffect(() => {
     handleEndSessionRef.current = handleEndSession;
   });
 
-  const isListening =
-    isCapturing && (deepgramStatus === "connected" || deepgramStatus === "reconnecting");
+  const micLevel = audio.currentLevel;
 
   if (phase === "idle") {
     return (
@@ -503,37 +614,110 @@ export default function MockSession() {
           <Skeleton className="h-4 w-5/6" />
           <Skeleton className="h-24 w-full rounded-xl" />
           {questionsError && (
-            <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs">
-              <AlertTriangle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-              <span className="flex-1 text-red-300">{questionsError}</span>
-              <button
-                type="button"
-                className="font-semibold text-red-200 hover:text-red-100 whitespace-nowrap"
-                onClick={() => {
-                  const cfg = sessionConfigRef.current;
-                  const uid = profile?.id;
-                  const sid = useSessionStore.getState().session_id;
-                  if (!cfg || !uid || !sid) {
-                    setPhase("idle");
-                    return;
-                  }
-                  void loadQuestions(sid, cfg, uid)
-                    .then(() => audio.start())
-                    .then(() => {
-                      setPhase("active");
-                      useOverlayStore.getState().showOverlay();
-                    })
-                    .catch((err: unknown) => {
-                      setQuestionsError(
-                        err instanceof Error ? err.message : "Retry failed",
-                      );
-                    });
-                }}
-              >
-                Retry
-              </button>
-            </div>
+            <InlineErrorRetry
+              message={questionsError}
+              onRetry={() => {
+                const cfg = sessionConfigRef.current;
+                const uid = profile?.id;
+                const sid = useSessionStore.getState().session_id;
+                if (!cfg || !uid || !sid) {
+                  setPhase("idle");
+                  return;
+                }
+                void loadQuestions(sid, cfg, uid)
+                  .then(() => audio.start())
+                  .then(() => {
+                    setPhase("active");
+                    useOverlayStore.getState().showOverlay();
+                  })
+                  .catch((err: unknown) => {
+                    setQuestionsError(
+                      err instanceof Error ? err.message : "Retry failed",
+                    );
+                  });
+              }}
+            />
           )}
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === "completed" && summaryStats) {
+    return (
+      <div className="flex items-center justify-center min-h-screen px-4">
+        <div className="w-full max-w-md space-y-5 text-center">
+          <CheckCircle className="h-10 w-10 text-emerald-500 mx-auto" />
+          <div className="space-y-1">
+            <h2 className="text-lg font-bold text-foreground">Session complete</h2>
+            <p className="text-sm text-muted-foreground">
+              {isSavingSummary ? "Saving your session…" : "Your mock interview has been saved."}
+            </p>
+          </div>
+
+          <div className="grid grid-cols-3 gap-3 text-left">
+            <div className="rounded-xl border border-border bg-card p-3 space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                Answered
+              </p>
+              <p className="text-xl font-bold text-foreground tabular-nums">
+                {summaryStats.questionsAnswered}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border bg-card p-3 space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                Time
+              </p>
+              <p className="text-xl font-bold text-foreground tabular-nums">
+                {formatDuration(summaryStats.timeTakenSeconds)}
+              </p>
+            </div>
+            <div className="rounded-xl border border-border bg-card p-3 space-y-1">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground flex items-center gap-1">
+                <Coins className="w-3 h-3" />
+                Credits
+              </p>
+              <p className="text-xl font-bold text-foreground tabular-nums">
+                {summaryStats.creditsUsed}
+              </p>
+            </div>
+          </div>
+
+          <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+            {summaryStats.sessionId ? (
+              <>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  fullWidth
+                  disabled={isSavingSummary}
+                  onClick={() => navigate(`/app/debrief/${summaryStats.sessionId}`)}
+                  leftIcon={<BarChart2 className="w-4 h-4" />}
+                >
+                  Go to Analytics
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  fullWidth
+                  disabled={isSavingSummary}
+                  onClick={() => navigate(`/app/scorecard/${summaryStats.sessionId}`)}
+                >
+                  View scorecard
+                </Button>
+              </>
+            ) : null}
+            <Button
+              variant="secondary"
+              size="sm"
+              fullWidth
+              disabled={isSavingSummary}
+              onClick={() => navigate("/app/sessions")}
+            >
+              Back to sessions
+            </Button>
+          </div>
         </div>
       </div>
     );
@@ -544,7 +728,7 @@ export default function MockSession() {
       <div className="flex items-center justify-center min-h-screen">
         <div className="text-center space-y-3">
           <RefreshCw className="h-8 w-8 animate-spin text-primary mx-auto" />
-          <p className="text-sm text-muted-foreground">Saving session…</p>
+          <p className="text-sm text-muted-foreground">Wrapping up…</p>
         </div>
       </div>
     );
@@ -575,7 +759,7 @@ export default function MockSession() {
     return (
       <div className="flex items-center justify-center min-h-[50vh]">
         <div className="text-center space-y-3">
-          <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin mx-auto" />
+          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin mx-auto" />
           <p className="text-muted-foreground text-sm">Loading question…</p>
         </div>
       </div>
@@ -584,29 +768,53 @@ export default function MockSession() {
 
   const questionText = typeof question === "string" ? question : question?.question_text ?? "";
 
-  const timerDisplay =
-    sessionTimeLeft <= 0
-      ? "Saving..."
-      : `${Math.floor(sessionTimeLeft / 60)}:${String(sessionTimeLeft % 60).padStart(2, "0")}`;
+  const isListeningActive =
+    !isPaused && isCapturing && (deepgramStatus === "connected" || deepgramStatus === "reconnecting");
 
   return (
     <div className="min-h-screen max-h-screen overflow-y-auto bg-background text-foreground">
       <LiveSessionController isActive={true} />
       <OverlayKeyboardHandler enabled={phase === "active"} onToggleMute={audio.toggleMute} />
 
-      {/* Main UI */}
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex min-h-screen">
+        {/* T-0266 — note-taking sidebar */}
+        <aside className="hidden lg:flex w-72 shrink-0 border-r border-border bg-card/50 flex-col p-4">
+          <div className="flex items-center gap-2 mb-3">
+            <StickyNote className="w-4 h-4 text-muted-foreground" />
+            <h2 className="text-sm font-semibold text-foreground">Session notes</h2>
+          </div>
+          <textarea
+            value={sessionNotes}
+            onChange={(e) => setSessionNotes(e.target.value)}
+            placeholder="Jot down key points, follow-ups, or reminders…"
+            className="flex-1 min-h-[200px] resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+          />
+        </aside>
+
+        {/* Main UI */}
+        <div className="flex-1 flex items-center justify-center">
         <div className="w-full max-w-lg space-y-4 sm:space-y-6 p-3 sm:p-6">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <span className="text-xs text-muted-foreground font-medium">
                 Question <span className="text-foreground font-bold">{qIndex + 1}</span> / {totalQ}
               </span>
-              <Badge variant="violet" size="sm">
+              <Badge variant="primary" size="sm">
                 mock
               </Badge>
             </div>
             <div className="flex items-center gap-2">
+              {isPaused && (
+                <Badge variant="amber" size="sm">Paused</Badge>
+              )}
+              <Button
+                variant="ghost"
+                size="xs"
+                onClick={() => void handleTogglePause()}
+                leftIcon={isPaused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
+              >
+                {isPaused ? "Resume" : "Pause"}
+              </Button>
               <Button
                 variant="ghost"
                 size="xs"
@@ -635,20 +843,48 @@ export default function MockSession() {
 
           <div className="bg-card border border-border rounded-2xl p-4 sm:p-6">
             <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <div
-                className={cn(
-                  "flex items-center gap-1.5 text-xs sm:text-sm font-bold tabular-nums",
-                  sessionTimeLeft <= 0
-                    ? "text-muted-foreground"
-                    : timeColor === "emerald"
-                      ? "text-emerald-400"
-                      : timeColor === "amber"
-                        ? "text-amber-400"
-                        : "text-red-400"
-                )}
-              >
-                <Timer className="w-3.5 h-3.5" />
-                {timerDisplay}
+              <div className="flex items-center gap-2">
+                <div
+                  className={cn(
+                    "flex items-center gap-1.5 text-xs sm:text-sm font-bold tabular-nums",
+                    timerMode === "countup" || sessionTimeLeft > 0
+                      ? timeColor === "emerald"
+                        ? "text-emerald-400"
+                        : timeColor === "amber"
+                          ? "text-amber-400"
+                          : "text-red-400"
+                      : "text-muted-foreground",
+                  )}
+                >
+                  <Timer className="w-3.5 h-3.5" />
+                  {timerDisplay}
+                </div>
+                <div className="flex rounded-lg border border-border overflow-hidden text-[10px]">
+                  <button
+                    type="button"
+                    onClick={() => setTimerMode("countdown")}
+                    className={cn(
+                      "px-2 py-0.5 transition-colors",
+                      timerMode === "countdown"
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    Countdown
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setTimerMode("countup")}
+                    className={cn(
+                      "px-2 py-0.5 transition-colors",
+                      timerMode === "countup"
+                        ? "bg-primary/10 text-primary"
+                        : "text-muted-foreground hover:text-foreground",
+                    )}
+                  >
+                    Count up
+                  </button>
+                </div>
               </div>
               <button
                 onClick={() => setSkipConfirm(true)}
@@ -670,10 +906,12 @@ export default function MockSession() {
                 <div
                   className={cn(
                     "w-2 h-2 rounded-full",
-                    isListening ? "bg-red-500 animate-pulse" : "bg-muted-foreground/30",
+                    isListeningActive ? "bg-red-500 animate-pulse" : "bg-muted-foreground/30",
                   )}
                 />
-                <span className="text-xs font-medium text-foreground">Your answer</span>
+                <span className="text-xs font-medium text-foreground">
+                  {isPaused ? "Recording paused" : "Your answer"}
+                </span>
                 <span
                   className={cn(
                     "text-xs font-medium",
@@ -690,18 +928,43 @@ export default function MockSession() {
                   {wpmHook.wpm} WPM
                 </span>
               </div>
-              <button
-                type="button"
-                onClick={audio.toggleMute}
-                className="p-1.5 rounded-lg hover:bg-accent/10 transition-all"
-                title={isMuted ? "Unmute" : "Mute"}
-              >
+              <div className="flex items-center gap-2">
+                {!isMuted && isCapturing && (
+                  <div className="w-16 hidden sm:block">
+                    <ProgressBar
+                      value={micLevel}
+                      max={100}
+                      color={micLevel > 80 ? "red" : micLevel > 30 ? "emerald" : "amber"}
+                      size="sm"
+                    />
+                  </div>
+                )}
+                <label className="hidden sm:flex items-center gap-1.5 text-[10px] text-muted-foreground cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={noiseSuppression}
+                    onChange={(e) => {
+                      const enabled = e.target.checked;
+                      setNoiseSuppression(enabled);
+                      void audio.setNoiseSuppression?.(enabled);
+                    }}
+                    className="rounded border-border"
+                  />
+                  Noise supp.
+                </label>
+                <button
+                  type="button"
+                  onClick={audio.toggleMute}
+                  className="p-1.5 rounded-lg hover:bg-accent/10 transition-all"
+                  title={isMuted ? "Unmute" : "Mute"}
+                >
                 {isMuted ? (
                   <MicOff className="w-3.5 h-3.5 text-red-400" />
                 ) : (
                   <Mic className="w-3.5 h-3.5 text-emerald-400" />
                 )}
               </button>
+              </div>
             </div>
 
             <div className="min-h-[60px] text-sm text-foreground leading-relaxed">
@@ -744,10 +1007,26 @@ export default function MockSession() {
             {isLastQ ? "Finish & see scorecard" : "Next question"}
           </Button>
 
+          <div className="lg:hidden rounded-2xl border border-border bg-card p-4 space-y-2">
+            <div className="flex items-center gap-2">
+              <StickyNote className="w-3.5 h-3.5 text-muted-foreground" />
+              <p className="text-xs font-semibold text-foreground">Session notes</p>
+            </div>
+            <textarea
+              value={sessionNotes}
+              onChange={(e) => setSessionNotes(e.target.value)}
+              placeholder="Jot down key points…"
+              rows={3}
+              className="w-full resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm"
+            />
+          </div>
+
           <p className="text-center text-xs text-muted-foreground/40">
             The overlay window provides AI hints, transcript, and session status. Use{" "}
-            <kbd className="px-1 py-0.5 bg-secondary rounded font-mono">Ctrl+Shift+H</kbd> to toggle it.
+            <kbd className="px-1 py-0.5 bg-secondary rounded font-mono">Ctrl+Shift+H</kbd> or{" "}
+            <kbd className="px-1 py-0.5 bg-secondary rounded font-mono">Ctrl+Shift+C</kbd> to toggle it.
           </p>
+        </div>
         </div>
       </div>
 
@@ -778,7 +1057,7 @@ export default function MockSession() {
               captureAnswer(true);
               setSkipConfirm(false);
               if (isLastQ) {
-                void handleEndSession();
+                void finalizeSession(true);
               } else {
                 orchestrator.nextQuestion();
               }

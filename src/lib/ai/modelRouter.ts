@@ -1,8 +1,4 @@
-// src/lib/ai/modelRouter.ts — PRODUCTION FIXED
-// - Supports both "behavioral" and "behavioural"
-// - Removes @ts-nocheck with safe typing
-// - Ensures full-answer path calls onError on failure
-// - Keeps routing, fallback, offline templates, resume fallback intact
+// src/lib/ai/modelRouter.ts — Multi-model routing for practice coach
 
 import type { PreferredAIModel, HintStyle } from "@/types/user.types";
 import type { CoachingContext } from "@/types/ai.types";
@@ -11,12 +7,14 @@ import type { InterviewType } from "@/types/session.types";
 import { useNetworkStore } from "@/store/networkStore";
 import { useAuthStore } from "@/store/userStore";
 import { useOverlayStore } from "@/store/overlayStore";
+import { normalizeToDisplayTier } from "@/lib/constants/pricing";
+import type { PlanId } from "@/lib/billing/subscriptionManager";
 
 import { streamGeminiHint, streamFullAnswer } from "./geminiClient";
-import type { AnswerMode } from "./geminiClient";
-// P0-4: OpenAI / Anthropic clients are intentionally NOT imported here.
-// Launch ships Gemini-only; other providers stay in the codebase as
-// dead code for a future re-enable but must not be reachable from routing.
+import type { AnswerMode, GeminiModel } from "./geminiClient";
+import { streamOpenAIHint } from "./openaiClient";
+import { streamClaudeHint } from "./anthropicClient";
+import { toDbModel } from "./modelMapping";
 
 import { getOfflineTemplate } from "./offlineTemplates";
 import { formatTalkingPointsAsHint } from "./resumeFallback";
@@ -45,6 +43,10 @@ export interface RouteAnswerGenerationOptions {
   questionTypeHint?: InterviewType | string;
   modelHint?: PreferredAIModel | string;
   context: CoachingContext;
+  sessionId?: string | null;
+  /** Sessionless fallback when sessionId is absent (mock | warmup | rehearsal | practice). */
+  mode?: string;
+  screenshotBase64?: string | null;
   onToken: (chunk: string) => void;
   onDone: (fullText: string) => void;
   onError?: (error: Error) => void;
@@ -53,8 +55,9 @@ export interface RouteAnswerGenerationOptions {
 
 function normalizeInterviewType(input: InterviewType | string | undefined): InterviewType {
   const raw = String(input ?? "").toLowerCase();
-  if (raw === "behavioral") return "behavioural" as InterviewType;
-  if (raw === "behavioural") return "behavioural" as InterviewType;
+  if (raw === "behavioral" || raw === "behavioural") return "behavioural" as InterviewType;
+  if (raw === "coding") return "coding" as InterviewType;
+  if (raw === "government_exam") return "government_exam" as InterviewType;
   return (input as InterviewType) ?? ("behavioural" as InterviewType);
 }
 
@@ -65,41 +68,55 @@ function getResumeFallbackOrTemplate(interviewType: InterviewType, hintStyle: Hi
   return getOfflineTemplate(interviewType, hintStyle);
 }
 
+function isProPlan(planId: PlanId | string | null | undefined): boolean {
+  const tier = normalizeToDisplayTier((planId as PlanId) ?? "free");
+  return tier === "pro" || tier === "enterprise";
+}
+
+function isGeminiModel(model: PreferredAIModel): boolean {
+  return model.startsWith("gemini");
+}
+
 export function selectModel(
-  _preferred: PreferredAIModel,
+  preferred: PreferredAIModel,
   _interviewType: InterviewType,
   _isDegraded: boolean
 ): PreferredAIModel {
-  // P0-4: launch ships Gemini-only. All routing collapses to gemini-flash.
-  return "gemini-flash";
+  const planId = useAuthStore.getState().planId ?? "free";
+  if (!isProPlan(planId) && !isGeminiModel(preferred)) {
+    return "gemini-flash";
+  }
+  return preferred || "gemini-flash";
 }
 
-function getFallbackModel(_failed: PreferredAIModel): PreferredAIModel | null {
-  // P0-4: no cross-provider fallback at launch.
+function getFallbackModel(failed: PreferredAIModel): PreferredAIModel | null {
+  if (failed !== "gemini-flash") return "gemini-flash";
   return null;
 }
 
+function toGeminiApiModel(model: PreferredAIModel): GeminiModel {
+  if (model === "gemini-pro") return "gemini-2.5-pro";
+  return "gemini-2.5-flash";
+}
+
 async function callModel(
-  _model: PreferredAIModel,
+  model: PreferredAIModel,
   opts: RouteHintOptions & { interviewType: InterviewType }
 ): Promise<void> {
   const start = Date.now();
+  const apiModel = toDbModel(model);
 
   const wrappedOnDone = async (text: string) => {
-    const elapsed = Date.now() - start;
-    useNetworkStore.getState().recordAIResponseTime(elapsed);
+    useNetworkStore.getState().recordAIResponseTime(Date.now() - start);
     await opts.onDone(text);
   };
 
-  // P0-4: always Gemini.
-  return streamGeminiHint({
+  const base = {
     question: opts.question,
     context: opts.context,
-    interviewType: opts.interviewType,
     isLive: opts.isLive,
     sessionId: opts.sessionId,
     questionId: opts.questionId,
-    screenshotBase64: opts.screenshotBase64 ?? null,
     simpleLanguage: opts.simpleLanguage,
     callType: opts.callType,
     language: opts.language,
@@ -107,8 +124,20 @@ async function callModel(
     onDone: wrappedOnDone,
     onError: opts.onError,
     signal: opts.signal,
-    model: "gemini-2.5-flash",
-  } as any);
+  };
+
+  if (model.startsWith("gpt")) {
+    return streamOpenAIHint({ ...base, model: apiModel });
+  }
+
+  if (model.startsWith("claude")) {
+    return streamClaudeHint({ ...base, model: apiModel });
+  }
+
+  return streamGeminiHint({
+    ...opts,
+    model: toGeminiApiModel(model),
+  });
 }
 
 export async function routeAnswerGeneration(opts: RouteAnswerGenerationOptions): Promise<void> {
@@ -118,7 +147,6 @@ export async function routeAnswerGeneration(opts: RouteAnswerGenerationOptions):
 
   const isOffline = networkStore.mode === "offline";
   const isDegraded = networkStore.mode === "degraded";
-
   const interviewType = normalizeInterviewType(opts.questionTypeHint);
 
   if (isOffline) {
@@ -137,63 +165,58 @@ export async function routeAnswerGeneration(opts: RouteAnswerGenerationOptions):
   overlayStore.setNetworkColor(networkStore.getOverlayColor());
 
   const start = Date.now();
-  const geminiModelForAnswer =
-    effectiveModel === "gemini-pro" ? "gemini-2.5-pro" : "gemini-2.5-flash";
+  const apiModel = toDbModel(effectiveModel);
 
   try {
     await streamFullAnswer({
       question: opts.questionText,
       context: opts.context,
-      model: geminiModelForAnswer,
-      simpleLanguage: (opts.context as any).simple_language ?? false,
+      model: (isGeminiModel(effectiveModel)
+        ? toGeminiApiModel(effectiveModel)
+        : apiModel) as GeminiModel,
+      sessionId: opts.sessionId ?? undefined,
+      mode: opts.mode,
+      screenshotBase64: opts.screenshotBase64 ?? null,
+      simpleLanguage: (opts.context as { simple_language?: boolean }).simple_language ?? false,
       onChunk: (chunk) => opts.onToken(chunk),
       onDone: (fullText) => {
-        const elapsed = Date.now() - start;
-        useNetworkStore.getState().recordAIResponseTime(elapsed);
+        useNetworkStore.getState().recordAIResponseTime(Date.now() - start);
         opts.onDone(fullText);
       },
-      onError: (err) => {
-        opts.onError?.(err);
-      },
+      onError: (err) => opts.onError?.(err),
       signal: opts.signal,
     });
   } catch (err) {
-    const e = err instanceof Error ? err : new Error(String(err));
-    opts.onError?.(e);
+    opts.onError?.(err instanceof Error ? err : new Error(String(err)));
   }
 }
 
 export async function routeHint(opts: RouteHintOptions): Promise<void> {
   const overlayStore = useOverlayStore.getState();
   const networkStore = useNetworkStore.getState();
-
   const interviewType = normalizeInterviewType(opts.interviewType);
 
-  // Full answer path
   if (opts.answerMode === "full_answer") {
     try {
       overlayStore.setHintState("streaming");
-
       await routeAnswerGeneration({
         questionText: opts.question,
         questionTypeHint: interviewType,
         modelHint: opts.preferredModel,
         context: opts.context,
+        sessionId: opts.sessionId,
+        mode: opts.isLive ? "rehearsal" : "mock",
         onToken: opts.onChunk,
-        onDone: (fullText) => {
-          void opts.onDone(fullText);
-        },
+        onDone: (fullText) => void opts.onDone(fullText),
         onError: (err) => opts.onError(err),
         signal: opts.signal,
       });
     } catch (err) {
-      const e = err instanceof Error ? err : new Error(String(err));
-      opts.onError(e);
+      opts.onError(err instanceof Error ? err : new Error(String(err)));
     }
     return;
   }
 
-  // Offline fallback
   if (networkStore.mode === "offline") {
     const fallback = getResumeFallbackOrTemplate(interviewType, opts.context.hint_style);
     overlayStore.setOfflineFallback(fallback);
@@ -204,7 +227,7 @@ export async function routeHint(opts: RouteHintOptions): Promise<void> {
   const model = selectModel(
     opts.preferredModel,
     interviewType,
-    networkStore.mode === "degraded"
+    networkStore.mode === "degraded",
   );
 
   overlayStore.setNetworkColor(networkStore.getOverlayColor());
@@ -212,20 +235,20 @@ export async function routeHint(opts: RouteHintOptions): Promise<void> {
   try {
     await callModel(model, { ...opts, interviewType });
   } catch (primaryErr) {
-    console.warn(`[ModelRouter] Primary model ${model} failed:`, primaryErr);
-
     const fallbackModel = getFallbackModel(model);
     if (fallbackModel) {
       try {
         await callModel(fallbackModel, { ...opts, interviewType });
       } catch (fallbackErr) {
-        const fallback = getResumeFallbackOrTemplate(interviewType, opts.context.hint_style);
-        overlayStore.setOfflineFallback(fallback);
+        overlayStore.setOfflineFallback(
+          getResumeFallbackOrTemplate(interviewType, opts.context.hint_style),
+        );
         opts.onError(fallbackErr instanceof Error ? fallbackErr : new Error(String(fallbackErr)));
       }
     } else {
-      const fallback = getResumeFallbackOrTemplate(interviewType, opts.context.hint_style);
-      overlayStore.setOfflineFallback(fallback);
+      overlayStore.setOfflineFallback(
+        getResumeFallbackOrTemplate(interviewType, opts.context.hint_style),
+      );
       opts.onError(primaryErr instanceof Error ? primaryErr : new Error(String(primaryErr)));
     }
   }

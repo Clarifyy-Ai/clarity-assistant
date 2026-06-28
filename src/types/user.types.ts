@@ -64,6 +64,8 @@ export interface UserProfile {
 
   // Plan & credits
   plan: UserPlan;
+  /** Supabase profiles.plan_id — preferred at runtime */
+  plan_id?: string | null;
   credits: number;
   credits_used_this_month: number;
   credits_reset_at: string | null;   // ISO datetime

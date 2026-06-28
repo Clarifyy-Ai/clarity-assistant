@@ -7,7 +7,7 @@ import type { HintStyle } from "@/types/user.types";
 // They are deterministic — no AI call, no spinner, no blank screen.
 // ─────────────────────────────────────────────────────────────────
 
-type TemplateMap = Record<InterviewType, Record<HintStyle, string>>;
+type TemplateMap = Partial<Record<InterviewType, Record<HintStyle, string>>>;
 
 const TEMPLATES: TemplateMap = {
   behavioural: {
@@ -179,7 +179,7 @@ export function getOfflineTemplate(
   return typeTemplates[hintStyle] ?? typeTemplates.short_hints;
 }
 
-export function getAllOfflineTemplates(): TemplateMap {
+export function getAllOfflineTemplates(): Partial<TemplateMap> {
   return TEMPLATES;
 }
 

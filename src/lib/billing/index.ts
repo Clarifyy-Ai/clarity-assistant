@@ -62,3 +62,14 @@ export type {
   CreditPack,
   PlanComparison,
 } from "./priceCalculator";
+
+// ─── Display tier labels (launch: Free / Pro / Enterprise) ─────────────────────
+export {
+  LAUNCH_PLANS,
+  DEPRECATED_PLANS,
+  PLAN_DISPLAY_NAMES,
+  getPlanDisplayName,
+  normalizeToDisplayTier,
+} from "@/lib/constants/pricing";
+
+export type { DisplayTier } from "@/lib/constants/pricing";

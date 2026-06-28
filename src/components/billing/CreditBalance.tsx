@@ -91,7 +91,7 @@ export function CreditBalance({
   if (!creditStatus) {
     return (
       <div className={cn('flex items-center gap-2 rounded-lg bg-secondary/40 p-3', className)}>
-        <div className="h-4 w-4 animate-spin rounded-full border-2 border-violet-500/30 border-t-violet-500" />
+        <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary/30 border-t-primary" />
         <span className="text-xs text-muted-foreground">Loading credits...</span>
       </div>
     );

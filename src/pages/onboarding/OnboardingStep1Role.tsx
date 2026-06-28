@@ -41,13 +41,19 @@ export default function OnboardingStep1Role({ onNext }: StepProps) {
   // Show referral badge if ?ref= is present in the URL
   const refCode = normalizeRefCode(searchParams.get("ref"));
 
-  const [name,    setName]    = useState("");
-  const [role,    setRole]    = useState("");
-  const [domain,  setDomain]  = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error,   setError]   = useState<string | null>(null);
+  const [name,        setName]        = useState("");
+  const [role,        setRole]        = useState("");
+  const [customRole,  setCustomRole]  = useState("");
+  const [domain,      setDomain]      = useState("");
+  const [loading,     setLoading]     = useState(false);
+  const [error,       setError]       = useState<string | null>(null);
 
-  const canProceed = Boolean(name.trim() && role && domain);
+  const canProceed = Boolean(
+    name.trim()
+    && role
+    && domain
+    && (role !== "other" || customRole.trim()),
+  );
 
   async function handleNext() {
     if (!canProceed || !user) return;
@@ -59,7 +65,7 @@ export default function OnboardingStep1Role({ onNext }: StepProps) {
       .update({
         full_name:       name.trim(),
         role_type:       role,
-        target_role:     role,
+        target_role:     role === "other" ? customRole.trim().slice(0, 100) : role,
         domain,
         onboarding_step: 2,
         ...(refCode ? { referred_by: refCode } : {}),
@@ -77,8 +83,10 @@ export default function OnboardingStep1Role({ onNext }: StepProps) {
 
     // Cast: Supabase row type vs local ProfileRow differ on computed columns
     if (data) setProfile(data as unknown as ProfileRow);
-    // Advance wizard and carry forward the target role
-    onNext({ targetRole: role, targetCompanies: [] });
+    onNext({
+      targetRole: role === "other" ? customRole.trim().slice(0, 100) : role,
+      targetCompanies: [],
+    });
   }
 
   return (
@@ -96,7 +104,7 @@ export default function OnboardingStep1Role({ onNext }: StepProps) {
 
       {/* ── Referral badge ──────────────────────────────────────────────── */}
       {refCode && (
-        <div className="px-3 py-2.5 bg-violet-500/10 border border-violet-500/20 rounded-xl text-xs text-violet-300 text-center">
+        <div className="px-3 py-2.5 bg-primary/10 border border-primary/20 rounded-xl text-xs text-primary text-center">
           Referral code{" "}
           <span className="font-mono font-bold">{refCode}</span>{" "}
           applied — you&apos;ll both earn bonus credits!
@@ -126,7 +134,7 @@ export default function OnboardingStep1Role({ onNext }: StepProps) {
               className={cn(
                 "flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-all",
                 role === r.value
-                  ? "bg-violet-600/20 border-violet-500/50 text-violet-200"
+                  ? "bg-primary/20 border-primary/50 text-primary"
                   : "bg-secondary/50 border-border text-muted-foreground hover:border-primary/30",
               )}
             >
@@ -135,6 +143,16 @@ export default function OnboardingStep1Role({ onNext }: StepProps) {
             </button>
           ))}
         </div>
+        {role === "other" && (
+          <Input
+            label="Describe your role"
+            value={customRole}
+            onChange={(e) => setCustomRole(e.target.value.slice(0, 100))}
+            placeholder="e.g. UX Research Lead"
+            maxLength={100}
+            hint={`${customRole.length}/100 characters`}
+          />
+        )}
       </div>
 
       {/* ── Domain chips ────────────────────────────────────────────────── */}
@@ -151,7 +169,7 @@ export default function OnboardingStep1Role({ onNext }: StepProps) {
               className={cn(
                 "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
                 domain === d
-                  ? "bg-violet-600/20 border-violet-500/40 text-violet-200"
+                  ? "bg-primary/20 border-primary/40 text-primary"
                   : "bg-secondary/50 border-border text-muted-foreground hover:border-primary/30",
               )}
             >

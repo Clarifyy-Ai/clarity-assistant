@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { ArrowLeft, Calendar, User } from "lucide-react";
-import { motion } from "framer-motion";
+import { LazyMotion, domAnimation, m } from "framer-motion";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { supabase } from "@/integrations/supabase/client";
@@ -175,13 +175,14 @@ export default function BlogPost() {
 
   return (
     <MarketingLayout>
+      <LazyMotion features={domAnimation} strict>
       <section className="pt-32 pb-20 px-6">
         <div className="max-w-2xl mx-auto">
           <Link to="/blog" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6">
             <ArrowLeft className="w-4 h-4" /> Back to Blog
           </Link>
 
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
+          <m.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
             <span className="text-xs text-primary font-medium">{post.category}</span>
             <h1 className="text-3xl md:text-4xl font-bold mt-2 mb-4">{post.title}</h1>
 
@@ -194,11 +195,11 @@ export default function BlogPost() {
             <div className="max-w-none">
               {renderMarkdown(post.content)}
             </div>
-          </motion.div>
+          </m.div>
 
           <div className="mt-12 pt-8 border-t border-border text-center">
             <h3 className="text-lg font-bold mb-2">Ready to start practicing?</h3>
-            <p className="text-sm text-muted-foreground mb-4">Get your first 5 mock sessions free. No credit card required.</p>
+            <p className="text-sm text-muted-foreground mb-4">Start free with 50 credits per month. No credit card required.</p>
             <Link
               to="/signup"
               className="inline-flex items-center gap-2 px-6 py-2.5 rounded-xl bg-primary text-primary-foreground text-sm font-semibold hover:opacity-90 transition-opacity"
@@ -208,6 +209,7 @@ export default function BlogPost() {
           </div>
         </div>
       </section>
+      </LazyMotion>
     </MarketingLayout>
   );
 }

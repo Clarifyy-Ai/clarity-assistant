@@ -3,83 +3,164 @@
 // Rendered inside OnboardingIndex (no outer page wrapper needed).
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { useAudioCapture } from "@/hooks/useAudioCapture";
 import { Button } from "@/components/ui/Button";
 import {
   Mic, Volume2, CheckCircle,
-  AlertCircle, Monitor, Info,
+  AlertCircle, Monitor, Info, Play, RotateCcw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { StepProps } from "@/types/onboarding.types";
 import type { ProfileRow } from "@/types";
 
+const RECORD_SECONDS = 3;
+
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function OnboardingStep4AudioSetup({ onNext, onBack, onSkip }: StepProps) {
+export default function OnboardingStep4AudioSetup({ onNext, onBack }: StepProps) {
   const { user, setProfile } = useAuthStore();
   const audio                = useAudioCapture();
 
-  const [micTested,  setMicTested]  = useState(false);
-  const [micOk,      setMicOk]      = useState(false);
-  const [loading,    setLoading]    = useState(false);
-  const [testError,  setTestError]  = useState<string | null>(null);
+  const [recording,   setRecording]   = useState(false);
+  const [recordSecs,  setRecordSecs]  = useState(0);
+  const [micOk,        setMicOk]        = useState(false);
+  const [loading,      setLoading]      = useState(false);
+  const [testError,    setTestError]    = useState<string | null>(null);
+  const [playbackUrl,  setPlaybackUrl]  = useState<string | null>(null);
 
-  // Audio level visualiser
   const [level, setLevel] = useState(0);
-  const rafRef             = useRef<number | null>(null);
-  const ctxRef             = useRef<AudioContext | null>(null);
-  const analyserRef        = useRef<AnalyserNode | null>(null);
+  const rafRef              = useRef<number | null>(null);
+  const ctxRef              = useRef<AudioContext | null>(null);
+  const recorderRef         = useRef<MediaRecorder | null>(null);
+  const chunksRef           = useRef<Blob[]>([]);
+  const recordTimerRef      = useRef<ReturnType<typeof setInterval> | null>(null);
+  const audioElRef          = useRef<HTMLAudioElement | null>(null);
 
-  // ── Mic test ────────────────────────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+      if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+      ctxRef.current?.close();
+      recorderRef.current?.stop();
+      audio.stopAll();
+      if (playbackUrl) URL.revokeObjectURL(playbackUrl);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  async function startMicTest() {
-    setTestError(null);
-    const { error } = await audio.startMic();
-    if (error) { setTestError(error); return; }
+  function stopVisualizer() {
+    if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
+    ctxRef.current?.close();
+    ctxRef.current = null;
+  }
 
-    // FIX: null guard before using audio.micStream
-    if (!audio.micStream) {
-      setTestError("Microphone stream not available. Please try again.");
-      return;
-    }
-
-    const ctx          = new AudioContext();
+  function startVisualizer(stream: MediaStream) {
+    const ctx = new AudioContext();
     const analyserNode = ctx.createAnalyser();
     analyserNode.fftSize = 256;
-    const source = ctx.createMediaStreamSource(audio.micStream);
+    const source = ctx.createMediaStreamSource(stream);
     source.connect(analyserNode);
-    ctxRef.current    = ctx;
-    analyserRef.current = analyserNode;
+    ctxRef.current = ctx;
 
     const data = new Float32Array(analyserNode.frequencyBinCount);
 
     function loop() {
       analyserNode.getFloatTimeDomainData(data);
       const rms  = Math.sqrt(data.reduce((s, v) => s + v * v, 0) / data.length);
-      const norm = Math.min(1, rms * 8);
-      setLevel(norm);
+      setLevel(Math.min(1, rms * 8));
       rafRef.current = requestAnimationFrame(loop);
     }
 
     rafRef.current = requestAnimationFrame(loop);
-    setMicTested(true);
-
-    // Auto-pass after 3 s of detecting audio
-    setTimeout(() => {
-      setMicOk(true);
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-      audio.stopAll();
-      ctxRef.current?.close();
-    }, 3000);
   }
 
-  // ── Save and advance ────────────────────────────────────────────────────
+  function resetRecording() {
+    if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+    stopVisualizer();
+    recorderRef.current?.stop();
+    recorderRef.current = null;
+    chunksRef.current = [];
+    audio.stopAll();
+    if (playbackUrl) URL.revokeObjectURL(playbackUrl);
+    setPlaybackUrl(null);
+    setRecording(false);
+    setRecordSecs(0);
+    setMicOk(false);
+    setLevel(0);
+  }
+
+  async function startMicTest() {
+    setTestError(null);
+    resetRecording();
+
+    const { error } = await audio.startMic();
+    if (error) {
+      setTestError(error);
+      return;
+    }
+
+    const stream = audio.micStream;
+    if (!stream) {
+      setTestError("Microphone stream not available. Please try again.");
+      return;
+    }
+
+    startVisualizer(stream);
+    setRecording(true);
+    setRecordSecs(RECORD_SECONDS);
+
+    chunksRef.current = [];
+    const recorder = new MediaRecorder(stream);
+    recorderRef.current = recorder;
+
+    recorder.ondataavailable = (e) => {
+      if (e.data.size > 0) chunksRef.current.push(e.data);
+    };
+
+    recorder.onstop = () => {
+      stopVisualizer();
+      audio.stopAll();
+      const blob = new Blob(chunksRef.current, { type: "audio/webm" });
+      if (blob.size > 0) {
+        const url = URL.createObjectURL(blob);
+        setPlaybackUrl(url);
+        setMicOk(true);
+      } else {
+        setTestError("No audio captured. Please try again.");
+      }
+      setRecording(false);
+      setRecordSecs(0);
+    };
+
+    recorder.start();
+
+    recordTimerRef.current = setInterval(() => {
+      setRecordSecs((prev) => {
+        if (prev <= 1) {
+          if (recordTimerRef.current) clearInterval(recordTimerRef.current);
+          recorderRef.current?.stop();
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+  }
+
+  function playRecording() {
+    if (!playbackUrl) return;
+    if (audioElRef.current) {
+      audioElRef.current.pause();
+    }
+    const el = new Audio(playbackUrl);
+    audioElRef.current = el;
+    void el.play();
+  }
 
   async function handleNext() {
-    if (!user) return;
+    if (!user || !micOk) return;
     setLoading(true);
 
     const { data, error } = await supabase
@@ -96,11 +177,10 @@ export default function OnboardingStep4AudioSetup({ onNext, onBack, onSkip }: St
 
     setLoading(false);
     if (!error && data) {
-      // Cast: Supabase row type vs local ProfileRow differ on computed columns
       setProfile(data as unknown as ProfileRow);
     }
 
-    onNext({ audioVerified: micOk });
+    onNext({ audioVerified: true });
   }
 
   return (
@@ -119,7 +199,7 @@ export default function OnboardingStep4AudioSetup({ onNext, onBack, onSkip }: St
       <div className="bg-secondary border border-border rounded-2xl p-5">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <Mic className="w-4 h-4 text-violet-400" />
+            <Mic className="w-4 h-4 text-primary" />
             <span className="text-sm font-semibold text-foreground">Microphone</span>
           </div>
           {micOk && (
@@ -129,12 +209,11 @@ export default function OnboardingStep4AudioSetup({ onNext, onBack, onSkip }: St
           )}
         </div>
 
-        {/* Level meter */}
         <div className="h-2 bg-background rounded-full overflow-hidden mb-4">
           <div
             className={cn(
               "h-full rounded-full transition-all duration-75",
-              micOk ? "bg-emerald-500" : "bg-violet-500",
+              micOk ? "bg-emerald-500" : "bg-primary",
             )}
             style={{ width: `${level * 100}%` }}
           />
@@ -147,23 +226,38 @@ export default function OnboardingStep4AudioSetup({ onNext, onBack, onSkip }: St
           </div>
         )}
 
-        {!micTested ? (
+        {recording ? (
+          <p className="text-xs text-muted-foreground animate-pulse">
+            Recording {recordSecs}s sample… speak a few words
+          </p>
+        ) : micOk ? (
+          <div className="flex flex-wrap gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={playRecording}
+              leftIcon={<Play className="w-3.5 h-3.5" />}
+            >
+              Play sample
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void startMicTest()}
+              leftIcon={<RotateCcw className="w-3.5 h-3.5" />}
+            >
+              Re-record
+            </Button>
+          </div>
+        ) : (
           <Button
             variant="secondary"
             size="sm"
-            onClick={startMicTest}
+            onClick={() => void startMicTest()}
             leftIcon={<Mic className="w-3.5 h-3.5" />}
           >
-            Test microphone
+            Record {RECORD_SECONDS}s test sample
           </Button>
-        ) : micOk ? (
-          <p className="text-xs text-emerald-400">
-            ✓ Microphone detected successfully
-          </p>
-        ) : (
-          <p className="text-xs text-muted-foreground animate-pulse">
-            Listening… speak a few words…
-          </p>
         )}
       </div>
 
@@ -201,9 +295,10 @@ export default function OnboardingStep4AudioSetup({ onNext, onBack, onSkip }: St
           size="md"
           fullWidth
           loading={loading}
+          disabled={!micOk}
           onClick={handleNext}
         >
-          {micOk ? "Continue →" : "Skip for now →"}
+          Continue →
         </Button>
       </div>
     </div>

@@ -3,6 +3,7 @@ import { useEffect, useRef, useCallback } from "react";
 import { FillerAccumulator, RealTimeFillerCounter } from "@/lib/audio/fillerDetector";
 import { useAudioStore } from "@/store/audioStore";
 import { useSessionStore } from "@/store/sessionStore";
+import { useOverlayStore } from "@/store/overlayStore";
 import {
   captureMicrophone,
   captureSystemAudio,
@@ -28,6 +29,8 @@ import type { Speaker, TranscriptUtterance } from "@/types/audio.types";
 interface UseAudioSessionOptions {
   enableSystemAudio?: boolean;
   micDeviceId?: string | null;
+  noiseSuppression?: boolean;
+  autoGainControl?: boolean;
   onQuestionDetected: (question: string) => void;
   onFillerDetected: (count: number) => void;
   onWPMUpdate: (wpm: number) => void;
@@ -131,7 +134,10 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
 
     try {
       // 1) mic
-      const micStream = await captureMicrophone(opts.micDeviceId);
+      const micStream = await captureMicrophone(opts.micDeviceId, {
+        noiseSuppression: opts.noiseSuppression ?? true,
+        autoGainControl: opts.autoGainControl ?? true,
+      });
       store.setMicStream(micStream);
 
       // 2) optional system audio — separate stream + Deepgram channel (P1-A)
@@ -212,9 +218,11 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       vad.start(analyser.getLevel);
 
       // 4) silence boundary — triggers question detection
+      const silenceSeconds =
+        useOverlayStore.getState().auto_answer_silence_seconds ?? 3;
       const silenceBoundary = new SilenceBoundaryDetector(
         (question) => opts.onQuestionDetected(question),
-        1200,
+        Math.max(1000, Math.min(10000, silenceSeconds * 1000)),
       );
       silenceRef.current = silenceBoundary;
 
@@ -270,7 +278,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       });
       store.setDeepgramStatus("error");
     }
-  }, [opts.micDeviceId, opts.enableSystemAudio, opts.onQuestionDetected, opts.onFillerDetected, opts.onWPMUpdate, handleUtterance, connectDeepgram]);
+  }, [opts.micDeviceId, opts.noiseSuppression, opts.autoGainControl, opts.enableSystemAudio, opts.onQuestionDetected, opts.onFillerDetected, opts.onWPMUpdate, handleUtterance, connectDeepgram]);
 
   // ── Stop pipeline ─────────────────────────────────────────────
   const stop = useCallback(() => {
@@ -324,6 +332,17 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     store.setIsMuted(muted);
   }, []);
 
+  const setNoiseSuppression = useCallback(async (enabled: boolean) => {
+    const store = useAudioStore.getState();
+    const stream = store.streams.mic_stream;
+    if (!stream) return;
+    await Promise.all(
+      stream.getAudioTracks().map((track) =>
+        track.applyConstraints({ noiseSuppression: enabled }).catch(() => undefined),
+      ),
+    );
+  }, []);
+
   // ── Toggle system audio at runtime ───────────────────────────
   const toggleSystemAudio = useCallback(async () => {
     const store = useAudioStore.getState();
@@ -349,7 +368,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         return;
       }
 
-      const proceed = confirmTabAudioCapture();
+      const proceed = await confirmTabAudioCapture();
       if (!proceed) return;
 
       try {
@@ -459,6 +478,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     stop,
     reconnect,
     toggleMute,
+    setNoiseSuppression,
     toggleSystemAudio,
     isSystemAudioActive,
     getFillerSnapshot,

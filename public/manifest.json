@@ -1,16 +1,22 @@
-{
-  "name": "Clarify AI",
-  "short_name": "Clarify",
-  "description": "AI-powered interview preparation assistant",
-  "start_url": "/",
-  "display": "standalone",
-  "background_color": "#09090b",
-  "theme_color": "#09090b",
-  "icons": [
-    {
-      "src": "/favicon.ico",
-      "sizes": "64x64",
-      "type": "image/x-icon"
-    }
-  ]
-}
+{
+  "name": "Clarify AI",
+  "short_name": "Clarify AI",
+  "description": "AI-powered interview preparation and rehearsal platform",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "icons": [
+    {
+      "src": "/favicon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

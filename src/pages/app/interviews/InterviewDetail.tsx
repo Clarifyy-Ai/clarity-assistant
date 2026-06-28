@@ -1,17 +1,21 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate, Link } from "react-router-dom";
+import { useParams, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useInterviewScheduler } from "@/hooks/useInterviewScheduler";
 import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { PageContent } from "@/components/layout/PageContent";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
-  ChevronLeft, Building2, Clock, Globe,
+  Building2, Clock, Globe,
   User, MessageSquare, CalendarDays,
   ExternalLink, Edit2, Trash2, CheckCircle,
-  ClipboardList, Brain,
+  ClipboardList, FileQuestion,
 } from "lucide-react";
 import { format, isPast, isToday } from "date-fns";
 import { cn } from "@/lib/utils";
@@ -53,43 +57,69 @@ export default function InterviewDetail() {
 
   if ((store as any).is_loading) {
     return (
-      <div className="max-w-2xl space-y-4">
+      <PageContent className="max-w-2xl space-y-4">
+        <PageHeader
+          title="Interview details"
+          subtitle="Loading interview…"
+          breadcrumbs={[
+            { label: "Interviews", href: "/app/interviews" },
+            { label: "Details" },
+          ]}
+        />
         <SkeletonCard />
         <SkeletonCard />
-      </div>
+      </PageContent>
     );
   }
 
   if (store.load_error) {
     return (
-      <div className="max-w-2xl space-y-4">
-        <Button variant="ghost" size="sm" onClick={() => navigate("/app/interviews")}>
-          <ChevronLeft className="w-4 h-4" /> Back
-        </Button>
-        <Card className="p-6 border-destructive/30 bg-destructive/5">
-          <p className="text-sm text-destructive mb-3">{store.load_error}</p>
-          <Button size="sm" onClick={() => scheduler.reload()}>
-            Retry
-          </Button>
-        </Card>
-      </div>
+      <PageContent className="max-w-2xl space-y-4">
+        <PageHeader
+          title="Interview details"
+          breadcrumbs={[
+            { label: "Interviews", href: "/app/interviews" },
+            { label: "Details" },
+          ]}
+        />
+        <InlineErrorRetry
+          message={store.load_error}
+          onRetry={() => scheduler.reload()}
+        />
+      </PageContent>
     );
   }
 
   if (!iv) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <p className="text-muted-foreground">Interview not found.</p>
-        <Button variant="secondary" size="sm" onClick={() => navigate("/app/interviews")}>
-          ← Back
-        </Button>
-      </div>
+      <PageContent className="max-w-2xl">
+        <PageHeader
+          title="Interview not found"
+          breadcrumbs={[
+            { label: "Interviews", href: "/app/interviews" },
+            { label: "Not found" },
+          ]}
+        />
+        <Card>
+          <EmptyState
+            icon={FileQuestion}
+            title="Interview not found"
+            description="This interview may have been deleted or the link is invalid."
+            actionLabel="Back to interviews"
+            onAction={() => navigate("/app/interviews")}
+            compact
+          />
+        </Card>
+      </PageContent>
     );
   }
 
-  const d         = new Date(iv.scheduled_at);
+  const round = iv.next_round ?? iv.rounds?.[0] ?? null;
+  const scheduledAt = round?.scheduled_at ?? iv.scheduled_at ?? iv.created_at;
+  const d         = new Date(scheduledAt);
   const isNow     = isToday(d);
   const isPassed  = isPast(d) && !isNow;
+  const ivStatus  = round?.status ?? iv.status ?? "scheduled";
 
   async function handleDelete() {
     setDeleting(true);
@@ -114,51 +144,58 @@ export default function InterviewDetail() {
   }
 
   return (
-    <div className="max-w-2xl space-y-5">
-
-      {/* Back + actions */}
-      <div className="flex items-center justify-between">
-        <button
-          onClick={() => navigate("/app/interviews")}
-          className="flex items-center gap-2 text-sm text-muted-foreground hover:text-foreground transition-colors"
-        >
-          <ChevronLeft className="w-4 h-4" />
-          Interviews
-        </button>
-        <div className="flex items-center gap-2">
-          {!isPassed && iv.status === "scheduled" && (
+    <PageContent className="max-w-2xl space-y-5">
+      <PageHeader
+        title={iv.company_name}
+        subtitle={iv.role_title}
+        breadcrumbs={[
+          { label: "Interviews", href: "/app/interviews" },
+          { label: iv.company_name },
+        ]}
+        actions={
+          <div className="flex items-center gap-2">
+            {!isPassed && ivStatus === "scheduled" && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={handleComplete}
+                leftIcon={<CheckCircle className="w-3.5 h-3.5" />}
+              >
+                Mark completed
+              </Button>
+            )}
             <Button
               variant="secondary"
               size="sm"
-              onClick={handleComplete}
-              leftIcon={<CheckCircle className="w-3.5 h-3.5" />}
+              onClick={() => navigate(`/app/interviews/${iv.id}/edit`)}
+              leftIcon={<Edit2 className="w-3.5 h-3.5" />}
             >
-              Mark completed
+              Edit
             </Button>
-          )}
-          <Button
-            variant="danger"
-            size="sm"
-            loading={deleting}
-            onClick={handleDelete}
-            leftIcon={<Trash2 className="w-3.5 h-3.5" />}
-          >
-            Delete
-          </Button>
-        </div>
-      </div>
+            <Button
+              variant="danger"
+              size="sm"
+              loading={deleting}
+              onClick={handleDelete}
+              leftIcon={<Trash2 className="w-3.5 h-3.5" />}
+            >
+              Delete
+            </Button>
+          </div>
+        }
+      />
 
       {/* Today banner */}
       {isNow && (
         <div
           onClick={() => navigate("/app/interview-day")}
-          className="flex items-center gap-4 p-4 bg-violet-600/20 border border-violet-500/40 rounded-2xl cursor-pointer hover:bg-violet-600/25 transition-all"
+          className="flex items-center gap-4 p-4 bg-primary/20 border border-primary/40 rounded-2xl cursor-pointer hover:bg-primary/25 transition-all"
         >
           <div className="text-2xl">🎯</div>
           <div className="flex-1">
             <p className="text-sm font-semibold text-foreground">This interview is today!</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Enter focus mode for final prep and real-time co-pilot.
+              Enter focus mode for final prep and Practice Coach.
             </p>
           </div>
           <Button variant="primary" size="sm">
@@ -171,43 +208,45 @@ export default function InterviewDetail() {
       <Card>
         <div className="flex items-start justify-between mb-5">
           <div>
-            <h1 className="text-xl font-bold text-foreground">{iv.company_name}</h1>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
+              Interview
+            </p>
             <p className="text-muted-foreground text-sm mt-0.5">{iv.role_title}</p>
           </div>
           <Badge
             variant={
-              iv.status === "completed" ? "emerald" :
-              iv.status === "cancelled" ? "red"     :
+              ivStatus === "completed" ? "emerald" :
+              ivStatus === "cancelled" ? "red"     :
               isNow                     ? "violet"  : "default"
             }
             size="md"
             dot
           >
-            {isNow ? "Today" : iv.status}
+            {isNow ? "Today" : ivStatus}
           </Badge>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           {[
             {
-              icon: <CalendarDays className="w-4 h-4 text-violet-400" />,
+              icon: <CalendarDays className="w-4 h-4 text-primary" />,
               label: "Date & time",
               value: format(d, "EEEE, MMMM d · h:mm a"),
             },
             {
               icon: <Clock className="w-4 h-4 text-blue-400" />,
               label: "Duration",
-              value: iv.duration_minutes ? `${iv.duration_minutes} minutes` : "—",
+              value: round?.duration_minutes ? `${round.duration_minutes} minutes` : iv.duration_minutes ? `${iv.duration_minutes} minutes` : "—",
             },
             {
               icon: <ClipboardList className="w-4 h-4 text-emerald-400" />,
               label: "Type & round",
-              value: `${iv.interview_type ?? "Interview"} · Round ${iv.round_number ?? 1}`,
+              value: `${round?.interview_type ?? iv.interview_type ?? "Interview"} · Round ${round?.round_number ?? iv.round_number ?? 1}`,
             },
             {
               icon: <Globe className="w-4 h-4 text-amber-400" />,
               label: "Platform",
-              value: iv.platform ? iv.platform.replace("_", " ") : "—",
+              value: (round?.platform ?? iv.platform) ? (round?.platform ?? iv.platform).replace("_", " ") : "—",
             },
           ].map((item) => (
             <div key={item.label} className="flex items-start gap-3">
@@ -225,28 +264,28 @@ export default function InterviewDetail() {
         </div>
 
         {/* Interviewer */}
-        {iv.interviewer_name && (
+        {(round?.interviewer_name ?? iv.interviewer_name) && (
           <div className="flex items-center gap-3 mt-4 pt-4 border-t border-border">
             <User className="w-4 h-4 text-muted-foreground shrink-0" />
             <div>
               <p className="text-[10px] text-muted-foreground">Interviewer</p>
-              <p className="text-sm text-foreground">{iv.interviewer_name}</p>
+              <p className="text-sm text-foreground">{round?.interviewer_name ?? iv.interviewer_name}</p>
             </div>
           </div>
         )}
 
         {/* Meeting link */}
-        {iv.meeting_link && (
+        {(round?.meeting_link ?? iv.meeting_link) && (
           <div className="flex items-center justify-between mt-3 pt-3 border-t border-border">
             <div className="flex items-center gap-2">
               <ExternalLink className="w-4 h-4 text-muted-foreground shrink-0" />
-              <p className="text-xs text-muted-foreground truncate">{iv.meeting_link}</p>
+              <p className="text-xs text-muted-foreground truncate">{round?.meeting_link ?? iv.meeting_link}</p>
             </div>
             <a
-              href={iv.meeting_link}
+              href={round?.meeting_link ?? iv.meeting_link}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-violet-400 hover:text-violet-300 transition-colors shrink-0 ml-2"
+              className="text-xs text-primary hover:text-primary/80 transition-colors shrink-0 ml-2"
             >
               Open ↗
             </a>
@@ -340,13 +379,13 @@ export default function InterviewDetail() {
           }}
           className="flex items-center gap-3"
         >
-          <Building2 className="w-5 h-5 text-violet-400 shrink-0" />
+          <Building2 className="w-5 h-5 text-primary shrink-0" />
           <div>
             <p className="text-xs font-semibold text-foreground">Company research</p>
             <p className="text-[10px] text-muted-foreground">AI brief for {iv.company_name}</p>
           </div>
         </Card>
       </div>
-    </div>
+    </PageContent>
   );
 }

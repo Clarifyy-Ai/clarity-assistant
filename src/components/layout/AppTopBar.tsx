@@ -1,19 +1,37 @@
-import { Link } from "react-router-dom";
-import { Bell, Zap, AlertTriangle, Shield, ShieldOff, Menu, X } from "lucide-react";
+import { Link, useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+import { Bell, Zap, AlertTriangle, Shield, ShieldOff, Menu, X, LogOut, Settings, User, Search } from "lucide-react";
 import { useAuthStore } from "@/store/userStore";
 import { useNotificationStore } from "@/store/notificationStore";
 import { useUIStore } from "@/store/uiStore";
+import { useNotifications } from "@/hooks/useNotifications";
 import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { CommandPalette } from "@/components/common/CommandPalette";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
+import { BrandLogo } from "@/components/marketing";
 
 export function AppTopBar() {
-  const { profile } = useAuthStore();
+  const { profile, signOut, refreshCredits } = useAuthStore();
+  const navigate = useNavigate();
   const notifStore  = useNotificationStore();
   const uiStore     = useUIStore();
+  useNotifications();
   const stealthMode = uiStore.stealth_mode;
   const mobileNavOpen = uiStore.mobile_nav_open;
+
+  useEffect(() => {
+    const onFocus = () => void refreshCredits();
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [refreshCredits]);
 
   const credits = profile?.credits ?? 0;
   const isLow   = credits <= 2;
@@ -33,22 +51,39 @@ export function AppTopBar() {
   const dragStyle = { WebkitAppRegion: "drag" } as React.CSSProperties;
   const noDragStyle = { WebkitAppRegion: "no-drag" } as React.CSSProperties;
 
+  async function handleSignOut() {
+    try {
+      await signOut();
+      navigate("/login", { replace: true });
+    } catch (error) {
+      console.error("[AppTopBar] Sign out failed:", error);
+    }
+  }
+
   return (
     <header
       style={dragStyle}
-      className="sticky top-0 z-40 h-14 w-full flex-shrink-0 bg-background/95 backdrop-blur border-b border-border flex items-center justify-between px-2 sm:px-4"
+      className="sticky top-0 z-[200] h-14 w-full flex-shrink-0 bg-background/95 backdrop-blur border-b border-border flex items-center justify-between px-2 sm:px-4"
     >
 
-      {/* Mobile hamburger — only visible on small screens */}
-      <button
-        type="button"
-        style={noDragStyle}
-        onClick={() => uiStore.setMobileNavOpen(!mobileNavOpen)}
-        className="md:hidden flex items-center justify-center w-9 h-9 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all mr-1"
-        aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
-      >
-        {mobileNavOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-      </button>
+      <div style={noDragStyle} className="flex items-center gap-1 min-w-0 shrink-0 md:hidden">
+        <button
+          type="button"
+          style={noDragStyle}
+          onClick={() => uiStore.setMobileNavOpen(!mobileNavOpen)}
+          className="flex items-center justify-center w-9 h-9 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all"
+          aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
+        >
+          {mobileNavOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+        </button>
+        <Link
+          to="/app"
+          className="flex items-center gap-1.5 pr-1"
+          aria-label="Clarify AI home"
+        >
+          <BrandLogo size="sm" />
+        </Link>
+      </div>
 
       <div
         className="flex items-center gap-2 min-w-0 flex-1"
@@ -60,7 +95,9 @@ export function AppTopBar() {
         <button
           type="button"
           style={noDragStyle}
+          data-tour="topbar-credits"
           onClick={() => uiStore.openUpgradeModal("pro")}
+          aria-label={`${credits} credit${credits === 1 ? "" : "s"}${isEmpty ? " — upgrade" : ""}`}
           className={cn(
             "flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-xl border text-[10px] sm:text-xs font-semibold transition-all",
             isEmpty
@@ -84,6 +121,7 @@ export function AppTopBar() {
           type="button"
           style={noDragStyle}
           onClick={toggleAppStealthMode}
+          aria-label={stealthMode ? "Disable discrete UI" : "Enable discrete UI"}
           title={
             stealthMode
               ? "Disable discrete UI labels (restores Clarify AI naming)"
@@ -108,32 +146,73 @@ export function AppTopBar() {
           <ThemeToggle />
         </div>
 
+        <button
+          type="button"
+          style={noDragStyle}
+          onClick={() => uiStore.setCommandPaletteOpen(true)}
+          aria-label="Search (Ctrl+K)"
+          title="Search (Ctrl+K)"
+          className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-xl hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-all"
+        >
+          <Search className="w-4 h-4" />
+        </button>
+
         <Link
           to="/app/notifications"
           style={noDragStyle}
+          aria-label={notifStore.unread_count > 0 ? `${notifStore.unread_count} unread notifications` : "Notifications"}
           className="relative w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-xl hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-all"
         >
           <Bell className="w-4 h-4" />
           {notifStore.unread_count > 0 && (
             <span className={cn(
-              "absolute top-1 right-1 sm:top-1.5 sm:right-1.5 w-2 h-2 rounded-full ring-2 ring-background",
-              stealthMode ? "bg-blue-500" : "bg-violet-500"
-            )} />
+              "absolute -top-0.5 -right-0.5 min-w-[1.125rem] h-[1.125rem] px-0.5 rounded-full flex items-center justify-center text-[10px] font-bold text-white ring-2 ring-background",
+              stealthMode ? "bg-blue-500" : "bg-primary"
+            )}>
+              {notifStore.unread_count > 9 ? "9+" : notifStore.unread_count}
+            </span>
           )}
         </Link>
 
-        <Link
-          to="/app/profile"
-          style={noDragStyle}
-          className={cn(
-            "w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-bold text-white hover:ring-2 transition-all flex-shrink-0",
-            stealthMode
-              ? "bg-blue-600 hover:ring-blue-500"
-              : "bg-violet-700 hover:ring-violet-500"
-          )}
-        >
-          {initial}
-        </Link>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              type="button"
+              style={noDragStyle}
+              aria-label="Account menu"
+              className={cn(
+                "w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-bold text-white hover:ring-2 transition-all flex-shrink-0",
+                stealthMode
+                  ? "bg-blue-600 hover:ring-blue-500"
+                  : "bg-primary hover:ring-primary/50"
+              )}
+            >
+              {initial}
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-48">
+            <DropdownMenuItem asChild>
+              <Link to="/app/profile" className="flex items-center gap-2 cursor-pointer">
+                <User className="w-4 h-4" />
+                Profile
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuItem asChild>
+              <Link to="/app/settings" className="flex items-center gap-2 cursor-pointer">
+                <Settings className="w-4 h-4" />
+                Settings
+              </Link>
+            </DropdownMenuItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              onClick={() => void handleSignOut()}
+              className="text-red-500 focus:text-red-500 cursor-pointer"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Log out
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </div>
       <CommandPalette />
     </header>

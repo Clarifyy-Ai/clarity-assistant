@@ -36,12 +36,24 @@ import {
 } from "../_shared/audit.ts";
 
 import { createServiceClient } from "../_shared/supabase.ts";
+import {
+  capDurationMinutes,
+  FREE_TIER_DAILY_SESSION_LIMIT,
+  isFreePlan,
+} from "../_shared/freeTier.ts";
 
 const FUNCTION_NAME = "start-session";
 
 const SESSION_LOOKBACK_HOURS = 24;
 
-const allowedSessionTypes = ["mock", "live"] as const;
+const allowedSessionTypes = [
+  "mock",
+  "live",
+  "warmup",
+  "rehearsal",
+  "room",
+  "practice",
+] as const;
 
 const allowedInterviewTypes = [
   "behavioral",
@@ -110,8 +122,8 @@ const startSessionSchema = z.object({
   duration_minutes: z
     .number()
     .int()
-    .min(15)
-    .max(45)
+    .min(5)
+    .max(60)
     .optional()
     .default(30),
 
@@ -166,6 +178,11 @@ const startSessionSchema = z.object({
     .max(20, "Too many focus areas.")
     .optional()
     .default([]),
+
+  is_practice: z
+    .boolean()
+    .optional()
+    .default(false),
 });
 
 type StartSessionRequest = z.infer<typeof startSessionSchema>;
@@ -262,19 +279,56 @@ function toDbModel(model: string): string {
   return "gemini-1-5-flash";
 }
 
+function buildSessionTags(options: {
+  sessionType: SessionType;
+  isPractice: boolean;
+}): string[] {
+  const tags: string[] = [];
+
+  if (
+    options.isPractice ||
+    options.sessionType === "mock" ||
+    options.sessionType === "warmup" ||
+    options.sessionType === "rehearsal" ||
+    options.sessionType === "room" ||
+    options.sessionType === "practice"
+  ) {
+    tags.push("practice");
+  }
+
+  if (options.sessionType === "rehearsal") {
+    tags.push("rehearsal");
+  }
+
+  return tags;
+}
+
 function buildSessionTitle(options: {
   sessionType: SessionType;
   company: string | null;
 }): string {
-  const label = options.sessionType === "live" ? "Live" : "Mock";
+  const label =
+    options.sessionType === "live"
+      ? "Live"
+      : options.sessionType === "rehearsal"
+        ? "Rehearsal"
+        : options.sessionType === "warmup"
+          ? "Warmup"
+          : options.sessionType === "room"
+            ? "Room"
+            : "Mock";
 
   if (options.company) {
     return `${label} — ${options.company}`;
   }
 
   return options.sessionType === "live"
-    ? "Live co-pilot"
-    : "Mock interview";
+    ? "Practice Coach"
+    : options.sessionType === "rehearsal"
+      ? "Practice Session"
+      : options.sessionType === "warmup"
+        ? "Mock warmup"
+        : "Mock interview";
 }
 
 async function parseAndValidateRequest(
@@ -425,10 +479,53 @@ Deno.serve(async (req: Request) => {
     return withCorsHeaders(req, bannedResponse(corsHeaders));
   }
 
+  // ── Free-tier enforcement ──
+  const { data: profile } = await db
+    .from("profiles")
+    .select("plan_id, credits")
+    .eq("id", user.id)
+    .single();
+
+  if (!profile?.plan_id || profile.plan_id === "free") {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const { count } = await db
+      .from("sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("user_id", user.id)
+      .gte("created_at", today.toISOString());
+
+    if ((count ?? 0) >= FREE_TIER_DAILY_SESSION_LIMIT) {
+      return json(corsHeaders, 403, {
+        error: "Daily session limit reached",
+        code: "FREE_TIER_SESSION_LIMIT",
+        message:
+          `Free plan allows ${FREE_TIER_DAILY_SESSION_LIMIT} sessions per day (5 min each). Upgrade to Pro for longer sessions.`,
+        upgrade_url: "/pricing",
+      });
+    }
+
+    if ((profile?.credits ?? 0) <= 0) {
+      return json(corsHeaders, 403, {
+        error: "No credits remaining",
+        code: "NO_CREDITS",
+        message:
+          "You have no credits remaining. Upgrade to Pro for 1,400 credits/month.",
+        upgrade_url: "/pricing",
+      });
+    }
+  }
+
   const sessionType = toSessionType(body);
+  const isPractice = body.is_practice || sessionType !== "live";
+  const sessionTags = buildSessionTags({ sessionType, isPractice });
   const company = sanitizeShortText(body.company);
   const role = sanitizeShortText(body.role);
-  const durationMinutes = body.duration_minutes;
+  const durationMinutes = capDurationMinutes(
+    profile?.plan_id ?? "free",
+    body.duration_minutes,
+  );
   const questionCount = body.question_count;
 
   const nowIso = new Date().toISOString();
@@ -550,6 +647,7 @@ Deno.serve(async (req: Request) => {
         duration_seconds: durationMinutes * 60,
         started_at: nowIso,
         ended_at: null,
+        tags: sessionTags.length > 0 ? sessionTags : null,
       })
       .select("id")
       .single();

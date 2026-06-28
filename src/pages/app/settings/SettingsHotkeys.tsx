@@ -1,9 +1,10 @@
 // Sprint C: Hotkey customization UI
 import { useEffect, useState } from "react";
 import { DEFAULT_HOTKEYS, type HotkeyId, isMac } from "@/lib/constants/hotkeys";
-import { Keyboard, RotateCcw, Check, X } from "lucide-react";
+import { RotateCcw, Check, X, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 
 const STORAGE_KEY = "clarify_custom_hotkeys";
 
@@ -20,6 +21,26 @@ function loadOverrides(): Overrides {
 function saveOverrides(o: Overrides) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(o));
   window.dispatchEvent(new CustomEvent("clarify:hotkeys-changed", { detail: o }));
+}
+
+function getEffectiveCombo(id: HotkeyId, overrides: Overrides): string {
+  const def = DEFAULT_HOTKEYS[id];
+  return overrides[id] ?? (isMac() && def.mac ? def.mac : def.keys);
+}
+
+function findConflicts(overrides: Overrides): Map<string, HotkeyId[]> {
+  const byCombo = new Map<string, HotkeyId[]>();
+  for (const id of Object.keys(DEFAULT_HOTKEYS) as HotkeyId[]) {
+    const combo = getEffectiveCombo(id, overrides);
+    const list = byCombo.get(combo) ?? [];
+    list.push(id);
+    byCombo.set(combo, list);
+  }
+  const conflicts = new Map<string, HotkeyId[]>();
+  for (const [combo, ids] of byCombo) {
+    if (ids.length > 1) conflicts.set(combo, ids);
+  }
+  return conflicts;
 }
 
 function captureCombo(e: KeyboardEvent): string | null {
@@ -49,6 +70,14 @@ export default function SettingsHotkeys() {
       const combo = captureCombo(e);
       if (!combo) return;
       const next = { ...overrides, [recordingId]: combo };
+      const conflict = (Object.keys(DEFAULT_HOTKEYS) as HotkeyId[]).find(
+        (id) => id !== recordingId && getEffectiveCombo(id, next) === combo,
+      );
+      if (conflict) {
+        toast.warning(
+          `Conflict: ${combo} is already assigned to "${DEFAULT_HOTKEYS[conflict].description}"`,
+        );
+      }
       setOverrides(next);
       saveOverrides(next);
       setRecordingId(null);
@@ -72,6 +101,10 @@ export default function SettingsHotkeys() {
   };
 
   const entries = Object.entries(DEFAULT_HOTKEYS) as [HotkeyId, any][];
+  const conflicts = findConflicts(overrides);
+  const conflictingIds = new Set(
+    [...conflicts.values()].flatMap((ids) => ids),
+  );
   const grouped = entries.reduce<Record<string, [HotkeyId, any][]>>((acc, e) => {
     const cat = e[1].category ?? "general";
     (acc[cat] ??= []).push(e);
@@ -79,16 +112,12 @@ export default function SettingsHotkeys() {
   }, {});
 
   return (
-    <div className="max-w-3xl space-y-5">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-xl font-bold flex items-center gap-2">
-            <Keyboard className="w-5 h-5" /> Keyboard shortcuts
-          </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Click a binding to record a new combination. Press Esc to cancel.
-          </p>
-        </div>
+    <SettingsPageShell
+      title="Keyboard shortcuts"
+      description="Click a binding to record a new combination. Press Esc to cancel."
+      className="max-w-3xl"
+    >
+      <div className="flex justify-end -mt-2">
         <button
           onClick={resetAll}
           className="text-xs px-3 py-1.5 rounded-md border border-border hover:bg-secondary flex items-center gap-1.5"
@@ -97,6 +126,16 @@ export default function SettingsHotkeys() {
         </button>
       </div>
 
+      {conflicts.size > 0 && (
+        <div className="flex items-start gap-2 px-4 py-3 rounded-xl border border-amber-500/30 bg-amber-500/10 text-xs text-amber-200/90">
+          <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
+          <p>
+            Duplicate hotkey bindings detected. Conflicting shortcuts may not work reliably —
+            assign unique combinations for each action.
+          </p>
+        </div>
+      )}
+
       {Object.entries(grouped).map(([cat, items]) => (
         <div key={cat} className="rounded-xl border border-border bg-card p-4">
           <h2 className="text-xs uppercase tracking-wide text-muted-foreground mb-3">
@@ -104,9 +143,10 @@ export default function SettingsHotkeys() {
           </h2>
           <ul className="space-y-2">
             {items.map(([id, def]) => {
-              const current = overrides[id] ?? (isMac() && def.mac ? def.mac : def.keys);
+              const current = getEffectiveCombo(id, overrides);
               const isCustom = !!overrides[id];
               const isRecording = recordingId === id;
+              const hasConflict = conflictingIds.has(id);
               return (
                 <li
                   key={id}
@@ -115,7 +155,13 @@ export default function SettingsHotkeys() {
                   <div className="min-w-0">
                     <p className="text-sm">{def.description}</p>
                     {isCustom && (
-                      <p className="text-[10px] text-violet-400">Custom</p>
+                      <p className="text-[10px] text-primary">Custom</p>
+                    )}
+                    {hasConflict && (
+                      <p className="text-[10px] text-amber-400 flex items-center gap-1 mt-0.5">
+                        <AlertTriangle className="w-3 h-3 shrink-0" />
+                        Duplicate binding
+                      </p>
                     )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
@@ -124,7 +170,9 @@ export default function SettingsHotkeys() {
                       className={cn(
                         "px-2.5 py-1 text-xs rounded-md border font-mono min-w-[110px] text-center",
                         isRecording
-                          ? "border-violet-500 bg-violet-500/10 text-violet-300 animate-pulse"
+                          ? "border-primary bg-primary/10 text-primary/80 animate-pulse"
+                          : hasConflict
+                          ? "border-amber-500/50 bg-amber-500/10 text-amber-300"
                           : "border-border hover:bg-secondary"
                       )}
                     >
@@ -155,6 +203,6 @@ export default function SettingsHotkeys() {
           </ul>
         </div>
       ))}
-    </div>
+    </SettingsPageShell>
   );
 }

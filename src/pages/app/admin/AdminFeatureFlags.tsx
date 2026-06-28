@@ -17,6 +17,9 @@ import { Switch }   from "@/components/ui/switch";
 import { Button }   from "@/components/ui/Button";
 import { Input }    from "@/components/ui/Input";
 import { toast }    from "sonner";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
   Flag, Search, RotateCcw, Save, ShieldCheck, Beaker, Lock,
 } from "lucide-react";
@@ -36,7 +39,7 @@ const PLAN_ORDER: PlanId[] = ["free", "starter", "pro", "elite", "enterprise"];
 const PLAN_COLORS: Record<PlanId, string> = {
   free:       "bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300",
   starter:    "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300",
-  pro:        "bg-violet-100 text-violet-700 dark:bg-violet-900/40 dark:text-violet-300",
+  pro:        "bg-primary/15 text-primary dark:bg-primary/20 dark:text-primary/80",
   elite:      "bg-amber-100 text-amber-700 dark:bg-amber-900/40 dark:text-amber-300",
   enterprise: "bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300",
 };
@@ -45,7 +48,7 @@ const CATEGORIES: Record<string, FeatureFlagId[]> = {
   "Core AI":     ["live_assist", "mock_sessions", "ai_coach", "star_builder", "rephraser"],
   "Advanced AI": ["company_research", "coding_hints", "system_design", "session_debrief", "resume_analysis", "beta_models"],
   "Audio":       ["audio_analysis", "filler_detection", "wpm_tracking", "diarization"],
-  "Overlay":     ["overlay", "stealth_mode", "screenshot_capture"],
+  "Overlay":     ["overlay", "screenshot_capture"],
   "Data":        ["answer_bank", "analytics", "calendar_sync"],
   "Access":      ["byok", "priority_support", "coach_sessions"],
   "Dev":         ["experimental_ui", "debug_panel"],
@@ -185,12 +188,16 @@ export default function AdminFeatureFlags() {
       </div>
 
       {dbFlagsError && (
-        <p className="text-sm text-red-500 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2">
-          Database flags could not be loaded: {dbFlagsError}. Showing plan gates only until you refresh.
-        </p>
+        <InlineErrorRetry
+          message={`Database flags could not be loaded: ${dbFlagsError}. Showing plan gates only until you refresh.`}
+          onRetry={() => window.location.reload()}
+        />
       )}
       {dbFlagsLoading && !dbFlagsError && (
-        <p className="text-xs text-muted-foreground">Loading database flag overrides…</p>
+        <div className="space-y-3">
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
       )}
 
       {/* Stats row */}
@@ -272,8 +279,13 @@ export default function AdminFeatureFlags() {
             <TableBody>
               {filtered.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center text-muted-foreground py-12">
-                    No flags match your filters.
+                  <TableCell colSpan={6}>
+                    <EmptyState
+                      icon={Flag}
+                      title="No flags match your filters"
+                      description="Try adjusting the search or filter criteria."
+                      compact
+                    />
                   </TableCell>
                 </TableRow>
               ) : (

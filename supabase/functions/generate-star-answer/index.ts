@@ -14,6 +14,7 @@ import {
   log,
 } from "../_shared/utils.ts";
 import type { STARAnswer, ModelId } from "../_shared/types.ts";
+import { creditCost } from "../_shared/creditEconomics.ts";
 
 // Sanitize text to protect prompt
 function sanitize(input: any, max = 2000): string {
@@ -81,7 +82,8 @@ Deno.serve(async (req: Request) => {
     // -------------------------------
     // DEDUCT CREDITS (Correct signature: userId, action, cost)
     // -------------------------------
-    const credit = await deductCredits(userId, "generate_star", 10);
+    const starCost = creditCost("star_builder");
+    const credit = await deductCredits(userId, "generate_star", starCost);
     if (!credit.success) {
       return errorResponse(
         credit.error ?? "Insufficient credits.",
@@ -148,7 +150,7 @@ Return ONLY this JSON:
 
     if (!aiResult?.text) {
       // Refund credits
-      await deductCredits(userId, "refund_generate_star", -10);
+      await deductCredits(userId, "refund_generate_star", -starCost);
       return errorResponse("AI service failed.", "AI_ERROR", 502, req);
     }
 

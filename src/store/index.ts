@@ -75,7 +75,6 @@ export { useAuthStore as useUserStore }  from "./userStore";
 export async function bootApp(): Promise<void> {
   const { useAuthStore }   = await import("./authStore");
   const { useGlobalStore } = await import("./globalStore");
-  const { useThemeStore }  = await import("./themeStore");
   const { useNetworkStore }= await import("./networkStore");
 
   const auth    = useAuthStore.getState();
@@ -92,11 +91,7 @@ export async function bootApp(): Promise<void> {
   // 3. Boot global (listeners, banners, perf)
   await global.boot();
 
-  // 4. Apply persisted theme
-  const theme = useThemeStore.getState();
-  if ("applyTheme" in theme) (theme as { applyTheme: () => void }).applyTheme();
-
-  // 5. Network listeners
+  // 4. Network listeners
   if ("initialize" in network) (network as { initialize: () => void }).initialize();
 }
 

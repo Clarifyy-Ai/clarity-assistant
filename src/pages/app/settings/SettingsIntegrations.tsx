@@ -12,6 +12,7 @@ import { cn }          from "@/lib/utils";
 import { useCalendarSync } from "@/hooks/useCalendarSync";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { toast }       from "sonner";
+import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 
 // ─────────────────────────────────────────────────────────────────
 // Integration definitions
@@ -29,6 +30,19 @@ interface Integration {
   bg:     string;
   /** true = the backend is wired up and ready; false = show Coming Soon */
   live:   boolean;
+}
+
+const INTEGRATION_ENV_KEYS: Record<string, string | undefined> = {
+  linkedin: import.meta.env.VITE_LINKEDIN_OAUTH_CLIENT_ID,
+  github: import.meta.env.VITE_GITHUB_OAUTH_CLIENT_ID,
+  slack: import.meta.env.VITE_SLACK_OAUTH_CLIENT_ID,
+  chrome_ext: import.meta.env.VITE_CHROME_EXTENSION_ID,
+};
+
+function isIntegrationVisible(integration: Integration): boolean {
+  if (integration.live) return true;
+  const key = INTEGRATION_ENV_KEYS[integration.id];
+  return typeof key === "string" && key.trim().length > 0;
 }
 
 const INTEGRATIONS: Integration[] = [
@@ -251,94 +265,37 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
     error,
   } = useCalendarSync();
 
-  // Tracks whether the server-side feature is actually ready.
-  // Starts as the static `live` flag; may be overridden to false
-  // if the edge function responds with 501.
-  const [serverReady, setServerReady] = useState(integration.live);
-  const [notified,    setNotified]    = useState(
-    () => localStorage.getItem("clarify_notify_google_calendar") === "1",
-  );
+  // Sync import requires server-side Google OAuth creds; connect works via Supabase Auth.
+  const [syncAvailable, setSyncAvailable] = useState(integration.live);
 
-  // Probe liveness on mount: attempt a lightweight sync call with no token.
-  // A 501 response means the backend isn't configured yet.
   useEffect(() => {
-    if (!integration.live) return; // already known to be off — skip the probe
+    if (!integration.live) return;
 
     let cancelled = false;
     (async () => {
       try {
         await fetchEdgeJson("sync-calendar", { probe: true });
+        if (!cancelled) setSyncAvailable(true);
       } catch (err) {
         const message = err instanceof Error ? err.message : "";
-        if (!cancelled && message.includes("501")) {
-          setServerReady(false);
+        const notConfigured =
+          message.includes("501") ||
+          message.toLowerCase().includes("not available") ||
+          message.toLowerCase().includes("not configured");
+        if (!cancelled && notConfigured) {
+          setSyncAvailable(false);
         }
       }
     })();
+
     return () => { cancelled = true; };
   }, [integration.live]);
 
-  // ── Coming-soon state (server not configured) ─────────────────
-  if (!serverReady) {
-    function handleNotify() {
-      localStorage.setItem("clarify_notify_google_calendar", "1");
-      setNotified(true);
-      toast.success("We'll let you know when Google Calendar sync is ready!", {
-        duration: 4000,
-      });
-    }
-
-    return (
-      <Card>
-        <div className="flex items-center gap-4">
-          <div className={cn(
-            "w-10 h-10 rounded-xl flex items-center justify-center shrink-0",
-            integration.bg,
-          )}>
-            <integration.icon className={cn("w-5 h-5", integration.color)} />
-          </div>
-
-          <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <p className="text-sm font-semibold text-foreground">{integration.label}</p>
-              <Badge variant="amber" size="sm">Coming soon</Badge>
-            </div>
-            <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
-              {integration.desc}
-            </p>
-          </div>
-
-          <div className="shrink-0">
-            {notified ? (
-              <span className="text-xs text-emerald-400 font-medium flex items-center gap-1">
-                <Bell className="w-3.5 h-3.5" />
-                Notified
-              </span>
-            ) : (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleNotify}
-                leftIcon={<Bell className="w-3.5 h-3.5" />}
-              >
-                Notify me
-              </Button>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-3 pt-3 border-t border-border">
-          <p className="text-[10px] text-muted-foreground leading-relaxed">
-            Google Calendar sync is in development. We'll import upcoming interview events automatically — read-only access, we never modify your calendar.
-          </p>
-        </div>
-      </Card>
-    );
-  }
-
-  // ── Live state (server configured) ───────────────────────────
   async function handleConnect() {
-    await connectGoogle();
+    const result = await connectGoogle();
+    if (result.error) {
+      toast.error(result.error);
+    }
   }
 
   async function handleDisconnect() {
@@ -353,10 +310,12 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
   async function handleSync() {
     const result = await syncNow();
     if (result.error) {
-      // If the edge function comes back 501 at runtime, flip to coming-soon
-      if ((result as { status?: number }).status === 501) {
-        setServerReady(false);
-        toast.info("Calendar sync isn't available yet — we'll notify you when it's ready.");
+      const notConfigured =
+        result.error.toLowerCase().includes("not available") ||
+        result.error.toLowerCase().includes("not configured");
+      if (notConfigured) {
+        setSyncAvailable(false);
+        toast.info("Calendar sync isn't available yet — connect now and we'll import once it's enabled.");
         return;
       }
       toast.error(result.error);
@@ -378,13 +337,18 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
         </div>
 
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <p className="text-sm font-semibold text-foreground">{integration.label}</p>
             {isConnected && <Badge variant="emerald" size="sm" dot>Connected</Badge>}
+            {!syncAvailable && integration.live && (
+              <Badge variant="amber" size="sm">Sync coming soon</Badge>
+            )}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
             {isConnected
-              ? "Your calendar is linked. Use Sync to import upcoming interview events."
+              ? syncAvailable
+                ? "Your calendar is linked. Use Sync to import upcoming interview events."
+                : "Your Google account is linked. Event import will be available once sync is enabled on the server."
               : integration.desc}
           </p>
           {lastSynced && (
@@ -399,7 +363,7 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          {isConnected && (
+          {isConnected && syncAvailable && (
             <Button
               variant="secondary"
               size="sm"
@@ -448,7 +412,6 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
 export default function SettingsIntegrations() {
   const [searchParams, setSearchParams] = useSearchParams();
 
-  // Handle ?calendar=connected redirect from OAuth flow
   useEffect(() => {
     if (searchParams.get("calendar") === "connected") {
       toast.success("Google Calendar connected!");
@@ -457,11 +420,10 @@ export default function SettingsIntegrations() {
   }, [searchParams, setSearchParams]);
 
   return (
-    <div className="space-y-5">
-      <h2 className="text-lg font-bold text-foreground">Integrations</h2>
+    <SettingsPageShell title="Integrations">
 
       <div className="space-y-3">
-        {INTEGRATIONS.map((integration) => {
+        {INTEGRATIONS.filter(isIntegrationVisible).map((integration) => {
           if (integration.id === "google_calendar") {
             return (
               <GoogleCalendarCard key={integration.id} integration={integration} />
@@ -481,7 +443,7 @@ export default function SettingsIntegrations() {
       {/* API access card — coming soon */}
       <Card>
         <div className="flex items-center gap-2 mb-2">
-          <Zap className="w-4 h-4 text-violet-400" />
+          <Zap className="w-4 h-4 text-primary" />
           <h3 className="text-sm font-semibold text-foreground">API access</h3>
           <Badge variant="amber" size="sm">Coming soon</Badge>
         </div>
@@ -490,6 +452,6 @@ export default function SettingsIntegrations() {
           is in development. Pro and Enterprise plans will get programmatic access at launch.
         </p>
       </Card>
-    </div>
+    </SettingsPageShell>
   );
 }

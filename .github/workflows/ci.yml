@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Placeholder VITE_* values for compile-time env resolution — not real secrets.
+env:
+  VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+  VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key-not-a-real-secret
+  VITE_SUPABASE_PUBLISHABLE_KEY: ci-placeholder-publishable-key
+  VITE_APP_ENV: test
+  VITE_APP_NAME: Clarify AI
+  VITE_APP_URL: http://127.0.0.1:5173
+
+jobs:
+  quality:
+    name: Validate, test, build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Validate environment
+        run: npm run validate-env
+
+      - name: Unit tests
+        run: npm test -- --run
+
+      # Non-blocking: surfaces high-severity advisories without failing the build.
+      - name: Dependency audit
+        run: npm audit --production --audit-level=high
+        continue-on-error: true
+
+      - name: Build
+        run: npm run build
+
+  e2e:
+    name: Playwright E2E (smoke)
+    runs-on: ubuntu-latest
+    needs: quality
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run E2E tests
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7

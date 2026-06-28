@@ -2,47 +2,61 @@
 
 Project: **qzgvjrvtkwlzxpmlddkx** (us-east-1)
 
-## Applied on remote (2026-05-25)
+## Recommended deploy path
 
-| Migration | What it does |
-|-----------|----------------|
-| `add_profile_prefs_columns` | `profiles.privacy_prefs`, `profiles.notification_prefs` (jsonb, default `{}`) |
-| `add_increment_profile_credits_fn` | `increment_profile_credits(uuid, int, text)` for Stripe webhooks |
-| `lockdown_increment_profile_credits_grants` | RPC executable by `service_role` only |
-
-Verified columns: `privacy_prefs`, `notification_prefs`, `stealth_mode` default `false`.
-
-## Edge functions — redeploy full sources
-
-Remote versions may still use **stub** `_shared/cors.ts` (wildcard `*`) and a **short** `analytics-dashboard` handler. Repo sources include full CORS allowlists, credit helpers, filler trends, and weak-spot radar.
-
-### Option A — Management API (recommended)
-
-1. Create a token: [Supabase Account → Access Tokens](https://supabase.com/dashboard/account/tokens)
-2. Run:
+Use the production deploy script (Windows):
 
 ```powershell
-$env:SUPABASE_ACCESS_TOKEN = "sbp_YOUR_TOKEN"
-$node = "$env:LOCALAPPDATA\Programs\cursor\resources\app\resources\helpers\node.exe"
-& $node scripts/deploy-all-from-mcp-json.mjs
+cd clarity-assistant
+.\scripts\run-production-deploy.ps1
 ```
 
-### Option B — Supabase CLI
+This runs, in order:
 
-```bash
-supabase functions deploy analytics-dashboard export-user-data delete-account --project-ref qzgvjrvtkwlzxpmlddkx
-```
+1. `npm run validate-env` — frontend `.env.local` checks
+2. `node scripts/pre-deploy-check.mjs` — migrations + edge inventory
+3. `npx supabase db push` — apply pending migrations
+4. `node scripts/deploy-all-edge-functions.mjs` — deploy all edge functions
+5. `bash scripts/smoke-edge.sh` — optional, when `SUPABASE_URL` + `ANON_KEY` are set
 
-### Option C — Cursor Supabase MCP
+See also: [DEPLOY_PRODUCTION_CHECKLIST.md](./DEPLOY_PRODUCTION_CHECKLIST.md)
 
-Regenerate args then deploy each function:
+## Prerequisites
 
 ```powershell
-node scripts/write-mcp-deploy-args.mjs analytics-dashboard
-# Use deploy_edge_function with .deploy-payloads/_mcp-call-analytics-dashboard.json
+npx supabase login
+npx supabase link --project-ref qzgvjrvtkwlzxpmlddkx
+cp .env.example .env.local
+# Fill in VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, etc.
+npm run validate-env
 ```
 
-## Dashboard (manual)
+## Regenerate edge deploy command list
 
-- Auth → enable **leaked password protection**
-- Edge Functions → Secrets: `ALLOWED_ORIGINS`, `GEMINI_API_KEY`, `DEEPGRAM_API_KEY`, `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`
+```powershell
+node scripts/list-edge-functions.mjs
+```
+
+Writes [EDGE_DEPLOY_COMMANDS.txt](./EDGE_DEPLOY_COMMANDS.txt).
+
+## Partial deploy (live / mock / prep P0 batch)
+
+```powershell
+.\scripts\deploy-live-mock-prep.ps1
+```
+
+## Required Supabase Edge secrets
+
+| Secret | Purpose |
+|--------|---------|
+| `GEMINI_API_KEY` | AI hints, debrief, mock gap-fill |
+| `DEEPGRAM_API_KEY` | Live transcription |
+| `DEEPGRAM_PROJECT_ID` | Scoped Deepgram tokens |
+| `SYSTEM_USER_ID` | AI-generated question owner UUID |
+| `ALLOWED_ORIGINS` | CORS allowlist (comma-separated) |
+| `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` | Billing |
+| `RESEND_API_KEY` | Email (optional) |
+
+## Legacy / archived
+
+Older MCP-based deploy scripts live in `scripts/archive/`. Do not use them for routine deploys.

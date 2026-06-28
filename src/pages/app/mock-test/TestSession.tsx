@@ -493,7 +493,8 @@ export default function TestSession() {
         questionMap[question.id] = question;
       }
 
-      const orderedQuestions = loadedTest.question_ids
+      const uniqueIds = [...new Set(loadedTest.question_ids)];
+      const orderedQuestions = uniqueIds
         .map((id) => questionMap[id])
         .filter(Boolean);
 

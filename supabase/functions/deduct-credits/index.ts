@@ -39,7 +39,9 @@ import {
   logValidationFailure,
 } from "../_shared/audit.ts";
 
-import { deductCreditsAtomic } from "../_shared/supabase.ts";
+import { deductCreditsAtomic, createServiceClient } from "../_shared/supabase.ts";
+import { bannedResponse, isUserBanned } from "../_shared/banCheck.ts";
+import { resolveActionCost } from "../_shared/creditEconomics.ts";
 
 const FUNCTION_NAME = "deduct-credits";
 
@@ -217,6 +219,11 @@ Deno.serve(async (req: Request) => {
 
   const { user } = auth.context;
 
+  const db = createServiceClient();
+  if (await isUserBanned(db, user.id)) {
+    return withCorsHeaders(req, bannedResponse(corsHeaders));
+  }
+
   const rateLimitResult = checkRateLimit({
     key: createRateLimitKey(FUNCTION_NAME, user.id),
     ...RATE_LIMIT_PRESETS.PAYMENT_ACTION,
@@ -249,10 +256,25 @@ Deno.serve(async (req: Request) => {
 
   const { data, idempotencyKey } = validation;
 
+  const serverCost = resolveActionCost(data.action);
+
+  if (serverCost === undefined) {
+    return json(corsHeaders, 422, {
+      error: `Unknown action: "${data.action}".`,
+      code: "UNKNOWN_ACTION",
+    });
+  }
+
+  if (data.cost !== serverCost) {
+    console.warn(
+      `[deduct-credits] Client sent cost=${data.cost} for action="${data.action}", server expects ${serverCost}. Using server cost.`,
+    );
+  }
+
   const result = await deductCreditsAtomic({
     userId: user.id,
     action: data.action,
-    cost: data.cost,
+    cost: serverCost,
     sessionId: data.session_id ?? null,
     idempotencyKey,
   });

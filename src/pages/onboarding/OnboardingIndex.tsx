@@ -9,6 +9,7 @@ import { useNavigate, useSearchParams }      from "react-router-dom";
 import { motion, AnimatePresence }           from "framer-motion";
 
 import { supabase }                             from "@/lib/supabase/client";
+import { fetchEdgeJson }                        from "@/lib/network/fetchEdge";
 import { useAuthStore }                         from "@/store";
 import { recordReferral, getStoredRefCode, normalizeRefCode } from "@/lib/referrals";
 import { ROUTES }            from "@/lib/constants";
@@ -192,11 +193,13 @@ export default function OnboardingIndex() {
   const navigate    = useNavigate();
   const [searchParams] = useSearchParams();
   const user            = useAuthStore((s) => s.user);
+  const profile         = useAuthStore((s) => s.profile);
   const isOnboarded     = useAuthStore((s) => s.isOnboarded);
   const isProfileLoaded = useAuthStore((s) => s.isProfileLoaded);
   const updateProfile   = useAuthStore((s) => s.updateProfile);
   const loadProfile     = useAuthStore((s) => s.loadProfile);
 
+  const isRerun = searchParams.get("rerun") === "1";
   const refCode = normalizeRefCode(searchParams.get("ref")) ?? getStoredRefCode();
 
   const [currentStep,    setCurrentStep]    = useState(1);
@@ -205,12 +208,28 @@ export default function OnboardingIndex() {
   const [isSaving,       setIsSaving]       = useState(false);
   const [isComplete,     setIsComplete]     = useState(false);
 
-  // Redirect if already onboarded (after profile loads)
+  // Redirect if already onboarded (unless re-running from Settings)
   useEffect(() => {
-    if (isProfileLoaded && isOnboarded) {
+    if (isProfileLoaded && isOnboarded && !isRerun) {
       navigate(ROUTES.DASHBOARD, { replace: true });
     }
-  }, [isProfileLoaded, isOnboarded, navigate]);
+  }, [isProfileLoaded, isOnboarded, isRerun, navigate]);
+
+  // Re-run: hydrate wizard from existing profile
+  useEffect(() => {
+    if (!isRerun || !profile) return;
+    setData((prev) => ({
+      ...prev,
+      targetRole:        profile.target_role ?? prev.targetRole,
+      targetCompanies:   (profile as { target_companies?: string[] }).target_companies ?? prev.targetCompanies,
+      yearsOfExperience: profile.years_of_exp ?? profile.experience_years ?? prev.yearsOfExperience,
+      preferredModel:    profile.preferred_model ?? prev.preferredModel,
+      preferredLanguage: profile.preferred_language ?? profile.stt_language ?? prev.preferredLanguage,
+      selectedMicId:     profile.audio_input_device ?? prev.selectedMicId,
+      overlayEnabled:    prev.overlayEnabled,
+      emailNotifications: profile.email_notifications ?? prev.emailNotifications,
+    }));
+  }, [isRerun, profile]);
 
   // ── Data merge helper ──────────────────────────────────────────────────────
 
@@ -245,6 +264,20 @@ export default function OnboardingIndex() {
         ...(refCode ? { referred_by: refCode } : {}),
       } as Record<string, unknown>);
 
+      if (user?.email) {
+        try {
+          await fetchEdgeJson("send-email", {
+            to: user.email,
+            type: "welcome",
+            data: {
+              name: profile?.full_name?.split(" ")[0] ?? "there",
+            },
+          });
+        } catch (emailErr) {
+          console.warn("[OnboardingIndex] welcome email failed:", emailErr);
+        }
+      }
+
       await loadProfile();
       setIsComplete(true);
     } catch (err) {
@@ -255,7 +288,7 @@ export default function OnboardingIndex() {
     } finally {
       setIsSaving(false);
     }
-  }, [data, updateProfile, loadProfile, user, refCode]);
+  }, [data, updateProfile, loadProfile, user, profile, refCode]);
 
   const handleNext = useCallback((stepData?: Partial<OnboardingData>) => {
     if (stepData) mergeData(stepData);
@@ -286,6 +319,10 @@ export default function OnboardingIndex() {
   // ── Redirect to dashboard ─────────────────────────────────────────────────
 
   const handleContinueToDashboard = useCallback(() => {
+    navigate(ROUTES.DASHBOARD, { replace: true });
+  }, [navigate]);
+
+  const handleSkipRerun = useCallback(() => {
     navigate(ROUTES.DASHBOARD, { replace: true });
   }, [navigate]);
 
@@ -338,12 +375,23 @@ export default function OnboardingIndex() {
             <div className="h-7 w-7 rounded-lg bg-primary/90 flex items-center justify-center">
               <span className="text-xs font-bold text-primary-foreground">C</span>
             </div>
-            <span className="font-semibold text-sm tracking-tight">Clarify</span>
+            <span className="font-semibold text-sm tracking-tight">Clarify AI</span>
           </div>
 
           <StepProgressBar currentStep={currentStep} completedSteps={completedSteps} />
 
-          <div className="w-16" />
+          {isRerun && profile?.onboarding_completed && !isComplete && (
+            <button
+              type="button"
+              onClick={handleSkipRerun}
+              className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4 transition-colors"
+            >
+              Skip to dashboard
+            </button>
+          )}
+
+          {!isRerun && <div className="w-16" />}
+          {isRerun && !profile?.onboarding_completed && <div className="w-16" />}
         </div>
       </header>
 
@@ -424,7 +472,7 @@ export default function OnboardingIndex() {
       </main>
 
       {/* ── Skip onboarding entirely (escape hatch) ────────────────────────── */}
-      {!isComplete && currentStep === 1 && (
+      {!isComplete && currentStep === 1 && !isRerun && (
         <div className="pb-8 text-center">
           <button
             type="button"

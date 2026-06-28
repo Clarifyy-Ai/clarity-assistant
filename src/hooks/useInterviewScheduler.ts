@@ -231,6 +231,26 @@ export function useInterviewScheduler() {
     }
   }, [loadInterviews]);
 
+  /* ── Update round ────────────────────────────────────────────────────── */
+
+  const updateRound = useCallback(async (
+    roundId: string,
+    values: Partial<RoundFormValues>,
+  ): Promise<{ error: string | null }> => {
+    try {
+      await interviewRoundsDB.update(roundId, {
+        ...values,
+        updated_at: new Date().toISOString(),
+      } as TablesUpdate<"interview_rounds">);
+      await loadInterviews();
+      return { error: null };
+    } catch (err) {
+      return {
+        error: err instanceof Error ? err.message : "Failed to update round",
+      };
+    }
+  }, [loadInterviews]);
+
   /* ── Update round outcome ────────────────────────────────────────────── */
 
   const updateRoundOutcome = useCallback(async (
@@ -266,6 +286,7 @@ export function useInterviewScheduler() {
     deleteInterview,
     moveStage,
     addRound,
+    updateRound,
     updateRoundOutcome,
     selectInterview: store.selectInterview,
     reload:          loadInterviews,

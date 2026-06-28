@@ -1,5 +1,6 @@
 // @ts-nocheck -- retained: notification_prefs and privacy_prefs JSONB column types not in Supabase generated schema; Toggle component uses Radix UI checked prop which TypeScript does not accept on the wrapper component type.
 import { useState, useRef } from "react";
+import { Link } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
@@ -8,10 +9,12 @@ import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import {
   User, Camera, Save, CheckCircle,
-  Briefcase, MapPin, Globe,
+  Briefcase, MapPin, Globe, RotateCcw, Mail, Lock, Eye, EyeOff,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { getPasswordStrength } from "@/lib/validators/emailValidator";
+import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsProfile — edit name, avatar, role, bio
@@ -53,6 +56,18 @@ export default function SettingsProfile() {
   const [avatarUrl,  setAvatarUrl]  = useState(profile?.avatar_url ?? "");
   const [uploading,  setUploading]  = useState(false);
 
+  const [newEmail,       setNewEmail]       = useState("");
+  const [emailPassword,  setEmailPassword]  = useState("");
+  const [emailSaving,    setEmailSaving]    = useState(false);
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword,     setNewPassword]     = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [showPasswords,   setShowPasswords]   = useState(false);
+  const [passwordSaving,  setPasswordSaving]  = useState(false);
+
+  const passwordStrength = getPasswordStrength(newPassword);
+
   const fileRef = useRef<HTMLInputElement>(null);
 
   async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
@@ -75,6 +90,76 @@ export default function SettingsProfile() {
       toast.success("Avatar updated!");
     }
     setUploading(false);
+  }
+
+  async function handleEmailChange() {
+    if (!user) return;
+    const trimmed = newEmail.trim();
+    if (!trimmed || !trimmed.includes("@")) {
+      toast.error("Enter a valid email address.");
+      return;
+    }
+    if (!emailPassword) {
+      toast.error("Enter your current password to confirm the email change.");
+      return;
+    }
+
+    setEmailSaving(true);
+    try {
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: user.email ?? "",
+        password: emailPassword,
+      });
+      if (signInErr) throw new Error("Password confirmation failed.");
+
+      const { error } = await supabase.auth.updateUser({ email: trimmed });
+      if (error) throw error;
+
+      toast.success("Verification email sent to your new address.");
+      setNewEmail("");
+      setEmailPassword("");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to update email.");
+    } finally {
+      setEmailSaving(false);
+    }
+  }
+
+  async function handlePasswordChange() {
+    if (!user) return;
+    if (!currentPassword) {
+      toast.error("Enter your current password.");
+      return;
+    }
+    if (!passwordStrength.isAcceptable) {
+      toast.error("Choose a stronger password.");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      toast.error("New passwords do not match.");
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      const { error: signInErr } = await supabase.auth.signInWithPassword({
+        email: user.email ?? "",
+        password: currentPassword,
+      });
+      if (signInErr) throw new Error("Current password is incorrect.");
+
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+
+      toast.success("Password updated");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : "Failed to update password.");
+    } finally {
+      setPasswordSaving(false);
+    }
   }
 
   async function handleSave() {
@@ -119,8 +204,7 @@ export default function SettingsProfile() {
     .join("");
 
   return (
-    <div className="space-y-5">
-      <h2 className="text-lg font-bold text-foreground">Profile</h2>
+    <SettingsPageShell title="Profile">
 
       {/* Avatar */}
       <Card>
@@ -141,7 +225,7 @@ export default function SettingsProfile() {
             <button
               onClick={() => fileRef.current?.click()}
               disabled={uploading}
-              className="absolute -bottom-1.5 -right-1.5 w-7 h-7 bg-violet-600 hover:bg-violet-500 rounded-xl flex items-center justify-center shadow-lg transition-colors"
+              className="absolute -bottom-1.5 -right-1.5 w-7 h-7 bg-primary hover:bg-primary rounded-xl flex items-center justify-center shadow-lg transition-colors"
             >
               {uploading
                 ? <div className="w-3 h-3 border border-white border-t-transparent rounded-full animate-spin" />
@@ -159,7 +243,7 @@ export default function SettingsProfile() {
           <div>
             <p className="text-sm text-foreground font-medium">{name || "Your name"}</p>
             <p className="text-xs text-muted-foreground mt-0.5">{user?.email}</p>
-            <Badge variant="violet" size="sm" className="mt-1.5">
+            <Badge variant="primary" size="sm" className="mt-1.5">
               {profile?.plan_id ?? "free"}
             </Badge>
           </div>
@@ -212,7 +296,7 @@ export default function SettingsProfile() {
       {/* Career info */}
       <Card>
         <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-          <Briefcase className="w-4 h-4 text-violet-400" />
+          <Briefcase className="w-4 h-4 text-primary" />
           Career info
         </h3>
         <div className="space-y-4">
@@ -261,6 +345,130 @@ export default function SettingsProfile() {
         </div>
       </Card>
 
+      <Card>
+        <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+          <Mail className="w-4 h-4 text-primary" />
+          Email address
+        </h3>
+        <p className="text-xs text-muted-foreground mb-3">
+          Current: {user?.email}
+        </p>
+        <div className="space-y-3 max-w-md">
+          <Input
+            label="New email"
+            type="email"
+            value={newEmail}
+            onChange={(e) => setNewEmail(e.target.value)}
+            placeholder="you@example.com"
+          />
+          <Input
+            label="Confirm with current password"
+            type={showPasswords ? "text" : "password"}
+            value={emailPassword}
+            onChange={(e) => setEmailPassword(e.target.value)}
+            placeholder="Current password"
+          />
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={emailSaving}
+            onClick={handleEmailChange}
+            disabled={!newEmail || !emailPassword}
+          >
+            Update email
+          </Button>
+        </div>
+      </Card>
+
+      <Card>
+        <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+          <Lock className="w-4 h-4 text-primary" />
+          Password
+        </h3>
+        <div className="space-y-3 max-w-md">
+          <Input
+            label="Current password"
+            type={showPasswords ? "text" : "password"}
+            value={currentPassword}
+            onChange={(e) => setCurrentPassword(e.target.value)}
+          />
+          <div>
+            <Input
+              label="New password"
+              type={showPasswords ? "text" : "password"}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+            />
+            {newPassword && (
+              <div className="mt-2 space-y-1">
+                <div className="flex gap-1">
+                  {[0, 1, 2, 3, 4].map((i) => (
+                    <span
+                      key={i}
+                      className={cn(
+                        "h-1 flex-1 rounded-full",
+                        i <= passwordStrength.score
+                          ? passwordStrength.color === "red"
+                            ? "bg-red-500"
+                            : passwordStrength.color === "orange"
+                              ? "bg-orange-400"
+                              : passwordStrength.color === "yellow"
+                                ? "bg-amber-400"
+                                : passwordStrength.color === "blue"
+                                  ? "bg-blue-400"
+                                  : "bg-emerald-500"
+                          : "bg-muted",
+                      )}
+                    />
+                  ))}
+                </div>
+                <p className="text-[10px] text-muted-foreground">
+                  Strength: {passwordStrength.label}
+                </p>
+              </div>
+            )}
+          </div>
+          <Input
+            label="Confirm new password"
+            type={showPasswords ? "text" : "password"}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+          />
+          <button
+            type="button"
+            onClick={() => setShowPasswords((v) => !v)}
+            className="inline-flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
+          >
+            {showPasswords ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+            {showPasswords ? "Hide passwords" : "Show passwords"}
+          </button>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={passwordSaving}
+            onClick={handlePasswordChange}
+            disabled={!currentPassword || !newPassword || !confirmPassword}
+          >
+            Update password
+          </Button>
+        </div>
+      </Card>
+
+      <Card>
+        <h3 className="text-sm font-semibold text-foreground mb-1">Onboarding</h3>
+        <p className="text-xs text-muted-foreground mb-3">
+          Re-run the setup wizard to update your role, preferences, or audio settings.
+          Your existing profile data is preserved.
+        </p>
+        <Link
+          to="/onboarding?rerun=1"
+          className="inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:text-primary/80 transition-colors"
+        >
+          <RotateCcw className="w-3.5 h-3.5" />
+          Re-run onboarding
+        </Link>
+      </Card>
+
       <Button
         variant={saved ? "success" : "primary"}
         size="md"
@@ -273,6 +481,6 @@ export default function SettingsProfile() {
       >
         {saved ? "Saved!" : "Save changes"}
       </Button>
-    </div>
+    </SettingsPageShell>
   );
 }

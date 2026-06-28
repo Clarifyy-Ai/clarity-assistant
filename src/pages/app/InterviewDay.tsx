@@ -2,16 +2,21 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
+import { useInterviewScheduler } from "@/hooks/useInterviewScheduler";
 import { useAuthStore } from "@/store/userStore";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { PageContent } from "@/components/layout/PageContent";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
   CalendarDays, Clock, CheckCircle,
-  Circle, Mic, Brain, Zap,
-  ChevronRight, Building2, Target,
-  Wind, Star, AlertTriangle,
+  Mic, ChevronRight, Building2, Target,
+  Wind, Star,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, differenceInMinutes } from "date-fns";
@@ -42,6 +47,11 @@ export default function InterviewDay() {
   const navigate  = useNavigate();
   const { profile } = useAuthStore();
   const store     = useInterviewSchedulerStore();
+  const scheduler = useInterviewScheduler();
+
+  useEffect(() => {
+    scheduler.reload();
+  }, []);
 
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
   const [affIdx,    setAffIdx]    = useState(0);
@@ -116,26 +126,44 @@ export default function InterviewDay() {
 
   const firstName = profile?.full_name?.split(" ")[0] ?? "there";
 
-  return (
-    <div className="max-w-2xl mx-auto space-y-5">
+  if (store.is_loading) {
+    return (
+      <PageContent className="max-w-2xl mx-auto space-y-5">
+        <PageHeader
+          title={`You've got this, ${firstName}`}
+          description="Focus mode for interview day — countdown, checklist, and calm prep"
+          badge="Interview Day"
+          icon={<Target className="w-5 h-5 text-primary" />}
+        />
+        <SkeletonCard />
+        <SkeletonCard />
+      </PageContent>
+    );
+  }
 
-      {/* Header */}
-      <div className="text-center py-4">
-        <p className="text-xs font-semibold text-violet-400 uppercase tracking-widest mb-2">
-          Interview Day
-        </p>
-        <h1 className="text-3xl font-black text-foreground">
-          You've got this, {firstName} 🎯
-        </h1>
-      </div>
+  return (
+    <PageContent className="max-w-2xl mx-auto space-y-5">
+      <PageHeader
+        title={`You've got this, ${firstName}`}
+        description="Focus mode for interview day — countdown, checklist, and calm prep"
+        badge="Interview Day"
+        icon={<Target className="w-5 h-5 text-primary" />}
+      />
+
+      {store.load_error && (
+        <InlineErrorRetry
+          message={store.load_error}
+          onRetry={() => scheduler.reload()}
+        />
+      )}
 
       {/* Interview info + countdown */}
       {todayIv ? (
-        <Card className="bg-gradient-to-r from-violet-600/15 to-blue-600/15 border-violet-500/30">
+        <Card className="bg-gradient-to-r from-primary/15 to-blue-600/15 border-primary/30">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
-              <div className="w-12 h-12 bg-violet-600 rounded-2xl flex items-center justify-center shrink-0">
-                <Building2 className="w-6 h-6 text-foreground" />
+              <div className="w-12 h-12 bg-primary rounded-2xl flex items-center justify-center shrink-0">
+                <Building2 className="w-6 h-6 text-primary-foreground" />
               </div>
               <div>
                 <p className="text-lg font-bold text-foreground">
@@ -156,7 +184,7 @@ export default function InterviewDay() {
                 <p className="text-[10px] text-muted-foreground uppercase tracking-widest">
                   Starts in
                 </p>
-                <p className="text-2xl font-black text-violet-400">
+                <p className="text-2xl font-black text-primary">
                   {timeLeft}
                 </p>
               </div>
@@ -173,22 +201,20 @@ export default function InterviewDay() {
               <span className="text-xs text-foreground">
                 🔗 {todayIv.meeting_link.slice(0, 50)}…
               </span>
-              <span className="text-xs text-violet-400 shrink-0 ml-2">Open ↗</span>
+              <span className="text-xs text-primary shrink-0 ml-2">Open ↗</span>
             </a>
           )}
         </Card>
       ) : (
-        <Card className="text-center py-6">
-          <CalendarDays className="w-8 h-8 text-muted-foreground mx-auto mb-2" />
-          <p className="text-muted-foreground text-sm">No interview scheduled for today.</p>
-          <Button
-            variant="secondary"
-            size="sm"
-            className="mt-3"
-            onClick={() => navigate("/app/interviews/new")}
-          >
-            Schedule one
-          </Button>
+        <Card>
+          <EmptyState
+            icon={CalendarDays}
+            title="No interview scheduled for today"
+            description="Schedule an interview to unlock countdown, checklist, and focus mode."
+            actionLabel="Schedule interview"
+            onAction={() => navigate("/app/interviews/new")}
+            compact
+          />
         </Card>
       )}
 
@@ -340,12 +366,12 @@ export default function InterviewDay() {
           rightIcon={<ChevronRight className="w-5 h-5" />}
           className="py-4 text-base"
         >
-          Launch Live Practice Coach
+          Launch Practice Coach
         </Button>
         <p className="text-center text-xs text-muted-foreground">
           For interview rehearsal only — not for use during real interviews.
         </p>
       </div>
-    </div>
+    </PageContent>
   );
 }

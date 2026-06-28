@@ -1,72 +1,63 @@
 // src/lib/stealth/stealthConfig.ts
+// Discrete UI: neutral alternate labels for private practice (nav/titles only).
+
+import { PRODUCT_NAMES, NAV_SECTION_LABELS } from "@/lib/constants/productNames";
 
 export const STEALTH_NAV_LABELS: Record<string, string> = {
-  "Dashboard": "Home",
-  "Live Co-Pilot": "Daily Standup",
-  "Mock Interview": "Sprint Review",
-  "Prep Lab": "Documentation",
-  "Sessions": "Meeting Notes",
-  "Analytics": "Reports",
-  "Documents": "Files",
-  "Answer Bank": "Knowledge Base",
-  "Interviews": "Calendar",
-  "Companies": "Clients",
-  "Practice Rooms": "Team Rooms",
+  [PRODUCT_NAMES.dashboard]: "Home",
+  [PRODUCT_NAMES.practiceCoach]: "Rehearsal",
+  [PRODUCT_NAMES.mockInterview]: "Drills",
+  [PRODUCT_NAMES.prepLab]: "Toolkit",
+  [PRODUCT_NAMES.govExams]: "Study Sets",
+  "Sessions": "Notes",
+  [PRODUCT_NAMES.sessionHistory]: "History",
+  [PRODUCT_NAMES.analytics]: "Reports",
+  [PRODUCT_NAMES.creditsUsage]: "Usage",
+  [PRODUCT_NAMES.documents]: "Files",
+  [PRODUCT_NAMES.answerBank]: "Saved Answers",
+  [PRODUCT_NAMES.interviews]: "Calendar",
+  [PRODUCT_NAMES.companyResearch]: "Research",
+  [PRODUCT_NAMES.groupPractice]: "Rooms",
   "Notifications": "Inbox",
   "Settings": "Preferences",
+  [PRODUCT_NAMES.debrief]: "Review",
+  [PRODUCT_NAMES.referrals]: "Invites",
+  [PRODUCT_NAMES.interviewDay]: "Focus",
 };
 
 export const STEALTH_SECTION_LABELS: Record<string, string> = {
-  "Core": "Workspace",
-  "Growth": "Resources",
-  "Planner": "Projects",
+  [NAV_SECTION_LABELS.core]: "Workspace",
+  [NAV_SECTION_LABELS.progress]: "Insights",
+  [NAV_SECTION_LABELS.planner]: "Schedule",
+  // Legacy section keys (pre-rename)
+  Core: "Workspace",
+  Growth: "Insights",
 };
 
 export const STEALTH_PAGE_TITLES: Record<string, string> = {
-  "Dashboard": "Home",
-  "Live Co-Pilot": "Daily Standup",
-  "Live Session": "Daily Standup",
-  "Mock Interview": "Sprint Review",
-  "Mock Practice": "Sprint Review",
-  "Prep Lab": "Documentation",
-  "Sessions": "Meeting Notes",
-  "Session History": "Meeting Notes",
-  "Analytics": "Reports",
+  ...STEALTH_NAV_LABELS,
+  "Practice Session": "Rehearsal",
+  "Mock Practice": "Drills",
+  "Session History": "History",
   "Performance Analytics": "Performance Reports",
-  "Documents": "Files",
-  "Answer Bank": "Knowledge Base",
-  "Interviews": "Calendar",
-  "Interview Scheduler": "Project Timeline",
-  "Companies": "Clients",
-  "Company Research": "Client Research",
-  "Practice Rooms": "Team Rooms",
-  "Notifications": "Inbox",
-  "Settings": "Preferences",
-  "Referrals": "Invitations",
-  "Interview Day": "Focus Mode",
-  "Debrief": "Retrospective",
+  "Interview Scheduler": "Schedule",
+  "Company Research": "Research",
 };
 
 export const STEALTH_BRAND = {
-  name: "WorkFlow",
-  tagline: "Project Management Suite",
+  name: "Clarify AI",
+  tagline: "Practice workspace",
 };
 
 /**
- * Manual spec: when stealth is active, overlay opacity should auto-fade
- * to ~15% when the mouse leaves the overlay region (Ch. 6.2).
- * This is used by screenCaptureBlocker.ts to keep UX consistent.
+ * When discrete UI is active, overlay opacity can auto-fade
+ * when the mouse leaves the overlay region.
  */
 export const STEALTH_OPACITY = {
   active: 1,
   faded: 0.15,
 };
 
-/**
- * DOM id used by the overlay root element so stealth utilities can
- * attach opacity + focus listeners. Make sure your OverlayWindow
- * root uses this id (e.g. <div id="clarify-overlay-root">).
- */
 export const STEALTH_OVERLAY_ROOT_ID = "clarify-overlay-root";
 
 export function getStealthLabel(label: string, isStealth: boolean): string {

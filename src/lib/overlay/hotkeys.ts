@@ -1,3 +1,4 @@
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { captureAndAnalyseCodingProblem } from "@/lib/audio/screenshotCapture";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";
@@ -6,8 +7,11 @@ import { toggleAppStealthMode } from "@/lib/stealth/stealthActions";
 
 // ─────────────────────────────────────────────────────────────────
 // Global Hotkey Manager
-// All keyboard shortcuts for the Live Co-pilot overlay.
+// All keyboard shortcuts for the Practice Coach overlay.
 // Uses capture-phase listeners so they fire even inside iframes.
+//
+// T-0295/T-0305: click-through / screen-capture evasion removed for compliance.
+// Discrete UI lowers opacity only — overlay stays visible on screen share.
 // ─────────────────────────────────────────────────────────────────
 
 export interface HotkeyDefinition {
@@ -33,6 +37,48 @@ const DOCK_POSITIONS: Array<{
   { key: "4", anchor: "bottom-right" },
 ];
 
+const HINT_SCROLL_STEP_PX = 120;
+
+function getHintScrollContainer(): HTMLElement | null {
+  const root = document.getElementById("clarify-overlay-root");
+  return root?.querySelector<HTMLElement>(".scroll-container") ?? null;
+}
+
+function scrollHintPanel(direction: "up" | "down"): void {
+  const el = getHintScrollContainer();
+  if (!el) return;
+  el.scrollBy({
+    top: direction === "up" ? -HINT_SCROLL_STEP_PX : HINT_SCROLL_STEP_PX,
+    behavior: "smooth",
+  });
+}
+
+/** T-0314 — warn when two definitions share the same key combo. */
+export function detectHotkeyConflicts(
+  definitions: HotkeyDefinition[],
+): Array<{ keys: string; ids: string[] }> {
+  const byKeys = new Map<string, string[]>();
+  for (const def of definitions) {
+    const normalized = def.keys.map((k) => k.toLowerCase()).join("+");
+    const ids = byKeys.get(normalized) ?? [];
+    ids.push(def.id);
+    byKeys.set(normalized, ids);
+  }
+  return [...byKeys.entries()]
+    .filter(([, ids]) => ids.length > 1)
+    .map(([keys, ids]) => ({ keys, ids }));
+}
+
+// ─────────────────────────────────────────────────────────────────
+// Runtime handlers (registered by live overlay pages)
+// ─────────────────────────────────────────────────────────────────
+
+let generateAnswerHandler: (() => void) | null = null;
+
+export function setGenerateAnswerHandler(handler: (() => void) | null): void {
+  generateAnswerHandler = handler;
+}
+
 // ─────────────────────────────────────────────────────────────────
 // Hotkey definitions
 // ─────────────────────────────────────────────────────────────────
@@ -50,14 +96,73 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
       isEnabled:   () => true,
       showInHelp:  true,
     },
+    // T-0293/T-0307/T-0308 — alias for overlay toggle
+    {
+      id:          "toggle_overlay_alias",
+      label:       "Toggle Overlay (Alt)",
+      description: "Same as Ctrl+Shift+H — show / hide overlay",
+      keys:        ["ctrl", "shift", "c"],
+      category:    "overlay",
+      action:      () => useOverlayStore.getState().toggleMinimize(),
+      isEnabled:   () => true,
+      showInHelp:  true,
+    },
     {
       id:          "toggle_stealth",
       label:       "Discrete UI",
       description: "Lower overlay opacity until you hover (still visible on screen share)",
-      keys:        ["ctrl", "shift", "s"],
+      keys:        ["ctrl", "shift", "t"],
       category:    "overlay",
       action:      toggleAppStealthMode,
       isEnabled:   () => true,
+      showInHelp:  true,
+    },
+
+    // T-0310/T-0311 — scroll answer panel
+    {
+      id:          "scroll_answer_up",
+      label:       "Scroll Answer Up",
+      description: "Scroll the answer panel upward",
+      keys:        ["ctrl", "shift", "s"],
+      category:    "overlay",
+      action:      () => scrollHintPanel("up"),
+      isEnabled:   () => useOverlayStore.getState().is_visible,
+      showInHelp:  true,
+    },
+    {
+      id:          "scroll_answer_down",
+      label:       "Scroll Answer Down",
+      description: "Scroll the answer panel downward",
+      keys:        ["ctrl", "shift", "d"],
+      category:    "overlay",
+      action:      () => scrollHintPanel("down"),
+      isEnabled:   () => useOverlayStore.getState().is_visible,
+      showInHelp:  true,
+    },
+    // T-0312 — clear answer
+    {
+      id:          "clear_answer",
+      label:       "Clear Answer",
+      description: "Clear the current hint / answer text",
+      keys:        ["ctrl", "shift", "q"],
+      category:    "hint",
+      action:      () => useOverlayStore.getState().clearHint(),
+      isEnabled:   () => useOverlayStore.getState().is_visible,
+      showInHelp:  true,
+    },
+
+    // ── Generate AI answer ─────────────────────────────────────
+    {
+      id:          "generate_answer",
+      label:       "Generate Answer",
+      description: "Manually trigger AI answer for the current question",
+      keys:        ["ctrl", "shift", "a"],
+      category:    "hint",
+      action:      () => generateAnswerHandler?.(),
+      isEnabled:   () =>
+        useSessionStore.getState().status === "active" &&
+        useOverlayStore.getState().is_visible &&
+        !!generateAnswerHandler,
       showInHelp:  true,
     },
 
@@ -77,13 +182,22 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
     {
       id:          "capture_coding_problem",
       label:       "Capture Coding Problem",
-      description: "Screenshot current problem and get AI analysis",
+      description: `Screenshot current problem and generate a full answer (${AI_CREDIT_COSTS.screenshot_answer} credits)`,
       keys:        ["ctrl", "shift", "c"],
       category:    "coding",
-      action:      () => captureAndAnalyseCodingProblem(),
+      action:      () => {
+        const handler = useOverlayStore.getState().capture_coding_handler;
+        if (handler) {
+          handler();
+          return;
+        }
+        captureAndAnalyseCodingProblem();
+      },
       isEnabled:   () =>
         useSessionStore.getState().status === "active" &&
-        useOverlayStore.getState().is_visible,
+        useOverlayStore.getState().is_visible &&
+        useOverlayStore.getState().network_color !== "red" &&
+        (typeof navigator === "undefined" || navigator.onLine),
       showInHelp:  true,
     },
 
@@ -220,11 +334,21 @@ export class HotkeyManager {
   constructor() {
     this.definitions = buildHotkeyDefinitions();
     this.boundHandler = this.handleKeyDown.bind(this);
+    this.warnConflicts();
+  }
+
+  private warnConflicts(): void {
+    for (const { keys, ids } of detectHotkeyConflicts(this.definitions)) {
+      console.warn(
+        `[HotkeyManager] Duplicate hotkey "${keys}" assigned to: ${ids.join(", ")}`,
+      );
+    }
   }
 
   // ── Register all hotkeys ──────────────────────────────────────
   register(): void {
     if (this.isActive) return;
+    this.warnConflicts();
     // Capture phase: fires before any element's own keydown handler
     document.addEventListener("keydown", this.boundHandler, { capture: true });
     this.isActive = true;
@@ -283,6 +407,7 @@ export class HotkeyManager {
       ...this.definitions.filter((d) => d.id !== def.id),
       def,
     ];
+    this.warnConflicts();
   }
 
   removeDefinition(id: string): void {

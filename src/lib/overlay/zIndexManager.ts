@@ -18,6 +18,9 @@ export const Z_LAYERS = {
   APP_TOAST:           600,
   APP_TOOLTIP:         700,
 
+  // ── Overlay in app shell (below sidebar/header so nav stays clickable) ──
+  OVERLAY_IN_SHELL:      150,
+
   // ── Overlay System ────────────────────────────────────────────────────────
   OVERLAY_BASE:         1000,
   OVERLAY_WINDOW:       1100,
@@ -285,6 +288,20 @@ export function getZIndexManager(): ZIndexManager {
  * className={`z-[${z("PANIC_BUTTON")}]`}
  */
 export const z = (layer: ZLayer): number => Z_LAYERS[layer];
+
+export type OverlayStackContext = "in-app-shell" | "fullscreen" | "electron";
+
+/** Z-index for the floating overlay panel — below app chrome when embedded in the shell. */
+export function getOverlayPortalZIndex(context: OverlayStackContext): number {
+  switch (context) {
+    case "in-app-shell":
+      return Z_LAYERS.OVERLAY_IN_SHELL;
+    case "electron":
+    case "fullscreen":
+    default:
+      return Z_LAYERS.OVERLAY_WINDOW;
+  }
+}
 
 /**
  * Inject all z-index values as CSS custom properties on :root.

@@ -9,8 +9,11 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { formatHotkeyLabel } from "@/lib/overlay/hotkeys";
+import { enumerateAudioDevices } from "@/lib/audio/audioCapture";
+import type { AudioDevice } from "@/types/audio.types";
 import type { LiveSessionConfig } from "@/types/session.types";
 import type { PreferredAIModel, HintStyle, UserProfile } from "@/types/user.types";
+import { CreditExhaustedState, useCreditExhaustedState } from "@/components/billing/CreditExhaustedState";
 
 interface PreSessionSetupProps {
   onStart: (config: LiveSessionConfig) => void;
@@ -37,6 +40,7 @@ const INTERVIEW_TYPES = [
 
 export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }: PreSessionSetupProps) {
   const { profile } = useAuthStore();
+  const { isExhausted: creditsExhausted } = useCreditExhaustedState();
   const resumes     = useDocumentStore((s) => s.resumes);
   const jds         = useDocumentStore((s) => s.jds);
   const activeResumeId = useDocumentStore((s) => s.active_resume_id);
@@ -56,6 +60,9 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
   const [enableSystemAudio, setEnableSystemAudio] = useState(false);
   const [stealthMode,       setStealthMode]       = useState(false);
   const [showAdvanced,      setShowAdvanced]      = useState(false);
+  const [micDevices,        setMicDevices]        = useState<AudioDevice[]>([]);
+  const [selectedMicId,     setSelectedMicId]     = useState<string>("");
+  const [noiseSuppression,  setNoiseSuppression]   = useState(true);
 
   const systemAudioSupported = typeof navigator !== "undefined"
     && !!navigator.mediaDevices
@@ -93,6 +100,21 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
     }
   }, []);
 
+  useEffect(() => {
+    if (micPermission !== "granted") return;
+    void enumerateAudioDevices()
+      .then((devices) => {
+        setMicDevices(devices);
+        if (!selectedMicId && devices.length > 0) {
+          const defaultDevice = devices.find((d) => d.isDefault) ?? devices[0];
+          setSelectedMicId(defaultDevice.deviceId);
+        }
+      })
+      .catch((err) => {
+        console.warn("[PreSessionSetup] enumerateAudioDevices failed:", err);
+      });
+  }, [micPermission, selectedMicId]);
+
   function handleStart() {
     if (micPermission === "denied") return;
     const config: LiveSessionConfig = {
@@ -107,6 +129,8 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
       interview_type:      interviewType,
       instructions,
       enable_system_audio: enableSystemAudio,
+      mic_device_id: selectedMicId || null,
+      noise_suppression: noiseSuppression,
     };
 
     const overlay = useOverlayStore.getState();
@@ -115,6 +139,16 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
     setAppStealthMode(stealthMode);
 
     onStart(config);
+  }
+
+  if (creditsExhausted) {
+    return (
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
+        <div className="w-full max-w-md rounded-2xl border border-border bg-card">
+          <CreditExhaustedState />
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -237,6 +271,32 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
             )}
           </div>
 
+          {micPermission === "granted" && micDevices.length > 0 && (
+            <div>
+              <label className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground mb-2">
+                <Volume2 className="w-3.5 h-3.5" /> Microphone
+              </label>
+              <select
+                value={selectedMicId}
+                onChange={(e) => setSelectedMicId(e.target.value)}
+                className="w-full bg-secondary border border-border text-foreground rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500 text-sm"
+              >
+                {micDevices.map((d) => (
+                  <option key={d.deviceId} value={d.deviceId}>{d.label}</option>
+                ))}
+              </select>
+              <label className="mt-2 flex items-center gap-2 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={noiseSuppression}
+                  onChange={(e) => setNoiseSuppression(e.target.checked)}
+                  className="rounded border-border bg-secondary text-emerald-500"
+                />
+                <span className="text-xs text-muted-foreground">Noise suppression</span>
+              </label>
+            </div>
+          )}
+
           <div className="flex items-center gap-4">
             <label className={cn(
               "flex items-center gap-3 flex-1",
@@ -308,9 +368,12 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
                 </p>
                 {[
                   { keys: ["ctrl", "shift", "h"], label: "Toggle overlay" },
-                  { keys: ["ctrl", "shift", "s"], label: "Stealth mode" },
-                  { keys: ["ctrl", "shift", "c"], label: "Screenshot + analyse" },
-                  { keys: ["ctrl", "shift", "p"], label: "Panic button" },
+                  { keys: ["ctrl", "shift", "c"], label: "Toggle overlay (alt)" },
+                  { keys: ["ctrl", "shift", "s"], label: "Scroll answer up" },
+                  { keys: ["ctrl", "shift", "d"], label: "Scroll answer down" },
+                  { keys: ["ctrl", "shift", "q"], label: "Clear answer" },
+                  { keys: ["ctrl", "shift", "g"], label: "Screenshot + analyse" },
+                  { keys: ["ctrl", "shift", "p"], label: "Calm steps" },
                   { keys: ["escape"],             label: "Clear hint" },
                 ].map((hk) => (
                   <div key={hk.label} className="flex items-center justify-between text-xs">
@@ -365,7 +428,7 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
           )}
         >
           <Zap className="w-4 h-4" />
-          {sessionType === "live" ? "Start Live Co-pilot" : "Start Mock Session"}
+          {sessionType === "live" ? "Start Practice Session" : "Start Mock Session"}
         </button>
       </div>
     </div>

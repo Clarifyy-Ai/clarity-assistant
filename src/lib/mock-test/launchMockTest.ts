@@ -26,7 +26,7 @@ export interface LaunchMockTestResult {
   ai_generated_count?: number;
 }
 
-/** Launch a mock test: select questions (with AI gap-fill) then create test record. */
+/** Launch a mock test: select questions from bank then create test record. */
 export async function launchMockTest(
   config: MockTestLaunchConfig
 ): Promise<LaunchMockTestResult> {
@@ -40,7 +40,7 @@ export async function launchMockTest(
     source_types:
       config.source_types.length > 0
         ? config.source_types
-        : ["OFFICIAL_PYP", "AI_GENERATED"],
+        : ["OFFICIAL_PYP"],
     subjects: config.subjects ?? [],
     topics: config.topics ?? [],
   };
@@ -55,7 +55,10 @@ export async function launchMockTest(
   }>("select-test-questions", { config: normalizedConfig });
 
   if (selectData.error && (!selectData.question_ids || selectData.question_ids.length === 0)) {
-    throw new Error(selectData.error);
+    const msg = selectData.error.includes("Pro plan") || selectData.error.includes("upgrade")
+      ? selectData.error
+      : selectData.error;
+    throw new Error(msg);
   }
 
   const questionIds = Array.isArray(selectData.question_ids)
@@ -64,7 +67,7 @@ export async function launchMockTest(
 
   if (questionIds.length === 0) {
     const hint = selectData.gap_fill_failed
-      ? "AI gap-fill failed — set GEMINI_API_KEY and SYSTEM_USER_ID in Supabase secrets."
+      ? "Question bank is short — ask an admin to import more official papers."
       : "Upload questions via Admin → Seed Question Bank, or use Collect from public sources.";
     throw new Error(`No questions available for this paper. ${hint}`);
   }

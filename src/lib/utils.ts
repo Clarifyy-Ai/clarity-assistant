@@ -21,11 +21,7 @@ export function getScoreLabel(score: number): "high" | "mid" | "low" {
   return "low";
 }
 
-export function getScoreColor(score: number): string {
-  if (score >= 70) return "text-green-400";
-  if (score >= 45) return "text-yellow-400";
-  return "text-red-400";
-}
+export { getScoreColor } from "@/lib/constants/colors";
 
 export function getScoreBgClass(score: number): string {
   if (score >= 70) return "score-pill-high";

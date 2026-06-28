@@ -1,6 +1,7 @@
 import { fileURLToPath } from "url";
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
+import { sentryVitePlugin } from "@sentry/vite-plugin";
 
 const __dirname = fileURLToPath(new URL(".", import.meta.url));
 
@@ -9,30 +10,28 @@ export default defineConfig(({ mode }) => {
   const isElectron = process.env.BUILD_TARGET === "electron";
   const isProduction = mode === "production";
 
-  const plugins = [react()];
-
-  // ✅ Sentry (safe conditional load)
-  if (
+  const sentryAuthToken = env.SENTRY_AUTH_TOKEN?.trim();
+  const sentryConfigured =
     isProduction &&
     env.SENTRY_ORG &&
     env.SENTRY_PROJECT &&
-    env.SENTRY_AUTH_TOKEN
-  ) {
-    import("@sentry/vite-plugin").then(({ sentryVitePlugin }) => {
-      plugins.push(
-        sentryVitePlugin({
-          org: env.SENTRY_ORG,
-          project: env.SENTRY_PROJECT,
-          authToken: env.SENTRY_AUTH_TOKEN,
-          sourcemaps: { assets: "./dist/**" },
-          telemetry: false,
-        }) as never
-      );
-    });
-  }
+    sentryAuthToken &&
+    !sentryAuthToken.includes("your-sentry") &&
+    sentryAuthToken !== "your-sentry-auth-token";
 
   return {
-    plugins,
+    plugins: [
+      react(),
+      ...(sentryConfigured
+        ? [sentryVitePlugin({
+            org: env.SENTRY_ORG,
+            project: env.SENTRY_PROJECT,
+            authToken: env.SENTRY_AUTH_TOKEN,
+            sourcemaps: { assets: "./dist/**" },
+            telemetry: false,
+          })]
+        : []),
+    ],
 
     base: isElectron ? "./" : "/",
 

@@ -8,6 +8,10 @@ import {
   type PlanId,
   type BillingInterval,
 } from "@/lib/billing/subscriptionManager";
+import {
+  AI_CREDIT_COSTS,
+  CREDIT_PACK_DEFINITIONS,
+} from "@/lib/constants/creditEconomics";
 import { ENV } from "@/lib/env";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -23,31 +27,15 @@ export interface CreditPack {
   stripePriceId?: string;
 }
 
-export const CREDIT_PACKS: CreditPack[] = [
-  {
-    id: "pack_50",
-    credits: 50,
-    priceUsdCents: 499,
-    label: "50 Credits",
-    stripePriceId: ENV.STRIPE_PRICE_CREDITS_50,
-  },
-  {
-    id: "pack_150",
-    credits: 150,
-    priceUsdCents: 1_299,
-    label: "150 Credits",
-    badge: "Most Popular",
-    stripePriceId: ENV.STRIPE_PRICE_CREDITS_150,
-  },
-  {
-    id: "pack_500",
-    credits: 500,
-    priceUsdCents: 3_999,
-    label: "500 Credits",
-    badge: "Best Value",
-    stripePriceId: ENV.STRIPE_PRICE_CREDITS_500,
-  },
-];
+export const CREDIT_PACKS: CreditPack[] = CREDIT_PACK_DEFINITIONS.map((pack) => ({
+  ...pack,
+  stripePriceId:
+    pack.id === "pack_50"
+      ? ENV.STRIPE_PRICE_CREDITS_50
+      : pack.id === "pack_150"
+        ? ENV.STRIPE_PRICE_CREDITS_150
+        : ENV.STRIPE_PRICE_CREDITS_500,
+}));
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Per-Feature Credit Costs
@@ -55,27 +43,26 @@ export const CREDIT_PACKS: CreditPack[] = [
 // ─────────────────────────────────────────────────────────────────────────────
 
 export const CREDIT_COSTS: Record<string, number> = {
-  // Live / AI
-  live_answer: 2,
-  live_hint: 1,
-  live_feedback: 2,
-
-  // Question generation / debrief / coach
-  generate_questions: 3,
-  session_debrief: 10,
-  ai_coach_message: 1,
-
-  // Prep tools
-  star_builder: 2,
-  rephraser: 1,
-  company_research: 5,
-  coding_hint: 2,
-  system_design: 5,
-
-  // Sessions / documents
-  mock_session: 10,
-  resume_analysis: 5,
-  screenshot_capture: 1,
+  live_answer: AI_CREDIT_COSTS.live_answer,
+  live_hint: AI_CREDIT_COSTS.live_hint,
+  live_feedback: AI_CREDIT_COSTS.live_feedback,
+  screenshot_answer: AI_CREDIT_COSTS.screenshot_answer,
+  generate_questions: AI_CREDIT_COSTS.generate_questions,
+  session_debrief: AI_CREDIT_COSTS.session_debrief,
+  ai_coach_message: AI_CREDIT_COSTS.ai_coach_message,
+  star_builder: AI_CREDIT_COSTS.star_builder,
+  rephraser: AI_CREDIT_COSTS.rephraser,
+  company_research: AI_CREDIT_COSTS.company_research,
+  coding_hint: AI_CREDIT_COSTS.coding_hint,
+  system_design: AI_CREDIT_COSTS.system_design,
+  mock_session: AI_CREDIT_COSTS.mock_session,
+  resume_analysis: AI_CREDIT_COSTS.resume_analysis,
+  create_mock_test: AI_CREDIT_COSTS.create_mock_test,
+  mock_test_ai_gap_fill: AI_CREDIT_COSTS.mock_test_ai_gap_fill,
+  generate_practice_questions: AI_CREDIT_COSTS.generate_practice_questions,
+  parse_question_pdf: AI_CREDIT_COSTS.parse_question_pdf,
+  analyze_test_performance: AI_CREDIT_COSTS.analyze_test_performance,
+  project_builder: AI_CREDIT_COSTS.project_builder,
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -346,16 +333,12 @@ export function recommendPlan(estimatedMonthlyCredits: number): PlanId {
   for (const planId of PLAN_ORDER) {
     const plan = PLANS[planId];
 
-    if (plan.creditsPerMonth === -1) {
-      return planId;
-    }
-
     if (plan.creditsPerMonth >= requiredCredits) {
       return planId;
     }
   }
 
-  return "elite";
+  return "enterprise";
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -385,10 +368,7 @@ export function buildPlanComparison(
     yearlyPrice: formatPriceWithInterval(plan.yearlyPrice, "yearly"),
     yearlySaving: savedPercent > 0 ? `Save ${savedPercent}%` : "",
     yearlySavingPercent: savedPercent,
-    creditsPerMonth:
-      plan.creditsPerMonth === -1
-        ? "Unlimited"
-        : `${plan.creditsPerMonth} credits/mo`,
+    creditsPerMonth: `${plan.creditsPerMonth.toLocaleString()} credits/mo`,
     isRecommended: recommendPlan(estimatedCreditsNeeded) === planId,
   };
 }

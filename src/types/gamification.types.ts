@@ -59,7 +59,7 @@ export const XP_LEVELS: XPLevelThreshold[] = [
   { level: 4,  label: "STAR Practitioner",      xp_required: 1000, badge_id: "star_user",      perks: ["STAR bank unlocked"] },
   { level: 5,  label: "Mock Interview Pro",     xp_required: 2000, badge_id: "mock_pro",       perks: ["Advanced analytics"] },
   { level: 6,  label: "System Design Aware",    xp_required: 3500, badge_id: "sysdesign",      perks: ["System Design guide"] },
-  { level: 7,  label: "Live Interview Ready",   xp_required: 5000, badge_id: "live_ready",     perks: ["Live co-pilot full access"] },
+  { level: 7,  label: "Live Interview Ready",   xp_required: 5000, badge_id: "live_ready",     perks: ["Practice Coach full access"] },
   { level: 8,  label: "Zero Filler Champion",   xp_required: 7500, badge_id: "zero_filler",    perks: ["Filler insights dashboard"] },
   { level: 9,  label: "Interview Strategist",   xp_required: 10000,badge_id: "strategist",     perks: ["Company deep research"] },
   { level: 10, label: "Clarify AI Master",       xp_required: 15000,badge_id: "master",         perks: ["All features unlocked", "Master badge"] },
@@ -169,7 +169,7 @@ export const BADGE_DEFINITIONS: Record<BadgeId, BadgeDefinition> = {
   first_live: {
     id: "first_live",
     name: "Live & Unafraid",
-    description: "Used the live co-pilot in a real interview",
+    description: "Used Practice Coach in a practice session",
     icon: "🎙️",
     rarity: "uncommon",
     xp_bonus: 100,

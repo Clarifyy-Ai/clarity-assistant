@@ -8,11 +8,14 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Badge } from "@/components/ui/Badge";
 import {
-  MessageSquare, Send, Loader2, CheckCircle2, Clock, AlertCircle, Search,
+  MessageSquare, Send, CheckCircle2, Clock, AlertCircle, Search,
 } from "lucide-react";
 import { toast } from "sonner";
 import { formatDistanceToNow } from "date-fns";
 import { cn } from "@/lib/utils";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 
 interface Thread {
   id: string;
@@ -47,6 +50,7 @@ export default function AdminLiveChat() {
   const [reply, setReply] = useState("");
   const [sending, setSending] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Load threads
@@ -54,6 +58,7 @@ export default function AdminLiveChat() {
 
   async function loadThreads() {
     setLoading(true);
+    setLoadError(null);
     try {
       const list = (await supportDB.listThreads(statusFilter)) as Thread[];
       setThreads(list);
@@ -70,7 +75,9 @@ export default function AdminLiveChat() {
         setProfiles({});
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to load support threads");
+      const message = err instanceof Error ? err.message : "Failed to load support threads";
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -161,7 +168,7 @@ export default function AdminLiveChat() {
     <div className="space-y-4">
       <div className="flex items-center justify-between flex-wrap gap-3">
         <h1 className="text-xl font-bold text-foreground flex items-center gap-2">
-          <MessageSquare className="w-5 h-5 text-violet-400" /> Live Chat / Support
+          <MessageSquare className="w-5 h-5 text-primary" /> Live Chat / Support
         </h1>
         <div className="flex gap-2">
           <KPI label="Open" value={openCount} icon={<AlertCircle className="w-3.5 h-3.5" />} color="text-amber-400" />
@@ -188,7 +195,7 @@ export default function AdminLiveChat() {
                   className={cn(
                     "flex-1 px-2 py-1 rounded-lg text-[10px] uppercase font-semibold transition",
                     statusFilter === s
-                      ? "bg-violet-500/15 text-violet-400"
+                      ? "bg-primary/15 text-primary"
                       : "text-muted-foreground hover:text-foreground"
                   )}
                 >
@@ -199,12 +206,27 @@ export default function AdminLiveChat() {
           </div>
 
           <div className="flex-1 overflow-y-auto">
-            {loading ? (
-              <div className="p-6 text-center text-xs text-muted-foreground">
-                <Loader2 className="w-4 h-4 animate-spin inline mr-2" /> Loading…
+            {loadError ? (
+              <div className="p-4">
+                <InlineErrorRetry message={loadError} onRetry={() => void loadThreads()} />
+              </div>
+            ) : loading ? (
+              <div className="space-y-2 p-3">
+                <SkeletonCard />
+                <SkeletonCard />
+                <SkeletonCard />
               </div>
             ) : filtered.length === 0 ? (
-              <div className="p-6 text-center text-xs text-muted-foreground">No threads</div>
+              <EmptyState
+                icon={MessageSquare}
+                title="No threads"
+                description={
+                  search.trim()
+                    ? "No threads match your search."
+                    : `No ${statusFilter === "all" ? "" : statusFilter} support threads right now.`
+                }
+                compact
+              />
             ) : (
               filtered.map((t) => {
                 const p = profiles[t.user_id];
@@ -221,7 +243,7 @@ export default function AdminLiveChat() {
                       <span className="text-sm font-semibold text-foreground truncate">
                         {p?.full_name ?? p?.email ?? "Unknown"}
                       </span>
-                      {t.unread_for_admin && <span className="w-2 h-2 rounded-full bg-violet-500 mt-1.5 shrink-0" />}
+                      {t.unread_for_admin && <span className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />}
                     </div>
                     <p className="text-[11px] text-muted-foreground truncate">{t.subject}</p>
                     <p className="text-[10px] text-muted-foreground/70 line-clamp-1 mt-0.5">{t.last_message_preview ?? "—"}</p>
@@ -271,7 +293,7 @@ export default function AdminLiveChat() {
                       className={cn(
                         "max-w-[75%] rounded-2xl px-3 py-2 text-sm",
                         m.sender_role === "admin"
-                          ? "ml-auto bg-violet-500/15 text-foreground"
+                          ? "ml-auto bg-primary/15 text-foreground"
                           : "bg-card border border-border text-foreground"
                       )}
                     >

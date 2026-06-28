@@ -112,7 +112,7 @@ function ListView() {
         <Button
           onClick={() => navigate("/app/admin/questions/new")}
           leftIcon={<Plus className="w-4 h-4" />}
-          className="bg-violet-600 hover:bg-violet-700 text-white"
+          className="bg-primary hover:bg-primary/90 text-white"
         >
           New question
         </Button>
@@ -176,7 +176,7 @@ function ListView() {
                     <td className="px-4 py-3 text-xs text-muted-foreground">{r.difficulty ?? "—"}</td>
                     <td className="px-4 py-3">
                       <div className="flex flex-wrap gap-1">
-                        {r.is_verified && <Badge variant="violet" size="sm">Verified</Badge>}
+                        {r.is_verified && <Badge variant="primary" size="sm">Verified</Badge>}
                         {r.is_public && <Badge size="sm">Public</Badge>}
                       </div>
                     </td>
@@ -387,7 +387,7 @@ function EditorView({ id }: { id?: string }) {
           disabled={saving}
           loading={saving}
           leftIcon={<Save className="w-4 h-4" />}
-          className="bg-violet-600 hover:bg-violet-700 text-white"
+          className="bg-primary hover:bg-primary/90 text-white"
         >
           Save question
         </Button>
@@ -416,7 +416,7 @@ function EditorView({ id }: { id?: string }) {
                     <div key={L} className="border border-border rounded-xl p-3">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-2">
-                          <span className="w-7 h-7 rounded-full bg-violet-500/15 text-violet-500 font-bold text-sm flex items-center justify-center">{L}</span>
+                          <span className="w-7 h-7 rounded-full bg-primary/15 text-primary font-bold text-sm flex items-center justify-center">{L}</span>
                           <span className="text-sm font-semibold">Option {L}</span>
                         </div>
                         <label className="flex items-center gap-1.5 text-xs cursor-pointer">

@@ -2,7 +2,7 @@ export { LiveAnswerStream } from './LiveAnswerStream';
 export { LiveCodingProblemCapture } from './LiveCodingProblemCapture';
 export { LiveHotKeyListener } from './LiveHotKeyListener';
 export { LiveNetworkMonitor } from './LiveNetworkMonitor';
-export { LivePanicButton } from './LivePanicButton';
+export { CalmStepsButton } from './CalmStepsButton';
 export { LiveSessionController } from './LiveSessionController';
 export { LiveSessionTimer } from './LiveSessionTimer';
 export { LiveTranscriptStream } from './LiveTranscriptStream';

@@ -1,22 +1,23 @@
-// @ts-nocheck -- retained: complex Supabase row types with manual schema columns
-// not in generated types. Removing produces implicit-any cascade across all data accesses.
 import { useEffect, useState, useCallback } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { answerBankDB, sessionsDB, sessionAnswersDB } from "@/lib/supabase/database";
+import { exportSessionPdf } from "@/lib/export/sessionPdf";
 import { useAuthStore } from "@/store/userStore";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { Modal } from "@/components/ui/Modal";
 import { toast } from "sonner";
 import {
   BarChart2, Clock, MessageSquare, Download,
   ChevronLeft, ChevronRight, ChevronDown, ChevronUp,
-  Star, Zap, AlertTriangle, CheckCircle,
+  Star, Zap, CheckCircle,
   Brain, Mic, Volume2, TrendingUp,
-  RefreshCw, ThumbsUp, Share2,
+  ThumbsUp, Share2, RefreshCw, AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -112,18 +113,11 @@ export default function SessionDetail() {
 
   if (fetchError) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <AlertTriangle className="w-8 h-8 text-amber-400" />
-        <p className="text-muted-foreground text-sm">{fetchError}</p>
-        <div className="flex gap-2">
-          <Button variant="secondary" size="sm" onClick={fetchSession}
-            leftIcon={<RefreshCw className="w-3.5 h-3.5" />}>
-            Retry
-          </Button>
-          <Button variant="secondary" size="sm" onClick={() => navigate("/app/sessions")}>
-            ← Back to sessions
-          </Button>
-        </div>
+      <div className="max-w-4xl space-y-4">
+        <InlineErrorRetry message={fetchError} onRetry={() => void fetchSession()} />
+        <Button variant="secondary" size="sm" onClick={() => navigate("/app/sessions")}>
+          ← Back to sessions
+        </Button>
       </div>
     );
   }
@@ -132,11 +126,17 @@ export default function SessionDetail() {
 
   if (!session) {
     return (
-      <div className="flex flex-col items-center justify-center py-20 gap-4">
-        <p className="text-muted-foreground">Session not found.</p>
-        <Button variant="secondary" size="sm" onClick={() => navigate("/app/sessions")}>
-          ← Back to sessions
-        </Button>
+      <div className="max-w-4xl">
+        <Card>
+          <EmptyState
+            icon={MessageSquare}
+            title="Session not found"
+            description="This session may have been deleted or the link is invalid."
+            actionLabel="Back to sessions"
+            onAction={() => navigate("/app/sessions")}
+            compact
+          />
+        </Card>
       </div>
     );
   }
@@ -194,7 +194,25 @@ export default function SessionDetail() {
             variant="secondary"
             size="sm"
             leftIcon={<Download className="w-3.5 h-3.5" />}
-            onClick={() => {/* PDF export handler */}}
+            onClick={() => {
+              try {
+                exportSessionPdf({
+                  title: `${session.session_type ?? "Session"} Interview${session.target_company ? ` — ${session.target_company}` : ""}`,
+                  dateLabel: format(new Date(session.created_at), "EEEE, MMMM d yyyy · h:mm a"),
+                  overallScore: score,
+                  durationLabel: duration,
+                  aiFeedback: session.ai_feedback ?? null,
+                  answers: answers.map((a) => ({
+                    question_text: a.question_text,
+                    transcript: a.transcript,
+                    score: a.score,
+                  })),
+                });
+                toast.success("PDF downloaded");
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : "PDF export failed");
+              }
+            }}
           >
             Export PDF
           </Button>
@@ -251,9 +269,9 @@ export default function SessionDetail() {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { icon: <Clock className="w-4 h-4 text-blue-400" />,         label: "Duration",     value: duration },
-          { icon: <MessageSquare className="w-4 h-4 text-violet-400" />,label: "Questions",    value: `${answers.length} / ${session.question_count ?? answers.length}` },
+          { icon: <MessageSquare className="w-4 h-4 text-primary" />,label: "Questions",    value: `${answers.length} / ${session.question_count ?? answers.length}` },
           { icon: <Volume2 className="w-4 h-4 text-emerald-400" />,    label: "Avg WPM",      value: session.avg_wpm ? `${session.avg_wpm}` : "—" },
-          { icon: <AlertTriangle className="w-4 h-4 text-amber-400" />, label: "Total fillers",value: session.total_filler_words ?? "—" },
+          { icon: <Mic className="w-4 h-4 text-amber-400" />, label: "Total fillers",value: session.total_filler_words ?? "—" },
         ].map((stat) => (
           <Card key={stat.label} padding="sm" className="flex items-center gap-3">
             {stat.icon}
@@ -269,7 +287,7 @@ export default function SessionDetail() {
       {session.ai_feedback && (
         <Card>
           <div className="flex items-center gap-2 mb-3">
-            <Brain className="w-4 h-4 text-violet-400" />
+            <Brain className="w-4 h-4 text-primary" />
             <h3 className="text-sm font-semibold text-foreground">AI Feedback Summary</h3>
           </div>
           <p className="text-sm text-foreground leading-relaxed whitespace-pre-wrap">
@@ -309,11 +327,20 @@ export default function SessionDetail() {
       {/* ── Per-question review ────────────────────────── */}
       <div>
         <h2 className="text-sm font-semibold text-foreground mb-3 flex items-center gap-2">
-          <MessageSquare className="w-4 h-4 text-violet-400" />
+          <MessageSquare className="w-4 h-4 text-primary" />
           Question-by-question review
         </h2>
         <div className="space-y-3">
-          {answers.map((ans, i) => {
+          {answers.length === 0 ? (
+            <Card>
+              <EmptyState
+                icon={MessageSquare}
+                title="No questions recorded"
+                description="This session has no question-and-answer data yet."
+                compact
+              />
+            </Card>
+          ) : answers.map((ans, i) => {
             const isOpen  = expanded[ans.id];
             const qScore  = ans.score ?? null;
             const qColor  =
@@ -404,7 +431,7 @@ export default function SessionDetail() {
 
                     {ans.ai_feedback && (
                       <div className="bg-secondary border border-border rounded-xl p-4">
-                        <p className="text-[10px] font-semibold text-violet-400 uppercase tracking-widest mb-2">
+                        <p className="text-[10px] font-semibold text-primary uppercase tracking-widest mb-2">
                           AI feedback
                         </p>
                         <p className="text-xs text-foreground leading-relaxed">{ans.ai_feedback}</p>
@@ -426,7 +453,7 @@ export default function SessionDetail() {
                       <div className="grid grid-cols-2 gap-2">
                         {Object.entries(ans.star_breakdown).map(([key, val]) => (
                           <div key={key} className="bg-secondary border border-border rounded-xl p-3">
-                            <p className="text-[10px] font-bold text-violet-400 uppercase mb-1">{key}</p>
+                            <p className="text-[10px] font-bold text-primary uppercase mb-1">{key}</p>
                             <p className="text-xs text-muted-foreground">{val as string}</p>
                           </div>
                         ))}
@@ -446,13 +473,10 @@ export default function SessionDetail() {
                           }
                           try {
                             await answerBankDB.upsert(user.id, {
-                              session_id: ans.session_id,
                               question_text: ans.question_text,
                               answer_text: ans.transcript,
-                              score: ans.score,
                               tags: ans.question_tags ?? [],
-                              star_breakdown: ans.star_breakdown ?? null,
-                              ai_feedback: ans.ai_feedback ?? null,
+                              source: "session",
                             });
                             toast.success("Saved to Answer Bank");
                           } catch (err: unknown) {
@@ -480,10 +504,10 @@ export default function SessionDetail() {
       </div>
 
       {/* ── Debrief CTA ───────────────────────────────── */}
-      <Card className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 bg-gradient-to-r from-violet-600/10 to-blue-600/10 border-violet-500/20">
+      <Card className="flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4 bg-gradient-to-r from-primary/10 to-blue-600/10 border-primary/20">
         <div className="flex items-center gap-3 flex-1 min-w-0">
-          <div className="w-10 h-10 bg-violet-600/20 rounded-xl flex items-center justify-center shrink-0">
-            <Brain className="w-5 h-5 text-violet-400" />
+          <div className="w-10 h-10 bg-primary/20 rounded-xl flex items-center justify-center shrink-0">
+            <Brain className="w-5 h-5 text-primary" />
           </div>
           <div className="min-w-0">
             <p className="text-sm font-semibold text-foreground">Deep-dive debrief</p>

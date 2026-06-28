@@ -119,7 +119,7 @@ function ChatBubble({ message }: { message: ChatMessage }) {
         className={cn(
           "max-w-[85%] px-3.5 py-2.5 rounded-2xl text-[13px] leading-relaxed",
           isUser
-            ? "bg-gradient-to-br from-indigo-600/30 to-violet-600/20 text-indigo-100 rounded-br-sm border border-indigo-500/20 shadow-sm shadow-indigo-500/10"
+            ? "bg-gradient-to-br from-indigo-600/30 to-primary/20 text-indigo-100 rounded-br-sm border border-indigo-500/20 shadow-sm shadow-indigo-500/10"
             : "bg-white/[0.05] text-white/80 rounded-bl-sm border border-white/[0.08]"
         )}
       >

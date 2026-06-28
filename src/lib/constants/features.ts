@@ -23,7 +23,6 @@ export const FEATURE_FLAGS = {
 
   // Overlay
   OVERLAY:             "overlay",
-  STEALTH_MODE:        "stealth_mode",
   SCREENSHOT_CAPTURE:  "screenshot_capture",
 
   // Audio
@@ -43,6 +42,7 @@ export const FEATURE_FLAGS = {
   EXPERIMENTAL_UI:     "experimental_ui",
   DEBUG_PANEL:         "debug_panel",
   BETA_MODELS:         "beta_models",
+  MOCK_TEST_AI:        "mock_test_ai",
 } as const;
 
 export type FeatureFlag = (typeof FEATURE_FLAGS)[keyof typeof FEATURE_FLAGS];
@@ -67,7 +67,6 @@ export const FEATURE_PLAN_GATE: Record<FeatureFlag, PlanId> = {
   [FEATURE_FLAGS.FILLER_DETECTION]:   "starter",
   [FEATURE_FLAGS.WPM_TRACKING]:       "starter",
   [FEATURE_FLAGS.ANALYTICS]:          "starter",
-  [FEATURE_FLAGS.STEALTH_MODE]:       "pro",
   [FEATURE_FLAGS.SCREENSHOT_CAPTURE]: "pro",
   [FEATURE_FLAGS.DIARIZATION]:        "pro",
   [FEATURE_FLAGS.BYOK]:               "pro",
@@ -77,6 +76,7 @@ export const FEATURE_PLAN_GATE: Record<FeatureFlag, PlanId> = {
   [FEATURE_FLAGS.EXPERIMENTAL_UI]:    "pro",
   [FEATURE_FLAGS.DEBUG_PANEL]:        "enterprise",
   [FEATURE_FLAGS.BETA_MODELS]:        "pro",
+  [FEATURE_FLAGS.MOCK_TEST_AI]:       "pro",
 } as const;
 
 /** Alias used in some admin pages */

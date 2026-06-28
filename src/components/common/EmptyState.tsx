@@ -77,6 +77,7 @@ export function EmptyState({
         <div className="flex flex-wrap items-center justify-center gap-2">
           {actionLabel && onAction && (
             <Button
+              variant="primary"
               size={compact ? "sm" : "default"}
               onClick={onAction}
             >

@@ -70,8 +70,17 @@ function isAcknowledged(): boolean {
  *
  * If the user already acknowledged this session, resolves immediately.
  */
-export function confirmTabAudioCapture(): Promise<boolean> {
+export interface TabAudioGuideOptions {
+  /** When true, never auto-proceed if the modal host is slow to mount. */
+  strict?: boolean;
+}
+
+export function confirmTabAudioCapture(
+  options?: TabAudioGuideOptions,
+): Promise<boolean> {
   if (isAcknowledged()) return Promise.resolve(true);
+
+  const strict = options?.strict ?? false;
 
   return new Promise<boolean>((resolve) => {
     const wrappedResolve = (value: boolean) => {
@@ -83,20 +92,21 @@ export function confirmTabAudioCapture(): Promise<boolean> {
       listener(wrappedResolve);
     } else {
       pending.push(wrappedResolve);
-      // Fallback safety: if no host appears within 3s, fall back to the
-      // old toast + proceed behaviour so we never deadlock a session.
-      setTimeout(() => {
-        const idx = pending.indexOf(wrappedResolve);
-        if (idx !== -1) {
-          pending.splice(idx, 1);
-          toast.info("Share tab audio", {
-            description:
-              "When the share dialog opens: pick your interview tab or window, tick \"Share tab audio\", then click Share.",
-            duration: 10_000,
-          });
-          wrappedResolve(true);
-        }
-      }, 3000);
+      if (!strict) {
+        // Non-strict fallback: toast + proceed after delay (legacy paths only).
+        setTimeout(() => {
+          const idx = pending.indexOf(wrappedResolve);
+          if (idx !== -1) {
+            pending.splice(idx, 1);
+            toast.info("Share tab audio", {
+              description:
+                'When the share dialog opens: pick your interview tab or window, tick "Share tab audio", then click Share.',
+              duration: 10_000,
+            });
+            wrappedResolve(true);
+          }
+        }, 3000);
+      }
     }
   });
 }

@@ -27,6 +27,7 @@ import { supabase } from "@/lib/supabase/client";
 import { readCachedAuthSession } from "@/lib/supabase/sessionCache";
 import { profilesDB, userRolesDB } from "@/lib/supabase/database";
 import { useOverlayStore } from "@/store/overlayStore";
+import { normalizePreferredModel } from "@/lib/ai/modelOptions";
 
 import {
   loadBYOKVault,
@@ -439,8 +440,10 @@ export const useAuthStore = create<AuthStore>()(
               state.error = null;
             });
 
+            const normalizedEmail = email.trim().toLowerCase();
+
             const { data, error } = await supabase.auth.signUp({
-              email: email.trim(),
+              email: normalizedEmail,
               password,
               options: {
                 data: {
@@ -637,6 +640,13 @@ export const useAuthStore = create<AuthStore>()(
                   "credits",
                   state.credits
                 );
+
+                const preferred = row.preferred_model as string | null | undefined;
+                if (preferred) {
+                  useOverlayStore
+                    .getState()
+                    .setActiveModel(normalizePreferredModel(preferred));
+                }
               }
             });
           },

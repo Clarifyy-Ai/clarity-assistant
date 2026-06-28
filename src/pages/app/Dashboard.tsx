@@ -11,50 +11,35 @@ import { useDocumentStore } from "@/store/documentStore";
 import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
 import { useGamification } from "@/hooks/useGamification";
 import { useInterviewScheduler } from "@/hooks/useInterviewScheduler";
+import { useDocuments } from "@/hooks/useDocuments";
 import { SetupChecklist } from "@/components/layout/SetupChecklist";
-import { PageHeader } from "@/components/layout/PageHeader";
+import { LowCreditBanner, useLowCreditState } from "@/components/billing/LowCreditBanner";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { XPProgressRing } from "@/components/gamification/XPProgressRing";
+import { Tooltip } from "@/components/ui/tooltip";
 import { Skeleton, SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import {
-  Mic, ClipboardList, FlaskConical, BarChart2,
+  Mic, ClipboardList, FlaskConical, BarChart2, Landmark,
   CalendarDays, Flame, Zap, ChevronRight,
   Star, TrendingUp, Trophy, Clock,
-  Building2, AlertTriangle, RefreshCw,
-  ListTodo, PenTool, FolderOpen, BarChart3,
+  Building2, AlertTriangle, Info,
+  ListTodo, PenTool, FolderOpen, BarChart3, FileSpreadsheet,
+  Sparkles, FileText, Layers, Upload, CheckCircle, Monitor, Download,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { getStealthLabel } from "@/lib/stealth/stealthConfig";
+import { useIndiaRegion } from "@/hooks/useIndiaRegion";
+import { getDesktopDownloadHref, isDesktopDownloadExternal } from "@/lib/constants/desktopDownload";
 import type { Tables } from "@/integrations/supabase/types";
 
-/* ─── INLINE ERROR / RETRY (file-local) ──────────────────────────────────── */
-// ✅ FIX P0-B: per-section retry banner — failed fetches no longer blank the
-// whole dashboard. Keep file-local to avoid touching shared components.
-function InlineErrorRetry({
-  message,
-  onRetry,
-}: {
-  message: string;
-  onRetry: () => void;
-}) {
-  return (
-    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-red-500/30 bg-red-500/5 text-xs">
-      <AlertTriangle className="w-3.5 h-3.5 text-red-400 shrink-0" />
-      <span className="flex-1 text-red-300 truncate">{message}</span>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="flex items-center gap-1 text-red-300 hover:text-red-200 font-semibold whitespace-nowrap"
-      >
-        <RefreshCw className="w-3 h-3" /> Retry
-      </button>
-    </div>
-  );
-}
-
+const IS_ELECTRON = Boolean(
+  (window as unknown as { electronAPI?: { isElectron?: boolean } }).electronAPI?.isElectron,
+);
 
 /* ─── LOCAL TYPES ────────────────────────────────────────────────────────── */
 
@@ -84,6 +69,31 @@ interface GamificationData {
   xpProgressPercent: number;
 }
 
+function computeReadinessScore(params: {
+  sessionCount: number | null;
+  streakCurrent: number;
+  hasResume: boolean;
+  hasJD: boolean;
+  hasSession: boolean;
+  onboardingCompleted: boolean;
+}): number {
+  const sessions = params.sessionCount ?? 0;
+  const sessionScore = Math.min(40, (sessions / 10) * 40);
+  const streakScore = Math.min(30, (params.streakCurrent / 7) * 30);
+  const prepSteps = [
+    params.hasResume,
+    params.hasJD,
+    params.hasSession,
+    params.onboardingCompleted,
+  ];
+  const prepScore = (prepSteps.filter(Boolean).length / prepSteps.length) * 30;
+  return Math.round(Math.min(100, sessionScore + streakScore + prepScore));
+}
+
+const READINESS_TOOLTIP =
+  "Combines practice sessions (up to 40 pts), your current streak (up to 30 pts), " +
+  "and setup completion — resume, job description, first session, and audio test (up to 30 pts).";
+
 /* ─── QUICK ACTIONS ──────────────────────────────────────────────────────── */
 
 interface QuickAction {
@@ -94,15 +104,23 @@ interface QuickAction {
   sub:          string;
   stealthSub?:  string;
   highlight:    boolean;
+  indiaOnly?:   boolean;
 }
+
+const QUICK_LAUNCH: { to: string; icon: React.ElementType; label: string }[] = [
+  { to: "/app/mock",      icon: ClipboardList, label: "Mock Interview" },
+  { to: "/app/live/overlay", icon: Layers,     label: "Overlay" },
+  { to: "/app/documents", icon: Upload,         label: "Upload" },
+  { to: "/app/analytics", icon: BarChart2,      label: "Analytics" },
+];
 
 const QUICK_ACTIONS: QuickAction[] = [
   {
     to:          "/app/live",
     icon:        Mic,
     stealthIcon: ListTodo,
-    label:       "Live Co-Pilot",
-    sub:         "Real interview mode",
+    label:       "Practice Coach",
+    sub:         "Practice session",
     stealthSub:  "Join your standup",
     highlight:   true,
   },
@@ -114,6 +132,16 @@ const QUICK_ACTIONS: QuickAction[] = [
     sub:         "Practice session",
     stealthSub:  "Review session",
     highlight:   false,
+  },
+  {
+    to:          "/app/mock-test",
+    icon:        Landmark,
+    stealthIcon: FileSpreadsheet,
+    label:       "Gov Exam Tests",
+    sub:         "UPSC · SSC · IBPS MCQ",
+    stealthSub:  "Assessment module",
+    highlight:   false,
+    indiaOnly:   true,
   },
   {
     to:          "/app/prep",
@@ -140,10 +168,13 @@ const QUICK_ACTIONS: QuickAction[] = [
 export default function Dashboard() {
   const { profile, user, isProfileLoaded } = useAuthStore();
   const stealth    = useUIStore((s) => s.stealth_mode);
+  const { isIndia } = useIndiaRegion();
   const scheduler  = useInterviewSchedulerStore();
+  const docStore   = useDocumentStore();
   const gamification = useGamification();
   const navigate     = useNavigate();
 
+  useDocuments();
   const { reload: reloadInterviews } = useInterviewScheduler();
 
   const [sessionCount, setSessionCount] = useState<number | null>(null);
@@ -179,6 +210,18 @@ export default function Dashboard() {
 
   const profileLoading = Boolean(userId) && !isProfileLoaded;
   const gamificationLoading = gamification.isLoading;
+  const { isLow: isLowCredit, balance: creditBalance } = useLowCreditState();
+
+  const readinessScore = computeReadinessScore({
+    sessionCount,
+    streakCurrent: gamification.streakCurrent,
+    hasResume: !!docStore.active_resume_id,
+    hasJD: !!docStore.active_jd_id,
+    hasSession: (profile?.xp ?? 0) > 0,
+    onboardingCompleted: profile?.onboarding_completed ?? false,
+  });
+  const readinessLoading =
+    gamificationLoading || sessionCount === null || profileLoading;
 
   const firstName = profile?.full_name?.split(" ")[0] ?? "there";
   const hour      = new Date().getHours();
@@ -200,54 +243,107 @@ export default function Dashboard() {
           </p>
         </div>
         <div className="flex items-center gap-2 flex-wrap flex-shrink-0">
+          {profile?.onboarding_completed && (
+            <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-xl">
+              <CheckCircle className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-emerald-400" />
+              <span className="text-[10px] sm:text-xs font-bold text-emerald-400">
+                Setup Complete
+              </span>
+            </div>
+          )}
+
           <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
-            <Flame className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500 dark:text-amber-400" />
+            <Flame
+              className={cn(
+                "w-3 h-3 sm:w-3.5 sm:h-3.5 text-amber-500 dark:text-amber-400",
+                !gamificationLoading && gamification.streakCurrent > 0 && "animate-streak-flame",
+              )}
+            />
             <span className="text-[10px] sm:text-xs font-bold text-amber-600 dark:text-amber-400">
               {gamificationLoading ? "…" : `${gamification.streakCurrent} day streak`}
             </span>
           </div>
 
-          {/* FIX: low-credit warning badge at <50 credits (manual Ch.2) */}
-          {(() => {
-            const credits     = profileLoading ? null : (profile?.credits ?? 0);
-            const isLowCredit = credits !== null && credits < 50;
-            return (
-              <div className={cn(
+          {isLowCredit && !profileLoading ? (
+            <Link
+              to="/app/settings/billing"
+              className={cn(
                 "flex items-center gap-1.5 px-2 sm:px-3 py-1.5 border rounded-xl",
-                isLowCredit
-                  ? "bg-red-500/10 border-red-500/30"
-                  : "bg-primary/10 border-primary/20",
-              )}>
-                {isLowCredit
-                  ? <AlertTriangle className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-red-400" />
-                  : <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-primary" />}
-                <span className={cn(
-                  "text-[10px] sm:text-xs font-bold",
-                  isLowCredit ? "text-red-400" : "text-primary",
-                )}>
-                  {credits === null ? "…" : credits} credits{isLowCredit ? " — low" : ""}
-                </span>
-              </div>
-            );
-          })()}
+                "bg-red-500/10 border-red-500/30 hover:bg-red-500/15 transition-colors",
+              )}
+            >
+              <AlertTriangle className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-red-400" />
+              <span className="text-[10px] sm:text-xs font-bold text-red-400">
+                {creditBalance} credits — low
+              </span>
+            </Link>
+          ) : (
+            <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1.5 border rounded-xl bg-primary/10 border-primary/20">
+              <Zap className="w-3 h-3 sm:w-3.5 sm:h-3.5 text-primary" />
+              <span className="text-[10px] sm:text-xs font-bold text-primary">
+                {profileLoading ? "…" : creditBalance} credits
+              </span>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* FIX: persistent low-credit warning banner (manual Ch.2 — show when <50) */}
-      {!profileLoading && (profile?.credits ?? 0) < 50 && (
-        <div className="flex items-center gap-3 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-xl">
-          <AlertTriangle className="w-4 h-4 text-red-400 shrink-0" />
-          <p className="text-xs text-red-300 flex-1">
-            You have fewer than 50 credits remaining. Top up to keep practising without interruptions.
-          </p>
-          <a
-            href="/app/settings/billing"
-            className="text-xs font-semibold text-red-400 hover:text-red-300 transition-colors whitespace-nowrap"
-          >
-            Add credits →
-          </a>
+      {!profileLoading && (creditBalance <= 0 || isLowCredit) && <LowCreditBanner />}
+
+      {!profileLoading && !profile?.onboarding_completed && (
+        <SetupChecklist prominent dismissible />
+      )}
+
+      {!IS_ELECTRON && (
+        <div className="flex items-center gap-4 p-4 rounded-2xl border border-border bg-card">
+          <div className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center shrink-0">
+            <Monitor className="w-5 h-5 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-foreground">Desktop app</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Install Clarify AI for system-wide hotkeys and the floating overlay. See{" "}
+              <code className="text-[10px]">docs/ELECTRON_RELEASE.md</code> for build notes.
+            </p>
+          </div>
+          {isDesktopDownloadExternal() ? (
+            <a
+              href={getDesktopDownloadHref()}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/15 transition-colors shrink-0"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Download
+            </a>
+          ) : (
+            <Link
+              to={getDesktopDownloadHref()}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/15 transition-colors shrink-0"
+            >
+              <Download className="w-3.5 h-3.5" />
+              Install guide
+            </Link>
+          )}
         </div>
       )}
+
+      {/* ── Quick Launch Bar (Mock · Overlay · Upload · Analytics) ─── */}
+      <div className="flex flex-wrap gap-2">
+        {QUICK_LAUNCH.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.to}
+              to={item.to}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-card hover:bg-secondary/60 hover:border-primary/30 transition-all text-sm font-medium text-foreground"
+            >
+              <Icon className="w-4 h-4 text-primary" />
+              {item.label}
+            </Link>
+          );
+        })}
+      </div>
 
       {/* ── Interview Day Banner ────────────────────────────────────── */}
       {todayInterview && (
@@ -256,9 +352,9 @@ export default function Dashboard() {
           tabIndex={0}
           onClick={() => navigate("/app/interview-day")}
           onKeyDown={(e) => e.key === "Enter" && navigate("/app/interview-day")}
-          className="flex items-center gap-4 p-4 bg-gradient-to-r from-violet-600/20 to-blue-600/20 border border-violet-500/30 rounded-2xl cursor-pointer hover:border-violet-500/50 transition-all"
+          className="flex items-center gap-4 p-4 bg-gradient-to-r from-primary/20 to-blue-600/20 border border-primary/30 rounded-2xl cursor-pointer hover:border-primary/50 transition-all"
         >
-          <div className="w-10 h-10 bg-violet-600 rounded-xl flex items-center justify-center shrink-0">
+          <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center shrink-0">
             <CalendarDays className="w-5 h-5 text-foreground" />
           </div>
           <div className="flex-1">
@@ -280,8 +376,8 @@ export default function Dashboard() {
 
       {/* ── Quick Actions ───────────────────────────────────────────── */}
       {/* FIX Issue 29: smaller padding on xs, truncate labels */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        {QUICK_ACTIONS.map((action) => {
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        {QUICK_ACTIONS.filter((a) => !a.indiaOnly || isIndia).map((action) => {
           const Icon  = stealth ? (action.stealthIcon ?? action.icon) : action.icon;
           const label = getStealthLabel(action.label, stealth);
           const sub   = stealth ? (action.stealthSub ?? action.sub) : action.sub;
@@ -320,6 +416,39 @@ export default function Dashboard() {
         })}
       </div>
 
+      {/* ── First-run CTA for brand-new users ─────────────────────── */}
+      {!profileLoading && !gamificationLoading && sessionCount === 0 && !docStore.active_resume_id && !docStore.active_jd_id && (
+        <Card className="bg-gradient-to-br from-primary/10 via-indigo-600/10 to-blue-600/10 border-primary/20">
+          <div className="flex flex-col items-center text-center gap-4 py-4">
+            <div className="w-14 h-14 rounded-2xl bg-primary/20 flex items-center justify-center">
+              <Sparkles className="w-7 h-7 text-primary" />
+            </div>
+            <div className="space-y-1.5 max-w-md">
+              <h3 className="text-lg font-bold text-foreground">Welcome to Clarify AI!</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Start your first mock interview or upload your resume to get personalized coaching.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-3">
+              <Link
+                to="/app/mock"
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground font-semibold text-sm rounded-xl hover:opacity-90 transition-opacity"
+              >
+                <ClipboardList className="w-4 h-4" />
+                Start Mock Interview
+              </Link>
+              <Link
+                to="/app/documents"
+                className="inline-flex items-center gap-2 px-4 py-2.5 bg-secondary border border-border text-foreground font-semibold text-sm rounded-xl hover:bg-secondary/80 transition-colors"
+              >
+                <FileText className="w-4 h-4" />
+                Upload Resume
+              </Link>
+            </div>
+          </div>
+        </Card>
+      )}
+
       {/* ── Stats row ───────────────────────────────────────────────── */}
       {sessionCountError && (
         <InlineErrorRetry
@@ -330,9 +459,10 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         <StatCard
           label="Total sessions"
-          value={sessionCountError ? "—" : sessionCount === null ? "—" : sessionCount}
+          value={sessionCountError ? "—" : sessionCount ?? 0}
           icon={<ClipboardList className="w-4 h-4 text-blue-400" />}
           color="blue"
+          loading={sessionCount === null && !sessionCountError}
         />
 
         <StatCard
@@ -352,7 +482,7 @@ export default function Dashboard() {
         <StatCard
           label="XP total"
           value={gamificationLoading ? "—" : gamification.xp.toLocaleString()}
-          icon={<Zap className="w-4 h-4 text-violet-400" />}
+          icon={<Zap className="w-4 h-4 text-primary" />}
           color="violet"
           loading={gamificationLoading}
         />
@@ -361,7 +491,7 @@ export default function Dashboard() {
       {/* ── Main content: 2-col layout ──────────────────────────────── */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-5">
-          <RecentSessions />
+          <RecentActivityFeed />
           <UpcomingInterviews
             interviews={(scheduler.interviews as ScheduledInterview[]).slice(0, 3)}
             loading={scheduler.is_loading}
@@ -370,7 +500,8 @@ export default function Dashboard() {
           />
         </div>
         <div className="space-y-5">
-          <SetupChecklist />
+          <ReadinessScoreCard score={readinessScore} loading={readinessLoading} />
+          {profile?.onboarding_completed && <SetupChecklist />}
           <XPLevelCard
             gamification={gamification}
             loading={gamificationLoading}
@@ -412,10 +543,9 @@ function StatCard({ label, value, icon, trend, loading }: StatCardProps) {
   );
 }
 
-/* ─── RECENT SESSIONS ────────────────────────────────────────────────────── */
+/* ─── RECENT ACTIVITY FEED ───────────────────────────────────────────────── */
 
-function RecentSessions() {
-  const stealth       = useUIStore((s) => s.stealth_mode);
+function RecentActivityFeed() {
   const { user, profile } = useAuthStore();
   const navigate      = useNavigate();
   const [sessions, setSessions] = useState<SessionRow[]>([]);
@@ -433,7 +563,7 @@ function RecentSessions() {
     setLoading(true);
     setError(null);
     void sessionsDB
-      .listRecentSummary(userId, 5)
+      .listRecentSummary(userId, 10)
       .then((rows) => {
         setSessions(rows as SessionRow[]);
         setLoading(false);
@@ -448,12 +578,13 @@ function RecentSessions() {
   return (
     <Card>
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-foreground">
-          {stealth ? "Recent Activity" : "Recent Sessions"}
+        <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
+          <Clock className="w-4 h-4 text-muted-foreground" />
+          Recent Activity
         </h3>
         <Link
           to="/app/sessions"
-          className="text-xs text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1"
+          className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-1"
         >
           View all <ChevronRight className="w-3 h-3" />
         </Link>
@@ -494,7 +625,7 @@ function RecentSessions() {
                   "w-8 h-8 rounded-lg flex items-center justify-center shrink-0",
                   isMock
                     ? "bg-blue-500/10 text-blue-400"
-                    : "bg-violet-500/10 text-violet-400",
+                    : "bg-primary/10 text-primary",
                 )}>
                   {isMock
                     ? <ClipboardList className="w-3.5 h-3.5" />
@@ -550,12 +681,12 @@ function UpcomingInterviews({
     <Card>
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-foreground flex items-center gap-2">
-          <CalendarDays className="w-4 h-4 text-violet-400" />
+          <CalendarDays className="w-4 h-4 text-primary" />
           {stealth ? "Upcoming Meetings" : "Upcoming Interviews"}
         </h3>
         <Link
           to="/app/interviews"
-          className="text-xs text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1"
+          className="text-xs text-primary hover:text-primary/80 transition-colors flex items-center gap-1"
         >
           Manage <ChevronRight className="w-3 h-3" />
         </Link>
@@ -592,8 +723,8 @@ function UpcomingInterviews({
               to={`/app/interviews/${iv.id}`}
               className="flex items-center gap-3 p-2.5 rounded-xl hover:bg-accent/5 transition-all"
             >
-              <div className="w-8 h-8 rounded-lg bg-violet-500/10 flex items-center justify-center shrink-0">
-                <Building2 className="w-3.5 h-3.5 text-violet-400" />
+              <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
+                <Building2 className="w-3.5 h-3.5 text-primary" />
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-foreground font-medium truncate">
@@ -606,12 +737,75 @@ function UpcomingInterviews({
                 </p>
               </div>
               {iv.interview_type && (
-                <Badge variant="violet" size="sm">{iv.interview_type}</Badge>
+                <Badge variant="primary" size="sm">{iv.interview_type}</Badge>
               )}
             </Link>
           ))}
         </div>
       )}
+    </Card>
+  );
+}
+
+/* ─── READINESS SCORE ────────────────────────────────────────────────────── */
+
+function ReadinessScoreCard({
+  score,
+  loading,
+}: {
+  score: number;
+  loading?: boolean;
+}) {
+  const color =
+    score >= 75 ? "emerald" :
+    score >= 50 ? "amber" :
+    "red";
+
+  if (loading) {
+    return (
+      <Card>
+        <Skeleton className="h-20 w-full rounded-xl" />
+      </Card>
+    );
+  }
+
+  return (
+    <Card>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <TrendingUp className="w-4 h-4 text-emerald-400" />
+          <h3 className="text-xs font-semibold text-foreground">Readiness Score</h3>
+          <Tooltip
+            content={READINESS_TOOLTIP}
+            side="bottom"
+            className="whitespace-normal max-w-[240px] text-left"
+          >
+            <button
+              type="button"
+              className="text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="How readiness score is calculated"
+            >
+              <Info className="w-3.5 h-3.5" />
+            </button>
+          </Tooltip>
+        </div>
+        <span className={cn(
+          "text-2xl font-black tabular-nums",
+          color === "emerald" && "text-emerald-400",
+          color === "amber" && "text-amber-400",
+          color === "red" && "text-red-400",
+        )}>
+          {score}
+        </span>
+      </div>
+      <ProgressBar
+        value={score}
+        max={100}
+        color={color}
+        size="sm"
+        showLabel
+        label={`${score}/100 interview readiness`}
+      />
     </Card>
   );
 }
@@ -635,21 +829,23 @@ function XPLevelCard({
 
   return (
     <Card>
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-violet-600 rounded-lg flex items-center justify-center text-xs font-black text-white">
-            {gamification.level}
-          </div>
-          <div>
-            <p className="text-xs font-semibold text-foreground">
-              {gamification.levelLabel ?? `Level ${gamification.level}`}
-            </p>
-            <p className="text-[10px] text-muted-foreground">
-              {gamification.xp.toLocaleString()} XP total
-            </p>
-          </div>
+      <div className="flex items-center gap-4 mb-3">
+        <XPProgressRing
+          percent={gamification.xpProgressPercent}
+          level={gamification.level}
+        />
+        <div className="flex-1 min-w-0">
+          <p className="text-xs font-semibold text-foreground">
+            {gamification.levelLabel ?? `Level ${gamification.level}`}
+          </p>
+          <p className="text-[10px] text-muted-foreground">
+            {gamification.xp.toLocaleString()} XP total
+          </p>
+          <p className="text-[10px] text-primary mt-0.5">
+            {gamification.xpToNextLevel.toLocaleString()} XP to next level
+          </p>
         </div>
-        <Zap className="w-4 h-4 text-violet-400" />
+        <Zap className="w-4 h-4 text-primary shrink-0" />
       </div>
       <ProgressBar
         value={gamification.xpProgressPercent}
@@ -657,7 +853,7 @@ function XPLevelCard({
         color="violet"
         size="sm"
         showLabel
-        label={`${gamification.xpToNextLevel.toLocaleString()} XP to next level`}
+        label={`${gamification.xpProgressPercent}% to level ${gamification.level + 1}`}
       />
     </Card>
   );
@@ -681,7 +877,7 @@ function DocumentsStatusCard() {
         <h3 className="text-xs font-semibold text-foreground">AI Context</h3>
         <Link
           to="/app/documents"
-          className="text-[10px] text-violet-400 hover:text-violet-300 transition-colors"
+          className="text-[10px] text-primary hover:text-primary/80 transition-colors"
         >
           Manage
         </Link>

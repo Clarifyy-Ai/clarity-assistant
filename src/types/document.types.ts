@@ -33,6 +33,8 @@ export interface ResumeDocument {
   active_version_id: string | null;
   // ★ FIX: not returned by DB — computed client-side only, mark optional
   active_version?: ResumeVersion | null;
+  /** Raw resume text when available (legacy uploads / preview) */
+  content?: string | null;
   created_at: string;
   updated_at: string;
 }

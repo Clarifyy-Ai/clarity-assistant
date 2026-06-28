@@ -2,8 +2,8 @@
 // Billing & Subscription Types
 // ─────────────────────────────────────────────────────────────────
 
-import type { UserPlan } from "./user.types";
 import { ENV } from "@/lib/env";
+import type { UserPlan } from "./user.types";
 
 // ── Plans ─────────────────────────────────────────────────────────
 
@@ -126,42 +126,10 @@ export const PLAN_DEFINITIONS: Record<UserPlan, PlanFeatures> = {
 };
 
 // ── Credit Packs (pay-per-credit) ─────────────────────────────────
+// Canonical pack definitions live in src/lib/billing/priceCalculator.ts
 
-export interface CreditPack {
-  id: string;
-  credits: number;
-  price_usd: number;
-  label: string;
-  stripe_price_id: string;
-  is_best_value: boolean;
-}
-
-export const CREDIT_PACKS: CreditPack[] = [
-  {
-    id: "pack_10",
-    credits: 10,
-    price_usd: 3,
-    label: "10 Credits",
-    stripe_price_id: ENV.STRIPE_PRICE_CREDITS_10 ?? "",
-    is_best_value: false,
-  },
-  {
-    id: "pack_25",
-    credits: 25,
-    price_usd: 6,
-    label: "25 Credits",
-    stripe_price_id: "",
-    is_best_value: false,
-  },
-  {
-    id: "pack_50",
-    credits: 50,
-    price_usd: 10,
-    label: "50 Credits",
-    stripe_price_id: "",
-    is_best_value: true,
-  },
-];
+export type { CreditPack } from "@/lib/billing/priceCalculator";
+export { CREDIT_PACKS } from "@/lib/billing/priceCalculator";
 
 // ── Billing History ───────────────────────────────────────────────
 

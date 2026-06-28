@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { creditsDB } from '@/lib/supabase/database';
+import { supabase } from '@/lib/supabase/client';
 
 /**
  * BillingHistory Component
@@ -69,6 +70,13 @@ export function BillingHistory({
       try {
         const data = await creditsDB.listByUserId(profile.id, 100);
 
+        const { data: payments } = await supabase
+          .from("payment_orders" as "profiles")
+          .select("id, product_type, amount_paise, status, created_at, paid_at, provider")
+          .eq("user_id", profile.id)
+          .order("created_at", { ascending: false })
+          .limit(50);
+
         const mapped: Transaction[] = data.map((row) => {
           const credits = row.amount as number;
           const reason: string = (row.action as string) ?? '';
@@ -78,7 +86,7 @@ export function BillingHistory({
             type = credits > 0 ? 'purchase' : 'usage';
           } else if (reason.startsWith('refund:')) {
             type = 'refund';
-          } else if (reason.startsWith('bonus:') || reason.startsWith('welcome') || reason.startsWith('referral:')) {
+          } else if (reason.startsWith('bonus:') || reason.startsWith('welcome') || reason === 'referral_reward') {
             type = 'bonus';
           } else if (credits < 0) {
             type = 'usage';
@@ -104,7 +112,29 @@ export function BillingHistory({
           };
         });
 
-        setTransactions(mapped);
+        const paymentRows: Transaction[] = (payments ?? []).map((p: {
+          id: string;
+          product_type: string;
+          amount_paise: number;
+          status: string;
+          created_at: string;
+          paid_at: string | null;
+          provider: string;
+        }) => ({
+          id: p.id,
+          date: new Date(p.paid_at ?? p.created_at),
+          type: p.status === "paid" ? "purchase" as const : "usage" as const,
+          description: `${p.provider} — ${p.product_type.replace(/_/g, " ")}`,
+          amount: p.amount_paise / 100,
+          credits: 0,
+          status: p.status === "paid" ? "completed" as const : "pending" as const,
+        }));
+
+        setTransactions(
+          [...mapped, ...paymentRows].sort(
+            (a, b) => b.date.getTime() - a.date.getTime(),
+          ),
+        );
       } catch {
         toast.error('Failed to load billing history');
       } finally {
@@ -181,7 +211,7 @@ export function BillingHistory({
     return (
       <div className={cn('rounded-lg border border-border bg-secondary/50 p-6', className)}>
         <div className="flex items-center justify-center py-12">
-          <div className="animate-spin rounded-full h-8 w-8 border-2 border-violet-500/30 border-t-violet-500" />
+          <div className="animate-spin rounded-full h-8 w-8 border-2 border-primary/30 border-t-primary" />
         </div>
       </div>
     );

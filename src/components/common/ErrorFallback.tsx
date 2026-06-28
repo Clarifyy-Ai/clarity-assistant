@@ -55,7 +55,7 @@ export function ErrorFallback({
       {/* Actions */}
       <div className="flex flex-wrap items-center justify-center gap-3">
         {resetError && (
-          <Button onClick={resetError} className="gap-2">
+          <Button variant="primary" onClick={resetError} className="gap-2">
             <RefreshCw className="w-4 h-4" />
             Try Again
           </Button>

@@ -4,7 +4,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import {
-  AlertCircle,
   BarChart3,
   Clock,
   CreditCard,
@@ -16,6 +15,11 @@ import {
 import { creditsDB, sessionsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/Button";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { PageContent } from "@/components/layout/PageContent";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
   Card,
   CardContent,
@@ -364,54 +368,50 @@ export default function UsageDashboard(): JSX.Element {
   }
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">
-            Usage & Analytics
-          </h1>
+    <PageContent className="space-y-6 max-w-7xl mx-auto">
+      <PageHeader
+        title="Usage & Analytics"
+        description="Track credits, sessions, and recent billing-related activity."
+        actions={
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              onClick={() => void loadUsage()}
+              disabled={isLoading}
+            >
+              <RefreshCw
+                className={cn("mr-2 h-4 w-4", isLoading && "animate-spin")}
+              />
+              Refresh
+            </Button>
 
-          <p className="text-sm text-muted-foreground mt-1">
-            Track credits, sessions, and recent billing-related activity.
-          </p>
-        </div>
-
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            onClick={() => void loadUsage()}
-            disabled={isLoading}
-          >
-            <RefreshCw
-              className={cn("mr-2 h-4 w-4", isLoading && "animate-spin")}
-            />
-            Refresh
-          </Button>
-
-          <Button
-            variant="primary"
-            onClick={() => void handleOpenBillingPortal()}
-            loading={isPortalLoading}
-          >
-            <CreditCard className="mr-2 h-4 w-4" />
-            Billing Portal
-          </Button>
-        </div>
-      </div>
+            <Button
+              variant="primary"
+              onClick={() => void handleOpenBillingPortal()}
+              loading={isPortalLoading}
+            >
+              <CreditCard className="mr-2 h-4 w-4" />
+              Billing Portal
+            </Button>
+          </div>
+        }
+      />
 
       {error && (
-        <div className="flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-destructive/20 bg-destructive/10 px-4 py-3 text-sm text-destructive">
-          <div className="flex items-center gap-2 flex-1">
-            <AlertCircle className="h-4 w-4 shrink-0" />
-            {error}
-          </div>
-          <Button variant="outline" size="sm" onClick={() => void loadUsage()}>
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Retry
-          </Button>
-        </div>
+        <InlineErrorRetry
+          message={error}
+          onRetry={() => void loadUsage()}
+        />
       )}
 
+      {isLoading ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {[...Array(4)].map((_, i) => (
+            <SkeletonCard key={i} />
+          ))}
+        </div>
+      ) : (
+      <>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
         <StatCard
           title="Available credits"
@@ -441,6 +441,8 @@ export default function UsageDashboard(): JSX.Element {
           icon={Clock}
         />
       </div>
+      </>
+      )}
 
       <div className="grid gap-6 xl:grid-cols-3">
         <Card className="xl:col-span-2">
@@ -469,6 +471,20 @@ export default function UsageDashboard(): JSX.Element {
           </CardHeader>
 
           <CardContent>
+            {isLoading ? (
+              <div className="space-y-3">
+                {[...Array(3)].map((_, i) => (
+                  <SkeletonCard key={i} />
+                ))}
+              </div>
+            ) : sessions.length === 0 ? (
+              <EmptyState
+                icon={Clock}
+                title="No sessions yet"
+                description="Start a mock interview or practice session to see activity here."
+                compact
+              />
+            ) : (
             <div className="space-y-3">
               {sessions.slice(0, 6).map((session) => (
                 <div
@@ -496,12 +512,8 @@ export default function UsageDashboard(): JSX.Element {
                 </div>
               ))}
 
-              {!isLoading && sessions.length === 0 && (
-                <p className="text-sm text-muted-foreground">
-                  No sessions found yet.
-                </p>
-              )}
             </div>
+            )}
           </CardContent>
         </Card>
       </div>
@@ -515,6 +527,20 @@ export default function UsageDashboard(): JSX.Element {
         </CardHeader>
 
         <CardContent>
+          {isLoading ? (
+            <div className="space-y-3">
+              {[...Array(5)].map((_, i) => (
+                <SkeletonCard key={i} />
+              ))}
+            </div>
+          ) : transactions.length === 0 ? (
+            <EmptyState
+              icon={CreditCard}
+              title="No transactions yet"
+              description="Credit purchases, usage, and subscription events will appear here."
+              compact
+            />
+          ) : (
           <div className="overflow-x-auto">
             <div className="overflow-x-auto"><table className="w-full text-sm min-w-[640px]">
               <thead>
@@ -568,13 +594,7 @@ export default function UsageDashboard(): JSX.Element {
               </tbody>
             </table></div>
 
-            {!isLoading && transactions.length === 0 && (
-              <div className="py-8 text-center text-sm text-muted-foreground">
-                No credit transactions found yet.
-              </div>
-            )}
-
-            {txHasMore && !isLoading && (
+            {txHasMore && (
               <div className="pt-4 flex justify-center">
                 <Button
                   variant="outline"
@@ -587,8 +607,9 @@ export default function UsageDashboard(): JSX.Element {
               </div>
             )}
           </div>
+          )}
         </CardContent>
       </Card>
-    </div>
+    </PageContent>
   );
 }

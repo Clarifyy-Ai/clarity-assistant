@@ -1,39 +1,76 @@
-import { useEffect, useMemo, useState } from "react";
-import { AlertTriangle, WifiOff, Wifi, X } from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { AlertTriangle, WifiOff, Wifi, RefreshCw, X, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { NetworkErrorPage } from "@/components/common/NetworkErrorPage";
+import { useIsOffline } from "@/hooks/useIsOffline";
 
-/**
- * Lightweight network health detector using:
- * - navigator.onLine
- * - Network Information API (when available)
- *
- * Shows a small banner under the top bar when:
- *  - Offline
- *  - Connection appears degraded (very slow / high RTT / low downlink)
- */
+type NetworkState = "online" | "reconnecting" | "offline";
+
 export function NetworkBanner() {
-  // Basic "online" state from the browser
-  const [isOnline, setIsOnline] = useState<boolean>(typeof navigator !== "undefined" ? navigator.onLine : true);
+  const { isOffline: hookOffline, retry: retryConnection } = useIsOffline();
+  const [isOnline, setIsOnline] = useState<boolean>(
+    typeof navigator !== "undefined" ? navigator.onLine : true,
+  );
+  const [networkState, setNetworkState] = useState<NetworkState>("online");
+  const reconnectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [showFullErrorPage, setShowFullErrorPage] = useState(false);
 
-  // Optional Network Information API (may be undefined in many browsers)
   const connection = useMemo(() => {
-    return typeof navigator !== "undefined" ? (navigator as any).connection ?? (navigator as any).mozConnection ?? (navigator as any).webkitConnection : undefined;
+    return typeof navigator !== "undefined"
+      ? (navigator as any).connection ??
+          (navigator as any).mozConnection ??
+          (navigator as any).webkitConnection
+      : undefined;
   }, []);
 
-  const [effectiveType, setEffectiveType] = useState<string | undefined>(() => connection?.effectiveType);
-  const [downlink, setDownlink] = useState<number | undefined>(() => connection?.downlink);
+  const [effectiveType, setEffectiveType] = useState<string | undefined>(
+    () => connection?.effectiveType,
+  );
+  const [downlink, setDownlink] = useState<number | undefined>(
+    () => connection?.downlink,
+  );
   const [rtt, setRtt] = useState<number | undefined>(() => connection?.rtt);
-  const [saveData, setSaveData] = useState<boolean | undefined>(() => connection?.saveData);
+  const [saveData, setSaveData] = useState<boolean | undefined>(
+    () => connection?.saveData,
+  );
 
-  // Local dismiss so users can hide the banner temporarily
   const [dismissed, setDismissed] = useState(false);
+
+  const logNetworkChange = useCallback((from: string, to: string) => {
+    if (import.meta.env.DEV) {
+      console.debug(`[NetworkBanner] ${from} → ${to}`, {
+        ts: new Date().toISOString(),
+        onLine: navigator.onLine,
+      });
+    }
+  }, []);
 
   useEffect(() => {
     function handleOnline() {
-      setIsOnline(true);
+      setNetworkState((prev) => {
+        logNetworkChange(prev, "reconnecting");
+        return "reconnecting";
+      });
+      setDismissed(false);
+
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
+      reconnectTimerRef.current = setTimeout(() => {
+        setIsOnline(true);
+        setNetworkState((prev) => {
+          logNetworkChange(prev, "online");
+          return "online";
+        });
+      }, 2000);
     }
+
     function handleOffline() {
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       setIsOnline(false);
+      setNetworkState((prev) => {
+        logNetworkChange(prev, "offline");
+        return "offline";
+      });
+      setDismissed(false);
     }
 
     window.addEventListener("online", handleOnline);
@@ -47,42 +84,92 @@ export function NetworkBanner() {
         setDownlink(connection.downlink);
         setRtt(connection.rtt);
         setSaveData(connection.saveData);
+        logNetworkChange(
+          "connection-change",
+          connection.effectiveType ?? "unknown",
+        );
       };
       connection.addEventListener?.("change", handleChange);
-      cleanupConn = () => connection.removeEventListener?.("change", handleChange);
+      cleanupConn = () =>
+        connection.removeEventListener?.("change", handleChange);
     }
 
     return () => {
       window.removeEventListener("online", handleOnline);
       window.removeEventListener("offline", handleOffline);
+      if (reconnectTimerRef.current) clearTimeout(reconnectTimerRef.current);
       cleanupConn?.();
     };
-  }, [connection]);
+  }, [connection, logNetworkChange]);
 
-  // Heuristics for "poor" connection
   const isPoor = useMemo(() => {
-    // If we don't have connection info, don't mark as poor—only show if offline.
     if (!connection) return false;
 
     const slowType = effectiveType === "slow-2g" || effectiveType === "2g";
-    const highLatency = typeof rtt === "number" && rtt > 500;              // >500ms RTT is quite laggy
-    const tinyDownlink = typeof downlink === "number" && downlink < 1;     // <1Mbps may struggle with live features
+    const highLatency = typeof rtt === "number" && rtt > 500;
+    const tinyDownlink = typeof downlink === "number" && downlink < 1;
 
     return slowType || highLatency || tinyDownlink || !!saveData;
   }, [connection, effectiveType, rtt, downlink, saveData]);
 
-  // Decide whether to show the banner
-  const shouldShow = !dismissed && (!isOnline || isPoor);
+  const isReconnecting = networkState === "reconnecting";
+  const isOffline = (!isOnline && !isReconnecting) || hookOffline;
+  const shouldShow = !dismissed && (!isOnline || isPoor || isReconnecting || hookOffline);
+
+  const handleRetry = useCallback(() => {
+    retryConnection();
+    if (navigator.onLine) {
+      setIsOnline(true);
+      setNetworkState("online");
+      setDismissed(false);
+      setShowFullErrorPage(false);
+    }
+  }, [retryConnection]);
+
+  useEffect(() => {
+    if (!isOffline) setShowFullErrorPage(false);
+  }, [isOffline]);
+
+  if (showFullErrorPage && isOffline) {
+    return (
+      <div className="sticky top-0 z-[300] border-b border-border bg-background">
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setShowFullErrorPage(false)}
+            className="absolute right-4 top-4 z-10 rounded-lg p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground transition-colors"
+            aria-label="Dismiss full-page network error"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <NetworkErrorPage onRetry={handleRetry} />
+        </div>
+      </div>
+    );
+  }
 
   if (!shouldShow) return null;
 
-  const isDegradedButOnline = isOnline && isPoor;
+  const isDegradedButOnline = isOnline && isPoor && !isReconnecting;
+
+  const bannerColor = isOffline
+    ? "bg-red-500/10 text-red-300"
+    : isReconnecting
+      ? "bg-blue-500/10 text-blue-300"
+      : "bg-amber-500/10 text-amber-300";
+
+  const dismissColor = isOffline
+    ? "hover:bg-red-500/20 text-red-200"
+    : isReconnecting
+      ? "hover:bg-blue-500/20 text-blue-200"
+      : "hover:bg-amber-500/20 text-amber-200";
 
   return (
     <div
       className={cn(
         "w-full flex-shrink-0",
-        "border-b border-border backdrop-blur"
+        "border-b border-border backdrop-blur",
+        isOffline && "sticky top-0 z-[300]",
       )}
       role="status"
       aria-live="polite"
@@ -90,35 +177,46 @@ export function NetworkBanner() {
       <div
         className={cn(
           "mx-auto flex max-w-7xl items-center gap-3 px-4 sm:px-6 lg:px-8 py-2.5",
-          !isOnline
-            ? "bg-red-500/10 text-red-300"
-            : "bg-amber-500/10 text-amber-300"
+          bannerColor,
         )}
       >
         <div className="flex items-center justify-center rounded-md border border-border bg-secondary p-1.5">
-          {!isOnline ? (
+          {!isOnline && !isReconnecting ? (
             <WifiOff className="h-4 w-4" />
+          ) : isReconnecting ? (
+            <RefreshCw className="h-4 w-4 animate-spin" />
           ) : (
             <AlertTriangle className="h-4 w-4" />
           )}
         </div>
 
         <div className="min-w-0 flex-1">
-          {!isOnline ? (
+          {isOffline ? (
             <>
-              <p className="text-sm font-semibold">You’re offline</p>
+              <p className="text-sm font-semibold">You're offline</p>
               <p className="text-xs opacity-80">
-                Check your connection. Live features and transcript streaming are paused.
+                Check your Wi‑Fi or mobile data. Live sessions, AI responses, and
+                sync are paused until you're back online.
+              </p>
+            </>
+          ) : isReconnecting ? (
+            <>
+              <p className="text-sm font-semibold">Reconnecting…</p>
+              <p className="text-xs opacity-80">
+                Network detected — restoring connection.
               </p>
             </>
           ) : (
             <>
-              <p className="text-sm font-semibold">Connection looks unstable</p>
+              <p className="text-sm font-semibold">
+                Connection looks unstable
+              </p>
               <p className="text-xs opacity-80">
-                Live Co‑Pilot may lag on slow networks.{" "}
+                Practice Coach may lag on slow networks.{" "}
                 <span className="opacity-70">
                   {effectiveType && `Type: ${effectiveType}`}
-                  {typeof downlink === "number" && ` · Downlink: ${downlink.toFixed(1)}Mbps`}
+                  {typeof downlink === "number" &&
+                    ` · Downlink: ${downlink.toFixed(1)}Mbps`}
                   {typeof rtt === "number" && ` · RTT: ${rtt}ms`}
                   {saveData && " · Data saver on"}
                 </span>
@@ -127,20 +225,38 @@ export function NetworkBanner() {
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={() => setDismissed(true)}
-          className={cn(
-            "rounded-lg p-1.5 transition-colors",
-            !isOnline
-              ? "hover:bg-red-500/20 text-red-200"
-              : "hover:bg-amber-500/20 text-amber-200"
-          )}
-          aria-label="Dismiss network banner"
-          title="Dismiss"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        {isOffline && (
+          <>
+            <button
+              type="button"
+              onClick={handleRetry}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-1.5 text-xs font-medium text-red-200 transition-colors hover:bg-red-500/20"
+            >
+              <RefreshCw className="h-3.5 w-3.5" />
+              Retry
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowFullErrorPage(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-secondary px-3 py-1.5 text-xs font-medium text-foreground transition-colors hover:bg-secondary/80"
+            >
+              <ExternalLink className="h-3.5 w-3.5" />
+              Connection help
+            </button>
+          </>
+        )}
+
+        {!isOffline && (
+          <button
+            type="button"
+            onClick={() => setDismissed(true)}
+            className={cn("rounded-lg p-1.5 transition-colors", dismissColor)}
+            aria-label="Dismiss network banner"
+            title="Dismiss"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        )}
 
         {isDegradedButOnline && (
           <a

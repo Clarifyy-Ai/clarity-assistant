@@ -27,8 +27,8 @@ const EXPORT_TYPES = [
     label:  "Sessions & scores",
     desc:   "All mock sessions with scores, timestamps, and metadata.",
     format: "JSON",
-    color:  "text-violet-400",
-    bg:     "bg-violet-500/10",
+    color:  "text-primary",
+    bg:     "bg-primary/10",
   },
   {
     id:     "transcripts",

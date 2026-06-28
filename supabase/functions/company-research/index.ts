@@ -9,9 +9,13 @@ import {
 } from "../_shared/utils.ts";
 import { parseJSON } from "../_shared/gemini.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
+import {
+  enforceAiRateLimit,
+} from "../_shared/rateLimit.ts";
+import { creditCost } from "../_shared/creditEconomics.ts";
 
 const FN = "company-research";
-const CREDIT_COST = 20;
+const CREDIT_COST = creditCost("company_research");
 
 const SYSTEM_PROMPT = `
 You are an expert career and company research assistant.
@@ -92,6 +96,9 @@ Deno.serve(async (req) => {
 
     const auth = await requireAuth(req);
     const userId = auth.userId;
+
+    const rateLimited = enforceAiRateLimit("company-research", userId);
+    if (rateLimited) return rateLimited;
 
     const planGate = requirePlan(auth.planId, "starter", req);
     if (planGate) return planGate;

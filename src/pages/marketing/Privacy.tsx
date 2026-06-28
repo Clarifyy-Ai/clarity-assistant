@@ -1,3 +1,4 @@
+import { PRIVACY_EMAIL, LEGAL_ENTITY_NAME, COMPANY_NAME } from "@/lib/constants/contact";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { usePageMeta } from "@/hooks/usePageMeta";
 
@@ -15,7 +16,7 @@ export default function Privacy() {
 
         <h2>1. Introduction</h2>
         <p>
-          Payara Labs ("Company", "we", "us") operates Clarify AI. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our Service.
+          {LEGAL_ENTITY_NAME} ("Company", "we", "us") operates {COMPANY_NAME}. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our Service. {COMPANY_NAME} is intended for interview preparation and rehearsal — not for use during actual third-party interviews or proctored assessments.
         </p>
 
         <h2>2. Information We Collect</h2>
@@ -95,8 +96,8 @@ export default function Privacy() {
         <h2>12. Contact Us</h2>
         <p>
           For privacy-related questions, contact us at{" "}
-          <a href="mailto:privacy@clarifyai.com" className="text-primary hover:underline">
-            privacy@clarifyai.com
+          <a href={`mailto:${PRIVACY_EMAIL}`} className="text-primary hover:underline">
+            {PRIVACY_EMAIL}
           </a>.
         </p>
       </article>

@@ -26,9 +26,11 @@ import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/label";
-import { Card, CardContent } from "@/components/ui/Card";
 import { Textarea } from "@/components/ui/textarea";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -283,6 +285,7 @@ export default function MyQuestions() {
 
   const [questions, setQuestions] = useState<Question[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [creatingTest, setCreatingTest] = useState(false);
 
   const [search, setSearch] = useState("");
@@ -301,6 +304,7 @@ export default function MyQuestions() {
     if (!user?.id) return;
 
     setLoading(true);
+    setLoadError(null);
 
     try {
       const data = await questionsDB.list({
@@ -311,7 +315,9 @@ export default function MyQuestions() {
       setQuestions(data as Question[]);
     } catch (error) {
       console.error("[MyQuestions] load failed:", error);
-      toast.error("Failed to load questions.");
+      const message = error instanceof Error ? error.message : "Failed to load questions.";
+      setLoadError(message);
+      toast.error(message);
     } finally {
       setLoading(false);
     }
@@ -531,7 +537,7 @@ export default function MyQuestions() {
 
             <Link
               to="/app/mock-test/upload?tab=manual"
-              className="inline-flex items-center gap-1.5 rounded-xl border border-violet-500/20 bg-violet-600/15 px-3 py-1.5 text-xs font-medium text-violet-600 transition-colors hover:bg-violet-600/25"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-primary/20 bg-primary/15 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/90/25"
             >
               <Plus className="h-4 w-4" />
               New Question
@@ -645,36 +651,28 @@ export default function MyQuestions() {
         )}
       </div>
 
+      {loadError && (
+        <InlineErrorRetry message={loadError} onRetry={() => void loadQuestions()} />
+      )}
+
       {loading ? (
-        <div className="space-y-2">
+        <div className="space-y-3">
           {[1, 2, 3, 4, 5].map((index) => (
-            <div key={index} className="h-14 animate-pulse rounded-xl bg-muted/30" />
+            <SkeletonCard key={index} />
           ))}
         </div>
       ) : filtered.length === 0 ? (
-        <Card className="border-dashed">
-          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-            <BookOpen className="mb-3 h-12 w-12 text-muted-foreground" />
-            <p className="font-medium text-foreground">
-              {questions.length === 0 ? "No questions yet" : "No results for these filters"}
-            </p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {questions.length === 0
-                ? "Import a PDF/Excel file or create questions manually."
-                : "Try adjusting the search or filters."}
-            </p>
-
-            {questions.length === 0 && (
-              <Link
-                to="/app/mock-test/upload"
-                className="mt-4 inline-flex items-center gap-1.5 rounded-xl border border-violet-500/20 bg-violet-600/15 px-3 py-1.5 text-xs font-medium text-violet-600 transition-colors hover:bg-violet-600/25"
-              >
-                <Upload className="h-4 w-4" />
-                Import Questions
-              </Link>
-            )}
-          </CardContent>
-        </Card>
+        <EmptyState
+          icon={BookOpen}
+          title={questions.length === 0 ? "No questions yet" : "No results for these filters"}
+          description={
+            questions.length === 0
+              ? "Import a PDF/Excel file or create questions manually."
+              : "Try adjusting the search or filters."
+          }
+          actionLabel={questions.length === 0 ? "Import Questions" : undefined}
+          onAction={questions.length === 0 ? () => navigate("/app/mock-test/upload") : undefined}
+        />
       ) : (
         <div className="overflow-hidden rounded-xl border">
           <div className="flex items-center gap-3 border-b bg-muted/30 px-4 py-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -685,7 +683,7 @@ export default function MyQuestions() {
               aria-label="Select all"
             >
               {allFilteredSelected ? (
-                <CheckSquare className="h-4 w-4 text-violet-600" />
+                <CheckSquare className="h-4 w-4 text-primary" />
               ) : (
                 <Square className="h-4 w-4" />
               )}
@@ -723,7 +721,7 @@ export default function MyQuestions() {
               key={question.id}
               className={cn(
                 "flex items-center gap-3 border-b px-4 py-3 transition-colors last:border-0",
-                selected.has(question.id) ? "bg-violet-500/5" : "hover:bg-muted/20"
+                selected.has(question.id) ? "bg-primary/5" : "hover:bg-muted/20"
               )}
             >
               <button
@@ -733,7 +731,7 @@ export default function MyQuestions() {
                 aria-label="Select question"
               >
                 {selected.has(question.id) ? (
-                  <CheckSquare className="h-4 w-4 text-violet-600" />
+                  <CheckSquare className="h-4 w-4 text-primary" />
                 ) : (
                   <Square className="h-4 w-4 text-muted-foreground" />
                 )}

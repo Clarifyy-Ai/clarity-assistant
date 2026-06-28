@@ -1,4 +1,6 @@
+import { LEGAL_EMAIL, LEGAL_ENTITY_NAME, COMPANY_NAME } from "@/lib/constants/contact";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
+import { ComplianceBanner } from "@/components/marketing";
 import { usePageMeta } from "@/hooks/usePageMeta";
 
 export default function Terms() {
@@ -9,18 +11,26 @@ export default function Terms() {
 
   return (
     <MarketingLayout>
-      <article className="pt-20 sm:pt-28 pb-14 px-4 sm:px-6 max-w-3xl mx-auto prose prose-sm dark:prose-invert prose-headings:font-bold prose-headings:text-foreground prose-p:text-muted-foreground prose-li:text-muted-foreground prose-strong:text-foreground">
+      <div className="pt-20 sm:pt-28 pb-6 px-4 sm:px-6 max-w-3xl mx-auto">
+        <ComplianceBanner />
+      </div>
+      <article className="pb-14 px-4 sm:px-6 max-w-3xl mx-auto prose prose-sm dark:prose-invert prose-headings:font-bold prose-headings:text-foreground prose-p:text-muted-foreground prose-li:text-muted-foreground prose-strong:text-foreground">
         <h1>Terms of Service</h1>
         <p className="text-xs text-muted-foreground">Last updated: March 25, 2026</p>
 
         <h2>1. Acceptance of Terms</h2>
         <p>
-          By accessing or using Clarify AI ("Service"), operated by Payara Labs ("Company", "we", "us"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service.
+          By accessing or using {COMPANY_NAME} ("Service"), operated by {LEGAL_ENTITY_NAME} ("Company", "we", "us"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service.
         </p>
 
         <h2>2. Description of Service</h2>
         <p>
-          Clarify AI is an AI-powered interview preparation platform providing mock interviews, real-time coaching, analytics, and related tools. The Service is provided "as is" and "as available."
+          Clarify AI is an AI-powered interview preparation platform providing mock interviews, live practice coaching, analytics, and related tools for rehearsal and preparation. The Service is provided "as is" and "as available."
+        </p>
+
+        <h2>2.1 Practice and Rehearsal Only</h2>
+        <p>
+          Clarify AI is designed exclusively for interview preparation, mock sessions, and rehearsal. You may not use AI assistance features during actual third-party interviews, employer assessments, proctored exams, or any evaluation where outside assistance is prohibited. The on-screen overlay is a standard application window and is visible to screen-sharing and recording tools.
         </p>
 
         <h2>3. User Accounts</h2>
@@ -35,15 +45,25 @@ export default function Terms() {
         <p>You agree not to:</p>
         <ul>
           <li>Use the Service for any unlawful purpose or in violation of any applicable laws.</li>
+          <li>
+            Use the Service to deceive a third party during an actual interview, exam, or assessment
+            — including using AI-generated hints or answers in real time while an employer, interviewer,
+            proctor, or examiner is evaluating you.
+          </li>
           <li>Attempt to reverse-engineer, decompile, or disassemble any part of the Service.</li>
           <li>Share your account credentials with third parties.</li>
           <li>Use automated systems (bots, scrapers) to access the Service without permission.</li>
           <li>Upload malicious content, viruses, or harmful code.</li>
         </ul>
+        <p>
+          Clarify AI is an interview <strong>preparation</strong> platform. Mock sessions, warmups,
+          and live rehearsals are practice contexts. AI model answers and coaching are study aids for
+          rehearsal — not scripts to be used during actual third-party interviews or employer evaluations.
+        </p>
 
         <h2>5. Intellectual Property</h2>
         <p>
-          All content, features, and functionality of the Service — including text, graphics, logos, and software — are owned by Payara Labs and protected by intellectual property laws. Your content (resumes, answers, notes) remains yours.
+          All content, features, and functionality of the Service — including text, graphics, logos, and software — are owned by {LEGAL_ENTITY_NAME} and protected by intellectual property laws. Your content (resumes, answers, notes) remains yours.
         </p>
 
         <h2>6. Subscriptions &amp; Billing</h2>
@@ -66,7 +86,7 @@ export default function Terms() {
 
         <h2>9. Limitation of Liability</h2>
         <p>
-          TO THE MAXIMUM EXTENT PERMITTED BY LAW, PAYARA LABS SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING FROM YOUR USE OF THE SERVICE.
+          TO THE MAXIMUM EXTENT PERMITTED BY LAW, {LEGAL_ENTITY_NAME.toUpperCase()} SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING FROM YOUR USE OF THE SERVICE.
         </p>
 
         <h2>10. Termination</h2>
@@ -82,8 +102,8 @@ export default function Terms() {
         <h2>12. Contact</h2>
         <p>
           For questions about these Terms, contact us at{" "}
-          <a href="mailto:legal@clarifyai.com" className="text-primary hover:underline">
-            legal@clarifyai.com
+          <a href={`mailto:${LEGAL_EMAIL}`} className="text-primary hover:underline">
+            {LEGAL_EMAIL}
           </a>.
         </p>
       </article>

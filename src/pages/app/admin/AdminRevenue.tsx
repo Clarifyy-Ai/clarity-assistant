@@ -18,6 +18,9 @@ import {
 import { Badge }   from "@/components/ui/Badge";
 import { Button }  from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import {
   DollarSign, TrendingUp, TrendingDown, Users,
   CreditCard, Download, RefreshCw,
@@ -353,12 +356,15 @@ export default function AdminRevenue() {
       </div>
 
       {loadError && (
-        <div className="rounded-xl border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive flex items-center gap-3">
-          <span className="flex-1">{loadError}</span>
-          <Button size="sm" variant="outline" onClick={() => fetchData(true)}>Retry</Button>
-        </div>
+        <InlineErrorRetry message={loadError} onRetry={() => void fetchData(true)} />
       )}
 
+      {isLoading ? (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
+        </div>
+      ) : (
+      <>
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard
@@ -462,8 +468,13 @@ export default function AdminRevenue() {
                     : transactions.length === 0
                       ? (
                         <TableRow>
-                          <TableCell colSpan={5} className="text-center text-muted-foreground py-10">
-                            No transactions found.
+                          <TableCell colSpan={5}>
+                            <EmptyState
+                              icon={CreditCard}
+                              title="No transactions yet"
+                              description="Revenue events will appear here once users subscribe or purchase credits."
+                              compact
+                            />
                           </TableCell>
                         </TableRow>
                       )
@@ -501,6 +512,8 @@ export default function AdminRevenue() {
           </CardContent>
         </Card>
       </div>
+      </>
+      )}
     </div>
   );
 }

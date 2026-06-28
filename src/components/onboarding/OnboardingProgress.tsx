@@ -29,9 +29,9 @@ export function OnboardingProgress({ current }: { current: number }) {
                 className={cn(
                   "flex h-8 w-8 items-center justify-center rounded-full border-2 text-xs font-bold transition-all",
                   done
-                    ? "bg-violet-600 border-violet-600 text-white"
+                    ? "bg-primary border-primary text-primary-foreground"
                     : active
-                    ? "bg-transparent border-violet-500 text-violet-400"
+                    ? "bg-transparent border-primary text-primary"
                     : "bg-transparent border-border text-muted-foreground"
                 )}
               >
@@ -42,7 +42,7 @@ export function OnboardingProgress({ current }: { current: number }) {
                 className={cn(
                   "hidden text-[10px] font-medium sm:block",
                   active
-                    ? "text-violet-400"
+                    ? "text-primary"
                     : done
                     ? "text-gray-400"
                     : "text-gray-700"

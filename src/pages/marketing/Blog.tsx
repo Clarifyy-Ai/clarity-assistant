@@ -18,7 +18,7 @@ interface BlogPostMeta {
 
 const CATEGORY_COLORS: Record<string, string> = {
   "Interview Tips": "text-blue-400 bg-blue-500/10 border-blue-500/20",
-  "Industry": "text-violet-400 bg-violet-500/10 border-violet-500/20",
+  "Industry": "text-primary bg-primary/10 border-primary/20",
   "Technical": "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
   "Wellness": "text-amber-400 bg-amber-500/10 border-amber-500/20",
   "Research": "text-pink-400 bg-pink-500/10 border-pink-500/20",
@@ -31,6 +31,36 @@ function formatDate(dateStr: string) {
     day: "numeric",
   });
 }
+
+const FALLBACK_POSTS: BlogPostMeta[] = [
+  {
+    slug: "star-method-guide",
+    title: "How to Use the STAR Method in Technical Interviews",
+    excerpt: "Structure behavioural answers with Situation, Task, Action, and Result — plus examples for engineering roles.",
+    published_at: "2026-03-15T00:00:00Z",
+    category: "Interview Tips",
+    author: "Clarify AI Team",
+    read_time: "6 min read",
+  },
+  {
+    slug: "system-design-prep",
+    title: "System Design Interview Prep in 30 Minutes",
+    excerpt: "A focused checklist for whiteboard system design rounds — scope, trade-offs, and follow-ups.",
+    published_at: "2026-03-05T00:00:00Z",
+    category: "Technical",
+    author: "Clarify AI Team",
+    read_time: "8 min read",
+  },
+  {
+    slug: "interview-anxiety",
+    title: "Managing Interview Anxiety Before the Big Day",
+    excerpt: "Practical breathing, rehearsal, and mindset techniques backed by performance psychology.",
+    published_at: "2026-02-28T00:00:00Z",
+    category: "Wellness",
+    author: "Clarify AI Team",
+    read_time: "5 min read",
+  },
+];
 
 export default function Blog() {
   usePageMeta({
@@ -56,7 +86,7 @@ export default function Blog() {
       if (error) {
         setError(error.message);
       } else {
-        setPosts((data as BlogPostMeta[]) ?? []);
+        setPosts((data as BlogPostMeta[])?.length ? (data as BlogPostMeta[]) : FALLBACK_POSTS);
       }
       setLoading(false);
     })();

@@ -170,7 +170,7 @@ export default function SettingsPolish() {
       {/* Notification channels */}
       <section className="rounded-xl border border-border bg-card p-4">
         <div className="flex items-center gap-2 mb-3">
-          <Bell className="w-4 h-4 text-violet-400" />
+          <Bell className="w-4 h-4 text-primary" />
           <h2 className="text-sm font-semibold">Notification channels</h2>
         </div>
         <ul className="space-y-2">
@@ -198,7 +198,7 @@ export default function SettingsPolish() {
                   aria-pressed={on}
                   className={cn(
                     "relative w-10 h-6 rounded-full transition-colors",
-                    on ? "bg-violet-500" : "bg-secondary"
+                    on ? "bg-primary" : "bg-secondary"
                   )}
                 >
                   <span
@@ -247,7 +247,7 @@ export default function SettingsPolish() {
         <button
           onClick={save}
           disabled={saving}
-          className="px-4 py-2 text-sm rounded-md bg-violet-600 hover:bg-violet-500 text-white flex items-center gap-2 shadow-lg"
+          className="px-4 py-2 text-sm rounded-md bg-primary hover:bg-primary text-white flex items-center gap-2 shadow-lg"
         >
           <Save className="w-4 h-4" />
           {saving ? "Saving…" : "Save preferences"}

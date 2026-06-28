@@ -3,10 +3,19 @@ import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { getPrivateMode } from "@/hooks/usePrivateMode";
 import { EDGE_BASE, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
+import { refreshCredits } from "@/lib/billing/creditsManager";
 
 /** Edge calls blocked while private mode is on (no cloud AI / analysis). */
 const PRIVATE_MODE_ALLOWLIST = new Set([
   "ping",
+]);
+
+/** Edge functions that do not deduct credits — skip balance refresh. */
+const CREDIT_REFRESH_SKIP = new Set([
+  "ping",
+  "stripe-webhook",
+  "create-checkout",
+  "create-portal-session",
 ]);
 
 /**
@@ -152,6 +161,10 @@ export async function fetchEdgeJson<T>(
       payload?.message ||
       `Edge Function "${fnName}" failed with HTTP ${response.status}`;
     throw new Error(message);
+  }
+
+  if (!CREDIT_REFRESH_SKIP.has(fnName)) {
+    void refreshCredits();
   }
 
   return (payload?.data ?? payload) as T;

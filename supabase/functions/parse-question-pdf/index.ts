@@ -7,7 +7,9 @@ import {
 } from "../_shared/utils.ts";
 import { geminiGenerateWithPdf, parseJSON } from "../_shared/gemini.ts";
 
-const CREDIT_COST = 5;
+import { creditCost } from "../_shared/creditEconomics.ts";
+
+const CREDIT_COST = creditCost("parse_question_pdf");
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
 
 const PDF_EXTRACT_PROMPT = `

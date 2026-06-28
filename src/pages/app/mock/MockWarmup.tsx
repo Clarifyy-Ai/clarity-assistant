@@ -3,8 +3,12 @@ import { useState, useEffect, useRef } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { PageContent } from "@/components/layout/PageContent";
 import { useAuthStore } from "@/store/userStore";
 import { getOrCreateSession, activateSession } from "@/lib/session/sessionLifecycle";
+import { maxSessionSecondsForPlan, isFreePlan } from "@/lib/constants/freeTier";
 import { toDbModel } from "@/lib/ai/modelMapping";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -16,14 +20,26 @@ import { toast } from "sonner";
 const WARMUP_QUESTIONS = [
   "What's your name and where are you based?",
   "What are you most excited to work on next?",
+  "Tell me about a recent project you're proud of.",
+  "What kind of team environment helps you do your best work?",
+  "Describe a challenge you overcame in the last year.",
+  "What skills are you actively improving right now?",
+  "Why are you interested in this type of role?",
+  "How do you prefer to receive feedback?",
+  "What's one accomplishment you'd highlight from your resume?",
+  "Where do you see yourself growing in the next 12 months?",
 ];
+
+const WARMUP_MAX = 10;
 
 type Phase = "breathing" | "warmup" | "done";
 
 export default function MockWarmup() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuthStore();
+  const { user, profile } = useAuthStore();
+  const warmupMaxSeconds = maxSessionSecondsForPlan(profile?.plan_id);
+  const warmupStartedRef = useRef<number | null>(null);
 
   const [phase,     setPhase]     = useState<Phase>("breathing");
   const [breathIdx, setBreathIdx] = useState(0);   // 0=inhale 1=hold 2=exhale
@@ -33,6 +49,7 @@ export default function MockWarmup() {
   const [warmupSessionId, setWarmupSessionId] = useState<string | null>(
     ((location.state as { sessionId?: string } | null)?.sessionId) ?? null,
   );
+  const [isPreparing, setIsPreparing] = useState(!warmupSessionId);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const preparingRef = useRef(false);
 
@@ -54,6 +71,7 @@ export default function MockWarmup() {
 
     const config = (location.state as { config?: any } | null)?.config ?? {};
     preparingRef.current = true;
+    setIsPreparing(true);
     getOrCreateSession({
       user_id: user.id,
       type: "warmup",
@@ -70,8 +88,29 @@ export default function MockWarmup() {
       navigate("/app/mock", { replace: true });
     }).finally(() => {
       preparingRef.current = false;
+      setIsPreparing(false);
     });
   }, [warmupSessionId, user?.id, location.state, navigate]);
+
+  useEffect(() => {
+    if (!warmupSessionId || phase === "done") return;
+    if (warmupStartedRef.current == null) {
+      warmupStartedRef.current = Date.now();
+    }
+    const tick = setInterval(() => {
+      const elapsed = Math.floor((Date.now() - (warmupStartedRef.current ?? Date.now())) / 1000);
+      if (elapsed >= warmupMaxSeconds) {
+        clearInterval(tick);
+        toast.info(
+          isFreePlan(profile?.plan_id)
+            ? "Free plan limit: 5-minute warmup complete."
+            : "Warmup time complete.",
+        );
+        setPhase("done");
+      }
+    }, 1000);
+    return () => clearInterval(tick);
+  }, [warmupSessionId, phase, warmupMaxSeconds, profile?.plan_id]);
 
   useEffect(() => {
     if (phase !== "breathing") return;
@@ -100,9 +139,23 @@ export default function MockWarmup() {
     return () => clearInterval(timerRef.current!);
   }, [phase, breathIdx]);
 
+  function warmupFeedback(text: string): { message: string; tone: "success" | "warning" | "info" } {
+    const trimmed = text.trim();
+    if (!trimmed) {
+      return { message: "Try speaking a few sentences — even a rough answer helps warm up.", tone: "warning" };
+    }
+    if (trimmed.length < 40) {
+      return { message: "Good start — expand with one concrete example next time.", tone: "info" };
+    }
+    return { message: "Nice warmup! Clear and confident — you're ready for the session.", tone: "success" };
+  }
+
   function handleNextQuestion() {
+    const feedback = warmupFeedback(answer);
+    toast[feedback.tone](feedback.message);
+
     setAnswer("");
-    if (qIdx + 1 >= WARMUP_QUESTIONS.length) {
+    if (qIdx + 1 >= WARMUP_MAX) {
       setPhase("done");
     } else {
       setQIdx((p) => p + 1);
@@ -112,7 +165,29 @@ export default function MockWarmup() {
   const currentBreath = BREATH_PHASES[breathIdx];
 
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center px-4">
+    <PageContent className="min-h-[calc(100vh-4rem)] flex flex-col px-4 py-6">
+      <PageHeader
+        title="Mock warmup"
+        description={
+          phase === "breathing"
+            ? "Calm your nerves before the session"
+            : phase === "warmup"
+              ? "Practice a few easy questions"
+              : "You're ready to begin"
+        }
+        breadcrumbs={[
+          { label: "Mock Interview", href: "/app/mock" },
+          { label: "Warmup" },
+        ]}
+      />
+
+      {isPreparing && !warmupSessionId ? (
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 max-w-lg mx-auto w-full">
+          <SkeletonCard />
+          <p className="text-sm text-muted-foreground">Preparing your warmup session…</p>
+        </div>
+      ) : (
+      <div className="flex-1 flex items-center justify-center">
       <div className="w-full max-w-lg text-center">
 
         {/* ── Breathing phase ──────────────────────────── */}
@@ -175,11 +250,11 @@ export default function MockWarmup() {
           <div className="space-y-6">
             <div>
               <p className="text-xs text-muted-foreground mb-2">
-                Warmup question {qIdx + 1} of {WARMUP_QUESTIONS.length}
+                Warmup question {qIdx + 1} of {WARMUP_MAX}
               </p>
               <ProgressBar
                 value={qIdx + 1}
-                max={WARMUP_QUESTIONS.length}
+                max={WARMUP_MAX}
                 color="violet"
                 size="xs"
                 className="mb-4"
@@ -206,7 +281,7 @@ export default function MockWarmup() {
               fullWidth
               onClick={handleNextQuestion}
             >
-              {qIdx + 1 < WARMUP_QUESTIONS.length ? "Next question →" : "Start session →"}
+              {qIdx + 1 < WARMUP_MAX ? "Next question →" : "Start session →"}
             </Button>
           </div>
         )}
@@ -231,6 +306,8 @@ export default function MockWarmup() {
           </div>
         )}
       </div>
-    </div>
+      </div>
+      )}
+    </PageContent>
   );
 }

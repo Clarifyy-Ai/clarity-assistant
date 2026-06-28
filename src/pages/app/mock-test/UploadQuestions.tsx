@@ -915,8 +915,8 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
       <div
         className={`relative flex cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed p-10 transition-colors ${
           dragging
-            ? "border-violet-500 bg-violet-500/10"
-            : "border-border hover:border-violet-500/50 hover:bg-muted/10"
+            ? "border-primary bg-primary/10"
+            : "border-border hover:border-primary/50 hover:bg-muted/10"
         }`}
         onDragOver={(e) => {
           e.preventDefault();
@@ -936,7 +936,7 @@ function PDFImportTab({ onImported }: { onImported: (count: number) => void }) {
 
         {parsing ? (
           <div className="flex flex-col items-center gap-3">
-            <Loader2 className="h-10 w-10 animate-spin text-violet-500" />
+            <Loader2 className="h-10 w-10 animate-spin text-primary" />
             <p className="font-medium text-foreground">Parsing PDF with AI…</p>
             <p className="text-sm text-muted-foreground">This may take 15–30 seconds.</p>
           </div>

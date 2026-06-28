@@ -23,6 +23,7 @@ import {
 
 import { loginSchema, type LoginInput } from "@/lib/validators";
 import { usePageMeta } from "@/hooks/usePageMeta";
+import { BrandLogo } from "@/components/marketing";
 
 type LocationState = {
   from?: {
@@ -39,6 +40,8 @@ const TESTIMONIAL = {
 
 const LOCK_KEY = "clarify_login_lock";
 const ATTEMPT_KEY = "clarify_login_attempts";
+const REMEMBER_ME_KEY = "clarify_remember_me";
+/** Client-side lockout after failed logins (T-0688). Complements Supabase Auth rate limiting on sign-in endpoints. */
 const MAX_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 30 * 60 * 1000;
 
@@ -103,6 +106,11 @@ export default function Login(): JSX.Element {
   const signInWithEmail = useAuthStore((state) => state.signInWithEmail);
 
   const [showPassword, setShowPassword] = useState(false);
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [rememberMe, setRememberMe] = useState(
+    () => safeGetLocalStorageItem(REMEMBER_ME_KEY) === "true"
+  );
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [lockTick, setLockTick] = useState(0);
   const [authError, setAuthError] = useState<string | null>(null);
@@ -175,6 +183,21 @@ export default function Login(): JSX.Element {
     return Math.ceil((lockedUntil - Date.now()) / 60_000);
   }, [lockedUntil, lockTick]);
 
+  const isFormValid = useMemo(
+    () => loginSchema.safeParse({ email, password }).success,
+    [email, password]
+  );
+
+  function handleRememberMeChange(checked: boolean): void {
+    setRememberMe(checked);
+
+    if (checked) {
+      safeSetLocalStorageItem(REMEMBER_ME_KEY, "true");
+    } else {
+      safeRemoveLocalStorageItem(REMEMBER_ME_KEY);
+    }
+  }
+
   async function handleLogin(data: LoginInput): Promise<void> {
     if (isLocked) {
       setAuthError(formatLockMessage(lockMinsLeft));
@@ -221,7 +244,7 @@ export default function Login(): JSX.Element {
   return (
     <div className="min-h-screen flex bg-background">
       {/* Left panel */}
-      <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] flex-col relative overflow-hidden bg-gradient-to-br from-violet-600 via-indigo-600 to-blue-700 p-10">
+      <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] flex-col relative overflow-hidden bg-gradient-to-br from-primary via-indigo-600 to-blue-700 p-10">
         <div className="absolute inset-0 opacity-10">
           <div className="absolute top-0 left-0 w-96 h-96 rounded-full bg-white blur-3xl -translate-x-1/2 -translate-y-1/2" />
           <div className="absolute bottom-0 right-0 w-80 h-80 rounded-full bg-white blur-3xl translate-x-1/2 translate-y-1/2" />
@@ -229,11 +252,7 @@ export default function Login(): JSX.Element {
 
         <div className="relative z-10 flex flex-col h-full">
           <div className="flex items-center gap-3">
-            <img
-              src="/images/clarify-logo.png"
-              alt="Clarify AI"
-              className="h-9 w-auto brightness-0 invert"
-            />
+            <BrandLogo size="md" showText={false} />
             <span className="text-xl font-bold text-white">Clarify AI</span>
           </div>
 
@@ -301,12 +320,8 @@ export default function Login(): JSX.Element {
       {/* Right panel */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 sm:px-10 py-12">
         <div className="lg:hidden mb-8 flex flex-col items-center gap-3">
-          <div className="w-full py-4 bg-gradient-to-r from-violet-600 to-indigo-600 rounded-2xl flex items-center justify-center gap-2">
-            <img
-              src="/images/clarify-logo.png"
-              alt="Clarify AI"
-              className="h-7 w-auto brightness-0 invert"
-            />
+          <div className="w-full py-4 bg-gradient-to-r from-primary to-indigo-600 rounded-2xl flex items-center justify-center gap-2">
+            <BrandLogo size="sm" showText={false} />
             <span className="text-lg font-bold text-white">Clarify AI</span>
           </div>
         </div>
@@ -351,6 +366,7 @@ export default function Login(): JSX.Element {
                   placeholder="you@example.com"
                   autoComplete="email"
                   required
+                  onChange={(event) => setEmail(event.target.value)}
                 />
 
                 {fieldErrors.email?.[0] && (
@@ -367,6 +383,7 @@ export default function Login(): JSX.Element {
                     placeholder="••••••••"
                     autoComplete="current-password"
                     required
+                    onChange={(event) => setPassword(event.target.value)}
                     rightIcon={
                       <button
                         type="button"
@@ -391,7 +408,21 @@ export default function Login(): JSX.Element {
                     </p>
                   )}
 
-                  <div className="flex justify-end">
+                  <div className="flex items-center justify-between">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={rememberMe}
+                        onChange={(event) =>
+                          handleRememberMeChange(event.target.checked)
+                        }
+                        className="h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/40 cursor-pointer"
+                      />
+                      <span className="text-xs text-muted-foreground">
+                        Remember me
+                      </span>
+                    </label>
+
                     <Link
                       to="/forgot-password"
                       className="text-xs text-primary hover:opacity-80 transition-opacity"
@@ -430,7 +461,7 @@ export default function Login(): JSX.Element {
                   variant="primary"
                   size="md"
                   loading={isSubmitting}
-                  disabled={isLocked || isSubmitting}
+                  disabled={isLocked || isSubmitting || !isFormValid}
                   fullWidth
                 >
                   {isLocked ? `Locked (${lockMinsLeft}m)` : "Sign in"}

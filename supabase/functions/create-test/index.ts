@@ -2,8 +2,9 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient, deductCredits, refundCredits } from "../_shared/supabase.ts";
+import { creditCost } from "../_shared/creditEconomics.ts";
 
-const CREATE_TEST_CREDIT_COST = 2;
+const CREATE_TEST_CREDIT_COST = creditCost("create_mock_test");
 
 function jsonResponse(req: Request, payload: unknown, status = 200) {
   return new Response(JSON.stringify(payload), {
