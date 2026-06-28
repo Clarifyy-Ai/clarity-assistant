@@ -44,10 +44,32 @@ async function query<T>(
 
 // ─── Profiles ─────────────────────────────────────────────────────────────────
 
+// Columns readable by the authenticated user. Excludes server-side billing
+// identifiers (stripe_customer_id, subscription_id) whose column-level SELECT
+// is revoked from the `authenticated` role for security.
+const PROFILE_SAFE_COLUMNS = [
+  "audio_input_device","audio_output_device","auto_transcript","avatar_url",
+  "ban_reason","bio","created_at","credits","credits_reset_at",
+  "credits_used_this_month","current_company","current_title","data_collection",
+  "data_retention_days","deepgram_model","deleted_at","domain","email",
+  "email_notifications","experience_years","full_name","github_url","headline",
+  "id","interview_date","interview_strengths","interview_weaknesses",
+  "is_actively_looking","is_banned","last_active_date","last_login_at","level",
+  "linkedin_url","locale","longest_streak","marketing_emails","noise_suppression",
+  "notice_period","notification_prefs","onboarding_completed","onboarding_step",
+  "overlay_font_size","overlay_hotkey","overlay_opacity","overlay_position",
+  "phone","plan_id","preferred_language","preferred_model","preferred_salary",
+  "privacy_prefs","profile_visibility","referral_code","referred_by",
+  "response_style","role_type","session_reminders","stealth_mode","streak_days",
+  "subscription_status","target_companies","target_role","timezone",
+  "total_practice_minutes","total_sessions","updated_at","website_url","xp",
+  "years_of_exp",
+].join(", ");
+
 export const profilesDB = {
   async getById(userId: string): Promise<Tables<"profiles">> {
     return query(
-      () => supabase.from("profiles").select("*").eq("id", userId).single(),
+      () => supabase.from("profiles").select(PROFILE_SAFE_COLUMNS).eq("id", userId).single() as unknown as PromiseLike<{ data: Tables<"profiles"> | null; error: unknown }>,
       { table: "profiles", operation: "getById" }
     );
   },
@@ -55,7 +77,7 @@ export const profilesDB = {
   async getByIdMaybe(userId: string): Promise<Tables<"profiles"> | null> {
     const { data, error } = await supabase
       .from("profiles")
-      .select("*")
+      .select(PROFILE_SAFE_COLUMNS)
       .eq("id", userId)
       .maybeSingle();
 
@@ -65,7 +87,7 @@ export const profilesDB = {
         operation: "getByIdMaybe",
       });
     }
-    return data;
+    return data as unknown as Tables<"profiles"> | null;
   },
 
   async getIdByReferralCode(code: string): Promise<string | null> {
@@ -95,8 +117,8 @@ export const profilesDB = {
         .from("profiles")
         .update({ ...updates, updated_at: new Date().toISOString() })
         .eq("id", userId)
-        .select()
-        .single(),
+        .select(PROFILE_SAFE_COLUMNS)
+        .single() as unknown as PromiseLike<{ data: Tables<"profiles"> | null; error: unknown }>,
       { table: "profiles", operation: "update" }
     );
   },
@@ -106,8 +128,8 @@ export const profilesDB = {
       () => supabase
         .from("profiles")
         .upsert({ ...profile, updated_at: new Date().toISOString() })
-        .select()
-        .single(),
+        .select(PROFILE_SAFE_COLUMNS)
+        .single() as unknown as PromiseLike<{ data: Tables<"profiles"> | null; error: unknown }>,
       { table: "profiles", operation: "upsert" }
     );
   },
@@ -1943,16 +1965,16 @@ export const adminAnalyticsDB = {
   }> {
     const today = new Date().toISOString().slice(0, 10);
     const [totalRes, proRes, todayRes, totalSessionsRes] = await Promise.all([
-      supabase.from("profiles").select("*", { count: "exact", head: true }),
+      supabase.from("profiles").select("id", { count: "exact", head: true }),
       supabase
         .from("profiles")
-        .select("*", { count: "exact", head: true })
+        .select("id", { count: "exact", head: true })
         .not("plan_id", "eq", "free"),
       supabase
         .from("sessions")
-        .select("*", { count: "exact", head: true })
+        .select("id", { count: "exact", head: true })
         .gte("created_at", today),
-      supabase.from("sessions").select("*", { count: "exact", head: true }),
+      supabase.from("sessions").select("id", { count: "exact", head: true }),
     ]);
 
     const firstErr = [totalRes, proRes, todayRes, totalSessionsRes].find(
