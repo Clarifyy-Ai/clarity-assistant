@@ -1,6 +1,7 @@
 // src/components/overlay/OverlayResizeHandles.tsx
 import { useCallback, useRef } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
+import { suppressOverlayGhostClicks } from "@/lib/overlay/ghostClickGuard";
 
 interface OverlayResizeHandlesProps {
   containerRef: React.RefObject<HTMLDivElement>;
@@ -37,6 +38,7 @@ export function OverlayResizeHandles({ containerRef }: OverlayResizeHandlesProps
       const startY = e.clientY;
       const startW = el.offsetWidth;
       const startH = el.offsetHeight;
+      let resized = false;
 
       const prevUserSelect = document.body.style.userSelect;
       const prevCursor = document.body.style.cursor;
@@ -53,10 +55,12 @@ export function OverlayResizeHandles({ containerRef }: OverlayResizeHandlesProps
         if (edge === "e" || edge === "se") newW = startW + dx;
         if (edge === "s" || edge === "se") newH = startH + dy;
 
+        if (Math.abs(dx) > 2 || Math.abs(dy) > 2) resized = true;
         useOverlayStore.getState().setOverlaySize(newW, newH);
       };
 
       const onUp = () => {
+        if (resized) suppressOverlayGhostClicks();
         isResizing.current = false;
         document.removeEventListener("pointermove", onMove);
         document.removeEventListener("pointerup", onUp);

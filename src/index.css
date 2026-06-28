@@ -180,11 +180,14 @@
 
   body {
     @apply text-foreground font-sans;
-    /* ★ FIX: transparent so Electron frameless window shows desktop behind */
+    /* Transparent only for frameless overlay windows; Electron main shell uses solid bg */
     background: transparent;
-    /* ★ FIX: 100vh not 100dvh — dvh unreliable in Electron's Chromium */
     min-height: 100vh;
     overflow-x: hidden;
+  }
+
+  html[data-electron="true"] body {
+    background: hsl(var(--background));
   }
 
   /* ★ ADD: Electron drag region utility class */

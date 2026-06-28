@@ -33,6 +33,8 @@
     "audit": "npm audit --production",
     "audit:fix": "npm audit fix",
     "validate-env": "node scripts/validate-env.js",
+    "publish:desktop-installer": "node scripts/publish-desktop-installer.mjs",
+    "install:desktop": "powershell -ExecutionPolicy Bypass -File scripts/install-desktop-local.ps1",
     "supabase:gen": "npx supabase gen types typescript --project-id qzgvjrvtkwlzxpmlddkx --schema public > src/integrations/supabase/types.ts"
   },
   "build": {
@@ -40,11 +42,13 @@
     "productName": "Clarify AI",
     "asar": true,
     "files": [
+      "!**/*",
       "dist/**/*",
-      "electron/**/*"
+      "electron/**/*",
+      "package.json"
     ],
     "directories": {
-      "output": "/tmp/clarify-release"
+      "output": "release"
     },
     "mac": {
       "target": [
@@ -69,6 +73,7 @@
           ]
         }
       ],
+      "icon": "public/icon.png",
       "signAndEditExecutable": false
     },
     "linux": {
@@ -85,7 +90,7 @@
     },
     "publish": {
       "provider": "github",
-      "owner": "Clarify AI",
+      "owner": "Clarifyy-Ai",
       "repo": "clarity-assistant"
     },
     "dmg": {

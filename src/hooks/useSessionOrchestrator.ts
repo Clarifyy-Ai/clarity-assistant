@@ -9,6 +9,7 @@ import { useAuthStore } from "@/store/userStore";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { buildResumeContextForAI } from "@/lib/documents/interviewContext";
 import { parseResumeContentString } from "@/lib/documents/resumeParse";
+import { getLocalHintFallback } from "@/lib/mock/localHintFallback";
 import { useDocumentStore } from "@/store/documentStore";
 import { useAudioStore } from "@/store/audioStore";
 import type { SessionQuestion } from "@/types/session.types";
@@ -145,11 +146,19 @@ export function useSessionOrchestrator() {
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to generate hint";
       console.error("[useSessionOrchestrator] requestHint failed:", err);
-      overlay.setHintState("error");
-      overlay.setError(msg);
+
+      const interviewType =
+        (session.config as { interview_type?: string })?.interview_type ?? "behavioural";
+      const fallbackHint = getLocalHintFallback(questionText, interviewType);
+
+      overlay.setCurrentQuestion(questionText);
+      overlay.appendStreamChunk(fallbackHint);
+      overlay.commitStreamedHint();
+      overlay.setHintState("ready");
+      overlay.setError(null);
       overlay.addChatMessage({
         role: "assistant",
-        text: `Error: ${msg}`,
+        text: `${fallbackHint}\n\n_(Offline coaching tips — AI hint service unavailable.)_`,
         timestamp: Date.now(),
       });
     } finally {

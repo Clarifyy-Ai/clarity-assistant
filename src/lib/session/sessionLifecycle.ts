@@ -17,6 +17,27 @@ export type SessionRow = Tables<"sessions">;
 export type SessionType = SessionRow["type"];
 
 const EXPIRY_MS = 24 * 60 * 60 * 1000;
+const DB_TIMEOUT_MS = 15_000;
+
+async function withDbTimeout<T>(
+  promise: PromiseLike<T>,
+  label: string,
+  ms = DB_TIMEOUT_MS,
+): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<never>((_, reject) => {
+    timeoutId = setTimeout(
+      () => reject(new Error(`${label} timed out. Check your connection and retry.`)),
+      ms,
+    );
+  });
+
+  try {
+    return await Promise.race([Promise.resolve(promise), timeout]);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
+  }
+}
 
 /** Session types permitted for sessionless AI calls (matches edge sessionEnforcement). */
 export type AiPracticeMode = "mock" | "warmup" | "rehearsal" | "practice";
@@ -90,18 +111,21 @@ export async function getOrCreateSession(
 ): Promise<GetOrCreateSessionResult> {
   const sinceIso = new Date(Date.now() - EXPIRY_MS).toISOString();
 
-  await abandonExpiredSessions(input.user_id, input.type);
+  await withDbTimeout(abandonExpiredSessions(input.user_id, input.type), "Session lookup");
 
-  const { data: existing, error: findErr } = await supabase
-    .from("sessions")
-    .select("*")
-    .eq("user_id", input.user_id)
-    .eq("type", input.type)
-    .in("status", ["pending", "active"])
-    .gte("created_at", sinceIso)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+  const { data: existing, error: findErr } = await withDbTimeout(
+    supabase
+      .from("sessions")
+      .select("*")
+      .eq("user_id", input.user_id)
+      .eq("type", input.type)
+      .in("status", ["pending", "active"])
+      .gte("created_at", sinceIso)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle(),
+    "Session lookup",
+  );
 
   if (findErr) {
     console.error("[sessionLifecycle] lookup failed:", findErr);
@@ -112,12 +136,15 @@ export async function getOrCreateSession(
     return { session: existing as SessionRow, reused: true };
   }
 
-  const { data: limitCheck, error: limitErr } = await (supabase.rpc as (
-    name: string,
-    args: Record<string, unknown>,
-  ) => ReturnType<typeof supabase.rpc>)(
-    "check_free_tier_limits",
-    { p_user_id: input.user_id, p_action: "start_session" },
+  const { data: limitCheck, error: limitErr } = await withDbTimeout(
+    (supabase.rpc as (
+      name: string,
+      args: Record<string, unknown>,
+    ) => ReturnType<typeof supabase.rpc>)(
+      "check_free_tier_limits",
+      { p_user_id: input.user_id, p_action: "start_session" },
+    ),
+    "Session limit check",
   );
   const limitResult = limitCheck as { allowed?: boolean; message?: string } | null;
   if (!limitErr && limitResult && limitResult.allowed === false) {
@@ -141,11 +168,10 @@ export async function getOrCreateSession(
     tags: tags.length > 0 ? tags : null,
   };
 
-  const { data: created, error: insertErr } = await supabase
-    .from("sessions")
-    .insert(insert)
-    .select()
-    .single();
+  const { data: created, error: insertErr } = await withDbTimeout(
+    supabase.from("sessions").insert(insert).select().single(),
+    "Session create",
+  );
 
   if (insertErr || !created) {
     console.error("[sessionLifecycle] insert failed:", insertErr);
@@ -160,11 +186,14 @@ export async function getOrCreateSession(
  * Sets started_at if not already set.
  */
 export async function activateSession(sessionId: string): Promise<void> {
-  const { data: existing, error: lookupError } = await supabase
-    .from("sessions")
-    .select("id, created_at, status")
-    .eq("id", sessionId)
-    .maybeSingle();
+  const { data: existing, error: lookupError } = await withDbTimeout(
+    supabase
+      .from("sessions")
+      .select("id, created_at, status")
+      .eq("id", sessionId)
+      .maybeSingle(),
+    "Session activate",
+  );
 
   if (lookupError || !existing) {
     throw new Error(lookupError?.message || "Session not found");
@@ -183,11 +212,14 @@ export async function activateSession(sessionId: string): Promise<void> {
     ...(existing.status === "active" ? {} : { started_at: new Date().toISOString() }),
   };
 
-  const { error } = await supabase
-    .from("sessions")
-    .update(update)
-    .eq("id", sessionId)
-    .in("status", ["pending", "active"]);
+  const { error } = await withDbTimeout(
+    supabase
+      .from("sessions")
+      .update(update)
+      .eq("id", sessionId)
+      .in("status", ["pending", "active"]),
+    "Session activate",
+  );
 
   if (error) {
     console.error("[sessionLifecycle] activate failed:", error);

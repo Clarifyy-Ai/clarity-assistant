@@ -4,6 +4,7 @@ import * as Sentry from "@sentry/react";
 import posthog from "posthog-js";
 import App from "./App";
 import "./index.css";
+import { isElectronApp } from "@/lib/platform/isElectron";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
@@ -76,13 +77,27 @@ if (isRealKey(import.meta.env.VITE_POSTHOG_KEY, ["phc_your", "your_posthog", "pl
   });
 }
 
-// ── Service Worker — PWA support ──────────────────────────────────────────
-if ("serviceWorker" in navigator && import.meta.env.VITE_APP_ENV === "production") {
-  window.addEventListener("load", () => {
-    navigator.serviceWorker
-      .register("/sw.js", { scope: "/" })
-      .catch((err) => console.warn("[SW] Registration failed:", err));
-  });
+// ── Service Worker — PWA support (web only; breaks on file:// in Electron) ──
+if (!isElectronApp() && "serviceWorker" in navigator) {
+  if (
+    import.meta.env.DEV ||
+    import.meta.env.VITE_APP_ENV === "development" ||
+    import.meta.env.VITE_APP_ENV === "test"
+  ) {
+    // Dev: drop any stale SW/cache from production builds (prevents blank screen).
+    void navigator.serviceWorker.getRegistrations().then((regs) => {
+      for (const reg of regs) void reg.unregister();
+    });
+    void caches.keys().then((keys) => {
+      for (const key of keys) void caches.delete(key);
+    });
+  } else {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker
+        .register("/sw.js", { scope: "/" })
+        .catch((err) => console.warn("[SW] Registration failed:", err));
+    });
+  }
 }
 
 // ── DOM mount guards ──────────────────────────────────────────────────────
@@ -108,13 +123,13 @@ if (!rootEl) {
     const el = document.createElement("div");
     el.id = id;
     el.style.cssText =
-      `position:fixed;inset:0;pointer-events:none;z-index:1100;isolation:isolate;`;
+      `position:fixed;top:0;left:0;width:0;height:0;overflow:visible;pointer-events:none;z-index:1100;isolation:isolate;`;
     document.body.appendChild(el);
   }
 })();
 
-// ── Web Vitals — Core Web Vitals reporting ────────────────────────────────
-if (import.meta.env.PROD) {
+// ── Web Vitals — Core Web Vitals reporting (web only) ─────────────────────
+if (import.meta.env.PROD && !isElectronApp()) {
   import("web-vitals").then(({ onCLS, onINP, onLCP, onFCP, onTTFB }) => {
     const reportMetric = (metric: { name: string; value: number }) => {
       if ((window as any).posthog) {
@@ -133,6 +148,8 @@ if (import.meta.env.PROD) {
 }
 
 // ── Mount React ───────────────────────────────────────────────────────────
+document.getElementById("boot-splash")?.remove();
+
 ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
     <Sentry.ErrorBoundary

@@ -34,12 +34,11 @@ import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { getStealthLabel } from "@/lib/stealth/stealthConfig";
 import { useIndiaRegion } from "@/hooks/useIndiaRegion";
-import { getDesktopDownloadHref, isDesktopDownloadExternal } from "@/lib/constants/desktopDownload";
+import { DesktopDownloadButton } from "@/components/common/DesktopDownloadButton";
+import { isElectronApp } from "@/lib/platform/isElectron";
 import type { Tables } from "@/integrations/supabase/types";
 
-const IS_ELECTRON = Boolean(
-  (window as unknown as { electronAPI?: { isElectron?: boolean } }).electronAPI?.isElectron,
-);
+const IS_ELECTRON = isElectronApp();
 
 /* ─── LOCAL TYPES ────────────────────────────────────────────────────────── */
 
@@ -302,29 +301,10 @@ export default function Dashboard() {
           <div className="flex-1 min-w-0">
             <p className="text-sm font-semibold text-foreground">Desktop app</p>
             <p className="text-xs text-muted-foreground mt-0.5">
-              Install Clarify AI for system-wide hotkeys and the floating overlay. See{" "}
-              <code className="text-[10px]">docs/ELECTRON_RELEASE.md</code> for build notes.
+              Install Clarify AI for system-wide hotkeys and the floating Practice Coach overlay.
             </p>
           </div>
-          {isDesktopDownloadExternal() ? (
-            <a
-              href={getDesktopDownloadHref()}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/15 transition-colors shrink-0"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Download
-            </a>
-          ) : (
-            <Link
-              to={getDesktopDownloadHref()}
-              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-xl border border-primary/30 bg-primary/10 text-xs font-semibold text-primary hover:bg-primary/15 transition-colors shrink-0"
-            >
-              <Download className="w-3.5 h-3.5" />
-              Install guide
-            </Link>
-          )}
+          <DesktopDownloadButton size="sm" variant="outline" showGuideLink={false} className="shrink-0 max-w-xs" />
         </div>
       )}
 

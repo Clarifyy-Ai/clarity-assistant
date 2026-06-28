@@ -1,6 +1,9 @@
 import { Link } from "react-router-dom";
 import { AlertTriangle, CheckCircle2, Monitor, Wrench } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { DesktopDownloadButton } from "@/components/common/DesktopDownloadButton";
+import { isElectronApp } from "@/lib/platform/isElectron";
+import { openInBrowser } from "@/lib/platform/openInBrowser";
 import {
   DESKTOP_INSTALL_STEPS,
   OVERLAY_SYSTEM_CHECKLIST,
@@ -64,11 +67,9 @@ export function OverlaySetupGuidePanel({
               <li key={step} className="leading-relaxed">{step}</li>
             ))}
           </ol>
-          <p className={cn("text-muted-foreground/80 mt-2", compact ? "text-[10px]" : "text-[11px]")}>
-            Build locally: <code className="text-foreground/80">npm run dist:win</code>,{" "}
-            <code className="text-foreground/80">npm run dist:mac</code>, or{" "}
-            <code className="text-foreground/80">npm run dist:linux</code> (see docs/ELECTRON_RELEASE.md).
-          </p>
+          <div className="mt-3">
+            <DesktopDownloadButton size="sm" />
+          </div>
         </section>
       )}
 
@@ -101,13 +102,35 @@ export function OverlaySetupGuidePanel({
 
       <p className={cn("text-muted-foreground", compact ? "text-[10px]" : "text-[11px]")}>
         Full guide (sign-in required):{" "}
-        <Link to="/app/guide/practice-coach" className="text-primary hover:underline">
-          Practice Coach setup
-        </Link>
-        {" · "}
-        <Link to="/app/settings/practice-coach" className="text-primary hover:underline">
-          Settings checklist
-        </Link>
+        {isElectronApp() ? (
+          <>
+            <button
+              type="button"
+              onClick={() => openInBrowser("/app/guide/practice-coach")}
+              className="text-primary hover:underline"
+            >
+              Practice Coach setup
+            </button>
+            {" · "}
+            <button
+              type="button"
+              onClick={() => openInBrowser("/app/settings/practice-coach")}
+              className="text-primary hover:underline"
+            >
+              Settings checklist
+            </button>
+          </>
+        ) : (
+          <>
+            <Link to="/app/guide/practice-coach" className="text-primary hover:underline">
+              Practice Coach setup
+            </Link>
+            {" · "}
+            <Link to="/app/settings/practice-coach" className="text-primary hover:underline">
+              Settings checklist
+            </Link>
+          </>
+        )}
       </p>
     </div>
   );

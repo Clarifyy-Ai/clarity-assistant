@@ -6,6 +6,9 @@ import { Card } from "@/components/ui/Card";
 import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
 import { AlertCircle } from "lucide-react";
 import { isBillingSuspended } from "@/lib/billing/subscriptionAccess";
+import { isElectronApp } from "@/lib/platform/isElectron";
+import { openInBrowser } from "@/lib/platform/openInBrowser";
+import { Button } from "@/components/ui/Button";
 
 interface ProtectedRouteProps {
   requireOnboarding?: boolean;
@@ -87,12 +90,22 @@ export const ProtectedRoute = memo(function ProtectedRoute({
               <p className="text-sm text-muted-foreground mb-4">
                 Your subscription payment is overdue. Update your billing details to restore access.
               </p>
-              <Link
-                to="/app/settings/billing"
-                className="inline-block px-4 py-2 bg-primary rounded-lg text-sm font-medium text-primary-foreground hover:opacity-90 transition mr-2"
-              >
-                Update billing
-              </Link>
+              {isElectronApp() ? (
+                <Button
+                  type="button"
+                  className="mr-2"
+                  onClick={() => openInBrowser("/app/settings/billing")}
+                >
+                  Update billing in browser
+                </Button>
+              ) : (
+                <Link
+                  to="/app/settings/billing"
+                  className="inline-block px-4 py-2 bg-primary rounded-lg text-sm font-medium text-primary-foreground hover:opacity-90 transition mr-2"
+                >
+                  Update billing
+                </Link>
+              )}
               <button
                 type="button"
                 onClick={() => useAuthStore.getState().signOut()}

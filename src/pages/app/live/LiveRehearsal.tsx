@@ -52,9 +52,6 @@ const DEFAULT_CONFIG: LiveSessionConfig = {
 };
 
 export default function LiveRehearsal() {
-  if (!isElectronApp()) {
-    return <DesktopOnlyGate />;
-  }
   return <LiveRehearsalSession />;
 }
 

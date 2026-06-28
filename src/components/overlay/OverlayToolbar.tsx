@@ -127,12 +127,14 @@ export function OverlayToolbar({
   const [showOverlaySettings, setShowOverlaySettings] = useState(false);
   const [showPinnedMenu, setShowPinnedMenu] = useState(false);
   const [showResumeQuickPeek, setShowResumeQuickPeek] = useState(false);
+  const [endConfirmOpen, setEndConfirmOpen] = useState(false);
 
   const moreMenuRef = useRef<HTMLDivElement>(null);
   const hotkeyRefRef = useRef<HTMLDivElement>(null);
   const overlaySettingsRef = useRef<HTMLDivElement>(null);
   const pinnedMenuRef = useRef<HTMLDivElement>(null);
   const resumeQuickPeekRef = useRef<HTMLDivElement>(null);
+  const endConfirmRef = useRef<HTMLDivElement>(null);
 
   const isGenerating = hintState === "generating" || hintState === "streaming";
   const captureCreditCost = SERVER_AI_CREDIT_COSTS.screenshotAnswer;
@@ -179,6 +181,9 @@ export function OverlayToolbar({
       if (pinnedMenuRef.current && !pinnedMenuRef.current.contains(t)) setShowPinnedMenu(false);
       if (resumeQuickPeekRef.current && !resumeQuickPeekRef.current.contains(t)) {
         setShowResumeQuickPeek(false);
+      }
+      if (endConfirmRef.current && !endConfirmRef.current.contains(t)) {
+        setEndConfirmOpen(false);
       }
     }
     document.addEventListener("mousedown", handleClickOutside);
@@ -525,22 +530,54 @@ export function OverlayToolbar({
           )}
         </div>
 
-        <button
-          type="button"
-          onClick={() => onEndSession?.()}
-          disabled={!onEndSession || !isSessionActive}
-          title={!isSessionActive ? "Session not active" : "End session"}
-          aria-label={!isSessionActive ? "Session not active" : "End session"}
-          className={cn(
-            "flex items-center gap-1 px-2 py-1 h-7 border text-[11px] font-bold rounded-lg transition-all shrink-0",
-            !onEndSession || !isSessionActive
-              ? "bg-white/5 border-white/10 text-white/20 cursor-not-allowed"
-              : "bg-red-600/15 hover:bg-red-600/30 border-red-500/20 hover:border-red-500/35 text-red-400 hover:text-red-300"
+        <div className="relative shrink-0" ref={endConfirmRef}>
+          <button
+            type="button"
+            onClick={() => setEndConfirmOpen((open) => !open)}
+            disabled={!onEndSession || !isSessionActive}
+            title={!isSessionActive ? "Session not active" : "End session"}
+            aria-label={!isSessionActive ? "Session not active" : "End session"}
+            aria-expanded={endConfirmOpen}
+            className={cn(
+              "flex items-center gap-1 px-2 py-1 h-7 border text-[11px] font-bold rounded-lg transition-all shrink-0",
+              !onEndSession || !isSessionActive
+                ? "bg-white/5 border-white/10 text-white/20 cursor-not-allowed"
+                : endConfirmOpen
+                  ? "bg-red-600/25 border-red-500/35 text-red-300"
+                  : "bg-red-600/15 hover:bg-red-600/30 border-red-500/20 hover:border-red-500/35 text-red-400 hover:text-red-300"
+            )}
+          >
+            <Square className="w-2.5 h-2.5 fill-current" aria-hidden="true" />
+            <span>End</span>
+          </button>
+
+          {endConfirmOpen && onEndSession && isSessionActive && (
+            <div className="absolute top-full right-0 mt-1.5 w-52 rounded-xl border border-red-500/25 bg-[#0f0f1e] shadow-2xl z-[60] p-3 space-y-2.5 animate-fade-in">
+              <p className="text-[11px] text-white/70 leading-snug">
+                End this session? Progress will be saved.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  onClick={() => setEndConfirmOpen(false)}
+                  className="flex-1 rounded-lg border border-white/10 bg-white/5 px-2 py-1.5 text-[11px] font-semibold text-white/70 hover:bg-white/10"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEndConfirmOpen(false);
+                    onEndSession();
+                  }}
+                  className="flex-1 rounded-lg border border-red-500/30 bg-red-600/20 px-2 py-1.5 text-[11px] font-bold text-red-300 hover:bg-red-600/30"
+                >
+                  End session
+                </button>
+              </div>
+            </div>
           )}
-        >
-          <Square className="w-2.5 h-2.5 fill-current" aria-hidden="true" />
-          <span>End</span>
-        </button>
+        </div>
       </div>
 
       {showResumeQuickPeek && (

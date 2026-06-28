@@ -7,3 +7,4 @@ export { ComplianceBanner } from "./ComplianceBanner";
 export { PageStateLoading, PageStateSkeleton } from "./PageStateLoading";
 export { UploadZone } from "./UploadZone";
 export { NetworkErrorPage } from "./NetworkErrorPage";
+export { DesktopDownloadButton } from "./DesktopDownloadButton";

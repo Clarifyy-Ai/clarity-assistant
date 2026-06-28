@@ -25,6 +25,8 @@
 //   No reliable programmatic evasion possible. UI shows a clear warning.
 //   Recommend the user use the desktop app (Electron) for real protection.
 
+import { isElectronApp } from "@/lib/platform/isElectron";
+
 /* ─── TYPES ─────────────────────────────────────────────────────────────── */
 
 export const STEALTH_ATTR = "stealthActive" as const;
@@ -57,7 +59,7 @@ declare global {
 /* ─── ENVIRONMENT DETECTION ─────────────────────────────────────────────── */
 
 export function isElectron(): boolean {
-  return typeof window !== "undefined" && window.electronAPI?.isElectron === true;
+  return isElectronApp();
 }
 
 /**

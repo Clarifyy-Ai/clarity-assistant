@@ -67,9 +67,9 @@ export function useNetworkColor(): "green" | "yellow" | "red" {
 
 function getQualityLabel(mode: string, avgRTT: number): string {
   if (mode === "offline") return "Offline";
+  if (mode === "degraded" || avgRTT >= 2000) return "Slow";
   if (avgRTT < 200) return "Excellent";
   if (avgRTT < 500) return "Good";
   if (avgRTT < 800) return "Fair";
-  if (avgRTT < 2000) return "Poor";
-  return "Very Poor";
+  return "Slow";
 }

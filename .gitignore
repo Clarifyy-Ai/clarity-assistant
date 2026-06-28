@@ -19,6 +19,8 @@ node_modules
 # =========================
 dist
 dist-ssr
+release
+electron-release
 
 # =========================
 # 🔐 Environment Variables (CRITICAL)

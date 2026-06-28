@@ -8,6 +8,9 @@ import { useWPMTracker } from "@/hooks/useWPMTracker";
 import { useHotkeys } from "@/hooks/useHotkeys";
 import { useGamification } from "@/hooks/useGamification";
 import { useOverlayStore } from "@/store/overlayStore";
+import { useUIStore } from "@/store/uiStore";
+import { useNetworkStore } from "@/store/networkStore";
+import { networkMonitor } from "@/lib/network/networkMonitor";
 import { useSessionStore } from "@/store/sessionStore";
 import { useAuthStore } from "@/store/authStore";
 import { useAudioStore } from "@/store/audioStore";
@@ -23,6 +26,8 @@ import {
 } from "@/lib/supabase/database";
 import { getOrCreateSession, activateSession } from "@/lib/session/sessionLifecycle";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { getLocalMockQuestions } from "@/lib/mock/localQuestionBank";
+import { isOverlayGhostClickSuppressed } from "@/lib/overlay/ghostClickGuard";
 import { toDbModel } from "@/lib/ai/modelMapping";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -58,6 +63,14 @@ import {
 } from "@/lib/constants/freeTier";
 
 type MockSessionPhase = "idle" | "configuring" | "active" | "completed";
+type MockSetupStep = "session" | "questions" | "audio";
+
+type MockConfig = LiveSessionConfig & {
+  type?: string;
+  count?: number;
+  role?: string | null;
+  question_count?: number;
+};
 
 /* ─── TYPES ─────────────────────────────────────────────────────────────── */
 
@@ -115,6 +128,7 @@ export default function MockSession() {
 
   const audio = useAudioSession({
     enableSystemAudio: false,
+    micOptional: true,
     micDeviceId,
     noiseSuppression,
     onQuestionDetected: () => {},
@@ -131,6 +145,8 @@ export default function MockSession() {
   const [skipConfirm, setSkipConfirm] = useState(false);
   const [endConfirm, setEndConfirm] = useState(false);
   const [questionsError, setQuestionsError] = useState<string | null>(null);
+  const [setupStep, setSetupStep] = useState<MockSetupStep>("session");
+  const [usedLocalQuestions, setUsedLocalQuestions] = useState(false);
   const [sessionNotes, setSessionNotes] = useState("");
 
   const questionsCacheRef = useRef<SessionQuestion[] | null>(null);
@@ -154,7 +170,10 @@ export default function MockSession() {
   // Overlay mount/unmount behavior
   useEffect(() => {
     if (phase === "active") {
-      useOverlayStore.getState().showOverlay();
+      const overlay = useOverlayStore.getState();
+      overlay.setStealthMode(false);
+      overlay.setMinimalMode(false);
+      overlay.showOverlay();
     }
     return () => {
       useOverlayStore.getState().hideOverlay();
@@ -313,10 +332,23 @@ export default function MockSession() {
     });
   }
 
+  function resolveMockConfigFields(config: MockConfig) {
+    const interviewType = config.interview_type ?? config.type ?? "behavioural";
+    const questionCount = config.question_count ?? config.count ?? 5;
+    const role =
+      config.role ??
+      (config as { target_role?: string }).target_role ??
+      profile?.target_role ??
+      "";
+    const company = config.company ?? "";
+
+    return { interviewType, questionCount, role, company };
+  }
+
   async function loadQuestions(
     dbSessionId: string,
-    config: LiveSessionConfig,
-    userId: string,
+    config: MockConfig,
+    options?: { forceLocal?: boolean },
   ): Promise<void> {
     if (questionsCacheRef.current?.length) {
       orchestrator.setQuestions(questionsCacheRef.current);
@@ -324,44 +356,56 @@ export default function MockSession() {
     }
 
     setQuestionsError(null);
+    const { interviewType, questionCount, role, company } = resolveMockConfigFields(config);
 
-    const data = await fetchEdgeJson<{ questions?: unknown[] }>("generate-questions", {
-      interview_type: config.interview_type,
-      experience_level: profile?.experience_years
-        ? profile.experience_years > 5
-          ? "senior"
-          : profile.experience_years > 2
-            ? "mid"
-            : "junior"
-        : "mid",
-      company: config.company || "",
-      role: profile?.target_role || "",
-      question_count: (config as LiveSessionConfig & { question_count?: number }).question_count ?? 5,
-      session_id: dbSessionId,
-      user_id: userId,
-      config,
-      free_session: true,
-    });
+    if (!options?.forceLocal) {
+      try {
+        const data = await fetchEdgeJson<{ questions?: unknown[] }>("generate-questions", {
+          type: interviewType,
+          count: questionCount,
+          interview_type: interviewType,
+          question_count: questionCount,
+          company,
+          role,
+          session_id: dbSessionId,
+          free_session: true,
+        });
 
-    const raw =
-      data?.questions ??
-      (data as { data?: { questions?: unknown[] } })?.data?.questions ??
-      [];
+        const raw =
+          data?.questions ??
+          (data as { data?: { questions?: unknown[] } })?.data?.questions ??
+          [];
 
-    if (!Array.isArray(raw) || raw.length === 0) {
-      throw new Error("No questions returned — try again.");
+        if (Array.isArray(raw) && raw.length > 0) {
+          orchestrator.setQuestions(raw);
+          questionsCacheRef.current = useSessionStore.getState().questions;
+          setUsedLocalQuestions(false);
+          return;
+        }
+      } catch (err) {
+        console.warn("[MockSession] AI question generation failed, using local bank:", err);
+      }
     }
 
-    orchestrator.setQuestions(raw);
-    const mapped = useSessionStore.getState().questions;
-    questionsCacheRef.current = mapped;
+    const local = getLocalMockQuestions({
+      type: interviewType,
+      count: questionCount,
+      company,
+      role,
+    });
+    orchestrator.setQuestions(local);
+    questionsCacheRef.current = useSessionStore.getState().questions;
+    setUsedLocalQuestions(true);
+    toast.message("Using built-in practice questions — AI generation was unavailable.");
   }
 
-  async function handleSetup(config: LiveSessionConfig) {
+  async function handleSetup(config: LiveSessionConfig, existingSessionId?: string) {
     if (isStartingRef.current) return;
     isStartingRef.current = true;
     setPhase("configuring");
+    setSetupStep("session");
     setQuestionsError(null);
+    setUsedLocalQuestions(false);
 
     sessionConfigRef.current = config;
     setMicDeviceId(config.mic_device_id ?? null);
@@ -372,10 +416,18 @@ export default function MockSession() {
 
     const overlay = useOverlayStore.getState();
     overlay.resetSessionState();
-    overlay.setStealthMode(!!config.stealth_mode);
+    // Parakeet-style: always fully visible during mock — no discrete/stealth dimming.
+    overlay.setStealthMode(false);
     overlay.setProctorSafe(false);
     overlay.setActiveModel(config.model);
     overlay.setHintStyle(config.hint_style);
+    overlay.setAutoGenerate(false);
+    overlay.setNetworkColor("green");
+    useUIStore.getState().setStealthMode(false);
+    useAudioStore.getState().setStreamError(null);
+    useNetworkStore.getState().deactivateOfflineFallback();
+    useNetworkStore.getState().setMode("strong");
+    void networkMonitor.forceProbe();
 
     const userId = profile?.id;
     if (!userId) {
@@ -385,23 +437,31 @@ export default function MockSession() {
       return;
     }
 
-    let dbSessionId: string | null = null;
+    let dbSessionId: string | null = existingSessionId ?? null;
     try {
-      const { session, reused } = await getOrCreateSession({
-        user_id: userId,
-        type: "mock",
-        title: config.company ? `Mock — ${config.company}` : "Mock interview",
-        document_id: config.resume_id ?? null,
-        jd_id: config.jd_id ?? null,
-        model_used: toDbModel(config.model) as Parameters<typeof sessionsDB.update>[1]["model_used"],
-      });
-      dbSessionId = session.id;
-      if (reused) toast.message("Resuming your in-progress session");
-      await activateSession(session.id);
+      if (dbSessionId) {
+        await activateSession(dbSessionId);
+      } else {
+        const { session, reused } = await getOrCreateSession({
+          user_id: userId,
+          type: "mock",
+          title: config.company ? `Mock — ${config.company}` : "Mock interview",
+          document_id: config.resume_id ?? null,
+          jd_id: config.jd_id ?? null,
+          model_used: toDbModel(config.model) as Parameters<typeof sessionsDB.update>[1]["model_used"],
+        });
+        dbSessionId = session.id;
+        if (reused) toast.message("Resuming your in-progress session");
+        await activateSession(session.id);
+      }
+
+      const mockConfig = config as MockConfig;
+      const { interviewType, questionCount } = resolveMockConfigFields(mockConfig);
 
       await orchestrator.createSession({
         session_type: "mock",
-        interview_type: config.interview_type,
+        interview_type: interviewType,
+        question_count: questionCount,
         hint_style: config.hint_style,
         model: config.model,
         resume_id: config.resume_id,
@@ -409,7 +469,8 @@ export default function MockSession() {
         session_id: dbSessionId,
       });
 
-      await loadQuestions(dbSessionId, config, userId);
+      setSetupStep("questions");
+      await loadQuestions(dbSessionId, mockConfig);
     } catch (err) {
       console.error("[MockSession] setup failed:", err);
       const message = err instanceof Error ? err.message : "Failed to start mock session";
@@ -429,6 +490,7 @@ export default function MockSession() {
     }
 
     try {
+      setSetupStep("audio");
       await audio.start();
       setSessionTimeLeft(SESSION_DURATION);
       setSessionElapsed(0);
@@ -437,21 +499,34 @@ export default function MockSession() {
       overlay.showOverlay();
     } catch (err) {
       console.error("[MockSession] audio start failed:", err);
-      toast.error(err instanceof Error ? err.message : "Microphone failed to start");
-      setPhase("configuring");
-      setQuestionsError("Audio capture failed — check permissions and retry.");
+      // micOptional allows text-only mock — still enter active session.
+      toast.warning("Mic unavailable — continuing with overlay chat and hints.");
+      useAudioStore.getState().setStreamError(null);
+      setSessionTimeLeft(SESSION_DURATION);
+      setSessionElapsed(0);
+      setIsPaused(false);
+      setPhase("active");
+      overlay.showOverlay();
     } finally {
       isStartingRef.current = false;
     }
   }
 
   useEffect(() => {
-    const configFromRoute = (location.state as { config?: LiveSessionConfig } | null)?.config;
+    const routeState = location.state as {
+      config?: LiveSessionConfig;
+      sessionId?: string;
+    } | null;
+    const configFromRoute = routeState?.config;
+    const sessionIdFromRoute = routeState?.sessionId;
+
     if (!configFromRoute || autoStartedRef.current || phase !== "idle") return;
+    if (!profile?.id) return;
+
     autoStartedRef.current = true;
-    void handleSetup(configFromRoute);
+    void handleSetup(configFromRoute, sessionIdFromRoute);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.state, phase]);
+  }, [location.state, phase, profile?.id]);
 
   async function finalizeSession(skipCapture = false) {
     if (endCalledRef.current) return;
@@ -580,6 +655,7 @@ export default function MockSession() {
   }
 
   async function handleEndSession() {
+    if (isOverlayGhostClickSuppressed()) return;
     await finalizeSession();
   }
 
@@ -600,14 +676,25 @@ export default function MockSession() {
   }
 
   if (phase === "configuring") {
+    const setupLabel =
+      setupStep === "session"
+        ? "Preparing session…"
+        : setupStep === "questions"
+          ? usedLocalQuestions
+            ? "Loading practice questions…"
+            : "Generating questions…"
+          : "Starting microphone…";
+
     return (
       <div className="flex items-center justify-center min-h-screen px-4">
         <div className="w-full max-w-md space-y-4">
           <div className="text-center space-y-2">
             <RefreshCw className="h-8 w-8 animate-spin text-primary mx-auto" />
-            <p className="text-sm font-medium text-foreground">Generating questions…</p>
+            <p className="text-sm font-medium text-foreground">{setupLabel}</p>
             <p className="text-xs text-muted-foreground">
-              Preparing your mock interview session
+              {setupStep === "audio"
+                ? "Allow microphone access when prompted"
+                : "Preparing your mock interview session"}
             </p>
           </div>
           <Skeleton className="h-4 w-full" />
@@ -617,15 +704,21 @@ export default function MockSession() {
             <InlineErrorRetry
               message={questionsError}
               onRetry={() => {
-                const cfg = sessionConfigRef.current;
-                const uid = profile?.id;
+                const cfg = sessionConfigRef.current as MockConfig | null;
                 const sid = useSessionStore.getState().session_id;
-                if (!cfg || !uid || !sid) {
+                if (!cfg || !sid) {
                   setPhase("idle");
+                  autoStartedRef.current = false;
                   return;
                 }
-                void loadQuestions(sid, cfg, uid)
-                  .then(() => audio.start())
+                setQuestionsError(null);
+                isStartingRef.current = true;
+                setSetupStep("questions");
+                void loadQuestions(sid, cfg, { forceLocal: true })
+                  .then(() => {
+                    setSetupStep("audio");
+                    return audio.start();
+                  })
                   .then(() => {
                     setPhase("active");
                     useOverlayStore.getState().showOverlay();
@@ -634,6 +727,9 @@ export default function MockSession() {
                     setQuestionsError(
                       err instanceof Error ? err.message : "Retry failed",
                     );
+                  })
+                  .finally(() => {
+                    isStartingRef.current = false;
                   });
               }}
             />

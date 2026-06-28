@@ -6,7 +6,6 @@ import {
   Mic,
   Keyboard,
   Sparkles,
-  ExternalLink,
 } from "lucide-react";
 import {
   Dialog,
@@ -21,11 +20,8 @@ import { useAuthStore } from "@/store/authStore";
 import { useUIStore } from "@/store/uiStore";
 import { usePwaInstallPrompt } from "@/hooks/usePwaInstallPrompt";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
-import {
-  getDesktopDownloadHref,
-  isDesktopDownloadExternal,
-  DESKTOP_INSTALL_GUIDE_PATH,
-} from "@/lib/constants/desktopDownload";
+import { DESKTOP_INSTALL_GUIDE_PATH } from "@/lib/constants/desktopDownload";
+import { DesktopDownloadButton } from "@/components/common/DesktopDownloadButton";
 import {
   dismissInstallPrompt,
   hasDismissedInstallPrompt,
@@ -33,12 +29,10 @@ import {
   snoozeInstallPrompt,
 } from "@/lib/onboarding/installPromptStorage";
 import { hasCompletedAppWalkthrough } from "@/lib/onboarding/appWalkthroughStorage";
-import { detectOs, osInstallLabel } from "@/lib/platform/detectOs";
 import { toast } from "sonner";
+import { isElectronApp } from "@/lib/platform/isElectron";
 
-const IS_ELECTRON = Boolean(
-  (window as Window & { electronAPI?: { isElectron?: boolean } }).electronAPI?.isElectron,
-);
+const IS_ELECTRON = isElectronApp();
 
 const INSTALL_STEPS = [
   {
@@ -58,6 +52,13 @@ const INSTALL_STEPS = [
   },
 ];
 
+function isStandalonePwa(): boolean {
+  return (
+    window.matchMedia("(display-mode: standalone)").matches ||
+    (window.navigator as Navigator & { standalone?: boolean }).standalone === true
+  );
+}
+
 export function InstallPromptModal(): JSX.Element | null {
   const navigate = useNavigate();
   const userId = useAuthStore((s) => s.user?.id);
@@ -68,10 +69,6 @@ export function InstallPromptModal(): JSX.Element | null {
   const { canInstall, promptInstall } = usePwaInstallPrompt();
   const [open, setOpen] = useState(false);
   const [installing, setInstalling] = useState(false);
-
-  const os = detectOs();
-  const osLabel = osInstallLabel(os);
-  const hasExternalDownload = isDesktopDownloadExternal();
 
   const close = useCallback(() => setOpen(false), []);
 
@@ -86,7 +83,7 @@ export function InstallPromptModal(): JSX.Element | null {
   }, [userId, close]);
 
   useEffect(() => {
-    if (IS_ELECTRON) return;
+    if (IS_ELECTRON || isStandalonePwa()) return;
     if (!userId || !isProfileLoaded || !onboardingCompleted) return;
     if (hasDismissedInstallPrompt(userId)) return;
     if (isInstallPromptSnoozed(userId)) return;
@@ -110,26 +107,16 @@ export function InstallPromptModal(): JSX.Element | null {
         return;
       }
 
-      if (hasExternalDownload) {
-        window.open(getDesktopDownloadHref(), "_blank", "noopener,noreferrer");
-        dismissPermanent();
-        return;
-      }
-
-      dismissPermanent();
+      snooze();
       navigate(DESKTOP_INSTALL_GUIDE_PATH);
     } finally {
       setInstalling(false);
     }
   }
 
-  if (IS_ELECTRON || !userId) return null;
+  if (IS_ELECTRON || !userId || isStandalonePwa()) return null;
 
-  const installButtonLabel = canInstall
-    ? "Install app"
-    : hasExternalDownload
-      ? `Download for ${osLabel}`
-      : "View install guide";
+  const installButtonLabel = canInstall ? "Install to home screen" : "View install guide";
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && snooze()}>
@@ -154,8 +141,8 @@ export function InstallPromptModal(): JSX.Element | null {
           <div className="flex gap-2 rounded-lg border border-indigo-500/25 bg-indigo-500/8 px-3 py-2.5 text-xs text-indigo-100/90 leading-relaxed">
             <Sparkles className="w-4 h-4 shrink-0 mt-0.5 text-indigo-300" aria-hidden />
             <p>
-              The web app works in your browser, but the <strong className="text-indigo-100">desktop installer</strong>{" "}
-              unlocks system-wide hotkeys, a floating overlay, and smoother audio capture.
+              The web app supports <strong className="text-indigo-100">Mock Interview</strong> and Prep Lab in your browser.
+              The <strong className="text-indigo-100">desktop installer</strong> unlocks Practice Coach with system-wide hotkeys and a floating overlay.
             </p>
           </div>
 
@@ -181,10 +168,14 @@ export function InstallPromptModal(): JSX.Element | null {
             })}
           </ol>
 
-          {!hasExternalDownload && !canInstall && (
+          {!canInstall && (
+            <DesktopDownloadButton size="sm" showGuideLink={false} />
+          )}
+
+          {!canInstall && (
             <p className="text-[11px] text-muted-foreground leading-relaxed">
               On Chrome or Edge you may also use the browser menu → <strong>Install app</strong> after visiting
-              this site. Full step-by-step instructions are in the install guide.
+              this site.
             </p>
           )}
         </div>
@@ -199,23 +190,44 @@ export function InstallPromptModal(): JSX.Element | null {
           >
             Remind me later
           </Button>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              snooze();
+              navigate("/app/mock");
+            }}
+          >
+            Continue in browser
+          </Button>
           <Button type="button" variant="outline" size="sm" onClick={dismissPermanent}>
             Don&apos;t show again
           </Button>
-          <Button
-            type="button"
-            size="sm"
-            className="bg-primary hover:bg-primary/90"
-            disabled={installing}
-            onClick={() => void handleInstall()}
-          >
-            {hasExternalDownload && !canInstall ? (
-              <ExternalLink className="w-4 h-4 mr-1.5" />
-            ) : (
-              <Download className="w-4 h-4 mr-1.5" />
-            )}
-            {installing ? "Opening…" : installButtonLabel}
-          </Button>
+          {canInstall ? (
+            <Button
+              type="button"
+              size="sm"
+              className="bg-primary hover:bg-primary/90"
+              disabled={installing}
+              onClick={() => void handleInstall()}
+              leftIcon={<Download className="w-4 h-4" />}
+            >
+              {installing ? "Opening…" : installButtonLabel}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => {
+                snooze();
+                navigate(DESKTOP_INSTALL_GUIDE_PATH);
+              }}
+            >
+              Install guide
+            </Button>
+          )}
         </DialogFooter>
 
         <p className="px-6 pb-4 text-[10px] text-center text-muted-foreground">

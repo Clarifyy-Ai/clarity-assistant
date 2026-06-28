@@ -1,14 +1,14 @@
 import { useNavigate } from "react-router-dom";
 import { Zap } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
-import { useAuthStore } from "@/store/authStore";
+
+export { useCreditExhaustedState } from "./useCreditState";
 
 interface CreditExhaustedStateProps {
   className?: string;
   compact?: boolean;
 }
 
-/** Full-page or inline empty state when the user has zero credits. */
 export function CreditExhaustedState({ className, compact }: CreditExhaustedStateProps) {
   const navigate = useNavigate();
 
@@ -25,10 +25,4 @@ export function CreditExhaustedState({ className, compact }: CreditExhaustedStat
       compact={compact}
     />
   );
-}
-
-export function useCreditExhaustedState(): { isExhausted: boolean; balance: number } {
-  const profile = useAuthStore((s) => s.profile);
-  const balance = profile?.credits ?? 0;
-  return { isExhausted: balance <= 0, balance };
 }

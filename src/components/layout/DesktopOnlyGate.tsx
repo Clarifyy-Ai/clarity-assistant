@@ -1,13 +1,10 @@
 import { Link } from "react-router-dom";
-import { Monitor, Download, Mic, Keyboard, ArrowRight, ExternalLink } from "lucide-react";
+import { Monitor, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/Button";
 import { Card, CardContent } from "@/components/ui/Card";
+import { DesktopDownloadButton } from "@/components/common/DesktopDownloadButton";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
-import {
-  DESKTOP_INSTALL_GUIDE_PATH,
-  getDesktopDownloadHref,
-  isDesktopDownloadExternal,
-} from "@/lib/constants/desktopDownload";
+import { DESKTOP_INSTALL_GUIDE_PATH } from "@/lib/constants/desktopDownload";
 
 interface DesktopOnlyGateProps {
   featureName?: string;
@@ -15,18 +12,15 @@ interface DesktopOnlyGateProps {
 }
 
 const DESKTOP_BENEFITS = [
-  { icon: Mic, text: "System-wide microphone and optional tab audio capture" },
-  { icon: Keyboard, text: "Global hotkeys — toggle overlay and generate answers" },
-  { icon: Monitor, text: "Floating always-on-top Practice Coach window" },
+  { icon: Monitor, text: "System-wide microphone and optional tab audio capture" },
+  { text: "Global hotkeys — toggle overlay and generate answers" },
+  { text: "Floating always-on-top Practice Coach window" },
 ];
 
 export function DesktopOnlyGate({
   featureName = PRODUCT_NAMES.practiceCoach,
   description = "Live AI coaching with the floating overlay and global hotkeys is available in the Clarify AI desktop app only. The web app still supports mock interviews, prep lab, and gov exam practice.",
 }: DesktopOnlyGateProps) {
-  const externalDownload = isDesktopDownloadExternal();
-  const downloadHref = getDesktopDownloadHref();
-
   return (
     <div className="max-w-2xl mx-auto py-8 px-4 space-y-6">
       <div className="text-center space-y-3">
@@ -43,36 +37,30 @@ export function DesktopOnlyGate({
             Why desktop?
           </p>
           <ul className="space-y-3">
-            {DESKTOP_BENEFITS.map(({ icon: Icon, text }) => (
+            {DESKTOP_BENEFITS.map(({ text }, i) => (
               <li key={text} className="flex items-start gap-3 text-sm text-foreground">
-                <Icon className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                {i === 0 ? (
+                  <Monitor className="w-4 h-4 text-primary shrink-0 mt-0.5" />
+                ) : (
+                  <span className="w-4 h-4 shrink-0 mt-0.5 text-primary text-center">•</span>
+                )}
                 <span>{text}</span>
               </li>
             ))}
           </ul>
+          <DesktopDownloadButton fullWidth />
         </CardContent>
       </Card>
 
       <div className="flex flex-col sm:flex-row gap-3 justify-center">
-        {externalDownload ? (
-          <a href={downloadHref} target="_blank" rel="noopener noreferrer">
-            <Button className="w-full sm:w-auto">
-              <Download className="w-4 h-4 mr-2" />
-              Download desktop app
-              <ExternalLink className="w-3.5 h-3.5 ml-1.5 opacity-70" />
-            </Button>
-          </a>
-        ) : (
-          <Link to={DESKTOP_INSTALL_GUIDE_PATH}>
-            <Button className="w-full sm:w-auto">
-              <Download className="w-4 h-4 mr-2" />
-              Install guide
-            </Button>
-          </Link>
-        )}
         <Link to="/app/dashboard">
           <Button variant="outline" className="w-full sm:w-auto">
             Back to dashboard
+          </Button>
+        </Link>
+        <Link to={DESKTOP_INSTALL_GUIDE_PATH}>
+          <Button variant="ghost" className="w-full sm:w-auto">
+            Install guide
           </Button>
         </Link>
       </div>

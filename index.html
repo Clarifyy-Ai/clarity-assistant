@@ -25,6 +25,7 @@
         img-src 'self' data: blob: https:;
         font-src 'self' data:;
         connect-src 'self'
+          https://api.github.com
           https://*.supabase.co
           wss://*.supabase.co
           https://api.openai.com
@@ -41,7 +42,6 @@
         worker-src 'self' blob:;
         manifest-src 'self';
         form-action 'self';
-        upgrade-insecure-requests;
       "
     />
 
@@ -64,15 +64,15 @@
     <link rel="canonical" href="https://clarify.ai.sltfinanceindia.com/" />
 
     <!-- PWA manifest -->
-    <link rel="manifest" href="/manifest.json" />
+    <link rel="manifest" href="./manifest.json" />
 
     <!-- Theme color for mobile browsers -->
     <meta name="theme-color" content="#09090b" />
 
     <!-- Icons -->
-    <link rel="icon" type="image/png" href="/favicon.png" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon" href="/icon.png" />
+    <link rel="icon" type="image/png" href="./favicon.png" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+    <link rel="apple-touch-icon" href="./icon.png" />
 
     <!-- Open Graph -->
     <meta property="og:title" content="Clarify AI — AI-Powered Interview Preparation" />
@@ -118,6 +118,7 @@
         ]
       }
     </script>
+    <script type="module" src="/src/main.tsx"></script>
   </head>
 
   <body>
@@ -131,6 +132,10 @@
     <script>
       (function () {
         try {
+          if (/Electron/i.test(navigator.userAgent)) {
+            document.documentElement.dataset.electron = "true";
+          }
+
           var stored = localStorage.getItem("confideq-ui");
           var isDark = false;
 
@@ -151,8 +156,46 @@
       })();
     </script>
 
-    <!-- React app root -->
-    <div id="root"></div>
+    <!-- React app root — boot splash shows instantly before JS bundle loads -->
+    <div id="root">
+      <div
+        id="boot-splash"
+        role="status"
+        aria-live="polite"
+        aria-busy="true"
+        style="
+          min-height: 100vh;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          gap: 16px;
+          background: #0f172a;
+          color: #e2e8f0;
+          font-family: system-ui, -apple-system, Segoe UI, sans-serif;
+        "
+      >
+        <div
+          style="
+            width: 40px;
+            height: 40px;
+            border: 3px solid rgba(148, 163, 184, 0.25);
+            border-top-color: #8b5cf6;
+            border-radius: 9999px;
+            animation: clarify-boot-spin 0.8s linear infinite;
+          "
+        ></div>
+        <p style="margin: 0; font-size: 14px; font-weight: 600;">Loading Clarify AI…</p>
+        <p style="margin: 0; font-size: 12px; opacity: 0.65;">Preparing your workspace</p>
+      </div>
+    </div>
+    <style>
+      @keyframes clarify-boot-spin {
+        to {
+          transform: rotate(360deg);
+        }
+      }
+    </style>
 
     <!--
       Overlay portal root:
@@ -180,6 +223,6 @@
       style="position:fixed;inset:0;pointer-events:none;z-index:1100;isolation:isolate;"
     ></div>
 
-    <script type="module" src="/src/main.tsx"></script>
+
   </body>
 </html>

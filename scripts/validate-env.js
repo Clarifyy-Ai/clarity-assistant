@@ -200,6 +200,36 @@ function checkRequiredVars(env) {
   }
 }
 
+function decodeJwtPayload(token) {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return null;
+    const json = Buffer.from(parts[1], "base64url").toString("utf8");
+    return JSON.parse(json);
+  } catch {
+    return null;
+  }
+}
+
+function checkSupabaseJwtKey(keyName, value) {
+  if (isMissing(value) || !value.startsWith("eyJ")) {
+    return;
+  }
+
+  const payload = decodeJwtPayload(value);
+  if (!payload) {
+    warnings.push(`${keyName} is not a valid JWT. Copy the anon key from Supabase Dashboard → API.`);
+    return;
+  }
+
+  if (payload.iss !== "supabase") {
+    errors.push(
+      `${keyName} is corrupted (JWT iss="${payload.iss}" — expected "supabase"). ` +
+        "Re-copy the anon key from Supabase Dashboard → Project Settings → API.",
+    );
+  }
+}
+
 function checkSupabaseConfig(env) {
   const supabaseUrl = env.VITE_SUPABASE_URL;
 
@@ -219,6 +249,9 @@ function checkSupabaseConfig(env) {
   if (!isMissing(publishableKey) && publishableKey.length < 40) {
     warnings.push("VITE_SUPABASE_PUBLISHABLE_KEY looks unusually short. Verify it is correct.");
   }
+
+  checkSupabaseJwtKey("VITE_SUPABASE_ANON_KEY", anonKey);
+  checkSupabaseJwtKey("VITE_SUPABASE_PUBLISHABLE_KEY", publishableKey);
 }
 
 function checkAppConfig(env) {
@@ -252,6 +285,16 @@ function checkAppConfig(env) {
 
     if (env.VITE_ENABLE_DEBUG_PANEL === "true") {
       errors.push("VITE_ENABLE_DEBUG_PANEL must not be true in production.");
+    }
+
+    const hasDesktopUrl =
+      env.VITE_DESKTOP_DOWNLOAD_URL_WIN ||
+      env.VITE_DESKTOP_DOWNLOAD_URL ||
+      env.VITE_GITHUB_RELEASE_REPO;
+    if (!hasDesktopUrl) {
+      warnings.push(
+        "No desktop installer URL configured. Set VITE_DESKTOP_DOWNLOAD_URL_WIN or publish to GitHub Releases.",
+      );
     }
   }
 }

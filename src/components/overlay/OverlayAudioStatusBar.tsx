@@ -83,12 +83,12 @@ export const OverlayAudioStatusBar = memo(function OverlayAudioStatusBar() {
             ? "text-emerald-300/90 bg-emerald-500/10 border-emerald-500/25"
             : dgPending
               ? "text-amber-300/80 bg-amber-500/10 border-amber-500/20"
-              : "text-red-300/80 bg-red-500/10 border-red-500/20",
+              : "text-sky-300/80 bg-sky-500/10 border-sky-500/20",
         )}
         title={`Transcription: ${deepgramStatus}`}
       >
         {dgOk ? <Wifi className="w-2.5 h-2.5" /> : <WifiOff className="w-2.5 h-2.5" />}
-        {dgPending ? "Connecting…" : dgOk ? "Live" : "Offline"}
+        {dgPending ? "Connecting…" : dgOk ? "Live" : "Text mode"}
       </span>
 
       {streamError?.message && (

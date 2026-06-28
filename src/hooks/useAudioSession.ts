@@ -31,6 +31,8 @@ interface UseAudioSessionOptions {
   micDeviceId?: string | null;
   noiseSuppression?: boolean;
   autoGainControl?: boolean;
+  /** When true, mic/transcription failures do not block mock practice. */
+  micOptional?: boolean;
   onQuestionDetected: (question: string) => void;
   onFillerDetected: (count: number) => void;
   onWPMUpdate: (wpm: number) => void;
@@ -241,20 +243,36 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       wpmTracker.start();
 
       // 7) dual Deepgram — mic = candidate, system = interviewer
-      deepgramMicRef.current = await connectDeepgram(
-        micStream,
-        "candidate",
-        (text) => {
-          store.updateInterimText(text);
-          fillerRTRef.current?.check(text);
-        },
-      );
-
-      if (sysStream) {
-        deepgramSystemRef.current = await connectDeepgram(
-          sysStream,
-          "interviewer",
+      try {
+        deepgramMicRef.current = await connectDeepgram(
+          micStream,
+          "candidate",
+          (text) => {
+            store.updateInterimText(text);
+            fillerRTRef.current?.check(text);
+          },
         );
+
+        if (sysStream) {
+          deepgramSystemRef.current = await connectDeepgram(
+            sysStream,
+            "interviewer",
+          );
+        }
+
+        store.setDeepgramStatus("connected");
+      } catch (dgErr) {
+        console.warn("[useAudioSession] Deepgram unavailable — mic-only mode:", dgErr);
+        store.setDeepgramStatus("disconnected");
+        if (!opts.micOptional) {
+          store.setStreamError({
+            code: "UNKNOWN",
+            message: "Live transcription unavailable",
+            recoverable: true,
+            suggestion:
+              "You can still practice — answers won't be transcribed until transcription reconnects.",
+          });
+        }
       }
 
       // 8) watch mic end
@@ -270,15 +288,24 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     } catch (err) {
       isStartedRef.current = false;
       const message = err instanceof Error ? err.message : "Audio start failed";
+
+      if (opts.micOptional) {
+        store.setStreamError(null);
+        store.setDeepgramStatus("disconnected");
+        store.setIsCapturing(false);
+        toast.message("Mic unavailable — continue with text chat and AI hints.");
+        return;
+      }
+
       store.setStreamError({
         code: "UNKNOWN",
         message,
         recoverable: true,
-        suggestion: "Refresh the page and try again.",
+        suggestion: "Allow microphone access in browser settings, then retry.",
       });
       store.setDeepgramStatus("error");
     }
-  }, [opts.micDeviceId, opts.noiseSuppression, opts.autoGainControl, opts.enableSystemAudio, opts.onQuestionDetected, opts.onFillerDetected, opts.onWPMUpdate, handleUtterance, connectDeepgram]);
+  }, [opts.micDeviceId, opts.noiseSuppression, opts.autoGainControl, opts.enableSystemAudio, opts.micOptional, opts.onQuestionDetected, opts.onFillerDetected, opts.onWPMUpdate, handleUtterance, connectDeepgram]);
 
   // ── Stop pipeline ─────────────────────────────────────────────
   const stop = useCallback(() => {

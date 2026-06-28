@@ -45,6 +45,10 @@ import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
 import { Toaster } from "@/components/ui/sonner";
 import { CookieConsent } from "@/components/common/CookieConsent";
 import { TabAudioGuideHost } from "@/components/audio/TabAudioGuideHost";
+import { isElectronApp } from "@/lib/platform/isElectron";
+import LoginPage from "@/pages/auth/Login";
+import DashboardPage from "@/pages/app/Dashboard";
+import { ElectronRouteGate } from "@/components/layout/ElectronRouteGate";
 
 // ✅ FIX P0-A: Marketing routes load eagerly (no lazy chunk on first paint).
 import Landing from "@/pages/marketing/Landing";
@@ -83,14 +87,14 @@ type ElectronWindow = Window & {
 };
 
 const electronWindow = window as ElectronWindow;
-const IS_ELECTRON = Boolean(electronWindow.electronAPI?.isElectron);
+const IS_ELECTRON = isElectronApp();
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Lazy page imports
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Auth
-const Login = lazy(() => import("@/pages/auth/Login"));
+const Login = IS_ELECTRON ? LoginPage : lazy(() => import("@/pages/auth/Login"));
 const Signup = lazy(() => import("@/pages/auth/Signup"));
 const VerifyEmail = lazy(() => import("@/pages/auth/VerifyEmail"));
 const ResetPassword = lazy(() => import("@/pages/auth/ResetPassword"));
@@ -102,7 +106,7 @@ const OnboardingIndex = lazy(
 );
 
 // App — top-level
-const Dashboard = lazy(() => import("@/pages/app/Dashboard"));
+const Dashboard = IS_ELECTRON ? DashboardPage : lazy(() => import("@/pages/app/Dashboard"));
 const Analytics = lazy(() => import("@/pages/app/Analytics"));
 const UsageDashboard = lazy(
   () => import("@/pages/app/usage/UsageDashboard")
@@ -304,23 +308,13 @@ const SharedDebrief = lazy(() => import("@/pages/marketing/SharedDebrief"));
 
 function PageLoader(): JSX.Element {
   return (
-    <div className="flex h-full w-full items-center justify-center py-20">
+    <div className="flex min-h-screen w-full items-center justify-center bg-background py-20">
       <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
     </div>
   );
 }
 
 function Page({ component: Component }: { component: ComponentType }): JSX.Element {
-  const location = useLocation();
-  const isShellRoute =
-    location.pathname.startsWith("/app") ||
-    location.pathname.startsWith("/onboarding");
-
-  // App shell routes suspend once at the AppShell <Outlet /> boundary.
-  if (isShellRoute) {
-    return <Component />;
-  }
-
   return (
     <Suspense fallback={<PageLoader />}>
       <Component />
@@ -388,10 +382,23 @@ function AppShell(): JSX.Element {
     };
   }, []);
 
-  if (hideChromeForLiveSession) {
+  if (IS_ELECTRON || hideChromeForLiveSession) {
     return (
-      <div className="flex h-[100vh] w-full overflow-hidden bg-background">
-        <main id="main-content" className="flex-1 overflow-y-auto">
+      <div
+        className={cn(
+          "flex h-[100vh] w-full overflow-hidden",
+          IS_ELECTRON ? "electron-shell bg-background" : "bg-background",
+        )}
+      >
+        {IS_ELECTRON && (
+          <div
+            style={{ WebkitAppRegion: "drag" } as CSSProperties}
+            className="fixed top-0 left-0 right-0 h-8 z-[9999] pointer-events-none"
+          />
+        )}
+        <SessionTimeoutBanner />
+        <NetworkBanner />
+        <main id="main-content" className="flex-1 overflow-y-auto min-w-0">
           <Suspense fallback={<AppLoadingFallback />}>
             <Outlet />
           </Suspense>
@@ -484,6 +491,9 @@ console.warn = (...args: unknown[]) => {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const routes = [
+  {
+    element: <ElectronRouteGate />,
+    children: [
   // Marketing
   { path: "/", element: <MarketingPage component={Landing} /> },
   { path: "/pricing", element: <MarketingPage component={Pricing} /> },
@@ -751,6 +761,8 @@ const routes = [
 
 
   { path: "*", element: <Page component={NotFound} /> },
+    ],
+  },
 ];
 
 const router = IS_ELECTRON

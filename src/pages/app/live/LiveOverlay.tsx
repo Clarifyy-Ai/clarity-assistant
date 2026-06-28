@@ -23,6 +23,7 @@ import { setGenerateAnswerHandler } from "@/lib/overlay/hotkeys";
 import { useHotkeys } from "@/hooks/useHotkeys";
 import { DesktopOnlyGate } from "@/components/layout/DesktopOnlyGate";
 import { isElectronApp } from "@/lib/platform/isElectron";
+import { openInBrowser } from "@/lib/platform/openInBrowser";
 import {
   initDesktopOverlayWindow,
   teardownDesktopOverlayWindow,
@@ -48,10 +49,9 @@ const DEFAULT_CONFIG: LiveSessionConfig = {
   enable_system_audio: true,
 };
 
+const IS_ELECTRON = isElectronApp();
+
 export default function LiveOverlay() {
-  if (!isElectronApp()) {
-    return <DesktopOnlyGate featureName="Practice Coach overlay" />;
-  }
   return <LiveOverlaySession />;
 }
 
@@ -202,19 +202,32 @@ function LiveOverlaySession() {
         <header className="sticky top-0 z-[300] flex items-center gap-3 border-b border-border bg-background/95 px-4 py-3 backdrop-blur">
           <button
             type="button"
-            onClick={() => navigate("/app/dashboard")}
+            onClick={() => {
+              if (IS_ELECTRON) openInBrowser("/app/dashboard");
+              else navigate("/app/dashboard");
+            }}
             className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            Dashboard
+            {IS_ELECTRON ? "Open web app" : "Dashboard"}
           </button>
           <span className="text-sm font-semibold text-foreground">Overlay practice mode</span>
-          <Link
-            to="/app/guide/practice-coach"
-            className="ml-auto text-[10px] font-medium text-primary hover:underline"
-          >
-            Install guide
-          </Link>
+          {IS_ELECTRON ? (
+            <button
+              type="button"
+              onClick={() => openInBrowser("/app/guide/practice-coach")}
+              className="ml-auto text-[10px] font-medium text-primary hover:underline"
+            >
+              Install guide
+            </button>
+          ) : (
+            <Link
+              to="/app/guide/practice-coach"
+              className="ml-auto text-[10px] font-medium text-primary hover:underline"
+            >
+              Install guide
+            </Link>
+          )}
         </header>
         <PreSessionSetupWizard onStart={handleSetup} sessionType="live" />
       </div>
@@ -249,16 +262,20 @@ function LiveOverlaySession() {
         <button
           type="button"
           onClick={() => {
+            const goBack = () => {
+              if (IS_ELECTRON) openInBrowser("/app/dashboard");
+              else navigate("/app/dashboard");
+            };
             if (isActive || isPaused) {
-              void handleStop().then(() => navigate("/app/dashboard"));
+              void handleStop().then(goBack);
             } else {
-              navigate("/app/dashboard");
+              goBack();
             }
           }}
           className="inline-flex items-center gap-1.5 text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          Dashboard
+          {IS_ELECTRON ? "Open web app" : "Dashboard"}
         </button>
         <span className="text-xs text-muted-foreground truncate">
           {isActive ? "Session active" : "Session ended"}

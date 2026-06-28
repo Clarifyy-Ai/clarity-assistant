@@ -115,16 +115,21 @@ export class NetworkMonitor {
       const error = err as Error;
 
       if (error.name === "AbortError") {
-        // Timed out — severely degraded but not fully offline
-        networkStore.recordRTT(FAST_PROBE_TIMEOUT + 1);
+        // Timed out — slow but still online
+        networkStore.recordRTT(3_000);
         useOverlayStore.getState().setNetworkColor(
           networkStore.getOverlayColor()
         );
       } else if (error.name === "TypeError") {
-        // FIX 5: TypeError = actual network failure (offline or DNS failure).
-        // Previously this was not distinguished from AbortError, causing
-        // "degraded" status when the user was actually fully offline.
-        this.handleOffline();
+        // Embedded browsers / strict CSP may block favicon probe — treat as slow, not offline.
+        if (typeof navigator !== "undefined" && !navigator.onLine) {
+          this.handleOffline();
+        } else {
+          networkStore.recordRTT(2_500);
+          useOverlayStore.getState().setNetworkColor(
+            networkStore.getOverlayColor()
+          );
+        }
       } else {
         // Unknown error — treat as degraded, not offline
         networkStore.recordRTT(FAST_PROBE_TIMEOUT - 1);

@@ -20,7 +20,9 @@ export function OverlayNetworkBadge({ color, rttMs, label }: OverlayNetworkBadge
       ? `${Math.round(rttMs)}ms`
       : color === "red"
         ? "Offline"
-        : null;
+        : color === "yellow"
+          ? "Slow"
+          : null;
 
   return (
     <span

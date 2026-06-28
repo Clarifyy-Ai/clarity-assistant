@@ -23,28 +23,53 @@ function writeFile(data) {
   }
 }
 
-function clampToDisplay(bounds) {
-  const display = screen.getDisplayMatching(bounds) || screen.getPrimaryDisplay();
+function normalizeBounds(bounds, defaultWidth, defaultHeight) {
+  const display = screen.getPrimaryDisplay();
   const wa = display.workArea;
-  const width = Math.min(Math.max(bounds.width, 800), wa.width);
-  const height = Math.min(Math.max(bounds.height, 600), wa.height);
-  let x = bounds.x;
-  let y = bounds.y;
-  if (typeof x !== "number" || x < wa.x || x + width > wa.x + wa.width) {
+
+  const width = Number.isFinite(bounds?.width) ? bounds.width : defaultWidth;
+  const height = Number.isFinite(bounds?.height) ? bounds.height : defaultHeight;
+  const safeWidth = Math.min(Math.max(width, 800), wa.width);
+  const safeHeight = Math.min(Math.max(height, 600), wa.height);
+
+  let x = bounds?.x;
+  let y = bounds?.y;
+  if (!Number.isFinite(x) || !Number.isFinite(y)) {
+    x = wa.x + Math.round((wa.width - safeWidth) / 2);
+    y = wa.y + Math.round((wa.height - safeHeight) / 2);
+  }
+
+  return { x, y, width: safeWidth, height: safeHeight };
+}
+
+function clampToDisplay(bounds, defaultWidth, defaultHeight) {
+  const normalized = normalizeBounds(bounds, defaultWidth, defaultHeight);
+  const display =
+    screen.getDisplayMatching(normalized) || screen.getPrimaryDisplay();
+  const wa = display.workArea;
+
+  const width = Math.min(Math.max(normalized.width, 800), wa.width);
+  const height = Math.min(Math.max(normalized.height, 600), wa.height);
+  let x = normalized.x;
+  let y = normalized.y;
+
+  if (x < wa.x || x + width > wa.x + wa.width) {
     x = wa.x + Math.round((wa.width - width) / 2);
   }
-  if (typeof y !== "number" || y < wa.y || y + height > wa.y + wa.height) {
+  if (y < wa.y || y + height > wa.y + wa.height) {
     y = wa.y + Math.round((wa.height - height) / 2);
   }
+
   return { x, y, width, height };
 }
 
 function loadWindowState({ defaultWidth, defaultHeight }) {
   const saved = readFile();
-  const base = saved && saved.bounds
-    ? saved.bounds
-    : { width: defaultWidth, height: defaultHeight };
-  const bounds = clampToDisplay(base);
+  const base =
+    saved && saved.bounds
+      ? saved.bounds
+      : { width: defaultWidth, height: defaultHeight };
+  const bounds = clampToDisplay(base, defaultWidth, defaultHeight);
   return { ...bounds, isMaximized: !!(saved && saved.isMaximized) };
 }
 

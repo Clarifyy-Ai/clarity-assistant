@@ -11,7 +11,9 @@ import { useAuthStore } from "@/store/userStore";
 import { profilesDB } from "@/lib/supabase/database";
 import { useDocumentPiP } from "@/lib/overlay/useDocumentPiP";
 import { getOverlayPortalZIndex, type OverlayStackContext } from "@/lib/overlay/zIndexManager";
+import { installOverlayGhostClickGuard } from "@/lib/overlay/ghostClickGuard";
 import { resizeDesktopOverlayWindow } from "@/lib/platform/electronWindowManager";
+import { isElectronApp } from "@/lib/platform/isElectron";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 import { cn } from "@/lib/utils";
@@ -39,19 +41,19 @@ import { OverlayAnswerTimer } from "./OverlayAnswerTimer";
 import { OverlayAudioStatusBar } from "./OverlayAudioStatusBar";
 import { OverlaySystemAudioBanner } from "./OverlaySystemAudioBanner";
 import { OverlaySessionPreparing } from "./OverlaySessionPreparing";
+import { ScreenCaptureBlocker } from "./ScreenCaptureBlocker";
 
 import { LiveTranscriptStream } from "@/components/live/LiveTranscriptStream";
 import { useNetworkMonitor } from "@/hooks/useNetworkMonitor";
 import { usePrivateMode } from "@/hooks/usePrivateMode";
+import { useOverlayDragHandle } from "@/hooks/useOverlayDragHandle";
 import type { SessionMode } from "@/types/session.types";
 
 // ─────────────────────────────────────────────────────────────────
 // Electron bridge
 // ─────────────────────────────────────────────────────────────────
 
-const IS_ELECTRON = Boolean(
-  (window as unknown as { electronAPI?: { isElectron?: boolean } }).electronAPI?.isElectron
-);
+const IS_ELECTRON = isElectronApp();
 
 function electronResize(w: number, h: number) {
   resizeDesktopOverlayWindow(w, h);
@@ -85,7 +87,11 @@ function overlayStackContext(
   return "in-app-shell";
 }
 
-function ensureOverlayRoot(doc: Document, stackContext: OverlayStackContext): HTMLElement {
+function ensureOverlayRoot(
+  doc: Document,
+  stackContext: OverlayStackContext,
+  sessionActive = false,
+): HTMLElement {
   let el = doc.getElementById(OVERLAY_ROOT_ID) as HTMLElement | null;
 
   if (!el) {
@@ -94,9 +100,9 @@ function ensureOverlayRoot(doc: Document, stackContext: OverlayStackContext): HT
     doc.body.appendChild(el);
   }
 
-  const z = getOverlayPortalZIndex(stackContext);
+  const z = getOverlayPortalZIndex(stackContext, sessionActive);
   el.style.cssText =
-    `position:fixed;inset:0;z-index:${z};isolation:isolate;pointer-events:none;`;
+    `position:fixed;top:0;left:0;width:0;height:0;overflow:visible;z-index:${z};isolation:isolate;pointer-events:none;`;
 
   return el;
 }
@@ -139,11 +145,14 @@ export function OverlayWindow({
   interviewType = "behavioral",
 }: OverlayWindowProps) {
   const panelRef = useRef<HTMLDivElement>(null);
+  const dragHandleRef = useRef<HTMLDivElement>(null);
   const resizeContainerRef = useRef<HTMLDivElement>(null);
   const persistPositionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => setIsMounted(true), []);
+
+  useEffect(() => installOverlayGhostClickGuard(), []);
 
   // T-0313 — Electron global shortcut for AI answer generation
   useEffect(() => {
@@ -161,9 +170,16 @@ export function OverlayWindow({
   const inAppShell = stackCtx === "in-app-shell";
   const { enabled: privateModeEnabled } = usePrivateMode();
 
+  // Session state — must be declared before isStealthMode-derived values
+  const sessionStatus = useSessionStore((s) => s.status);
+  const sessionMode = useSessionStore((s) => s.mode);
+  const isSessionActive = sessionStatus === "active";
+
   // Overlay store state
   const isVisible = useOverlayStore((s) => s.is_visible);
   const isStealthMode = useOverlayStore((s) => s.is_stealth_mode);
+  // Parakeet-style: keep overlay fully opaque while a session is running.
+  const useDiscreteOpacity = isStealthMode && !isSessionActive;
   const isProctorSafe = useOverlayStore((s) => s.is_proctor_safe);
   const isPanicVisible = useOverlayStore((s) => s.is_panic_visible);
   const panicContent = useOverlayStore((s) => s.panic_content);
@@ -195,10 +211,6 @@ export function OverlayWindow({
   // User profile for persisting position
   const profileId = useAuthStore((s) => s.profile?.id ?? null);
 
-  // Session state
-  const sessionStatus = useSessionStore((s) => s.status);
-  const sessionMode = useSessionStore((s) => s.mode);
-  const isSessionActive = sessionStatus === "active";
   const contextModeLabel = overlayContextModeLabel(
     sessionMode,
     isPreparingSession,
@@ -211,6 +223,9 @@ export function OverlayWindow({
 
   const isRecording = deepgramStatus === "connected";
   const isGenerating = hintState === "generating" || hintState === "streaming";
+  const showStreamError =
+    streamError &&
+    !(streamError.code === "UNKNOWN" && isSessionActive);
 
   // Persist position (debounced)
   const handlePositionChange = useCallback(
@@ -244,6 +259,13 @@ export function OverlayWindow({
   // - Peek mode => show a small banner even when not visible
   const shouldShow = isVisible || isPeekActive;
 
+  useOverlayDragHandle({
+    handleRef: dragHandleRef,
+    panelRef,
+    onPositionChange: handlePositionChange,
+    disabled: !isMounted || isMobile || !shouldShow || isProctorSafe,
+  });
+
   // Document PiP support (user opt-in)
   const pipDoc = useDocumentPiP(pipOptIn && shouldShow);
   const targetDoc = pipDoc ?? (typeof document !== "undefined" ? document : null);
@@ -256,17 +278,19 @@ export function OverlayWindow({
   // Portal mount node
   const overlayRoot = useMemo<HTMLElement | null>(() => {
     if (!targetDoc) return null;
-    return ensureOverlayRoot(targetDoc, stackCtx);
-  }, [targetDoc, stackCtx]);
+    return ensureOverlayRoot(targetDoc, stackCtx, isSessionActive);
+  }, [targetDoc, stackCtx, isSessionActive]);
 
   const displayText =
     hintState === "streaming" || (hintState === "generating" && streamingBuffer.trim())
       ? streamingBuffer || currentHint
       : currentHint;
 
-  // Panel opacity: discrete UI dimming is handled by StealthMouseGuard (avoids double-fade).
-  const effectiveOpacity = !shouldShow ? 0 : isStealthMode ? 1 : 1;
-  const guardStealthOpacity = Math.max(0.15, Math.min(1, stealthOpacity / 100));
+  // Panel opacity: discrete UI dimming only when not in an active session.
+  const effectiveOpacity = !shouldShow ? 0 : 1;
+  const guardStealthOpacity = useDiscreteOpacity
+    ? Math.max(0.15, Math.min(1, stealthOpacity / 100))
+    : 1;
 
   // Pill width constraints
   const pillWidth = isMobile ? "100%" : Math.min(640, Math.max(420, overlayWidth));
@@ -303,6 +327,11 @@ export function OverlayWindow({
 
   if (!isMounted || !overlayRoot) return null;
 
+  // Mount ScreenCaptureBlocker as a side-effect-only node (no visible UI; events feed ScreenCaptureBanner)
+  const captureDetector = (
+    <ScreenCaptureBlocker isActive={isStealthMode || isSessionActive} showWarning={false} />
+  );
+
   // ───────────────────────────────────────────────────────────────
   // Overlay content
   // ───────────────────────────────────────────────────────────────
@@ -329,6 +358,10 @@ export function OverlayWindow({
         opacity: effectiveOpacity,
         pointerEvents: shouldShow ? "auto" : "none",
       }}
+      onPointerDown={(e) => {
+        // Keep overlay interactions from bubbling to the page beneath the portal.
+        e.stopPropagation();
+      }}
       role="dialog"
       aria-label="Clarify AI Overlay"
       aria-hidden={shouldShow ? undefined : true}
@@ -336,16 +369,18 @@ export function OverlayWindow({
     >
       <div className="absolute inset-x-0 top-0 h-[1px] bg-gradient-to-r from-transparent via-indigo-500/50 to-transparent pointer-events-none" />
 
-      {/* HEADER — drag strip only */}
+      {/* HEADER — drag strip; pointer capture drag via useOverlayDragHandle */}
       <div
+        ref={dragHandleRef}
         data-drag-handle
         className={cn(
-          "flex cursor-grab items-center gap-2 px-3 py-2 shrink-0 active:cursor-grabbing",
+          "flex cursor-grab items-center gap-2 px-3 py-2 shrink-0 active:cursor-grabbing select-none touch-none",
           "border-b border-white/[0.07]",
           "bg-gradient-to-r from-[#0d0d1e]/80 via-[#0e0e1c]/60 to-[#0d0d1e]/80",
           isMobile && "py-3"
         )}
-        title="Drag to move"
+        style={{ touchAction: "none" }}
+        title="Drag header to move overlay"
         onDoubleClick={() => {
           if (isPeekActive && !isVisible && useOverlayStore.getState().toggleMinimize) {
             useOverlayStore.getState().toggleMinimize();
@@ -354,6 +389,11 @@ export function OverlayWindow({
           useOverlayStore.getState().setMinimalMode(!isMinimalMode);
         }}
       >
+        <div className="flex items-center gap-1 shrink-0 text-white/30 mr-0.5" aria-hidden>
+          <span className="block w-1 h-1 rounded-full bg-current" />
+          <span className="block w-1 h-1 rounded-full bg-current" />
+          <span className="block w-1 h-1 rounded-full bg-current" />
+        </div>
         <div className="flex items-center gap-2 shrink-0 min-w-0 flex-1">
           <div className="w-5 h-5 rounded-md bg-gradient-to-br from-indigo-500 to-primary flex items-center justify-center shadow-lg shadow-indigo-500/30 shrink-0">
             <Sparkles className="w-3 h-3 text-white" />
@@ -390,7 +430,15 @@ export function OverlayWindow({
 
           <OverlayNetworkBadge color={networkColor} rttMs={avgRTT} label={qualityLabel} />
 
-          {isStealthMode && (
+          {isSessionActive && (
+            <span
+              className="font-mono text-[9px] font-bold text-emerald-300 bg-emerald-500/15 border border-emerald-500/20 px-1.5 py-0.5 rounded shrink-0"
+              title="Fully visible during session (Parakeet-style)"
+            >
+              VISIBLE
+            </span>
+          )}
+          {useDiscreteOpacity && (
             <span
               className="font-mono text-[9px] font-bold text-primary bg-primary/15 border border-primary/20 px-1.5 py-0.5 rounded shrink-0"
               title="Discrete UI — lower opacity until hover; still visible on screen share"
@@ -519,12 +567,12 @@ export function OverlayWindow({
                 </div>
               ) : (
                 <>
-                  {streamError && (
+                  {showStreamError && (
                     <div className="flex items-center gap-2 px-3 py-2 bg-red-500/10 border-b border-red-500/15 shrink-0">
                       <div className="w-1.5 h-1.5 rounded-full bg-red-500 shrink-0 animate-pulse" />
                       <span className="text-[11px] text-red-400 truncate flex-1">
-                        {streamError.message}
-                        {streamError.suggestion ? ` — ${streamError.suggestion}` : ""}
+                        {streamError!.message}
+                        {streamError!.suggestion ? ` — ${streamError!.suggestion}` : ""}
                       </span>
                       <button
                         onClick={() => useAudioStore.getState().setStreamError(null)}
@@ -635,10 +683,11 @@ export function OverlayWindow({
   if (isMobile) {
     return createPortal(
       <StealthMouseGuard
-        isActive={isStealthMode}
+        isActive={useDiscreteOpacity}
         interactive={shouldShow}
         stealthOpacity={guardStealthOpacity}
       >
+        {captureDetector}
         <div
           ref={panelRef}
           className={cn(
@@ -658,9 +707,11 @@ export function OverlayWindow({
   // DESKTOP: floating draggable window
   return createPortal(
     <StealthMouseGuard
-      isActive={isStealthMode}
+      isActive={useDiscreteOpacity}
+      interactive={shouldShow}
       stealthOpacity={guardStealthOpacity}
     >
+      {captureDetector}
       <OverlayPositionManager
         ref={panelRef}
         position={position}
@@ -669,6 +720,8 @@ export function OverlayWindow({
         overlayWidth={overlayWidth}
         overlayHeight={overlayHeight}
         stackContext={stackCtx}
+        sessionActive={isSessionActive}
+        enableInteraction={shouldShow}
       >
         {overlayContent}
       </OverlayPositionManager>

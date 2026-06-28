@@ -8,7 +8,6 @@ import {
   type Ref,
 } from "react";
 import {
-  createDragHandler,
   createTouchDragHandler,
   getProctorSafePosition,
 } from "@/lib/overlay/stealthMouse";
@@ -22,6 +21,9 @@ interface OverlayPositionManagerProps {
   overlayWidth: number;
   overlayHeight: number;
   stackContext?: OverlayStackContext;
+  sessionActive?: boolean;
+  /** When false, wrapper ignores pointer events (overlay hidden). */
+  enableInteraction?: boolean;
   children: ReactNode;
 }
 
@@ -40,7 +42,7 @@ function setRefs<T>(...refs: (Ref<T> | undefined)[]) {
 
 export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPositionManagerProps>(
   function OverlayPositionManager(
-    { position, onPositionChange, isProctorSafe, overlayWidth, overlayHeight, stackContext = "fullscreen", children },
+    { position, onPositionChange, isProctorSafe, overlayWidth, overlayHeight, stackContext = "fullscreen", sessionActive = false, enableInteraction = true, children },
     ref
   ) {
     const localRef = useRef<HTMLDivElement | null>(null);
@@ -52,11 +54,9 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
       const el = localRef.current;
       if (!el) return;
 
-      const cleanupMouse = createDragHandler(el, onPositionChange);
       const cleanupTouch = createTouchDragHandler(el, onPositionChange);
 
       return () => {
-        cleanupMouse?.();
         cleanupTouch?.();
       };
     }, [onPositionChange]);
@@ -98,11 +98,8 @@ export const OverlayPositionManager = forwardRef<HTMLDivElement, OverlayPosition
         style={{
           left: `${position.x}px`,
           top: `${position.y}px`,
-          zIndex: getOverlayPortalZIndex(stackContext),
-          // Wrapper passes through clicks; the inner panel toggles pointer-events
-          // via `pointer-events-auto/none` based on visibility. This prevents the
-          // hidden overlay from blocking underlying UI.
-          pointerEvents: "none",
+          zIndex: getOverlayPortalZIndex(stackContext, sessionActive),
+          pointerEvents: enableInteraction ? "auto" : "none",
           isolation: "isolate",
           willChange: "transform",
           transform: "translateZ(0)",

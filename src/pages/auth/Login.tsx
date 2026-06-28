@@ -21,7 +21,7 @@ import {
   AzureOAuthButton,
 } from "@/components/auth/OAuthButton";
 
-import { formatSupabaseAuthError } from "@/lib/errors";
+import { formatSupabaseAuthError, isSupabaseConfigAuthError } from "@/lib/errors";
 import { loginSchema, type LoginInput } from "@/lib/validators";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { BrandLogo } from "@/components/marketing";
@@ -213,6 +213,16 @@ export default function Login(): JSX.Element {
       safeRemoveLocalStorageItem(ATTEMPT_KEY);
       safeRemoveLocalStorageItem(LOCK_KEY);
     } catch (error) {
+      const message = formatSupabaseAuthError(error);
+
+      if (isSupabaseConfigAuthError(error)) {
+        if (import.meta.env.DEV) {
+          console.error("[Login] Supabase client misconfigured:", error);
+        }
+        setAuthError(message);
+        return;
+      }
+
       const previousAttempts = getStoredAttemptCount();
       const nextAttempts = previousAttempts + 1;
 
@@ -229,7 +239,6 @@ export default function Login(): JSX.Element {
       }
 
       const remainingAttempts = MAX_ATTEMPTS - nextAttempts;
-      const message = formatSupabaseAuthError(error);
 
       if (import.meta.env.DEV) {
         console.error("[Login] signInWithPassword failed:", error);

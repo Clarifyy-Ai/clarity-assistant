@@ -461,6 +461,13 @@ export function formatSupabaseAuthError(error: unknown): string {
   return message || USER_MESSAGES[ErrorCode.AUTH_INVALID_CREDENTIALS]!;
 }
 
+/** True when Supabase rejected the client API key (deployment misconfiguration). */
+export function isSupabaseConfigAuthError(error: unknown): boolean {
+  if (!error || typeof error !== "object") return false;
+  const message = (error as SupabaseAuthErrorShape).message?.toLowerCase() ?? "";
+  return message.includes("invalid api key");
+}
+
 // ─── Async Error Wrapper ──────────────────────────────────────────────────────
 
 /**

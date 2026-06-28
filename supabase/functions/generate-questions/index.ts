@@ -167,6 +167,11 @@ const generateQuestionsSchema = z
       .optional()
       .default("mixed"),
 
+    free_session: z
+      .boolean()
+      .optional()
+      .default(false),
+
     session_id: z
       .string()
       .uuid("Invalid session ID.")
@@ -210,6 +215,7 @@ const generateQuestionsSchema = z
     resume_context:  data.resume_context,
     job_description: data.job_description,
     focus_areas:   data.focus_areas,
+    free_session:  data.free_session ?? false,
   }));
 
 type GenerateQuestionsRequest = z.infer<typeof generateQuestionsSchema>;
@@ -606,37 +612,46 @@ Deno.serve(async (req: Request) => {
 
   const idempotencyKey = getIdempotencyKey(req);
 
-  const creditResult = await deductCreditsAtomic({
-    userId: user.id,
-    action: "generate_questions",
-    cost: CREDIT_COST,
-    sessionId: body.session_id ?? null,
-    idempotencyKey,
-  });
+  let creditResult: {
+    success: boolean;
+    error?: string;
+    balanceAfter?: number | null;
+    transactionId?: string | null;
+  } = { success: true, balanceAfter: null, transactionId: null };
 
-  if (!creditResult.success) {
-    await logAiAudit({
-      req,
+  if (!body.free_session) {
+    creditResult = await deductCreditsAtomic({
       userId: user.id,
-      action: "GENERATE_QUESTIONS",
+      action: "generate_questions",
+      cost: CREDIT_COST,
       sessionId: body.session_id ?? null,
-      status: "failure",
-      metadata: {
-        reason: creditResult.error ?? "Credit deduction failed.",
-        cost: CREDIT_COST,
-      },
+      idempotencyKey,
     });
 
-    const isInsufficient = (creditResult.error ?? "")
-      .toLowerCase()
-      .includes("insufficient");
+    if (!creditResult.success) {
+      await logAiAudit({
+        req,
+        userId: user.id,
+        action: "GENERATE_QUESTIONS",
+        sessionId: body.session_id ?? null,
+        status: "failure",
+        metadata: {
+          reason: creditResult.error ?? "Credit deduction failed.",
+          cost: CREDIT_COST,
+        },
+      });
 
-    return json(corsHeaders, isInsufficient ? 402 : 500, {
-      success: false,
-      error: isInsufficient ? "Insufficient credits." : "Credit deduction failed.",
-      code:  isInsufficient ? "PAYMENT_REQUIRED" : "CREDIT_DEDUCTION_FAILED",
-      request_id: requestId,
-    });
+      const isInsufficient = (creditResult.error ?? "")
+        .toLowerCase()
+        .includes("insufficient");
+
+      return json(corsHeaders, isInsufficient ? 402 : 500, {
+        success: false,
+        error: isInsufficient ? "Insufficient credits." : "Credit deduction failed.",
+        code:  isInsufficient ? "PAYMENT_REQUIRED" : "CREDIT_DEDUCTION_FAILED",
+        request_id: requestId,
+      });
+    }
   }
 
   const prompt = buildPrompt(body);
@@ -653,12 +668,14 @@ Deno.serve(async (req: Request) => {
       error instanceof Error ? error.message : String(error),
     );
 
-    await refundCredits({
-      userId: user.id,
-      cost: CREDIT_COST,
-      reason: "generate_questions AI failure",
-      sessionId: body.session_id ?? null,
-    });
+    if (!body.free_session) {
+      await refundCredits({
+        userId: user.id,
+        cost: CREDIT_COST,
+        reason: "generate_questions AI failure",
+        sessionId: body.session_id ?? null,
+      });
+    }
 
     await logAiAudit({
       req,

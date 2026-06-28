@@ -36,6 +36,7 @@ export { useHotkeys } from "./useHotkeys";
 export { useNetworkMonitor } from "./useNetworkMonitor";
 export { useOfflineFallback } from "./useOfflineFallback";
 export { useIsOffline } from "./useIsOffline";
+export { useDesktopDownload } from "./useDesktopDownload";
 export { useStealthMouse } from "./useStealthMouse";
 
 // ─── AI & Analysis ────────────────────────────────────────────────────────────

@@ -1,9 +1,7 @@
 // electron/main.cjs
-// Standard, visible desktop shell for Clarify AI.
-// NO screen-capture evasion. NO content protection. NO skipTaskbar.
-// See .lovable/plan.md for scope and guardrails.
-
-const { app, BrowserWindow, shell, session } = require("electron");
+// Desktop shell for Practice Coach overlay sessions only.
+// Dashboard, prep, billing, and mock interviews run in the web browser.
+const { app, BrowserWindow, shell, session, dialog, ipcMain } = require("electron");
 const path = require("path");
 const url = require("url");
 const { loadWindowState, trackWindow } = require("./window-state.cjs");
@@ -21,15 +19,25 @@ if (!gotLock) {
 
 let mainWindow = null;
 
+function isSafeExternalUrl(target) {
+  try {
+    const u = new URL(target);
+    return u.protocol === "http:" || u.protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
 const CSP = [
   "default-src 'self'",
-  "script-src 'self'" + (isDev ? " 'unsafe-eval'" : ""),
+  "script-src 'self' 'unsafe-inline'" + (isDev ? " 'unsafe-eval'" : ""),
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
-  "connect-src 'self' http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://api.deepgram.com wss://api.deepgram.com https://api.stripe.com https://checkout.stripe.com",
+  "connect-src 'self' http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://api.deepgram.com wss://api.deepgram.com https://api.stripe.com https://checkout.stripe.com https://api.github.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://*.sentry.io https://*.ingest.sentry.io https://app.posthog.com https://us.i.posthog.com https://eu.i.posthog.com",
   "frame-src https://checkout.stripe.com",
-  "media-src 'self' blob:",
+  "media-src 'self' blob: data:",
+  "worker-src 'self' blob:",
   "object-src 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -45,12 +53,26 @@ function isInternalUrl(target) {
   }
 }
 
+function resolveIndexHtmlPath() {
+  return path.join(app.getAppPath(), "dist", "index.html");
+}
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  if (!mainWindow.isVisible()) mainWindow.show();
+  mainWindow.focus();
+}
+
+function reportLoadFailure(title, detail) {
+  console.error(`[Clarify AI] ${title}:`, detail);
+  showMainWindow();
+  dialog.showErrorBox(title, detail);
+}
+
 function createMainWindow() {
   const state = loadWindowState({
     defaultWidth: 1440,
     defaultHeight: 900,
-    minWidth: 1024,
-    minHeight: 720,
   });
 
   mainWindow = new BrowserWindow({
@@ -103,34 +125,80 @@ function createMainWindow() {
     return { action: "deny" };
   });
 
-  mainWindow.once("ready-to-show", () => mainWindow.show());
+  mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
+    reportLoadFailure(
+      "Clarify AI failed to load",
+      `Could not load the app shell (${errorCode}: ${errorDescription}).\n\nURL: ${validatedURL}`,
+    );
+  });
+
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    reportLoadFailure(
+      "Clarify AI crashed",
+      `The app window stopped unexpectedly (${details.reason}). Please restart Clarify AI.`,
+    );
+  });
+
+  mainWindow.once("ready-to-show", () => showMainWindow());
+
+  // Fallback: never leave the app running with a hidden window.
+  const showFallbackTimer = setTimeout(() => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      console.warn("[Clarify AI] ready-to-show timeout — forcing window visible");
+      showMainWindow();
+    }
+  }, 3000);
+  mainWindow.once("ready-to-show", () => clearTimeout(showFallbackTimer));
+  mainWindow.on("closed", () => clearTimeout(showFallbackTimer));
 
   if (isDev) {
-    mainWindow.loadURL(DEV_URL);
+    mainWindow.loadURL(`${DEV_URL}#/app/live/overlay`);
+    mainWindow.webContents.openDevTools({ mode: "detach" });
   } else {
-    mainWindow.loadURL(
-      url.format({
-        pathname: path.join(__dirname, "..", "dist", "index.html"),
-        protocol: "file:",
-        slashes: true,
-      })
-    );
+    const indexPath = resolveIndexHtmlPath();
+    mainWindow.loadFile(indexPath, { hash: "/app/live/overlay" });
   }
+  // Show window as soon as HTML is parsed (boot splash), not only after React paints.
+  mainWindow.webContents.once("did-finish-load", () => {
+    if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
+      showMainWindow();
+    }
+  });
 }
 
 app.on("second-instance", () => {
-  if (mainWindow) {
-    if (mainWindow.isMinimized()) mainWindow.restore();
-    mainWindow.focus();
-  }
+  showMainWindow();
 });
 
 app.whenReady().then(() => {
+  ipcMain.handle("shell:openExternal", (_event, targetUrl) => {
+    if (typeof targetUrl === "string" && isSafeExternalUrl(targetUrl)) {
+      return shell.openExternal(targetUrl);
+    }
+    return false;
+  });
+
+  ipcMain.handle("set-content-protection", (_event, enabled) => {
+    mainWindow?.setContentProtection(Boolean(enabled));
+  });
+
   buildMenu({ isDev });
   createMainWindow();
 
+  if (app.isPackaged) {
+    const { autoUpdater } = require("electron-updater");
+    autoUpdater.checkForUpdatesAndNotify();
+    autoUpdater.on("update-available", () => {
+      mainWindow?.webContents.send("update-available");
+    });
+    autoUpdater.on("update-downloaded", () => {
+      mainWindow?.webContents.send("update-downloaded");
+    });
+  }
+
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+    else showMainWindow();
   });
 });
 

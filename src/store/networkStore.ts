@@ -39,11 +39,13 @@ interface NetworkStore extends NetworkState {
   getOverlayColor: () => "green" | "yellow" | "red";
 }
 
-function computeMode(avgRTT: number): NetworkMode {
-  if (avgRTT === 0)    return "offline";
-  if (avgRTT < 800)    return "strong";
-  if (avgRTT < 2000)   return "degraded";
-  return "offline";
+function computeMode(avgRTT: number, browserOffline: boolean): NetworkMode {
+  if (browserOffline) return "offline";
+  // No probe data yet — assume online (avoid false "Offline" on first paint).
+  if (avgRTT === 0) return "strong";
+  if (avgRTT < 800) return "strong";
+  // Slow connection ≠ offline (probe timeouts used to mark 4999ms as offline).
+  return "degraded";
 }
 
 function computeAvg(history: number[]): number {
@@ -77,12 +79,13 @@ export const useNetworkStore = create<NetworkStore>()(
       set((state) => {
         const history = [...state.rtt_history, rtt_ms].slice(-10);
         const avg_rtt = computeAvg(history);
-        const mode = computeMode(avg_rtt);
+        const browserOffline =
+          typeof navigator !== "undefined" ? !navigator.onLine : false;
+        const mode = computeMode(avg_rtt, browserOffline);
 
         // Auto-select faster model on degraded network
         let model_override: PreferredAIModel | null = null;
         if (mode === "degraded") model_override = "gemini-flash";
-        if (mode === "offline")  model_override = null;
 
         return {
           rtt_ms,
@@ -92,6 +95,8 @@ export const useNetworkStore = create<NetworkStore>()(
           model_override,
           last_checked_at: Date.now(),
           probe_count: state.probe_count + 1,
+          is_offline_fallback_active:
+            mode === "offline" ? true : state.is_offline_fallback_active,
         };
       });
     },

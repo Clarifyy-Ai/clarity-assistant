@@ -78,6 +78,7 @@ export function createDragHandler(
     }
 
     e.preventDefault();
+    e.stopPropagation();
 
     const rect = overlayEl.getBoundingClientRect();
     dragState = {
@@ -119,6 +120,8 @@ export function createDragHandler(
     newY = Math.max(0, Math.min(vh - oh, newY));
 
     applyImmediatePosition(newX, newY);
+    // Keep React state in sync so re-renders do not snap the panel back.
+    onPositionChange({ x: newX, y: newY });
   }
 
   function finishDrag(finalX: number, finalY: number) {
@@ -181,11 +184,11 @@ export function createDragHandler(
     onPositionChange({ x: dragState.startLeft, y: dragState.startTop });
   }
 
-  overlayEl.addEventListener("mousedown", onMouseDown);
+  overlayEl.addEventListener("mousedown", onMouseDown, true);
 
   // Return cleanup function
   return () => {
-    overlayEl.removeEventListener("mousedown", onMouseDown);
+    overlayEl.removeEventListener("mousedown", onMouseDown, true);
     document.removeEventListener("mousemove", onMouseMove);
     document.removeEventListener("mouseup", onMouseUp);
     document.removeEventListener("keydown", onKeyDown, true);
@@ -244,6 +247,7 @@ export function createTouchDragHandler(
 
     overlayEl.style.left = `${newX}px`;
     overlayEl.style.top = `${newY}px`;
+    onPositionChange({ x: newX, y: newY });
   }
 
   function onTouchEnd(): void {

@@ -28,6 +28,7 @@ import { readCachedAuthSession } from "@/lib/supabase/sessionCache";
 import { profilesDB, userRolesDB } from "@/lib/supabase/database";
 import { useOverlayStore } from "@/store/overlayStore";
 import { normalizePreferredModel } from "@/lib/ai/modelOptions";
+import { isElectronApp } from "@/lib/platform/isElectron";
 
 import {
   loadBYOKVault,
@@ -48,6 +49,17 @@ export type AuthStatus =
   | "authenticated"
   | "unauthenticated"
   | "error";
+
+const AUTH_SESSION_TIMEOUT_MS = isElectronApp() ? 12_000 : 20_000;
+
+function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) => {
+      setTimeout(() => reject(new Error(`${label} timed out after ${Math.round(ms / 1000)}s`)), ms);
+    }),
+  ]);
+}
 
 export interface BYOKKeys {
   openai?: string;
@@ -320,7 +332,11 @@ export const useAuthStore = create<AuthStore>()(
               const {
                 data: { session },
                 error,
-              } = await supabase.auth.getSession();
+              } = await withTimeout(
+                supabase.auth.getSession(),
+                AUTH_SESSION_TIMEOUT_MS,
+                "Session check",
+              );
 
               if (error) {
                 throw error;

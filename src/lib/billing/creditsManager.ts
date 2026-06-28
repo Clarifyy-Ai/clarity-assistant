@@ -1,5 +1,4 @@
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
-import { EDGE_BASE } from "@/lib/env";
 import { creditsDB } from "@/lib/supabase/database";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
@@ -254,19 +253,14 @@ export async function deductCreditsForAction(
   }
 
   try {
-    const { getAuthHeaders } = await import("@/lib/network/fetchEdge");
+    const { fetchEdge } = await import("@/lib/network/fetchEdge");
     const idempotencyKey = `dc-${(crypto as any)?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(36).slice(2)}`}`;
-    const headers = await getAuthHeaders({ "Idempotency-Key": idempotencyKey });
 
-    const response = await fetch(`${EDGE_BASE}/deduct-credits`, {
-      method: "POST",
-      headers,
-      body: JSON.stringify({
-        action,
-        cost,
-        session_id: sessionId ?? null,
-      }),
-    });
+    const response = await fetchEdge(
+      "deduct-credits",
+      { action, cost, session_id: sessionId ?? null },
+      { headers: { "Idempotency-Key": idempotencyKey } },
+    );
 
     if (!response.ok) {
       if (response.status === 402) {

@@ -49,7 +49,7 @@ export default function MockInterview() {
   const [company, setCompany] = useState("");
   const [role,    setRole]    = useState(() => (profile as any)?.target_role ?? "");
   const [numQ,    setNumQ]    = useState(5);
-  const [warmup,  setWarmup]  = useState(true);
+  const [warmup,  setWarmup]  = useState(false);
   const [loading, setLoading] = useState(false);
   const startingRef = useRef(false);
 

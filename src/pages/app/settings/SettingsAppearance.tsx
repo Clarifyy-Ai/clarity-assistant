@@ -6,10 +6,13 @@ import {
   getDefaultOverlayEnabled,
   setDefaultOverlayEnabled,
 } from "@/lib/overlay/defaultOverlayPreference";
+import { setAppStealthMode } from "@/lib/stealth/stealthActions";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/switch";
-import { CheckCircle, Palette, Monitor, Sun, Moon, Layers } from "lucide-react";
+import { DesktopDownloadButton } from "@/components/common/DesktopDownloadButton";
+import { isElectronApp } from "@/lib/platform/isElectron";
+import { CheckCircle, Palette, Monitor, Sun, Moon, Layers, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 
@@ -35,6 +38,7 @@ export default function SettingsAppearance() {
   const currentTheme = useUIStore((s) => s.theme);
   const setUITheme   = useUIStore((s) => s.setTheme);
   const extras       = useThemeStore();
+  const stealthMode  = useUIStore((s) => s.stealth_mode);
 
   const [accent,   setAccent]   = useState(extras.accentColor ?? "violet");
   const [fontSize, setFontSize] = useState(extras.fontSize ?? "Default");
@@ -171,6 +175,38 @@ export default function SettingsAppearance() {
       >
         {saved ? "Applied!" : "Apply changes"}
       </Button>
+
+      {/* ── Discrete / Stealth mode ── */}
+      <Card>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3">
+            <div className="w-9 h-9 rounded-xl bg-secondary flex items-center justify-center shrink-0 mt-0.5">
+              <EyeOff className="w-4 h-4 text-muted-foreground" />
+            </div>
+            <div>
+              <h3 className="text-sm font-semibold text-foreground">Discrete mode</h3>
+              <p className="text-xs text-muted-foreground mt-0.5 leading-relaxed">
+                Remaps UI labels and dims the overlay so the app looks like a productivity tool.
+                Useful when practising in a shared screen environment.
+              </p>
+            </div>
+          </div>
+          <Switch
+            checked={stealthMode}
+            onCheckedChange={(v) => void setAppStealthMode(v)}
+            aria-label="Toggle discrete mode"
+          />
+        </div>
+
+        {stealthMode && !isElectronApp() && (
+          <div className="mt-4 pt-4 border-t border-border">
+            <p className="text-xs text-muted-foreground mb-3">
+              For OS-level screen capture protection (hides the overlay from Zoom, OBS, and screen recorders), install the desktop app.
+            </p>
+            <DesktopDownloadButton size="sm" variant="outline" showGuideLink={false} />
+          </div>
+        )}
+      </Card>
     </SettingsPageShell>
   );
 }

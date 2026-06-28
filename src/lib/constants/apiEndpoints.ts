@@ -165,7 +165,6 @@ export const ROUTES = {
   DASHBOARD:         "/app/dashboard",
   LIVE_SESSION:      "/app/live",
   SESSION:           (id: string) => `/app/sessions/${id}`,
-  SESSIONS_HISTORY:  "/app/sessions/history",
   MOCK_INTERVIEW:    "/app/mock",
   MOCK_TEST:         "/app/mock-test",
   ANSWER_BANK:       "/app/answers",

@@ -1,4 +1,6 @@
 import { fileURLToPath } from "url";
+import fs from "node:fs";
+import path from "node:path";
 import { defineConfig, loadEnv } from "vite";
 import react from "@vitejs/plugin-react-swc";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
@@ -22,6 +24,15 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       react(),
+      ...(isElectron
+        ? [{
+            name: "electron-html-csp",
+            transformIndexHtml(html: string) {
+              // upgrade-insecure-requests breaks file:// asset loads in packaged Electron.
+              return html.replace(/\s*upgrade-insecure-requests;?/g, "");
+            },
+          }]
+        : []),
       ...(sentryConfigured
         ? [sentryVitePlugin({
             org: env.SENTRY_ORG,
@@ -30,6 +41,34 @@ export default defineConfig(({ mode }) => {
             sourcemaps: { assets: "./dist/**" },
             telemetry: false,
           })]
+        : []),
+      ...(!isProduction && !isElectron
+        ? [{
+            name: "local-desktop-installer",
+            configureServer(server) {
+              server.middlewares.use("/dev-downloads/clarify-ai-setup.exe", (_req, res, next) => {
+                const candidates = [
+                  path.join(__dirname, "release-new", "Clarify AI Setup 1.0.0.exe"),
+                  path.join(__dirname, "release", "Clarify AI Setup 1.0.0.exe"),
+                ];
+                for (const dir of ["release-new", "release"]) {
+                  const folder = path.join(__dirname, dir);
+                  if (!fs.existsSync(folder)) continue;
+                  const match = fs.readdirSync(folder).find((f) => f.endsWith(".exe") && /setup/i.test(f));
+                  if (match) candidates.unshift(path.join(folder, match));
+                }
+                const file = candidates.find((p) => fs.existsSync(p));
+                if (!file) {
+                  res.statusCode = 404;
+                  res.end("Build the installer first: npm run dist:win");
+                  return;
+                }
+                res.setHeader("Content-Type", "application/octet-stream");
+                res.setHeader("Content-Disposition", 'attachment; filename="Clarify-AI-Setup.exe"');
+                fs.createReadStream(file).pipe(res);
+              });
+            },
+          }]
         : []),
     ],
 
@@ -57,22 +96,45 @@ export default defineConfig(({ mode }) => {
 
       rollupOptions: {
         output: {
-          manualChunks: {
-            "vendor-react": ["react", "react-dom", "react-router-dom"],
-            "vendor-ui": [
-              "@radix-ui/react-dialog",
-              "@radix-ui/react-dropdown-menu",
-              "@radix-ui/react-tabs",
-              "@radix-ui/react-toast",
-              "framer-motion",
-              "lucide-react",
-            ],
-            "vendor-charts": ["recharts"],
-            "vendor-supabase": ["@supabase/supabase-js"],
-            "vendor-query": ["@tanstack/react-query"],
-            "vendor-form": ["react-hook-form", "zod"],
-            "vendor-state": ["zustand"],
-            "vendor-audio": ["@deepgram/sdk"],
+          manualChunks(id) {
+            // ── Vendor splits ──────────────────────────────────────────
+            if (["react", "react-dom", "react-router-dom"].some((p) => id.includes(`/node_modules/${p}/`)))
+              return "vendor-react";
+            if (
+              [
+                "@radix-ui/react-dialog",
+                "@radix-ui/react-dropdown-menu",
+                "@radix-ui/react-tabs",
+                "@radix-ui/react-toast",
+                "framer-motion",
+                "lucide-react",
+              ].some((p) => id.includes(`/node_modules/${p}/`))
+            )
+              return "vendor-ui";
+            if (id.includes("/node_modules/recharts/")) return "vendor-charts";
+            if (id.includes("/node_modules/@supabase/")) return "vendor-supabase";
+            if (id.includes("/node_modules/@tanstack/")) return "vendor-query";
+            if (
+              id.includes("/node_modules/react-hook-form/") ||
+              id.includes("/node_modules/zod/")
+            )
+              return "vendor-form";
+            if (id.includes("/node_modules/zustand/")) return "vendor-state";
+            if (id.includes("/node_modules/@deepgram/")) return "vendor-audio";
+
+            // ── App splits ─────────────────────────────────────────────
+            if (id.includes("/src/store/")) return "chunk-stores";
+            if (id.includes("/src/lib/billing/")) return "chunk-billing";
+            if (
+              id.includes("/src/lib/ai/") ||
+              id.includes("/src/lib/network/")
+            )
+              return "chunk-network";
+            if (
+              id.includes("/src/pages/app/live/LiveOverlay") ||
+              id.includes("/src/components/overlay/")
+            )
+              return "chunk-overlay";
           },
         },
       },

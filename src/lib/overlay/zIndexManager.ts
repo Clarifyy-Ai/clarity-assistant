@@ -292,7 +292,14 @@ export const z = (layer: ZLayer): number => Z_LAYERS[layer];
 export type OverlayStackContext = "in-app-shell" | "fullscreen" | "electron";
 
 /** Z-index for the floating overlay panel — below app chrome when embedded in the shell. */
-export function getOverlayPortalZIndex(context: OverlayStackContext): number {
+export function getOverlayPortalZIndex(
+  context: OverlayStackContext,
+  sessionActive = false,
+): number {
+  if (sessionActive && context === "in-app-shell") {
+    return Z_LAYERS.OVERLAY_WINDOW;
+  }
+
   switch (context) {
     case "in-app-shell":
       return Z_LAYERS.OVERLAY_IN_SHELL;
