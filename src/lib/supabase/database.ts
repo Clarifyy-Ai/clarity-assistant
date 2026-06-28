@@ -1965,16 +1965,16 @@ export const adminAnalyticsDB = {
   }> {
     const today = new Date().toISOString().slice(0, 10);
     const [totalRes, proRes, todayRes, totalSessionsRes] = await Promise.all([
-      supabase.from("profiles").select("*", { count: "exact", head: true }),
+      supabase.from("profiles").select("id", { count: "exact", head: true }),
       supabase
         .from("profiles")
-        .select("*", { count: "exact", head: true })
+        .select("id", { count: "exact", head: true })
         .not("plan_id", "eq", "free"),
       supabase
         .from("sessions")
-        .select("*", { count: "exact", head: true })
+        .select("id", { count: "exact", head: true })
         .gte("created_at", today),
-      supabase.from("sessions").select("*", { count: "exact", head: true }),
+      supabase.from("sessions").select("id", { count: "exact", head: true }),
     ]);
 
     const firstErr = [totalRes, proRes, todayRes, totalSessionsRes].find(
