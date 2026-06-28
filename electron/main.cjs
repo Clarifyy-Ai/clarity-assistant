@@ -125,17 +125,19 @@ function createOverlay() {
   overlayWindow.on("resized", saveWindowBounds);
 
 
+  overlayWindow.once("ready-to-show", () => {
+    overlayWindow.showInactive();
+  });
+
   // Load app
   if (isDev) {
-    overlayWindow.loadURL("http://localhost:5173");
+    overlayWindow.loadURL("http://localhost:5173/#/app/live");
     // overlayWindow.webContents.openDevTools({ mode: "detach" });
   } else {
-    overlayWindow.loadFile(path.join(__dirname, "../dist/index.html"));
+    overlayWindow.loadFile(path.join(__dirname, "../dist/index.html"), {
+      hash: "/app/live",
+    });
   }
-
-  overlayWindow.once("ready-to-show", () => {
-    overlayWindow.show();
-  });
 
   // ★ Hide instead of close — keeps app alive
   overlayWindow.on("close", (e) => {
@@ -157,8 +159,7 @@ function createTray() {
     {
       label: "Show ClarifyAI",
       click: () => {
-        overlayWindow.show();
-        overlayWindow.focus();
+        overlayWindow.showInactive();
       },
     },
     {
@@ -179,7 +180,8 @@ function createTray() {
   tray.setContextMenu(menu);
 
   tray.on("click", () => {
-    overlayWindow.isVisible() ? overlayWindow.hide() : overlayWindow.show();
+    if (overlayWindow.isVisible()) overlayWindow.hide();
+    else overlayWindow.showInactive();
   });
 }
 
@@ -266,6 +268,24 @@ app.on("before-quit", () => {
 ipcMain.on("show-overlay", () => {
   overlayWindow?.show();
   overlayWindow?.focus();
+});
+
+ipcMain.on("show-overlay-inactive", () => {
+  overlayWindow?.showInactive();
+});
+
+ipcMain.on("hide-overlay", () => {
+  overlayWindow?.hide();
+});
+
+ipcMain.on("set-always-on-top", (_, { enabled, level }) => {
+  if (!overlayWindow) return;
+  const safeLevel = level === "normal" ? "normal" : "floating";
+  overlayWindow.setAlwaysOnTop(Boolean(enabled), safeLevel);
+});
+
+ipcMain.on("set-focusable", (_, focusable) => {
+  overlayWindow?.setFocusable(Boolean(focusable));
 });
 
 ipcMain.on("quit-app", () => {

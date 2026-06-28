@@ -29,6 +29,12 @@ import { notifyOverlayVisibilityOnMobile } from "@/lib/overlay/overlayVisibility
 import { getDefaultOverlayEnabled } from "@/lib/overlay/defaultOverlayPreference";
 import { setGenerateAnswerHandler } from "@/lib/overlay/hotkeys";
 import { useHotkeys } from "@/hooks/useHotkeys";
+import { DesktopOnlyGate } from "@/components/layout/DesktopOnlyGate";
+import { isElectronApp } from "@/lib/platform/isElectron";
+import {
+  initDesktopOverlayWindow,
+  teardownDesktopOverlayWindow,
+} from "@/lib/platform/electronWindowManager";
 
 const DEFAULT_CONFIG: LiveSessionConfig = {
   company: null,
@@ -46,6 +52,13 @@ const DEFAULT_CONFIG: LiveSessionConfig = {
 };
 
 export default function LiveRehearsal() {
+  if (!isElectronApp()) {
+    return <DesktopOnlyGate />;
+  }
+  return <LiveRehearsalSession />;
+}
+
+function LiveRehearsalSession() {
   const sessionStatus = useSessionStore((s) => s.status);
   const isVisible = useOverlayStore((s) => s.is_visible);
   const streamError = useAudioStore((s) => s.streams?.error ?? null);
@@ -57,6 +70,14 @@ export default function LiveRehearsal() {
 
   useEffect(() => {
     setDefaultOverlay(getDefaultOverlayEnabled());
+  }, []);
+
+  useEffect(() => {
+    if (!isElectronApp()) return;
+    void initDesktopOverlayWindow();
+    return () => {
+      void teardownDesktopOverlayWindow();
+    };
   }, []);
 
   const hasStartedRef = useRef(false);

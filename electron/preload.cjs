@@ -2,9 +2,14 @@
 const { contextBridge, ipcRenderer } = require("electron");
 
 contextBridge.exposeInMainWorld("electronAPI", {
-  show:   ()     => ipcRenderer.send("show-overlay"),
-  quit:   ()     => ipcRenderer.send("quit-app"),
+  show: () => ipcRenderer.send("show-overlay"),
+  showInactive: () => ipcRenderer.send("show-overlay-inactive"),
+  hide: () => ipcRenderer.send("hide-overlay"),
+  quit: () => ipcRenderer.send("quit-app"),
   resize: (w, h) => ipcRenderer.send("resize-overlay", { width: w, height: h }),
+  setAlwaysOnTop: (enabled, level = "floating") =>
+    ipcRenderer.send("set-always-on-top", { enabled, level }),
+  setFocusable: (focusable) => ipcRenderer.send("set-focusable", focusable),
 
   // Offline / Private mode
   setOfflineMode: (enabled) => ipcRenderer.send("set-offline-mode", enabled),

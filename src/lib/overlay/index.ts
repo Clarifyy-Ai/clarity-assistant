@@ -28,6 +28,23 @@ export type {
   OverlaySizeConfig,
 } from "./overlayCompositor";
 
+// ─── Screen Capture Evasion ───────────────────────────────────────────────────
+export {
+  STEALTH_ATTR,
+  CAPTURE_ATTR,
+  applyStealthToElement,
+  removeStealthFromElement,
+  isStealthActive,
+  toggleStealthOnElement,
+  getSupportInfo,
+  patchGetDisplayMedia,
+  enableContentProtection,
+  onCaptureStateChange,
+  isElectron,
+} from "./screenCaptureEvasion";
+
+export type { SupportLevel, SupportInfo } from "./screenCaptureEvasion";
+
 // ─── Stealth Mouse ────────────────────────────────────────────────────────────
 export {
   createDragHandler,

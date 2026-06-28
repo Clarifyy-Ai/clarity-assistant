@@ -64,7 +64,14 @@ import GovExams from "@/pages/marketing/GovExams";
 
 type ElectronAPI = {
   isElectron?: boolean;
+  platform?: string;
+  show?: () => void;
+  showInactive?: () => void;
+  hide?: () => void;
+  quit?: () => void;
   resize?: (w: number, h: number) => void;
+  setAlwaysOnTop?: (enabled: boolean, level?: "floating" | "normal") => void;
+  setFocusable?: (focusable: boolean) => void;
   onGlobalShortcut?: (callback: (action: string) => void) => void;
   removeGlobalShortcutListener?: () => void;
   onHotkeyConflict?: (callback: (info: { key: string; action: string }) => void) => void;

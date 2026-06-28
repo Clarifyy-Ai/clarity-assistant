@@ -21,6 +21,12 @@ import type { LiveSessionConfig } from "@/types/session.types";
 import { notifyOverlayVisibilityOnMobile } from "@/lib/overlay/overlayVisibilityNotice";
 import { setGenerateAnswerHandler } from "@/lib/overlay/hotkeys";
 import { useHotkeys } from "@/hooks/useHotkeys";
+import { DesktopOnlyGate } from "@/components/layout/DesktopOnlyGate";
+import { isElectronApp } from "@/lib/platform/isElectron";
+import {
+  initDesktopOverlayWindow,
+  teardownDesktopOverlayWindow,
+} from "@/lib/platform/electronWindowManager";
 
 const PREP_LABELS = [
   "Analysing your profile…",
@@ -43,6 +49,13 @@ const DEFAULT_CONFIG: LiveSessionConfig = {
 };
 
 export default function LiveOverlay() {
+  if (!isElectronApp()) {
+    return <DesktopOnlyGate featureName="Practice Coach overlay" />;
+  }
+  return <LiveOverlaySession />;
+}
+
+function LiveOverlaySession() {
   const navigate = useNavigate();
   const sessionStatus = useSessionStore((s) => s.status);
 
@@ -52,6 +65,13 @@ export default function LiveOverlay() {
 
   const hasStartedRef = useRef(false);
   const didEndRef = useRef(false);
+
+  useEffect(() => {
+    void initDesktopOverlayWindow();
+    return () => {
+      void teardownDesktopOverlayWindow();
+    };
+  }, []);
 
   const call = useCallSession({
     config,

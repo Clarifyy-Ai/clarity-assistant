@@ -11,6 +11,7 @@ import { useAuthStore } from "@/store/userStore";
 import { profilesDB } from "@/lib/supabase/database";
 import { useDocumentPiP } from "@/lib/overlay/useDocumentPiP";
 import { getOverlayPortalZIndex, type OverlayStackContext } from "@/lib/overlay/zIndexManager";
+import { resizeDesktopOverlayWindow } from "@/lib/platform/electronWindowManager";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 import { cn } from "@/lib/utils";
@@ -53,8 +54,7 @@ const IS_ELECTRON = Boolean(
 );
 
 function electronResize(w: number, h: number) {
-  const api = (window as unknown as { electronAPI?: { resize?: (w: number, h: number) => void } }).electronAPI;
-  api?.resize?.(w, h);
+  resizeDesktopOverlayWindow(w, h);
 }
 
 // ─────────────────────────────────────────────────────────────────
