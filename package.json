@@ -44,7 +44,7 @@
       "electron/**/*"
     ],
     "directories": {
-      "output": "release"
+      "output": "/tmp/clarify-release"
     },
     "mac": {
       "target": [
@@ -69,7 +69,7 @@
           ]
         }
       ],
-      "icon": "public/icon.ico"
+      "signAndEditExecutable": false
     },
     "linux": {
       "target": [
