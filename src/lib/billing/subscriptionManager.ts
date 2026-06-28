@@ -690,11 +690,12 @@ export async function getUserSubscription(
   }
 
   const [profile, profileError] = await tryCatch(async () => {
+    // NOTE: stripe_customer_id and subscription_id are not selectable from the
+    // client (column-level grant revoked); rely on the `subscriptions` table
+    // fallback below for those identifiers.
     const { data, error } = await supabase
       .from("profiles")
-      .select(
-        "plan_id, subscription_id, stripe_customer_id, subscription_status"
-      )
+      .select("plan_id, subscription_status")
       .eq("id", userId)
       .maybeSingle();
 
