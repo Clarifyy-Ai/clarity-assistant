@@ -405,6 +405,62 @@ export function getUserMessage(error: unknown): string {
   return USER_MESSAGES[appError.code] ?? appError.message ?? "Something went wrong.";
 }
 
+type SupabaseAuthErrorShape = {
+  message?: string;
+  code?: string;
+  status?: number;
+};
+
+/**
+ * Map Supabase Auth API errors (signInWithPassword, signUp, etc.) to user-facing copy.
+ */
+export function formatSupabaseAuthError(error: unknown): string {
+  if (typeof error === "string" && error.trim()) {
+    return error.trim();
+  }
+
+  if (!error || typeof error !== "object") {
+    return USER_MESSAGES[ErrorCode.AUTH_INVALID_CREDENTIALS]!;
+  }
+
+  const err = error as SupabaseAuthErrorShape;
+  const message = err.message?.trim() ?? "";
+  const code = err.code?.toLowerCase() ?? "";
+
+  if (
+    message.includes("Failed to fetch") ||
+    message.includes("NetworkError") ||
+    message.includes("Load failed")
+  ) {
+    return "Cannot reach the sign-in service. Check your internet connection, or verify Supabase URL/keys are set correctly for this deployment.";
+  }
+
+  if (message.toLowerCase().includes("invalid api key")) {
+    return "Sign-in is misconfigured (invalid Supabase API key). Redeploy with correct VITE_SUPABASE_ANON_KEY.";
+  }
+
+  switch (code) {
+    case "invalid_credentials":
+    case "invalid_grant":
+      return USER_MESSAGES[ErrorCode.AUTH_INVALID_CREDENTIALS]!;
+    case "email_not_confirmed":
+      return USER_MESSAGES[ErrorCode.AUTH_EMAIL_NOT_VERIFIED]!;
+    case "user_banned":
+      return "This account has been disabled. Contact support if you need help.";
+    case "over_request_rate_limit":
+    case "too_many_requests":
+      return "Too many sign-in attempts. Please wait a few minutes and try again.";
+    default:
+      break;
+  }
+
+  if (/invalid login credentials/i.test(message)) {
+    return USER_MESSAGES[ErrorCode.AUTH_INVALID_CREDENTIALS]!;
+  }
+
+  return message || USER_MESSAGES[ErrorCode.AUTH_INVALID_CREDENTIALS]!;
+}
+
 // ─── Async Error Wrapper ──────────────────────────────────────────────────────
 
 /**

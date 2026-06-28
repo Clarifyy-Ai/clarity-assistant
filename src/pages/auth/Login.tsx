@@ -21,6 +21,7 @@ import {
   AzureOAuthButton,
 } from "@/components/auth/OAuthButton";
 
+import { formatSupabaseAuthError } from "@/lib/errors";
 import { loginSchema, type LoginInput } from "@/lib/validators";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { BrandLogo } from "@/components/marketing";
@@ -228,10 +229,11 @@ export default function Login(): JSX.Element {
       }
 
       const remainingAttempts = MAX_ATTEMPTS - nextAttempts;
-      const message =
-        error instanceof Error
-          ? error.message
-          : "Invalid email or password.";
+      const message = formatSupabaseAuthError(error);
+
+      if (import.meta.env.DEV) {
+        console.error("[Login] signInWithPassword failed:", error);
+      }
 
       setAuthError(
         `${message} (${remainingAttempts} attempt${
