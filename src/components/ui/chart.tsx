@@ -223,12 +223,9 @@ const ChartLegend = RechartsPrimitive.Legend;
 
 const ChartLegendContent = React.forwardRef<
   HTMLDivElement,
-  React.ComponentProps<"div"> &
-    Pick<RechartsPrimitive.LegendProps, "payload" | "verticalAlign"> & {
-      hideIcon?: boolean;
-      nameKey?: string;
-    }
->(({ className, hideIcon = false, payload, verticalAlign = "bottom", nameKey }, ref) => {
+  // Loosened typing for recharts v3 generic Legend props.
+  any
+>(({ className, hideIcon = false, payload, verticalAlign = "bottom", nameKey }: any, ref) => {
   const { config } = useChart();
 
   if (!payload?.length) {
