@@ -96,12 +96,12 @@ export function buildHotkeyDefinitions(): HotkeyDefinition[] {
       isEnabled:   () => true,
       showInHelp:  true,
     },
-    // T-0293/T-0307/T-0308 — alias for overlay toggle
+    // T-0293/T-0307/T-0308 — alias for overlay toggle (moved to Ctrl+Shift+Y to avoid conflict with capture)
     {
       id:          "toggle_overlay_alias",
       label:       "Toggle Overlay (Alt)",
       description: "Same as Ctrl+Shift+H — show / hide overlay",
-      keys:        ["ctrl", "shift", "c"],
+      keys:        ["ctrl", "shift", "y"],
       category:    "overlay",
       action:      () => useOverlayStore.getState().toggleMinimize(),
       isEnabled:   () => true,
