@@ -47,14 +47,29 @@ Deno.serve(async (req) => {
     ------------------------------------------------------- */
 
     const deleteTables = [
+      // Transactional / billing data
       "credit_transactions",
+      "subscriptions",
+      "payment_orders",
+      // Session content
       "session_answers",
       "session_debriefs",
+      "session_transcripts",
+      // Feature data
       "answer_bank",
       "company_research",
       "interviews",
+      "scheduled_interviews",
+      "notifications",
+      "referrals",
+      "mock_tests",
+      // Documents (before sessions to avoid FK issues)
       "documents",
+      "resumes",
+      // Core
       "sessions",
+      "user_roles",
+      // Profile last (FK target)
       "profiles",
     ];
 
@@ -110,9 +125,11 @@ Deno.serve(async (req) => {
     /* -------------------------------------------------------
        AUDIT LOG (optional)
     ------------------------------------------------------- */
+    // Use service-role anon write since user is now deleted
     await db.from("audit_logs").insert({
       user_id: targetUserId,
-      event: "account_deleted",
+      action: "account_deleted",
+      metadata: { email: userEmail },
       created_at: new Date().toISOString(),
     }).catch(() => {});
 

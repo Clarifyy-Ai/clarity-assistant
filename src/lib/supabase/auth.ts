@@ -97,7 +97,7 @@ export async function signUp(credentials: SignUpCredentials): Promise<AuthResult
           full_name:  fullName  ?? "",
           avatar_url: avatarUrl ?? "",
         },
-        emailRedirectTo: `${window.location.origin}/auth/verify-email`,
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
 
@@ -210,7 +210,7 @@ export async function sendMagicLink(email: string): Promise<void> {
 export async function sendPasswordReset(email: string): Promise<void> {
   const [, err] = await tryCatch(async () => {
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/auth/reset-password`,
+      redirectTo: `${window.location.origin}/reset-password`,
     });
     if (error) throw error;
   });
@@ -304,7 +304,7 @@ export async function resendVerificationEmail(email: string): Promise<void> {
       type:  "signup",
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/verify-email`,
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
       },
     });
     if (error) throw error;

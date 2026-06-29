@@ -10,6 +10,10 @@ verify_jwt = false
 [functions.stripe-webhook]
 verify_jwt = false
 
+# Razorpay webhooks are signed by HMAC — must NOT verify Supabase JWT.
+[functions.razorpay-webhook]
+verify_jwt = false
+
 [functions.ai-coach-chat]
 verify_jwt = true
 
@@ -125,4 +129,13 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.validate-api-key]
+verify_jwt = true
+
+[functions.billing-status]
+verify_jwt = true
+
+[functions.razorpay-create-order]
+verify_jwt = true
+
+[functions.record-referral]
 verify_jwt = true
