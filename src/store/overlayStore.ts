@@ -31,6 +31,19 @@ export type HintState =
 // Overlay Store
 // ─────────────────────────────────────────────────────────────────
 
+// ─────────────────────────────────────────────────────────────────
+// Overlay Layout Mode
+// ─────────────────────────────────────────────────────────────────
+
+/**
+ * Overlay layout mode enum.
+ *  - floating  — free-floating draggable panel (default)
+ *  - docked    — locked to screen edge; no drag
+ *  - sidebar   — fixed to right/left edge, full viewport height
+ *  - compact   — minimal pill
+ */
+export type OverlayLayoutMode = "floating" | "docked" | "sidebar" | "compact";
+
 export interface ActivityLogEntry {
   event: string;
   timestamp: number;
@@ -109,6 +122,7 @@ interface OverlayStore {
   is_hotkey_help_visible: boolean;
   is_pip_active: boolean;
   pip_opt_in: boolean;
+  overlay_layout_mode: OverlayLayoutMode;
 
   chat_history: ChatMessage[];
   is_chat_generating: boolean;
@@ -118,6 +132,7 @@ interface OverlayStore {
 
   pinned_hints: Array<{ id: string; question: string; hint: string; timestamp: number }>;
 
+  setOverlayLayoutMode: (mode: OverlayLayoutMode) => void;
   showOverlay: () => void;
   hideOverlay: () => void;
   toggleOverlay: () => void;
@@ -275,6 +290,7 @@ export const useOverlayStore = create<OverlayStore>()(
 
       is_peek_active: false,
       is_minimal_mode: false,
+      overlay_layout_mode: "floating" as OverlayLayoutMode,
 
       is_hotkey_help_visible: false,
       is_pip_active: false,
@@ -341,7 +357,8 @@ export const useOverlayStore = create<OverlayStore>()(
         set((s) => ({
           is_visible: false,
           is_peek_active: true,
-          is_minimal_mode: true,
+          // Do NOT force is_minimal_mode — minimized just hides the panel;
+          // peek pill renders via is_peek_active branch independently.
           is_panic_visible: false,
           activity_log: [
             ...s.activity_log,
@@ -353,6 +370,7 @@ export const useOverlayStore = create<OverlayStore>()(
         set((s) => ({
           is_visible: true,
           is_peek_active: false,
+          is_minimal_mode: false,
           session_start_time: s.session_start_time ?? Date.now(),
           activity_log: [
             ...s.activity_log,
@@ -366,7 +384,6 @@ export const useOverlayStore = create<OverlayStore>()(
             return {
               is_visible: false,
               is_peek_active: true,
-              is_minimal_mode: true,
               is_panic_visible: false,
               activity_log: [
                 ...s.activity_log,
@@ -379,6 +396,7 @@ export const useOverlayStore = create<OverlayStore>()(
             return {
               is_visible: true,
               is_peek_active: false,
+              is_minimal_mode: false,
               session_start_time: s.session_start_time ?? Date.now(),
               activity_log: [
                 ...s.activity_log,
@@ -390,6 +408,7 @@ export const useOverlayStore = create<OverlayStore>()(
           return {
             is_visible: true,
             is_peek_active: false,
+            is_minimal_mode: false,
             session_start_time: s.session_start_time ?? Date.now(),
             activity_log: [
               ...s.activity_log,
@@ -689,12 +708,24 @@ export const useOverlayStore = create<OverlayStore>()(
           font_size: Math.max(11, Math.min(20, font_size)),
         }),
 
+      setOverlayLayoutMode: (overlay_layout_mode) =>
+        set((s) => ({
+          overlay_layout_mode,
+          // Sync minimal mode flag for compact layout.
+          is_minimal_mode: overlay_layout_mode === "compact" ? true : s.is_minimal_mode,
+          // Sidebar / docked disable proctor-safe corner lock.
+          is_proctor_safe: overlay_layout_mode === "docked" || overlay_layout_mode === "sidebar"
+            ? false
+            : s.is_proctor_safe,
+        })),
+
+      // Peek shows a temporary minimal pill without permanently changing layout mode.
       setPeekActive: (is_peek_active) =>
         set((s) => ({
           is_peek_active,
           is_visible: is_peek_active ? false : s.is_visible,
           is_panic_visible: is_peek_active ? false : s.is_panic_visible,
-          is_minimal_mode: is_peek_active ? true : s.is_minimal_mode,
+          // Do NOT force is_minimal_mode — peek has its own render branch.
         })),
 
       setMinimalMode: (is_minimal_mode) =>
@@ -733,6 +764,7 @@ export const useOverlayStore = create<OverlayStore>()(
         stealth_opacity: state.stealth_opacity,
         font_size: state.font_size,
         is_minimal_mode: state.is_minimal_mode,
+        overlay_layout_mode: state.overlay_layout_mode,
         pip_opt_in: state.pip_opt_in,
       }),
     }

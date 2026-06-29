@@ -13,6 +13,12 @@ const desktopBridge = {
   isElectron: true,
   openExternal: (targetUrl) => ipcRenderer.invoke("shell:openExternal", targetUrl),
   setContentProtection: (enabled) => ipcRenderer.invoke("set-content-protection", enabled),
+  // Overlay window management (names match ElectronWindowAPI interface)
+  setAlwaysOnTop: (flag, level) => ipcRenderer.invoke("overlay:set-always-on-top", flag, level ?? "floating"),
+  resize: (width, height) => ipcRenderer.invoke("overlay:resize", width, height),
+  showInactive: () => ipcRenderer.invoke("overlay:show-inactive"),
+  hide: () => ipcRenderer.invoke("overlay:hide"),
+  // Update events
   onUpdateAvailable: (callback) => ipcRenderer.on("update-available", callback),
   onUpdateDownloaded: (callback) => ipcRenderer.on("update-downloaded", callback),
 };

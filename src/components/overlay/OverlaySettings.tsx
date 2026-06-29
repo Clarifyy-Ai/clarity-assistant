@@ -1,6 +1,7 @@
 // src/components/overlay/OverlaySettings.tsx
 import { useMemo, useState } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
+import type { OverlayLayoutMode } from "@/store/overlayStore";
 import { setAppStealthMode } from "@/lib/stealth/stealthActions";
 import {
   Settings,
@@ -10,6 +11,7 @@ import {
   Shield,
   AlertCircle,
   RefreshCw,
+  LayoutTemplate,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -34,9 +36,8 @@ const DEFAULT_LOCAL_SETTINGS: LocalOnlySettings = {
 };
 
 const HINT_STYLE_OPTIONS = [
-  { v: "short_hints", l: "Hints" },
-  { v: "full_answer", l: "Full" },
-  { v: "outline", l: "Outline" },
+  { v: "short_hints",   l: "Hints" },
+  { v: "full_answer",   l: "Full" },
   { v: "keywords_only", l: "Keys" },
 ] as const;
 
@@ -55,6 +56,7 @@ export function OverlaySettings({
   const fontSize = useOverlayStore((s) => s.font_size);
   const isMinimalMode = useOverlayStore((s) => s.is_minimal_mode);
   const pipOptIn = useOverlayStore((s) => s.pip_opt_in);
+  const overlayLayoutMode = useOverlayStore((s) => s.overlay_layout_mode);
 
   const [localSettings, setLocalSettings] =
     useState<LocalOnlySettings>(DEFAULT_LOCAL_SETTINGS);
@@ -73,6 +75,7 @@ export function OverlaySettings({
       autoAnswerSilenceSeconds,
       minimalMode: isMinimalMode,
       pipOptIn,
+      layoutMode: overlayLayoutMode,
       ...localSettings,
     }),
     [
@@ -86,6 +89,7 @@ export function OverlaySettings({
       autoAnswerSilenceSeconds,
       isMinimalMode,
       pipOptIn,
+      overlayLayoutMode,
       localSettings,
     ]
   );
@@ -121,6 +125,9 @@ export function OverlaySettings({
       case "minimalMode":
         os.setMinimalMode?.(Boolean(value));
         break;
+      case "layoutMode":
+        os.setOverlayLayoutMode?.(value as OverlayLayoutMode);
+        break;
     }
   };
 
@@ -143,6 +150,7 @@ export function OverlaySettings({
     os.setAutoGenerate?.(false);
     os.setAutoAnswerSilenceSeconds(3);
     os.setMinimalMode?.(false);
+    os.setOverlayLayoutMode?.("floating");
 
     setLocalSettings(DEFAULT_LOCAL_SETTINGS);
   };
@@ -312,6 +320,37 @@ export function OverlaySettings({
             ariaLabel="Toggle proctor safe position"
           />
         </SettingRow>
+
+        <div className="my-2 border-t border-white/[0.06]" />
+
+        {/* Layout mode picker */}
+        <div className="px-3 py-2.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+          <div className="flex items-center gap-1.5 mb-2">
+            <LayoutTemplate className="h-3.5 w-3.5 text-white/30" aria-hidden="true" />
+            <p className="text-[12px] font-semibold text-white/60">Layout Mode</p>
+          </div>
+          <div className="grid grid-cols-4 gap-1 bg-black/20 p-1 rounded-xl">
+            {(["floating", "docked", "sidebar", "compact"] as OverlayLayoutMode[]).map((mode) => (
+              <button
+                key={mode}
+                type="button"
+                onClick={() => handleStoreSettingChange("layoutMode", mode)}
+                aria-pressed={overlayLayoutMode === mode}
+                className={cn(
+                  "py-1 rounded-lg text-[10px] font-bold capitalize transition-all",
+                  overlayLayoutMode === mode
+                    ? "bg-indigo-600/40 text-indigo-200"
+                    : "text-white/30 hover:text-white/55"
+                )}
+              >
+                {mode}
+              </button>
+            ))}
+          </div>
+          <p className="text-[10px] text-white/25 mt-1.5 leading-snug">
+            Floating: free drag · Docked: edge snap · Sidebar: full-height rail · Compact: pill
+          </p>
+        </div>
 
         <div className="my-2 border-t border-white/[0.06]" />
 

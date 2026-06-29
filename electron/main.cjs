@@ -182,6 +182,31 @@ app.whenReady().then(() => {
     mainWindow?.setContentProtection(Boolean(enabled));
   });
 
+  // Overlay window controls — always-on-top, resize, show/hide
+  ipcMain.handle("overlay:set-always-on-top", (_event, flag, level) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const safeLevel = ["normal", "floating", "torn-off-menu", "modal-panel", "main-menu",
+      "status", "pop-up-menu", "screen-saver"].includes(level) ? level : "floating";
+    mainWindow.setAlwaysOnTop(Boolean(flag), safeLevel);
+  });
+
+  ipcMain.handle("overlay:resize", (_event, width, height) => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    const w = Math.max(320, Math.min(1200, Number(width) || 480));
+    const h = Math.max(200, Math.min(900,  Number(height) || 600));
+    mainWindow.setSize(w, h);
+  });
+
+  ipcMain.handle("overlay:show-inactive", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.showInactive();
+  });
+
+  ipcMain.handle("overlay:hide", () => {
+    if (!mainWindow || mainWindow.isDestroyed()) return;
+    mainWindow.hide();
+  });
+
   buildMenu({ isDev });
   createMainWindow();
 
