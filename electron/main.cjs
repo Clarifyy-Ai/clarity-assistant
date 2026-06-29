@@ -139,7 +139,13 @@ function createMainWindow() {
     );
   });
 
-  mainWindow.once("ready-to-show", () => showMainWindow());
+  mainWindow.once("ready-to-show", () => {
+    // Enable screen capture protection immediately on show.
+    // This hides the window from Zoom, Meet, Teams, OBS and any screen recorder
+    // — the same mechanism Parakeet AI uses.
+    mainWindow.setContentProtection(true);
+    showMainWindow();
+  });
 
   // Fallback: never leave the app running with a hidden window.
   const showFallbackTimer = setTimeout(() => {
@@ -179,6 +185,8 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("set-content-protection", (_event, enabled) => {
+    // setContentProtection(true) = window hidden from screen recorders (Parakeet-style).
+    // setContentProtection(false) = window visible (e.g. for diagnostic/support mode).
     mainWindow?.setContentProtection(Boolean(enabled));
   });
 

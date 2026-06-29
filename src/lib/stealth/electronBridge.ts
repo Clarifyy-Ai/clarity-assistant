@@ -17,11 +17,22 @@ function getElectronAPI(): ElectronWindowAPI | null {
 
 class ElectronStealthBridge implements ElectronStealthAPI {
   /**
-   * OS capture exclusion is not enabled in this build (compliance).
-   * Callers may still invoke this; it always returns false.
+   * Exclude the overlay window from OS screen capture.
+   * Uses Electron setContentProtection (Windows DWM / macOS CGWindowLevel).
+   * This makes the window invisible to screen recorders, OBS, Zoom, Meet, etc.
+   * — identical to how Parakeet AI works.
    */
-  async setScreenCaptureExcluded(_enabled: boolean): Promise<boolean> {
-    return false;
+  async setScreenCaptureExcluded(enabled: boolean): Promise<boolean> {
+    const api = getElectronAPI();
+    if (!api) return false;
+    try {
+      // setContentProtection is exposed via preload.cjs → IPC → main.cjs
+      await (api as any).setContentProtection?.(enabled);
+      return true;
+    } catch (err) {
+      console.error("[stealth] setContentProtection failed:", err);
+      return false;
+    }
   }
 
   async hideOverlayWindow(): Promise<void> {

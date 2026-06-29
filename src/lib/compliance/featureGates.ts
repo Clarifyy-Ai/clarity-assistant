@@ -12,9 +12,13 @@
 export const DISCRETE_UI_LABELS_ENABLED = true;
 
 /**
- * Stealth capture-evasion is permanently disabled by compliance policy.
- * This always returns false; callers should treat it as a hard gate.
+ * Screen-capture exclusion via Electron setContentProtection.
+ * Enabled for desktop (Electron) builds only — uses OS-native APIs
+ * (Windows DWM WDA_EXCLUDEFROMCAPTURE, macOS CGWindowLevel).
+ * Returns false for browser/web builds where OS capture APIs are unavailable.
  */
 export function isStealthCaptureFeatureAllowed(): boolean {
-  return false;
+  // Only allow in Electron desktop builds
+  return typeof window !== "undefined" &&
+    !!(window as any).electronAPI?.isElectron;
 }

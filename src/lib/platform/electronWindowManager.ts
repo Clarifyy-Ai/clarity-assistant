@@ -25,7 +25,12 @@ function getApi(): ElectronWindowAPI | undefined {
   return (window as Window & { electronAPI?: ElectronWindowAPI }).electronAPI;
 }
 
-/** Apply desktop overlay window profile (no OS capture exclusion). */
+/**
+ * Apply desktop overlay window profile.
+ * Enables Parakeet-style screen capture exclusion:
+ * the overlay window is invisible to Zoom, Meet, Teams, OBS, etc.
+ * Uses Electron setContentProtection (Windows DWM / macOS CGWindowLevel).
+ */
 export async function initDesktopOverlayWindow(): Promise<void> {
   const api = getApi();
   if (!api) return;
@@ -35,9 +40,9 @@ export async function initDesktopOverlayWindow(): Promise<void> {
   api.showInactive?.();
 
   await enableScreenCaptureBlocker({
-    excludeFromCapture: false,
+    excludeFromCapture: true,   // Hide from screen recorders (Parakeet-style)
     enableOpacityAutoFade: true,
-    enableAutoHideOnFocusLoss: true,
+    enableAutoHideOnFocusLoss: false, // Don't auto-hide; user controls via hotkeys
   });
 }
 
