@@ -151,6 +151,9 @@ if (import.meta.env.PROD && !isElectronApp()) {
 // ── Mount React ───────────────────────────────────────────────────────────
 document.getElementById("boot-splash")?.remove();
 
+// Runtime check: confirm Supabase env + connectivity. Non-blocking.
+void logSupabaseHealth();
+
 ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
     <Sentry.ErrorBoundary
