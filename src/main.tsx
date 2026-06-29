@@ -5,6 +5,7 @@ import posthog from "posthog-js";
 import App from "./App";
 import "./index.css";
 import { isElectronApp } from "@/lib/platform/isElectron";
+import { logSupabaseHealth } from "@/lib/supabase/healthCheck";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
@@ -149,6 +150,9 @@ if (import.meta.env.PROD && !isElectronApp()) {
 
 // ── Mount React ───────────────────────────────────────────────────────────
 document.getElementById("boot-splash")?.remove();
+
+// Runtime check: confirm Supabase env + connectivity. Non-blocking.
+void logSupabaseHealth();
 
 ReactDOM.createRoot(rootEl).render(
   <React.StrictMode>
