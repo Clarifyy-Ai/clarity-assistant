@@ -43,13 +43,7 @@ export function resolveIsIndiaUser(profile?: {
   const forced = envForceIndia();
   if (forced !== null) return forced;
 
-  if (profile?.timezone) {
-    return isIndiaTimezone(profile.timezone);
-  }
-
-  if (profile?.locale && isIndiaLocale(profile.locale)) {
-    return true;
-  }
-
-  return detectIndiaFromBrowser();
+  // Allow all users globally — gov exam access is no longer gated to India only.
+  // The feature is useful to anyone preparing for Indian government exams worldwide.
+  return true;
 }

@@ -1,14 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useDocumentStore } from "@/store/documentStore";
 import { useAuthStore } from "@/store/authStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { setAppStealthMode } from "@/lib/stealth/stealthActions";
 import {
-  Radio, FileText, Briefcase, Brain,  Volume2,
-  ChevronDown, Settings2, Zap, Shield, Keyboard,
+  Mic, MicOff, Volume2, Briefcase, Brain, ChevronRight,
+  Sparkles, Shield, FileText, Settings2, Check, AlertTriangle,
+  Eye, Info,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { formatHotkeyLabel } from "@/lib/overlay/hotkeys";
 import { enumerateAudioDevices } from "@/lib/audio/audioCapture";
 import type { AudioDevice } from "@/types/audio.types";
 import type { LiveSessionConfig } from "@/types/session.types";
@@ -21,21 +21,25 @@ interface PreSessionSetupProps {
   initialConfig?: LiveSessionConfig;
 }
 
-const MODEL_OPTIONS: { id: PreferredAIModel; label: string; desc: string }[] = [
-  { id: "gpt-4o",            label: "GPT-4o",           desc: "Best for nuanced answers" },
-  { id: "claude-3-5-sonnet", label: "Claude 3.5 Sonnet", desc: "Excellent reasoning" },
-  { id: "gemini-1-5-pro",    label: "Gemini 1.5 Pro",   desc: "Fast, cost-effective" },
-  { id: "gemini-flash",      label: "Gemini Flash",      desc: "Fastest response time" },
+const MODEL_OPTIONS: { id: PreferredAIModel; label: string; desc: string; tag?: string }[] = [
+  { id: "gemini-flash",      label: "Gemini Flash",       desc: "Fastest · Best for practice",   tag: "Recommended" },
+  { id: "gemini-1-5-pro",    label: "Gemini 1.5 Pro",     desc: "Deeper reasoning" },
+  { id: "gpt-4o",            label: "GPT-4o",             desc: "Nuanced, balanced answers" },
+  { id: "claude-3-5-sonnet", label: "Claude 3.5 Sonnet",  desc: "Excellent for writing" },
 ];
 
 const INTERVIEW_TYPES = [
-  { value: "behavioral",    label: "Behavioural" },
-  { value: "technical",      label: "Technical" },
-  { value: "system_design",  label: "System Design" },
-  { value: "coding",         label: "Coding" },
-  { value: "hr",             label: "HR / Culture Fit" },
-  { value: "product",        label: "Product" },
-  { value: "leadership",     label: "Leadership" },
+  { value: "behavioral",   label: "Behavioural",    emoji: "🧠" },
+  { value: "technical",    label: "Technical",      emoji: "💻" },
+  { value: "system_design",label: "System Design",  emoji: "🏗️" },
+  { value: "hr",           label: "HR / Culture",   emoji: "🤝" },
+  { value: "mixed",        label: "Mixed",          emoji: "🎯" },
+];
+
+const HINT_STYLES: { value: HintStyle; label: string; desc: string }[] = [
+  { value: "short_hints",    label: "Hints",       desc: "Key bullet points only" },
+  { value: "full_answer",    label: "Full Answer",  desc: "Complete suggested response" },
+  { value: "keywords_only",  label: "Keywords",    desc: "Trigger words to jog memory" },
 ];
 
 export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }: PreSessionSetupProps) {
@@ -45,38 +49,27 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
   const jds         = useDocumentStore((s) => s.jds);
   const activeResumeId = useDocumentStore((s) => s.active_resume_id);
   const activeJdId     = useDocumentStore((s) => s.active_jd_id);
-  const [interviewType,     setInterviewType]     = useState(initialConfig?.interview_type ?? "behavioral");
-  const [resumeId,          setResumeId]          = useState<string | null>(initialConfig?.resume_id ?? activeResumeId);
-  const [jdId,              setJdId]              = useState<string | null>(initialConfig?.jd_id ?? activeJdId);
-  const [instructions,      setInstructions]      = useState(initialConfig?.instructions ?? "");
+
   const typedProfile = profile as unknown as UserProfile | null;
-  const [model,             setModel]             = useState<PreferredAIModel>(
-    typedProfile?.preferred_model ?? "gemini-flash"
-  );
-  const [smartRouting,      setSmartRouting]       = useState(false);
-  const [hintStyle,         setHintStyle]         = useState<HintStyle>(
-    typedProfile?.hint_style ?? "short_hints"
-  );
-  const [enableSystemAudio, setEnableSystemAudio] = useState(false);
-  const [stealthMode,       setStealthMode]       = useState(false);
-  const [showAdvanced,      setShowAdvanced]      = useState(false);
-  const [micDevices,        setMicDevices]        = useState<AudioDevice[]>([]);
-  const [selectedMicId,     setSelectedMicId]     = useState<string>("");
-  const [noiseSuppression,  setNoiseSuppression]   = useState(true);
 
-  const systemAudioSupported = typeof navigator !== "undefined"
-    && !!navigator.mediaDevices
-    && "getDisplayMedia" in navigator.mediaDevices;
+  const [step, setStep] = useState<"type" | "settings" | "audio">("type");
+  const [interviewType, setInterviewType]   = useState(initialConfig?.interview_type ?? "behavioral");
+  const [resumeId,      setResumeId]        = useState<string | null>(initialConfig?.resume_id ?? activeResumeId);
+  const [jdId,          setJdId]            = useState<string | null>(initialConfig?.jd_id ?? activeJdId);
+  const [company,       setCompany]         = useState(initialConfig?.company ?? "");
+  const [role,          setRole]            = useState(initialConfig?.role ?? "");
+  const [model,         setModel]           = useState<PreferredAIModel>(typedProfile?.preferred_model ?? "gemini-flash");
+  const [hintStyle,     setHintStyle]       = useState<HintStyle>(typedProfile?.hint_style ?? "short_hints");
+  const [stealthMode,   setStealthMode]     = useState(false);
+  const [micDevices,    setMicDevices]      = useState<AudioDevice[]>([]);
+  const [selectedMicId, setSelectedMicId]   = useState<string>("");
+  const [noiseSuppression, setNoiseSuppression] = useState(true);
+  const [micPermission, setMicPermission]   = useState<"unknown" | "granted" | "denied" | "checking">("unknown");
+  const [showAdvanced,  setShowAdvanced]    = useState(false);
+  const micCheckedRef = useRef(false);
 
-  const [micPermission, setMicPermission] = useState<"unknown" | "granted" | "denied" | "checking">("unknown");
-
-  useEffect(() => {
-    setResumeId(activeResumeId);
-  }, [activeResumeId]);
-
-  useEffect(() => {
-    setJdId(activeJdId);
-  }, [activeJdId]);
+  useEffect(() => { setResumeId(activeResumeId); }, [activeResumeId]);
+  useEffect(() => { setJdId(activeJdId); }, [activeJdId]);
 
   const checkMicPermission = async () => {
     setMicPermission("checking");
@@ -90,60 +83,58 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
   };
 
   useEffect(() => {
+    if (micCheckedRef.current) return;
+    micCheckedRef.current = true;
     if (navigator.permissions) {
-      navigator.permissions.query({ name: "microphone" as PermissionName }).then((result) => {
-        if (result.state === "granted") setMicPermission("granted");
-        else if (result.state === "denied") setMicPermission("denied");
-      }).catch((err) => {
-        console.error("[PreSessionSetup] microphone permissions query failed:", err);
-      });
+      navigator.permissions
+        .query({ name: "microphone" as PermissionName })
+        .then((r) => {
+          if (r.state === "granted") setMicPermission("granted");
+          else if (r.state === "denied") setMicPermission("denied");
+        })
+        .catch(() => {});
     }
   }, []);
 
   useEffect(() => {
     if (micPermission !== "granted") return;
-    void enumerateAudioDevices()
+    enumerateAudioDevices()
       .then((devices) => {
         setMicDevices(devices);
         if (!selectedMicId && devices.length > 0) {
-          const defaultDevice = devices.find((d) => d.isDefault) ?? devices[0];
-          setSelectedMicId(defaultDevice.deviceId);
+          setSelectedMicId((devices.find((d) => d.isDefault) ?? devices[0]).deviceId);
         }
       })
-      .catch((err) => {
-        console.warn("[PreSessionSetup] enumerateAudioDevices failed:", err);
-      });
+      .catch(() => {});
   }, [micPermission, selectedMicId]);
 
   function handleStart() {
     if (micPermission === "denied") return;
     const config: LiveSessionConfig = {
-      company:             null,
-      role:                null,
+      company:             company || null,
+      role:                role || null,
       hint_style:          hintStyle,
-      model:               smartRouting ? "gemini-flash" : model,
-      smart_routing:       smartRouting,
+      model,
+      smart_routing:       false,
       stealth_mode:        stealthMode,
       resume_id:           resumeId,
       jd_id:               jdId,
       interview_type:      interviewType,
-      instructions,
-      enable_system_audio: enableSystemAudio,
-      mic_device_id: selectedMicId || null,
-      noise_suppression: noiseSuppression,
+      instructions:        "",
+      enable_system_audio: false,
+      mic_device_id:       selectedMicId || null,
+      noise_suppression:   noiseSuppression,
     };
-
     const overlay = useOverlayStore.getState();
-    overlay.setActiveModel(smartRouting ? "gemini-flash" : model);
+    overlay.setActiveModel(model);
     overlay.setHintStyle(hintStyle);
     setAppStealthMode(stealthMode);
-
     onStart(config);
   }
 
   if (creditsExhausted) {
     return (
-      <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
+      <div className="min-h-screen bg-background flex items-center justify-center p-6">
         <div className="w-full max-w-md rounded-2xl border border-border bg-card">
           <CreditExhaustedState />
         </div>
@@ -151,305 +142,311 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
     );
   }
 
+  const isMock = sessionType === "mock";
+  const canProceed = micPermission !== "denied";
+
   return (
-    <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
-      <div className="w-full max-w-lg space-y-6">
-        <div className="text-center">
-          <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-sm font-medium mb-4">
-            <Radio className="w-3.5 h-3.5 animate-pulse" />
-            Session Setup
+    <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-4 sm:p-6">
+      <div className="w-full max-w-xl">
+
+        {/* Header */}
+        <div className="text-center mb-6">
+          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-primary text-xs font-semibold mb-4">
+            <Sparkles className="w-3.5 h-3.5" />
+            {isMock ? "Mock Interview" : "Practice Coach"}
           </div>
-          <h1 className="text-3xl font-bold text-foreground">
-            Configure Your Session
+          <h1 className="text-2xl sm:text-3xl font-bold text-foreground">
+            {isMock ? "Set up your mock interview" : "Configure your session"}
           </h1>
-          <p className="text-muted-foreground mt-2 text-sm">
-            Configure your session below, then start when ready.
+          <p className="text-muted-foreground text-sm mt-1.5">
+            {isMock
+              ? "Answer AI-generated questions, get real-time hints, and review your performance."
+              : "AI listens, detects questions, and delivers hints directly to your overlay."}
           </p>
         </div>
 
-        <div className="bg-secondary border border-border rounded-2xl p-6 space-y-5">
+        <div className="bg-card border border-border rounded-2xl overflow-hidden shadow-sm">
 
-          <div>
-            <label className="block text-sm font-medium text-muted-foreground mb-2">
-              Interview Type
-            </label>
-            <select
-              value={interviewType}
-              onChange={(e) => setInterviewType(e.target.value)}
-              className="w-full bg-secondary border border-border text-foreground rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500"
-            >
+          {/* ── Interview Type ── */}
+          <div className="p-5 border-b border-border">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Interview type</p>
+            <div className="grid grid-cols-5 gap-2">
               {INTERVIEW_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>{t.label}</option>
+                <button
+                  key={t.value}
+                  type="button"
+                  onClick={() => setInterviewType(t.value)}
+                  className={cn(
+                    "flex flex-col items-center gap-1.5 px-2 py-3 rounded-xl border text-xs font-medium transition-all",
+                    interviewType === t.value
+                      ? "bg-primary/10 border-primary/40 text-primary"
+                      : "bg-background border-border text-muted-foreground hover:border-border hover:text-foreground"
+                  )}
+                >
+                  <span className="text-lg leading-none">{t.emoji}</span>
+                  <span className="text-center leading-tight">{t.label}</span>
+                </button>
               ))}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground mb-2">
-                <FileText className="w-3.5 h-3.5" /> Resume
-              </label>
-              <select
-                value={resumeId ?? ""}
-                onChange={(e) => setResumeId(e.target.value || null)}
-                className="w-full bg-secondary border border-border text-foreground rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 text-sm"
-              >
-                <option value="">None selected</option>
-                {resumes.map((r) => (
-                  <option key={r.id} value={r.id}>{r.title || (r as any).file_name}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground mb-2">
-                <Briefcase className="w-3.5 h-3.5" /> Job Description
-              </label>
-              <select
-                value={jdId ?? ""}
-                onChange={(e) => setJdId(e.target.value || null)}
-                className="w-full bg-secondary border border-border text-foreground rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 text-sm"
-              >
-                <option value="">None selected</option>
-                {jds.map((j) => (
-                  <option key={j.id} value={j.id}>{(j as any).title || j.company_name}</option>
-                ))}
-              </select>
             </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-muted-foreground mb-2">
-              Instructions (optional)
-            </label>
-            <textarea
-              value={instructions}
-              onChange={(e) => setInstructions(e.target.value)}
-              placeholder="e.g. Focus on STAR method, emphasise leadership examples, keep answers under 2 minutes..."
-              rows={3}
-              className="w-full bg-secondary border border-border text-foreground placeholder-gray-500 rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500 text-sm resize-none"
-            />
-          </div>
-
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <label className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground">
-                <Brain className="w-3.5 h-3.5" /> AI Model
-              </label>
-              <label className="flex items-center gap-2 cursor-pointer">
+          {/* ── Role & Company (optional) ── */}
+          <div className="p-5 border-b border-border">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Context (optional)</p>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1.5">Target company</label>
                 <input
-                  type="checkbox"
-                  checked={smartRouting}
-                  onChange={(e) => setSmartRouting(e.target.checked)}
-                  className="rounded border-border bg-secondary text-emerald-500"
+                  value={company ?? ""}
+                  onChange={(e) => setCompany(e.target.value)}
+                  placeholder="e.g. Google, Infosys"
+                  className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
                 />
-                <span className="text-xs text-muted-foreground">Smart routing</span>
-              </label>
-            </div>
-            {smartRouting ? (
-              <div className="bg-emerald-500/5 border border-emerald-500/15 rounded-xl p-3">
-                <p className="text-xs text-emerald-400 font-medium">Auto-select best model</p>
-                <p className="text-[10px] text-muted-foreground mt-1">Routes to the optimal model based on question type and complexity.</p>
               </div>
-            ) : (
-              <div className="grid grid-cols-2 gap-2">
+              <div>
+                <label className="block text-xs text-muted-foreground mb-1.5">Role</label>
+                <input
+                  value={role ?? ""}
+                  onChange={(e) => setRole(e.target.value)}
+                  placeholder="e.g. Software Engineer"
+                  className="w-full bg-background border border-border rounded-xl px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
+                />
+              </div>
+              <div>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
+                  <FileText className="w-3 h-3" /> Resume
+                </label>
+                <select
+                  value={resumeId ?? ""}
+                  onChange={(e) => setResumeId(e.target.value || null)}
+                  className="w-full bg-background border border-border text-foreground rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary"
+                >
+                  <option value="">No resume</option>
+                  {resumes.map((r) => (
+                    <option key={r.id} value={r.id}>{r.title || (r as any).file_name}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="flex items-center gap-1.5 text-xs text-muted-foreground mb-1.5">
+                  <Briefcase className="w-3 h-3" /> Job Description
+                </label>
+                <select
+                  value={jdId ?? ""}
+                  onChange={(e) => setJdId(e.target.value || null)}
+                  className="w-full bg-background border border-border text-foreground rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary"
+                >
+                  <option value="">No JD</option>
+                  {jds.map((j) => (
+                    <option key={j.id} value={j.id}>{(j as any).title || j.company_name}</option>
+                  ))}
+                </select>
+              </div>
+            </div>
+          </div>
+
+          {/* ── Hint style ── */}
+          <div className="p-5 border-b border-border">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">AI hint style</p>
+            <div className="grid grid-cols-3 gap-2">
+              {HINT_STYLES.map((hs) => (
+                <button
+                  key={hs.value}
+                  type="button"
+                  onClick={() => setHintStyle(hs.value)}
+                  className={cn(
+                    "flex flex-col gap-1 px-3 py-3 rounded-xl border text-left transition-all",
+                    hintStyle === hs.value
+                      ? "bg-primary/10 border-primary/40 text-primary"
+                      : "bg-background border-border text-muted-foreground hover:text-foreground"
+                  )}
+                >
+                  <span className="text-xs font-semibold">{hs.label}</span>
+                  <span className="text-[11px] leading-tight opacity-70">{hs.desc}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* ── AI Model + Advanced ── */}
+          <div className="p-5 border-b border-border">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((p) => !p)}
+              className="flex items-center gap-2 w-full text-left"
+            >
+              <Settings2 className="w-3.5 h-3.5 text-muted-foreground" />
+              <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">AI model</span>
+              <ChevronRight className={cn("w-3.5 h-3.5 text-muted-foreground ml-auto transition-transform", showAdvanced && "rotate-90")} />
+            </button>
+
+            {showAdvanced && (
+              <div className="mt-3 grid grid-cols-2 gap-2">
                 {MODEL_OPTIONS.map((m) => (
                   <button
                     key={m.id}
+                    type="button"
                     onClick={() => setModel(m.id)}
                     className={cn(
-                      "text-left px-3 py-2 rounded-xl border text-sm transition-all",
+                      "text-left px-3 py-2.5 rounded-xl border transition-all",
                       model === m.id
-                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                        : "bg-secondary border-border text-muted-foreground hover:border-border"
+                        ? "bg-primary/10 border-primary/40"
+                        : "bg-background border-border hover:border-border"
                     )}
                   >
-                    <p className="font-medium text-xs">{m.label}</p>
-                    <p className="text-[10px] mt-0.5 opacity-60">{m.desc}</p>
+                    <div className="flex items-center gap-1.5 mb-0.5">
+                      <span className={cn("text-xs font-semibold", model === m.id ? "text-primary" : "text-foreground")}>
+                        {m.label}
+                      </span>
+                      {m.tag && (
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-500/15 text-emerald-400 rounded-full">
+                          {m.tag}
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-muted-foreground">{m.desc}</p>
                   </button>
                 ))}
               </div>
             )}
           </div>
 
-          {micPermission === "granted" && micDevices.length > 0 && (
-            <div>
-              <label className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground mb-2">
-                <Volume2 className="w-3.5 h-3.5" /> Microphone
-              </label>
-              <select
-                value={selectedMicId}
-                onChange={(e) => setSelectedMicId(e.target.value)}
-                className="w-full bg-secondary border border-border text-foreground rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500 text-sm"
-              >
-                {micDevices.map((d) => (
-                  <option key={d.deviceId} value={d.deviceId}>{d.label}</option>
-                ))}
-              </select>
-              <label className="mt-2 flex items-center gap-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={noiseSuppression}
-                  onChange={(e) => setNoiseSuppression(e.target.checked)}
-                  className="rounded border-border bg-secondary text-emerald-500"
-                />
-                <span className="text-xs text-muted-foreground">Noise suppression</span>
-              </label>
-            </div>
-          )}
+          {/* ── Microphone ── */}
+          <div className="p-5 border-b border-border">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Microphone</p>
 
-          <div className="flex items-center gap-4">
-            <label className={cn(
-              "flex items-center gap-3 flex-1",
-              systemAudioSupported ? "cursor-pointer" : "cursor-not-allowed opacity-50"
-            )}>
-              <input
-                type="checkbox"
-                checked={enableSystemAudio}
-                onChange={(e) => setEnableSystemAudio(e.target.checked)}
-                disabled={!systemAudioSupported}
-                className="rounded border-border bg-secondary text-emerald-500"
-              />
-              <div>
-                <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
-                  <Volume2 className="w-3.5 h-3.5" /> System Audio
-                </p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">
-                  {systemAudioSupported
-                    ? "Capture interviewer audio"
-                    : "Not supported in this browser"}
-                </p>
+            {micPermission === "granted" && (
+              <div className="flex items-center gap-2 mb-3">
+                <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-medium">
+                  <Check className="w-3.5 h-3.5" />
+                  Access granted
+                </div>
               </div>
-            </label>
-
-            <label className="flex items-center gap-3 cursor-pointer flex-1">
-              <input
-                type="checkbox"
-                checked={stealthMode}
-                onChange={(e) => setStealthMode(e.target.checked)}
-                className="rounded border-border bg-secondary text-emerald-500"
-              />
-              <div>
-                <p className="text-sm font-medium text-foreground flex items-center gap-1.5">
-                  <Shield className="w-3.5 h-3.5" /> Discrete UI labels
-                </p>
-                <p className="text-[10px] text-muted-foreground mt-0.5">Neutral nav names only — overlay stays visible if you share your screen</p>
-              </div>
-            </label>
-          </div>
-
-          <button
-            onClick={() => setShowAdvanced((p) => !p)}
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-muted-foreground transition-colors"
-          >
-            <Settings2 className="w-3 h-3" />
-            Advanced settings
-            <ChevronDown className={cn("w-3 h-3 transition-transform", showAdvanced && "rotate-180")} />
-          </button>
-
-          {showAdvanced && (
-            <div className="space-y-4 pt-2 border-t border-border">
-              <div>
-                <label className="block text-sm font-medium text-muted-foreground mb-2">Hint Style</label>
-                <select
-                  value={hintStyle}
-                  onChange={(e) => setHintStyle(e.target.value as HintStyle)}
-                  className="w-full bg-secondary border border-border text-foreground rounded-xl px-4 py-2.5 focus:outline-none focus:border-emerald-500 text-sm"
-                >
-                  <option value="full_answer">Full Answer</option>
-                  <option value="short_hints">Short Hints</option>
-                  <option value="keywords_only">Keywords Only</option>
-                </select>
-              </div>
-
-              <div className="bg-background rounded-xl p-3 space-y-1.5">
-                <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">
-                  <Keyboard className="w-3 h-3 inline mr-1" />
-                  Hotkeys
-                </p>
-                {[
-                  { keys: ["ctrl", "shift", "h"], label: "Toggle overlay" },
-                  { keys: ["ctrl", "shift", "c"], label: "Toggle overlay (alt)" },
-                  { keys: ["ctrl", "shift", "s"], label: "Scroll answer up" },
-                  { keys: ["ctrl", "shift", "d"], label: "Scroll answer down" },
-                  { keys: ["ctrl", "shift", "q"], label: "Clear answer" },
-                  { keys: ["ctrl", "shift", "g"], label: "Screenshot + analyse" },
-                  { keys: ["ctrl", "shift", "p"], label: "Calm steps" },
-                  { keys: ["escape"],             label: "Clear hint" },
-                ].map((hk) => (
-                  <div key={hk.label} className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">{hk.label}</span>
-                    <kbd className="px-2 py-0.5 bg-secondary rounded text-muted-foreground font-mono">
-                      {formatHotkeyLabel(hk.keys)}
-                    </kbd>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {micPermission === "denied" && (
-          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 space-y-3">
-            <div className="flex items-start gap-2.5">
-              <Volume2 className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
-              <div>
-                <p className="text-sm text-red-400 font-semibold">Microphone access blocked</p>
-                <p className="text-xs text-red-400/70 mt-0.5 leading-relaxed">
-                  Click the camera/lock icon in the browser address bar, set Microphone to "Allow", then click "Try again".
-                </p>
-              </div>
-            </div>
-            <div className="flex gap-2">
-              <button
-                onClick={checkMicPermission}
-                className="flex-1 py-2.5 bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-300 font-medium rounded-xl transition-all text-sm flex items-center justify-center gap-1.5"
-              >
-                <Volume2 className="w-4 h-4" />
-                Try again
-              </button>
-              <button
-                onClick={() => window.location.reload()}
-                className="flex-1 py-2.5 bg-secondary/40 hover:bg-secondary/60 border border-border text-muted-foreground font-medium rounded-xl transition-all text-sm"
-              >
-                Reload page
-              </button>
-            </div>
-          </div>
-        )}
-
-        {micPermission !== "granted" && micPermission !== "denied" && (
-          <button
-            onClick={checkMicPermission}
-            disabled={micPermission === "checking"}
-            className="w-full py-3 bg-secondary hover:bg-secondary border border-border text-foreground font-medium rounded-xl transition-all flex items-center justify-center gap-2 text-sm mb-2"
-          >
-            {micPermission === "checking" ? (
-              <>
-                <div className="w-3.5 h-3.5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" />
-                Checking permissions…
-              </>
-            ) : (
-              <>
-                <Volume2 className="w-4 h-4" />
-                Allow microphone access
-              </>
             )}
-          </button>
-        )}
 
-        <button
-          onClick={handleStart}
-          disabled={micPermission === "denied"}
-          className={cn(
-            "w-full py-3.5 font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
-            micPermission === "denied"
-              ? "bg-gray-700 text-muted-foreground cursor-not-allowed"
-              : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-foreground"
-          )}
-        >
-          <Zap className="w-4 h-4" />
-          {sessionType === "live" ? "Start Practice Session" : "Start Mock Session"}
-        </button>
+            {micPermission === "denied" && (
+              <div className="flex items-start gap-2.5 p-3 bg-red-500/10 border border-red-500/20 rounded-xl mb-3">
+                <AlertTriangle className="w-4 h-4 text-red-400 mt-0.5 shrink-0" />
+                <div>
+                  <p className="text-sm text-red-400 font-medium">Microphone blocked</p>
+                  <p className="text-xs text-red-400/70 mt-0.5">Click the lock icon in your browser address bar → allow microphone, then try again.</p>
+                </div>
+              </div>
+            )}
+
+            {micPermission !== "granted" && micPermission !== "denied" && (
+              <button
+                type="button"
+                onClick={checkMicPermission}
+                disabled={micPermission === "checking"}
+                className="flex items-center gap-2 w-full px-4 py-2.5 bg-background border border-border rounded-xl text-sm text-foreground hover:border-primary transition-all mb-3"
+              >
+                {micPermission === "checking"
+                  ? <><div className="w-3.5 h-3.5 border-2 border-primary/30 border-t-primary rounded-full animate-spin" /> Checking…</>
+                  : <><Mic className="w-4 h-4 text-muted-foreground" /> Allow microphone access</>
+                }
+              </button>
+            )}
+
+            {micPermission === "granted" && micDevices.length > 0 && (
+              <div className="space-y-2.5">
+                <select
+                  value={selectedMicId}
+                  onChange={(e) => setSelectedMicId(e.target.value)}
+                  className="w-full bg-background border border-border text-foreground rounded-xl px-3 py-2.5 text-sm focus:outline-none focus:border-primary"
+                >
+                  {micDevices.map((d) => (
+                    <option key={d.deviceId} value={d.deviceId}>{d.label}</option>
+                  ))}
+                </select>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={noiseSuppression}
+                    onChange={(e) => setNoiseSuppression(e.target.checked)}
+                    className="rounded border-border"
+                  />
+                  <span className="text-xs text-muted-foreground">Noise suppression</span>
+                </label>
+              </div>
+            )}
+
+            {micPermission === "denied" && (
+              <div className="flex gap-2">
+                <button type="button" onClick={checkMicPermission} className="flex-1 py-2 bg-background border border-border rounded-xl text-sm text-foreground hover:border-primary">
+                  Try again
+                </button>
+                <button type="button" onClick={() => window.location.reload()} className="flex-1 py-2 bg-background border border-border rounded-xl text-sm text-muted-foreground">
+                  Reload
+                </button>
+              </div>
+            )}
+
+            <p className="text-[11px] text-muted-foreground mt-2 flex items-center gap-1">
+              <Info className="w-3 h-3 shrink-0" />
+              {isMock ? "Mic is optional for mock interviews — you can type answers instead." : "Mic needed to detect spoken interview questions."}
+            </p>
+          </div>
+
+          {/* ── Options ── */}
+          <div className="p-5 border-b border-border">
+            <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-3">Options</p>
+            <label className="flex items-center gap-3 cursor-pointer select-none">
+              <div
+                role="checkbox"
+                aria-checked={stealthMode}
+                tabIndex={0}
+                onClick={() => setStealthMode((p) => !p)}
+                onKeyDown={(e) => e.key === " " && setStealthMode((p) => !p)}
+                className={cn(
+                  "relative w-10 h-6 rounded-full transition-colors border-2 shrink-0",
+                  stealthMode
+                    ? "bg-primary border-primary"
+                    : "bg-secondary border-border"
+                )}
+              >
+                <div className={cn(
+                  "absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform",
+                  stealthMode && "translate-x-4"
+                )} />
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <Eye className="w-3.5 h-3.5 text-muted-foreground" />
+                  <span className="text-sm font-medium text-foreground">Discrete UI</span>
+                </div>
+                <p className="text-[11px] text-muted-foreground mt-0.5">
+                  Dims the overlay when not in use. Nav labels stay neutral during screen share.
+                </p>
+              </div>
+            </label>
+          </div>
+
+          {/* ── Start ── */}
+          <div className="p-5">
+            <button
+              type="button"
+              onClick={handleStart}
+              disabled={!canProceed}
+              className={cn(
+                "w-full py-3.5 rounded-xl font-semibold text-base flex items-center justify-center gap-2.5 transition-all",
+                canProceed
+                  ? "bg-primary hover:bg-primary/90 text-primary-foreground shadow-lg shadow-primary/20"
+                  : "bg-muted text-muted-foreground cursor-not-allowed"
+              )}
+            >
+              <Sparkles className="w-4 h-4" />
+              {isMock ? "Start mock interview" : "Start session"}
+              <ChevronRight className="w-4 h-4" />
+            </button>
+
+            {!canProceed && (
+              <p className="text-center text-xs text-muted-foreground mt-2">
+                Allow microphone access above to continue
+              </p>
+            )}
+          </div>
+        </div>
       </div>
     </div>
   );

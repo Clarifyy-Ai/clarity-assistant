@@ -171,7 +171,7 @@ export default function MockSession() {
   useEffect(() => {
     if (phase === "active") {
       const overlay = useOverlayStore.getState();
-      overlay.setStealthMode(false);
+      // Respect stealth mode set during session setup (don't force-clear it).
       overlay.setMinimalMode(false);
       overlay.showOverlay();
     }
@@ -416,14 +416,14 @@ export default function MockSession() {
 
     const overlay = useOverlayStore.getState();
     overlay.resetSessionState();
-    // Parakeet-style: always fully visible during mock — no discrete/stealth dimming.
-    overlay.setStealthMode(false);
+    // Apply user's stealth preference from setup config.
+    overlay.setStealthMode(config.stealth_mode ?? false);
     overlay.setProctorSafe(false);
     overlay.setActiveModel(config.model);
     overlay.setHintStyle(config.hint_style);
     overlay.setAutoGenerate(false);
     overlay.setNetworkColor("green");
-    useUIStore.getState().setStealthMode(false);
+    useUIStore.getState().setStealthMode(config.stealth_mode ?? false);
     useAudioStore.getState().setStreamError(null);
     useNetworkStore.getState().deactivateOfflineFallback();
     useNetworkStore.getState().setMode("strong");

@@ -926,16 +926,12 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             <button
               onClick={handleStart}
               disabled={
-                micPermission !== "granted" ||
-                !visibilityAck ||
-                preflightLoading ||
-                (preflight !== null && !preflight.ready)
+                micPermission === "denied" ||
+                preflightLoading
               }
               className={cn(
                 "flex-1 py-3.5 font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
-                micPermission !== "granted" ||
-                !visibilityAck ||
-                (preflight !== null && !preflight.ready)
+                micPermission === "denied" || preflightLoading
                   ? "bg-muted text-muted-foreground cursor-not-allowed"
                   : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-foreground"
               )}
