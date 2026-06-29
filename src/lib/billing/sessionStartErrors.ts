@@ -40,5 +40,12 @@ export function handleSessionStartError(error: unknown): boolean {
     return true;
   }
 
+  if (error instanceof ApiClientError && error.code === "SESSION_CREATE_FAILED") {
+    toast.error(
+      "Could not start your session. Please try again in a moment. If this keeps happening, contact support.",
+    );
+    return true;
+  }
+
   return false;
 }

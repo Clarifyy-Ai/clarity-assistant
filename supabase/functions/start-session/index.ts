@@ -257,6 +257,31 @@ function toSessionType(body: StartSessionRequest): SessionType {
   return body.session_type ?? body.type ?? "mock";
 }
 
+const DB_SESSION_TYPES = new Set<string>([
+  "live",
+  "mock",
+  "warmup",
+  "rehearsal",
+  "room",
+]);
+
+const DB_AI_MODELS = new Set<string>([
+  "gpt-4o",
+  "gpt-4o-mini",
+  "claude-3-5-sonnet",
+  "claude-3-haiku",
+  "gemini-1-5-pro",
+  "gemini-1-5-flash",
+  "gemini-2.0-flash",
+]);
+
+/** Map API session types to values allowed by the sessions.type column. */
+function toDbSessionType(type: SessionType): SessionType {
+  if (type === "practice") return "rehearsal";
+  if (DB_SESSION_TYPES.has(type)) return type;
+  return "mock";
+}
+
 function toDbModel(model: string): string {
   const value = model.trim();
 
@@ -277,6 +302,11 @@ function toDbModel(model: string): string {
   }
 
   return "gemini-1-5-flash";
+}
+
+function toDbModelEnum(model: string): string {
+  const mapped = toDbModel(model);
+  return DB_AI_MODELS.has(mapped) ? mapped : "gemini-1-5-flash";
 }
 
 function buildSessionTags(options: {
@@ -397,7 +427,7 @@ function buildConfig(input: {
     time_per_question_seconds: Math.round(
       (input.durationMinutes * 60) / input.questionCount
     ),
-    model: toDbModel(input.body.model),
+    model: toDbModelEnum(input.body.model),
     hint_style: input.body.hint_style,
     include_warmup: false,
     resume_id: input.body.resume_id ?? null,
@@ -517,7 +547,7 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const sessionType = toSessionType(body);
+  const sessionType = toDbSessionType(toSessionType(body));
   const isPractice = body.is_practice || sessionType !== "live";
   const sessionTags = buildSessionTags({ sessionType, isPractice });
   const company = sanitizeShortText(body.company);
@@ -637,23 +667,28 @@ Deno.serve(async (req: Request) => {
         user_id: user.id,
         type: sessionType,
         status: "active",
-        model_used: config.model,
+        model_used: toDbModelEnum(config.model as string),
         title: buildSessionTitle({
           sessionType,
           company,
         }),
         document_id: body.resume_id ?? null,
         jd_id: body.jd_id ?? null,
-        duration_seconds: durationMinutes * 60,
         started_at: nowIso,
         ended_at: null,
+        updated_at: nowIso,
         tags: sessionTags.length > 0 ? sessionTags : null,
       })
       .select("id")
       .single();
 
     if (insertError || !createdData) {
-      console.error("[start-session] Insert error:", insertError?.message);
+      console.error(
+        "[start-session] Insert error:",
+        insertError?.message,
+        insertError?.code,
+        insertError?.details,
+      );
 
       return json(corsHeaders, 500, {
         error: "Could not create session.",
