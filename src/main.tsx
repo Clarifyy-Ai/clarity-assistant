@@ -5,6 +5,7 @@ import posthog from "posthog-js";
 import App from "./App";
 import "./index.css";
 import { isElectronApp } from "@/lib/platform/isElectron";
+import { logSupabaseHealth } from "@/lib/supabase/healthCheck";
 import "@fontsource/inter/400.css";
 import "@fontsource/inter/500.css";
 import "@fontsource/inter/600.css";
