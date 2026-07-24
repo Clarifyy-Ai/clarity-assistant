@@ -57,7 +57,7 @@ export default function SettingsSubscription() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const currentPlan = (profile?.plan_id ?? "free") as PlanId;
-  const renewDate   = profile?.subscription_renews_at;
+  const renewDate   = profile?.subscription_ends_at ?? subscription?.currentPeriodEnd ?? null;
 
   useEffect(() => {
     if (!user?.id) return;
