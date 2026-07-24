@@ -70,15 +70,17 @@ export function BillingHistory({
       try {
         const data = await creditsDB.listByUserId(profile.id, 100);
 
-        const { data: payments } = await supabase
-          .from("payment_orders" as "profiles")
+        // `payment_orders` is not in the generated Supabase schema yet;
+        // cast the client to `any` to bypass the frozen type, keeping runtime behavior identical.
+        const { data: payments } = await (supabase as any)
+          .from("payment_orders")
           .select("id, product_type, amount_paise, status, created_at, paid_at, provider")
           .eq("user_id", profile.id)
           .order("created_at", { ascending: false })
-          .limit(50);
+          .limit(50) as { data: PaymentOrderRow[] | null };
 
         const mapped: Transaction[] = data.map((row) => {
-          const credits = row.amount as number;
+          const credits = (row.amount ?? 0) as number;
           const reason: string = (row.action as string) ?? '';
 
           let type: Transaction['type'] = 'usage';
@@ -112,15 +114,7 @@ export function BillingHistory({
           };
         });
 
-        const paymentRows: Transaction[] = (payments ?? []).map((p: {
-          id: string;
-          product_type: string;
-          amount_paise: number;
-          status: string;
-          created_at: string;
-          paid_at: string | null;
-          provider: string;
-        }) => ({
+        const paymentRows: Transaction[] = (payments ?? []).map((p: PaymentOrderRow) => ({
           id: p.id,
           date: new Date(p.paid_at ?? p.created_at),
           type: p.status === "paid" ? "purchase" as const : "usage" as const,
