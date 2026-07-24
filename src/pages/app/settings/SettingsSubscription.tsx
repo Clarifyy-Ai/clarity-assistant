@@ -161,7 +161,10 @@ export default function SettingsSubscription() {
             </p>
             {renewDate && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                Renews {format(new Date(renewDate), "MMMM d, yyyy")}
+                Renews {format(
+                  renewDate instanceof Date ? renewDate : new Date(renewDate),
+                  "MMMM d, yyyy"
+                )}
               </p>
             )}
           </div>
