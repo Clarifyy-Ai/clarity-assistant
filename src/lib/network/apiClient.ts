@@ -266,16 +266,9 @@ export const apiClient = {
     body?: Record<string, unknown> | FormData,
     options?: { headers?: Record<string, string> }
   ): Promise<T> {
-    const { data, error } = await supabase.functions.invoke<T>(functionName, {
-      body,
-      headers: options?.headers,
-    });
-
-    if (error) {
-      throw new Error(error.message || `Edge function "${functionName}" failed`);
-    }
-
-    return data as T;
+    // P0-1: consolidate on fetchEdge to unify auth headers, timeouts, and credit refresh.
+    const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
+    return fetchEdgeJson<T>(functionName, body, { headers: options?.headers });
   },
 
   async upload<T>(

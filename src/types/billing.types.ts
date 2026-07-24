@@ -216,3 +216,16 @@ export interface CheckoutSessionResponse {
   checkout_url: string;
   session_id: string;
 }
+
+// ── Payment Orders (Razorpay/Stripe unified) ──────────────────────
+// The `payment_orders` table is not present in the generated Supabase types.
+// Keep a hand-authored row shape until the codegen picks it up.
+export interface PaymentOrderRow {
+  id: string;
+  product_type: string;
+  amount_paise: number;
+  status: string;
+  created_at: string;
+  paid_at: string | null;
+  provider: string;
+}

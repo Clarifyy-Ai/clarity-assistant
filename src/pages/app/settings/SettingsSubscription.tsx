@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/authStore";
 import { Card } from "@/components/ui/Card";
@@ -58,7 +57,7 @@ export default function SettingsSubscription() {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
   const currentPlan = (profile?.plan_id ?? "free") as PlanId;
-  const renewDate   = profile?.subscription_renews_at;
+  const renewDate   = profile?.subscription_ends_at ?? subscription?.currentPeriodEnd ?? null;
 
   useEffect(() => {
     if (!user?.id) return;
@@ -162,7 +161,10 @@ export default function SettingsSubscription() {
             </p>
             {renewDate && (
               <p className="text-xs text-muted-foreground mt-0.5">
-                Renews {format(new Date(renewDate), "MMMM d, yyyy")}
+                Renews {format(
+                  renewDate instanceof Date ? renewDate : new Date(renewDate),
+                  "MMMM d, yyyy"
+                )}
               </p>
             )}
           </div>
