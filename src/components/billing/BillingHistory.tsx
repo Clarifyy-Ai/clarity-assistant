@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState } from 'react';
 import { useAuthStore } from '@/store/userStore';
 import { Calendar, Download, CreditCard, ArrowDownLeft, Filter } from 'lucide-react';
@@ -7,6 +6,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { creditsDB } from '@/lib/supabase/database';
 import { supabase } from '@/lib/supabase/client';
+import type { PaymentOrderRow } from '@/types/billing.types';
 
 /**
  * BillingHistory Component
