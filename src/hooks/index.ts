@@ -28,7 +28,6 @@ export { useWPMTracker } from "./useWPMTracker";
 export { useLiveCopilot } from "./useLiveCopilot";
 export { useSessionContext } from "./useSessionContext";
 export { useSessionOrchestrator } from "./useSessionOrchestrator";
-export { useRoom } from "./useRoom";
 
 // ─── Overlay ──────────────────────────────────────────────────────────────────
 export { useOverlayVisibility } from "./useOverlayVisibility";
@@ -46,7 +45,6 @@ export { useModelSwitcher } from "./useModelSwitcher";
 
 // ─── Interview & Prep ─────────────────────────────────────────────────────────
 export { useInterviewScheduler } from "./useInterviewScheduler";
-export { useSTARBuilder } from "./useSTARBuilder";
 export { useScorecard } from "./useScorecard";
 export { useResumeContext } from "./useResumeContext";
 export { useCalendarSync } from "./useCalendarSync";

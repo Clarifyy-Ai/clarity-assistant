@@ -22,12 +22,8 @@ export type {
   WSManagerStats,
 } from "./webSocketManager";
 
-// ─── API Client ───────────────────────────────────────────────────────────────
-export { apiClient } from "./apiClient";
-
-export type {
-  HttpMethod,
-  RequestConfig,
-  ApiResponse,
-  ApiErrorShape as ApiError,
-} from "./apiClient";
+// ─── API Client (deprecated shim — prefer fetchEdge / @/lib/api/apiClient) ────
+/** @deprecated Use `@/lib/api/apiClient` or `@/lib/network/fetchEdge`. */
+export { ApiClientError } from "./apiClient";
+/** @deprecated Use `@/lib/api/apiClient`. */
+export type { HttpMethod } from "./apiClient";

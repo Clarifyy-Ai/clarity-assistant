@@ -20,6 +20,7 @@ import {
   Pause,
   Play,
   ExternalLink,
+  Monitor,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -29,12 +30,12 @@ import { notifyOverlayVisibilityOnMobile } from "@/lib/overlay/overlayVisibility
 import { getDefaultOverlayEnabled } from "@/lib/overlay/defaultOverlayPreference";
 import { setGenerateAnswerHandler } from "@/lib/overlay/hotkeys";
 import { useHotkeys } from "@/hooks/useHotkeys";
-import { DesktopOnlyGate } from "@/components/layout/DesktopOnlyGate";
 import { isElectronApp } from "@/lib/platform/isElectron";
 import {
   initDesktopOverlayWindow,
   teardownDesktopOverlayWindow,
 } from "@/lib/platform/electronWindowManager";
+import { DesktopDownloadButton } from "@/components/common/DesktopDownloadButton";
 
 const DEFAULT_CONFIG: LiveSessionConfig = {
   company: null,
@@ -235,6 +236,19 @@ function LiveRehearsalSession() {
             <ExternalLink className="w-3.5 h-3.5" />
           </Link>
         </div>
+        {!isElectronApp() && (
+          <div
+            role="note"
+            className="mx-auto max-w-2xl mb-4 flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm"
+          >
+            <Monitor className="w-4 h-4 text-muted-foreground shrink-0" />
+            <p className="flex-1 text-muted-foreground">
+              Floating overlay, global hotkeys, and tab-audio capture work best in the desktop app.
+              Web sessions remain available with browser limitations.
+            </p>
+            <DesktopDownloadButton className="shrink-0" />
+          </div>
+        )}
         <PreSessionSetupWizard onStart={handleSetup} sessionType="live" />
       </>
     );

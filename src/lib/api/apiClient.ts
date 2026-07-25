@@ -11,7 +11,8 @@
 // - Add safe retry support for transient failures
 // - Normalize API errors into a consistent shape
 //
-// Use this file instead of direct fetch() calls for app/Edge Function requests.
+// Prefer this module (or `@/lib/network/fetchEdge`) for Edge/API calls.
+// `src/lib/network/apiClient.ts` is a deprecated no-op shim — do not use it.
 
 import { EDGE_BASE } from "@/lib/env";
 import { getCSRFHeaders } from "@/lib/security";
@@ -351,7 +352,7 @@ async function executeRequest<T>(
     method,
     auth: options.auth ?? true,
     csrf: options.csrf ?? true,
-    byok: options.byok ?? true,
+    byok: options.byok ?? false,
     customHeaders: options.headers,
     hasBody,
   });

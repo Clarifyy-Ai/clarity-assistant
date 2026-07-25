@@ -81,17 +81,15 @@ export default function SessionDetail() {
 
   // ── Derived values ────────────────────────────────────────────
 
-  const shareUrl = `${window.location.origin}/share/${session?.id ?? ""}`;
-
   const score = session?.overall_score ?? 0;
   const scoreColor =
     score >= 80 ? "emerald" :
     score >= 60 ? "amber"   : "red";
 
   const scoreTier =
-    score >= 85 ? "Excellent 🎉" :
-    score >= 70 ? "Good 👍"      :
-    score >= 55 ? "Fair 😐"      : "Needs work 💪";
+    score >= 85 ? "Excellent" :
+    score >= 70 ? "Good" :
+    score >= 55 ? "Fair" : "Needs work";
 
   const duration = session?.duration_seconds
     ? `${Math.floor(session.duration_seconds / 60)}m ${session.duration_seconds % 60}s`
@@ -527,28 +525,34 @@ export default function SessionDetail() {
         </Button>
       </Card>
 
-      {/* ── Share modal ────────────────────────────────── */}
-      {/* FIX 4: share URL uses window.location.origin instead of hardcoded domain */}
-      <Modal open={shareOpen} onClose={() => setShareOpen(false)} title="Share scorecard" size="sm">
+      <Modal open={shareOpen} onClose={() => setShareOpen(false)} title="Share session report" size="sm">
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
-            Share a public read-only link to this scorecard.
+            Public share links use a secure token from the scorecard or debrief page.
+            Open the report first, then use Share there.
           </p>
-          <div className="flex gap-2">
-            <input
-              readOnly
-              value={shareUrl}
-              className="flex-1 bg-background border border-input text-foreground rounded-xl px-3 py-2 text-xs focus:outline-none focus:border-ring transition-colors"
-            />
+          <div className="flex flex-col sm:flex-row gap-2">
+            <Button
+              variant="primary"
+              size="sm"
+              className="w-full"
+              onClick={() => {
+                setShareOpen(false);
+                navigate(`/app/scorecard/${session.id}`);
+              }}
+            >
+              Open scorecard
+            </Button>
             <Button
               variant="secondary"
               size="sm"
+              className="w-full"
               onClick={() => {
-                navigator.clipboard.writeText(shareUrl);
-                toast.success("Link copied!");
+                setShareOpen(false);
+                navigate(`/app/debrief/${session.id}`);
               }}
             >
-              Copy
+              Open debrief
             </Button>
           </div>
         </div>

@@ -16,23 +16,25 @@ import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
   CalendarDays, Clock, CheckCircle,
   Mic, ChevronRight, Building2, Target,
-  Wind, Star,
+  Wind, Star, Volume2, VolumeX, Droplets, StickyNote, Monitor, Smartphone,
+  Link2, ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format, differenceInMinutes } from "date-fns";
+import type { LucideIcon } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────
 // InterviewDay — focus mode for interview day
 // Countdown, final checklist, quick affirmations, launch co-pilot
 // ─────────────────────────────────────────────────────────────────
 
-const FINAL_CHECKLIST = [
-  { id: "audio",    label: "Audio & mic working",           icon: "🎤" },
-  { id: "quiet",    label: "Quiet environment secured",     icon: "🔇" },
-  { id: "water",    label: "Water nearby",                  icon: "💧" },
-  { id: "notes",    label: "Quick notes printed/open",      icon: "📝" },
-  { id: "browser",  label: "Meeting link ready to open",    icon: "🖥️" },
-  { id: "phone",    label: "Phone on silent",               icon: "📵" },
+const FINAL_CHECKLIST: Array<{ id: string; label: string; icon: LucideIcon }> = [
+  { id: "audio",    label: "Audio & mic working",           icon: Volume2 },
+  { id: "quiet",    label: "Quiet environment secured",     icon: VolumeX },
+  { id: "water",    label: "Water nearby",                  icon: Droplets },
+  { id: "notes",    label: "Quick notes printed/open",      icon: StickyNote },
+  { id: "browser",  label: "Meeting link ready to open",    icon: Monitor },
+  { id: "phone",    label: "Phone on silent",               icon: Smartphone },
 ];
 
 const AFFIRMATIONS = [
@@ -198,10 +200,13 @@ export default function InterviewDay() {
               rel="noopener noreferrer"
               className="mt-4 flex items-center justify-between p-3 bg-accent/5 hover:bg-accent/10 border border-border rounded-xl transition-all"
             >
-              <span className="text-xs text-foreground">
-                🔗 {todayIv.meeting_link.slice(0, 50)}…
+              <span className="text-xs text-foreground flex items-center gap-2 min-w-0">
+                <Link2 className="w-3.5 h-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                <span className="truncate">{todayIv.meeting_link}</span>
               </span>
-              <span className="text-xs text-primary shrink-0 ml-2">Open ↗</span>
+              <span className="text-xs text-primary shrink-0 ml-2 inline-flex items-center gap-1">
+                Open <ExternalLink className="w-3 h-3" aria-hidden />
+              </span>
             </a>
           )}
         </Card>
@@ -334,7 +339,7 @@ export default function InterviewDay() {
                   <CheckCircle className="w-3 h-3 text-foreground" />
                 )}
               </div>
-              <span className="text-base">{item.icon}</span>
+              <item.icon className="w-4 h-4 text-muted-foreground shrink-0" aria-hidden />
               <span className={cn(
                 "text-sm",
                 checklist[item.id]

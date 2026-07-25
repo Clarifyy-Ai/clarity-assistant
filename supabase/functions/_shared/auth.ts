@@ -19,6 +19,7 @@
 // Never expose SUPABASE_SERVICE_ROLE_KEY to frontend code.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { bannedResponse, isUserBanned } from "./banCheck.ts";
 
 export type AuthenticatedUser = {
   id: string;
@@ -152,6 +153,7 @@ export function createServiceRoleClient() {
  * Verifies the incoming request JWT using Supabase Auth.
  *
  * Throws an error if token is missing or invalid.
+ * Banned users throw with code ACCOUNT_BANNED (caught by getAuthContext).
  */
 export async function requireAuth(req: Request): Promise<AuthContext> {
   const accessToken = extractBearerToken(req);
@@ -166,6 +168,13 @@ export async function requireAuth(req: Request): Promise<AuthContext> {
 
   if (error || !data.user) {
     throw new Error("Invalid or expired access token.");
+  }
+
+  const admin = createServiceRoleClient();
+  if (await isUserBanned(admin, data.user.id)) {
+    const banError = new Error("ACCOUNT_BANNED");
+    banError.name = "AccountBannedError";
+    throw banError;
   }
 
   return {
@@ -194,7 +203,16 @@ export async function getAuthContext(
       context,
       error: null,
     };
-  } catch {
+  } catch (err) {
+    if (
+      err instanceof Error &&
+      (err.name === "AccountBannedError" || err.message === "ACCOUNT_BANNED")
+    ) {
+      return {
+        context: null,
+        error: bannedResponse({}),
+      };
+    }
     return {
       context: null,
       error: unauthorizedResponse(),

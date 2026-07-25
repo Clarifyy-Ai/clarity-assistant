@@ -88,7 +88,7 @@ describe("deductCreditsForAction – pre-flight checks", () => {
     expect(r.error).toMatch(/insufficient/i);
   });
 
-  it("BYOK users bypass deduction", async () => {
+  it("BYOK flags do not bypass deduction", async () => {
     vi.doMock("@/store/userStore", () => {
       const state: any = {
         profile: {
@@ -108,8 +108,8 @@ describe("deductCreditsForAction – pre-flight checks", () => {
       "@/lib/billing/creditsManager"
     );
     const r = await deductCreditsForAction("liveanswerlong");
-    expect(r.success).toBe(true);
-    expect(r.creditsDeducted).toBe(0);
+    expect(r.success).toBe(false);
+    expect(r.error).toMatch(/insufficient/i);
   });
 
   it("Returns auth error when no profile", async () => {

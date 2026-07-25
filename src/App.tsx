@@ -194,12 +194,7 @@ const DebriefDetail = lazy(
   () => import("@/pages/app/debrief/DebriefDetail")
 );
 
-// Rooms
-const PracticeRooms = lazy(
-  () => import("@/pages/app/rooms/PracticeRooms")
-);
-const NewRoom = lazy(() => import("@/pages/app/rooms/NewRoom"));
-const RoomSession = lazy(() => import("@/pages/app/rooms/RoomSession"));
+// Rooms — group practice deferred until WebRTC ships (routes redirect)
 
 // Settings
 const Settings = lazy(() => import("@/pages/app/settings/Settings"));
@@ -232,12 +227,6 @@ const SettingsIntegrations = lazy(
 );
 const SettingsAppearance = lazy(
   () => import("@/pages/app/settings/SettingsAppearance")
-);
-const SettingsSubscription = lazy(
-  () => import("@/pages/app/settings/SettingsSubscription")
-);
-const SettingsCredits = lazy(
-  () => import("@/pages/app/settings/SettingsCredits")
 );
 const SettingsData = lazy(
   () => import("@/pages/app/settings/SettingsData")
@@ -539,8 +528,8 @@ const routes = [
         element: <Page component={LiveOverlay} />,
       },
       {
-        path: "/app/rooms/:roomId/session",
-        element: <Page component={RoomSession} />,
+        path: "/app/rooms/*",
+        element: <Navigate to="/app/dashboard" replace />,
       },
       {
         path: "/app/mock-test/session/:testId",
@@ -656,8 +645,8 @@ const routes = [
 
           { path: "guide", element: <Page component={Guide} /> },
           { path: "guide/practice-coach", element: <Page component={PracticeCoachGuide} /> },
-          { path: "rooms", element: <Page component={PracticeRooms} /> },
-          { path: "rooms/new", element: <Page component={NewRoom} /> },
+          { path: "rooms", element: <Navigate to="/app/dashboard" replace /> },
+          { path: "rooms/*", element: <Navigate to="/app/dashboard" replace /> },
 
           {
             path: "settings",
@@ -696,9 +685,12 @@ const routes = [
               },
               {
                 path: "subscription",
-                element: <Page component={SettingsSubscription} />,
+                element: <Navigate to="/app/settings/billing" replace />,
               },
-              { path: "credits", element: <Page component={SettingsCredits} /> },
+              {
+                path: "credits",
+                element: <Navigate to="/app/settings/billing" replace />,
+              },
               { path: "data", element: <Page component={SettingsData} /> },
               { path: "danger", element: <Page component={SettingsDanger} /> },
               { path: "hotkeys", element: <Page component={SettingsHotkeys} /> },

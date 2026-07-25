@@ -3,12 +3,48 @@
 // Dashboard, prep, billing, and mock interviews run in the web browser.
 const { app, BrowserWindow, shell, session, dialog, ipcMain } = require("electron");
 const path = require("path");
+const fs = require("fs");
 const url = require("url");
 const { loadWindowState, trackWindow } = require("./window-state.cjs");
 const { buildMenu } = require("./menu.cjs");
 
 const isDev = process.env.ELECTRON_DEV === "1" || !app.isPackaged;
 const DEV_URL = process.env.ELECTRON_DEV_URL || "http://localhost:8080";
+
+const connectSrc = [
+  "'self'",
+  "https://*.supabase.co",
+  "wss://*.supabase.co",
+  "https://api.deepgram.com",
+  "wss://api.deepgram.com",
+  "https://api.stripe.com",
+  "https://checkout.stripe.com",
+  "https://api.github.com",
+  "https://api.openai.com",
+  "https://api.anthropic.com",
+  "https://generativelanguage.googleapis.com",
+  "https://*.sentry.io",
+  "https://*.ingest.sentry.io",
+  "https://app.posthog.com",
+  "https://us.i.posthog.com",
+  "https://eu.i.posthog.com",
+  ...(isDev ? ["http://localhost:*", "ws://localhost:*"] : []),
+].join(" ");
+
+const CSP = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'" + (isDev ? " 'unsafe-eval'" : ""),
+  "style-src 'self' 'unsafe-inline'",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data:",
+  `connect-src ${connectSrc}`,
+  "frame-src https://checkout.stripe.com",
+  "media-src 'self' blob: data:",
+  "worker-src 'self' blob:",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+].join("; ");
 
 // Single-instance lock — focus existing window on second launch.
 const gotLock = app.requestSingleInstanceLock();
@@ -28,21 +64,6 @@ function isSafeExternalUrl(target) {
   }
 }
 
-const CSP = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'" + (isDev ? " 'unsafe-eval'" : ""),
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob: https:",
-  "font-src 'self' data:",
-  "connect-src 'self' http://localhost:* ws://localhost:* https://*.supabase.co wss://*.supabase.co https://api.deepgram.com wss://api.deepgram.com https://api.stripe.com https://checkout.stripe.com https://api.github.com https://api.openai.com https://api.anthropic.com https://generativelanguage.googleapis.com https://*.sentry.io https://*.ingest.sentry.io https://app.posthog.com https://us.i.posthog.com https://eu.i.posthog.com",
-  "frame-src https://checkout.stripe.com",
-  "media-src 'self' blob: data:",
-  "worker-src 'self' blob:",
-  "object-src 'none'",
-  "base-uri 'self'",
-  "form-action 'self'",
-].join("; ");
-
 function isInternalUrl(target) {
   try {
     const u = new URL(target);
@@ -54,7 +75,20 @@ function isInternalUrl(target) {
 }
 
 function resolveIndexHtmlPath() {
-  return path.join(app.getAppPath(), "dist", "index.html");
+  // Packaged: app.asar/dist/index.html. Unpackaged: <repo>/dist/index.html.
+  // Prefer app.getAppPath(); fall back next to electron/ for local package runs.
+  const candidates = [
+    path.join(app.getAppPath(), "dist", "index.html"),
+    path.join(__dirname, "..", "dist", "index.html"),
+  ];
+  for (const candidate of candidates) {
+    try {
+      if (fs.existsSync(candidate)) return candidate;
+    } catch {
+      /* ignore */
+    }
+  }
+  return candidates[0];
 }
 
 function showMainWindow() {
@@ -140,9 +174,8 @@ function createMainWindow() {
   });
 
   mainWindow.once("ready-to-show", () => {
-    // Enable screen capture protection immediately on show.
-    // This hides the window from Zoom, Meet, Teams, OBS and any screen recorder
-    // — the same mechanism Parakeet AI uses.
+    // Best-effort content protection (OS-dependent). Reduces capture in some
+    // screen-share pipelines; not a guarantee against all recorders/proctors.
     mainWindow.setContentProtection(true);
     showMainWindow();
   });
@@ -157,6 +190,8 @@ function createMainWindow() {
   mainWindow.once("ready-to-show", () => clearTimeout(showFallbackTimer));
   mainWindow.on("closed", () => clearTimeout(showFallbackTimer));
 
+  // HashRouter (IS_ELECTRON) expects #/app/live/overlay — keep hash identical in
+  // both paths so production loadFile and vite-dev loadURL land on LiveOverlay.
   if (isDev) {
     mainWindow.loadURL(`${DEV_URL}#/app/live/overlay`);
     mainWindow.webContents.openDevTools({ mode: "detach" });

@@ -28,7 +28,7 @@ import {
 
   User, Bell, Mic, Brain, Calendar, Sparkles, Lock, CreditCard,
 
-  CalendarDays, Building2, Users, Gift, History, Trash2,
+  CalendarDays, Building2, Gift, History, Trash2,
 
 } from "lucide-react";
 
@@ -86,13 +86,13 @@ const COMMANDS: NavCommand[] = [
 
   { label: PRODUCT_NAMES.companyResearch, path: "/app/companies", icon: Building2, group: "Navigate", keywords: "research company" },
 
-  { label: PRODUCT_NAMES.groupPractice, path: "/app/rooms", icon: Users, group: "Navigate", keywords: "collaborative team practice rooms" },
-
   { label: PRODUCT_NAMES.referrals, path: "/app/referrals", icon: Gift, group: "Navigate", keywords: "invite reward" },
 
   { label: "Profile", path: "/app/profile", icon: User, group: "Account" },
 
   { label: "Settings", path: "/app/settings", icon: Settings, group: "Account" },
+
+  { label: "Billing", path: "/app/settings/billing", icon: CreditCard, group: "Account", keywords: "subscription plan credits payment" },
 
   { label: PRODUCT_NAMES.practiceCoach, path: "/app/live", icon: Mic, group: "Sessions" },
 

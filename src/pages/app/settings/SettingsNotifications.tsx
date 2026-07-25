@@ -5,7 +5,7 @@ import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Toggle } from "@/components/ui/Toggle";
-import { CheckCircle, Bell, Mail, Smartphone, Send } from "lucide-react";
+import { CheckCircle, Bell, Mail, Send } from "lucide-react";
 import { toast } from "sonner";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 
@@ -120,11 +120,6 @@ export default function SettingsNotifications() {
     });
   }
 
-  const channelIcon = (ch: string) =>
-    ch === "email"
-      ? <Mail className="w-3 h-3 text-muted-foreground" />
-      : <Smartphone className="w-3 h-3 text-muted-foreground" />;
-
   return (
     <SettingsPageShell title="Notifications">
 
@@ -147,10 +142,10 @@ export default function SettingsNotifications() {
       <Card>
         <h3 className="text-sm font-semibold text-foreground mb-3">Categories</h3>
         <div className="space-y-4">
-          {CATEGORY_ITEMS.map((item) => (
+          {CATEGORY_ITEMS.filter((item) => item.channel !== "push").map((item) => (
             <div key={item.key} className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                {channelIcon(item.channel)}
+                <Mail className="w-3 h-3 text-muted-foreground" />
                 <span className="text-sm text-foreground">{item.label}</span>
               </div>
               <Toggle
@@ -160,6 +155,9 @@ export default function SettingsNotifications() {
             </div>
           ))}
         </div>
+        <p className="text-[10px] text-muted-foreground mt-4 leading-relaxed">
+          Push preferences are hidden for now — there is no push server. In-app toasts and browser notifications (when permitted) are the only real-time alerts; email covers the categories above.
+        </p>
       </Card>
 
       <Card>

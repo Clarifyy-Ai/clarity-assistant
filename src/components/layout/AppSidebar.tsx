@@ -21,7 +21,6 @@ import {
   LogOut,
   Phone,
   Gift,
-  Users,
   Bell,
   Briefcase,
   ListTodo,
@@ -203,12 +202,6 @@ const NAV_SECTIONS: NavSection[] = [
         stealthIcon: Building,
         label: PRODUCT_NAMES.companyResearch,
       },
-      {
-        to: "/app/rooms",
-        icon: Users,
-        stealthIcon: Users,
-        label: PRODUCT_NAMES.groupPractice,
-      },
     ],
   },
 ];
@@ -388,7 +381,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
 
       <div className="space-y-1 border-t border-sidebar-border py-3">
         <SidebarLink
-          to="/help"
+          to="/app/guide/practice-coach"
           icon={BookMarked}
           label="Guide"
           collapsed={visuallyCollapsed}

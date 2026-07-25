@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { useUIStore } from "@/store/uiStore";
 import type { PreferredAIModel } from "@/types/user.types";
+
 /** Server-aligned credit costs (see supabase/functions/_shared/creditEconomics.ts). */
 export const SERVER_AI_CREDIT_COSTS = {
   hint: AI_CREDIT_COSTS.live_hint,
@@ -11,8 +12,12 @@ export const SERVER_AI_CREDIT_COSTS = {
   screenshotAnswer: AI_CREDIT_COSTS.screenshot_answer,
 } as const;
 
+/**
+ * Legacy model-based precheck defaults to live_answer cost (not hint).
+ * Prefer checkCreditsForAction / CREDIT_COSTS for accurate gating.
+ */
 function getCreditCost(_model: PreferredAIModel): number {
-  return SERVER_AI_CREDIT_COSTS.hint;
+  return SERVER_AI_CREDIT_COSTS.fullAnswer;
 }
 
 export function checkCreditsForAction(
@@ -29,23 +34,6 @@ export function checkCreditsForAction(
       isLow: false,
       isBYOKActive: false,
       reason: "Not authenticated",
-    };
-  }
-
-  const isBYOKActive = !!(
-    profile.byok_gemini ||
-    profile.byok_openai ||
-    profile.byok_anthropic
-  );
-
-  if (isBYOKActive) {
-    return {
-      canProceed: true,
-      creditsRequired: 0,
-      creditsAvailable: profile.credits,
-      isLow: false,
-      isBYOKActive: true,
-      reason: null,
     };
   }
 
@@ -119,6 +107,7 @@ export interface CreditCheckResult {
   creditsRequired:  number;
   creditsAvailable: number;
   isLow:            boolean;
+  /** Always false — BYOK product disabled; retained for call-site compatibility. */
   isBYOKActive:     boolean;
   reason:           string | null;
 }
@@ -132,9 +121,6 @@ export interface CreditDeductionResult {
 
 const LOW_CREDIT_THRESHOLD = 5;
 
-// ── Check if user can afford a model‑based call (legacy helper) ──
-// Guard: deduction is blocked if subscription is not active and no free credits. [file:1][file:3]
-
 export function checkCredits(model: PreferredAIModel): CreditCheckResult {
   const { profile } = useAuthStore.getState();
 
@@ -146,24 +132,6 @@ export function checkCredits(model: PreferredAIModel): CreditCheckResult {
       isLow:            false,
       isBYOKActive:     false,
       reason:           "Not authenticated",
-    };
-  }
-
-  // BYOK users bypass credit checks entirely. [file:3]
-  const isBYOKActive = !!(
-    profile.byok_gemini ||
-    profile.byok_openai ||
-    profile.byok_anthropic
-  );
-
-  if (isBYOKActive) {
-    return {
-      canProceed:       true,
-      creditsRequired:  0,
-      creditsAvailable: profile.credits,
-      isLow:            false,
-      isBYOKActive:     true,
-      reason:           null,
     };
   }
 
@@ -206,8 +174,6 @@ export function checkCredits(model: PreferredAIModel): CreditCheckResult {
   };
 }
 
-// ── Generic deduction by CreditAction (preferred API) ────────────
-
 export async function deductCreditsForAction(
   action: CreditAction,
   sessionId?: string,
@@ -222,16 +188,6 @@ export async function deductCreditsForAction(
     };
   }
 
-  // BYOK: skip deduction entirely. [file:3]
-  if (profile.byok_gemini || profile.byok_openai || profile.byok_anthropic) {
-    return {
-      success:          true,
-      creditsDeducted:  0,
-      creditsRemaining: profile.credits,
-      error:            null,
-    };
-  }
-
   const cost = CREDIT_COSTS[action] ?? 0;
   if (!cost) {
     return {
@@ -242,7 +198,6 @@ export async function deductCreditsForAction(
     };
   }
 
-  // Simple pre‑flight check to avoid obvious failures.
   if ((profile.credits ?? 0) < cost) {
     return {
       success:          false,
@@ -264,7 +219,6 @@ export async function deductCreditsForAction(
 
     if (!response.ok) {
       if (response.status === 402) {
-        // Race condition: another tab used credits. [file:1]
         await refreshCredits();
         const errBody = await response.json().catch(() => null);
         const msg = errBody?.error ?? "Insufficient credits";
@@ -307,15 +261,10 @@ export async function deductCreditsForAction(
   }
 }
 
-// ── Legacy model-based deduction wrapper (optional) ──────────────
-// Useful where you already call by model only; internally maps to an action.
-
 export async function deductCredits(
   model: PreferredAIModel,
   sessionId: string,
 ): Promise<CreditDeductionResult> {
-  // Map model → default action (short vs long answers). [file:3]
-  // You can refine this mapping based on token estimates.
   const action: CreditAction =
     model === "gpt-4o" || model === "claude"
       ? "liveanswerlong"
@@ -323,8 +272,6 @@ export async function deductCredits(
 
   return deductCreditsForAction(action, sessionId);
 }
-
-// ── Credit top-up / modal helpers ────────────────────────────────
 
 export function openUpgradeFlow(trigger = "out_of_credits"): void {
   useUIStore.getState().openUpgradeModal(trigger);
@@ -337,8 +284,6 @@ export function showLowCreditWarning(creditsRemaining: number): void {
     openUpgradeFlow("low_credits");
   }
 }
-
-// ── Refetch credits from DB ──────────────────────────────────────
 
 export async function refreshCredits(): Promise<number | null> {
   const { user } = useAuthStore.getState();
@@ -360,8 +305,6 @@ export async function refreshCredits(): Promise<number | null> {
 
   return data.credits;
 }
-
-// ── Credit usage history ─────────────────────────────────────────
 
 export interface CreditTransaction {
   id:         string;
@@ -392,8 +335,7 @@ export async function fetchCreditHistory(
   })) as CreditTransaction[];
 }
 
-// ── BYOK check ───────────────────────────────────────────────────
-
+/** Legacy BYOK flags may exist on profiles; they do not grant free credits. */
 export function isBYOKConfigured(
   model:   PreferredAIModel,
   profile: ReturnType<typeof useAuthStore.getState>["profile"],

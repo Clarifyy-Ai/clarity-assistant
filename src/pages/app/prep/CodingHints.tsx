@@ -8,23 +8,25 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import {
   Code2, Search, ChevronRight, Lightbulb, BookOpen,
-  Copy, Sparkles, AlertCircle,
+  Copy, Sparkles, AlertCircle, LayoutList, BarChart3, Type,
+  GitBranch, Network, Sigma, Link2, ArrowUpDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { CodeScratchpad } from "@/components/prep/CodeScratchpad";
 import { CodeHighlight, renderTextWithCodeBlocks } from "@/components/prep/CodeHighlight";
 import { supabase } from "@/lib/supabase/client";
+import type { LucideIcon } from "lucide-react";
 
-const CATEGORIES = [
-  { id: "all",       label: "All",           icon: "📋" },
-  { id: "arrays",    label: "Arrays",        icon: "📊" },
-  { id: "strings",   label: "Strings",       icon: "🔤" },
-  { id: "trees",     label: "Trees",         icon: "🌳" },
-  { id: "graphs",    label: "Graphs",        icon: "🕸️" },
-  { id: "dp",        label: "Dynamic Prog.", icon: "📐" },
-  { id: "linked",    label: "Linked Lists",  icon: "🔗" },
-  { id: "sorting",   label: "Sorting",       icon: "↕️" },
+const CATEGORIES: Array<{ id: string; label: string; icon: LucideIcon }> = [
+  { id: "all",       label: "All",           icon: LayoutList },
+  { id: "arrays",    label: "Arrays",        icon: BarChart3 },
+  { id: "strings",   label: "Strings",       icon: Type },
+  { id: "trees",     label: "Trees",         icon: GitBranch },
+  { id: "graphs",    label: "Graphs",        icon: Network },
+  { id: "dp",        label: "Dynamic Prog.", icon: Sigma },
+  { id: "linked",    label: "Linked Lists",  icon: Link2 },
+  { id: "sorting",   label: "Sorting",       icon: ArrowUpDown },
 ];
 
 type Difficulty = "easy" | "medium" | "hard";
@@ -143,8 +145,11 @@ export default function CodingHints() {
       );
       await refreshCredits();
     } catch (err) {
-      setHintText(getOfflineHint(activeProblem));
-      toast.info("Using offline hints — AI unavailable.");
+      const message =
+        err instanceof Error ? err.message : "AI hints unavailable. Please try again.";
+      setError(message);
+      setHintText("");
+      toast.error(message);
     }
     setLoading(null);
   }
@@ -164,8 +169,11 @@ export default function CodingHints() {
       setSolutionText(data.result ?? "Solution explanation unavailable.");
       await refreshCredits();
     } catch (err) {
-      setSolutionText(getOfflineSolution(activeProblem));
-      toast.info("Using offline solution — AI unavailable.");
+      const message =
+        err instanceof Error ? err.message : "AI solution unavailable. Please try again.";
+      setError(message);
+      setSolutionText("");
+      toast.error(message);
     }
     setLoading(null);
   }
@@ -206,7 +214,8 @@ export default function CodingHints() {
                     : "bg-secondary border-border text-muted-foreground hover:text-foreground"
                 )}
               >
-                {c.icon} {c.label}
+                <c.icon className="w-3.5 h-3.5 inline-block mr-1 -mt-0.5" aria-hidden />
+                {c.label}
               </button>
             ))}
           </div>
@@ -410,21 +419,4 @@ export default function CodingHints() {
       </div>
     </div>
   );
-}
-
-function getOfflineHint(problem: CodingProblem): string {
-  const hints: Record<string, string> = {
-    arrays: "Consider using a hash map to track values you've seen. Think about whether you can solve this in a single pass through the array.",
-    strings: "Think about character frequency counting. A hash map or array of size 26 can track character occurrences efficiently.",
-    trees: "Consider recursive vs iterative approaches. For most tree problems, DFS (pre/in/post-order) or BFS (level-order) will work.",
-    graphs: "Think about BFS vs DFS traversal. Consider using a visited set to avoid cycles. Is this a connectivity or shortest-path problem?",
-    dp: "Identify the subproblems and their relationships. Can you express the solution in terms of smaller subproblems? Start with a recurrence relation.",
-    linked: "Use a two-pointer technique or dummy head node. Drawing out the pointer manipulations on paper often clarifies the logic.",
-    sorting: "Think about the divide-and-conquer paradigm. What's the key insight for the partition/merge step?",
-  };
-  return hints[problem.category] ?? "Break the problem into smaller subproblems. Consider edge cases like empty input, single element, and duplicates.";
-}
-
-function getOfflineSolution(problem: CodingProblem): string {
-  return `Offline solution guide for "${problem.title}":\n\n1. Key approach: Consider using ${problem.tags.join(" or ")}.\n2. Time complexity: Think about the optimal solution — most interview problems have O(n) or O(n log n) solutions.\n3. Space complexity: Can you solve this in-place or do you need auxiliary data structures?\n4. Edge cases: Empty input, single element, all duplicates, sorted/reverse sorted.\n\nPractice explaining your thought process aloud — interviewers care about your reasoning as much as the solution.`;
 }

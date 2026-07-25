@@ -74,7 +74,7 @@ export type DisplayTier = "free" | "pro" | "enterprise";
 
 export function normalizeToDisplayTier(planId: PlanId | string | null | undefined): DisplayTier {
 
-  if (planId === "enterprise") return "enterprise";
+  if (planId === "enterprise" || planId === "team") return "enterprise";
 
   if (planId === "free") return "free";
 
@@ -85,6 +85,11 @@ export function normalizeToDisplayTier(planId: PlanId | string | null | undefine
 
 
 export function getPlanDisplayName(planId: PlanId | string | null | undefined): string {
+
+  // Legacy DB value — never surface "Team" or SSO marketing copy.
+  if (typeof planId === "string" && planId.trim().toLowerCase() === "team") {
+    return "Enterprise";
+  }
 
   if (typeof planId === "string" && planId in PLAN_DISPLAY_NAMES) {
 

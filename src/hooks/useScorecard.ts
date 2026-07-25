@@ -163,12 +163,18 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
         duration_seconds: durationSeconds || sessionMeta.duration_seconds,
       } as Parameters<typeof sessionsDB.update>[1]);
 
-      setState((s) => ({ ...s, scorecard, isGenerating: false }));
-    } catch {
+      setState((s) => ({
+        ...s,
+        scorecard,
+        isGenerating: false,
+        error: null,
+      }));
+    } catch (err) {
       setState((s) => ({
         ...s,
         isGenerating: false,
-        error: "Failed to generate scorecard",
+        error:
+          err instanceof Error ? err.message : "Failed to generate scorecard",
       }));
     }
   }, [sessionId, profile]);
@@ -221,7 +227,8 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
     return url;
   }, [state.scorecard, sessionId]);
 
-  const exportPDF = useCallback(async (): Promise<void> => {
+  /** Downloads scorecard as JSON (honest name — not a PDF). */
+  const exportJSON = useCallback(async (): Promise<void> => {
     if (!state.scorecard) return;
 
     const json = JSON.stringify(state.scorecard, null, 2);
@@ -234,10 +241,14 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
     URL.revokeObjectURL(url);
   }, [state.scorecard, sessionId]);
 
+  /** @deprecated Use exportJSON — kept for call-site compatibility. */
+  const exportPDF = exportJSON;
+
   return {
     ...state,
     generateScorecard,
     shareScorecard,
+    exportJSON,
     exportPDF,
     reload: loadScorecard,
   };
@@ -271,37 +282,35 @@ ${questions
 
 Return ONLY valid JSON array.`;
 
+  const text = await callGemini({ prompt, model: "gemini-1.5-flash" });
+  const clean = text.replace(/```json|```/g, "").trim();
+  let raw: Array<Partial<QuestionScore> & { question_id?: string }>;
   try {
-    const text = await callGemini({ prompt, model: "gemini-1.5-flash" });
-    const clean = text.replace(/```json|```/g, "").trim();
-    const raw = JSON.parse(clean) as Array<
+    raw = JSON.parse(clean) as Array<
       Partial<QuestionScore> & { question_id?: string }
     >;
-    return raw.map((r, i) => ({
+  } catch {
+    throw new Error("Scorecard scoring failed: invalid AI response");
+  }
+  if (!Array.isArray(raw) || raw.length === 0) {
+    throw new Error("Scorecard scoring failed: empty AI response");
+  }
+  return raw.map((r, i) => {
+    if (typeof r.score !== "number" || typeof r.confidence_score !== "number") {
+      throw new Error("Scorecard scoring failed: incomplete score payload");
+    }
+    return {
       question_id: r.question_id ?? questions[i]?.id ?? "",
       question_text: questions[i]?.question_text ?? "",
       order_index: i,
-      score: r.score ?? 50,
-      confidence_score: r.confidence_score ?? 50,
+      score: r.score,
+      confidence_score: r.confidence_score,
       star_used: r.star_used ?? false,
-      key_strength: r.key_strength ?? "Unable to analyse",
-      key_weakness: r.key_weakness ?? "Unable to analyse",
-      coach_tip:
-        r.coach_tip ?? "Review your answer and practice the STAR framework.",
-    }));
-  } catch {
-    return questions.map((q, i) => ({
-      question_id: q.id,
-      question_text: q.question_text,
-      order_index: i,
-      score: 50,
-      confidence_score: 50,
-      star_used: false,
-      key_strength: "Unable to analyse",
-      key_weakness: "Unable to analyse",
-      coach_tip: "Review your answer and practice the STAR framework.",
-    }));
-  }
+      key_strength: r.key_strength ?? "",
+      key_weakness: r.key_weakness ?? "",
+      coach_tip: r.coach_tip ?? "",
+    };
+  });
 }
 
 async function generateFeedback(
@@ -323,21 +332,22 @@ Return JSON:
 
 Return ONLY valid JSON.`;
 
+  const text = await callGemini({ prompt, model: "gemini-1.5-flash" });
+  const clean = text.replace(/```json|```/g, "").trim();
+  let parsed: FeedbackPayload;
   try {
-    const text = await callGemini({ prompt, model: "gemini-1.5-flash" });
-    const clean = text.replace(/```json|```/g, "").trim();
-    return JSON.parse(clean) as FeedbackPayload;
+    parsed = JSON.parse(clean) as FeedbackPayload;
   } catch {
-    return {
-      strengths: ["Completed the session"],
-      improvements: ["Practice the STAR framework"],
-      coach_note: "Keep practising.",
-      star_adherence: 50,
-      clarity_score: 50,
-      structure_score: 50,
-      relevance_score: 50,
-    };
+    throw new Error("Scorecard feedback failed: invalid AI response");
   }
+  if (
+    typeof parsed.clarity_score !== "number" ||
+    typeof parsed.structure_score !== "number" ||
+    typeof parsed.relevance_score !== "number"
+  ) {
+    throw new Error("Scorecard feedback failed: incomplete feedback payload");
+  }
+  return parsed;
 }
 
 function calculateOverallScore(
@@ -368,5 +378,5 @@ function generateShareToken(): string {
 }
 
 function buildShareUrl(token: string): string {
-  return `${ENV.APP_URL || window.location.origin}/scorecard/shared/${token}`;
+  return `${ENV.APP_URL || window.location.origin}/share/${token}`;
 }

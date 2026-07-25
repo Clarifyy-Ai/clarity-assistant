@@ -8,6 +8,7 @@ import {
   type PlanId,
   getPlanFeatureLimit,
 } from "@/lib/billing/subscriptionManager";
+import { normalizePlanId } from "@/lib/billing/planIds";
 import { getPlanDisplayName } from "@/lib/constants/pricing";
 export { handleSessionStartError, isSessionLimitError } from "@/lib/billing/sessionStartErrors";
 
@@ -20,8 +21,9 @@ export { handleSessionStartError, isSessionLimitError } from "@/lib/billing/sess
 type GatedPlan = "free" | "pro" | "enterprise";
 
 function normalizeUserPlan(value: unknown): PlanId {
-  if (typeof value === "string" && PLAN_ORDER.includes(value as PlanId)) {
-    return value as PlanId;
+  const normalized = normalizePlanId(value as string);
+  if (PLAN_ORDER.includes(normalized as PlanId)) {
+    return normalized as PlanId;
   }
   return "free";
 }

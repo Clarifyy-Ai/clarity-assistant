@@ -1,8 +1,7 @@
 // src/lib/billing/subscriptionManager.ts
 //
-// Subscription plan lifecycle management-gating helpers in one place// Subscription plan lifecycle management.
-// - Avoid direct Stripe calls from frontend
-// - Route subscription mutations through hardened Edge Function API wrappers
+// Subscription plan lifecycle management and feature-gating helpers.
+// Avoid direct Stripe calls from frontend — route mutations through Edge APIs.
 
 import { supabase } from "@/lib/supabase/client";
 import { BillingError, ErrorCode, tryCatch } from "@/lib/errors";
@@ -12,6 +11,9 @@ import {
   cancelSubscription as cancelSubscriptionApi,
   resumeSubscription as resumeSubscriptionApi,
 } from "@/lib/api/billing";
+import { normalizePlanId } from "./planIds";
+
+export { normalizePlanId } from "./planIds";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Plan Definitions
@@ -251,7 +253,7 @@ export const PLANS: Record<PlanId, Plan> = {
       {
         key: "byok",
         label: "Bring Your Own API Key",
-        included: true,
+        included: false,
       },
       {
         key: "analytics",
@@ -326,7 +328,7 @@ export const PLANS: Record<PlanId, Plan> = {
       {
         key: "byok",
         label: "Bring Your Own API Key",
-        included: true,
+        included: false,
       },
       {
         key: "analytics",
@@ -362,7 +364,7 @@ export const PLANS: Record<PlanId, Plan> = {
   enterprise: {
     id: "enterprise",
     name: "Enterprise",
-    tagline: "For teams and bootcamps",
+    tagline: "Higher credits for power users and coaches",
     monthlyPrice: 7_900,
     yearlyPrice: 6_583, // $79,000/yr ÷ 12 — display only
     creditsPerMonth: 4_000,
@@ -374,34 +376,23 @@ export const PLANS: Record<PlanId, Plan> = {
         included: true,
       },
       {
-        key: "team_seats",
-        label: "Team seats",
-        included: true,
-        limit: "unlimited",
-      },
-      {
-        key: "sso",
-        label: "SSO / SAML",
+        key: "credits",
+        label: "4,000 credits / month",
         included: true,
       },
       {
-        key: "audit_logs",
-        label: "Audit logs",
-        included: true,
-      },
-      {
-        key: "custom_models",
-        label: "Custom AI models",
+        key: "priority_models",
+        label: "Priority model access",
         included: true,
       },
       {
         key: "dedicated_support",
-        label: "Dedicated support",
+        label: "Priority email support",
         included: true,
       },
       {
-        key: "sla",
-        label: "99.9% SLA",
+        key: "usage_analytics",
+        label: "Advanced usage analytics",
         included: true,
       },
     ],
@@ -426,8 +417,6 @@ export {
 } from "@/lib/constants/pricing";
 
 export type { DisplayTier } from "@/lib/constants/pricing";
-
-const VALID_PLAN_IDS = new Set<string>(PLAN_ORDER);
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Subscription State
@@ -487,14 +476,6 @@ type SubscriptionRow = {
   created_at?: string | null;
   updated_at?: string | null;
 };
-
-function isPlanId(value: unknown): value is PlanId {
-  return typeof value === "string" && VALID_PLAN_IDS.has(value);
-}
-
-function normalizePlanId(value: unknown): PlanId {
-  return isPlanId(value) ? value : "free";
-}
 
 function normalizeStatus(value: unknown): SubscriptionStatus {
   if (typeof value !== "string") {
@@ -665,7 +646,10 @@ export function getPlanFeatureLimit(
 }
 
 export function isPlanHigherThan(planA: PlanId, planB: PlanId): boolean {
-  return PLAN_ORDER.indexOf(planA) > PLAN_ORDER.indexOf(planB);
+  const a = normalizePlanId(planA);
+  const b = normalizePlanId(planB);
+  const order: Array<"free" | "pro" | "enterprise"> = ["free", "pro", "enterprise"];
+  return order.indexOf(a) > order.indexOf(b);
 }
 
 export function getRequiredPlanForFeature(featureKey: string): PlanId | null {

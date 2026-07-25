@@ -22,7 +22,7 @@ import {
 import { authenticateRequest } from "../_shared/auth.ts";
 
 import {
-  checkRateLimit,
+  checkRateLimitAsync,
   createRateLimitKey,
   rateLimitResponse,
   RATE_LIMIT_PRESETS,
@@ -224,7 +224,7 @@ Deno.serve(async (req: Request) => {
     return withCorsHeaders(req, bannedResponse(corsHeaders));
   }
 
-  const rateLimitResult = checkRateLimit({
+  const rateLimitResult = await checkRateLimitAsync(db, {
     key: createRateLimitKey(FUNCTION_NAME, user.id),
     ...RATE_LIMIT_PRESETS.PAYMENT_ACTION,
   });

@@ -237,7 +237,7 @@ const FAQS = [
   },
   {
     q: "How much does Clarify AI cost?",
-    a: "Free includes 50 credits per month — enough to try Practice Coach and a mock session. Pro is $29 / month for 1,400 credits and the full feature set. Enterprise is $79 / month per seat with 4,000 credits and team controls.",
+    a: "Free includes 50 credits per month — enough to try Practice Coach and a mock session. Pro is $29 / month for 1,400 credits and the full feature set. Enterprise is $79 / month for 4,000 credits, priority model access, and priority email support.",
   },
   {
     q: "What is included in the free plan?",

@@ -11,8 +11,11 @@
 
     <!--
       Security Policy:
-      This CSP is intentionally compatible with Vite + React + inline JSON-LD + theme bootstrap script.
-      For stronger production security, move inline scripts to external files or use nonce-based CSP at CDN/server level.
+      script-src keeps 'unsafe-inline' because Vite + the pre-hydration theme
+      bootstrap + JSON-LD need it. Removing unsafe-inline without nonces/hashes
+      breaks Vite (dev HMR and production inline boot). Harden at CDN/server
+      with nonce-based CSP when shipping behind a reverse proxy.
+      connect-src is intentionally allowlisted to known backends only.
     -->
     <meta
       http-equiv="Content-Security-Policy"
@@ -20,7 +23,7 @@
         default-src 'self';
         base-uri 'self';
         object-src 'none';
-        script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net;
+        script-src 'self' 'unsafe-inline';
         style-src 'self' 'unsafe-inline';
         img-src 'self' data: blob: https:;
         font-src 'self' data:;

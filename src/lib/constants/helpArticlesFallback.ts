@@ -179,8 +179,8 @@ Credits refresh monthly based on your plan tier. Credit packs cost more per cred
     category_title: "Billing & Credits",
     question: "How much do paid plans cost?",
     answer:
-      "Pro is $29/month for 1,400 credits. Enterprise is $79/month per seat with 4,000 credits and team controls.",
-    body_md: `Pro is **$29 / month** for 1,400 credits and unlocks the full feature set. Enterprise is **$79 / month** per seat with 4,000 credits and team controls. Yearly billing saves roughly two months. Upgrade anytime from **Settings → Billing**.`,
+      "Pro is $29/month for 1,400 credits. Enterprise is $79/month for 4,000 credits with priority support.",
+    body_md: `Pro is **$29 / month** for 1,400 credits and unlocks the full feature set. Enterprise is **$79 / month** for 4,000 credits, priority model access, and priority email support. Yearly billing saves roughly two months. Upgrade anytime from **Settings → Billing**.`,
     sort_order: 20,
   },
 ];

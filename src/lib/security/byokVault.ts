@@ -11,7 +11,7 @@
 //                           localStorage from older builds.
 //   * `saveBYOKVault()`  → no-op (silently drops keys).
 //   * `clearBYOKVault()` → wipes legacy localStorage entries.
-//   * `hasBYOKVault()`   → always false.
+//   * `hasBYOKVault()`   → always false (also wipes legacy keys).
 //
 // Do NOT re-introduce persistent key storage here. If BYOK is ever re-enabled,
 // route it through a server-side encrypted vault (e.g. Supabase Vault), not
@@ -33,6 +33,14 @@ function safeRemove(key: string): void {
   }
 }
 
+/**
+ * Wipe legacy BYOK ciphertext + device-key material from localStorage.
+ * Safe to call repeatedly; no-ops when storage is unavailable.
+ *
+ * Legacy keys (never write these again):
+ *   - clarify-byok-vault-key-v1
+ *   - clarify-byok-vault-v1
+ */
 function wipeLegacy(): void {
   safeRemove(LEGACY_KEY_STORAGE);
   safeRemove(LEGACY_PAYLOAD_STORAGE);
@@ -54,7 +62,12 @@ export function clearBYOKVault(): void {
   wipeLegacy();
 }
 
-/** @deprecated Always false since P0-5. */
+/**
+ * @deprecated Always false since P0-5.
+ * Also wipes legacy keys so callers that only check `hasBYOKVault()` still
+ * clear residual localStorage from older builds.
+ */
 export function hasBYOKVault(): boolean {
+  wipeLegacy();
   return false;
 }

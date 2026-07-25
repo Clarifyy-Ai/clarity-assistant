@@ -305,12 +305,158 @@ export function enforceDataExportRateLimit(userId: string): Response | null {
 }
 
 /**
+ * Async distributed rate limit via Postgres RPC.
+ * Falls back to in-memory checkRateLimit if RPC fails.
+ */
+export async function checkRateLimitAsync(
+  adminClient: {
+    rpc: (
+      fn: string,
+      args: Record<string, unknown>
+    ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  },
+  options: RateLimitOptions
+): Promise<RateLimitResult> {
+  const { key, limit, windowMs } = options;
+
+  if (!key || key.trim().length === 0) {
+    throw new Error("[rateLimit] key is required.");
+  }
+  if (!Number.isInteger(limit) || limit <= 0) {
+    throw new Error("[rateLimit] limit must be a positive integer.");
+  }
+  if (!Number.isInteger(windowMs) || windowMs <= 0) {
+    throw new Error("[rateLimit] windowMs must be a positive integer.");
+  }
+
+  try {
+    const { data, error } = await adminClient.rpc("check_rate_limit", {
+      p_key: key,
+      p_limit: limit,
+      p_window_ms: windowMs,
+    });
+
+    if (error) {
+      console.error("[rateLimit] RPC failed, falling back to memory:", error.message);
+      return checkRateLimit(options);
+    }
+
+    const row = Array.isArray(data) ? data[0] : data;
+    if (!row || typeof row !== "object") {
+      return checkRateLimit(options);
+    }
+
+    const r = row as {
+      allowed?: boolean;
+      remaining?: number;
+      reset_at_ms?: number;
+      retry_after_seconds?: number;
+    };
+
+    return {
+      allowed: Boolean(r.allowed),
+      limit,
+      remaining: Number(r.remaining ?? 0),
+      resetAt: Number(r.reset_at_ms ?? Date.now() + windowMs),
+      retryAfterSeconds: Number(r.retry_after_seconds ?? 0),
+    };
+  } catch (err) {
+    console.error(
+      "[rateLimit] RPC exception, falling back to memory:",
+      err instanceof Error ? err.message : err
+    );
+    return checkRateLimit(options);
+  }
+}
+
+export async function enforceRateLimitAsync(
+  adminClient: {
+    rpc: (
+      fn: string,
+      args: Record<string, unknown>
+    ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  },
+  options: RateLimitOptions
+): Promise<Response | null> {
+  const result = await checkRateLimitAsync(adminClient, options);
+  if (!result.allowed) {
+    return rateLimitResponse(result);
+  }
+  return null;
+}
+
+export async function enforceAiRateLimitAsync(
+  adminClient: {
+    rpc: (
+      fn: string,
+      args: Record<string, unknown>
+    ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  },
+  functionName: string,
+  userId: string
+): Promise<Response | null> {
+  return enforceRateLimitAsync(adminClient, {
+    key: createRateLimitKey(functionName, userId),
+    ...RATE_LIMIT_PRESETS.AI_GENERATION,
+  });
+}
+
+export async function enforceStrictAiRateLimitAsync(
+  adminClient: {
+    rpc: (
+      fn: string,
+      args: Record<string, unknown>
+    ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  },
+  functionName: string,
+  userId: string
+): Promise<Response | null> {
+  return enforceRateLimitAsync(adminClient, {
+    key: createRateLimitKey(functionName, userId),
+    ...RATE_LIMIT_PRESETS.AI_GENERATION_STRICT,
+  });
+}
+
+export async function enforcePaymentRateLimitAsync(
+  adminClient: {
+    rpc: (
+      fn: string,
+      args: Record<string, unknown>
+    ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  },
+  functionName: string,
+  userId: string
+): Promise<Response | null> {
+  return enforceRateLimitAsync(adminClient, {
+    key: createRateLimitKey(functionName, userId),
+    ...RATE_LIMIT_PRESETS.PAYMENT_ACTION,
+  });
+}
+
+export async function enforceSessionRateLimitAsync(
+  adminClient: {
+    rpc: (
+      fn: string,
+      args: Record<string, unknown>
+    ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  },
+  functionName: string,
+  userId: string
+): Promise<Response | null> {
+  return enforceRateLimitAsync(adminClient, {
+    key: createRateLimitKey(functionName, userId),
+    ...RATE_LIMIT_PRESETS.SESSION_ACTION,
+  });
+}
+
+/**
  * Testing/debug helper.
  * Do not call this from production request handlers.
  */
 export function clearRateLimitStore(): void {
   store.clear();
 }
+
 //
 // SECURITY PURPOSE:
 // - Protect expensive AI/payment/session endpoints from abuse

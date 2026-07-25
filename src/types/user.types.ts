@@ -2,6 +2,7 @@
 // User & Profile Types
 // ─────────────────────────────────────────────────────────────────
 
+/** Launch surface: free | pro | enterprise. `team` is a legacy DB alias only. */
 export type UserPlan = "free" | "pro" | "team" | "enterprise";
 
 export type UserRole =

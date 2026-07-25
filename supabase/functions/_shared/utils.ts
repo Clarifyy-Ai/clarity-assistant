@@ -120,9 +120,18 @@ export async function requireAuth(req: Request): Promise<AuthContext & { byok: B
 
   const { data: profile } = await admin
     .from("profiles")
-    .select("plan_id, credits")
+    .select("plan_id, credits, is_banned")
     .eq("id", user.id)
     .maybeSingle();
+
+  if (profile?.is_banned) {
+    throw errorResponse(
+      "Account suspended. Contact support.",
+      "ACCOUNT_BANNED",
+      403,
+      req
+    );
+  }
 
   const { data: roleRow } = await admin
     .from("user_roles")

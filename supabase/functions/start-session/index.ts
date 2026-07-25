@@ -20,7 +20,7 @@ import { authenticateRequest } from "../_shared/auth.ts";
 import { bannedResponse, isUserBanned } from "../_shared/banCheck.ts";
 
 import {
-  checkRateLimit,
+  checkRateLimitAsync,
   createRateLimitKey,
   rateLimitResponse,
   RATE_LIMIT_PRESETS,
@@ -472,7 +472,9 @@ Deno.serve(async (req: Request) => {
 
   const { user } = auth.context;
 
-  const rateLimitResult = checkRateLimit({
+  const db = createServiceClient();
+
+  const rateLimitResult = await checkRateLimitAsync(db, {
     key: createRateLimitKey(FUNCTION_NAME, user.id),
     ...RATE_LIMIT_PRESETS.SESSION_ACTION,
   });
@@ -503,7 +505,6 @@ Deno.serve(async (req: Request) => {
   }
 
   const body = validation.data;
-  const db = createServiceClient();
 
   if (await isUserBanned(db, user.id)) {
     return withCorsHeaders(req, bannedResponse(corsHeaders));

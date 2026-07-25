@@ -2,7 +2,7 @@ import { NavLink, Outlet, useLocation } from "react-router-dom";
 import {
   User, Bell, Shield, CreditCard,
   Zap, Palette, Download, Trash2,
-  ChevronRight, Globe, Mic, Keyboard, Sparkles, ShieldCheck, LogOut, Radio,
+  ChevronRight, Globe, Mic, Keyboard, Sparkles, ShieldCheck, LogOut,
   type LucideIcon,
 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
@@ -26,14 +26,11 @@ const SETTINGS_NAV: SettingsNavItem[] = [
   { to: "/app/settings/notifications",  icon: Bell,        label: "Notifications"   },
   { to: "/app/settings/appearance",     icon: Palette,     label: "Appearance"      },
   { to: "/app/settings/audio",          icon: Mic,         label: "Audio & speech"  },
-  { to: "/app/settings/practice-coach", icon: Radio,      label: "Practice Coach"  },
   { to: "/app/settings/privacy",        icon: Shield,      label: "Privacy"         },
   { to: "/app/settings/security",       icon: Shield,      label: "Security"        },
   { to: "/app/settings/security-config", icon: ShieldCheck, label: "Security config" },
-  { to: "/app/settings/billing",        icon: CreditCard,  label: "Billing"         },
+  { to: "/app/settings/billing",        icon: CreditCard,  label: "Billing & plan"  },
   { to: "/app/settings/models",         icon: Zap,         label: "AI models"       },
-  { to: "/app/settings/subscription",   icon: CreditCard,  label: "Subscription"    },
-  { to: "/app/settings/credits",        icon: Zap,         label: "Credits"         },
   { to: "/app/settings/integrations",   icon: Globe,       label: "Integrations"    },
   { to: "/app/settings/data",           icon: Download,    label: "Data & export"   },
   { to: "/app/settings/hotkeys",        icon: Keyboard,    label: "Keyboard shortcuts" },

@@ -20,6 +20,11 @@ export default defineConfig({
 
     // Only match test files; avoids pulling app code accidentally
     include: ["src/**/*.{test,spec}.{ts,tsx}"],
+    exclude: [
+      "node_modules",
+      "dist",
+      "src/test/_placeholders/**",
+    ],
 
     // Improve debugging & stability
     clearMocks: true,

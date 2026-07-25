@@ -40,8 +40,11 @@ const INTEGRATION_ENV_KEYS: Record<string, string | undefined> = {
 };
 
 function isIntegrationVisible(integration: Integration): boolean {
-  if (integration.live) return true;
+  // Soft-hide unfinished ComingSoonCard integrations — only surface live ones.
+  // OAuth stubs stay hidden unless marked live (Connect would be misleading).
+  if (!integration.live) return false;
   const key = INTEGRATION_ENV_KEYS[integration.id];
+  if (key === undefined) return true;
   return typeof key === "string" && key.trim().length > 0;
 }
 
@@ -265,8 +268,8 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
     error,
   } = useCalendarSync();
 
-  // Sync import requires server-side Google OAuth creds; connect works via Supabase Auth.
-  const [syncAvailable, setSyncAvailable] = useState(integration.live);
+  // Sync import requires server-side Google OAuth creds; assume unavailable until probed.
+  const [syncAvailable, setSyncAvailable] = useState(false);
 
   useEffect(() => {
     if (!integration.live) return;
@@ -349,7 +352,9 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
               ? syncAvailable
                 ? "Your calendar is linked. Use Sync to import upcoming interview events."
                 : "Your Google account is linked. Event import will be available once sync is enabled on the server."
-              : integration.desc}
+              : syncAvailable
+                ? integration.desc
+                : "Google Calendar sync isn't available yet. Interview import will appear here once the server is configured."}
           </p>
           {lastSynced && (
             <p className="text-[10px] text-muted-foreground mt-0.5">
@@ -374,20 +379,31 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
               Sync now
             </Button>
           )}
-          <Button
-            variant={isConnected ? "danger" : "secondary"}
-            size="sm"
-            loading={isDisconnecting || isCheckingConnection}
-            onClick={isConnected ? handleDisconnect : handleConnect}
-            leftIcon={isConnected ? undefined : <ExternalLink className="w-3.5 h-3.5" />}
-          >
-            {isCheckingConnection ? "…" : isConnected ? "Disconnect" : "Connect"}
-          </Button>
+          {/* When sync isn't live, don't present Connect as the primary CTA */}
+          {!syncAvailable && !isConnected ? (
+            <Button variant="ghost" size="sm" disabled>
+              Sync unavailable
+            </Button>
+          ) : (
+            <Button
+              variant={isConnected ? "danger" : "secondary"}
+              size="sm"
+              loading={isDisconnecting || isCheckingConnection}
+              onClick={isConnected ? handleDisconnect : handleConnect}
+              leftIcon={isConnected ? undefined : <ExternalLink className="w-3.5 h-3.5" />}
+            >
+              {isCheckingConnection ? "…" : isConnected ? "Disconnect" : "Connect"}
+            </Button>
+          )}
         </div>
       </div>
 
       <div className="mt-3 pt-3 border-t border-border">
-        {isConnected ? (
+        {!syncAvailable ? (
+          <p className="text-[10px] text-muted-foreground leading-relaxed">
+            Calendar event import isn&apos;t enabled on the server yet. You can still schedule interviews manually in Clarify — Google sync will appear here once it&apos;s available.
+          </p>
+        ) : isConnected ? (
           <>
             <p className="text-[10px] text-muted-foreground mb-1.5">Permissions granted:</p>
             <div className="flex flex-wrap gap-1.5">
@@ -439,19 +455,6 @@ export default function SettingsIntegrations() {
           );
         })}
       </div>
-
-      {/* API access card — coming soon */}
-      <Card>
-        <div className="flex items-center gap-2 mb-2">
-          <Zap className="w-4 h-4 text-primary" />
-          <h3 className="text-sm font-semibold text-foreground">API access</h3>
-          <Badge variant="amber" size="sm">Coming soon</Badge>
-        </div>
-        <p className="text-xs text-muted-foreground leading-relaxed">
-          The Clarify AI public API for building integrations and automating workflows
-          is in development. Pro and Enterprise plans will get programmatic access at launch.
-        </p>
-      </Card>
     </SettingsPageShell>
   );
 }

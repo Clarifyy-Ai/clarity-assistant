@@ -67,7 +67,6 @@ const KNOWN_PRODUCTION_ORIGINS = [
   "https://clarityapp.ai",
   "https://www.clarityapp.ai",
   "https://app.clarityapp.ai",
-  "https://preview--clarify-aii.lovable.app",
 ];
 
 const ALLOWED_METHODS = [

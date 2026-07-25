@@ -92,7 +92,6 @@ export {
   SettingsBilling,
   SettingsSubscription,
   SettingsCredits,
-  SettingsBYOK,
   SettingsModels,
   SettingsNotifications,
   SettingsIntegrations,

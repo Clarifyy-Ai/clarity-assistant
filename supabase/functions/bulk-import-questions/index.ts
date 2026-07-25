@@ -6,6 +6,15 @@
 // Auth: header `x-ingest-key` MUST match the `INGEST_API_KEY` secret.
 // This function is intentionally JWT-disabled because the caller is a
 // server-side scraper, not a browser user.
+
+function timingSafeEqual(a: string, b: string): boolean {
+  if (a.length !== b.length) return false;
+  let diff = 0;
+  for (let i = 0; i < a.length; i++) {
+    diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+  }
+  return diff === 0;
+}
 //
 // Body shape:
 // {
@@ -104,7 +113,7 @@ Deno.serve(async (req) => {
     );
   }
   const providedKey = req.headers.get("x-ingest-key")?.trim();
-  if (!providedKey || providedKey !== expectedKey) {
+  if (!providedKey || !timingSafeEqual(providedKey, expectedKey)) {
     return json({ error: "Forbidden" }, 403, req);
   }
 

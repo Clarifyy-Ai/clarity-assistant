@@ -97,6 +97,8 @@ export default function Scorecard() {
           </div>
           <div className="flex items-center gap-2">
             <button
+              type="button"
+              aria-label={isShared ? "Share scorecard link again" : "Share scorecard link"}
               onClick={handleShare}
               className="flex items-center gap-1.5 px-3 py-2 bg-secondary hover:bg-secondary border border-border text-muted-foreground text-sm rounded-xl transition-all"
             >
@@ -104,11 +106,13 @@ export default function Scorecard() {
               {copyFeedback ? "Copied!" : isShared ? "Share again" : "Share"}
             </button>
             <button
-              onClick={exportPDF}
+              type="button"
+              aria-label="Export scorecard as JSON"
+              onClick={() => void exportPDF()}
               className="flex items-center gap-1.5 px-3 py-2 bg-secondary hover:bg-secondary border border-border text-muted-foreground text-sm rounded-xl transition-all"
             >
               <Download className="w-3.5 h-3.5" />
-              Export PDF
+              Export JSON
             </button>
           </div>
         </div>
