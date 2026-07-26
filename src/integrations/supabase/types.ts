@@ -103,6 +103,53 @@ export type Database = {
           },
         ]
       }
+      ai_usage_logs: {
+        Row: {
+          action: string
+          cost_microcents: number | null
+          created_at: string | null
+          id: string
+          input_tokens: number | null
+          latency_ms: number | null
+          model: string
+          output_tokens: number | null
+          user_id: string | null
+          was_fallback: boolean | null
+        }
+        Insert: {
+          action: string
+          cost_microcents?: number | null
+          created_at?: string | null
+          id?: string
+          input_tokens?: number | null
+          latency_ms?: number | null
+          model: string
+          output_tokens?: number | null
+          user_id?: string | null
+          was_fallback?: boolean | null
+        }
+        Update: {
+          action?: string
+          cost_microcents?: number | null
+          created_at?: string | null
+          id?: string
+          input_tokens?: number | null
+          latency_ms?: number | null
+          model?: string
+          output_tokens?: number | null
+          user_id?: string | null
+          was_fallback?: boolean | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       analytics: {
         Row: {
           created_at: string
@@ -135,6 +182,7 @@ export type Database = {
           answer_text: string
           category: string | null
           created_at: string
+          deleted_at: string | null
           id: string
           is_favourite: boolean
           last_used_at: string | null
@@ -149,6 +197,7 @@ export type Database = {
           answer_text: string
           category?: string | null
           created_at?: string
+          deleted_at?: string | null
           id?: string
           is_favourite?: boolean
           last_used_at?: string | null
@@ -163,6 +212,7 @@ export type Database = {
           answer_text?: string
           category?: string | null
           created_at?: string
+          deleted_at?: string | null
           id?: string
           is_favourite?: boolean
           last_used_at?: string | null
@@ -258,6 +308,90 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      audit_logs: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          ip_address: string | null
+          metadata: Json | null
+          resource_id: string | null
+          resource_type: string | null
+          status: string
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          resource_id?: string | null
+          resource_type?: string | null
+          status?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          metadata?: Json | null
+          resource_id?: string | null
+          resource_type?: string | null
+          status?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      billing_settings: {
+        Row: {
+          auto_deduct_credits: boolean
+          credits_150_inr_paise: number
+          credits_50_inr_paise: number
+          credits_500_inr_paise: number
+          enterprise_monthly_inr_paise: number
+          id: number
+          pro_monthly_inr_paise: number
+          razorpay_enabled: boolean
+          referee_credit_reward: number
+          referral_discount_percent: number
+          referrer_credit_reward: number
+          updated_at: string
+        }
+        Insert: {
+          auto_deduct_credits?: boolean
+          credits_150_inr_paise?: number
+          credits_50_inr_paise?: number
+          credits_500_inr_paise?: number
+          enterprise_monthly_inr_paise?: number
+          id?: number
+          pro_monthly_inr_paise?: number
+          razorpay_enabled?: boolean
+          referee_credit_reward?: number
+          referral_discount_percent?: number
+          referrer_credit_reward?: number
+          updated_at?: string
+        }
+        Update: {
+          auto_deduct_credits?: boolean
+          credits_150_inr_paise?: number
+          credits_50_inr_paise?: number
+          credits_500_inr_paise?: number
+          enterprise_monthly_inr_paise?: number
+          id?: number
+          pro_monthly_inr_paise?: number
+          razorpay_enabled?: boolean
+          referee_credit_reward?: number
+          referral_discount_percent?: number
+          referrer_credit_reward?: number
+          updated_at?: string
+        }
+        Relationships: []
       }
       blog_posts: {
         Row: {
@@ -717,6 +851,7 @@ export type Database = {
           company_name: string | null
           content: string | null
           created_at: string
+          deleted_at: string | null
           file_name: string | null
           file_size: number | null
           file_url: string | null
@@ -743,6 +878,7 @@ export type Database = {
           company_name?: string | null
           content?: string | null
           created_at?: string
+          deleted_at?: string | null
           file_name?: string | null
           file_size?: number | null
           file_url?: string | null
@@ -769,6 +905,7 @@ export type Database = {
           company_name?: string | null
           content?: string | null
           created_at?: string
+          deleted_at?: string | null
           file_name?: string | null
           file_size?: number | null
           file_url?: string | null
@@ -1019,6 +1156,33 @@ export type Database = {
           slug?: string
           sort_order?: number
           updated_at?: string
+        }
+        Relationships: []
+      }
+      idempotency_log: {
+        Row: {
+          created_at: string
+          expires_at: string | null
+          id: string
+          key: string
+          metadata: Json
+          response: Json | null
+        }
+        Insert: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          key: string
+          metadata?: Json
+          response?: Json | null
+        }
+        Update: {
+          created_at?: string
+          expires_at?: string | null
+          id?: string
+          key?: string
+          metadata?: Json
+          response?: Json | null
         }
         Relationships: []
       }
@@ -1423,6 +1587,78 @@ export type Database = {
           },
         ]
       }
+      payment_orders: {
+        Row: {
+          amount_paise: number
+          created_at: string
+          credits_granted: number
+          currency: string
+          id: string
+          metadata: Json
+          paid_at: string | null
+          plan_id: string | null
+          product_type: string
+          promo_code: string | null
+          promo_code_id: string | null
+          provider: string
+          provider_order_id: string | null
+          provider_payment_id: string | null
+          status: string
+          user_id: string
+        }
+        Insert: {
+          amount_paise: number
+          created_at?: string
+          credits_granted?: number
+          currency?: string
+          id?: string
+          metadata?: Json
+          paid_at?: string | null
+          plan_id?: string | null
+          product_type: string
+          promo_code?: string | null
+          promo_code_id?: string | null
+          provider?: string
+          provider_order_id?: string | null
+          provider_payment_id?: string | null
+          status?: string
+          user_id: string
+        }
+        Update: {
+          amount_paise?: number
+          created_at?: string
+          credits_granted?: number
+          currency?: string
+          id?: string
+          metadata?: Json
+          paid_at?: string | null
+          plan_id?: string | null
+          product_type?: string
+          promo_code?: string | null
+          promo_code_id?: string | null
+          provider?: string
+          provider_order_id?: string | null
+          provider_payment_id?: string | null
+          status?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "payment_orders_promo_code_id_fkey"
+            columns: ["promo_code_id"]
+            isOneToOne: false
+            referencedRelation: "promo_codes"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payment_orders_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       practice_rooms: {
         Row: {
           created_at: string
@@ -1460,6 +1696,7 @@ export type Database = {
         Row: {
           audio_input_device: string | null
           audio_output_device: string | null
+          auto_deduct_credits: boolean
           auto_transcript: boolean
           avatar_url: string | null
           ban_reason: string | null
@@ -1476,6 +1713,7 @@ export type Database = {
           deleted_at: string | null
           domain: string | null
           email: string | null
+          email_normalized: string | null
           email_notifications: boolean
           experience_years: number | null
           full_name: string | null
@@ -1503,6 +1741,7 @@ export type Database = {
           overlay_hotkey: string
           overlay_opacity: number
           overlay_position: string
+          pending_promo_code: string | null
           phone: string | null
           plan_id: Database["public"]["Enums"]["plan_tier"]
           preferred_language: string
@@ -1535,6 +1774,7 @@ export type Database = {
         Insert: {
           audio_input_device?: string | null
           audio_output_device?: string | null
+          auto_deduct_credits?: boolean
           auto_transcript?: boolean
           avatar_url?: string | null
           ban_reason?: string | null
@@ -1551,6 +1791,7 @@ export type Database = {
           deleted_at?: string | null
           domain?: string | null
           email?: string | null
+          email_normalized?: string | null
           email_notifications?: boolean
           experience_years?: number | null
           full_name?: string | null
@@ -1578,6 +1819,7 @@ export type Database = {
           overlay_hotkey?: string
           overlay_opacity?: number
           overlay_position?: string
+          pending_promo_code?: string | null
           phone?: string | null
           plan_id?: Database["public"]["Enums"]["plan_tier"]
           preferred_language?: string
@@ -1610,6 +1852,7 @@ export type Database = {
         Update: {
           audio_input_device?: string | null
           audio_output_device?: string | null
+          auto_deduct_credits?: boolean
           auto_transcript?: boolean
           avatar_url?: string | null
           ban_reason?: string | null
@@ -1626,6 +1869,7 @@ export type Database = {
           deleted_at?: string | null
           domain?: string | null
           email?: string | null
+          email_normalized?: string | null
           email_notifications?: boolean
           experience_years?: number | null
           full_name?: string | null
@@ -1653,6 +1897,7 @@ export type Database = {
           overlay_hotkey?: string
           overlay_opacity?: number
           overlay_position?: string
+          pending_promo_code?: string | null
           phone?: string | null
           plan_id?: Database["public"]["Enums"]["plan_tier"]
           preferred_language?: string
@@ -1686,6 +1931,65 @@ export type Database = {
           {
             foreignKeyName: "profiles_referred_by_fkey"
             columns: ["referred_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      promo_codes: {
+        Row: {
+          applies_to: string
+          bonus_credits: number
+          code: string
+          created_at: string
+          created_by: string | null
+          description: string | null
+          discount_percent: number
+          id: string
+          is_active: boolean
+          max_redemptions: number | null
+          redemption_count: number
+          updated_at: string
+          valid_from: string
+          valid_until: string | null
+        }
+        Insert: {
+          applies_to?: string
+          bonus_credits?: number
+          code: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          discount_percent?: number
+          id?: string
+          is_active?: boolean
+          max_redemptions?: number | null
+          redemption_count?: number
+          updated_at?: string
+          valid_from?: string
+          valid_until?: string | null
+        }
+        Update: {
+          applies_to?: string
+          bonus_credits?: number
+          code?: string
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          discount_percent?: number
+          id?: string
+          is_active?: boolean
+          max_redemptions?: number | null
+          redemption_count?: number
+          updated_at?: string
+          valid_from?: string
+          valid_until?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "promo_codes_created_by_fkey"
+            columns: ["created_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -1791,6 +2095,24 @@ export type Database = {
           updated_at?: string | null
           uploaded_by?: string | null
           upvotes?: number | null
+        }
+        Relationships: []
+      }
+      rate_limit_buckets: {
+        Row: {
+          count: number
+          key: string
+          reset_at: string
+        }
+        Insert: {
+          count?: number
+          key: string
+          reset_at: string
+        }
+        Update: {
+          count?: number
+          key?: string
+          reset_at?: string
         }
         Relationships: []
       }
@@ -2187,7 +2509,10 @@ export type Database = {
       }
       scheduled_interviews: {
         Row: {
+          calendar_event_id: string | null
+          calendar_provider: string | null
           company_name: string
+          company_research_id: string | null
           created_at: string
           id: string
           is_remote: boolean
@@ -2205,7 +2530,10 @@ export type Database = {
           user_id: string
         }
         Insert: {
+          calendar_event_id?: string | null
+          calendar_provider?: string | null
           company_name: string
+          company_research_id?: string | null
           created_at?: string
           id?: string
           is_remote?: boolean
@@ -2223,7 +2551,10 @@ export type Database = {
           user_id: string
         }
         Update: {
+          calendar_event_id?: string | null
+          calendar_provider?: string | null
           company_name?: string
+          company_research_id?: string | null
           created_at?: string
           id?: string
           is_remote?: boolean
@@ -2247,12 +2578,16 @@ export type Database = {
           communication: number | null
           confidence: number | null
           created_at: string
+          details: Json
           feedback: string | null
+          generated_at: string | null
           id: string
           improvements: string[] | null
+          is_shared: boolean
           overall_score: number | null
           problem_solving: number | null
           session_id: string | null
+          share_token: string | null
           strengths: string[] | null
           technical: number | null
           user_id: string
@@ -2261,12 +2596,16 @@ export type Database = {
           communication?: number | null
           confidence?: number | null
           created_at?: string
+          details?: Json
           feedback?: string | null
+          generated_at?: string | null
           id?: string
           improvements?: string[] | null
+          is_shared?: boolean
           overall_score?: number | null
           problem_solving?: number | null
           session_id?: string | null
+          share_token?: string | null
           strengths?: string[] | null
           technical?: number | null
           user_id: string
@@ -2275,12 +2614,16 @@ export type Database = {
           communication?: number | null
           confidence?: number | null
           created_at?: string
+          details?: Json
           feedback?: string | null
+          generated_at?: string | null
           id?: string
           improvements?: string[] | null
+          is_shared?: boolean
           overall_score?: number | null
           problem_solving?: number | null
           session_id?: string | null
+          share_token?: string | null
           strengths?: string[] | null
           technical?: number | null
           user_id?: string
@@ -2482,6 +2825,7 @@ export type Database = {
           duration_ms: number | null
           id: string
           question: string
+          question_index: number | null
           score: number | null
           session_id: string | null
           user_id: string
@@ -2493,6 +2837,7 @@ export type Database = {
           duration_ms?: number | null
           id?: string
           question: string
+          question_index?: number | null
           score?: number | null
           session_id?: string | null
           user_id: string
@@ -2504,6 +2849,7 @@ export type Database = {
           duration_ms?: number | null
           id?: string
           question?: string
+          question_index?: number | null
           score?: number | null
           session_id?: string | null
           user_id?: string
@@ -2520,36 +2866,54 @@ export type Database = {
       }
       session_debriefs: {
         Row: {
+          action_plan: Json
           created_at: string
           detailed_report: Json | null
           id: string
           improvements: string[] | null
+          insight: string | null
+          next_session_goals: string[]
           overall_grade: string | null
           priority_focus: string | null
+          resources: Json
           session_id: string | null
+          skill_gaps: Json
           strengths: string[] | null
+          summary: string | null
           user_id: string
         }
         Insert: {
+          action_plan?: Json
           created_at?: string
           detailed_report?: Json | null
           id?: string
           improvements?: string[] | null
+          insight?: string | null
+          next_session_goals?: string[]
           overall_grade?: string | null
           priority_focus?: string | null
+          resources?: Json
           session_id?: string | null
+          skill_gaps?: Json
           strengths?: string[] | null
+          summary?: string | null
           user_id: string
         }
         Update: {
+          action_plan?: Json
           created_at?: string
           detailed_report?: Json | null
           id?: string
           improvements?: string[] | null
+          insight?: string | null
+          next_session_goals?: string[]
           overall_grade?: string | null
           priority_focus?: string | null
+          resources?: Json
           session_id?: string | null
+          skill_gaps?: Json
           strengths?: string[] | null
+          summary?: string | null
           user_id?: string
         }
         Relationships: [
@@ -2640,6 +3004,7 @@ export type Database = {
           confidence_score: number | null
           created_at: string
           credits_used: number | null
+          deleted_at: string | null
           document_id: string | null
           ended_at: string | null
           filler_words: number | null
@@ -2651,6 +3016,7 @@ export type Database = {
           notes: string | null
           overall_score: number | null
           questions_asked: number | null
+          session_type: string | null
           started_at: string | null
           status: Database["public"]["Enums"]["session_status"]
           tags: string[] | null
@@ -2667,6 +3033,7 @@ export type Database = {
           confidence_score?: number | null
           created_at?: string
           credits_used?: number | null
+          deleted_at?: string | null
           document_id?: string | null
           ended_at?: string | null
           filler_words?: number | null
@@ -2678,6 +3045,7 @@ export type Database = {
           notes?: string | null
           overall_score?: number | null
           questions_asked?: number | null
+          session_type?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["session_status"]
           tags?: string[] | null
@@ -2694,6 +3062,7 @@ export type Database = {
           confidence_score?: number | null
           created_at?: string
           credits_used?: number | null
+          deleted_at?: string | null
           document_id?: string | null
           ended_at?: string | null
           filler_words?: number | null
@@ -2705,6 +3074,7 @@ export type Database = {
           notes?: string | null
           overall_score?: number | null
           questions_asked?: number | null
+          session_type?: string | null
           started_at?: string | null
           status?: Database["public"]["Enums"]["session_status"]
           tags?: string[] | null
@@ -2763,6 +3133,7 @@ export type Database = {
           id: string
           max_documents: number | null
           max_sessions_per_month: number | null
+          monthly_amount_cents: number | null
           monthly_credits: number
           plan_id: Database["public"]["Enums"]["plan_tier"]
           priority_support: boolean
@@ -2787,6 +3158,7 @@ export type Database = {
           id?: string
           max_documents?: number | null
           max_sessions_per_month?: number | null
+          monthly_amount_cents?: number | null
           monthly_credits?: number
           plan_id?: Database["public"]["Enums"]["plan_tier"]
           priority_support?: boolean
@@ -2811,6 +3183,7 @@ export type Database = {
           id?: string
           max_documents?: number | null
           max_sessions_per_month?: number | null
+          monthly_amount_cents?: number | null
           monthly_credits?: number
           plan_id?: Database["public"]["Enums"]["plan_tier"]
           priority_support?: boolean
@@ -3310,6 +3683,27 @@ export type Database = {
       }
     }
     Views: {
+      ai_daily_costs: {
+        Row: {
+          avg_latency_ms: number | null
+          call_count: number | null
+          model: string | null
+          total_cost_microcents: number | null
+          total_input_tokens: number | null
+          total_output_tokens: number | null
+          usage_date: string | null
+          user_id: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "ai_usage_logs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       feature_flags_public: {
         Row: {
           created_at: string | null
@@ -3345,6 +3739,10 @@ export type Database = {
       }
     }
     Functions: {
+      acquire_submit_lock: {
+        Args: { p_test_id: string; p_user_id: string }
+        Returns: Json
+      }
       add_credits: {
         Args: {
           p_action?: Database["public"]["Enums"]["credit_action"]
@@ -3358,6 +3756,48 @@ export type Database = {
       bulk_update_users: {
         Args: { p_patch: Json; p_user_ids: string[] }
         Returns: number
+      }
+      check_free_tier_limits: {
+        Args: { p_action: string; p_user_id: string }
+        Returns: Json
+      }
+      check_rate_limit: {
+        Args: { p_key: string; p_limit: number; p_window_ms: number }
+        Returns: {
+          allowed: boolean
+          remaining: number
+          reset_at_ms: number
+          retry_after_seconds: number
+        }[]
+      }
+      claim_and_complete_test: {
+        Args: {
+          p_accuracy: number
+          p_attempt_percentage: number
+          p_max_score: number
+          p_predicted_percentile: number
+          p_strong_topics: string[]
+          p_subject_breakdown: Json
+          p_test_id: string
+          p_time_analysis: Json
+          p_topic_breakdown: Json
+          p_total_score: number
+          p_user_id: string
+          p_weak_topics: string[]
+        }
+        Returns: Json
+      }
+      cleanup_expired_documents: { Args: never; Returns: number }
+      create_test_atomic: {
+        Args: {
+          p_config: Json
+          p_credit_cost?: number
+          p_question_ids: string[]
+          p_test_name: string
+          p_time_limit: number
+          p_user_id: string
+        }
+        Returns: Json
       }
       deduct_credits: {
         Args: { p_action: string; p_cost: number; p_session_id?: string }
@@ -3398,6 +3838,59 @@ export type Database = {
           status: Database["public"]["Enums"]["referral_status"]
         }[]
       }
+      get_shared_debrief: {
+        Args: { p_token: string }
+        Returns: {
+          action_plan: Json
+          created_at: string
+          detailed_report: Json | null
+          id: string
+          improvements: string[] | null
+          insight: string | null
+          next_session_goals: string[]
+          overall_grade: string | null
+          priority_focus: string | null
+          resources: Json
+          session_id: string | null
+          skill_gaps: Json
+          strengths: string[] | null
+          summary: string | null
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "session_debriefs"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
+      get_shared_scorecard: {
+        Args: { p_token: string }
+        Returns: {
+          communication: number | null
+          confidence: number | null
+          created_at: string
+          details: Json
+          feedback: string | null
+          generated_at: string | null
+          id: string
+          improvements: string[] | null
+          is_shared: boolean
+          overall_score: number | null
+          problem_solving: number | null
+          session_id: string | null
+          share_token: string | null
+          strengths: string[] | null
+          technical: number | null
+          user_id: string
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "scorecards"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -3415,7 +3908,32 @@ export type Database = {
         Returns: undefined
       }
       mask_email: { Args: { p_email: string }; Returns: string }
-      refund_credits: { Args: { p_cost: number }; Returns: Json }
+      purge_expired_idempotency_log: { Args: never; Returns: number }
+      record_referral_reward: {
+        Args: { p_referral_code: string; p_referred_id: string }
+        Returns: Json
+      }
+      refund_credits: {
+        Args: { p_cost: number; p_reason?: string; p_user_id: string }
+        Returns: Json
+      }
+      submit_test_atomic: {
+        Args: {
+          p_accuracy: number
+          p_attempt_percentage: number
+          p_max_score: number
+          p_predicted_percentile: number
+          p_strong_topics: string[]
+          p_subject_breakdown: Json
+          p_test_id: string
+          p_time_analysis: Json
+          p_topic_breakdown: Json
+          p_total_score: number
+          p_user_id: string
+          p_weak_topics: string[]
+        }
+        Returns: Json
+      }
       update_topic_performance: {
         Args: {
           p_attempted_delta: number
