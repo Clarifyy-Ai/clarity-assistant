@@ -58,7 +58,7 @@ const PROFILE_SAFE_COLUMNS = [
   "linkedin_url","locale","longest_streak","marketing_emails","noise_suppression",
   "notice_period","notification_prefs","onboarding_completed","onboarding_step",
   "overlay_font_size","overlay_hotkey","overlay_opacity","overlay_position",
-  "phone","plan_id","preferred_language","preferred_model","preferred_salary",
+  "payment_failed_at","phone","plan_id","preferred_language","preferred_model","preferred_salary",
   "privacy_prefs","profile_visibility","referral_code","referred_by",
   "response_style","role_type","session_reminders","stealth_mode","streak_days",
   "subscription_status","target_companies","target_role","timezone",

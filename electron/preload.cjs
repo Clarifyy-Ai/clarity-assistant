@@ -18,6 +18,22 @@ const desktopBridge = {
   resize: (width, height) => ipcRenderer.invoke("overlay:resize", width, height),
   showInactive: () => ipcRenderer.invoke("overlay:show-inactive"),
   hide: () => ipcRenderer.invoke("overlay:hide"),
+  onGlobalShortcut: (callback) => {
+    const handler = (_event, action) => callback(action);
+    ipcRenderer.on("global-shortcut", handler);
+    return () => ipcRenderer.removeListener("global-shortcut", handler);
+  },
+  removeGlobalShortcutListener: () => {
+    ipcRenderer.removeAllListeners("global-shortcut");
+  },
+  onHotkeyConflict: (callback) => {
+    const handler = (_event, info) => callback(info);
+    ipcRenderer.on("hotkey-conflict", handler);
+    return () => ipcRenderer.removeListener("hotkey-conflict", handler);
+  },
+  removeHotkeyConflictListener: () => {
+    ipcRenderer.removeAllListeners("hotkey-conflict");
+  },
   // Update events
   onUpdateAvailable: (callback) => ipcRenderer.on("update-available", callback),
   onUpdateDownloaded: (callback) => ipcRenderer.on("update-downloaded", callback),

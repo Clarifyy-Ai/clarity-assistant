@@ -28,7 +28,7 @@ import {
 } from "../_shared/auth.ts";
 
 import {
-  checkRateLimit,
+  checkRateLimitAsync,
   createRateLimitKey,
   rateLimitResponse,
   RATE_LIMIT_PRESETS
@@ -201,7 +201,7 @@ Deno.serve(async (req: Request) => {
   const userId = auth.context.user.id;
 
   /* ── RATE LIMIT ── (important for audio streaming) */
-  const rl = checkRateLimit({
+  const rl = await checkRateLimitAsync(createServiceClient(), {
     key: createRateLimitKey(FUNCTION_NAME, userId),
     ...RATE_LIMIT_PRESETS.STREAMING_ACTION
   });

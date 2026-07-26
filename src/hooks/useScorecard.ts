@@ -103,7 +103,7 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
         top_3: [],
       };
       const wpmTrend: WpmTrend = {
-        avg: sessionMeta.avg_wpm ?? 140,
+        avg: sessionMeta.avg_wpm ?? 0,
         trend: "stable",
       };
 

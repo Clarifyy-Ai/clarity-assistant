@@ -4,6 +4,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { useUIStore } from "@/store/uiStore";
 import type { PreferredAIModel } from "@/types/user.types";
+import { isPaidPlan as isPaidPlanId } from "@/lib/billing/planIds";
 
 /** Server-aligned credit costs (see supabase/functions/_shared/creditEconomics.ts). */
 export const SERVER_AI_CREDIT_COSTS = {
@@ -37,10 +38,11 @@ export function checkCreditsForAction(
     };
   }
 
-  const isPaidPlan = profile.plan && profile.plan !== "free";
+  const planKey = (profile as { plan_id?: string; plan?: string }).plan_id ?? profile.plan;
+  const paid = isPaidPlanId(planKey);
   const subStatus = profile.subscription_status as string | undefined;
 
-  if (isPaidPlan && subStatus && !["active", "trialing"].includes(subStatus)) {
+  if (paid && subStatus && !["active", "trialing"].includes(subStatus)) {
     return {
       canProceed: false,
       creditsRequired: required,
@@ -135,10 +137,11 @@ export function checkCredits(model: PreferredAIModel): CreditCheckResult {
     };
   }
 
-  const isPaidPlan = profile.plan && profile.plan !== "free";
+  const planKey = (profile as { plan_id?: string; plan?: string }).plan_id ?? profile.plan;
+  const paid = isPaidPlanId(planKey);
   const subStatus  = profile.subscription_status as string | undefined;
 
-  if (isPaidPlan && subStatus && !["active", "trialing"].includes(subStatus)) {
+  if (paid && subStatus && !["active", "trialing"].includes(subStatus)) {
     return {
       canProceed:       false,
       creditsRequired:  getCreditCost(model),
@@ -299,6 +302,7 @@ export async function refreshCredits(): Promise<number | null> {
 
   useAuthStore.getState().updateProfile({
     credits:             data.credits,
+    plan_id:             data.plan_id as any,
     plan:                data.plan_id as any,
     subscription_status: data.subscription_status,
   });

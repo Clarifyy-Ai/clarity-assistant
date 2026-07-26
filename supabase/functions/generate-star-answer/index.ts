@@ -12,9 +12,12 @@ import {
   requireFields,
   trimToMaxTokens,
   log,
+  getAdminClient,
 } from "../_shared/utils.ts";
 import type { STARAnswer, ModelId } from "../_shared/types.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
+import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
+import { requirePlan } from "../_shared/requirePlan.ts";
 
 // Sanitize text to protect prompt
 function sanitize(input: any, max = 2000): string {
@@ -42,6 +45,16 @@ Deno.serve(async (req: Request) => {
     // -------------------------------
     const auth = await requireAuth(req);
     const userId = auth.userId;
+
+    const rateLimited = await enforceAiRateLimitAsync(
+      getAdminClient(),
+      "generate-star-answer",
+      userId,
+    );
+    if (rateLimited) return rateLimited;
+
+    const planGate = requirePlan(auth.planId, "free", req);
+    if (planGate) return planGate;
 
     // -------------------------------
     // BODY

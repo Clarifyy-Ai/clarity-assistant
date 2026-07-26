@@ -6,11 +6,12 @@ import {
   deductCredits,
   callAI,
   log,
+  getAdminClient,
 } from "../_shared/utils.ts";
 import { parseJSON } from "../_shared/gemini.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
 import {
-  enforceAiRateLimit,
+  enforceAiRateLimitAsync,
 } from "../_shared/rateLimit.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 
@@ -97,7 +98,11 @@ Deno.serve(async (req) => {
     const auth = await requireAuth(req);
     const userId = auth.userId;
 
-    const rateLimited = enforceAiRateLimit("company-research", userId);
+    const rateLimited = await enforceAiRateLimitAsync(
+      getAdminClient(),
+      "company-research",
+      userId,
+    );
     if (rateLimited) return rateLimited;
 
     const planGate = requirePlan(auth.planId, "starter", req);

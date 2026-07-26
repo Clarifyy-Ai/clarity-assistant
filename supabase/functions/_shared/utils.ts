@@ -244,65 +244,31 @@ export async function deductCredits(
   const admin = getAdminClient();
   const cost = overrideCost ?? CREDIT_COSTS[feature] ?? 1;
 
-  // 1) Try atomic RPC (if installed)
+  // Always charge via atomic RPC. Enterprise is a credit tier (not unlimited).
+  // Fail closed on RPC errors — never select-then-update (races) or skip for plan_id.
   const { data: rpcData, error: rpcError } = await admin.rpc(
     "deduct_credits_atomic",
     { p_user_id: userId, p_amount: cost, p_action: feature }
   );
 
   if (rpcError) {
-    // RPC missing or failed: fall back (keep behavior consistent)
-    console.warn("[credits] deduct_credits_atomic RPC failed, falling back:", rpcError.message);
+    console.error("[credits] deduct_credits_atomic RPC failed:", rpcError.message);
+    return {
+      success: false,
+      balanceAfter: 0,
+      error: "Credit deduction unavailable. Please retry.",
+    };
   }
 
   if (rpcData?.success) {
-    return { success: true, balanceAfter: rpcData.balance_after ?? -1 };
+    return { success: true, balanceAfter: rpcData.balance_after ?? 0 };
   }
 
-  // 2) Fallback (safe but not fully atomic)
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("credits, plan_id, credits_used_this_month")
-    .eq("id", userId)
-    .maybeSingle();
-
-  if (!profile) return { success: false, balanceAfter: 0, error: "Profile not found" };
-
-  const { credits, plan_id, credits_used_this_month } = profile;
-
-  if (credits === -1 || plan_id === "enterprise") {
-    return { success: true, balanceAfter: -1 };
-  }
-
-  if ((credits ?? 0) < cost) {
-    return { success: false, balanceAfter: credits ?? 0, error: "Insufficient credits" };
-  }
-
-  const newBal = (credits ?? 0) - cost;
-
-  const { error: updateErr } = await admin
-    .from("profiles")
-    .update({
-      credits: newBal,
-      credits_used_this_month: (credits_used_this_month ?? 0) + cost,
-      updated_at: new Date().toISOString()
-    })
-    .eq("id", userId);
-
-  if (updateErr) {
-    return { success: false, balanceAfter: credits ?? 0, error: "Failed to deduct credits" };
-  }
-
-  await admin.from("credit_transactions").insert({
-    user_id: userId,
-    amount: -cost,
-    balance_after: newBal,
-    action: feature,
-    description: `${feature} — ${cost} credit${cost !== 1 ? "s" : ""}`,
-    created_at: new Date().toISOString()
-  });
-
-  return { success: true, balanceAfter: newBal };
+  return {
+    success: false,
+    balanceAfter: rpcData?.balance_after ?? 0,
+    error: rpcData?.error ?? "Insufficient credits",
+  };
 }
 
 /* -------------------------------------------------------------------------- */

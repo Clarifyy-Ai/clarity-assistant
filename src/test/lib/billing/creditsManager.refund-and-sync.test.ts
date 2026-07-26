@@ -192,6 +192,7 @@ describe("refreshCredits — balance sync from DB", () => {
     expect(authState.updateProfile).toHaveBeenCalledWith({
       credits: 77,
       plan: "pro",
+      plan_id: "pro",
       subscription_status: "trialing",
     });
   });

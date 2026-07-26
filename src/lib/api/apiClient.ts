@@ -160,23 +160,9 @@ function getAccessToken(): string | null {
   return null;
 }
 
+/** BYOK product disabled — never forward client API keys. */
 function getByokHeaders(): Record<string, string> {
-  const byokKeys = useAuthStore.getState().byokKeys;
-  const headers: Record<string, string> = {};
-
-  if (byokKeys.openai?.trim()) {
-    headers["x-byok-openai"] = byokKeys.openai.trim();
-  }
-
-  if (byokKeys.anthropic?.trim()) {
-    headers["x-byok-anthropic"] = byokKeys.anthropic.trim();
-  }
-
-  if (byokKeys.gemini?.trim()) {
-    headers["x-byok-gemini"] = byokKeys.gemini.trim();
-  }
-
-  return headers;
+  return {};
 }
 
 function buildHeaders(

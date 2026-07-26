@@ -5,7 +5,7 @@ import { createServiceClient } from "../_shared/supabase.ts";
 import { parseJSON } from "../_shared/gemini.ts";
 import { requireAuth } from "../_shared/utils.ts";
 import {
-  enforceAiRateLimit,
+  enforceAiRateLimitAsync,
 } from "../_shared/rateLimit.ts";
 import {
   looksLikePdf,
@@ -173,7 +173,11 @@ Deno.serve(async (req) => {
   try {
     const { userId } = await requireAuth(req);
 
-    const rateLimited = enforceAiRateLimit("parse-resume", userId);
+    const rateLimited = await enforceAiRateLimitAsync(
+      createServiceClient(),
+      "parse-resume",
+      userId,
+    );
     if (rateLimited) return rateLimited;
 
     // ── Document upload limit enforcement ──

@@ -22,7 +22,7 @@ import {
 } from "../_shared/auth.ts";
 
 import {
-  checkRateLimit,
+  checkRateLimitAsync,
   createRateLimitKey,
   rateLimitResponse,
   RATE_LIMIT_PRESETS,
@@ -41,6 +41,7 @@ import {
 import {
   deductCreditsAtomic,
   refundCredits,
+  createServiceClient,
 } from "../_shared/supabase.ts";
 
 import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
@@ -560,7 +561,7 @@ Deno.serve(async (req: Request) => {
 
   const { user } = auth.context;
 
-  const rateLimitResult = checkRateLimit({
+  const rateLimitResult = await checkRateLimitAsync(createServiceClient(), {
     key: createRateLimitKey(FUNCTION_NAME, user.id),
     ...RATE_LIMIT_PRESETS.AI_GENERATION,
   });

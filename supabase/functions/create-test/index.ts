@@ -3,6 +3,12 @@ import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient, deductCredits, refundCredits } from "../_shared/supabase.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
+import {
+  checkRateLimitAsync,
+  createRateLimitKey,
+  rateLimitResponse,
+  RATE_LIMIT_PRESETS,
+} from "../_shared/rateLimit.ts";
 
 const CREATE_TEST_CREDIT_COST = creditCost("create_mock_test");
 
@@ -44,6 +50,14 @@ Deno.serve(async (req) => {
     const auth = await authenticateRequest(req);
     if (auth.error) return auth.error;
     const user = auth.context.user;
+
+    const rateLimitResult = await checkRateLimitAsync(db, {
+      key: createRateLimitKey("create-test", user.id),
+      ...RATE_LIMIT_PRESETS.SESSION_ACTION,
+    });
+    if (!rateLimitResult.allowed) {
+      return rateLimitResponse(rateLimitResult);
+    }
 
     const body = await req.json().catch(() => null);
     if (!body || typeof body !== "object") {

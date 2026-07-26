@@ -1,7 +1,7 @@
 // electron/main.cjs
 // Desktop shell for Practice Coach overlay sessions only.
 // Dashboard, prep, billing, and mock interviews run in the web browser.
-const { app, BrowserWindow, shell, session, dialog, ipcMain } = require("electron");
+const { app, BrowserWindow, shell, session, dialog, ipcMain, globalShortcut } = require("electron");
 const path = require("path");
 const fs = require("fs");
 const url = require("url");
@@ -9,7 +9,7 @@ const { loadWindowState, trackWindow } = require("./window-state.cjs");
 const { buildMenu } = require("./menu.cjs");
 
 const isDev = process.env.ELECTRON_DEV === "1" || !app.isPackaged;
-const DEV_URL = process.env.ELECTRON_DEV_URL || "http://localhost:8080";
+const DEV_URL = process.env.ELECTRON_DEV_URL || "http://localhost:5173";
 
 const connectSrc = [
   "'self'",
@@ -105,8 +105,8 @@ function reportLoadFailure(title, detail) {
 
 function createMainWindow() {
   const state = loadWindowState({
-    defaultWidth: 1440,
-    defaultHeight: 900,
+    defaultWidth: 480,
+    defaultHeight: 640,
   });
 
   mainWindow = new BrowserWindow({
@@ -114,12 +114,13 @@ function createMainWindow() {
     height: state.height,
     x: state.x,
     y: state.y,
-    minWidth: 1024,
-    minHeight: 720,
+    minWidth: 360,
+    minHeight: 320,
     show: false,
     backgroundColor: "#0F172A",
     title: "Clarify AI",
-    autoHideMenuBar: false,
+    autoHideMenuBar: true,
+    alwaysOnTop: true,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -174,9 +175,8 @@ function createMainWindow() {
   });
 
   mainWindow.once("ready-to-show", () => {
-    // Best-effort content protection (OS-dependent). Reduces capture in some
-    // screen-share pipelines; not a guarantee against all recorders/proctors.
-    mainWindow.setContentProtection(true);
+    // Content protection is OPT-IN (stealth). Default: visible on screen share.
+    mainWindow.setContentProtection(false);
     showMainWindow();
   });
 
@@ -209,6 +209,34 @@ function createMainWindow() {
 
 app.on("second-instance", () => {
   showMainWindow();
+});
+
+function registerGlobalShortcuts() {
+  const bindings = [
+    { accelerator: "CommandOrControl+Shift+H", action: "toggle-overlay" },
+    { accelerator: "CommandOrControl+Shift+A", action: "request-ai-answer" },
+  ];
+
+  for (const { accelerator, action } of bindings) {
+    try {
+      const ok = globalShortcut.register(accelerator, () => {
+        if (!mainWindow || mainWindow.isDestroyed()) return;
+        mainWindow.webContents.send("global-shortcut", action);
+      });
+      if (!ok) {
+        console.warn(`[Clarify AI] Failed to register ${accelerator}`);
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send("hotkey-conflict", { key: accelerator });
+        }
+      }
+    } catch (err) {
+      console.warn(`[Clarify AI] Shortcut error ${accelerator}:`, err);
+    }
+  }
+}
+
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
 });
 
 app.whenReady().then(() => {
@@ -252,6 +280,7 @@ app.whenReady().then(() => {
 
   buildMenu({ isDev });
   createMainWindow();
+  registerGlobalShortcuts();
 
   if (app.isPackaged) {
     const { autoUpdater } = require("electron-updater");

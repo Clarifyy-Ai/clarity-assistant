@@ -10,6 +10,12 @@ import {
   log,
 } from "../_shared/utils.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
+import {
+  checkRateLimitAsync,
+  createRateLimitKey,
+  rateLimitResponse,
+  RATE_LIMIT_PRESETS,
+} from "../_shared/rateLimit.ts";
 
 /* -------------------------------------------------------------------------- */
 /*                                    TYPES                                   */
@@ -377,6 +383,14 @@ Deno.serve(async (req: Request) => {
   try {
     const auth = await requireAuth(req);
     const db = createServiceClient();
+
+    const rateLimitResult = await checkRateLimitAsync(db, {
+      key: createRateLimitKey("submit-test", auth.userId),
+      ...RATE_LIMIT_PRESETS.SESSION_ACTION,
+    });
+    if (!rateLimitResult.allowed) {
+      return rateLimitResponse(rateLimitResult);
+    }
 
     const body = await parseBody<{ test_id: string }>(req);
     const testId = safeString(body?.test_id);

@@ -96,20 +96,13 @@ Deno.serve(async (req: Request) => {
   const productType = order.product_type as string;
   const credits = (order.credits_granted as number) ?? 0;
 
-  await db
-    .from("payment_orders")
-    .update({
-      status: "paid",
-      provider_payment_id: paymentId,
-      paid_at: new Date().toISOString(),
-    })
-    .eq("id", order.id);
-
+  // Grant entitlements BEFORE marking paid so a mid-flight failure does not
+  // leave the order "paid" without credits/plan updates.
   if (productType === "pro_monthly" || productType === "enterprise_monthly") {
     const planId = productType === "pro_monthly" ? "pro" : "enterprise";
     const monthlyCredits = PLAN_MONTHLY_CREDITS[planId as "pro" | "enterprise"];
 
-    await db.from("profiles").update({
+    const { error: profileErr } = await db.from("profiles").update({
       plan_id: planId,
       subscription_status: "active",
       credits_used_this_month: 0,
@@ -117,6 +110,13 @@ Deno.serve(async (req: Request) => {
       pending_promo_code: null,
       updated_at: new Date().toISOString(),
     }).eq("id", userId);
+    if (profileErr) {
+      console.error("[razorpay-webhook] profile update failed", profileErr.message);
+      return new Response(JSON.stringify({ error: "profile_update_failed" }), {
+        status: 500,
+        headers: { ...headers, "Content-Type": "application/json" },
+      });
+    }
 
     await db.from("subscriptions").upsert({
       user_id: userId,
@@ -126,22 +126,45 @@ Deno.serve(async (req: Request) => {
       updated_at: new Date().toISOString(),
     }, { onConflict: "user_id" });
 
-    await db.rpc("add_credits", {
+    const { error: creditErr } = await db.rpc("add_credits", {
       p_user_id: userId,
       p_amount: monthlyCredits,
       p_action: "subscription_grant",
       p_description: `Razorpay subscription — ${planId}`,
       p_payment_id: paymentId,
     });
+    if (creditErr) {
+      console.error("[razorpay-webhook] add_credits failed", creditErr.message);
+      return new Response(JSON.stringify({ error: "credit_grant_failed" }), {
+        status: 500,
+        headers: { ...headers, "Content-Type": "application/json" },
+      });
+    }
   } else if (credits > 0) {
-    await db.rpc("add_credits", {
+    const { error: creditErr } = await db.rpc("add_credits", {
       p_user_id: userId,
       p_amount: credits,
       p_action: "purchase",
       p_description: `Razorpay credit pack — ${productType}`,
       p_payment_id: paymentId,
     });
+    if (creditErr) {
+      console.error("[razorpay-webhook] add_credits failed", creditErr.message);
+      return new Response(JSON.stringify({ error: "credit_grant_failed" }), {
+        status: 500,
+        headers: { ...headers, "Content-Type": "application/json" },
+      });
+    }
   }
+
+  await db
+    .from("payment_orders")
+    .update({
+      status: "paid",
+      provider_payment_id: paymentId,
+      paid_at: new Date().toISOString(),
+    })
+    .eq("id", order.id);
 
   if (order.promo_code_id) {
     const { data: promo } = await db

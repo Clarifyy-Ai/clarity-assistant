@@ -29,7 +29,7 @@ import {
 } from "../_shared/sessionEnforcement.ts";
 
 import {
-  checkRateLimit,
+  checkRateLimitAsync,
   createRateLimitKey,
   rateLimitResponse,
   RATE_LIMIT_PRESETS,
@@ -434,8 +434,9 @@ Deno.serve(async (req: Request) => {
   }
 
   const { user } = auth.context;
+  const db = createServiceClient();
 
-  const rateLimitResult = checkRateLimit({
+  const rateLimitResult = await checkRateLimitAsync(db, {
     key: createRateLimitKey(FUNCTION_NAME, user.id),
     ...RATE_LIMIT_PRESETS.AI_GENERATION,
   });

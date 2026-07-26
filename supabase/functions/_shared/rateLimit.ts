@@ -306,7 +306,7 @@ export function enforceDataExportRateLimit(userId: string): Response | null {
 
 /**
  * Async distributed rate limit via Postgres RPC.
- * Falls back to in-memory checkRateLimit if RPC fails.
+ * Fail-closed on RPC errors (deny request) to resist multi-isolate abuse.
  */
 export async function checkRateLimitAsync(
   adminClient: {
@@ -329,6 +329,14 @@ export async function checkRateLimitAsync(
     throw new Error("[rateLimit] windowMs must be a positive integer.");
   }
 
+  const deny: RateLimitResult = {
+    allowed: false,
+    limit,
+    remaining: 0,
+    resetAt: Date.now() + windowMs,
+    retryAfterSeconds: Math.ceil(windowMs / 1000),
+  };
+
   try {
     const { data, error } = await adminClient.rpc("check_rate_limit", {
       p_key: key,
@@ -337,13 +345,15 @@ export async function checkRateLimitAsync(
     });
 
     if (error) {
-      console.error("[rateLimit] RPC failed, falling back to memory:", error.message);
-      return checkRateLimit(options);
+      // Fail closed: do not fall open to per-isolate memory under RPC outage.
+      console.error("[rateLimit] RPC failed — denying request:", error.message);
+      return deny;
     }
 
     const row = Array.isArray(data) ? data[0] : data;
     if (!row || typeof row !== "object") {
-      return checkRateLimit(options);
+      console.error("[rateLimit] RPC returned empty row — denying request");
+      return deny;
     }
 
     const r = row as {
@@ -362,10 +372,10 @@ export async function checkRateLimitAsync(
     };
   } catch (err) {
     console.error(
-      "[rateLimit] RPC exception, falling back to memory:",
+      "[rateLimit] RPC exception — denying request:",
       err instanceof Error ? err.message : err
     );
-    return checkRateLimit(options);
+    return deny;
   }
 }
 

@@ -1,8 +1,28 @@
 // supabase/functions/ai-coach-chat/index.ts
 //
 // AI coach chat endpoint.
-//
-// Production hardJsonBody } from "../_shared/errors.ts";// Production hardening included:
+
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+
+import {
+  handleCors,
+  getCorsHeaders,
+  withCorsHeaders,
+} from "../_shared/cors.ts";
+
+import {
+  authenticateRequest,
+  enforceResourceOwnership,
+} from "../_shared/auth.ts";
+
+import {
+  checkRateLimitAsync,
+  createRateLimitKey,
+  rateLimitResponse,
+  RATE_LIMIT_PRESETS,
+} from "../_shared/rateLimit.ts";
+
+import { parseJsonBody } from "../_shared/errors.ts";
 
 import {
   logAiAudit,
@@ -427,7 +447,7 @@ Deno.serve(async (req: Request) => {
 
   const { user } = auth.context;
 
-  const rateLimitResult = checkRateLimit({
+  const rateLimitResult = await checkRateLimitAsync(createServiceClient(), {
     key: createRateLimitKey(FUNCTION_NAME, user.id),
     ...RATE_LIMIT_PRESETS.AI_GENERATION,
   });
@@ -638,37 +658,4 @@ Deno.serve(async (req: Request) => {
     });
   }
 });
-// - CORS handling
-// - POST-only method enforcement
-// - centralized JWT authentication
-// - backend request validation
-// - session ownership verification
-// - active-session check
-// - prompt-injection protection
-// - rate limiting
-// - atomic credit deduction
-// - safe refund on AI failure
-// - BYOK Gemini support
-// - audit logging
-// - safe JSON responses
-
-import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
-
-import {
-  handleCors,
-  getCorsHeaders,
-  withCorsHeaders,
-} from "../_shared/cors.ts";
-
-import {
-  authenticateRequest,
-  enforceResourceOwnership,
-} from "../_shared/auth.ts";
-
-import {
-  checkRateLimit,
-  createRateLimitKey,
-  rateLimitResponse,
-  RATE_LIMIT_PRESETS,
-} from "../_shared/rateLimit.ts";
 

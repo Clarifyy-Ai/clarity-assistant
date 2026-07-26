@@ -13,12 +13,13 @@ export const DISCRETE_UI_LABELS_ENABLED = true;
 
 /**
  * Screen-capture exclusion via Electron setContentProtection.
- * Enabled for desktop (Electron) builds only — uses OS-native APIs
- * (Windows DWM WDA_EXCLUDEFROMCAPTURE, macOS CGWindowLevel).
- * Returns false for browser/web builds where OS capture APIs are unavailable.
+ * Opt-in only: allowed in Electron builds when the user enables stealth_mode
+ * (or explicitly toggles capture exclusion). Default is false / visible.
  */
 export function isStealthCaptureFeatureAllowed(): boolean {
-  // Only allow in Electron desktop builds
-  return typeof window !== "undefined" &&
-    !!(window as any).electronAPI?.isElectron;
+  if (typeof window === "undefined" || !(window as any).electronAPI?.isElectron) {
+    return false;
+  }
+  // Feature may be used when user opts in; gate does not auto-enable it.
+  return true;
 }

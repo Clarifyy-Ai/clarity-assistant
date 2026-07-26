@@ -5,10 +5,12 @@ import {
   handleCors, parseBody, requireAuth,
   successResponse, errorResponse,
   deductCredits, callAI,
-  requireFields, log
+  requireFields, log, getAdminClient
 } from "../_shared/utils.ts";
 import type { ModelId } from "../_shared/types.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
+import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
+import { requirePlan } from "../_shared/requirePlan.ts";
 
 type STARKey = "situation" | "task" | "action" | "result";
 
@@ -55,6 +57,16 @@ Deno.serve(async (req: Request) => {
   try {
     // AUTH
     const auth = await requireAuth(req);
+
+    const rateLimited = await enforceAiRateLimitAsync(
+      getAdminClient(),
+      "polish-star-section",
+      auth.userId,
+    );
+    if (rateLimited) return rateLimited;
+
+    const planGate = requirePlan(auth.planId, "free", req);
+    if (planGate) return planGate;
 
     // BODY
     const rawBody = await parseBody<{
