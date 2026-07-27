@@ -1,10 +1,75 @@
-// ✅ FIX P0-A: Route-level Suspense fallback matching app shell chrome (sidebar + header).
+// Route-level Suspense fallback matching app shell chrome (sidebar + header).
+// After 10s of loading, surfaces a retry button + DevTools instructions link
+// so users are never stuck on an indefinite spinner.
 
+import { useEffect, useState, useCallback } from "react";
+import { RefreshCw, AlertTriangle, ExternalLink } from "lucide-react";
 import { Skeleton } from "@/components/ui/SkeletonLoader";
 
+const STUCK_TIMEOUT_MS = 10_000;
+
 export function AppLoadingFallback(): JSX.Element {
+  const [stuck, setStuck] = useState(false);
+
+  useEffect(() => {
+    const t = window.setTimeout(() => setStuck(true), STUCK_TIMEOUT_MS);
+    return () => window.clearTimeout(t);
+  }, []);
+
+  const handleRetry = useCallback(() => {
+    // Hard reload bypasses HMR + service-worker caches that commonly cause
+    // a stale bundle to hang in the preview iframe.
+    window.location.reload();
+  }, []);
+
+  if (stuck) {
+    return (
+      <div
+        role="alert"
+        aria-live="assertive"
+        className="flex h-[100vh] w-full flex-col items-center justify-center gap-6 bg-background px-6 text-center"
+      >
+        <div className="flex h-16 w-16 items-center justify-center rounded-full bg-destructive/10">
+          <AlertTriangle className="h-8 w-8 text-destructive" aria-hidden="true" />
+        </div>
+        <div className="flex max-w-md flex-col gap-2">
+          <h2 className="text-xl font-semibold text-foreground">
+            This is taking longer than expected
+          </h2>
+          <p className="text-sm leading-relaxed text-muted-foreground">
+            The app hasn&apos;t finished loading after 10 seconds. This is usually
+            caused by a stale cached bundle or a slow network. Retry the page, or
+            open your browser&apos;s DevTools console to check for errors.
+          </p>
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-3">
+          <button
+            type="button"
+            onClick={handleRetry}
+            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <RefreshCw className="h-4 w-4" aria-hidden="true" />
+            Retry
+          </button>
+          <a
+            href="https://developer.chrome.com/docs/devtools/open"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 rounded-md border border-border bg-background px-4 py-2 text-sm font-medium text-foreground transition-colors hover:bg-secondary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <ExternalLink className="h-4 w-4" aria-hidden="true" />
+            How to open DevTools
+          </a>
+        </div>
+        <p className="max-w-md text-xs text-muted-foreground">
+          Tip: press <kbd className="rounded border border-border bg-muted px-1.5 py-0.5 font-mono text-[10px]">Ctrl/Cmd + Shift + R</kbd> to hard-refresh and clear the cache.
+        </p>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-[100vh] w-full overflow-hidden bg-background">
+    <div className="flex h-[100vh] w-full overflow-hidden bg-background" aria-busy="true" aria-live="polite">
       {/* Sidebar skeleton */}
       <aside className="hidden md:flex w-60 shrink-0 flex-col border-r border-border bg-card/40 p-4 gap-4">
         <Skeleton className="h-8 w-32" />
