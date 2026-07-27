@@ -12,6 +12,7 @@ import {
 import {
   enforceAiRateLimitAsync,
 } from "../_shared/rateLimit.ts";
+import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
@@ -32,6 +33,9 @@ Deno.serve(async (req: Request) => {
       userId,
     );
     if (rateLimited) return rateLimited;
+
+    const capabilityGate = requireCapabilityForFunction(auth.planId, FN, req);
+    if (capabilityGate) return capabilityGate;
 
     const db = getAdminClient();
 

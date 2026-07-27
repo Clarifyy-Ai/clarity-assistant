@@ -3,11 +3,26 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { PLAN_MONTHLY_CREDITS } from "../_shared/creditEconomics.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
+import { assertBillingConfigOrThrow } from "../_shared/billingConfig.ts";
+import { opsLog } from "../_shared/opsLog.ts";
+import {
+  PLAN_CATALOG,
+  CREDIT_PACK_CATALOG,
+  monthlyCreditsForPlan,
+  normalizePlanId,
+} from "../_shared/billingCatalog.ts";
 
 const STRIPE_SECRET_KEY      = Deno.env.get("STRIPE_SECRET_KEY")      ?? "";
 const STRIPE_WEBHOOK_SECRET  = Deno.env.get("STRIPE_WEBHOOK_SECRET")
   ?? Deno.env.get("STRIPE_WEBHOOK_SIGNING_SECRET")
   ?? "";
+
+function isProductionEnv(): boolean {
+  const raw = (Deno.env.get("APP_ENV") ?? Deno.env.get("ENVIRONMENT") ?? "")
+    .trim()
+    .toLowerCase();
+  return raw === "production" || raw === "prod";
+}
 
 // ─────────────────────────────────────────────────────────────────
 // Constant-time HMAC-SHA256 verification (prevents timing attacks)
@@ -88,12 +103,13 @@ async function getProfileByCustomer(
 // ─────────────────────────────────────────────────────────────────
 
 function derivePlanId(metadata: Record<string, string> | null | undefined): string {
-  const planId = metadata?.plan_id?.trim();
-  if (!planId) {
-    console.warn("[stripe-webhook] Missing plan_id in metadata — defaulting to free");
+  const raw = metadata?.plan_id?.trim();
+  const normalized = normalizePlanId(raw);
+  if (!raw || !normalized || !(normalized in PLAN_CATALOG)) {
+    console.warn("[stripe-webhook] Missing/unknown plan_id in metadata — defaulting to free");
     return "free";
   }
-  return planId;
+  return normalized;
 }
 
 type PricePlanEntitlement = {
@@ -104,29 +120,39 @@ type PricePlanEntitlement = {
 function buildPriceToPlanMap(): Map<string, PricePlanEntitlement> {
   const map = new Map<string, PricePlanEntitlement>();
 
-  function add(envKey: string, planId: keyof typeof PLAN_MONTHLY_CREDITS): void {
+  function add(envKey: string | undefined, planId: keyof typeof PLAN_MONTHLY_CREDITS): void {
+    if (!envKey) return;
     const priceId = Deno.env.get(envKey)?.trim();
     if (priceId) {
       map.set(priceId, {
         planId,
-        monthlyCredits: PLAN_MONTHLY_CREDITS[planId],
+        monthlyCredits: monthlyCreditsForPlan(planId),
       });
     }
   }
 
-  add("STRIPE_PRICE_STARTER_MONTHLY", "starter");
-  add("STRIPE_PRICE_STARTER_YEARLY", "starter");
-  add("STRIPE_PRICE_PRO_MONTHLY", "pro");
-  add("STRIPE_PRICE_PRO_YEARLY", "pro");
-  add("STRIPE_PRICE_ELITE_MONTHLY", "elite");
-  add("STRIPE_PRICE_ELITE_YEARLY", "elite");
-  add("STRIPE_PRICE_ENTERPRISE_MONTHLY", "enterprise");
-  add("STRIPE_PRICE_ENTERPRISE_YEARLY", "enterprise");
+  // Include inactive legacy prices so renewals still resolve correctly.
+  for (const plan of Object.values(PLAN_CATALOG)) {
+    add(plan.stripePriceEnvKeys.monthly, plan.planId as keyof typeof PLAN_MONTHLY_CREDITS);
+    add(plan.stripePriceEnvKeys.yearly, plan.planId as keyof typeof PLAN_MONTHLY_CREDITS);
+  }
 
   return map;
 }
 
 const PRICE_TO_PLAN = buildPriceToPlanMap();
+
+function resolveCreditsFromPackMetadata(
+  metadata: Record<string, string>,
+): number {
+  const packId = metadata.credit_pack_id?.trim();
+  if (packId) {
+    const pack = CREDIT_PACK_CATALOG.find((p) => p.packId === packId && p.active);
+    if (pack) return pack.credits;
+  }
+  // Never trust client-supplied credit_amount alone for unknown packs.
+  return 0;
+}
 
 function resolvePlanFromPrice(
   priceId: string | null | undefined,
@@ -134,11 +160,9 @@ function resolvePlanFromPrice(
   fallbackMetadata?: Record<string, string> | null,
 ): { planId: string; monthlyCredits: number } {
   const metaPlanId = priceMetadata?.plan_id?.trim() ?? fallbackMetadata?.plan_id?.trim();
-  if (metaPlanId) {
-    const credits =
-      PLAN_MONTHLY_CREDITS[metaPlanId as keyof typeof PLAN_MONTHLY_CREDITS] ??
-      PLAN_MONTHLY_CREDITS.free;
-    return { planId: metaPlanId, monthlyCredits: credits };
+  const normalized = normalizePlanId(metaPlanId);
+  if (metaPlanId && normalized && normalized in PLAN_CATALOG) {
+    return { planId: normalized, monthlyCredits: monthlyCreditsForPlan(normalized) };
   }
 
   if (priceId) {
@@ -147,7 +171,7 @@ function resolvePlanFromPrice(
       return mapped;
     }
     console.warn(
-      `[stripe-webhook] Unknown Stripe price ${priceId} — defaulting plan to free`,
+      `[stripe-webhook] Unknown Stripe price ${priceId} — rejecting entitlement (free)`,
     );
   } else {
     console.warn("[stripe-webhook] No price id on subscription — defaulting plan to free");
@@ -195,6 +219,22 @@ Deno.serve(async (req) => {
 
   const headers = getCorsHeaders(req);
 
+  try {
+    assertBillingConfigOrThrow({ requireStripe: true });
+  } catch {
+    opsLog({
+      function_name: "stripe-webhook",
+      operation: "config_validate",
+      result: "error",
+      error_class: "BILLING_CONFIG_INVALID",
+      retryable: false,
+    });
+    return new Response(
+      JSON.stringify({ error: "Billing configuration invalid" }),
+      { status: 503, headers: { ...headers, "Content-Type": "application/json" } },
+    );
+  }
+
   if (!STRIPE_SECRET_KEY) {
     console.error("[stripe-webhook] STRIPE_SECRET_KEY not configured");
     return new Response(
@@ -218,6 +258,7 @@ Deno.serve(async (req) => {
   }
 
   const db = createServiceClient();
+  let claimedEventKey: string | null = null;
 
   try {
     const rawBody  = await req.text();
@@ -233,7 +274,13 @@ Deno.serve(async (req) => {
 
     const valid = await verifyStripeSignature(rawBody, signature, STRIPE_WEBHOOK_SECRET);
     if (!valid) {
-      console.error("[stripe-webhook] Invalid webhook signature — rejecting event");
+      opsLog({
+        function_name: "stripe-webhook",
+        operation: "verify_signature",
+        result: "denied",
+        error_class: "INVALID_SIGNATURE",
+        retryable: false,
+      });
       return new Response(
         JSON.stringify({ error: "Invalid signature" }),
         { status: 400, headers: { ...headers, "Content-Type": "application/json" } },
@@ -243,16 +290,38 @@ Deno.serve(async (req) => {
     const event     = JSON.parse(rawBody);
     const eventType = event.type as string;
 
-    console.log(`[stripe-webhook] Processing: ${eventType} (id: ${event.id})`);
+    if (isProductionEnv() && event.livemode === false) {
+      opsLog({
+        function_name: "stripe-webhook",
+        operation: "livemode_guard",
+        result: "denied",
+        provider: "stripe",
+        provider_event_id: event.id,
+        error_class: "TEST_MODE_IN_PRODUCTION",
+        retryable: false,
+      });
+      return new Response(
+        JSON.stringify({ error: "Test-mode events rejected in production" }),
+        { status: 400, headers: { ...headers, "Content-Type": "application/json" } },
+      );
+    }
+
+    opsLog({
+      function_name: "stripe-webhook",
+      operation: eventType,
+      result: "ok",
+      provider: "stripe",
+      provider_event_id: event.id,
+    });
 
     const isNew = await ensureIdempotent(db, event.id);
     if (!isNew) {
-      console.log(`[stripe-webhook] Duplicate event ${event.id} — skipping`);
       return new Response(
         JSON.stringify({ received: true, duplicate: true }),
         { status: 200, headers: { ...headers, "Content-Type": "application/json" } },
       );
     }
+    claimedEventKey = `stripe_event_${event.id}`;
 
     switch (eventType) {
 
@@ -277,7 +346,10 @@ Deno.serve(async (req) => {
           break;
         }
 
-        const creditAmount = metadata.credit_amount ? parseInt(metadata.credit_amount, 10) : 0;
+        const catalogCredits = resolveCreditsFromPackMetadata(metadata);
+        const creditAmount = catalogCredits > 0
+          ? catalogCredits
+          : 0;
         const isCreditPurchase = creditAmount > 0 && !subscriptionId;
         const planId = derivePlanId(metadata);
 
@@ -306,7 +378,7 @@ Deno.serve(async (req) => {
           }, { onConflict: "user_id" });
         }
 
-        // One-time credit top-up (credit pack purchase) — idempotent via stripe_payment_id
+        // One-time credit top-up — amount from server catalog only
         if (creditAmount > 0) {
           const amount = creditAmount;
           const paymentId = (session.payment_intent as string | null) ?? session.id;
@@ -361,12 +433,20 @@ Deno.serve(async (req) => {
           updated_at: new Date().toISOString(),
         }).eq("user_id", profile.id);
 
-        // Monthly subscription credit refresh on renewal (invoice.paid fires each billing cycle).
-        // Grants plan credits via add_credits RPC; idempotent on invoice.id prevents double-grant.
-        const monthlyCredits = parseInt(
-          (invoice.lines?.data?.[0]?.metadata?.monthly_credits as string) ?? "0",
-          10,
-        ) || PLAN_MONTHLY_CREDITS.pro;
+        // Resolve monthly credits from catalog via subscription price / profile plan — never trust invoice metadata alone.
+        const priceId = invoice.lines?.data?.[0]?.price?.id as string | undefined;
+        const lineMeta = (invoice.lines?.data?.[0]?.metadata ?? {}) as Record<string, string>;
+        const resolved = resolvePlanFromPrice(priceId, lineMeta, null);
+        const { data: profilePlan } = await db
+          .from("profiles")
+          .select("plan_id")
+          .eq("id", profile.id)
+          .maybeSingle();
+        const monthlyCredits =
+          resolved.planId !== "free"
+            ? resolved.monthlyCredits
+            : monthlyCreditsForPlan(profilePlan?.plan_id);
+
         if (monthlyCredits > 0 && invoice.id) {
           const { data: existing } = await db
             .from("credit_transactions")
@@ -543,6 +623,22 @@ Deno.serve(async (req) => {
     );
 
   } catch (err) {
+    // Release claim so Stripe retries can re-process after grant/DB failures.
+    if (claimedEventKey) {
+      try {
+        await db.from("idempotency_log").delete().eq("key", claimedEventKey);
+      } catch (releaseErr) {
+        console.error("[stripe-webhook] Failed to release idempotency claim:", releaseErr);
+      }
+    }
+    opsLog({
+      function_name: "stripe-webhook",
+      operation: "handler",
+      result: "error",
+      error_class: "UNHANDLED",
+      retryable: true,
+      meta: { message: err instanceof Error ? err.message : "unknown" },
+    });
     console.error("[stripe-webhook] Unhandled error:", err);
     return new Response(
       JSON.stringify({ error: "Internal server error" }),

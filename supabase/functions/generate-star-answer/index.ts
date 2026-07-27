@@ -18,6 +18,7 @@ import type { STARAnswer, ModelId } from "../_shared/types.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
+import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 
 // Sanitize text to protect prompt
 function sanitize(input: any, max = 2000): string {
@@ -55,6 +56,9 @@ Deno.serve(async (req: Request) => {
 
     const planGate = requirePlan(auth.planId, "free", req);
     if (planGate) return planGate;
+
+    const capabilityGate = requireCapabilityForFunction(auth.planId, FN, req);
+    if (capabilityGate) return capabilityGate;
 
     // -------------------------------
     // BODY

@@ -66,7 +66,7 @@ No credit card is required. You'll start on the Free plan with 50 credits per mo
 - Practice sessions with the live AI coach (limited)
 - STAR builder and answer bank (limited)
 
-No credit card required. Upgrade to **Pro** ($29/mo, 1,400 credits) or **Enterprise** ($79/mo, 4,000 credits) anytime.`,
+No credit card required. Upgrade to **Pro** ($29/mo, 1,400 credits) or **Max** ($79/mo, 4,000 credits) anytime.`,
     sort_order: 30,
   },
   {
@@ -161,7 +161,7 @@ Group Practice is available on all plans.`,
     category_title: "Billing & Credits",
     question: "How do credits work?",
     answer:
-      "Credits are the currency for AI-powered features. Free includes 50 credits/month, Pro includes 1,400/month, and Enterprise includes 4,000/month.",
+      "Credits are the currency for AI-powered features. Free includes 50 credits/month, Pro includes 1,400/month, and Max includes 4,000/month.",
     body_md: `Credits are the currency for AI features. Each action has a set cost:
 
 - Live hint: 2 credits
@@ -179,8 +179,8 @@ Credits refresh monthly based on your plan tier. Credit packs cost more per cred
     category_title: "Billing & Credits",
     question: "How much do paid plans cost?",
     answer:
-      "Pro is $29/month for 1,400 credits. Enterprise is $79/month for 4,000 credits with priority support.",
-    body_md: `Pro is **$29 / month** for 1,400 credits and unlocks the full feature set. Enterprise is **$79 / month** for 4,000 credits, priority model access, and priority email support. Yearly billing saves roughly two months. Upgrade anytime from **Settings → Billing**.`,
+      "Pro is $29/month for 1,400 credits. Max is $79/month for 4,000 credits with priority support.",
+    body_md: `Pro is **$29 / month** for 1,400 credits and unlocks the full feature set. Max is **$79 / month** for 4,000 credits, priority model access, and priority email support. Yearly billing saves roughly two months. Upgrade anytime from **Settings → Billing**.`,
     sort_order: 20,
   },
 ];

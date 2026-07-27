@@ -60,10 +60,12 @@ const SUPPORTED_OAUTH_PROVIDERS = new Set<string>([
 
 const FEATURE_PLAN_MAP: Record<FeatureKey, string[]> = {
   live_copilot: ["pro", "elite", "enterprise"],
-  team_rooms: ["elite", "enterprise"],
+  // Rooms are deprecated — never grant access.
+  team_rooms: [],
   advanced_analytics: ["pro", "elite", "enterprise"],
   export_pdf: ["pro", "elite", "enterprise"],
-  byok: ["pro", "elite", "enterprise"],
+  // BYOK removed — server-managed providers only.
+  byok: [],
 };
 
 // ─────────────────────────────────────────────────────────────────────────────

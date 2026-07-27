@@ -15,7 +15,29 @@ export type RateLimitResult = {
   remaining: number;
   resetAt: number;
   retryAfterSeconds: number;
+  /** True when the distributed rate-limit backend failed (not a normal 429). */
+  backendFailure?: boolean;
 };
+
+/** Endpoint classification for rate-limit outage strategy. */
+export type RateLimitClass = "strict_fail_closed" | "controlled_degradation_candidate";
+
+export const RATE_LIMIT_CLASS: Record<string, RateLimitClass> = {
+  "create-checkout": "strict_fail_closed",
+  "stripe-webhook": "strict_fail_closed",
+  "razorpay-create-order": "strict_fail_closed",
+  "razorpay-webhook": "strict_fail_closed",
+  "deduct-credits": "strict_fail_closed",
+  "generate-answer": "strict_fail_closed",
+  "generate-hint": "strict_fail_closed",
+  "prep-tool": "strict_fail_closed",
+  "collect-exam-papers": "strict_fail_closed",
+  "ai-feedback": "strict_fail_closed",
+  "analytics-dashboard": "controlled_degradation_candidate",
+  ping: "controlled_degradation_candidate",
+};
+
+const RATE_LIMIT_RPC_TIMEOUT_MS = 2_000;
 
 export type RateLimitOptions = {
   key: string;
@@ -147,9 +169,27 @@ export function checkRateLimit(options: RateLimitOptions): RateLimitResult {
 }
 
 /**
- * Returns a standard JSON 429 response.
+ * Returns a standard JSON 429 (quota) or 503 (backend outage) response.
+ * Sensitive endpoints remain fail-closed — never bypass.
  */
 export function rateLimitResponse(result: RateLimitResult): Response {
+  if (result.backendFailure) {
+    return new Response(
+      JSON.stringify({
+        error: "Temporary service unavailability. Please try again shortly.",
+        code: "RATE_LIMIT_BACKEND_UNAVAILABLE",
+        retryAfterSeconds: result.retryAfterSeconds || 5,
+      }),
+      {
+        status: 503,
+        headers: {
+          "Content-Type": "application/json",
+          "Retry-After": String(result.retryAfterSeconds || 5),
+        },
+      },
+    );
+  }
+
   return new Response(
     JSON.stringify({
       error: "Rate limit exceeded.",
@@ -284,6 +324,52 @@ export function enforcePaymentRateLimit(
   });
 }
 
+export async function enforceSessionRateLimitAsync(
+  adminClient: {
+    rpc: (
+      fn: string,
+      args: Record<string, unknown>
+    ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  },
+  functionName: string,
+  userId: string
+): Promise<Response | null> {
+  return enforceRateLimitAsync(adminClient, {
+    key: createRateLimitKey(functionName, userId),
+    ...RATE_LIMIT_PRESETS.SESSION_ACTION,
+  });
+}
+
+export async function enforceAccountDeletionRateLimitAsync(
+  adminClient: {
+    rpc: (
+      fn: string,
+      args: Record<string, unknown>
+    ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  },
+  userId: string
+): Promise<Response | null> {
+  return enforceRateLimitAsync(adminClient, {
+    key: createRateLimitKey("delete-account", userId),
+    ...RATE_LIMIT_PRESETS.ACCOUNT_DELETION,
+  });
+}
+
+export async function enforceDataExportRateLimitAsync(
+  adminClient: {
+    rpc: (
+      fn: string,
+      args: Record<string, unknown>
+    ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  },
+  userId: string
+): Promise<Response | null> {
+  return enforceRateLimitAsync(adminClient, {
+    key: createRateLimitKey("export-user-data", userId),
+    ...RATE_LIMIT_PRESETS.DATA_EXPORT,
+  });
+}
+
 /**
  * Helper for account deletion.
  */
@@ -335,14 +421,24 @@ export async function checkRateLimitAsync(
     remaining: 0,
     resetAt: Date.now() + windowMs,
     retryAfterSeconds: Math.ceil(windowMs / 1000),
+    backendFailure: true,
   };
 
   try {
-    const { data, error } = await adminClient.rpc("check_rate_limit", {
+    const rpcPromise = adminClient.rpc("check_rate_limit", {
       p_key: key,
       p_limit: limit,
       p_window_ms: windowMs,
     });
+
+    const timeoutPromise = new Promise<{ data: null; error: { message: string } }>((resolve) => {
+      setTimeout(
+        () => resolve({ data: null, error: { message: "rate_limit_rpc_timeout" } }),
+        RATE_LIMIT_RPC_TIMEOUT_MS,
+      );
+    });
+
+    const { data, error } = await Promise.race([rpcPromise, timeoutPromise]);
 
     if (error) {
       // Fail closed: do not fall open to per-isolate memory under RPC outage.
@@ -369,6 +465,7 @@ export async function checkRateLimitAsync(
       remaining: Number(r.remaining ?? 0),
       resetAt: Number(r.reset_at_ms ?? Date.now() + windowMs),
       retryAfterSeconds: Number(r.retry_after_seconds ?? 0),
+      backendFailure: false,
     };
   } catch (err) {
     console.error(

@@ -21,7 +21,13 @@ import {
 } from "../_shared/cors.ts";
 
 import { authenticateRequest } from "../_shared/auth.ts";
-import { PLAN_MONTHLY_CREDITS } from "../_shared/creditEconomics.ts";
+import { assertBillingConfigOrThrow } from "../_shared/billingConfig.ts";
+import { opsLog } from "../_shared/opsLog.ts";
+import {
+  PLAN_CATALOG,
+  CREDIT_PACK_CATALOG,
+  type CanonicalPlanId,
+} from "../_shared/billingCatalog.ts";
 
 import {
   checkRateLimitAsync,
@@ -143,85 +149,47 @@ function buildPriceAllowlist(): Map<string, PriceEntitlement> {
 
   function add(envKey: string, entitlement: PriceEntitlement): void {
     const priceId = Deno.env.get(envKey);
+    if (!priceId || priceId.trim().length === 0) return;
+    // Reject obvious test resources when APP_ENV=production
+    const env = (Deno.env.get("APP_ENV") ?? "").toLowerCase();
+    if (
+      (env === "production" || env === "prod") &&
+      (priceId.includes("_test") || priceId.startsWith("price_test"))
+    ) {
+      return;
+    }
+    allowlist.set(priceId.trim(), entitlement);
+  }
 
-    if (priceId && priceId.trim().length > 0) {
-      allowlist.set(priceId.trim(), entitlement);
+  // Subscriptions — only active catalog plans for new checkout
+  for (const plan of Object.values(PLAN_CATALOG)) {
+    if (!plan.active) continue;
+    const planId = plan.planId as CanonicalPlanId;
+    if (plan.stripePriceEnvKeys.monthly) {
+      add(plan.stripePriceEnvKeys.monthly, {
+        mode: "subscription",
+        planId,
+        monthlyCredits: plan.monthlyCredits,
+      });
+    }
+    if (plan.stripePriceEnvKeys.yearly) {
+      add(plan.stripePriceEnvKeys.yearly, {
+        mode: "subscription",
+        planId,
+        monthlyCredits: plan.monthlyCredits,
+      });
     }
   }
 
-  // Subscriptions
-  add("STRIPE_PRICE_STARTER_MONTHLY", {
-    mode: "subscription",
-    planId: "starter",
-    monthlyCredits: PLAN_MONTHLY_CREDITS.starter,
-  });
-
-  add("STRIPE_PRICE_STARTER_YEARLY", {
-    mode: "subscription",
-    planId: "starter",
-    monthlyCredits: PLAN_MONTHLY_CREDITS.starter,
-  });
-
-  add("STRIPE_PRICE_PRO_MONTHLY", {
-    mode: "subscription",
-    planId: "pro",
-    monthlyCredits: PLAN_MONTHLY_CREDITS.pro,
-  });
-
-  add("STRIPE_PRICE_PRO_YEARLY", {
-    mode: "subscription",
-    planId: "pro",
-    monthlyCredits: PLAN_MONTHLY_CREDITS.pro,
-  });
-
-  add("STRIPE_PRICE_ELITE_MONTHLY", {
-    mode: "subscription",
-    planId: "elite",
-    monthlyCredits: PLAN_MONTHLY_CREDITS.elite,
-  });
-
-  add("STRIPE_PRICE_ELITE_YEARLY", {
-    mode: "subscription",
-    planId: "elite",
-    monthlyCredits: PLAN_MONTHLY_CREDITS.elite,
-  });
-
-  add("STRIPE_PRICE_ENTERPRISE_MONTHLY", {
-    mode: "subscription",
-    planId: "enterprise",
-    monthlyCredits: PLAN_MONTHLY_CREDITS.enterprise,
-  });
-
-  add("STRIPE_PRICE_ENTERPRISE_YEARLY", {
-    mode: "subscription",
-    planId: "enterprise",
-    monthlyCredits: PLAN_MONTHLY_CREDITS.enterprise,
-  });
-
-  // Credit packs
-  add("STRIPE_PRICE_CREDITS_10", {
-    mode: "payment",
-    creditPackId: "credits_10",
-    credits: 10,
-  });
-
-  add("STRIPE_PRICE_CREDITS_50", {
-    mode: "payment",
-    creditPackId: "credits_50",
-    credits: 50,
-  });
-
-  add("STRIPE_PRICE_CREDITS_150", {
-    mode: "payment",
-    creditPackId: "credits_150",
-    credits: 150,
-  });
-
-  add("STRIPE_PRICE_CREDITS_500", {
-    mode: "payment",
-    creditPackId: "credits_500",
-    credits: 500,
-  });
+  // Credit packs from catalog
+  for (const pack of CREDIT_PACK_CATALOG) {
+    if (!pack.active) continue;
+    add(pack.stripePriceEnvKey, {
+      mode: "payment",
+      creditPackId: pack.packId,
+      credits: pack.credits,
+    });
+  }
 
   return allowlist;
 }
@@ -466,6 +434,22 @@ Deno.serve(async (req: Request) => {
     return json(corsHeaders, 503, {
       error: "Stripe is not configured.",
       code: "SERVICE_UNAVAILABLE",
+    });
+  }
+
+  try {
+    assertBillingConfigOrThrow({ requireStripe: true });
+  } catch (err) {
+    opsLog({
+      function_name: FUNCTION_NAME,
+      operation: "config_validate",
+      result: "error",
+      error_class: "BILLING_CONFIG_INVALID",
+      retryable: false,
+    });
+    return json(corsHeaders, 503, {
+      error: "Billing is not configured for this environment.",
+      code: "BILLING_CONFIG_INVALID",
     });
   }
 

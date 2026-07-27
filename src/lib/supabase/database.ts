@@ -1167,13 +1167,12 @@ export const creditsDB = {
     );
   },
 
-  async deduct(userId: string, amount: number, action = "usage"): Promise<void> {
-    const { error } = await supabase.rpc("deduct_credits", {
-      p_action: action,
-      p_cost:   amount,
-    });
-    if (error) throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED,
-      { table: "credits", operation: "deduct" });
+  async deduct(_userId: string, _amount: number, _action = "usage"): Promise<void> {
+    throw new DatabaseError(
+      "Direct deduct_credits RPC is disabled. Use the deduct-credits Edge Function.",
+      ErrorCode.DB_QUERY_FAILED,
+      { table: "credits", operation: "deduct" },
+    );
   },
 
   async add(userId: string, amount: number): Promise<void> {

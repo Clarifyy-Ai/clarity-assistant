@@ -8,6 +8,9 @@ import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { parseJsonBody } from "../_shared/errors.ts";
 import { PLAN_MONTHLY_CREDITS } from "../_shared/creditEconomics.ts";
+import { assertBillingConfigOrThrow } from "../_shared/billingConfig.ts";
+import { opsLog } from "../_shared/opsLog.ts";
+import { monthlyCreditsForPlan } from "../_shared/billingCatalog.ts";
 
 const KEY_ID = Deno.env.get("RAZORPAY_KEY_ID") ?? "";
 const KEY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET") ?? "";
@@ -55,9 +58,9 @@ function baseAmountPaise(
 function creditsForProduct(product: (typeof PRODUCT_TYPES)[number]): number {
   switch (product) {
     case "pro_monthly":
-      return PLAN_MONTHLY_CREDITS.pro;
+      return monthlyCreditsForPlan("pro");
     case "enterprise_monthly":
-      return PLAN_MONTHLY_CREDITS.enterprise;
+      return monthlyCreditsForPlan("enterprise");
     case "credits_50":
       return 50;
     case "credits_150":
@@ -104,6 +107,22 @@ Deno.serve(async (req: Request) => {
 
   if (!KEY_ID || !KEY_SECRET) {
     return new Response(JSON.stringify({ error: "Razorpay not configured" }), {
+      status: 503,
+      headers: { ...headers, "Content-Type": "application/json" },
+    });
+  }
+
+  try {
+    assertBillingConfigOrThrow({ requireRazorpay: true });
+  } catch {
+    opsLog({
+      function_name: "razorpay-create-order",
+      operation: "config_validate",
+      result: "error",
+      error_class: "BILLING_CONFIG_INVALID",
+      retryable: false,
+    });
+    return new Response(JSON.stringify({ error: "Billing configuration invalid" }), {
       status: 503,
       headers: { ...headers, "Content-Type": "application/json" },
     });

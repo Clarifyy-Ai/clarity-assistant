@@ -12,6 +12,7 @@ import {
 import { geminiGenerate } from "../_shared/gemini.ts";
 import { logAICost } from "../_shared/aiProvider.ts";
 import { AI_CREDIT_COSTS } from "../_shared/creditEconomics.ts";
+import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
 
@@ -207,6 +208,9 @@ Deno.serve(async (req: Request) => {
 
     const planGate = requirePlan(auth.planId, "free", req);
     if (planGate) return planGate;
+
+    const capabilityGate = requireCapabilityForFunction(auth.planId, FN, req);
+    if (capabilityGate) return capabilityGate;
 
     /* ----------------------- BODY ----------------------- */
     const body = await req.json().catch(() => null);

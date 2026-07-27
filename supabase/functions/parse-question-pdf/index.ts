@@ -5,6 +5,7 @@ import {
   successResponse,
   deductCredits,
 } from "../_shared/utils.ts";
+import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { geminiGenerateWithPdf, parseJSON } from "../_shared/gemini.ts";
 
 import { creditCost } from "../_shared/creditEconomics.ts";
@@ -83,6 +84,9 @@ Deno.serve(async (req) => {
   try {
     const auth = await requireAuth(req);
     userId = auth.userId;
+
+    const capabilityGate = requireCapabilityForFunction(auth.planId, "parse-question-pdf", req);
+    if (capabilityGate) return capabilityGate;
 
     const pdf = await extractPdf(req);
     if (!pdf?.base64) {

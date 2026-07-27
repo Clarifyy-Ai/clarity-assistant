@@ -4,6 +4,7 @@ import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
 import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
+import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { mapExamType } from "../_shared/examTypeMap.ts";
 import {
   buildPracticeBatchPrompt,
@@ -40,6 +41,13 @@ Deno.serve(async (req) => {
 
     const planGate = requirePlan(profile?.plan_id, "pro", req);
     if (planGate) return planGate;
+
+    const capabilityGate = requireCapabilityForFunction(
+      profile?.plan_id,
+      "generate-practice-questions",
+      req,
+    );
+    if (capabilityGate) return capabilityGate;
 
     const body = await req.json().catch(() => null);
     const rawTopic = sanitize(body?.topic ?? "");

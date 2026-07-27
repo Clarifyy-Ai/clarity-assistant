@@ -225,8 +225,8 @@ export function formatFillerStat(count: number, perMinute: number): string {
  * @example formatCredits(-1) → "Unlimited"
  */
 export function formatCredits(credits: number): string {
-  if (credits === -1) return "Unlimited";
-  return `${formatNumber(credits)} credit${credits === 1 ? "" : "s"}`;
+  const safe = Math.max(0, credits);
+  return `${formatNumber(safe)} credit${safe === 1 ? "" : "s"}`;
 }
 
 /**

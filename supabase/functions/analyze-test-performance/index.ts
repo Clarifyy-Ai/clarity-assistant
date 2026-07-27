@@ -11,6 +11,7 @@ import {
   getAdminClient, 
   log 
 } from "../_shared/utils.ts";
+import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 
 const SYSTEM_PROMPT = `
 You are an expert exam coach for competitive exams like JEE, NEET, UPSC, SSC.
@@ -31,6 +32,13 @@ Deno.serve(async (req) => {
     const auth = await requireAuth(req);
     const userId = auth.userId;
     const db = getAdminClient();
+
+    const capabilityGate = requireCapabilityForFunction(
+      auth.planId,
+      FN,
+      req,
+    );
+    if (capabilityGate) return capabilityGate;
 
     /* ----------------------------------
        VALIDATE BODY

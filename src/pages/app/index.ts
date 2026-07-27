@@ -55,9 +55,9 @@ export {
 
 export { MockInterview, MockSession, MockWarmup } from "./mock";
 
-// Practice rooms are served from ./rooms — no separate practice/ directory.
+// ─── Rooms (deprecated — routes redirect; modules removed) ───────────────────
 
-
+// Practice rooms are retired. Keep route redirects in App.tsx only.
 
 // ─── Prep ─────────────────────────────────────────────────────────────────────
 
@@ -69,14 +69,6 @@ export {
   SystemDesign,
   ProjectBuilder,
 } from "./prep";
-
-// ─── Rooms ────────────────────────────────────────────────────────────────────
-
-export {
-  PracticeRooms as Rooms,
-  NewRoom       as CreateRoom,
-  RoomSession   as Room,
-} from "./rooms";
 
 // ─── Sessions ────────────────────────────────────────────────────────────────
 

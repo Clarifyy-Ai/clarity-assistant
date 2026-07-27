@@ -73,6 +73,43 @@ Deno.serve(async (req) => {
     });
   }
 
+  const billingTimer = startTimer();
+  try {
+    const { validateBillingConfig } = await import("../_shared/billingConfig.ts");
+    const report = validateBillingConfig({
+      requireStripe: Boolean(Deno.env.get("STRIPE_SECRET_KEY")),
+      requireRazorpay: Boolean(Deno.env.get("RAZORPAY_KEY_ID")),
+    });
+    checks.billing_config = {
+      status: report.ok ? "ok" : "degraded",
+      duration_ms: billingTimer.elapsed(),
+    };
+    if (!report.ok && (Deno.env.get("APP_ENV") ?? "") === "production") {
+      allHealthy = false;
+    }
+  } catch {
+    checks.billing_config = { status: "error", duration_ms: billingTimer.elapsed() };
+  }
+
+  const rlTimer = startTimer();
+  try {
+    const db = createServiceClient();
+    const { error } = await db.rpc("check_rate_limit", {
+      p_key: "__healthcheck__",
+      p_limit: 1,
+      p_window_ms: 60_000,
+    });
+    // Missing RPC is a hard fail; soft errors still report degraded
+    checks.rate_limit_rpc = {
+      status: error ? "error" : "ok",
+      duration_ms: rlTimer.elapsed(),
+    };
+    if (error) allHealthy = false;
+  } catch {
+    allHealthy = false;
+    checks.rate_limit_rpc = { status: "error", duration_ms: rlTimer.elapsed() };
+  }
+
   const status = allHealthy ? "healthy" : "degraded";
   const httpStatus = allHealthy ? 200 : 503;
 

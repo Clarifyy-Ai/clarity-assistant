@@ -2,7 +2,7 @@ import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import {
-  enforceAccountDeletionRateLimit,
+  enforceAccountDeletionRateLimitAsync,
 } from "../_shared/rateLimit.ts";
 
 // delete-account — securely delete account and all linked data
@@ -17,10 +17,9 @@ Deno.serve(async (req) => {
     const authenticatedUserId = auth.context.user.id;
     const userEmail = auth.context.user.email;
 
-    const rateLimited = enforceAccountDeletionRateLimit(authenticatedUserId);
-    if (rateLimited) return rateLimited;
-
     const db = createServiceClient();
+    const rateLimited = await enforceAccountDeletionRateLimitAsync(db, authenticatedUserId);
+    if (rateLimited) return rateLimited;
 
     /* -------------------------------------------------------
        VALIDATE BODY & CONFIRMATION

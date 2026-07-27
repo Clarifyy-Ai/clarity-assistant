@@ -43,6 +43,21 @@ jobs:
       - name: Unit tests
         run: npm test -- --run
 
+      - name: Release copy gates
+        run: npm run release:gates
+
+      - name: Release security gates
+        run: npm run release:security-gates
+
+      - name: Billing catalog parity
+        run: npm run billing:parity
+
+      - name: AI capability gates
+        run: npm run release:capability-gates
+
+      - name: Billing config preflight
+        run: npm run billing:preflight
+
       # Non-blocking: surfaces high-severity advisories without failing the build.
       - name: Dependency audit
         run: npm audit --production --audit-level=high

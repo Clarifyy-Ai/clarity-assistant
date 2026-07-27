@@ -2,7 +2,7 @@ import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import {
-  enforceRateLimit,
+  enforceRateLimitAsync,
   createRateLimitKey,
 } from "../_shared/rateLimit.ts";
 
@@ -16,7 +16,7 @@ Deno.serve(async (req: Request) => {
 
     const user = auth.context.user;
 
-    const rateLimited = enforceRateLimit({
+    const rateLimited = await enforceRateLimitAsync(createServiceClient(), {
       key: createRateLimitKey("analytics-dashboard", user.id),
       limit: 10,
       windowMs: 60_000,

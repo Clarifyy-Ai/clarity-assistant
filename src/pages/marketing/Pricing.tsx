@@ -107,7 +107,7 @@ export default function Pricing() {
                 : effectiveMonthly === 0
                   ? "Free"
                   : `$${(effectiveMonthly / 100).toFixed(0)}`;
-            const isContactSales = planId === "enterprise";
+            const isMax = planId === "enterprise";
 
             return (
               <m.div
@@ -137,10 +137,10 @@ export default function Pricing() {
 
                 <div className="mt-5">
                   <span className="text-3xl font-extrabold">{priceDisplay}</span>
-                  {effectiveMonthly > 0 && !isContactSales && (
+                  {effectiveMonthly > 0 && !isMax && (
                     <span className="text-sm text-muted-foreground ml-1">/mo</span>
                   )}
-                  {annual && effectiveMonthly > 0 && !isContactSales && (
+                  {annual && effectiveMonthly > 0 && !isMax && (
                     <p className="text-[11px] text-muted-foreground/70 mt-0.5">billed annually</p>
                   )}
                 </div>
@@ -148,13 +148,13 @@ export default function Pricing() {
                   {plan.creditsPerMonth.toLocaleString()} credits/mo
                 </p>
 
-                {isContactSales ? (
-                  <a
-                    href={`mailto:${SALES_EMAIL}?subject=Enterprise%20plan`}
+                {isMax ? (
+                  <Link
+                    to={`/signup?plan=${planId}`}
                     className="mt-5 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all bg-secondary text-foreground hover:bg-secondary/80"
                   >
-                    Contact Sales <ArrowRight className="w-3.5 h-3.5" />
-                  </a>
+                    Get Max <ArrowRight className="w-3.5 h-3.5" />
+                  </Link>
                 ) : (
                   <Link
                     to={planId === "free" ? "/signup" : `/signup?plan=${planId}`}

@@ -9,14 +9,9 @@
 //
 
 // Launch model:
-
 //   Free        — 50 credits / month, $0
-
 //   Pro         — 1,400 credits / month, $29 / mo  (or $290 / yr)
-
-//   Enterprise  — 4,000 credits / month, $79 / mo per seat
-
-
+//   Max         — 4,000 credits / month, $79 / mo (consumer high-credit tier)
 
 import {
 
@@ -62,7 +57,7 @@ export const PLAN_DISPLAY_NAMES: Record<PlanId, string> = {
 
   elite: "Pro",
 
-  enterprise: "Enterprise",
+  enterprise: "Max",
 
 };
 
@@ -74,9 +69,9 @@ export type DisplayTier = "free" | "pro" | "enterprise";
 
 export function normalizeToDisplayTier(planId: PlanId | string | null | undefined): DisplayTier {
 
-  if (planId === "enterprise" || planId === "team") return "enterprise";
+  if (planId === "enterprise" || planId === "team" || planId === "max") return "enterprise";
 
-  if (planId === "free") return "free";
+  if (planId === "free" || planId === "starter") return "free";
 
   return "pro";
 
@@ -86,9 +81,13 @@ export function normalizeToDisplayTier(planId: PlanId | string | null | undefine
 
 export function getPlanDisplayName(planId: PlanId | string | null | undefined): string {
 
-  // Legacy DB value — never surface "Team" or SSO marketing copy.
+  // Legacy DB value — never surface "Team" or organization-suite marketing copy.
   if (typeof planId === "string" && planId.trim().toLowerCase() === "team") {
-    return "Enterprise";
+    return "Max";
+  }
+
+  if (typeof planId === "string" && planId.trim().toLowerCase() === "max") {
+    return "Max";
   }
 
   if (typeof planId === "string" && planId in PLAN_DISPLAY_NAMES) {
@@ -165,13 +164,13 @@ export function formatMonthlyCredits(planId: PlanId): string {
 
   const v = PLAN_MONTHLY_CREDITS[planId];
 
-  return v === null ? "Unlimited" : `${v.toLocaleString()} / mo`;
+  return `${(v ?? 0).toLocaleString()} / mo`;
 
 }
 
 
 
-/** Enterprise uses a high monthly cap (not unlimited). */
+/** No plan is unlimited — Enterprise/Max uses a high monthly cap. */
 
 export function isUnlimited(planId: PlanId): boolean {
 

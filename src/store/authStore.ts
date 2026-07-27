@@ -7,7 +7,7 @@
 // - Avoid duplicate auth listeners
 // - Avoid persisting JWT/session/user data in Zustand storage
 // - Keep role/plan/credits DB-derived, not localStorage-derived
-// - Keep BYOK keys encrypted in browser vault and in-memory only
+// - BYOK is removed — server-managed AI credentials only
 //
 // Compatibility fields:
 // - isLoading
@@ -29,12 +29,7 @@ import { profilesDB, userRolesDB } from "@/lib/supabase/database";
 import { useOverlayStore } from "@/store/overlayStore";
 import { normalizePreferredModel } from "@/lib/ai/modelOptions";
 import { isElectronApp } from "@/lib/platform/isElectron";
-
-import {
-  loadBYOKVault,
-  saveBYOKVault,
-  clearBYOKVault,
-} from "@/lib/security/byokVault";
+import { clearBYOKVault } from "@/lib/security/byokVault";
 
 import type {
   SupabaseSession,
@@ -61,19 +56,12 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
-export interface BYOKKeys {
-  openai?: string;
-  anthropic?: string;
-  gemini?: string;
-}
-
 export interface AuthState {
   status: AuthStatus;
   session: SupabaseSession | null;
   user: SupabaseUser | null;
   profile: ProfileRow | null;
   isProfileLoaded: boolean;
-  byokKeys: BYOKKeys;
   error: string | null;
   isAdmin: boolean;
   isOnboarded: boolean;
@@ -106,9 +94,6 @@ export interface AuthActions {
   setProfile: (profile: ProfileRow | null) => void;
   refreshCredits: () => Promise<void>;
 
-  setBYOKKey: (provider: keyof BYOKKeys, key: string) => void;
-  clearBYOKKey: (provider: keyof BYOKKeys) => void;
-
   setUser: (user: SupabaseUser | null) => void;
   setSession: (session: SupabaseSession | null) => void;
   setError: (error: string | null) => void;
@@ -128,7 +113,6 @@ function buildInitialAuthState(): AuthState {
       user: cached.user as unknown as SupabaseUser,
       profile: null,
       isProfileLoaded: false,
-      byokKeys: {},
       error: null,
       isAdmin: false,
       isOnboarded: false,
@@ -145,7 +129,6 @@ function buildInitialAuthState(): AuthState {
     user: null,
     profile: null,
     isProfileLoaded: false,
-    byokKeys: {},
     error: null,
     isAdmin: false,
     isOnboarded: false,
@@ -271,10 +254,6 @@ function syncOverlayFromProfile(row: Record<string, unknown>): void {
   }
 }
 
-function sanitizeBYOKKey(key: string): string {
-  return key.trim();
-}
-
 export const useAuthStore = create<AuthStore>()(
   devtools(
     persist(
@@ -313,15 +292,10 @@ export const useAuthStore = create<AuthStore>()(
             }
 
             try {
-              const vault = await loadBYOKVault();
-
-              if (Object.keys(vault).length > 0) {
-                set((state) => {
-                  state.byokKeys = vault;
-                });
-              }
-            } catch (error) {
-              console.warn("[authStore] BYOK vault hydration failed:", error);
+              // Wipe any legacy BYOK vault remnants from older clients.
+              clearBYOKVault();
+            } catch {
+              // Ignore vault wipe failures.
             }
 
             if (hadCachedSession && get().user?.id) {
@@ -698,37 +672,6 @@ export const useAuthStore = create<AuthStore>()(
             });
           },
 
-          setBYOKKey: (provider, key) => {
-            const sanitizedKey = sanitizeBYOKKey(key);
-
-            set((state) => {
-              state.byokKeys[provider] = sanitizedKey;
-            });
-
-            void saveBYOKVault({
-              ...get().byokKeys,
-              [provider]: sanitizedKey,
-            }).catch((error) => {
-              console.error("[authStore] BYOK persist failed:", error);
-            });
-          },
-
-          clearBYOKKey: (provider) => {
-            set((state) => {
-              delete state.byokKeys[provider];
-            });
-
-            const nextKeys = {
-              ...get().byokKeys,
-            };
-
-            delete nextKeys[provider];
-
-            void saveBYOKVault(nextKeys).catch((error) => {
-              console.error("[authStore] BYOK clear failed:", error);
-            });
-          },
-
           setUser: (user) => {
             set((state) => {
               state.user = user;
@@ -761,7 +704,6 @@ export const useAuthStore = create<AuthStore>()(
               state.status = "unauthenticated";
               state.isLoading = false;
               state.isAuthenticated = false;
-              state.byokKeys = {};
             });
           },
         };
@@ -780,7 +722,6 @@ export const useAuthStore = create<AuthStore>()(
          * - isAdmin
          * - planId
          * - credits
-         * - byokKeys
          */
         partialize: (state) => ({
           isOnboarded: state.isOnboarded,
@@ -812,12 +753,7 @@ export const selectCredits = (state: AuthStore) => state.credits;
 
 export const selectIsAdmin = (state: AuthStore) => state.isAdmin;
 
-export const selectHasByok = (state: AuthStore) =>
-  Boolean(
-    state.byokKeys.openai ||
-      state.byokKeys.anthropic ||
-      state.byokKeys.gemini
-  );
+export const selectHasByok = (_state: AuthStore) => false;
 
 export const selectPreferredModel = (state: AuthStore) =>
   state.profile?.preferred_model ?? "gpt-4o";

@@ -233,7 +233,7 @@ export function PricingCard({
           {subtitle && <p className="text-xs text-muted-foreground mt-1">{subtitle}</p>}
           {credits !== undefined && credits !== null && (
             <p className="text-xs text-muted-foreground mt-1">
-              {credits < 0 ? '∞ Unlimited' : credits.toLocaleString()} credits/month
+              {Math.max(0, credits).toLocaleString()} credits/month
             </p>
           )}
         </div>

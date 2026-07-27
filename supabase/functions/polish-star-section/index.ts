@@ -11,6 +11,7 @@ import type { ModelId } from "../_shared/types.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
+import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 
 type STARKey = "situation" | "task" | "action" | "result";
 
@@ -67,6 +68,9 @@ Deno.serve(async (req: Request) => {
 
     const planGate = requirePlan(auth.planId, "free", req);
     if (planGate) return planGate;
+
+    const capabilityGate = requireCapabilityForFunction(auth.planId, FN, req);
+    if (capabilityGate) return capabilityGate;
 
     // BODY
     const rawBody = await parseBody<{

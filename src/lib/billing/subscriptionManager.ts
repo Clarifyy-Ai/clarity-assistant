@@ -363,7 +363,7 @@ export const PLANS: Record<PlanId, Plan> = {
 
   enterprise: {
     id: "enterprise",
-    name: "Enterprise",
+    name: "Max",
     tagline: "Higher credits for power users and coaches",
     monthlyPrice: 7_900,
     yearlyPrice: 6_583, // $79,000/yr ÷ 12 — display only

@@ -51,6 +51,7 @@ import {
 import { callAI, extractBYOK } from "../_shared/utils.ts";
 import { logAICost } from "../_shared/aiProvider.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
+import { requireCapability } from "../_shared/requireCapability.ts";
 import { resolveModel, isGeminiModel } from "../_shared/resolveModel.ts";
 import type { ModelId } from "../_shared/types.ts";
 
@@ -538,6 +539,11 @@ Deno.serve(async (req: Request) => {
   const overlayGate = requirePlan(planId, "starter", req);
   if (overlayGate) {
     return withCors(overlayGate, corsHeaders);
+  }
+
+  const capabilityGate = requireCapability(planId, "live_rehearsal", req);
+  if (capabilityGate) {
+    return withCors(capabilityGate, corsHeaders);
   }
 
   if (hasScreenshot) {

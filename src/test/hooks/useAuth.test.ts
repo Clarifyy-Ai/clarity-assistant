@@ -206,18 +206,18 @@ describe("useAuth — canAccessFeature [T-0050]", () => {
     expect(result.current.canAccessFeature("live_copilot")).toBe(true);
   });
 
-  it("only elite/enterprise can access team_rooms", () => {
+  it("team_rooms is deprecated and never granted", () => {
     seedProfile("pro");
     const { result } = renderHook(() => useAuth(), { wrapper });
     expect(result.current.canAccessFeature("team_rooms")).toBe(false);
 
     seedProfile("elite");
     const { result: eliteResult } = renderHook(() => useAuth(), { wrapper });
-    expect(eliteResult.current.canAccessFeature("team_rooms")).toBe(true);
+    expect(eliteResult.current.canAccessFeature("team_rooms")).toBe(false);
 
     seedProfile("enterprise");
     const { result: entResult } = renderHook(() => useAuth(), { wrapper });
-    expect(entResult.current.canAccessFeature("team_rooms")).toBe(true);
+    expect(entResult.current.canAccessFeature("team_rooms")).toBe(false);
   });
 });
 

@@ -5,8 +5,9 @@
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
+import { createServiceClient } from "../_shared/supabase.ts";
 import {
-  enforceSessionRateLimit,
+  enforceSessionRateLimitAsync,
 } from "../_shared/rateLimit.ts";
 
 const TOKEN_TTL_SECONDS = 60; // 1 minute
@@ -30,7 +31,8 @@ Deno.serve(async (req: Request) => {
     if (auth.error) return auth.error;
     const user = auth.context.user;
 
-    const rateLimited = enforceSessionRateLimit("deepgram-token", user.id);
+    const db = createServiceClient();
+    const rateLimited = await enforceSessionRateLimitAsync(db, "deepgram-token", user.id);
     if (rateLimited) return rateLimited;
 
     /* ── ENV VALIDATION ────────────────────────────────────────────────── */

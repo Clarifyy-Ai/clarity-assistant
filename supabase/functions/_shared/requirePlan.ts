@@ -17,38 +17,41 @@
 //   free < starter < pro < elite < enterprise
 
 import { errorResponse } from "./utils.ts";
+import { planRank, normalizePlanId, getPlanDisplayName } from "./billingCatalog.ts";
 
 export type PlanTier = "free" | "starter" | "pro" | "elite" | "enterprise";
 
-const PLAN_RANK: Record<PlanTier, number> = {
-  free:       0,
-  starter:    1,
-  pro:        2,
-  elite:      3,
-  enterprise: 4,
-};
-
 /**
  * Returns null if the user's plan meets or exceeds the required tier.
- * Returns a 403 Response if the user's plan is insufficient.
- *
- * The caller pattern (`if (gate) return gate;`) keeps premium EFs concise.
+ * Uses billingCatalog ranks (starter≡free, elite≡pro).
  */
 export function requirePlan(
   userPlanId: string | null | undefined,
   requiredTier: PlanTier,
   req?: Request,
 ): Response | null {
-  const userPlan = (userPlanId ?? "free") as PlanTier;
-  const userRank     = PLAN_RANK[userPlan]     ?? 0;
-  const requiredRank = PLAN_RANK[requiredTier] ?? 0;
+  const userRank = planRank(userPlanId);
+  const requiredRank = planRank(requiredTier);
 
-  if (userRank >= requiredRank) return null;
+  if (userRank < 0 || requiredRank < 0 || userRank < requiredRank) {
+    const label = getPlanDisplayName(requiredTier);
+    return errorResponse(
+      `This feature requires the ${label} plan or higher. Please upgrade to continue.`,
+      "PLAN_UPGRADE_REQUIRED",
+      403,
+      req,
+    );
+  }
 
-  return errorResponse(
-    `This feature requires the ${requiredTier} plan or higher. Please upgrade to continue.`,
-    "PLAN_UPGRADE_REQUIRED",
-    403,
-    req,
-  );
+  // Reject completely unknown plan strings (except null → free)
+  if (userPlanId != null && String(userPlanId).trim() !== "" && normalizePlanId(userPlanId) == null) {
+    return errorResponse(
+      "Unknown plan. Please contact support.",
+      "INVALID_PLAN",
+      403,
+      req,
+    );
+  }
+
+  return null;
 }

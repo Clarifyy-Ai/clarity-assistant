@@ -27,6 +27,7 @@ import {
 
 import {
   authenticateRequest,
+  resolveUserPlanId,
 } from "../_shared/auth.ts";
 
 import {
@@ -64,6 +65,7 @@ import {
   type AIProviderResult,
 } from "../_shared/aiProvider.ts";
 import { resolveModel } from "../_shared/resolveModel.ts";
+import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { extractBYOK } from "../_shared/utils.ts";
 
 const FUNCTION_NAME = "generate-debrief";
@@ -588,6 +590,12 @@ Deno.serve(async (req: Request) => {
   const { user } = auth.context;
 
   const dbEarly = createServiceClient();
+  const planId = await resolveUserPlanId(user.id);
+  const capabilityGate = requireCapabilityForFunction(planId, FUNCTION_NAME, req);
+  if (capabilityGate) {
+    return withCorsHeaders(req, capabilityGate);
+  }
+
   const rateLimitResult = await checkRateLimitAsync(dbEarly, {
     key: createRateLimitKey(FUNCTION_NAME, user.id),
     ...RATE_LIMIT_PRESETS.AI_GENERATION_STRICT,

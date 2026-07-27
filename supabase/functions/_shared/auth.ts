@@ -258,6 +258,23 @@ export async function isAdmin(userId: string): Promise<boolean> {
   return admin || superAdmin;
 }
 
+/** Resolve consumer plan_id from profiles (server-side only). */
+export async function resolveUserPlanId(userId: string): Promise<string> {
+  const supabase = createServiceRoleClient();
+  const { data, error } = await supabase
+    .from("profiles")
+    .select("plan_id")
+    .eq("id", userId)
+    .maybeSingle();
+
+  if (error) {
+    console.error("[auth] resolveUserPlanId failed:", error.message);
+    return "free";
+  }
+
+  return String(data?.plan_id ?? "free");
+}
+
 /**
  * Requires admin role.
  *

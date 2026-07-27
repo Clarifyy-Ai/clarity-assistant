@@ -63,7 +63,7 @@ export type {
   PlanComparison,
 } from "./priceCalculator";
 
-// ─── Display tier labels (launch: Free / Pro / Enterprise) ─────────────────────
+// ─── Display tier labels (launch: Free / Pro / Max) ─────────────────────
 export {
   LAUNCH_PLANS,
   DEPRECATED_PLANS,
@@ -79,3 +79,10 @@ export {
   isPaidPlan,
   type LaunchPlanId,
 } from "./planIds";
+
+export {
+  planRank,
+  getCatalogDisplayName,
+  normalizeCanonicalPlanId,
+  PLAN_RANK,
+} from "./planCatalog";

@@ -16,12 +16,13 @@
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
-import { authenticateRequest } from "../_shared/auth.ts";
+import { authenticateRequest, resolveUserPlanId } from "../_shared/auth.ts";
+import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import {
   isSessionTypeAllowedForAi,
 } from "../_shared/sessionEnforcement.ts";
 import {
-  checkRateLimit,
+  checkRateLimitAsync,
   createRateLimitKey,
   rateLimitResponse,
   RATE_LIMIT_PRESETS,
@@ -159,7 +160,15 @@ Deno.serve(async (req: Request) => {
 
   const { user } = auth.context;
 
-  const rateLimitResult = checkRateLimit({
+  const planId = await resolveUserPlanId(user.id);
+  const capabilityGate = requireCapabilityForFunction(planId, FUNCTION_NAME, req);
+  if (capabilityGate) {
+    const capHeaders = new Headers(capabilityGate.headers);
+    new Headers(corsHeaders).forEach((v, k) => capHeaders.set(k, v));
+    return new Response(capabilityGate.body, { status: capabilityGate.status, headers: capHeaders });
+  }
+
+  const rateLimitResult = await checkRateLimitAsync(createServiceClient(), {
     key: createRateLimitKey(FUNCTION_NAME, user.id),
     ...RATE_LIMIT_PRESETS.AI_GENERATION,
   });

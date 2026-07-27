@@ -33,16 +33,19 @@ const connectSrc = [
 
 const CSP = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'" + (isDev ? " 'unsafe-eval'" : ""),
+  // Vite production bundles are static; unsafe-inline retained only for style
+  // attributes used by the UI toolkit. Scripts: no unsafe-eval outside Electron DEV.
+  "script-src 'self'" + (isDev ? " 'unsafe-inline' 'unsafe-eval'" : ""),
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https:",
   "font-src 'self' data:",
   `connect-src ${connectSrc}`,
   "frame-src https://checkout.stripe.com",
+  "frame-ancestors 'none'",
   "media-src 'self' blob: data:",
   "worker-src 'self' blob:",
   "object-src 'none'",
-  "base-uri 'self'",
+  "base-uri 'none'",
   "form-action 'self'",
 ].join("; ");
 

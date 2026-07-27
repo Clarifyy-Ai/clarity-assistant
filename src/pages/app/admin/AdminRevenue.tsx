@@ -171,7 +171,7 @@ export default function AdminRevenue() {
         });
 
         const planNames: Record<string, string> = {
-          free: "Free", starter: "Starter", pro: "Pro", elite: "Elite", enterprise: "Enterprise",
+          free: "Free", starter: "Pro", pro: "Pro", elite: "Pro", enterprise: "Max",
         };
 
         const total = profileData.length || 1;

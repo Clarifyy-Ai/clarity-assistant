@@ -10,6 +10,7 @@ import {
 } from "../_shared/utils.ts";
 import { parseJSON } from "../_shared/gemini.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
+import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import {
   enforceAiRateLimitAsync,
 } from "../_shared/rateLimit.ts";
@@ -107,6 +108,9 @@ Deno.serve(async (req) => {
 
     const planGate = requirePlan(auth.planId, "starter", req);
     if (planGate) return planGate;
+
+    const capabilityGate = requireCapabilityForFunction(auth.planId, FN, req);
+    if (capabilityGate) return capabilityGate;
 
     const body = await parseBody<any>(req);
 

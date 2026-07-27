@@ -237,7 +237,7 @@ const FAQS = [
   },
   {
     q: "How much does Clarify AI cost?",
-    a: "Free includes 50 credits per month — enough to try Practice Coach and a mock session. Pro is $29 / month for 1,400 credits and the full feature set. Enterprise is $79 / month for 4,000 credits, priority model access, and priority email support.",
+    a: "Free includes 50 credits per month — enough to try Practice Coach and a mock session. Pro is $29 / month for 1,400 credits and the full feature set. Max is $79 / month for 4,000 credits, priority model access, and priority email support.",
   },
   {
     q: "What is included in the free plan?",
@@ -271,7 +271,7 @@ function formatPlanTeaserFeatures(planId: PlanId): string[] {
   const featureLabels = plan.features
     .filter((f) => f.included)
     .map((f) => {
-      if (f.limit === "unlimited") return `Unlimited ${f.label.toLowerCase()}`;
+      if (f.limit === "unlimited") return f.label;
       if (typeof f.limit === "number" && f.note) return `${f.label} (${f.note})`;
       if (typeof f.limit === "number") return `${f.label} (${f.limit})`;
       return f.label;
@@ -662,24 +662,24 @@ export default function Landing() {
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
             {LAUNCH_PLANS.map((planId, i) => {
               const plan = PLANS[planId];
-              const isEnterprise = planId === "enterprise";
-              const priceDisplay = isEnterprise
+              const isMax = planId === "enterprise";
+              const priceDisplay = isMax
                 ? "$79"
                 : plan.monthlyPrice === 0
                   ? "$0"
                   : `$${(plan.monthlyPrice / 100).toFixed(0)}`;
-              const period = isEnterprise
+              const period = isMax
                 ? "/month"
                 : plan.monthlyPrice === 0
                   ? "forever"
                   : "/month";
-              const cta = isEnterprise
-                ? "Contact Sales"
+              const cta = isMax
+                ? "Get Max"
                 : planId === "free"
                   ? "Start Free"
                   : "Get Pro";
-              const to = isEnterprise
-                ? `mailto:${SALES_EMAIL}?subject=Enterprise%20plan`
+              const to = isMax
+                ? `/signup?plan=${planId}`
                 : planId === "free"
                   ? "/signup"
                   : `/signup?plan=${planId}`;

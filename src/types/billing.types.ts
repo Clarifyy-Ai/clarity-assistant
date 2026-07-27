@@ -79,7 +79,7 @@ export const PLAN_DEFINITIONS: Record<UserPlan, PlanFeatures> = {
    */
   team: {
     id: "team",
-    name: "Enterprise",
+    name: "Max",
     price_monthly_usd: 79,
     price_annual_usd: 790,
     credits_monthly: 4000,
@@ -94,13 +94,13 @@ export const PLAN_DEFINITIONS: Record<UserPlan, PlanFeatures> = {
     highlighted_features: ["4,000 credits", "Priority support"],
     ai_models: ["Gemini Flash", "Gemini Pro", "GPT-4o", "Claude"],
     is_popular: false,
-    cta_label: "Upgrade to Enterprise",
+    cta_label: "Upgrade to Max",
     stripe_price_monthly: null,
     stripe_price_annual: null,
   },
   enterprise: {
     id: "enterprise",
-    name: "Enterprise",
+    name: "Max",
     price_monthly_usd: 79,
     price_annual_usd: 790,
     credits_monthly: 4000,
@@ -115,7 +115,7 @@ export const PLAN_DEFINITIONS: Record<UserPlan, PlanFeatures> = {
     highlighted_features: ["4,000 credits", "Priority support"],
     ai_models: ["Gemini Flash", "Gemini Pro", "GPT-4o", "Claude"],
     is_popular: false,
-    cta_label: "Upgrade to Enterprise",
+    cta_label: "Upgrade to Max",
     stripe_price_monthly: null,
     stripe_price_annual: null,
   },

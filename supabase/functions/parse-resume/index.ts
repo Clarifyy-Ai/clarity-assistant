@@ -4,6 +4,7 @@ import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { parseJSON } from "../_shared/gemini.ts";
 import { requireAuth } from "../_shared/utils.ts";
+import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import {
   enforceAiRateLimitAsync,
 } from "../_shared/rateLimit.ts";
@@ -188,6 +189,10 @@ Deno.serve(async (req) => {
       .maybeSingle();
 
     const planId = profileRow?.plan_id ?? "free";
+
+    const capabilityGate = requireCapabilityForFunction(planId, "parse-resume", req);
+    if (capabilityGate) return capabilityGate;
+
     const docLimits: Record<string, number> = { free: 5, pro: 50 };
     const maxDocs = docLimits[planId] ?? Infinity;
 

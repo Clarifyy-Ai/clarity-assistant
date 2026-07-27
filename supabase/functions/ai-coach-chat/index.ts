@@ -13,7 +13,9 @@ import {
 import {
   authenticateRequest,
   enforceResourceOwnership,
+  resolveUserPlanId,
 } from "../_shared/auth.ts";
+import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 
 import {
   checkRateLimitAsync,
@@ -446,6 +448,12 @@ Deno.serve(async (req: Request) => {
   }
 
   const { user } = auth.context;
+
+  const planId = await resolveUserPlanId(user.id);
+  const capabilityGate = requireCapabilityForFunction(planId, FUNCTION_NAME, req);
+  if (capabilityGate) {
+    return withCorsHeaders(req, capabilityGate);
+  }
 
   const rateLimitResult = await checkRateLimitAsync(createServiceClient(), {
     key: createRateLimitKey(FUNCTION_NAME, user.id),

@@ -3,8 +3,10 @@
  * Secret: RAZORPAY_WEBHOOK_SECRET
  */
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { assertBillingConfigOrThrow } from "../_shared/billingConfig.ts";
+import { opsLog } from "../_shared/opsLog.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
-import { PLAN_MONTHLY_CREDITS } from "../_shared/creditEconomics.ts";
+import { monthlyCreditsForPlan } from "../_shared/billingCatalog.ts";
 
 const WEBHOOK_SECRET = Deno.env.get("RAZORPAY_WEBHOOK_SECRET") ?? "";
 
@@ -42,10 +44,27 @@ Deno.serve(async (req: Request) => {
     return new Response("Method not allowed", { status: 405, headers });
   }
 
+  try {
+    assertBillingConfigOrThrow({ requireRazorpay: true });
+  } catch {
+    return new Response(JSON.stringify({ error: "Billing configuration invalid" }), {
+      status: 503,
+      headers: { ...headers, "Content-Type": "application/json" },
+    });
+  }
+
   const rawBody = await req.text();
   const signature = req.headers.get("x-razorpay-signature") ?? "";
 
   if (!(await verifySignature(rawBody, signature))) {
+    opsLog({
+      function_name: "razorpay-webhook",
+      operation: "verify_signature",
+      result: "denied",
+      provider: "razorpay",
+      error_class: "INVALID_SIGNATURE",
+      retryable: false,
+    });
     return new Response("Invalid signature", { status: 401, headers });
   }
 
@@ -100,7 +119,7 @@ Deno.serve(async (req: Request) => {
   // leave the order "paid" without credits/plan updates.
   if (productType === "pro_monthly" || productType === "enterprise_monthly") {
     const planId = productType === "pro_monthly" ? "pro" : "enterprise";
-    const monthlyCredits = PLAN_MONTHLY_CREDITS[planId as "pro" | "enterprise"];
+    const monthlyCredits = monthlyCreditsForPlan(planId);
 
     const { error: profileErr } = await db.from("profiles").update({
       plan_id: planId,

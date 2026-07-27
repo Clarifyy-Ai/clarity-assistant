@@ -21,7 +21,7 @@ import {
   withCorsHeaders,
 } from "../_shared/cors.ts";
 
-import { authenticateRequest } from "../_shared/auth.ts";
+import { authenticateRequest, resolveUserPlanId } from "../_shared/auth.ts";
 
 import {
   enforceAiSessionAccess,
@@ -57,6 +57,7 @@ import {
   moderateOutput,
 } from "../_shared/aiProvider.ts";
 import { resolveModel } from "../_shared/resolveModel.ts";
+import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { extractBYOK } from "../_shared/utils.ts";
 
 const FUNCTION_NAME = "generate-hint";
@@ -435,6 +436,12 @@ Deno.serve(async (req: Request) => {
 
   const { user } = auth.context;
   const db = createServiceClient();
+
+  const planId = await resolveUserPlanId(user.id);
+  const capabilityGate = requireCapabilityForFunction(planId, FUNCTION_NAME, req);
+  if (capabilityGate) {
+    return withCorsHeaders(req, capabilityGate);
+  }
 
   const rateLimitResult = await checkRateLimitAsync(db, {
     key: createRateLimitKey(FUNCTION_NAME, user.id),

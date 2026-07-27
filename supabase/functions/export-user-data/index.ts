@@ -4,7 +4,7 @@ import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import {
-  enforceDataExportRateLimit,
+  enforceDataExportRateLimitAsync,
 } from "../_shared/rateLimit.ts";
 
 Deno.serve(async (req) => {
@@ -16,10 +16,9 @@ Deno.serve(async (req) => {
     if (auth.error) return auth.error;
     const user = auth.context.user;
 
-    const rateLimited = enforceDataExportRateLimit(user.id);
-    if (rateLimited) return rateLimited;
-
     const db = createServiceClient();
+    const rateLimited = await enforceDataExportRateLimitAsync(db, user.id);
+    if (rateLimited) return rateLimited;
 
     /* ---------------------------------------------------
        VALIDATE BODY

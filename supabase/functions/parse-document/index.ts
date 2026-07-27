@@ -4,6 +4,7 @@ import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { parseJSON } from "../_shared/gemini.ts";
 import { requireAuth } from "../_shared/utils.ts";
+import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import {
   enforceAiRateLimitAsync,
 } from "../_shared/rateLimit.ts";
@@ -77,6 +78,19 @@ Deno.serve(async (req) => {
 
   try {
     const { userId } = await requireAuth(req);
+
+    const { data: profileRow } = await db
+      .from("profiles")
+      .select("plan_id")
+      .eq("id", userId)
+      .maybeSingle();
+
+    const capabilityGate = requireCapabilityForFunction(
+      profileRow?.plan_id,
+      "parse-document",
+      req,
+    );
+    if (capabilityGate) return capabilityGate;
 
     const rateLimited = await enforceAiRateLimitAsync(
       createServiceClient(),
