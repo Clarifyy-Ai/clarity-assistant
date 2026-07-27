@@ -1701,6 +1701,9 @@ export type Database = {
           avatar_url: string | null
           ban_reason: string | null
           bio: string | null
+          byok_anthropic: boolean
+          byok_gemini: boolean
+          byok_openai: boolean
           created_at: string
           credits: number
           credits_reset_at: string | null
@@ -1741,6 +1744,7 @@ export type Database = {
           overlay_hotkey: string
           overlay_opacity: number
           overlay_position: string
+          payment_failed_at: string | null
           pending_promo_code: string | null
           phone: string | null
           plan_id: Database["public"]["Enums"]["plan_tier"]
@@ -1779,6 +1783,9 @@ export type Database = {
           avatar_url?: string | null
           ban_reason?: string | null
           bio?: string | null
+          byok_anthropic?: boolean
+          byok_gemini?: boolean
+          byok_openai?: boolean
           created_at?: string
           credits?: number
           credits_reset_at?: string | null
@@ -1819,6 +1826,7 @@ export type Database = {
           overlay_hotkey?: string
           overlay_opacity?: number
           overlay_position?: string
+          payment_failed_at?: string | null
           pending_promo_code?: string | null
           phone?: string | null
           plan_id?: Database["public"]["Enums"]["plan_tier"]
@@ -1857,6 +1865,9 @@ export type Database = {
           avatar_url?: string | null
           ban_reason?: string | null
           bio?: string | null
+          byok_anthropic?: boolean
+          byok_gemini?: boolean
+          byok_openai?: boolean
           created_at?: string
           credits?: number
           credits_reset_at?: string | null
@@ -1897,6 +1908,7 @@ export type Database = {
           overlay_hotkey?: string
           overlay_opacity?: number
           overlay_position?: string
+          payment_failed_at?: string | null
           pending_promo_code?: string | null
           phone?: string | null
           plan_id?: Database["public"]["Enums"]["plan_tier"]
