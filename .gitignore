@@ -29,7 +29,8 @@ _asar-extract/
 # =========================
 .env
 .env.local
-.env.production
+# .env.production is intentionally tracked: contains only public Vite values (Supabase URL + publishable key)
+!.env.production
 .env.*.local
 
 # =========================
