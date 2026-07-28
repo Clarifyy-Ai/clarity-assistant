@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useState, useRef } from "react";
 import { Link } from "react-router-dom";
 import { supabase } from "@/lib/supabase/client";

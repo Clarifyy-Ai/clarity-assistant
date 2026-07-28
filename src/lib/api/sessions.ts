@@ -2,12 +2,7 @@
 //
 // Session API wrappers.
 
-import {
-  createIdempotencyKey,
-  invokeFunction,
-  invokeIdempotentFunction,
-  type IdempotencyOptions,
-} from "@/lib/api/functions";
+import { invokeFunction } from "@/lib/api/functions";
 
 export type StartSessionRequest = {
   session_type?: "mock" | "live" | "warmup" | "rehearsal" | "room" | "practice";
@@ -46,63 +41,6 @@ export type StartSessionResponse = {
   reused?: boolean;
 };
 
-export type EndSessionRequest = {
-  session_id: string;
-  status?: "completed" | "cancelled" | "failed";
-  credits_used?: number;
-  duration_seconds?: number | null;
-  overall_score?: number | null;
-  avg_wpm?: number | null;
-  total_filler_words?: number | null;
-  notes?: string;
-};
-
-export type EndSessionResponse = {
-  success: boolean;
-  request_id: string;
-  session_id: string;
-  status: string;
-  ended_at?: string;
-  duration_seconds?: number | null;
-  credits_used?: number;
-  already_ended?: boolean;
-};
-
-export type SaveAnswerRequest = {
-  session_id: string;
-  question_id?: string | null;
-  question_index?: number;
-  question_text?: string;
-  answer?: string;
-  transcript?: string;
-  score?: number | null;
-  duration_seconds?: number | null;
-  metadata?: Record<string, unknown>;
-};
-
-export type SaveAnswerResponse = {
-  success: boolean;
-  request_id: string;
-  answer_id: string;
-  session_id: string;
-  question_index: number;
-};
-
-export type SaveTranscriptRequest = {
-  session_id: string;
-  content: string;
-  speaker?: "user" | "ai" | "system";
-  timestamp_ms?: number;
-  sequence?: number;
-  is_final?: boolean;
-};
-
-export type SaveTranscriptResponse = {
-  success: boolean;
-  request_id: string;
-  transcript_id: string;
-};
-
 export async function startSession(
   payload: StartSessionRequest
 ): Promise<StartSessionResponse> {
@@ -110,53 +48,4 @@ export async function startSession(
     "start-session",
     payload
   );
-}
-
-export async function endSession(
-  payload: EndSessionRequest
-): Promise<EndSessionResponse> {
-  return invokeFunction<EndSessionResponse, EndSessionRequest>(
-    "end-session",
-    payload
-  );
-}
-
-export async function saveAnswer(
-  payload: SaveAnswerRequest,
-  options: IdempotencyOptions = {}
-): Promise<SaveAnswerResponse> {
-  return invokeIdempotentFunction<SaveAnswerResponse, SaveAnswerRequest>(
-    "save-answer",
-    payload,
-    {
-      idempotencyKey:
-        options.idempotencyKey ?? createIdempotencyKey("save-answer"),
-    }
-  );
-}
-
-export async function saveTranscript(
-  payload: SaveTranscriptRequest,
-  options: IdempotencyOptions = {}
-): Promise<SaveTranscriptResponse> {
-  return invokeFunction<SaveTranscriptResponse, SaveTranscriptRequest>(
-    "save-transcript",
-    payload,
-    {
-      headers: options.idempotencyKey
-        ? {
-            "Idempotency-Key": options.idempotencyKey,
-          }
-        : undefined,
-    }
-  );
-}
-
-export function createTranscriptSequence(): () => number {
-  let sequence = 0;
-
-  return () => {
-    sequence += 1;
-    return sequence;
-  };
 }

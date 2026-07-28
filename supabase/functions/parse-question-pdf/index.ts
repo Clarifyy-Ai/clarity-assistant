@@ -3,10 +3,12 @@ import {
   requireAuth,
   errorResponse,
   successResponse,
-  deductCredits,
+  getAdminClient,
 } from "../_shared/utils.ts";
+import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { geminiGenerateWithPdf, parseJSON } from "../_shared/gemini.ts";
+import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 
 import { creditCost } from "../_shared/creditEconomics.ts";
 
@@ -85,6 +87,13 @@ Deno.serve(async (req) => {
     const auth = await requireAuth(req);
     userId = auth.userId;
 
+    const rateLimited = await enforceAiRateLimitAsync(
+      getAdminClient(),
+      "parse-question-pdf",
+      userId,
+    );
+    if (rateLimited) return rateLimited;
+
     const capabilityGate = requireCapabilityForFunction(auth.planId, "parse-question-pdf", req);
     if (capabilityGate) return capabilityGate;
 
@@ -93,8 +102,13 @@ Deno.serve(async (req) => {
       return errorResponse("No PDF uploaded", "NO_PDF", 400, req);
     }
 
-    const deduct = await deductCredits(userId, "parse_question_pdf", CREDIT_COST);
-    if (!deduct.success) {
+    const creditResult = await deductCreditsAtomic({
+      userId,
+      action: "parse_question_pdf",
+      cost: CREDIT_COST,
+      idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+    });
+    if (!creditResult.success) {
       return errorResponse("Insufficient credits", "NO_CREDITS", 402, req);
     }
     charged = true;
@@ -107,7 +121,11 @@ Deno.serve(async (req) => {
       });
     } catch (err) {
       if (charged) {
-        await deductCredits(userId, "refund_parse_question_pdf", -CREDIT_COST);
+        await refundCredits({
+          userId,
+          cost: CREDIT_COST,
+          reason: "parse-question-pdf AI call failure",
+        });
       }
       const msg = err instanceof Error ? err.message : "Gemini PDF parse failed";
       console.error("[parse-question-pdf] Gemini error:", msg);
@@ -133,7 +151,11 @@ Deno.serve(async (req) => {
 
     if (charged && userId) {
       try {
-        await deductCredits(userId, "refund_parse_question_pdf", -CREDIT_COST);
+        await refundCredits({
+          userId,
+          cost: CREDIT_COST,
+          reason: "parse-question-pdf unhandled error",
+        });
       } catch {
         /* ignore refund failure */
       }

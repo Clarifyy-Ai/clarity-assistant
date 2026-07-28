@@ -366,6 +366,13 @@ export async function deductCredits(
  * Adds optional:
  * - session_id attachment
  * - idempotency lookup/storage
+ *
+ * M4 DEFERRED: Preferring public.deduct_credits RPC would be ideal for a single
+ * SQL transaction, but that RPC binds to auth.uid() (no p_user_id) and is
+ * service_role-only after revoke — Edge Functions cannot impersonate the user
+ * JWT for arbitrary deductions without a signature change. Keep the guarded
+ * JS read-then-update path (.gte("credits", amount)) until a service-role
+ * deduct_credits(p_user_id, ...) RPC is introduced.
  */
 export async function deductCreditsAtomic(
   input: DeductCreditsAtomicInput

@@ -2,6 +2,10 @@ import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { parseJsonBody } from "../_shared/errors.ts";
+import {
+  createRateLimitKey,
+  enforceRateLimitAsync,
+} from "../_shared/rateLimit.ts";
 import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
 
 const schema = z.object({
@@ -28,6 +32,14 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  const db = createServiceClient();
+  const rateLimited = await enforceRateLimitAsync(db, {
+    key: createRateLimitKey("record-referral", auth.context.user.id),
+    limit: 10,
+    windowMs: 60_000,
+  });
+  if (rateLimited) return rateLimited;
+
   const body = await parseJsonBody(req);
   const parsed = schema.safeParse(body);
   if (!parsed.success) {
@@ -37,7 +49,6 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const db = createServiceClient();
   const { data, error } = await db.rpc("record_referral_reward", {
     p_referred_id: auth.context.user.id,
     p_referral_code: parsed.data.referral_code.toUpperCase(),

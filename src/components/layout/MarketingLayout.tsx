@@ -5,12 +5,11 @@ import { BrandLogo } from "@/components/marketing";
 import { Menu, X, Twitter, Github } from "lucide-react";
 import { SALES_EMAIL, STATUS_PAGE_URL, LEGAL_ENTITY_NAME } from "@/lib/constants/contact";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
-import { useIndiaRegion } from "@/hooks/useIndiaRegion";
 import { cn } from "@/lib/utils";
 
-const NAV_LINKS: Array<{ to?: string; href?: string; label: string; indiaOnly?: boolean }> = [
+const NAV_LINKS: Array<{ to?: string; href?: string; label: string }> = [
   { href: "/#features", label: "Features" },
-  { to: "/gov-exams", label: PRODUCT_NAMES.govExams, indiaOnly: true },
+  { to: "/gov-exams", label: PRODUCT_NAMES.govExams },
   { to: "/pricing", label: "Pricing" },
   { to: "/shortcuts", label: "Shortcuts" },
   { to: "/blog", label: "Blog" },
@@ -21,14 +20,14 @@ const FOOTER_COLUMNS: Array<{
   heading: string;
   links: Array<
     | { href: string; label: string; external?: boolean }
-    | { to: string; label: string; indiaOnly?: boolean }
+    | { to: string; label: string }
   >;
 }> = [
   {
     heading: "Product",
     links: [
       { href: "/#features", label: "Features" },
-      { to: "/gov-exams", label: PRODUCT_NAMES.govExams, indiaOnly: true },
+      { to: "/gov-exams", label: PRODUCT_NAMES.govExams },
       { to: "/pricing", label: "Pricing" },
       { to: "/shortcuts", label: "Shortcuts" },
       { to: "/signup", label: "Get started free" },
@@ -69,8 +68,6 @@ interface MarketingLayoutProps {
 export function MarketingLayout({ children }: MarketingLayoutProps) {
   const { pathname } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
-  const { isIndia } = useIndiaRegion();
-  const navLinks = NAV_LINKS.filter((link) => !link.indiaOnly || isIndia);
 
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
@@ -83,7 +80,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
             <BrandLogo size="md" />
           </Link>
           <div className="hidden md:flex items-center gap-8 text-sm text-muted-foreground">
-            {navLinks.map((link) => {
+            {NAV_LINKS.map((link) => {
               const key = link.to ?? link.href ?? link.label;
               const isActive = link.to
                 ? link.to === "/"
@@ -135,7 +132,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
 
         {menuOpen && (
           <div className="md:hidden border-t border-border bg-background/95 backdrop-blur-xl px-4 py-3 space-y-1">
-            {navLinks.map((link) => {
+            {NAV_LINKS.map((link) => {
               const key = link.to ?? link.href ?? link.label;
               const isActive = link.to ? pathname.startsWith(link.to) : false;
               const className = cn(
@@ -218,7 +215,6 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
                 </p>
                 <ul className="space-y-2.5">
                   {col.links
-                    .filter((link) => !("indiaOnly" in link && link.indiaOnly) || isIndia)
                     .map((link) => (
                     <li key={link.label}>
                       {"href" in link ? (
@@ -252,11 +248,9 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
               <Link to="/help" className="hover:text-foreground transition-colors">Help</Link>
               <Link to="/pricing" className="hover:text-foreground transition-colors">Pricing</Link>
               <Link to="/blog" className="hover:text-foreground transition-colors">Blog</Link>
-              {isIndia && (
-                <Link to="/gov-exams" className="hover:text-foreground transition-colors">
-                  {PRODUCT_NAMES.govExams}
-                </Link>
-              )}
+              <Link to="/gov-exams" className="hover:text-foreground transition-colors">
+                {PRODUCT_NAMES.govExams}
+              </Link>
               <Link to="/shortcuts" className="hover:text-foreground transition-colors">Shortcuts</Link>
               <a href={STATUS_PAGE_URL} target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Status</a>
             </div>

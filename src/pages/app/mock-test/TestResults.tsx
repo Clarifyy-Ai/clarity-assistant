@@ -482,8 +482,8 @@ export default function TestResults() {
             color: "text-blue-400",
           },
           {
-            label: "Percentile",
-            value: `~${analysis.predicted_percentile ?? 0}th`,
+            label: "Estimated performance band",
+            value: rankTier,
             icon: <TrendingUp className="h-5 w-5 text-primary" />,
             color: "text-primary",
           },

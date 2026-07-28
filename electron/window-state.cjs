@@ -29,8 +29,8 @@ function normalizeBounds(bounds, defaultWidth, defaultHeight) {
 
   const width = Number.isFinite(bounds?.width) ? bounds.width : defaultWidth;
   const height = Number.isFinite(bounds?.height) ? bounds.height : defaultHeight;
-  const safeWidth = Math.min(Math.max(width, 800), wa.width);
-  const safeHeight = Math.min(Math.max(height, 600), wa.height);
+  const safeWidth = Math.min(Math.max(width, 360), wa.width);
+  const safeHeight = Math.min(Math.max(height, 320), wa.height);
 
   let x = bounds?.x;
   let y = bounds?.y;
@@ -48,8 +48,8 @@ function clampToDisplay(bounds, defaultWidth, defaultHeight) {
     screen.getDisplayMatching(normalized) || screen.getPrimaryDisplay();
   const wa = display.workArea;
 
-  const width = Math.min(Math.max(normalized.width, 800), wa.width);
-  const height = Math.min(Math.max(normalized.height, 600), wa.height);
+  const width = Math.min(Math.max(normalized.width, 360), wa.width);
+  const height = Math.min(Math.max(normalized.height, 320), wa.height);
   let x = normalized.x;
   let y = normalized.y;
 

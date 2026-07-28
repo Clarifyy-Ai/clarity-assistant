@@ -95,11 +95,6 @@ const ALLOWED_HEADERS = [
 
   // Optional webhook/signature headers if helper is reused
   "stripe-signature",
-
-  // BYOK headers
-  "x-byok-openai",
-  "x-byok-anthropic",
-  "x-byok-gemini",
 ].join(", ");
 
 function isValidOrigin(origin: string): boolean {

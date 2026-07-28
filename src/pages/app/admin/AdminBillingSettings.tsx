@@ -10,7 +10,6 @@ type BillingSettings = {
   referral_discount_percent: number;
   referrer_credit_reward: number;
   referee_credit_reward: number;
-  auto_deduct_credits: boolean;
   razorpay_enabled: boolean;
   pro_monthly_inr_paise: number;
   enterprise_monthly_inr_paise: number;
@@ -23,7 +22,6 @@ const defaults: BillingSettings = {
   referral_discount_percent: 50,
   referrer_credit_reward: 25,
   referee_credit_reward: 25,
-  auto_deduct_credits: true,
   razorpay_enabled: true,
   pro_monthly_inr_paise: 249900,
   enterprise_monthly_inr_paise: 679900,
@@ -95,7 +93,7 @@ export default function AdminBillingSettings() {
     <div className="space-y-6 max-w-xl">
       <PageHeader
         title="Billing settings"
-        description="Referral rewards, Razorpay pricing (INR paise), auto-deduct"
+        description="Referral rewards and Razorpay pricing (INR paise)"
         icon={<Settings2 className="w-5 h-5 text-red-400" />}
       />
 
@@ -108,7 +106,6 @@ export default function AdminBillingSettings() {
 
       <Card className="p-4 space-y-4">
         <h3 className="font-semibold text-sm">Credits & payments</h3>
-        {field("Auto-deduct credits on AI use", "auto_deduct_credits", "checkbox")}
         {field("Razorpay enabled", "razorpay_enabled", "checkbox")}
         {field("Pro monthly (paise)", "pro_monthly_inr_paise")}
         {field("Enterprise monthly (paise)", "enterprise_monthly_inr_paise")}

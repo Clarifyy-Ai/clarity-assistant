@@ -40,6 +40,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { Skeleton } from "@/components/ui/skeleton";
 import { toast } from "sonner";
 import { ENV } from "@/lib/env";
+import { creditsDB } from "@/lib/supabase/database";
 import {
   AlertTriangle,
   ArrowUpRight,
@@ -155,6 +156,8 @@ export default function SettingsBilling(): JSX.Element {
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [promoCode, setPromoCode] = useState("");
   const [razorpayLoading, setRazorpayLoading] = useState<string | null>(null);
+  /** Sum of debit amounts this calendar month; null when unknown / N/A. */
+  const [creditsUsedThisPeriod, setCreditsUsedThisPeriod] = useState<number | null>(null);
 
   const effectivePlanId = (planId as PlanId) || "free";
   const currentPlan = PLANS[effectivePlanId] ?? PLANS.free;
@@ -186,6 +189,40 @@ export default function SettingsBilling(): JSX.Element {
   }, [user?.id]);
 
   useEffect(() => {
+    if (!user?.id) {
+      setCreditsUsedThisPeriod(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadPeriodUsage(): Promise<void> {
+      try {
+        const monthStart = new Date();
+        monthStart.setDate(1);
+        monthStart.setHours(0, 0, 0, 0);
+
+        const rows = await creditsDB.listByUserId(user!.id, 200);
+        const used = rows
+          .filter((tx) => {
+            const created = new Date(tx.created_at).getTime();
+            return created >= monthStart.getTime() && (tx.amount ?? 0) < 0;
+          })
+          .reduce((sum, tx) => sum + Math.abs(tx.amount ?? 0), 0);
+
+        if (!cancelled) setCreditsUsedThisPeriod(used);
+      } catch {
+        if (!cancelled) setCreditsUsedThisPeriod(null);
+      }
+    }
+
+    void loadPeriodUsage();
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, credits.balance]);
+
+  useEffect(() => {
     const checkoutStatus = searchParams.get("checkout");
     const legacySuccess = searchParams.get("success");
     const legacyCanceled = searchParams.get("canceled");
@@ -209,10 +246,16 @@ export default function SettingsBilling(): JSX.Element {
   const creditsRemaining = credits.balance;
   const creditsMonthly = currentPlan.creditsPerMonth;
 
-  const creditsUsed = Math.max(0, creditsMonthly - creditsRemaining);
+  // Prefer ledger debits; never invent used = monthly - remaining (packs break that).
+  const creditsUsed =
+    creditsUsedThisPeriod !== null
+      ? creditsUsedThisPeriod
+      : creditsRemaining > creditsMonthly
+        ? null
+        : Math.max(0, creditsMonthly - creditsRemaining);
 
   const usagePct =
-    creditsMonthly > 0
+    creditsUsed !== null && creditsMonthly > 0
       ? Math.min(100, (creditsUsed / creditsMonthly) * 100)
       : 0;
 
@@ -510,13 +553,13 @@ export default function SettingsBilling(): JSX.Element {
                 </p>
 
                 <p className="text-xs text-muted-foreground">
-                  {creditsUsed} /{" "}
+                  {creditsUsed === null ? "N/A" : creditsUsed} /{" "}
                   {creditsMonthly.toLocaleString()}
                 </p>
               </div>
 
               <ProgressBar
-                value={creditsUsed}
+                value={creditsUsed ?? 0}
                 max={creditsMonthly}
                 color={usagePct > 80 ? "red" : usagePct > 50 ? "amber" : "violet"}
                 size="sm"

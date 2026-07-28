@@ -6,12 +6,13 @@ import {
   requireAuth, 
   parseBody, 
   errorResponse, 
-  deductCredits, 
   callAI, 
   getAdminClient, 
   log 
 } from "../_shared/utils.ts";
+import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
+import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 
 const SYSTEM_PROMPT = `
 You are an expert exam coach for competitive exams like JEE, NEET, UPSC, SSC.
@@ -32,6 +33,9 @@ Deno.serve(async (req) => {
     const auth = await requireAuth(req);
     const userId = auth.userId;
     const db = getAdminClient();
+
+    const rateLimited = await enforceAiRateLimitAsync(db, FN, userId);
+    if (rateLimited) return rateLimited;
 
     const capabilityGate = requireCapabilityForFunction(
       auth.planId,
@@ -145,10 +149,15 @@ Use topic and subject names exactly as provided.
 `.trim();
 
     /* ----------------------------------
-       CREDIT DEDUCTION (SAFE)
+       CREDIT DEDUCTION (atomic + idempotent)
     ---------------------------------- */
     const analysisCost = creditCost("analyze_test_performance");
-    const creditResult = await deductCredits(userId, "analyze_test_performance" as any, analysisCost);
+    const creditResult = await deductCreditsAtomic({
+      userId,
+      action: "analyze_test_performance",
+      cost: analysisCost,
+      idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+    });
     if (!creditResult.success) {
       return errorResponse(`Insufficient credits. AI analysis costs ${analysisCost} credits.`, "INSUFFICIENT_CREDITS", 402);
     }
@@ -172,8 +181,11 @@ Use topic and subject names exactly as provided.
     if (!aiResult) aiResult = await runAI(); // retry once
 
     if (!aiResult) {
-      // refund credits if both attempts failed
-      await deductCredits(userId, "refund_ai_test_analysis" as any, -analysisCost);
+      await refundCredits({
+        userId,
+        cost: analysisCost,
+        reason: "analyze-test-performance AI call failure",
+      });
       return errorResponse("AI model failure", "AI_ERROR", 500);
     }
 

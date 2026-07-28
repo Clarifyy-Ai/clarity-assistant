@@ -366,8 +366,10 @@ export const PLANS: Record<PlanId, Plan> = {
     name: "Max",
     tagline: "Higher credits for power users and coaches",
     monthlyPrice: 7_900,
-    yearlyPrice: 6_583, // $79,000/yr ÷ 12 — display only
+    yearlyPrice: 6_583, // ~$79/mo billed yearly ($790.00/yr ÷ 12) — display only
     creditsPerMonth: 4_000,
+    stripePriceIdMonthly: ENV.STRIPE_PRICE_ENTERPRISE_MONTHLY,
+    stripePriceIdYearly: ENV.STRIPE_PRICE_ENTERPRISE_YEARLY,
     color: "emerald",
     features: [
       {

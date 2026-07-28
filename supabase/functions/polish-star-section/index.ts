@@ -4,9 +4,10 @@
 import {
   handleCors, parseBody, requireAuth,
   successResponse, errorResponse,
-  deductCredits, callAI,
+  callAI,
   requireFields, log, getAdminClient
 } from "../_shared/utils.ts";
+import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import type { ModelId } from "../_shared/types.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
@@ -116,9 +117,14 @@ Deno.serve(async (req: Request) => {
     const model: ModelId = rawBody.model ?? "gpt-4o-mini";
 
     const polishCost = creditCost("polish_star");
-    const credit = await deductCredits(auth.userId, "polish_star", polishCost);
-    if (!credit.success) {
-      return errorResponse(credit.error ?? "Insufficient credits.", "INSUFFICIENT_CREDITS", 402, req);
+    const creditResult = await deductCreditsAtomic({
+      userId: auth.userId,
+      action: "polish_star",
+      cost: polishCost,
+      idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+    });
+    if (!creditResult.success) {
+      return errorResponse(creditResult.error ?? "Insufficient credits.", "INSUFFICIENT_CREDITS", 402, req);
     }
 
     // Prompt construction
@@ -162,9 +168,15 @@ Return ONLY the rewritten ${sectionLabel} text:
         temperature: 0.65,
       });
     } catch (aiErr) {
-      // Refund the credit since the AI provider failed
-      try { await deductCredits(auth.userId, "refund_polish_star" as any, -polishCost); }
-      catch (refundErr) { log(FN, "error", "Refund failed", refundErr); }
+      try {
+        await refundCredits({
+          userId: auth.userId,
+          cost: polishCost,
+          reason: "polish-star-section AI call failure",
+        });
+      } catch (refundErr) {
+        log(FN, "error", "Refund failed", refundErr);
+      }
       log(FN, "error", "AI provider failed", aiErr);
       return errorResponse(
         "AI service temporarily unavailable. Your credit has been refunded.",

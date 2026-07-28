@@ -62,6 +62,21 @@ const STORAGE_FROM_CONFIG: Record<string, string> = {
   CUSTOM: "CUSTOM",
 };
 
+/**
+ * DB display strings for admin question filters / editors.
+ * Must match `questions.exam_type` values (not frontend IDs like JEE_MAIN).
+ */
+export const QUESTION_EXAM_TYPE_OPTIONS = [
+  "JEE Main",
+  "JEE Advanced",
+  "NEET UG",
+  "UPSC CSE",
+  "SSC Exams (CGL/CHSL)",
+  "Banking (IBPS/SBI/RBI)",
+  "NDA",
+  "GENERAL",
+] as const;
+
 export function normalizeExamTypeForStorage(configOrRaw: string | null | undefined): string | null {
   if (!configOrRaw || configOrRaw === "CUSTOM" || configOrRaw === "none") return null;
   const id = resolveExamConfigId(configOrRaw);

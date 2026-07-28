@@ -8,8 +8,12 @@ import {
   successResponse,
   errorResponse,
   log,
+  getAdminClient,
 } from "../_shared/utils.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
+import { requirePlan } from "../_shared/requirePlan.ts";
+import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
+import { enforceSessionRateLimitAsync } from "../_shared/rateLimit.ts";
 
 // ─────────────────────────────────────────────────────────────────
 // Configuration guard — fail fast with 501 if OAuth creds are absent.
@@ -241,6 +245,15 @@ Deno.serve(async (req) => {
     // ── Auth ─────────────────────────────────────────────────────
     const auth = await requireAuth(req);
     const user = auth.user;
+
+    const rateLimited = await enforceSessionRateLimitAsync(db, FN, user.id);
+    if (rateLimited) return rateLimited;
+
+    // P0-3: Calendar sync is a Pro feature (matches PLANS.features.calendar_sync)
+    const planGate = requirePlan(auth.planId, "pro", req);
+    if (planGate) return planGate;
+    const capabilityGate = requireCapabilityForFunction(auth.planId, FN, req);
+    if (capabilityGate) return capabilityGate;
 
     // ── Body ─────────────────────────────────────────────────────
     const body = await parseBody<{

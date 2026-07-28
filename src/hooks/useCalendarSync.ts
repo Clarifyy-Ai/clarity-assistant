@@ -9,16 +9,33 @@ async function parseEdgeJson<T>(res: Response): Promise<T> {
   const payload = text ? JSON.parse(text) : {};
   const data = (payload?.data ?? payload) as T & { error?: string; code?: string };
   if (!res.ok) {
-    const err = new Error(data?.error ?? `Request failed (${res.status})`) as Error & { code?: string };
+    const err = new Error(
+      data?.error ?? `Request failed (${res.status})`,
+    ) as Error & { code?: string; status?: number };
     err.code = data?.code;
+    err.status = res.status;
     throw err;
   }
   return data;
 }
 
+const CALENDAR_UNAVAILABLE_MSG =
+  "Google Calendar sync isn't available yet — server sync is not configured.";
+
+function isCalendarUnavailableError(err: Error & { code?: string; status?: number }): boolean {
+  if (err.status === 501 || err.code === "NOT_CONFIGURED") return true;
+  const msg = (err.message ?? "").toLowerCase();
+  return (
+    msg.includes("501") ||
+    msg.includes("not available") ||
+    msg.includes("not configured") ||
+    msg.includes("coming soon")
+  );
+}
+
 // ─────────────────────────────────────────────────────────────────
 // useCalendarSync
-// Connects Google Calendar and imports upcoming interview events.
+// Google OAuth connect/disconnect; event import only when sync-calendar is configured.
 // ─────────────────────────────────────────────────────────────────
 
 // Auth events that warrant a re-check of calendar connection status
@@ -143,7 +160,7 @@ export function useCalendarSync() {
       return { imported: count, error: null };
 
     } catch (err) {
-      const e = err as Error & { code?: string };
+      const e = err as Error & { code?: string; status?: number };
       if (e.code === "TOKEN_REVOKED" || e.code === "NO_TOKEN") {
         setIsConnected(false);
         const msg =
@@ -152,6 +169,11 @@ export function useCalendarSync() {
             : "Google Calendar not connected. Please connect it first.";
         setError(msg);
         return { imported: 0, error: msg };
+      }
+      // 501 / NOT_CONFIGURED — do not claim full Google Calendar sync works
+      if (isCalendarUnavailableError(e)) {
+        setError(CALENDAR_UNAVAILABLE_MSG);
+        return { imported: 0, error: CALENDAR_UNAVAILABLE_MSG };
       }
       const msg = err instanceof Error ? err.message : "Sync failed";
       setError(msg);

@@ -30,6 +30,7 @@ export default function OnboardingStep4AudioSetup({ onNext, onBack }: StepProps)
   const [loading,      setLoading]      = useState(false);
   const [testError,    setTestError]    = useState<string | null>(null);
   const [playbackUrl,  setPlaybackUrl]  = useState<string | null>(null);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>("default");
 
   const [level, setLevel] = useState(0);
   const rafRef              = useRef<number | null>(null);
@@ -108,6 +109,10 @@ export default function OnboardingStep4AudioSetup({ onNext, onBack }: StepProps)
       return;
     }
 
+    const trackDeviceId =
+      stream.getAudioTracks()[0]?.getSettings()?.deviceId?.trim() || "default";
+    setSelectedDeviceId(trackDeviceId);
+
     startVisualizer(stream);
     setRecording(true);
     setRecordSecs(RECORD_SECONDS);
@@ -166,7 +171,7 @@ export default function OnboardingStep4AudioSetup({ onNext, onBack }: StepProps)
     const { data, error } = await supabase
       .from("profiles")
       .update({
-        audio_input_device:  "default",
+        audio_input_device:  selectedDeviceId || "default",
         auto_transcript:     true,
         noise_suppression:   true,
         onboarding_step:     5,

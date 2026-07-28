@@ -16,7 +16,6 @@ export {
 // ─── Audio & Speech ───────────────────────────────────────────────────────────
 export { useAudioCapture } from "./useAudioCapture";
 export { useAudioSession } from "./useAudioSession";
-export { useDeepgramStream } from "./useDeepgramStream";
 export { useSpeechRecognition } from "./useSpeechRecognition";
 export { useSpeakerDiarization } from "./useSpeakerDiarization";
 export { useFillerWordDetection } from "./useFillerWordDetection";

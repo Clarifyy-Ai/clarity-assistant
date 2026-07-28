@@ -11,10 +11,14 @@ import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
   CalendarDays, Plus, Building2, Clock,
   ChevronRight, CheckCircle, AlertCircle,
-  Circle, Filter, Trash2, RefreshCw,
+  Circle, Trash2, RefreshCw,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { format, isPast, isToday, isFuture } from "date-fns";
+import {
+  getCurrentRoundDate,
+  getCurrentRoundStatus,
+} from "@/lib/interviews/roundHelpers";
+import { format, isToday, isFuture } from "date-fns";
 import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
@@ -49,8 +53,8 @@ export default function Interviews() {
   }
 
   const filtered = store.interviews.filter((iv) => {
-    const scheduledAt = iv.next_round?.scheduled_at ?? iv.created_at;
-    const status = iv.next_round?.status ?? "scheduled";
+    const scheduledAt = getCurrentRoundDate(iv);
+    const status = getCurrentRoundStatus(iv);
     const d = new Date(scheduledAt);
     if (filter === "upcoming")  return isFuture(d) && !isToday(d) && status !== "cancelled";
     if (filter === "today")     return isToday(d);
@@ -61,7 +65,7 @@ export default function Interviews() {
 
   // Group by month
   const grouped = filtered.reduce<Record<string, any[]>>((acc, iv) => {
-    const scheduledAt = iv.next_round?.scheduled_at ?? iv.created_at;
+    const scheduledAt = getCurrentRoundDate(iv);
     const key = format(new Date(scheduledAt), "MMMM yyyy");
     if (!acc[key]) acc[key] = [];
     acc[key].push(iv);
@@ -131,7 +135,7 @@ export default function Interviews() {
           >
             {f}
             {f === "today" && store.interviews.some(
-              (iv) => isToday(new Date(iv.next_round?.scheduled_at ?? iv.created_at))
+              (iv) => isToday(new Date(getCurrentRoundDate(iv)))
             ) && (
               <span className="ml-1.5 w-1.5 h-1.5 bg-primary rounded-full inline-block" />
             )}
@@ -193,17 +197,21 @@ function InterviewRow({
   onDelete:  () => void;
 }) {
   const navigate  = useNavigate();
-  const d         = new Date(iv.scheduled_at);
+  const status    = getCurrentRoundStatus(iv);
+  const round     = iv.next_round ?? iv.rounds?.[0] ?? null;
+  const d         = new Date(getCurrentRoundDate(iv));
   const isNow     = isToday(d);
-  const isPassed  = isPast(d) && !isNow;
-  const isCancelled = iv.status === "cancelled";
+  const isCancelled = status === "cancelled";
+  const durationMinutes = round?.duration_minutes ?? iv.duration_minutes;
+  const interviewerName = round?.interviewer_name ?? iv.interviewer_name;
+  const platform = round?.platform ?? iv.platform;
 
   const statusConfig = {
     scheduled:  { label: "Scheduled",  variant: "violet"  as const, icon: Circle      },
     completed:  { label: "Completed",  variant: "emerald" as const, icon: CheckCircle  },
     cancelled:  { label: "Cancelled",  variant: "red"     as const, icon: AlertCircle  },
     rescheduled:{ label: "Rescheduled",variant: "amber"   as const, icon: Clock        },
-  }[iv.status] ?? { label: iv.status, variant: "default" as const, icon: Circle };
+  }[status] ?? { label: status, variant: "default" as const, icon: Circle };
 
   const StatusIcon = statusConfig.icon;
 
@@ -258,13 +266,13 @@ function InterviewRow({
           <span className="flex items-center gap-1">
             <Clock className="w-3 h-3" />
             {format(d, "h:mm a")}
-            {iv.duration_minutes && ` · ${iv.duration_minutes}min`}
+            {durationMinutes && ` · ${durationMinutes}min`}
           </span>
-          {iv.interviewer_name && (
-            <span>with {iv.interviewer_name}</span>
+          {interviewerName && (
+            <span>with {interviewerName}</span>
           )}
-          {iv.platform && (
-            <span className="capitalize">{iv.platform}</span>
+          {platform && (
+            <span className="capitalize">{platform}</span>
           )}
         </div>
 
@@ -292,7 +300,7 @@ function InterviewRow({
           >
             View details
           </Button>
-          {!isNow && iv.status !== "completed" && (
+          {!isNow && status !== "completed" && (
             <Button
               variant="ghost"
               size="xs"

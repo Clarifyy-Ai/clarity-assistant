@@ -33,11 +33,8 @@ export interface AIProviderOptions {
   jsonMode?: boolean;
   /** API model id (e.g. gpt-4o, gemini-2.0-flash). Falls back to Gemini chain if omitted. */
   model?: string;
-  byok?: {
-    openai?: string;
-    anthropic?: string;
-    gemini?: string;
-  };
+  /** @deprecated M1 — BYOK ignored; server keys only. */
+  byok?: Record<string, never>;
 }
 
 export interface AIProviderResult {
@@ -204,7 +201,6 @@ export async function generateWithFallback(
     temperature = 0.7,
     jsonMode = false,
     model: requestedModel,
-    byok,
   } = options;
 
   const models = getFallbackModels(requestedModel ?? MODELS.primary);
@@ -240,7 +236,6 @@ export async function generateWithFallback(
             temperature,
             stream: false,
           },
-          byok,
         );
 
         const provider = model.startsWith("gpt")

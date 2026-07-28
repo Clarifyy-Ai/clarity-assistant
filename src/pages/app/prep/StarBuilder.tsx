@@ -3,7 +3,7 @@ import { useAuthStore } from "@/store/userStore";
 import { answerBankDB } from "@/lib/supabase/database";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { refreshCredits } from "@/lib/billing/creditsManager";
-import { useCredits } from "@/hooks/useCredits";
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
@@ -49,7 +49,6 @@ function buildStarAnswerText(parts: {
 
 export default function StarBuilder() {
   const { user } = useAuthStore();
-  const { costs } = useCredits();
 
   const [question, setQuestion] = useState("");
   const [situation, setSituation] = useState("");
@@ -286,7 +285,7 @@ export default function StarBuilder() {
               disabled={polishing || !hasContent}
               leftIcon={polishing ? <Loader2 className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
             >
-              {polishing ? "Polishing..." : `AI Polish (${costs.star_generate} credits)`}
+              {polishing ? "Polishing..." : `AI Polish (${AI_CREDIT_COSTS.polish_star} credits)`}
             </Button>
             <Button
               variant="secondary"

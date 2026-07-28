@@ -18,6 +18,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { LazyMotion, domAnimation } from "framer-motion";
 import { GovExamShowcase } from "@/components/marketing/GovExamShowcase";
 import { toast } from "sonner";
 
@@ -245,14 +246,16 @@ export default function MockTestHub(): React.ReactElement {
       )}
 
       {/* ── Animated feature preview ───────────────────────── */}
-      <GovExamShowcase compact className="mb-2" />
+      <LazyMotion features={domAnimation} strict>
+        <GovExamShowcase compact className="mb-2" />
+      </LazyMotion>
 
       {/* ── Stats bar: 4 stats including streak ───────────────────── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           { icon: ClipboardList, label: "Tests Taken",    value: loading ? "—" : String(stats.totalTests) },
           { icon: Target,        label: "Avg Accuracy",   value: loading ? "—" : `${stats.avgAccuracy}%` },
-          { icon: BookOpen,      label: "My Questions",   value: loading ? "—" : String(stats.totalQuestions) },
+          { icon: BookOpen,      label: "My uploads",     value: loading ? "—" : String(stats.totalQuestions) },
           { icon: Flame,         label: "Day Streak",     value: loading ? "—" : `${stats.streakDays}🔥`, streak: true },
         ].map(({ icon: Icon, label, value, streak }) => (
           <Card key={label} className="text-center py-3">

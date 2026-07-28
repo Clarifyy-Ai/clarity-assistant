@@ -11,11 +11,13 @@ interface LogContext {
 const REDACTED_KEYS = ["apiKey", "token", "password", "secret", "authorization"];
 
 function log(level: LogLevel, message: string, context?: LogContext): void {
+  const sentryReady = Boolean((Deno.env.get("SENTRY_DSN") ?? "").trim());
   const entry: Record<string, unknown> = {
     level,
     message,
     timestamp: new Date().toISOString(),
     service: "Clarify AI-edge",
+    ...(level === "error" ? { sentry_ready: sentryReady } : {}),
     ...context,
   };
 

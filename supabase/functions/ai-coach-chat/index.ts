@@ -182,10 +182,9 @@ function getIdempotencyKey(req: Request): string | null {
   return value.trim();
 }
 
-function getByokGeminiKey(req: Request): string | undefined {
-  const value = req.headers.get("x-byok-gemini")?.trim();
-
-  return value && value.length > 0 ? value : undefined;
+function getByokGeminiKey(_req: Request): string | undefined {
+  // M1: BYOK headers no longer accepted — server GEMINI_API_KEY only.
+  return undefined;
 }
 
 function sanitizeModel(input?: string): string | undefined {
@@ -575,7 +574,6 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const byokGeminiKey = getByokGeminiKey(req);
   const model = sanitizeModel(body.model);
   const messages = buildGeminiMessages(body);
 
@@ -586,7 +584,6 @@ Deno.serve(async (req: Request) => {
       SYSTEM_PROMPT,
       0.6,
       512,
-      byokGeminiKey,
       model
     );
 

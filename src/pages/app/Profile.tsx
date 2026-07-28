@@ -24,6 +24,7 @@ import {
   Video,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useGamification } from "@/hooks/useGamification";
 import type { Tables } from "@/integrations/supabase";
 
 type ProfileRow = Tables<"profiles">;
@@ -70,6 +71,7 @@ function ProfilePageSkeleton() {
 export default function Profile() {
   const navigate = useNavigate();
   const { profile: storeProfile, user, setProfile } = useAuthStore();
+  const { unlockedBadges } = useGamification();
   const [profile, setLocalProfile] = useState<any>(storeProfile);
   const [profileLoading, setProfileLoading] = useState(!storeProfile);
   const [profileError, setProfileError] = useState<string | null>(null);
@@ -140,14 +142,14 @@ export default function Profile() {
     { label: "XP Earned", value: displayProfile?.xp ?? 0, icon: Zap, color: "text-amber-500" },
     {
       label: "Current Streak",
-      value: `${displayProfile?.streak_current ?? 0}d`,
+      value: `${displayProfile?.streak_days ?? 0}d`,
       icon: Flame,
       color: "text-orange-500",
     },
     { label: "Sessions", value: sessionsCompleted, icon: Video, color: "text-blue-500" },
     {
       label: "Badges",
-      value: (displayProfile?.badges as string[] | null)?.length ?? 0,
+      value: unlockedBadges.length,
       icon: Star,
       color: "text-primary",
     },

@@ -144,15 +144,16 @@ Scores are tracked over time in your Analytics dashboard for trend analysis.`,
     category_title: "Mock Tests",
     question: "Can I practice with others?",
     answer:
-      "Yes. Group Practice allows collaborative sessions where you and peers can practice together with shared scorecards and real-time coaching.",
-    body_md: `Yes! **Group Practice** allows collaborative mock interviews:
+      "Group Practice is coming soon. Collaborative rooms with shared scorecards are not available yet.",
+    body_md: `**Group Practice is coming soon.**
 
-- Create a room with a name and max participant count
-- Share the room link with peers
+We're building collaborative mock interviews where you and peers can:
+
+- Create a room and share a link
 - Practice together with shared scorecards
 - Get real-time AI coaching for every participant
 
-Group Practice is available on all plans.`,
+Until then, use solo mock interviews and practice sessions. Check Help again when Group Practice launches.`,
     sort_order: 30,
   },
   {

@@ -558,6 +558,22 @@ export const useAuthStore = create<AuthStore>()(
 
               const row = profile as unknown as Record<string, unknown>;
 
+              // Ban enforcement: clear the session so banned JWTs cannot linger.
+              // ProtectedRoute also blocks if profile is present with is_banned.
+              if (getProfileBoolean(row, "is_banned", false)) {
+                console.warn("[authStore] Banned account detected — signing out");
+                try {
+                  sessionStorage.setItem(
+                    "clarify_auth_ban_message",
+                    "Your account has been suspended. Contact support."
+                  );
+                } catch {
+                  // Ignore storage failures.
+                }
+                await get().signOut();
+                return;
+              }
+
               set((state) => {
                 state.profile = profile as unknown as ProfileRow;
                 state.isProfileLoaded = true;

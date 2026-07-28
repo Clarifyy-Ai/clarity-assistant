@@ -5,6 +5,7 @@ import { PLAN_MONTHLY_CREDITS } from "../_shared/creditEconomics.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { assertBillingConfigOrThrow } from "../_shared/billingConfig.ts";
 import { opsLog } from "../_shared/opsLog.ts";
+import { reportEdgeError } from "../_shared/errors.ts";
 import {
   PLAN_CATALOG,
   CREDIT_PACK_CATALOG,
@@ -185,6 +186,29 @@ function stripeTimestampToIso(unixSeconds: number | null | undefined): string | 
     return null;
   }
   return new Date(unixSeconds * 1000).toISOString();
+}
+
+/**
+ * P4-2: Only claw back credits when the wallet still holds at least the
+ * originally granted amount. Never wipe the balance to zero blindly.
+ */
+export function decideRefundClawback(opts: {
+  currentBalance: number;
+  creditsGranted: number;
+}): {
+  clawbackAmount: number;
+  shouldClawback: boolean;
+  reason: "full_clawback" | "insufficient_unspent" | "nothing_to_claw";
+} {
+  const balance = Math.max(0, Math.floor(opts.currentBalance));
+  const granted = Math.max(0, Math.floor(opts.creditsGranted));
+  if (granted <= 0) {
+    return { clawbackAmount: 0, shouldClawback: false, reason: "nothing_to_claw" };
+  }
+  if (balance >= granted) {
+    return { clawbackAmount: granted, shouldClawback: true, reason: "full_clawback" };
+  }
+  return { clawbackAmount: 0, shouldClawback: false, reason: "insufficient_unspent" };
 }
 
 // ─────────────────────────────────────────────────────────────────
@@ -569,9 +593,11 @@ Deno.serve(async (req) => {
         const nowIso = new Date().toISOString();
 
         if ((invoice.attempt_count ?? 0) >= 3) {
+          // P0-2: Never overwrite profiles.credits on payment failure — purchased
+          // credit packs must be preserved. Downgrade plan/status only; wallet
+          // resets (if any) belong on customer.subscription.deleted via ledger.
           await db.from("profiles").update({
             plan_id:             "free",
-            credits:             PLAN_MONTHLY_CREDITS.free,
             subscription_status: "past_due",
             payment_failed_at:   nowIso,
             updated_at:          nowIso,
@@ -613,6 +639,118 @@ Deno.serve(async (req) => {
         break;
       }
 
+      // ── Charge refunded → flag payment + conditional credit clawback ──
+      case "charge.refunded": {
+        const charge = event.data.object;
+        const customerId = charge.customer as string | null;
+        const paymentIntentId =
+          (typeof charge.payment_intent === "string"
+            ? charge.payment_intent
+            : charge.payment_intent?.id) as string | null;
+        const chargeId = charge.id as string | undefined;
+
+        if (!customerId) {
+          console.warn("[stripe-webhook] charge.refunded: missing customer");
+          break;
+        }
+
+        const { data: refundProfile } = await db
+          .from("profiles")
+          .select("id, credits, plan_id, subscription_status")
+          .eq("stripe_customer_id", customerId)
+          .maybeSingle();
+
+        if (!refundProfile) {
+          console.warn(
+            `[stripe-webhook] charge.refunded: no profile for customer ${customerId}`,
+          );
+          break;
+        }
+
+        const nowIso = new Date().toISOString();
+        const paymentKey = paymentIntentId ?? chargeId ?? event.id;
+
+        // Flag subscription / profile as refunded (do not wipe wallet here).
+        await db.from("profiles").update({
+          subscription_status:
+            refundProfile.subscription_status === "active" ||
+            refundProfile.subscription_status === "trialing"
+              ? "refunded"
+              : refundProfile.subscription_status,
+          updated_at: nowIso,
+        }).eq("id", refundProfile.id);
+
+        await db.from("subscriptions").update({
+          status: "refunded",
+          updated_at: nowIso,
+        }).eq("user_id", refundProfile.id);
+
+        // Resolve originally granted credits from ledger (purchase / subscription_grant).
+        let creditsGranted = 0;
+        if (paymentKey) {
+          const { data: grantRows } = await db
+            .from("credit_transactions")
+            .select("amount, action")
+            .eq("stripe_payment_id", paymentKey)
+            .in("action", ["purchase", "subscription_grant", "bonus"]);
+
+          for (const row of grantRows ?? []) {
+            const amt = typeof row.amount === "number" ? row.amount : 0;
+            if (amt > 0) creditsGranted += amt;
+          }
+        }
+
+        const decision = decideRefundClawback({
+          currentBalance: refundProfile.credits ?? 0,
+          creditsGranted,
+        });
+
+        let clawed = 0;
+        if (decision.shouldClawback && decision.clawbackAmount > 0) {
+          const { data: updated } = await db
+            .from("profiles")
+            .update({
+              credits: (refundProfile.credits ?? 0) - decision.clawbackAmount,
+              updated_at: nowIso,
+            })
+            .eq("id", refundProfile.id)
+            .gte("credits", decision.clawbackAmount)
+            .select("credits")
+            .maybeSingle();
+
+          if (updated) {
+            clawed = decision.clawbackAmount;
+            await db.from("credit_transactions").insert({
+              user_id: refundProfile.id,
+              action: "refund",
+              amount: -clawed,
+              balance_after: updated.credits,
+              description: `Stripe charge.refunded clawback (${paymentKey})`,
+              stripe_payment_id: `refund_${paymentKey}`,
+              created_at: nowIso,
+            });
+          }
+        }
+
+        await db.from("audit_logs").insert({
+          user_id: refundProfile.id,
+          action: "payment_refunded",
+          details: {
+            provider: "stripe",
+            charge_id: chargeId,
+            payment_intent: paymentIntentId,
+            credits_granted: creditsGranted,
+            clawback: clawed,
+            clawback_reason: decision.reason,
+          },
+        });
+
+        console.log(
+          `[stripe-webhook] charge.refunded — user ${refundProfile.id}, clawback=${clawed}, reason=${decision.reason}`,
+        );
+        break;
+      }
+
       default:
         console.log(`[stripe-webhook] Unhandled event type: ${eventType}`);
     }
@@ -631,17 +769,24 @@ Deno.serve(async (req) => {
         console.error("[stripe-webhook] Failed to release idempotency claim:", releaseErr);
       }
     }
+    const requestId = await reportEdgeError(err, {
+      functionName: "stripe-webhook",
+      operation: "handler",
+    });
     opsLog({
       function_name: "stripe-webhook",
       operation: "handler",
       result: "error",
       error_class: "UNHANDLED",
       retryable: true,
-      meta: { message: err instanceof Error ? err.message : "unknown" },
+      meta: {
+        message: err instanceof Error ? err.message : "unknown",
+        requestId,
+      },
     });
     console.error("[stripe-webhook] Unhandled error:", err);
     return new Response(
-      JSON.stringify({ error: "Internal server error" }),
+      JSON.stringify({ error: "Internal server error", requestId }),
       { status: 500, headers: { ...headers, "Content-Type": "application/json" } },
     );
   }

@@ -10,4 +10,3 @@ export { ErrorBoundary } from './ErrorBoundary';
 export { MarketingLayout } from './MarketingLayout';
 export { PageContent } from './PageContent';
 export { SettingsPageShell } from './SettingsPageShell';
-export { DesktopOnlyGate } from './DesktopOnlyGate';

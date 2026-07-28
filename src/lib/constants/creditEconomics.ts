@@ -58,6 +58,8 @@ export const AI_CREDIT_COSTS = {
   system_design: 8,
   mock_session: 15,
   resume_analysis: 12,
+  gap_analysis: 10,
+  parse_document: 8,
   create_mock_test: 3,
   mock_test_ai_gap_fill: 15,
   generate_practice_questions: 15,

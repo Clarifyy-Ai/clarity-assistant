@@ -50,3 +50,22 @@ Only commands actually executed in this remediation sprint are listed. No secret
 - Full Deno webhook concurrency matrix not in CI (Vitest product-rule guards only)
 - Playwright E2E not re-run locally this session (CI job configured)
 - Database.ts decomposition: map only, no module extraction
+
+## Sprint 0 agent P0 batch (2026-07-27 evening)
+
+| Command | Exit | Result |
+|---------|------|--------|
+| `npm run release:gates` | 0 | OK |
+| `npm run release:security-gates` | 0 | OK |
+| `npm run release:capability-gates` | 0 | OK (16 AI) |
+| `npm run billing:parity` | 0 | OK |
+| `npm run test:run -- src/test/lib/billing` | 0 | 6 files / 33 tests (incl. 5 Razorpay logic) |
+| `npm run typecheck` | 0 | OK |
+
+### Code landed (not deployed)
+- All charging EFs → `deductCreditsAtomic` + `refundCredits`
+- Razorpay catalog grants + grant-before-paid + idempotency
+- bulk-import-questions zod/RL/fail-closed key
+- LazyMotion GovExams/MockTestHub; rooms route dedupe; calendar 501 honesty
+- CSP: no script unsafe-inline; utils.deductCredits → atomic
+- Ban: authStore sign-out; requireAuth fail-closed on lookup errors

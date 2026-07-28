@@ -81,12 +81,16 @@ export default function SessionDetail() {
 
   // ── Derived values ────────────────────────────────────────────
 
-  const score = session?.overall_score ?? 0;
+  const rawOverall = session?.overall_score;
+  const hasOverallScore = rawOverall !== null && rawOverall !== undefined;
+  const score = hasOverallScore ? Number(rawOverall) : 0;
   const scoreColor =
+    !hasOverallScore ? "gray" :
     score >= 80 ? "emerald" :
     score >= 60 ? "amber"   : "red";
 
   const scoreTier =
+    !hasOverallScore ? "Not scored" :
     score >= 85 ? "Excellent" :
     score >= 70 ? "Good" :
     score >= 55 ? "Fair" : "Needs work";
@@ -197,7 +201,7 @@ export default function SessionDetail() {
                 exportSessionPdf({
                   title: `${session.session_type ?? "Session"} Interview${session.target_company ? ` — ${session.target_company}` : ""}`,
                   dateLabel: format(new Date(session.created_at), "EEEE, MMMM d yyyy · h:mm a"),
-                  overallScore: score,
+                  overallScore: hasOverallScore ? score : null,
                   durationLabel: duration,
                   aiFeedback: session.ai_feedback ?? null,
                   answers: answers.map((a) => ({
@@ -223,13 +227,16 @@ export default function SessionDetail() {
           <div className={cn(
             "text-4xl sm:text-6xl font-black mb-1",
             scoreColor === "emerald" ? "text-emerald-400" :
-            scoreColor === "amber"   ? "text-amber-400"   : "text-red-400"
+            scoreColor === "amber"   ? "text-amber-400"   :
+            scoreColor === "gray"    ? "text-muted-foreground" : "text-red-400"
           )}>
-            {score}
+            {hasOverallScore ? score : "—"}
           </div>
           <p className="text-foreground text-sm font-medium">{scoreTier}</p>
           <p className="text-muted-foreground text-xs mt-1">Overall score</p>
-          <ProgressBar value={score} max={100} color={scoreColor} size="sm" className="mt-4 w-32" />
+          {hasOverallScore && (
+            <ProgressBar value={score} max={100} color={scoreColor === "gray" ? "violet" : scoreColor} size="sm" className="mt-4 w-32" />
+          )}
         </Card>
 
         <Card className="sm:col-span-2">
@@ -243,18 +250,26 @@ export default function SessionDetail() {
               { label: "Communication",         key: "communication_score"},
               { label: "Confidence & Delivery", key: "confidence_score"   },
             ].map((dim) => {
-              const val = session[dim.key] ?? 0;
-              const c   = val >= 75 ? "emerald" : val >= 50 ? "amber" : "red";
+              const raw = session[dim.key];
+              const unscored = raw === null || raw === undefined;
+              const val = unscored ? 0 : Number(raw);
+              const c: "emerald" | "amber" | "red" =
+                val >= 75 ? "emerald" : val >= 50 ? "amber" : "red";
               return (
                 <div key={dim.key} className="flex items-center gap-3">
                   <span className="text-[10px] sm:text-xs text-muted-foreground w-28 sm:w-40 shrink-0">{dim.label}</span>
-                  <ProgressBar value={val} max={100} color={c} size="sm" className="flex-1" />
+                  {unscored ? (
+                    <span className="flex-1 text-xs text-muted-foreground">Not scored</span>
+                  ) : (
+                    <ProgressBar value={val} max={100} color={c} size="sm" className="flex-1" />
+                  )}
                   <span className={cn(
                     "text-xs font-bold w-8 text-right tabular-nums",
+                    unscored ? "text-muted-foreground" :
                     c === "emerald" ? "text-emerald-400" :
                     c === "amber"   ? "text-amber-400"   : "text-red-400"
                   )}>
-                    {val}
+                    {unscored ? "—" : val}
                   </span>
                 </div>
               );

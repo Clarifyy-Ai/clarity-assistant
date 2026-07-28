@@ -19,9 +19,6 @@ import { useAuthStore } from "@/store/authStore";
 
 export type EdgeFunctionName =
   | "start-session"
-  | "end-session"
-  | "save-answer"
-  | "save-transcript"
   | "generate-answer"
   | "generate-questions"
   | "generate-hint"

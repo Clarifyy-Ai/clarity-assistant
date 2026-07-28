@@ -1,7 +1,7 @@
 // supabase/functions/create-test/index.ts
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
-import { createServiceClient, deductCredits, refundCredits } from "../_shared/supabase.ts";
+import { createServiceClient, deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import {
   checkRateLimitAsync,
@@ -115,11 +115,12 @@ Deno.serve(async (req) => {
     const marksPositive = clampNumber(config.marks_positive ?? 4, 0, 100, 4);
     const marksNegative = clampNumber(config.marks_negative ?? 1, 0, 100, 1);
 
-    const creditResult = await deductCredits(
-      user.id,
-      "create_mock_test",
-      CREATE_TEST_CREDIT_COST
-    );
+    const creditResult = await deductCreditsAtomic({
+      userId: user.id,
+      action: "create_mock_test",
+      cost: CREATE_TEST_CREDIT_COST,
+      idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+    });
 
     if (!creditResult?.success) {
       return jsonResponse(

@@ -32,7 +32,6 @@ export const subscriptionPlanSchema = z.enum(["starter", "pro", "elite"]);
 export const billingIntervalSchema = z.enum(["monthly", "yearly"]);
 
 export const creditPackIdSchema = z.enum([
-  "credits_10",
   "credits_50",
   "credits_150",
   "credits_500",

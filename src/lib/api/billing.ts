@@ -188,8 +188,3 @@ export async function redirectToBillingPortal(
 export async function openBillingPortal(): Promise<void> {
   await redirectToBillingPortal(getBillingReturnUrl());
 }
-
-// Optional future function if you create billing-status Edge Function later.
-export async function getBillingStatus<TStatus>(): Promise<TStatus> {
-  return invokeFunction<TStatus>("billing-status");
-}

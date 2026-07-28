@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/Button";
 import { PlanGate } from "@/components/layout/PlanGate";
 import { getOrCreateSession } from "@/lib/session/sessionLifecycle";
 import { toDbModel } from "@/lib/ai/modelMapping";
+import { WARMUP_MAX } from "@/pages/app/mock/MockWarmup";
 import {
   ClipboardList, ChevronRight, Timer,
 } from "lucide-react";
@@ -253,7 +254,7 @@ export default function MockInterview() {
         <div className="flex-1">
           <p className="text-sm font-semibold text-foreground">Pre-session warmup</p>
           <p className="text-xs text-muted-foreground mt-0.5">
-            30s breathing exercise + 2 easy non-scored warmup questions
+            30s breathing exercise + {WARMUP_MAX} easy non-scored warmup questions
           </p>
         </div>
         <button

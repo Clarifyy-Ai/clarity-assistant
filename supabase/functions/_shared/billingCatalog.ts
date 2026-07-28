@@ -122,12 +122,6 @@ export const PLAN_CATALOG: Record<CanonicalPlanId, PlanCatalogEntry> = {
 
 export const CREDIT_PACK_CATALOG: CreditPackCatalogEntry[] = [
   {
-    packId: "credits_10",
-    credits: 10,
-    stripePriceEnvKey: "STRIPE_PRICE_CREDITS_10",
-    active: true,
-  },
-  {
     packId: "credits_50",
     credits: 50,
     stripePriceEnvKey: "STRIPE_PRICE_CREDITS_50",
@@ -182,4 +176,30 @@ export function monthlyCreditsForPlan(
 ): number {
   const id = normalizePlanId(raw) ?? "free";
   return PLAN_CATALOG[id].monthlyCredits;
+}
+
+/**
+ * Server-owned credit amount for a Razorpay product_type.
+ * Never trust client or payment_orders.credits_granted for grants.
+ */
+export function creditsForRazorpayProductType(productType: string): number {
+  const key = productType.trim();
+  const plan = Object.values(PLAN_CATALOG).find((p) =>
+    p.razorpayProductIds?.includes(key)
+  );
+  if (plan) return plan.monthlyCredits;
+
+  const pack = CREDIT_PACK_CATALOG.find((p) => p.packId === key && p.active);
+  return pack?.credits ?? 0;
+}
+
+/** Plan id for Razorpay subscription products; null for credit packs. */
+export function planIdForRazorpayProductType(
+  productType: string,
+): CanonicalPlanId | null {
+  const key = productType.trim();
+  const plan = Object.values(PLAN_CATALOG).find((p) =>
+    p.razorpayProductIds?.includes(key)
+  );
+  return plan?.planId ?? null;
 }

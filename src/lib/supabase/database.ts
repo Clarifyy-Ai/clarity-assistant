@@ -7,6 +7,7 @@
 import { supabase } from "@/lib/supabase/client";
 import { DatabaseError, ErrorCode, tryCatch } from "@/lib/errors";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase";
+import { PLAN_PRICE_CENTS_MONTHLY } from "@/lib/constants/creditEconomics";
 import {
   mapRowToScorecard,
   mapScorecardToInsert,
@@ -1274,57 +1275,64 @@ export const creditsDB = {
       .reduce((sum, tx) => sum + Math.abs(Number(tx.amount) || 0), 0);
   },
 
-  async monthlyRevenueByPlan(sinceIso: string): Promise<
-    { month: string; planId: string; totalCents: number }[]
+  /**
+   * P0-6: USD MRR by plan from active/trialing subscriptions × catalog prices.
+   * Never sums credit_transactions.amount (those are credit counts, not cents).
+   */
+  async monthlyRevenueByPlan(_sinceIso: string): Promise<
+    { month: string; planId: string; totalCents: number; currency: "USD" }[]
   > {
     const { data, error } = await supabase
-      .from("credit_transactions")
-      .select("amount, action, created_at, user_id")
-      .gte("created_at", sinceIso)
-      .order("created_at", { ascending: false });
+      .from("subscriptions")
+      .select("plan_id, status, updated_at")
+      .in("status", ["active", "trialing"]);
 
     if (error) {
       throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
-        table: "credit_transactions",
+        table: "subscriptions",
         operation: "monthlyRevenueByPlan",
       });
     }
 
-    const userIds = [...new Set((data ?? []).map((r) => r.user_id).filter(Boolean))];
-    const planByUser: Record<string, string> = {};
+    const month = new Date().toISOString().slice(0, 7);
+    const counts: Record<string, number> = {};
+    for (const row of data ?? []) {
+      const planId = String(row.plan_id ?? "free");
+      counts[planId] = (counts[planId] ?? 0) + 1;
+    }
 
-    if (userIds.length > 0) {
-      const { data: profiles, error: profileErr } = await supabase
-        .from("profiles")
-        .select("id, plan_id")
-        .in("id", userIds);
+    return Object.entries(counts).map(([planId, count]) => {
+      const priceKey = planId as keyof typeof PLAN_PRICE_CENTS_MONTHLY;
+      const cents = PLAN_PRICE_CENTS_MONTHLY[priceKey] ?? 0;
+      return {
+        month,
+        planId,
+        totalCents: cents * count,
+        currency: "USD" as const,
+      };
+    });
+  },
 
-      if (profileErr) {
-        throw new DatabaseError(profileErr.message, ErrorCode.DB_QUERY_FAILED, {
-          table: "profiles",
-          operation: "monthlyRevenueByPlan.plans",
-        });
-      }
+  /** INR revenue from paid Razorpay orders (amount_paise), reported separately from USD. */
+  async sumRazorpayPaidPaiseSince(sinceIso: string): Promise<number> {
+    const { data, error } = await (supabase as any)
+      .from("payment_orders")
+      .select("amount_paise, status, created_at")
+      .gte("created_at", sinceIso)
+      .in("status", ["paid", "captured", "success"]);
 
-      (profiles ?? []).forEach((p) => {
-        if (p.id) planByUser[p.id] = p.plan_id ?? "free";
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "payment_orders",
+        operation: "sumRazorpayPaidPaiseSince",
       });
     }
 
-    const bucket: Record<string, number> = {};
-    for (const tx of data ?? []) {
-      const action = String(tx.action ?? "");
-      if (!action.includes("subscription") && !action.includes("purchase")) continue;
-      const month = tx.created_at?.slice(0, 7) ?? "unknown";
-      const planId = planByUser[tx.user_id] ?? "unknown";
-      const key = `${month}|${planId}`;
-      bucket[key] = (bucket[key] ?? 0) + Math.abs(Number(tx.amount) || 0);
-    }
-
-    return Object.entries(bucket).map(([key, totalCents]) => {
-      const [month, planId] = key.split("|");
-      return { month, planId, totalCents };
-    });
+    return (data ?? []).reduce(
+      (sum: number, row: { amount_paise?: number }) =>
+        sum + Math.abs(Number(row.amount_paise) || 0),
+      0,
+    );
   },
 };
 

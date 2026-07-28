@@ -48,7 +48,7 @@ import {
   createServiceClient,
   deductCreditsAtomic,
 } from "../_shared/supabase.ts";
-import { callAI, extractBYOK } from "../_shared/utils.ts";
+import { callAI } from "../_shared/utils.ts";
 import { logAICost } from "../_shared/aiProvider.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
 import { requireCapability } from "../_shared/requireCapability.ts";
@@ -256,13 +256,7 @@ function sanitizeModelInput(input: string, fallback: string): string {
   return model.length > 0 ? model : fallback;
 }
 
-function getGeminiApiKey(req: Request): string {
-  const byokGeminiKey = req.headers.get("x-byok-gemini")?.trim();
-
-  if (byokGeminiKey) {
-    return byokGeminiKey;
-  }
-
+function getGeminiApiKey(_req: Request): string {
   return SERVER_GEMINI_API_KEY;
 }
 
@@ -535,10 +529,24 @@ Deno.serve(async (req: Request) => {
 
   const planId = String(profileRow?.plan_id ?? "free");
   const hasScreenshot = Boolean(body.screenshot_base64?.trim());
+  const modeLower = String(body.mode ?? "").toLowerCase();
+  // Overlay / desktop capture features are Pro-only (PLANS.features.overlay).
+  // Base answer generation remains available on free (limited live_assist sessions).
+  const isOverlayFeature =
+    hasScreenshot ||
+    modeLower.includes("overlay") ||
+    modeLower === "live" ||
+    modeLower === "desktop" ||
+    modeLower === "new_capture" ||
+    modeLower === "adjust_region";
 
-  const overlayGate = requirePlan(planId, "starter", req);
-  if (overlayGate) {
-    return withCors(overlayGate, corsHeaders);
+  if (isOverlayFeature) {
+    const overlayGate =
+      requireCapability(planId, "desktop_overlay", req) ??
+      requirePlan(planId, "pro", req);
+    if (overlayGate) {
+      return withCors(overlayGate, corsHeaders);
+    }
   }
 
   const capabilityGate = requireCapability(planId, "live_rehearsal", req);
@@ -595,8 +603,6 @@ Deno.serve(async (req: Request) => {
     hasScreenshot,
   });
 
-  const byok = extractBYOK(req);
-
   // Non-Gemini models: non-stream callAI with chunked SSE proxy
   if (!isGeminiModel(model)) {
     const aiStartMs = Date.now();
@@ -611,7 +617,6 @@ Deno.serve(async (req: Request) => {
           maxTokens: 1024,
           temperature: 0.7,
         },
-        byok,
       );
 
       void logAICost(db, {
@@ -665,7 +670,7 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const geminiApiKey = byok?.gemini?.trim() || SERVER_GEMINI_API_KEY;
+  const geminiApiKey = SERVER_GEMINI_API_KEY;
 
   if (!geminiApiKey) {
     await logAiAudit({

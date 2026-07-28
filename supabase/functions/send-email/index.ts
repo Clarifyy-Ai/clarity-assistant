@@ -5,8 +5,10 @@ import {
   requireAuth,
   errorResponse,
   successResponse,
-  log
+  log,
+  getAdminClient,
 } from "../_shared/utils.ts";
+import { enforceEmailRateLimitAsync } from "../_shared/rateLimit.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const FROM_EMAIL = "Clarify AI <hello@confideq.app>";
@@ -180,6 +182,13 @@ Deno.serve(async (req) => {
   try {
     const auth = await requireAuth(req);
     const userId = auth.userId;
+
+    const rateLimited = await enforceEmailRateLimitAsync(
+      getAdminClient(),
+      "send-email",
+      userId,
+    );
+    if (rateLimited) return rateLimited;
 
     const body = await req.json().catch(() => null);
     if (!body) {

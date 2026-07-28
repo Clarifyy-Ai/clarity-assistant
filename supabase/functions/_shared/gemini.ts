@@ -27,7 +27,6 @@ export interface GeminiMessage {
 }
 
 export type GeminiRequestOptions = {
-  byokKey?: string;
   model?: string;
   stream?: boolean;
   timeoutMs?: number;
@@ -54,15 +53,9 @@ function getServerGeminiKey(): string {
 }
 
 /**
- * Priority:
- * 1. BYOK key
- * 2. server-side GEMINI_API_KEY
+ * Server-side GEMINI_API_KEY only (BYOK headers removed — M1).
  */
-function resolveGeminiKey(byokKey?: string): string {
-  if (typeof byokKey === "string" && byokKey.trim().length > 0) {
-    return byokKey.trim();
-  }
-
+function resolveGeminiKey(): string {
   return getServerGeminiKey().trim();
 }
 
@@ -148,11 +141,11 @@ async function geminiRequest(
   payload: Record<string, unknown>,
   options: GeminiRequestOptions = {}
 ): Promise<unknown> {
-  const apiKey = resolveGeminiKey(options.byokKey);
+  const apiKey = resolveGeminiKey();
 
   if (!apiKey) {
     throw new Error(
-      "No Gemini API key available. Set GEMINI_API_KEY in Supabase Secrets or pass a BYOK key via x-byok-gemini."
+      "No Gemini API key available. Set GEMINI_API_KEY in Supabase Secrets."
     );
   }
 
@@ -207,7 +200,6 @@ export async function geminiGenerate(
   systemPrompt?: string,
   temperature = 0.7,
   maxTokens = 2048,
-  byokKey?: string,
   model?: string
 ): Promise<string> {
   const safePrompt = sanitizePrompt(prompt);
@@ -243,7 +235,6 @@ export async function geminiGenerate(
   }
 
   const data = await geminiRequest(payload, {
-    byokKey,
     model,
   });
 
@@ -254,7 +245,7 @@ export async function geminiGenerate(
 export async function geminiGenerateWithPdf(
   prompt: string,
   pdfBase64: string,
-  options?: { temperature?: number; maxTokens?: number; model?: string; byokKey?: string }
+  options?: { temperature?: number; maxTokens?: number; model?: string }
 ): Promise<string> {
   const safePrompt = sanitizePrompt(prompt, MAX_PROMPT_LENGTH);
   const payload: Record<string, unknown> = {
@@ -279,7 +270,6 @@ export async function geminiGenerateWithPdf(
   };
 
   const data = await geminiRequest(payload, {
-    byokKey: options?.byokKey,
     model: options?.model,
     timeoutMs: 60_000,
   });
@@ -296,7 +286,6 @@ export async function geminiChat(
   systemPrompt?: string,
   temperature = 0.7,
   maxTokens = 1024,
-  byokKey?: string,
   model?: string
 ): Promise<string> {
   const safeMessages = messages
@@ -330,7 +319,6 @@ export async function geminiChat(
   }
 
   const data = await geminiRequest(payload, {
-    byokKey,
     model,
   });
 

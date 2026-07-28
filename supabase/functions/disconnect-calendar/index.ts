@@ -1,6 +1,7 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
+import { enforceSessionRateLimitAsync } from "../_shared/rateLimit.ts";
 
 // -----------------------------------------------------------
 // Helper: fetch Google identity + refresh token (uses SRK)
@@ -43,6 +44,13 @@ Deno.serve(async (req) => {
     if (auth.error) return auth.error;
     const user = auth.context.user;
     const db = createServiceClient();
+
+    const rateLimited = await enforceSessionRateLimitAsync(
+      db,
+      "disconnect-calendar",
+      user.id,
+    );
+    if (rateLimited) return rateLimited;
 
     // ------------------------------
     // ENV validation

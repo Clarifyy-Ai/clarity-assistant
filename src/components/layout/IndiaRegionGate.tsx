@@ -5,7 +5,7 @@ interface IndiaRegionGateProps {
   children: React.ReactNode;
 }
 
-/** Blocks India-only routes (Gov Exam Mock Tests) for users outside India. */
+/** Gov exam route gate — currently a pass-through while region gating is disabled. */
 export function IndiaRegionGate({
   children,
   fallback = "/app/dashboard",

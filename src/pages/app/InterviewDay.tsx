@@ -20,6 +20,11 @@ import {
   Link2, ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import {
+  getCurrentRound,
+  getCurrentRoundDate,
+  getCurrentRoundStatus,
+} from "@/lib/interviews/roundHelpers";
 import { format, differenceInMinutes } from "date-fns";
 import type { LucideIcon } from "lucide-react";
 
@@ -64,22 +69,24 @@ export default function InterviewDay() {
 
   // Today's interview
   const todayIv = store.interviews.find((iv) => {
-    const d = new Date(iv.scheduled_at);
+    const d = new Date(getCurrentRoundDate(iv));
     const now = new Date();
     return (
       d.getFullYear() === now.getFullYear() &&
       d.getMonth()    === now.getMonth()    &&
       d.getDate()     === now.getDate()     &&
-      iv.status === "scheduled"
+      getCurrentRoundStatus(iv) === "scheduled"
     );
   });
+  const todayRound = todayIv ? getCurrentRound(todayIv) : null;
+  const todayScheduledAt = todayIv ? getCurrentRoundDate(todayIv) : null;
 
   // Countdown timer
   useEffect(() => {
-    if (!todayIv) return;
+    if (!todayIv || !todayScheduledAt) return;
     const tick = () => {
       const diff = differenceInMinutes(
-        new Date(todayIv.scheduled_at),
+        new Date(todayScheduledAt),
         new Date()
       );
       if (diff <= 0) {
@@ -93,7 +100,7 @@ export default function InterviewDay() {
     tick();
     const t = setInterval(tick, 30_000);
     return () => clearInterval(t);
-  }, [todayIv]);
+  }, [todayIv, todayScheduledAt]);
 
   // Rotate affirmation every 8s
   useEffect(() => {
@@ -176,8 +183,9 @@ export default function InterviewDay() {
                 </p>
                 <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                   <Clock className="w-3 h-3" />
-                  {format(new Date(todayIv.scheduled_at), "h:mm a")}
-                  {todayIv.duration_minutes && ` · ${todayIv.duration_minutes}min`}
+                  {format(new Date(todayScheduledAt!), "h:mm a")}
+                  {(todayRound?.duration_minutes ?? todayIv.duration_minutes) &&
+                    ` · ${todayRound?.duration_minutes ?? todayIv.duration_minutes}min`}
                 </p>
               </div>
             </div>
@@ -193,16 +201,16 @@ export default function InterviewDay() {
             )}
           </div>
 
-          {todayIv.meeting_link && (
+          {(todayRound?.meeting_link ?? todayIv.meeting_link) && (
             <a
-              href={todayIv.meeting_link}
+              href={todayRound?.meeting_link ?? todayIv.meeting_link}
               target="_blank"
               rel="noopener noreferrer"
               className="mt-4 flex items-center justify-between p-3 bg-accent/5 hover:bg-accent/10 border border-border rounded-xl transition-all"
             >
               <span className="text-xs text-foreground flex items-center gap-2 min-w-0">
                 <Link2 className="w-3.5 h-3.5 shrink-0 text-muted-foreground" aria-hidden />
-                <span className="truncate">{todayIv.meeting_link}</span>
+                <span className="truncate">{todayRound?.meeting_link ?? todayIv.meeting_link}</span>
               </span>
               <span className="text-xs text-primary shrink-0 ml-2 inline-flex items-center gap-1">
                 Open <ExternalLink className="w-3 h-3" aria-hidden />

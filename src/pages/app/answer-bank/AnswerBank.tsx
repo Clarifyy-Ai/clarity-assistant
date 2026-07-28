@@ -15,10 +15,12 @@ import { toast } from "sonner";
 import {
   BookOpen, Search, Star, Trash2,
   ChevronDown, ChevronUp, Copy,
-  Edit2, Check, Plus,
+  Edit2, Check, Plus, Sparkles,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { refreshCredits } from "@/lib/billing/creditsManager";
 
 // ─────────────────────────────────────────────────────────────────
 // AnswerBank — saved STAR answers + session saves
@@ -334,13 +336,36 @@ function AddAnswerModal({
 }: {
   open:    boolean;
   onClose: () => void;
-  onSaved: (a: any) => void;
+  onSaved: (a: Tables<"answer_bank">) => void;
   userId:  string;
 }) {
   const [question, setQuestion] = useState("");
   const [answer,   setAnswer]   = useState("");
   const [category, setCategory] = useState("Behavioural");
   const [saving,   setSaving]   = useState(false);
+  const [generating, setGenerating] = useState(false);
+  const [aiDraft, setAiDraft] = useState(false);
+
+  async function handleGenerateWithAi() {
+    if (!question.trim() || generating) return;
+    setGenerating(true);
+    try {
+      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
+        tool_id: "star_method",
+        input: `Interview question:\n${question.trim()}\n\nDraft a complete STAR answer from scratch for this question. Invent plausible, specific details the candidate can edit.`,
+      });
+      const text = (data.result ?? "").trim();
+      if (!text) throw new Error("AI returned an empty answer.");
+      setAnswer(text);
+      setAiDraft(true);
+      await refreshCredits();
+      toast.success("Draft generated — review before saving");
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : "Failed to generate answer.");
+    } finally {
+      setGenerating(false);
+    }
+  }
 
   async function handleSave() {
     if (!question.trim() || !answer.trim()) return;
@@ -350,12 +375,13 @@ function AddAnswerModal({
         question_text: question.trim(),
         answer_text:   answer.trim(),
         category,
-        source:        "manual",
+        source:        aiDraft ? "prep_lab" : "manual",
       });
       onSaved(data);
       setQuestion("");
       setAnswer("");
       setCategory("Behavioural");
+      setAiDraft(false);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to save answer.");
     } finally {
@@ -376,11 +402,24 @@ function AddAnswerModal({
           />
         </div>
         <div>
-          <p className="text-xs text-muted-foreground mb-1.5">Your answer</p>
+          <div className="flex items-center justify-between mb-1.5 gap-2">
+            <p className="text-xs text-muted-foreground">Your answer</p>
+            <Button
+              type="button"
+              variant="secondary"
+              size="xs"
+              loading={generating}
+              disabled={!question.trim() || generating || saving}
+              onClick={() => void handleGenerateWithAi()}
+              leftIcon={<Sparkles className="w-3 h-3" />}
+            >
+              Generate with AI
+            </Button>
+          </div>
           <textarea
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
-            placeholder="Write your STAR answer here…"
+            placeholder="Write your STAR answer here, or generate a draft with AI…"
             rows={6}
             className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
           />
@@ -391,6 +430,7 @@ function AddAnswerModal({
             {CATEGORIES.filter((c) => c !== "All").map((c) => (
               <button
                 key={c}
+                type="button"
                 onClick={() => setCategory(c)}
                 className={cn(
                   "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
@@ -413,7 +453,7 @@ function AddAnswerModal({
             size="sm"
             fullWidth
             loading={saving}
-            disabled={!question.trim() || !answer.trim()}
+            disabled={!question.trim() || !answer.trim() || generating}
             onClick={handleSave}
             leftIcon={<Star className="w-3.5 h-3.5" />}
           >

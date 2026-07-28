@@ -308,7 +308,7 @@ export default function OnboardingStep5ResumeUpload({ onNext, onBack, onSkip }: 
 
           },
 
-          { timeoutMs: 60_000 },
+          { timeoutMs: 60_000, headers: { "x-clarify-onboarding-parse": "1" } },
 
         );
 

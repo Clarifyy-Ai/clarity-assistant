@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────
-// MockWarmup — 30s breathing + 2 warmup questions
+// MockWarmup — 30s breathing + WARMUP_MAX non-scored warmup questions
 // ─────────────────────────────────────────────────────────────────
 
 const WARMUP_QUESTIONS = [
@@ -30,7 +30,8 @@ const WARMUP_QUESTIONS = [
   "Where do you see yourself growing in the next 12 months?",
 ];
 
-const WARMUP_MAX = 10;
+/** Number of easy non-scored warmup questions before a mock session. */
+export const WARMUP_MAX = 10;
 
 type Phase = "breathing" | "warmup" | "done";
 

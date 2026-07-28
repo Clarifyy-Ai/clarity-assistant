@@ -82,8 +82,6 @@ export {
   SettingsAppearance,
   SettingsAudio,
   SettingsBilling,
-  SettingsSubscription,
-  SettingsCredits,
   SettingsModels,
   SettingsNotifications,
   SettingsIntegrations,

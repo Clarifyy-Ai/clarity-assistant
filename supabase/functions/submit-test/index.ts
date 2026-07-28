@@ -617,6 +617,8 @@ Deno.serve(async (req: Request) => {
     const boundedTotalScore = Math.max(0, totalScore);
     const pctScore =
       maxScore > 0 ? (boundedTotalScore / maxScore) * 100 : 0;
+    // Score-derived estimate for UI "performance band" — not a real cohort percentile.
+    // Field name `predicted_percentile` kept for DB / RPC compatibility.
     const predictedPercentile = Math.min(99, Math.max(1, Math.round(pctScore)));
 
     const weakTopics = Object.entries(topicBreakdown)

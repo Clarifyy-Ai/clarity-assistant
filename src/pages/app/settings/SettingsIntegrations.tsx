@@ -53,7 +53,7 @@ const INTEGRATIONS: Integration[] = [
     id:     "google_calendar",
     icon:   Calendar,
     label:  "Google Calendar",
-    desc:   "Sync scheduled interviews directly from your Google Calendar.",
+    desc:   "Link Google to import interview events when server sync is enabled.",
     status: "available",
     color:  "text-blue-400",
     bg:     "bg-blue-500/10",
@@ -280,13 +280,20 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
         await fetchEdgeJson("sync-calendar", { probe: true });
         if (!cancelled) setSyncAvailable(true);
       } catch (err) {
-        const message = err instanceof Error ? err.message : "";
+        // Any probe failure → do not claim full sync works (501, auth, network).
+        const message = (err instanceof Error ? err.message : "").toLowerCase();
         const notConfigured =
           message.includes("501") ||
-          message.toLowerCase().includes("not available") ||
-          message.toLowerCase().includes("not configured");
-        if (!cancelled && notConfigured) {
+          message.includes("not available") ||
+          message.includes("not configured") ||
+          message.includes("coming soon") ||
+          message.includes("isn't available");
+        if (!cancelled) {
           setSyncAvailable(false);
+          if (!notConfigured) {
+            // Non-501 failures still mean sync UI must not advertise readiness.
+            console.warn("[SettingsIntegrations] sync-calendar probe failed:", message);
+          }
         }
       }
     })();
@@ -315,10 +322,15 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
     if (result.error) {
       const notConfigured =
         result.error.toLowerCase().includes("not available") ||
-        result.error.toLowerCase().includes("not configured");
+        result.error.toLowerCase().includes("not configured") ||
+        result.error.toLowerCase().includes("coming soon") ||
+        result.error.toLowerCase().includes("isn't available") ||
+        result.error.includes("501");
       if (notConfigured) {
         setSyncAvailable(false);
-        toast.info("Calendar sync isn't available yet — connect now and we'll import once it's enabled.");
+        toast.info(
+          "Google Calendar sync isn't available yet — server sync is not configured.",
+        );
         return;
       }
       toast.error(result.error);

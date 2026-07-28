@@ -32,7 +32,7 @@ export const RATE_LIMIT_CLASS: Record<string, RateLimitClass> = {
   "generate-hint": "strict_fail_closed",
   "prep-tool": "strict_fail_closed",
   "collect-exam-papers": "strict_fail_closed",
-  "ai-feedback": "strict_fail_closed",
+  "bulk-import-questions": "strict_fail_closed",
   "analytics-dashboard": "controlled_degradation_candidate",
   ping: "controlled_degradation_candidate",
 };
@@ -256,8 +256,15 @@ export const RATE_LIMIT_PRESETS = {
     windowMs: 60_000,
   },
 
+  /** Checkout / order creation — 10/min (P4-1). */
   PAYMENT_ACTION: {
-    limit: 3,
+    limit: 10,
+    windowMs: 60_000,
+  },
+
+  /** Transactional email send — 10/min (P4-1). */
+  EMAIL_ACTION: {
+    limit: 10,
     windowMs: 60_000,
   },
 
@@ -269,6 +276,12 @@ export const RATE_LIMIT_PRESETS = {
   DATA_EXPORT: {
     limit: 2,
     windowMs: 60 * 60 * 1000,
+  },
+
+  /** Scraper ingest — generous for batch papers, still abuse-resistant. */
+  BULK_INGEST: {
+    limit: 30,
+    windowMs: 60_000,
   },
 } as const;
 
@@ -537,6 +550,22 @@ export async function enforcePaymentRateLimitAsync(
   return enforceRateLimitAsync(adminClient, {
     key: createRateLimitKey(functionName, userId),
     ...RATE_LIMIT_PRESETS.PAYMENT_ACTION,
+  });
+}
+
+export async function enforceEmailRateLimitAsync(
+  adminClient: {
+    rpc: (
+      fn: string,
+      args: Record<string, unknown>
+    ) => Promise<{ data: unknown; error: { message: string } | null }>;
+  },
+  functionName: string,
+  userId: string
+): Promise<Response | null> {
+  return enforceRateLimitAsync(adminClient, {
+    key: createRateLimitKey(functionName, userId),
+    ...RATE_LIMIT_PRESETS.EMAIL_ACTION,
   });
 }
 

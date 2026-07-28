@@ -3,6 +3,7 @@
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requireAuth } from "../_shared/utils.ts";
+import { enforceSessionRateLimitAsync } from "../_shared/rateLimit.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
 const FROM_EMAIL = Deno.env.get("FROM_EMAIL") ?? "Clarify AI <hello@confideq.app>";
@@ -61,6 +62,15 @@ Deno.serve(async (req) => {
     }
 
     const { userId } = await requireAuth(req);
+    const db = createServiceClient();
+
+    const rateLimited = await enforceSessionRateLimitAsync(
+      db,
+      "schedule-interview",
+      userId,
+    );
+    if (rateLimited) return rateLimited;
+
     const body = await req.json().catch(() => ({}));
 
     const interviewId = sanitize(body?.interview_id, 64);
@@ -74,8 +84,6 @@ Deno.serve(async (req) => {
         { status: 400, headers }
       );
     }
-
-    const db = createServiceClient();
 
     const { data: interview } = await db
       .from("scheduled_interviews")

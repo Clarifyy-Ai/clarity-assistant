@@ -412,6 +412,107 @@ export function requireMethod(req: Request, allowedMethods: string[]): Response 
 }
 
 /**
+ * P4-3: Optional Sentry reporting for edge functions.
+ * Uses a minimal HTTPS envelope POST when SENTRY_DSN is set.
+ * Always emits a structured ERROR log with requestId (works without DSN).
+ */
+export async function reportEdgeError(
+  error: unknown,
+  context: ErrorContext = {},
+): Promise<string> {
+  const requestId =
+    typeof context.requestId === "string" && context.requestId
+      ? context.requestId
+      : generateErrorId();
+
+  const normalizedError =
+    error instanceof Error
+      ? { name: error.name, message: error.message, stack: error.stack }
+      : { name: "UnknownError", message: String(error), stack: null };
+
+  const dsn = (Deno.env.get("SENTRY_DSN") ?? "").trim();
+  const sentryReady = dsn.length > 0;
+
+  console.error(
+    JSON.stringify({
+      level: "error",
+      errorId: requestId,
+      requestId,
+      sentry_ready: sentryReady,
+      error: sanitizeForLog(normalizedError),
+      context: sanitizeForLog(context),
+      timestamp: new Date().toISOString(),
+    }),
+  );
+
+  if (!sentryReady) {
+    return requestId;
+  }
+
+  try {
+    const parsed = new URL(dsn);
+    // DSN form: https://<key>@<host>/<projectId>
+    const publicKey = parsed.username;
+    const projectId = parsed.pathname.replace(/^\//, "");
+    if (!publicKey || !projectId) {
+      return requestId;
+    }
+
+    const ingestHost = parsed.host;
+    const envelopeUrl = `https://${ingestHost}/api/${projectId}/envelope/`;
+    const eventId = requestId.replace(/-/g, "").slice(0, 32);
+    const timestamp = Math.floor(Date.now() / 1000);
+
+    const header = JSON.stringify({
+      dsn,
+      event_id: eventId,
+      sent_at: new Date().toISOString(),
+    });
+    const itemHeader = JSON.stringify({ type: "event", content_type: "application/json" });
+    const payload = JSON.stringify({
+      event_id: eventId,
+      timestamp,
+      platform: "javascript",
+      level: "error",
+      environment: Deno.env.get("APP_ENV") ?? Deno.env.get("ENVIRONMENT") ?? "unknown",
+      message: normalizedError.message,
+      exception: {
+        values: [
+          {
+            type: normalizedError.name,
+            value: normalizedError.message,
+            stacktrace: normalizedError.stack
+              ? { frames: [{ filename: "edge", function: String(context.functionName ?? "unknown") }] }
+              : undefined,
+          },
+        ],
+      },
+      tags: {
+        requestId,
+        functionName: String(context.functionName ?? "unknown"),
+      },
+      extra: sanitizeForLog(context),
+    });
+
+    await fetch(envelopeUrl, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/x-sentry-envelope",
+        "X-Sentry-Auth": `Sentry sentry_version=7, sentry_client=clarify-edge/1.0, sentry_key=${publicKey}`,
+      },
+      body: `${header}\n${itemHeader}\n${payload}`,
+    }).catch(() => null);
+  } catch (reportErr) {
+    console.warn(
+      "[sentry] report failed:",
+      reportErr instanceof Error ? reportErr.message : String(reportErr),
+    );
+  }
+
+  return requestId;
+}
+
+/**
  * Wrapper for consistent Edge Function error handling.
  *
  * Usage:

@@ -1,7 +1,7 @@
 // parse-document — PDF/text extraction for documents table (cover letter, etc.)
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
-import { createServiceClient } from "../_shared/supabase.ts";
+import { createServiceClient, deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import { parseJSON } from "../_shared/gemini.ts";
 import { requireAuth } from "../_shared/utils.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
@@ -9,6 +9,9 @@ import {
   enforceAiRateLimitAsync,
 } from "../_shared/rateLimit.ts";
 import { validateUploadMime } from "../_shared/uploadValidation.ts";
+import { creditCost } from "../_shared/creditEconomics.ts";
+
+const PARSE_DOCUMENT_COST = creditCost("parse_document");
 
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
@@ -36,10 +39,13 @@ async function extractWithGemini(
 {"full_text":"...","summary":"brief summary"}`;
 
   const res = await fetch(
-    `${GEMINI_BASE}/models/${GEMINI_MODEL}:generateContent?key=${GEMINI_API_KEY}`,
+    `${GEMINI_BASE}/models/${GEMINI_MODEL}:generateContent`,
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": GEMINI_API_KEY,
+      },
       body: JSON.stringify({
         contents: [
           {
@@ -184,6 +190,26 @@ Deno.serve(async (req) => {
       );
     }
 
+    const creditResult = await deductCreditsAtomic({
+      userId,
+      action: "parse_document",
+      cost: PARSE_DOCUMENT_COST,
+      idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+    });
+    if (!creditResult.success) {
+      return new Response(
+        JSON.stringify({
+          error: "Insufficient credits.",
+          code: "INSUFFICIENT_CREDITS",
+          message: `Document parsing costs ${PARSE_DOCUMENT_COST} credits.`,
+        }),
+        {
+          status: 402,
+          headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+        },
+      );
+    }
+
     const extracted = await extractWithGemini(
       safeBase64(new Uint8Array(buf)),
       mimeCheck.mimeType,
@@ -191,6 +217,11 @@ Deno.serve(async (req) => {
     );
 
     if (!extracted) {
+      await refundCredits({
+        userId,
+        cost: PARSE_DOCUMENT_COST,
+        reason: "refund_parse_document_failed",
+      });
       return new Response(
         JSON.stringify({ error: "Could not extract text from document", code: "INTERNAL_ERROR" }),
         { status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }

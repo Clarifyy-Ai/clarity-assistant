@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { z } from "zod";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Eye,
   EyeOff,
@@ -14,7 +16,6 @@ import {
 import { useAuthStore } from "@/store/authStore";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { BrandLogo } from "@/components/marketing";
-import { FormWrapper } from "@/components/common/FormWrapper";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 
@@ -25,8 +26,8 @@ import {
   AzureOAuthButton,
 } from "@/components/auth/OAuthButton";
 
-import { signupSchema, type SignupInput } from "@/lib/validators";
-import { sanitizeText } from "@/lib/security";
+import { signupSchema } from "@/lib/validators";
+import { getCSRFHiddenInputProps, sanitizeText, validateCSRFToken } from "@/lib/security";
 import { cn } from "@/lib/utils";
 
 type PasswordStrength = {
@@ -146,7 +147,7 @@ const signupFormSchema = z.preprocess(
   signupSchema
 );
 
-type SignupFormInput = z.infer<typeof signupFormSchema>;
+type SignupFormInput = z.infer<typeof signupSchema>;
 
 export default function Signup(): JSX.Element {
   usePageMeta({
@@ -163,15 +164,32 @@ export default function Signup(): JSX.Element {
   const authStatus = useAuthStore((state) => state.status);
   const signUpWithEmail = useAuthStore((state) => state.signUpWithEmail);
 
-  const [fullName, setFullName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [acceptTerms, setAcceptTerms] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState<string>("");
+
+  const {
+    register,
+    handleSubmit,
+    watch,
+    setValue,
+    formState: { errors, isSubmitting, isValid },
+  } = useForm<SignupFormInput>({
+    resolver: zodResolver(signupFormSchema),
+    mode: "onChange",
+    defaultValues: {
+      fullName: "",
+      email: "",
+      password: "",
+      confirmPassword: "",
+      acceptTerms: false,
+    },
+  });
+
+  const password = watch("password");
+  const acceptTerms = watch("acceptTerms");
+  const isFormValid = isValid;
 
   useEffect(() => {
     if (authStatus === "authenticated") {
@@ -193,34 +211,35 @@ export default function Signup(): JSX.Element {
   }, [searchParams]);
 
   const passwordStrength = useMemo(
-    () => getPasswordStrength(password),
+    () => getPasswordStrength(password ?? ""),
     [password]
   );
 
   const passwordChecks = useMemo(
     () => ({
-      length: password.length >= 8,
-      upper: /[A-Z]/.test(password),
-      number: /[0-9]/.test(password),
-      special: /[^A-Za-z0-9]/.test(password),
+      length: (password ?? "").length >= 8,
+      upper: /[A-Z]/.test(password ?? ""),
+      number: /[0-9]/.test(password ?? ""),
+      special: /[^A-Za-z0-9]/.test(password ?? ""),
     }),
     [password]
   );
 
-  const isFormValid = useMemo(
-    () =>
-      signupFormSchema.safeParse({
-        fullName,
-        email,
-        password,
-        confirmPassword,
-        acceptTerms,
-      }).success,
-    [fullName, email, password, confirmPassword, acceptTerms]
-  );
-
-  async function handleSignup(data: SignupFormInput): Promise<void> {
+  async function handleSignup(
+    data: SignupFormInput,
+    event?: React.BaseSyntheticEvent
+  ): Promise<void> {
     setFormError(null);
+
+    const formEl = event?.target as HTMLFormElement | undefined;
+    if (formEl) {
+      const formData = new FormData(formEl);
+      const token = formData.get("csrfToken");
+      if (typeof token !== "string" || !validateCSRFToken(token)) {
+        setFormError("Security token expired. Please refresh and try again.");
+        return;
+      }
+    }
 
     if (refCode) {
       safeSetLocalStorageItem(REFERRAL_STORAGE_KEY, refCode);
@@ -381,232 +400,191 @@ export default function Signup(): JSX.Element {
             <div className="flex-1 h-px bg-border" />
           </div>
 
-          <FormWrapper<SignupFormInput>
-            schema={signupFormSchema}
-            onSubmit={handleSignup}
+          <form
             className="space-y-4"
-            validateCsrf
+            noValidate
+            onSubmit={handleSubmit((data, event) => handleSignup(data, event))}
           >
-            {({ fieldErrors, formError: validationFormError, isSubmitting }) => (
-              <>
-                <Input
-                  label="Full name"
-                  name="fullName"
-                  type="text"
-                  placeholder="Jane Smith"
-                  autoComplete="name"
-                  required
-                  aria-required={true}
-                  aria-describedby={fieldErrors.fullName?.[0] ? "error-fullName" : undefined}
-                  aria-invalid={!!fieldErrors.fullName?.[0]}
-                  onChange={(event) => setFullName(event.target.value)}
-                />
+            <input {...getCSRFHiddenInputProps()} />
+            <Input
+              label="Full name"
+              type="text"
+              placeholder="Jane Smith"
+              autoComplete="name"
+              required
+              error={errors.fullName?.message}
+              {...register("fullName")}
+            />
 
-                {fieldErrors.fullName?.[0] && (
-                  <p id="error-fullName" role="alert" className="text-xs text-destructive">
-                    {fieldErrors.fullName[0]}
-                  </p>
-                )}
+            <Input
+              label="Email"
+              type="email"
+              placeholder="you@example.com"
+              autoComplete="email"
+              required
+              error={errors.email?.message}
+              {...register("email")}
+            />
 
-                <Input
-                  label="Email"
-                  name="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                  required
-                  aria-required={true}
-                  aria-describedby={fieldErrors.email?.[0] ? "error-email" : undefined}
-                  aria-invalid={!!fieldErrors.email?.[0]}
-                  onChange={(event) => setEmail(event.target.value)}
-                />
-
-                {fieldErrors.email?.[0] && (
-                  <p id="error-email" role="alert" className="text-xs text-destructive">
-                    {fieldErrors.email[0]}
-                  </p>
-                )}
-
-                <div className="space-y-1.5">
-                  <Input
-                    label="Password"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="Min. 8 characters"
-                    autoComplete="new-password"
-                    required
-                    aria-required={true}
-                    aria-describedby={fieldErrors.password?.[0] ? "error-password" : "password-requirements"}
-                    aria-invalid={!!fieldErrors.password?.[0]}
-                    onChange={(event) => {
-                      setPassword(event.target.value);
-                    }}
-                    rightIcon={
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((value) => !value)}
-                        className="text-muted-foreground hover:text-foreground transition-colors"
-                        aria-label={
-                          showPassword ? "Hide password" : "Show password"
-                        }
-                      >
-                        {showPassword ? (
-                          <EyeOff className="w-4 h-4" />
-                        ) : (
-                          <Eye className="w-4 h-4" />
-                        )}
-                      </button>
+            <div className="space-y-1.5">
+              <Input
+                label="Password"
+                type={showPassword ? "text" : "password"}
+                placeholder="Min. 8 characters"
+                autoComplete="new-password"
+                required
+                error={errors.password?.message}
+                {...register("password")}
+                rightIcon={
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((value) => !value)}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
                     }
-                  />
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                }
+              />
 
-                  {fieldErrors.password?.[0] && (
-                    <p id="error-password" role="alert" className="text-xs text-destructive">
-                      {fieldErrors.password[0]}
-                    </p>
-                  )}
-
-                  {password.length > 0 && (
-                    <div id="password-requirements" className="space-y-1.5">
-                      <div className="flex gap-1">
-                        {[1, 2, 3, 4, 5].map((level) => (
-                          <div
-                            key={level}
-                            className={cn(
-                              "h-1 flex-1 rounded-full transition-all duration-300",
-                              level <= passwordStrength.score
-                                ? passwordStrength.color
-                                : "bg-border"
-                            )}
-                          />
-                        ))}
-                      </div>
-
-                      <p className="text-[11px] text-muted-foreground">
-                        Password strength:{" "}
-                        <span className="font-medium text-foreground">
-                          {passwordStrength.label}
-                        </span>
-                      </p>
-
-                      <ul className="text-[11px] space-y-0.5 mt-1.5">
-                        {[
-                          {
-                            ok: passwordChecks.length,
-                            text: "At least 8 characters",
-                          },
-                          {
-                            ok: passwordChecks.upper,
-                            text: "One uppercase letter (A-Z)",
-                          },
-                          {
-                            ok: passwordChecks.number,
-                            text: "One number (0-9)",
-                          },
-                          {
-                            ok: passwordChecks.special,
-                            text: "One special character (!@#$…)",
-                          },
-                        ].map((check) => (
-                          <li
-                            key={check.text}
-                            className={cn(
-                              "flex items-center gap-1.5",
-                              check.ok
-                                ? "text-emerald-500"
-                                : "text-muted-foreground"
-                            )}
-                          >
-                            <span className="inline-block w-3 text-center">
-                              {check.ok ? "✓" : "○"}
-                            </span>
-                            {check.text}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </div>
-
-                <Input
-                  label="Confirm password"
-                  name="confirmPassword"
-                  type={showPassword ? "text" : "password"}
-                  placeholder="Re-enter your password"
-                  autoComplete="new-password"
-                  required
-                  aria-required={true}
-                  aria-describedby={fieldErrors.confirmPassword?.[0] ? "error-confirmPassword" : undefined}
-                  aria-invalid={!!fieldErrors.confirmPassword?.[0]}
-                  onChange={(event) => setConfirmPassword(event.target.value)}
-                />
-
-                {fieldErrors.confirmPassword?.[0] && (
-                  <p id="error-confirmPassword" role="alert" className="text-xs text-destructive">
-                    {fieldErrors.confirmPassword[0]}
-                  </p>
-                )}
-
-                <label className="flex items-start gap-2.5 cursor-pointer select-none">
-                  <input
-                    type="checkbox"
-                    name="acceptTerms"
-                    value="true"
-                    checked={acceptTerms}
-                    onChange={(event) => setAcceptTerms(event.target.checked)}
-                    required
-                    aria-required={true}
-                    className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/40 cursor-pointer"
-                  />
-
-                  <span className="text-[12px] text-muted-foreground leading-snug">
-                    I agree to the{" "}
-                    <Link
-                      to="/terms"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary underline hover:opacity-80"
-                    >
-                      Terms of Service
-                    </Link>{" "}
-                    and{" "}
-                    <Link
-                      to="/privacy"
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-primary underline hover:opacity-80"
-                    >
-                      Privacy Policy
-                    </Link>
-                    .
-                  </span>
-                </label>
-
-                {fieldErrors.acceptTerms?.[0] && (
-                  <p id="error-acceptTerms" role="alert" className="text-xs text-destructive">
-                    {fieldErrors.acceptTerms[0]}
-                  </p>
-                )}
-
-                {(formError || validationFormError) && (
-                  <div role="alert" className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2.5">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{formError ?? validationFormError}</span>
+              {(password?.length ?? 0) > 0 && (
+                <div id="password-requirements" className="space-y-1.5">
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4, 5].map((level) => (
+                      <div
+                        key={level}
+                        className={cn(
+                          "h-1 flex-1 rounded-full transition-all duration-300",
+                          level <= passwordStrength.score
+                            ? passwordStrength.color
+                            : "bg-border"
+                        )}
+                      />
+                    ))}
                   </div>
-                )}
 
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="md"
-                  loading={isSubmitting}
-                  disabled={isSubmitting || !isFormValid}
-                  fullWidth
+                  <p className="text-[11px] text-muted-foreground">
+                    Password strength:{" "}
+                    <span className="font-medium text-foreground">
+                      {passwordStrength.label}
+                    </span>
+                  </p>
+
+                  <ul className="text-[11px] space-y-0.5 mt-1.5">
+                    {[
+                      {
+                        ok: passwordChecks.length,
+                        text: "At least 8 characters",
+                      },
+                      {
+                        ok: passwordChecks.upper,
+                        text: "One uppercase letter (A-Z)",
+                      },
+                      {
+                        ok: passwordChecks.number,
+                        text: "One number (0-9)",
+                      },
+                      {
+                        ok: passwordChecks.special,
+                        text: "One special character (!@#$…)",
+                      },
+                    ].map((check) => (
+                      <li
+                        key={check.text}
+                        className={cn(
+                          "flex items-center gap-1.5",
+                          check.ok
+                            ? "text-emerald-500"
+                            : "text-muted-foreground"
+                        )}
+                      >
+                        <span className="inline-block w-3 text-center">
+                          {check.ok ? "✓" : "○"}
+                        </span>
+                        {check.text}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+
+            <Input
+              label="Confirm password"
+              type={showPassword ? "text" : "password"}
+              placeholder="Re-enter your password"
+              autoComplete="new-password"
+              required
+              error={errors.confirmPassword?.message}
+              {...register("confirmPassword")}
+            />
+
+            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={Boolean(acceptTerms)}
+                onChange={(event) =>
+                  setValue("acceptTerms", event.target.checked, {
+                    shouldValidate: true,
+                  })
+                }
+                required
+                className="mt-0.5 h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/40 cursor-pointer"
+              />
+
+              <span className="text-[12px] text-muted-foreground leading-snug">
+                I agree to the{" "}
+                <Link
+                  to="/terms"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline hover:opacity-80"
                 >
-                  Create account
-                </Button>
-              </>
+                  Terms of Service
+                </Link>{" "}
+                and{" "}
+                <Link
+                  to="/privacy"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-primary underline hover:opacity-80"
+                >
+                  Privacy Policy
+                </Link>
+                .
+              </span>
+            </label>
+
+            {errors.acceptTerms?.message && (
+              <p role="alert" className="text-xs text-destructive">
+                {errors.acceptTerms.message}
+              </p>
             )}
-          </FormWrapper>
+
+            {formError && (
+              <div role="alert" className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{formError}</span>
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              variant="primary"
+              size="md"
+              loading={isSubmitting}
+              disabled={isSubmitting || !isFormValid}
+              fullWidth
+            >
+              Create account
+            </Button>
+          </form>
 
           <p className="text-center text-sm text-muted-foreground mt-5">
             Already have an account?{" "}

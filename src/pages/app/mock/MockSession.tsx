@@ -256,14 +256,9 @@ export default function MockSession() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [orchestrator.currentQuestionIndex]);
 
-  // Hotkeys
+  // Hotkeys — overlay toggle is Ctrl+Shift+H only (Ctrl+Shift+C is coding capture in hotkeys.ts)
   useHotkeys({
     "ctrl+shift+h": () => {
-      if (phase !== "active") return;
-      const overlay = useOverlayStore.getState();
-      overlay.is_visible ? overlay.hideOverlay() : overlay.showOverlay();
-    },
-    "ctrl+shift+c": () => {
       if (phase !== "active") return;
       const overlay = useOverlayStore.getState();
       overlay.is_visible ? overlay.hideOverlay() : overlay.showOverlay();
@@ -1119,8 +1114,7 @@ export default function MockSession() {
 
           <p className="text-center text-xs text-muted-foreground/40">
             The overlay window provides AI hints, transcript, and session status. Use{" "}
-            <kbd className="px-1 py-0.5 bg-secondary rounded font-mono">Ctrl+Shift+H</kbd> or{" "}
-            <kbd className="px-1 py-0.5 bg-secondary rounded font-mono">Ctrl+Shift+C</kbd> to toggle it.
+            <kbd className="px-1 py-0.5 bg-secondary rounded font-mono">Ctrl+Shift+H</kbd> to toggle it.
           </p>
         </div>
         </div>

@@ -158,8 +158,33 @@ function isMissing(value) {
   return typeof value !== "string" || value.trim().length === 0;
 }
 
-function isPlaceholder(value) {
+/**
+ * CI sandbox values (ci-placeholder*) are allowed only in development.
+ * Covers keys that start with "ci-placeholder" and the CI Supabase URL host.
+ */
+function isAllowedCiPlaceholder(value, appEnv) {
+  if (appEnv !== "development" || typeof value !== "string") {
+    return false;
+  }
+
+  if (value.startsWith("ci-placeholder")) {
+    return true;
+  }
+
+  try {
+    const url = new URL(value);
+    return url.hostname.startsWith("ci-placeholder.");
+  } catch {
+    return false;
+  }
+}
+
+function isPlaceholder(value, appEnv = "development") {
   if (isMissing(value)) {
+    return false;
+  }
+
+  if (isAllowedCiPlaceholder(value, appEnv)) {
     return false;
   }
 
@@ -186,6 +211,8 @@ function isValidSupabaseUrl(value) {
 }
 
 function checkRequiredVars(env) {
+  const appEnv = env.VITE_APP_ENV || "development";
+
   for (const key of REQUIRED_CLIENT_VARS) {
     const value = env[key];
 
@@ -194,7 +221,7 @@ function checkRequiredVars(env) {
       continue;
     }
 
-    if (isPlaceholder(value)) {
+    if (isPlaceholder(value, appEnv)) {
       errors.push(`Environment variable ${key} still contains a placeholder value.`);
     }
   }
@@ -376,8 +403,9 @@ function main() {
   checkKnownLegacyNames(env);
 
   // Friendly visibility for optional vars without failing builds.
+  const appEnv = env.VITE_APP_ENV || "development";
   for (const key of OPTIONAL_CLIENT_VARS) {
-    if (isPlaceholder(env[key])) {
+    if (isPlaceholder(env[key], appEnv)) {
       warnings.push(`${key} appears to contain a placeholder value.`);
     }
   }

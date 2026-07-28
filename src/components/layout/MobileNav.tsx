@@ -21,7 +21,6 @@ import {
 } from "lucide-react";
 
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
-import { useIndiaRegion } from "@/hooks/useIndiaRegion";
 import { notifyOverlayVisibilityOnMobile } from "@/lib/overlay/overlayVisibilityNotice";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
@@ -38,7 +37,6 @@ type MobileTab = {
   icon: LucideIcon;
   label: string;
   exact?: boolean;
-  indiaOnly?: boolean;
 };
 
 const TABS: MobileTab[] = [
@@ -50,7 +48,6 @@ const TABS: MobileTab[] = [
     to: "/app/mock-test",
     icon: Brain,
     label: "Gov Exams",
-    indiaOnly: true,
   },
 ];
 
@@ -75,9 +72,7 @@ export function MobileNav(): JSX.Element {
   const location = useLocation();
   const navigate = useNavigate();
   const signOut = useAuthStore((s) => s.signOut);
-  const { isIndia } = useIndiaRegion();
   const [moreOpen, setMoreOpen] = useState(false);
-  const visibleTabs = TABS.filter((tab) => !tab.indiaOnly || isIndia);
   const moreActive = MORE_LINKS.some(
     (l) => location.pathname === l.to || location.pathname.startsWith(`${l.to}/`),
   );
@@ -87,7 +82,7 @@ export function MobileNav(): JSX.Element {
       className="fixed bottom-0 left-0 right-0 h-16 bg-background/95 backdrop-blur border-t border-border z-[200] flex items-center md:hidden"
       aria-label="Mobile navigation"
     >
-      {visibleTabs.map((tab) => {
+      {TABS.map((tab) => {
         const Icon = tab.icon;
         const isActive = isRouteActive(location.pathname, tab);
 

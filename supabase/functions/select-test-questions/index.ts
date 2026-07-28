@@ -13,7 +13,7 @@
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
-import { createServiceClient, deductCredits } from "../_shared/supabase.ts";
+import { createServiceClient, deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
 import { mapExamType } from "../_shared/examTypeMap.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
@@ -22,6 +22,7 @@ import {
   type WeakTopicStat,
 } from "../_shared/examAIPrompts.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
+import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 /* ─── SANITIZATION ───────────────────────────────────────────────────────── */
 //
 // REGEX ESCAPING RULE for RegExp constructor strings:
@@ -331,6 +332,13 @@ Deno.serve(async (req: Request) => {
     const userId = auth.context.user.id;
     const db = createServiceClient();
 
+    const rateLimited = await enforceAiRateLimitAsync(
+      db,
+      "select-test-questions",
+      userId,
+    );
+    if (rateLimited) return rateLimited;
+
     /* ── PARSE & VALIDATE INPUT ────────────────────────────────────────── */
     const body   = await req.json().catch(() => null) as Record<string, unknown> | null;
     const config = body?.config as Record<string, unknown> | undefined;
@@ -536,8 +544,13 @@ Deno.serve(async (req: Request) => {
 
     if (gap > 0 && wantsAI) {
       const aiCreditCost = creditCost("mock_test_ai_gap_fill");
-      const credit = await deductCredits(userId, "mock_test_ai_gap_fill", aiCreditCost);
-      if (!credit.success) {
+      const creditResult = await deductCreditsAtomic({
+        userId,
+        action: "mock_test_ai_gap_fill",
+        cost: aiCreditCost,
+        idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+      });
+      if (!creditResult.success) {
         gapFillError =
           `Need ${aiCreditCost} credits to generate ${gap} AI questions (have ${profile?.credits ?? 0}). ` +
           `Bank provided ${finalIds.length} of ${question_count}.`;
@@ -564,7 +577,11 @@ Deno.serve(async (req: Request) => {
         } else if (gapResult.error) {
           gapFillError = gapResult.error;
           try {
-            await deductCredits(userId, "refund_mock_test_ai_gap_fill", -aiCreditCost);
+            await refundCredits({
+              userId,
+              cost: aiCreditCost,
+              reason: "select-test-questions AI gap-fill failure",
+            });
           } catch {
             /* best-effort refund */
           }

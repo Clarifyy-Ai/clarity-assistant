@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { useState } from "react";
@@ -60,6 +59,9 @@ export default function Rephraser() {
       setAlternatives(parsed);
       await refreshCredits();
     } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "Rephrase failed — AI unavailable.";
+      setError(message);
       setAlternatives(getOfflineAlternatives(original));
       toast.info("Using offline rephrasing — AI unavailable.");
     }

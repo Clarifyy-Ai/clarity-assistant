@@ -5,6 +5,7 @@
 
 import { createClient, SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { getCorsHeaders, handleCors as _handleCorsFn } from "./cors.ts";
+import { deductCreditsAtomic, refundCredits } from "./supabase.ts";
 
 import type {
   AuthContext, EdgeSuccess,
@@ -23,7 +24,7 @@ function safeCorsHeaders(req?: Request): Record<string, string> {
   return {
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type, x-app-name, x-app-version, x-byok-openai, x-byok-anthropic, x-byok-gemini",
+      "authorization, x-client-info, apikey, content-type, x-app-name, x-app-version",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
   };
@@ -69,27 +70,10 @@ export function getAdminClient(): SupabaseClient {
 }
 
 /* -------------------------------------------------------------------------- */
-/*                         AUTH + BYOK EXTRACTION                              */
+/*                         AUTH (BYOK headers removed — M1)                    */
 /* -------------------------------------------------------------------------- */
 
-export interface BYOK {
-  openai?: string;
-  anthropic?: string;
-  gemini?: string;
-}
-
-export function extractBYOK(req: Request): BYOK {
-  const out: BYOK = {};
-  const o = req.headers.get("x-byok-openai");
-  const a = req.headers.get("x-byok-anthropic");
-  const g = req.headers.get("x-byok-gemini");
-  if (o && o.trim()) out.openai = o.trim();
-  if (a && a.trim()) out.anthropic = a.trim();
-  if (g && g.trim()) out.gemini = g.trim();
-  return out;
-}
-
-export async function requireAuth(req: Request): Promise<AuthContext & { byok: BYOK }> {
+export async function requireAuth(req: Request): Promise<AuthContext> {
   if (!ENV.SUPABASE_URL || !ENV.SUPABASE_ANON_KEY) {
     throw errorResponse(
       "Server misconfiguration: missing Supabase credentials.",
@@ -118,11 +102,22 @@ export async function requireAuth(req: Request): Promise<AuthContext & { byok: B
 
   const admin = getAdminClient();
 
-  const { data: profile } = await admin
+  const { data: profile, error: profileError } = await admin
     .from("profiles")
     .select("plan_id, credits, is_banned")
     .eq("id", user.id)
     .maybeSingle();
+
+  // Fail closed on ban-lookup errors so a transient DB outage cannot bypass suspension.
+  if (profileError) {
+    console.error("[utils.requireAuth] profile ban lookup failed:", profileError.message);
+    throw errorResponse(
+      "Account suspended. Contact support.",
+      "ACCOUNT_BANNED",
+      403,
+      req
+    );
+  }
 
   if (profile?.is_banned) {
     throw errorResponse(
@@ -146,8 +141,12 @@ export async function requireAuth(req: Request): Promise<AuthContext & { byok: B
     planId: profile?.plan_id ?? "free",
     credits: profile?.credits ?? 0,
     isAdmin: !!roleRow,
-    byok: extractBYOK(req),
   };
+}
+
+/** @deprecated M1 — BYOK removed. Always returns empty; do not pass client keys. */
+export function extractBYOK(_req: Request): Record<string, never> {
+  return {};
 }
 
 /* -------------------------------------------------------------------------- */
@@ -233,41 +232,46 @@ export function requireFields(body: Record<string, unknown>, fields: string[]): 
 }
 
 /* -------------------------------------------------------------------------- */
-/*                      ATOMIC CREDIT DEDUCTION (RPC + FALLBACK)               */
+/*              CREDIT DEDUCTION — delegates to atomic + idempotent path        */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Shared helper used by leftover Edge Function callers.
+ * Always goes through deductCreditsAtomic (idempotency + shared deduct path)
+ * so this is not a thinner bypass of accounting safeguards.
+ * Negative overrideCost is treated as a refund via refundCredits.
+ */
 export async function deductCredits(
   userId: string,
-  feature: FeatureKey,
+  feature: FeatureKey | string,
   overrideCost?: number
 ): Promise<CreditDeductionResult> {
-  const admin = getAdminClient();
-  const cost = overrideCost ?? CREDIT_COSTS[feature] ?? 1;
+  const cost = overrideCost ?? CREDIT_COSTS[feature as FeatureKey] ?? 1;
 
-  // Always charge via atomic RPC. Enterprise is a credit tier (not unlimited).
-  // Fail closed on RPC errors — never select-then-update (races) or skip for plan_id.
-  const { data: rpcData, error: rpcError } = await admin.rpc(
-    "deduct_credits_atomic",
-    { p_user_id: userId, p_amount: cost, p_action: feature }
-  );
-
-  if (rpcError) {
-    console.error("[credits] deduct_credits_atomic RPC failed:", rpcError.message);
+  if (cost < 0) {
+    const refund = await refundCredits({
+      userId,
+      cost: Math.abs(cost),
+      reason: String(feature),
+    });
     return {
-      success: false,
+      success: refund.success,
       balanceAfter: 0,
-      error: "Credit deduction unavailable. Please retry.",
+      error: refund.error,
     };
   }
 
-  if (rpcData?.success) {
-    return { success: true, balanceAfter: rpcData.balance_after ?? 0 };
-  }
+  const result = await deductCreditsAtomic({
+    userId,
+    action: String(feature),
+    cost,
+    idempotencyKey: `utils-deduct-${crypto.randomUUID()}`,
+  });
 
   return {
-    success: false,
-    balanceAfter: rpcData?.balance_after ?? 0,
-    error: rpcData?.error ?? "Insufficient credits",
+    success: result.success,
+    balanceAfter: result.balanceAfter ?? 0,
+    error: result.error,
   };
 }
 
@@ -297,14 +301,13 @@ const PROVIDER_MAP: Record<string, "openai" | "anthropic" | "gemini"> = {
 
 export async function callAI(
   req: AICompletionRequest,
-  byok?: BYOK,
 ): Promise<AICompletionResponse> {
   const start = Date.now();
   const provider = PROVIDER_MAP[req.model];
 
-  if (provider === "openai") return callOpenAI(req, start, byok?.openai);
-  if (provider === "anthropic") return callAnthropic(req, start, byok?.anthropic);
-  if (provider === "gemini") return callGemini(req, start, byok?.gemini);
+  if (provider === "openai") return callOpenAI(req, start);
+  if (provider === "anthropic") return callAnthropic(req, start);
+  if (provider === "gemini") return callGemini(req, start);
 
   throw new Error(
     `Unknown model provider for "${req.model}". Add it to PROVIDER_MAP in utils.ts.`
@@ -318,11 +321,10 @@ const AI_TIMEOUT_MS = 50_000;
 async function callOpenAI(
   req: AICompletionRequest,
   start: number,
-  byokKey?: string,
 ): Promise<AICompletionResponse> {
-  const apiKey = byokKey?.trim() || ENV.OPENAI_API_KEY;
+  const apiKey = ENV.OPENAI_API_KEY;
   if (!apiKey) {
-    throw new Error("OpenAI API key not available. Set OPENAI_API_KEY or provide x-byok-openai.");
+    throw new Error("OpenAI API key not available. Set OPENAI_API_KEY in Supabase Secrets.");
   }
 
   const ctrl = new AbortController();
@@ -374,11 +376,10 @@ async function callOpenAI(
 async function callAnthropic(
   req: AICompletionRequest,
   start: number,
-  byokKey?: string,
 ): Promise<AICompletionResponse> {
-  const apiKey = byokKey?.trim() || ENV.ANTHROPIC_API_KEY;
+  const apiKey = ENV.ANTHROPIC_API_KEY;
   if (!apiKey) {
-    throw new Error("Anthropic API key not available. Set ANTHROPIC_API_KEY or provide x-byok-anthropic.");
+    throw new Error("Anthropic API key not available. Set ANTHROPIC_API_KEY in Supabase Secrets.");
   }
 
   const system = req.messages.find(m => m.role === "system")?.content ?? "";
@@ -438,11 +439,10 @@ function extractGeminiText(json: any): string {
 async function callGemini(
   req: AICompletionRequest,
   start: number,
-  byokKey?: string,
 ): Promise<AICompletionResponse> {
-  const apiKey = byokKey?.trim() || ENV.GEMINI_API_KEY;
+  const apiKey = ENV.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("Gemini API key not available. Set GEMINI_API_KEY or provide x-byok-gemini.");
+    throw new Error("Gemini API key not available. Set GEMINI_API_KEY in Supabase Secrets.");
   }
 
   const base = `https://generativelanguage.googleapis.com/${ENV.GEMINI_API_VERSION}`;

@@ -1,6 +1,4 @@
-// @ts-nocheck
 import { useCallback, useRef } from "react";
-import type { TranscriptSegment } from "./useDeepgramStream";
 
 // ─────────────────────────────────────────────────────────────────
 // useSpeakerDiarization
@@ -8,6 +6,12 @@ import type { TranscriptSegment } from "./useDeepgramStream";
 // "interviewer" or "candidate" buffer based on speaker index.
 // Also maintains a rolling window for question detection.
 // ─────────────────────────────────────────────────────────────────
+
+export interface TranscriptSegment {
+  text: string;
+  speaker: 0 | 1;
+  is_final: boolean;
+}
 
 interface DiarizedOutput {
   interviewer: string;   // latest interviewer utterance

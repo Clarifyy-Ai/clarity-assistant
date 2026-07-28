@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import {
   Eye,
   EyeOff,
@@ -10,7 +12,6 @@ import {
 } from "lucide-react";
 
 import { useAuthStore } from "@/store/authStore";
-import { FormWrapper } from "@/components/common/FormWrapper";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 
@@ -23,6 +24,7 @@ import {
 
 import { formatSupabaseAuthError, isSupabaseConfigAuthError } from "@/lib/errors";
 import { loginSchema, type LoginInput } from "@/lib/validators";
+import { getCSRFHiddenInputProps, validateCSRFToken } from "@/lib/security";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { BrandLogo } from "@/components/marketing";
 
@@ -42,7 +44,13 @@ const TESTIMONIAL = {
 const LOCK_KEY = "clarify_login_lock";
 const ATTEMPT_KEY = "clarify_login_attempts";
 const REMEMBER_ME_KEY = "clarify_remember_me";
-/** Client-side lockout after failed logins (T-0688). Complements Supabase Auth rate limiting on sign-in endpoints. */
+/**
+ * Client-side UX lockout after failed logins (T-0688).
+ * This is NOT authoritative — it can be cleared by wiping localStorage.
+ * Real protection: Supabase Auth applies server-side rate limiting on
+ * sign-in / token endpoints (dashboard Auth rate limits). Do not invent a
+ * separate lockout microservice unless product requires IP-keyed DB locks.
+ */
 const MAX_ATTEMPTS = 5;
 const LOCK_DURATION_MS = 30 * 60 * 1000;
 
@@ -82,9 +90,9 @@ function getStoredAttemptCount(): number {
 }
 
 function formatLockMessage(lockMinsLeft: number): string {
-  return `Too many failed attempts. Account locked for ${lockMinsLeft} minute${
+  return `Too many failed attempts on this device. Try again in ${lockMinsLeft} minute${
     lockMinsLeft === 1 ? "" : "s"
-  }.`;
+  }. Supabase Auth also rate-limits sign-in on the server.`;
 }
 
 export default function Login(): JSX.Element {
@@ -107,14 +115,22 @@ export default function Login(): JSX.Element {
   const signInWithEmail = useAuthStore((state) => state.signInWithEmail);
 
   const [showPassword, setShowPassword] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [rememberMe, setRememberMe] = useState(
     () => safeGetLocalStorageItem(REMEMBER_ME_KEY) === "true"
   );
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [lockTick, setLockTick] = useState(0);
   const [authError, setAuthError] = useState<string | null>(null);
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting, isValid },
+  } = useForm<LoginInput>({
+    resolver: zodResolver(loginSchema),
+    mode: "onChange",
+    defaultValues: { email: "", password: "" },
+  });
 
   useEffect(() => {
     const message = searchParams.get("message");
@@ -123,6 +139,16 @@ export default function Login(): JSX.Element {
       setAuthError(decodeURIComponent(message.replace(/\+/g, " ")));
     } else if (errorCode) {
       setAuthError(`Sign-in failed (${errorCode}). Please try again.`);
+    } else {
+      try {
+        const banMessage = sessionStorage.getItem("clarify_auth_ban_message");
+        if (banMessage) {
+          sessionStorage.removeItem("clarify_auth_ban_message");
+          setAuthError(banMessage);
+        }
+      } catch {
+        // Ignore storage failures.
+      }
     }
   }, [searchParams]);
 
@@ -184,10 +210,7 @@ export default function Login(): JSX.Element {
     return Math.ceil((lockedUntil - Date.now()) / 60_000);
   }, [lockedUntil, lockTick]);
 
-  const isFormValid = useMemo(
-    () => loginSchema.safeParse({ email, password }).success,
-    [email, password]
-  );
+  const isFormValid = isValid;
 
   function handleRememberMeChange(checked: boolean): void {
     setRememberMe(checked);
@@ -199,7 +222,20 @@ export default function Login(): JSX.Element {
     }
   }
 
-  async function handleLogin(data: LoginInput): Promise<void> {
+  async function handleLogin(
+    data: LoginInput,
+    event?: React.BaseSyntheticEvent
+  ): Promise<void> {
+    const formEl = event?.target as HTMLFormElement | undefined;
+    if (formEl) {
+      const formData = new FormData(formEl);
+      const token = formData.get("csrfToken");
+      if (typeof token !== "string" || !validateCSRFToken(token)) {
+        setAuthError("Security token expired. Please refresh and try again.");
+        return;
+      }
+    }
+
     if (isLocked) {
       setAuthError(formatLockMessage(lockMinsLeft));
       return;
@@ -234,7 +270,9 @@ export default function Login(): JSX.Element {
         safeSetLocalStorageItem(LOCK_KEY, String(until));
         setLockedUntil(until);
 
-        setAuthError("Too many failed attempts. Account locked for 30 minutes.");
+        setAuthError(
+          "Too many failed attempts on this device. Locked for 30 minutes. Supabase Auth also rate-limits sign-in on the server."
+        );
         return;
       }
 
@@ -362,124 +400,109 @@ export default function Login(): JSX.Element {
             <div className="flex-1 h-px bg-border" />
           </div>
 
-          <FormWrapper<LoginInput>
-            schema={loginSchema}
-            onSubmit={handleLogin}
+          <form
             className="space-y-4"
-            validateCsrf
+            noValidate
+            onSubmit={handleSubmit((data, event) => handleLogin(data, event))}
           >
-            {({ fieldErrors, formError, isSubmitting }) => (
-              <>
-                <Input
-                  label="Email"
-                  name="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                  required
-                  onChange={(event) => setEmail(event.target.value)}
-                />
+            <input {...getCSRFHiddenInputProps()} />
+            <Input
+              label="Email"
+              type="email"
+              placeholder="you@example.com"
+              autoComplete="email"
+              required
+              error={errors.email?.message}
+              {...register("email")}
+            />
 
-                {fieldErrors.email?.[0] && (
-                  <p className="text-xs text-destructive">
-                    {fieldErrors.email[0]}
-                  </p>
-                )}
-
-                <div className="space-y-1">
-                  <Input
-                    label="Password"
-                    name="password"
-                    type={showPassword ? "text" : "password"}
-                    placeholder="••••••••"
-                    autoComplete="current-password"
-                    required
-                    onChange={(event) => setPassword(event.target.value)}
-                    rightIcon={
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword((value) => !value)}
-                        className="text-muted-foreground hover:text-foreground transition-colors"
-                        aria-label={
-                          showPassword ? "Hide password" : "Show password"
-                        }
-                      >
-                        {showPassword ? (
-                          <EyeOff className="w-4 h-4" />
-                        ) : (
-                          <Eye className="w-4 h-4" />
-                        )}
-                      </button>
+            <div className="space-y-1">
+              <Input
+                label="Password"
+                type={showPassword ? "text" : "password"}
+                placeholder="••••••••"
+                autoComplete="current-password"
+                required
+                error={errors.password?.message}
+                {...register("password")}
+                rightIcon={
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword((value) => !value)}
+                    className="text-muted-foreground hover:text-foreground transition-colors"
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
                     }
+                  >
+                    {showPassword ? (
+                      <EyeOff className="w-4 h-4" />
+                    ) : (
+                      <Eye className="w-4 h-4" />
+                    )}
+                  </button>
+                }
+              />
+
+              <div className="flex items-center justify-between">
+                <label className="flex items-center gap-2 cursor-pointer select-none">
+                  <input
+                    type="checkbox"
+                    checked={rememberMe}
+                    onChange={(event) =>
+                      handleRememberMeChange(event.target.checked)
+                    }
+                    className="h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/40 cursor-pointer"
                   />
+                  <span className="text-xs text-muted-foreground">
+                    Remember me
+                  </span>
+                </label>
 
-                  {fieldErrors.password?.[0] && (
-                    <p className="text-xs text-destructive">
-                      {fieldErrors.password[0]}
-                    </p>
-                  )}
-
-                  <div className="flex items-center justify-between">
-                    <label className="flex items-center gap-2 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={rememberMe}
-                        onChange={(event) =>
-                          handleRememberMeChange(event.target.checked)
-                        }
-                        className="h-4 w-4 rounded border-border text-primary focus:ring-2 focus:ring-primary/40 cursor-pointer"
-                      />
-                      <span className="text-xs text-muted-foreground">
-                        Remember me
-                      </span>
-                    </label>
-
-                    <Link
-                      to="/forgot-password"
-                      className="text-xs text-primary hover:opacity-80 transition-opacity"
-                    >
-                      Forgot password?
-                    </Link>
-                  </div>
-                </div>
-
-                {isLocked && (
-                  <div className="flex items-start gap-2 text-sm text-amber-600 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2.5">
-                    <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                    <div>
-                      <p className="font-medium">Account temporarily locked</p>
-                      <p className="text-xs mt-0.5 opacity-90">
-                        Too many failed attempts. Try again in {lockMinsLeft}{" "}
-                        minute{lockMinsLeft === 1 ? "" : "s"}, or{" "}
-                        <Link to="/forgot-password" className="underline">
-                          reset your password
-                        </Link>
-                        .
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {(authError || formError) && !isLocked && (
-                  <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2.5">
-                    <AlertCircle className="w-4 h-4 shrink-0" />
-                    <span>{authError ?? formError}</span>
-                  </div>
-                )}
-
-                <Button
-                  type="submit"
-                  variant="primary"
-                  size="md"
-                  loading={isSubmitting}
-                  disabled={isLocked || isSubmitting || !isFormValid}
-                  fullWidth
+                <Link
+                  to="/forgot-password"
+                  className="text-xs text-primary hover:opacity-80 transition-opacity"
                 >
-                  {isLocked ? `Locked (${lockMinsLeft}m)` : "Sign in"}
-                </Button>
-              </>
+                  Forgot password?
+                </Link>
+              </div>
+            </div>
+
+            {isLocked && (
+              <div className="flex items-start gap-2 text-sm text-amber-600 bg-amber-500/10 border border-amber-500/30 rounded-xl px-3 py-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-medium">Temporarily locked on this device</p>
+                  <p className="text-xs mt-0.5 opacity-90">
+                    Too many failed attempts. Try again in {lockMinsLeft}{" "}
+                    minute{lockMinsLeft === 1 ? "" : "s"}, or{" "}
+                    <Link to="/forgot-password" className="underline">
+                      reset your password
+                    </Link>
+                    . Server-side Supabase Auth rate limits still apply even
+                    if this device lock is cleared.
+                  </p>
+                </div>
+              </div>
             )}
-          </FormWrapper>
+
+            {authError && !isLocked && (
+              <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2.5">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{authError}</span>
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              variant="primary"
+              size="md"
+              loading={isSubmitting}
+              disabled={isLocked || isSubmitting || !isFormValid}
+              fullWidth
+            >
+              {isLocked ? `Locked (${lockMinsLeft}m)` : "Sign in"}
+            </Button>
+          </form>
 
           <p className="text-center text-sm text-muted-foreground mt-6">
             Don&apos;t have an account?{" "}

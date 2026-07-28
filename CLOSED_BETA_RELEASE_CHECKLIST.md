@@ -17,8 +17,13 @@
 - [ ] Billing idempotency verified live (Stripe/Razorpay)
 - [x] Plan normalization verified (`planCatalog.test.ts`)
 - [ ] Admin authorization runtime tests
-- [x] Rooms removed from pages (redirects remain)
+- [x] Rooms removed from pages (redirects remain) — duplicate top-level route removed
 - [x] BYOK remnants removed from authStore (DB null migration pending apply)
+- [x] Charging EFs use deductCreditsAtomic + idempotency (local code)
+- [x] Razorpay grant-before-paid + catalog credits (local; Vitest 5)
+- [x] bulk-import-questions hardened (zod/RL/fail-closed)
+- [x] LazyMotion on GovExams + MockTestHub
+- [x] CSP script unsafe-inline removed (style retained)
 
 ## Operations
 

@@ -13,6 +13,10 @@ import {
   enforceAiRateLimitAsync,
 } from "../_shared/rateLimit.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
+import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
+import { creditCost } from "../_shared/creditEconomics.ts";
+
+const GAP_ANALYSIS_COST = creditCost("gap_analysis");
 
 Deno.serve(async (req: Request) => {
   const cors = handleCors(req);
@@ -84,6 +88,23 @@ Deno.serve(async (req: Request) => {
     }
 
     /* -------------------------------------------------------
+       P0-4: DEDUCT CREDITS (server-authoritative)
+    ------------------------------------------------------- */
+    const creditResult = await deductCreditsAtomic({
+      userId,
+      action: "gap_analysis",
+      cost: GAP_ANALYSIS_COST,
+      idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+    });
+    if (!creditResult.success) {
+      return errorResponse(
+        `Insufficient credits. Gap analysis costs ${GAP_ANALYSIS_COST} credits.`,
+        "INSUFFICIENT_CREDITS",
+        402,
+      );
+    }
+
+    /* -------------------------------------------------------
        SANITIZE & TRIM LARGE CONTENT (Preserved exact limits)
     ------------------------------------------------------- */
     const safeResume = String(resume.content ?? "")
@@ -125,7 +146,23 @@ ${safeJD}
       model: "gemini-2.0-flash", // Using latest Gemini matching original intent
       messages: [{ role: "user", content: prompt }],
       maxTokens: 2048,
+    }).catch(async (err) => {
+      await refundCredits({
+        userId,
+        cost: GAP_ANALYSIS_COST,
+        reason: "refund_gap_analysis_ai_failure",
+      });
+      throw err;
     });
+
+    if (!aiResult?.text) {
+      await refundCredits({
+        userId,
+        cost: GAP_ANALYSIS_COST,
+        reason: "refund_gap_analysis_empty",
+      });
+      return errorResponse("Gap analysis unavailable. Credits refunded.", "AI_ERROR", 502);
+    }
 
     const clean = aiResult.text.replace(/```json|```/g, "").trim();
 

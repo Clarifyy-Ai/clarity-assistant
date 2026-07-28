@@ -35,6 +35,8 @@ interface RevenueMetrics {
   ltv:               number;
   totalRevenue:      number;
   creditRevenue:     number;
+  /** INR paise from paid Razorpay orders in the selected window (separate from USD MRR). */
+  inrRevenuePaise:   number;
 }
 
 interface PlanDistribution {
@@ -211,27 +213,30 @@ export default function AdminRevenue() {
           : 0;
 
         const txData = await creditsDB.listRecent(50);
-        const creditPurchaseCents = await creditsDB.sumPurchasesSince(sinceIso);
-        const ledgerMrrRows = await creditsDB.monthlyRevenueByPlan(sinceIso);
-        const ledgerMrr = ledgerMrrRows.reduce((sum, row) => sum + row.totalCents, 0);
-        const useLedgerMrr = STRIPE_CONFIGURED && ledgerMrr > 0;
-        const mrr = useLedgerMrr ? ledgerMrr : planEstimateMrr;
-        setMrrIsEstimated(!useLedgerMrr);
+        // P0-6: USD MRR from active subscriptions × catalog prices (not credit ledger).
+        const usdMrrRows = await creditsDB.monthlyRevenueByPlan(sinceIso);
+        const subscriptionMrr = usdMrrRows.reduce((sum, row) => sum + row.totalCents, 0);
+        const mrr = subscriptionMrr > 0 ? subscriptionMrr : planEstimateMrr;
+        // Estimated when Stripe isn't configured OR we fell back to profile plan counts.
+        setMrrIsEstimated(!STRIPE_CONFIGURED || subscriptionMrr === 0);
 
-        // MRR growth vs previous period (only meaningful with ledger data)
+        let inrRevenuePaise = 0;
+        try {
+          inrRevenuePaise = await creditsDB.sumRazorpayPaidPaiseSince(sinceIso);
+        } catch {
+          inrRevenuePaise = 0;
+        }
+
+        // MRR growth vs previous snapshot (subscription-based)
         let mrrGrowth = 0;
-        if (useLedgerMrr) {
-          try {
-            const prevRows = await creditsDB.monthlyRevenueByPlan(prevSinceIso);
-            const prevTotal = prevRows.reduce((sum, row) => sum + row.totalCents, 0);
-            // prevTotal covers 2x window; subtract current to get prior period only
-            const priorPeriod = Math.max(prevTotal - ledgerMrr, 0);
-            if (priorPeriod > 0) {
-              mrrGrowth = ((ledgerMrr - priorPeriod) / priorPeriod) * 100;
-            }
-          } catch {
-            mrrGrowth = 0;
+        try {
+          const prevRows = await creditsDB.monthlyRevenueByPlan(prevSinceIso);
+          const prevTotal = prevRows.reduce((sum, row) => sum + row.totalCents, 0);
+          if (prevTotal > 0 && mrr !== prevTotal) {
+            mrrGrowth = ((mrr - prevTotal) / prevTotal) * 100;
           }
+        } catch {
+          mrrGrowth = 0;
         }
 
         const userIds = [...new Set((txData ?? []).map((tx) => tx.user_id))];
@@ -276,7 +281,8 @@ export default function AdminRevenue() {
           churnRate,
           ltv,
           totalRevenue:      mrr,
-          creditRevenue:     creditPurchaseCents,
+          creditRevenue:     0,
+          inrRevenuePaise,
         });
       }
     } catch (err) {
@@ -321,8 +327,8 @@ export default function AdminRevenue() {
           <h1 className="text-xl font-bold text-foreground">Revenue</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
             {mrrIsEstimated
-              ? "Estimated (Stripe disconnected) — MRR from plan counts. Transactions use live ledger data."
-              : "MRR from credit_transactions grouped by month and plan. Transactions use live ledger data."}
+              ? "USD MRR estimated from active plan counts × catalog prices. INR shown separately from Razorpay payment_orders."
+              : "USD MRR from active/trialing subscriptions × catalog prices. INR shown separately from Razorpay payment_orders."}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -393,6 +399,29 @@ export default function AdminRevenue() {
           title="Avg. LTV"
           value={metrics ? formatCents(metrics.ltv) : "—"}
           subtitle="Per paying user"
+          icon={CreditCard}
+          loading={isLoading}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <MetricCard
+          title="USD MRR"
+          value={metrics ? formatCents(metrics.mrr) : "—"}
+          subtitle="Active/trialing × catalog USD prices"
+          icon={DollarSign}
+          loading={isLoading}
+        />
+        <MetricCard
+          title="INR revenue (period)"
+          value={
+            metrics
+              ? `₹${(metrics.inrRevenuePaise / 100).toLocaleString("en-IN", {
+                  maximumFractionDigits: 0,
+                })}`
+              : "—"
+          }
+          subtitle="Paid Razorpay orders in selected range (not blended into USD MRR)"
           icon={CreditCard}
           loading={isLoading}
         />

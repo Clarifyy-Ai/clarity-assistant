@@ -52,7 +52,6 @@ import {
 import type { ProfileRow } from "@/types";
 import { getPlanDisplayName } from "@/lib/constants/pricing";
 import { PRODUCT_NAMES, NAV_SECTION_LABELS } from "@/lib/constants/productNames";
-import { useIndiaRegion } from "@/hooks/useIndiaRegion";
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -63,7 +62,6 @@ type NavItem = {
   label: string;
   exact?: boolean;
   tourId?: string;
-  indiaOnly?: boolean;
 };
 
 type NavSection = {
@@ -129,7 +127,6 @@ const NAV_SECTIONS: NavSection[] = [
         icon: ClipboardList,
         stealthIcon: PenTool,
         label: PRODUCT_NAMES.govExams,
-        indiaOnly: true,
       },
     ],
   },
@@ -231,20 +228,20 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
 
   const sidebarCollapsed = useUIStore((state) => state.sidebar_collapsed);
   const stealthMode = useUIStore((state) => state.stealth_mode);
-  const setSidebarCollapsed = useUIStore(
-    (state) => state.setSidebarCollapsed
-  );
   const toggleSidebar = useUIStore((state) => state.toggleSidebar);
 
   const profile = useAuthStore((state) => state.profile);
   const isAdmin = useAuthStore((state) => state.isAdmin);
-  const { isIndia } = useIndiaRegion();
 
   const signOut = useAuthStore((state) => state.signOut);
 
   const [hoverExpanded, setHoverExpanded] = useState(false);
+  /** Forced collapse below lg — does not write into persisted preference. */
+  const [viewportForcedCollapse, setViewportForcedCollapse] = useState(false);
 
-  const collapsed = onNavClick ? false : sidebarCollapsed;
+  const collapsed = onNavClick
+    ? false
+    : viewportForcedCollapse || sidebarCollapsed;
   const visuallyCollapsed = collapsed && !hoverExpanded;
   const initial = getProfileInitial(profile);
   const planLabel = getPlanLabel(profile);
@@ -253,11 +250,8 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
     const mediaQuery = window.matchMedia("(min-width: 1024px)");
 
     const handleChange = (event: MediaQueryListEvent | MediaQueryList) => {
-      if (!event.matches) {
-        setSidebarCollapsed(true);
-      } else {
-        setSidebarCollapsed(false);
-      }
+      // Below lg: force visual collapse only. Above lg: restore saved preference.
+      setViewportForcedCollapse(!event.matches);
     };
 
     handleChange(mediaQuery);
@@ -267,7 +261,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
     return () => {
       mediaQuery.removeEventListener("change", handleChange);
     };
-  }, [setSidebarCollapsed]);
+  }, []);
 
   // Mock-test question count badge removed alongside section de-scoping.
 
@@ -329,7 +323,6 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
             )}
 
             {section.items
-              .filter((item) => !item.indiaOnly || isIndia)
               .map((item) => {
               const isItemActive = isPathActive(location.pathname, item.to);
               const Icon = stealthMode ? item.stealthIcon : item.icon;

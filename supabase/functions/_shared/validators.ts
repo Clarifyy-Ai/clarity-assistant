@@ -171,7 +171,6 @@ export const billingPlanIdSchema = z.enum([
 ]);
 
 export const creditPackIdSchema = z.enum([
-  "credits_10",
   "credits_50",
   "credits_150",
   "credits_500",

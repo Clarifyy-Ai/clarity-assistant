@@ -17,9 +17,6 @@ verify_jwt = false
 [functions.ai-coach-chat]
 verify_jwt = true
 
-[functions.ai-feedback]
-verify_jwt = true
-
 [functions.analytics-dashboard]
 verify_jwt = true
 
@@ -32,6 +29,8 @@ verify_jwt = true
 [functions.collect-exam-papers]
 verify_jwt = true
 
+# Scraper ingest uses x-ingest-key (INGEST_API_KEY); JWT must stay disabled.
+# Function fails closed if INGEST_API_KEY is unset. Rate-limited + schema-validated.
 [functions.bulk-import-questions]
 verify_jwt = false
 
@@ -59,9 +58,6 @@ verify_jwt = true
 [functions.disconnect-calendar]
 verify_jwt = true
 
-[functions.end-session]
-verify_jwt = true
-
 [functions.export-user-data]
 verify_jwt = true
 
@@ -75,9 +71,6 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.generate-hint]
-verify_jwt = true
-
-[functions.generate-practice-questions]
 verify_jwt = true
 
 [functions.generate-questions]
@@ -104,12 +97,6 @@ verify_jwt = true
 [functions.resume-subscription]
 verify_jwt = true
 
-[functions.save-answer]
-verify_jwt = true
-
-[functions.save-transcript]
-verify_jwt = true
-
 [functions.schedule-interview]
 verify_jwt = true
 
@@ -126,12 +113,6 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.sync-calendar]
-verify_jwt = true
-
-[functions.validate-api-key]
-verify_jwt = true
-
-[functions.billing-status]
 verify_jwt = true
 
 [functions.razorpay-create-order]

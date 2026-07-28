@@ -7,10 +7,13 @@ import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { parseJsonBody } from "../_shared/errors.ts";
-import { PLAN_MONTHLY_CREDITS } from "../_shared/creditEconomics.ts";
 import { assertBillingConfigOrThrow } from "../_shared/billingConfig.ts";
 import { opsLog } from "../_shared/opsLog.ts";
-import { monthlyCreditsForPlan } from "../_shared/billingCatalog.ts";
+import {
+  creditsForRazorpayProductType,
+  planIdForRazorpayProductType,
+} from "../_shared/billingCatalog.ts";
+import { enforcePaymentRateLimitAsync } from "../_shared/rateLimit.ts";
 
 const KEY_ID = Deno.env.get("RAZORPAY_KEY_ID") ?? "";
 const KEY_SECRET = Deno.env.get("RAZORPAY_KEY_SECRET") ?? "";
@@ -53,27 +56,6 @@ function baseAmountPaise(
     case "credits_500":
       return settings.credits_500_inr_paise;
   }
-}
-
-function creditsForProduct(product: (typeof PRODUCT_TYPES)[number]): number {
-  switch (product) {
-    case "pro_monthly":
-      return monthlyCreditsForPlan("pro");
-    case "enterprise_monthly":
-      return monthlyCreditsForPlan("enterprise");
-    case "credits_50":
-      return 50;
-    case "credits_150":
-      return 150;
-    case "credits_500":
-      return 500;
-  }
-}
-
-function planIdForProduct(product: (typeof PRODUCT_TYPES)[number]): string | null {
-  if (product === "pro_monthly") return "pro";
-  if (product === "enterprise_monthly") return "enterprise";
-  return null;
 }
 
 async function razorpayFetch(path: string, body: Record<string, unknown>) {
@@ -136,6 +118,14 @@ Deno.serve(async (req: Request) => {
     });
   }
 
+  const db = createServiceClient();
+  const rateLimited = await enforcePaymentRateLimitAsync(
+    db,
+    "razorpay-create-order",
+    auth.context.user.id,
+  );
+  if (rateLimited) return rateLimited;
+
   const raw = await parseJsonBody(req);
   const parsed = schema.safeParse(raw);
   if (!parsed.success) {
@@ -145,7 +135,6 @@ Deno.serve(async (req: Request) => {
     });
   }
 
-  const db = createServiceClient();
   const { data: settingsRow } = await db
     .from("billing_settings")
     .select("*")
@@ -230,8 +219,8 @@ Deno.serve(async (req: Request) => {
       amount_paise: amount,
       currency: "INR",
       status: "created",
-      credits_granted: creditsForProduct(product_type),
-      plan_id: planIdForProduct(product_type),
+      credits_granted: creditsForRazorpayProductType(product_type),
+      plan_id: planIdForRazorpayProductType(product_type),
       promo_code_id: promoId,
       promo_code: appliedPromo,
       metadata: { receipt },

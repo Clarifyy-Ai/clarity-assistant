@@ -20,7 +20,6 @@ export const EDGE_FUNCTIONS = {
   // AI Generation
   GENERATE_ANSWER:        "generate-answer",
   GENERATE_HINT:          "generate-hint",
-  GENERATE_FEEDBACK:      "ai-feedback",
   GENERATE_STAR:          "generate-star-answer",
   GENERATE_DEBRIEF:       "generate-debrief",
   GENERATE_REPHRASE:      "prep-tool",
@@ -51,7 +50,6 @@ export const EDGE_FUNCTIONS = {
   // Analytics & sessions
   ANALYTICS_DASHBOARD:    "analytics-dashboard",
   START_SESSION:          "start-session",
-  END_SESSION:            "end-session",
 } as const;
 
 export type EdgeFunctionName = (typeof EDGE_FUNCTIONS)[keyof typeof EDGE_FUNCTIONS];

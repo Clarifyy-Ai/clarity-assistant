@@ -10,7 +10,6 @@ const ACTIVE_LAUNCH_PLANS = new Set(["free", "pro", "enterprise"]);
 function resolvePackCredits(packId: string | undefined, clientCredits: number): number {
   void clientCredits;
   const packs: Record<string, number> = {
-    credits_10: 10,
     credits_50: 50,
     credits_150: 150,
     credits_500: 500,

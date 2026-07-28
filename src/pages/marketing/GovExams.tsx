@@ -1,5 +1,5 @@
-import { Link, Navigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { Link } from "react-router-dom";
+import { LazyMotion, domAnimation, m } from "framer-motion";
 import {
   ArrowRight,
   BookOpen,
@@ -13,7 +13,6 @@ import {
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { GovExamShowcase } from "@/components/marketing/GovExamShowcase";
 import { usePageMeta } from "@/hooks/usePageMeta";
-import { useIndiaRegion } from "@/hooks/useIndiaRegion";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { cn } from "@/lib/utils";
 
@@ -64,8 +63,6 @@ function fadeUp(delay = 0) {
 }
 
 export default function GovExams() {
-  const { isIndia } = useIndiaRegion();
-
   usePageMeta({
     title: `${PRODUCT_NAMES.govExams} — UPSC, SSC, IBPS & more | ${PRODUCT_NAMES.brand}`,
     description:
@@ -73,15 +70,12 @@ export default function GovExams() {
     canonical: "https://clarify.ai.sltfinanceindia.com/gov-exams",
   });
 
-  if (!isIndia) {
-    return <Navigate to="/" replace />;
-  }
-
   return (
     <MarketingLayout>
+      <LazyMotion features={domAnimation} strict>
       <section className="pt-24 sm:pt-28 pb-12 px-4 sm:px-6">
         <div className="max-w-5xl mx-auto">
-          <motion.div
+          <m.div
             initial={{ opacity: 0, y: 24 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
@@ -116,22 +110,22 @@ export default function GovExams() {
                 Log in to mock test hub
               </Link>
             </div>
-          </motion.div>
+          </m.div>
 
-          <motion.div {...fadeUp(0.1)}>
+          <m.div {...fadeUp(0.1)}>
             <GovExamShowcase />
-          </motion.div>
+          </m.div>
         </div>
       </section>
 
       <section className="py-14 px-4 sm:px-6 bg-secondary/20">
         <div className="max-w-5xl mx-auto">
-          <motion.h2 {...fadeUp()} className="text-2xl font-bold text-center mb-10">
+          <m.h2 {...fadeUp()} className="text-2xl font-bold text-center mb-10">
             Supported exam types
-          </motion.h2>
+          </m.h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             {EXAM_TYPES.map((exam, i) => (
-              <motion.div
+              <m.div
                 key={exam.name}
                 {...fadeUp(i * 0.06)}
                 className="rounded-2xl border border-border bg-card p-5"
@@ -141,7 +135,7 @@ export default function GovExams() {
                 </span>
                 <h3 className="font-bold mt-2">{exam.name}</h3>
                 <p className="text-xs text-muted-foreground mt-1">{exam.subjects}</p>
-              </motion.div>
+              </m.div>
             ))}
           </div>
         </div>
@@ -149,15 +143,15 @@ export default function GovExams() {
 
       <section className="py-14 px-4 sm:px-6">
         <div className="max-w-5xl mx-auto">
-          <motion.h2 {...fadeUp()} className="text-2xl font-bold text-center mb-3">
+          <m.h2 {...fadeUp()} className="text-2xl font-bold text-center mb-3">
             Built for serious exam prep
-          </motion.h2>
+          </m.h2>
           <p className="text-sm text-muted-foreground text-center mb-10 max-w-lg mx-auto">
             Everything you need to simulate the real exam hall — not just flashcards.
           </p>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
             {FEATURES.map((f, i) => (
-              <motion.div
+              <m.div
                 key={f.title}
                 {...fadeUp(i * 0.08)}
                 className="flex gap-4 rounded-2xl border border-border bg-card p-5"
@@ -169,7 +163,7 @@ export default function GovExams() {
                   <h3 className="font-semibold text-sm">{f.title}</h3>
                   <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{f.desc}</p>
                 </div>
-              </motion.div>
+              </m.div>
             ))}
           </div>
         </div>
@@ -177,7 +171,7 @@ export default function GovExams() {
 
       <section className="py-14 px-4 sm:px-6 border-t border-border">
         <div className="max-w-3xl mx-auto text-center">
-          <motion.div {...fadeUp()}>
+          <m.div {...fadeUp()}>
             <h2 className="text-xl font-bold mb-4">Also preparing for job interviews?</h2>
             <p className="text-sm text-muted-foreground mb-6">
               Clarify AI combines gov exam mock tests with AI interview coaching, mock sessions,
@@ -203,9 +197,10 @@ export default function GovExams() {
               Explore all features
               <ArrowRight className="w-4 h-4" />
             </Link>
-          </motion.div>
+          </m.div>
         </div>
       </section>
+      </LazyMotion>
     </MarketingLayout>
   );
 }

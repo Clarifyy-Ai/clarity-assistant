@@ -85,10 +85,7 @@ export function AppTopBar() {
         </Link>
       </div>
 
-      <div
-        className="flex items-center gap-2 min-w-0 flex-1"
-        id="topbar-breadcrumb"
-      />
+      <div className="flex items-center gap-2 min-w-0 flex-1" />
 
       <div style={noDragStyle} className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
 

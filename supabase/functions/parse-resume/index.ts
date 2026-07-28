@@ -1,7 +1,7 @@
 // parse-resume/index.ts — FIXED: uses Storage download (private bucket)
 
 import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
-import { createServiceClient } from "../_shared/supabase.ts";
+import { createServiceClient, deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import { parseJSON } from "../_shared/gemini.ts";
 import { requireAuth } from "../_shared/utils.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
@@ -12,7 +12,9 @@ import {
   looksLikePdf,
   validateUploadMime,
 } from "../_shared/uploadValidation.ts";
+import { creditCost } from "../_shared/creditEconomics.ts";
 
+const RESUME_PARSE_COST = creditCost("resume_analysis");
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
 const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
 const OCR_API_KEY = Deno.env.get("OCR_API_KEY") ?? "";
@@ -184,7 +186,7 @@ Deno.serve(async (req) => {
     // ── Document upload limit enforcement ──
     const { data: profileRow } = await db
       .from("profiles")
-      .select("plan_id")
+      .select("plan_id, onboarding_completed")
       .eq("id", userId)
       .maybeSingle();
 
@@ -192,6 +194,11 @@ Deno.serve(async (req) => {
 
     const capabilityGate = requireCapabilityForFunction(planId, "parse-resume", req);
     if (capabilityGate) return capabilityGate;
+
+    // P0-4: First resume parse during onboarding is free once; later parses charge.
+    const onboardingHeader = req.headers.get("x-clarify-onboarding-parse") === "1";
+    const waiveCredits =
+      onboardingHeader || profileRow?.onboarding_completed === false;
 
     const docLimits: Record<string, number> = { free: 5, pro: 50 };
     const maxDocs = docLimits[planId] ?? Infinity;
@@ -285,6 +292,30 @@ Deno.serve(async (req) => {
 
     const base64 = safeBase64(fileBytes);
 
+    let creditsDeducted = false;
+    if (!waiveCredits) {
+      const creditResult = await deductCreditsAtomic({
+        userId,
+        action: "resume_analysis",
+        cost: RESUME_PARSE_COST,
+        idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+      });
+      if (!creditResult.success) {
+        return new Response(
+          JSON.stringify({
+            error: "Insufficient credits.",
+            code: "INSUFFICIENT_CREDITS",
+            message: `Resume analysis costs ${RESUME_PARSE_COST} credits.`,
+          }),
+          {
+            status: 402,
+            headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+          },
+        );
+      }
+      creditsDeducted = true;
+    }
+
     const SCHEMA = `{"name":"","summary":"","skills":[],"experience":[],"projects":[],"education":[],"total_years_experience":null}`;
     const PROMPT = `Extract structured resume information following this schema EXACTLY:\n${SCHEMA}\nReturn ONLY valid JSON. No markdown, no extra text.`;
 
@@ -337,7 +368,14 @@ Deno.serve(async (req) => {
       }
     }
 
-    // ALL FAILED
+    // ALL FAILED — refund if we charged
+    if (creditsDeducted) {
+      await refundCredits({
+        userId,
+        cost: RESUME_PARSE_COST,
+        reason: "refund_parse_resume_failed",
+      });
+    }
     if (effectiveVersionId) {
       await db.from("resume_versions").update({ parse_status: "error", parse_error: "All extraction methods failed" }).eq("id", effectiveVersionId);
     }

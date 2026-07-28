@@ -1,6 +1,10 @@
 /**
  * Server-side capability authorization (plan_id based).
  * Credits alone do not unlock every capability.
+ *
+ * Ranks align with PLAN_RANK in billingCatalog.ts and PLANS.features in
+ * src/lib/billing/subscriptionManager.ts:
+ *   free/starter = 0, pro/elite = 2, enterprise = 4
  */
 
 import { normalizePlanId, planRank, type CanonicalPlanId } from "./billingCatalog.ts";
@@ -18,22 +22,28 @@ export type Capability =
   | "desktop_overlay"
   | "analytics"
   | "company_research"
-  | "priority_models";
+  | "priority_models"
+  | "calendar_sync";
 
-/** Minimum plan rank required for each capability. */
-const CAPABILITY_MIN_RANK: Record<Capability, number> = {
-  live_rehearsal: 0,
-  advanced_hints: 0,
-  mock_interview: 0,
-  mock_test: 0,
-  prep_star: 0,
-  prep_coding: 0,
-  detailed_debrief: 0,
-  public_share: 0,
-  desktop_overlay: 0,
-  analytics: 0,
-  company_research: 0, // gated further by requirePlan("starter") where needed
-  priority_models: 4, // enterprise/max only
+/**
+ * Minimum plan rank required for each capability.
+ * Mirrors client PLANS.features: free gets limited coaching/prep/mock;
+ * Pro unlocks overlay, company research, analytics, calendar sync, AI mock-test fill.
+ */
+export const CAPABILITY_MIN_RANK: Record<Capability, number> = {
+  live_rehearsal: 0, // free: limited Practice Coach sessions
+  advanced_hints: 0, // free: included with live sessions (credit-gated)
+  mock_interview: 0, // free: limited mock sessions
+  mock_test: 0, // free: official papers; AI gap-fill gated separately via requirePlan("pro")
+  prep_star: 0, // free: limited STAR builder
+  prep_coding: 0, // free: prep tools available (some Pro tools gated in UI)
+  detailed_debrief: 0, // available after any session
+  public_share: 0, // share tokens not plan-gated
+  desktop_overlay: 2, // Pro: practice overlay
+  analytics: 2, // Pro: performance analytics / gap analysis
+  company_research: 2, // Pro: company research
+  calendar_sync: 2, // Pro: calendar sync
+  priority_models: 4, // Max/enterprise only
 };
 
 export function hasCapability(
@@ -83,10 +93,8 @@ export const AI_FUNCTION_CAPABILITY: Record<string, Capability> = {
   "generate-hint": "advanced_hints",
   "generate-answer": "live_rehearsal",
   "generate-debrief": "detailed_debrief",
-  "ai-feedback": "detailed_debrief",
   "ai-coach-chat": "live_rehearsal",
-  "generate-questions": "mock_test",
-  "generate-practice-questions": "mock_interview",
+  "generate-questions": "mock_interview",
   "generate-star-answer": "prep_star",
   "polish-star-section": "prep_star",
   "prep-tool": "prep_star",
@@ -96,6 +104,7 @@ export const AI_FUNCTION_CAPABILITY: Record<string, Capability> = {
   "company-research": "company_research",
   "analyze-test-performance": "mock_test",
   "parse-question-pdf": "mock_test",
+  "sync-calendar": "calendar_sync",
 };
 
 export function capabilityForFunction(functionName: string): Capability | null {

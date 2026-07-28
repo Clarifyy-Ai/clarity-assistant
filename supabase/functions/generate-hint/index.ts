@@ -224,10 +224,9 @@ function getIdempotencyKey(req: Request): string | null {
   return value.trim();
 }
 
-function getByokGeminiKey(req: Request): string | undefined {
-  const value = req.headers.get("x-byok-gemini")?.trim();
-
-  return value && value.length > 0 ? value : undefined;
+function getByokGeminiKey(_req: Request): string | undefined {
+  // M1: BYOK headers no longer accepted — server GEMINI_API_KEY only.
+  return undefined;
 }
 
 function sanitizeText(value: unknown, limit = 500): string {

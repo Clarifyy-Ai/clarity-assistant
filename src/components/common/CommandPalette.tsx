@@ -36,8 +36,6 @@ import { usePrivateMode } from "@/hooks/usePrivateMode";
 
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
-import { useIndiaRegion } from "@/hooks/useIndiaRegion";
-
 import { useUIStore } from "@/store/uiStore";
 
 import {
@@ -64,11 +62,7 @@ interface NavCommand {
 
   group: "Navigate" | "Sessions" | "Prep" | "Account";
 
-  indiaOnly?: boolean;
-
 }
-
-
 
 const COMMANDS: NavCommand[] = [
 
@@ -98,7 +92,7 @@ const COMMANDS: NavCommand[] = [
 
   { label: PRODUCT_NAMES.mockInterview, path: "/app/mock", icon: FlaskConical, group: "Sessions" },
 
-  { label: PRODUCT_NAMES.govExams, path: "/app/mock-test", icon: Brain, group: "Sessions", keywords: "exam gov test", indiaOnly: true },
+  { label: PRODUCT_NAMES.govExams, path: "/app/mock-test", icon: Brain, group: "Sessions", keywords: "exam gov test" },
 
   { label: PRODUCT_NAMES.sessionHistory, path: "/app/sessions", icon: Calendar, group: "Sessions", keywords: "history calls" },
 
@@ -138,9 +132,7 @@ export function CommandPalette() {
 
   const { enabled: privateMode, toggle: togglePrivate } = usePrivateMode();
 
-  const { isIndia } = useIndiaRegion();
-
-  const visibleCommands = COMMANDS.filter((c) => !c.indiaOnly || isIndia);
+  const visibleCommands = COMMANDS;
 
 
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Clock, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
@@ -18,11 +19,15 @@ function formatRemaining(ms: number): string {
 export function SessionTimeoutBanner() {
   const session = useAuthStore((s) => s.session);
   const setSession = useAuthStore((s) => s.setSession);
+  const signOut = useAuthStore((s) => s.signOut);
+  const navigate = useNavigate();
+  const location = useLocation();
 
   const [showWarning, setShowWarning] = useState(false);
   const [remainingMs, setRemainingMs] = useState<number | null>(null);
   const [extending, setExtending] = useState(false);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const forcedSignOutRef = useRef(false);
 
   const clearTick = useCallback(() => {
     if (tickRef.current) {
@@ -30,6 +35,20 @@ export function SessionTimeoutBanner() {
       tickRef.current = null;
     }
   }, []);
+
+  const forceSignOut = useCallback(async () => {
+    if (forcedSignOutRef.current) return;
+    forcedSignOutRef.current = true;
+    clearTick();
+    try {
+      await signOut();
+    } finally {
+      navigate("/login", {
+        replace: true,
+        state: { from: { pathname: location.pathname } },
+      });
+    }
+  }, [clearTick, signOut, navigate, location.pathname]);
 
   const evaluateExpiry = useCallback(() => {
     const expiresAt = session?.expires_at;
@@ -42,6 +61,13 @@ export function SessionTimeoutBanner() {
     const expiryMs = expiresAt * 1000;
     const msLeft = expiryMs - Date.now();
 
+    if (msLeft <= 0) {
+      setShowWarning(true);
+      setRemainingMs(0);
+      void forceSignOut();
+      return;
+    }
+
     if (msLeft <= WARN_BEFORE_MS) {
       setShowWarning(true);
       setRemainingMs(msLeft);
@@ -49,9 +75,10 @@ export function SessionTimeoutBanner() {
       setShowWarning(false);
       setRemainingMs(null);
     }
-  }, [session?.expires_at]);
+  }, [session?.expires_at, forceSignOut]);
 
   useEffect(() => {
+    forcedSignOutRef.current = false;
     clearTick();
     evaluateExpiry();
 
@@ -102,20 +129,22 @@ export function SessionTimeoutBanner() {
           </p>
           <p className="text-xs opacity-80">
             {expired
-              ? "Extend your session to keep working without signing in again."
+              ? "Signing you out — please sign in again to continue."
               : `You'll be signed out in ${formatRemaining(remainingMs)} unless you extend.`}
           </p>
         </div>
 
-        <Button
-          variant="secondary"
-          size="sm"
-          loading={extending}
-          onClick={() => void handleExtend()}
-          leftIcon={<RefreshCw className="h-3.5 w-3.5" />}
-        >
-          Extend session
-        </Button>
+        {!expired && (
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={extending}
+            onClick={() => void handleExtend()}
+            leftIcon={<RefreshCw className="h-3.5 w-3.5" />}
+          >
+            Extend session
+          </Button>
+        )}
       </div>
     </div>
   );

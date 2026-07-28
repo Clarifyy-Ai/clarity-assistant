@@ -7,13 +7,13 @@ import {
   requireAuth,
   successResponse,
   errorResponse,
-  deductCredits,
   callAI,
   requireFields,
   trimToMaxTokens,
   log,
   getAdminClient,
 } from "../_shared/utils.ts";
+import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import type { STARAnswer, ModelId } from "../_shared/types.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
@@ -97,13 +97,18 @@ Deno.serve(async (req: Request) => {
     if (!ALLOWED_MODELS.includes(model)) model = "gpt-4o";
 
     // -------------------------------
-    // DEDUCT CREDITS (Correct signature: userId, action, cost)
+    // DEDUCT CREDITS (atomic + idempotent)
     // -------------------------------
     const starCost = creditCost("star_builder");
-    const credit = await deductCredits(userId, "generate_star", starCost);
-    if (!credit.success) {
+    const creditResult = await deductCreditsAtomic({
+      userId,
+      action: "generate_star",
+      cost: starCost,
+      idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+    });
+    if (!creditResult.success) {
       return errorResponse(
-        credit.error ?? "Insufficient credits.",
+        creditResult.error ?? "Insufficient credits.",
         "INSUFFICIENT_CREDITS",
         402,
         req
@@ -166,8 +171,11 @@ Return ONLY this JSON:
     if (!aiResult?.text) aiResult = await runAI(); // retry once
 
     if (!aiResult?.text) {
-      // Refund credits
-      await deductCredits(userId, "refund_generate_star", -starCost);
+      await refundCredits({
+        userId,
+        cost: starCost,
+        reason: "generate-star-answer AI call failure",
+      });
       return errorResponse("AI service failed.", "AI_ERROR", 502, req);
     }
 

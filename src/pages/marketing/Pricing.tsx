@@ -102,11 +102,9 @@ export default function Pricing() {
               ? Math.round(plan.yearlyPrice)
               : monthlyPrice;
             const priceDisplay =
-              planId === "enterprise"
-                ? "Custom"
-                : effectiveMonthly === 0
-                  ? "Free"
-                  : `$${(effectiveMonthly / 100).toFixed(0)}`;
+              effectiveMonthly === 0
+                ? "Free"
+                : `$${(effectiveMonthly / 100).toFixed(0)}`;
             const isMax = planId === "enterprise";
 
             return (
@@ -137,10 +135,10 @@ export default function Pricing() {
 
                 <div className="mt-5">
                   <span className="text-3xl font-extrabold">{priceDisplay}</span>
-                  {effectiveMonthly > 0 && !isMax && (
+                  {effectiveMonthly > 0 && (
                     <span className="text-sm text-muted-foreground ml-1">/mo</span>
                   )}
-                  {annual && effectiveMonthly > 0 && !isMax && (
+                  {annual && effectiveMonthly > 0 && (
                     <p className="text-[11px] text-muted-foreground/70 mt-0.5">billed annually</p>
                   )}
                 </div>

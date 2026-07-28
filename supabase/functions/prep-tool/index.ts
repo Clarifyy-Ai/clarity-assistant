@@ -5,10 +5,10 @@ import {
   requireAuth,
   successResponse,
   errorResponse,
-  deductCredits,
   log,
   getAdminClient,
 } from "../_shared/utils.ts";
+import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import { geminiGenerate } from "../_shared/gemini.ts";
 import { logAICost } from "../_shared/aiProvider.ts";
 import { AI_CREDIT_COSTS } from "../_shared/creditEconomics.ts";
@@ -236,8 +236,13 @@ Deno.serve(async (req: Request) => {
 
     /* ------------------- CREDIT DEDUCTION ------------------- */
     const toolCost = getToolCost(tool_id);
-    const credit   = await deductCredits(userId, `prep_tool_${tool_id}` as any, toolCost);
-    if (!credit.success) {
+    const creditResult = await deductCreditsAtomic({
+      userId,
+      action: `prep_tool_${tool_id}`,
+      cost: toolCost,
+      idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+    });
+    if (!creditResult.success) {
       return errorResponse("Insufficient credits", "INSUFFICIENT_CREDITS", 402, req);
     }
 
@@ -248,13 +253,16 @@ Deno.serve(async (req: Request) => {
     let raw: string;
     const aiStartMs = Date.now();
     try {
-      raw = await geminiGenerate(prompt, undefined, 0.6, 1200, auth.byok?.gemini);
+      raw = await geminiGenerate(prompt, undefined, 0.6, 1200);
       if (!raw || raw.trim().length === 0) {
         throw new Error("AI returned empty response");
       }
     } catch (aiErr) {
-      // Refund credits — user didn't get a useful result
-      await deductCredits(userId, `refund_prep_tool_${tool_id}` as any, -toolCost);
+      await refundCredits({
+        userId,
+        cost: toolCost,
+        reason: `prep-tool AI call failure (${tool_id})`,
+      });
       log(FN, "error", "AI call failed, credits refunded", { userId, tool_id, err: String(aiErr) });
       return errorResponse(
         "AI service temporarily unavailable. Credits refunded.",

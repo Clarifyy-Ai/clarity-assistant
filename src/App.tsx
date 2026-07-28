@@ -528,10 +528,6 @@ const routes = [
         element: <Page component={LiveOverlay} />,
       },
       {
-        path: "/app/rooms/*",
-        element: <Navigate to="/app/dashboard" replace />,
-      },
-      {
         path: "/app/mock-test/session/:testId",
         element: <IndiaAppPage component={MockTestSession} />,
       },
@@ -565,7 +561,7 @@ const routes = [
           { path: "mock/warmup", element: <Page component={MockWarmup} /> },
           { path: "mock/session", element: <Page component={MockSession} /> },
 
-          // Mock Test (Gov exams — India only)
+          // Mock Test (Gov exams)
           { path: "mock-test", element: <IndiaAppPage component={MockTestHub} /> },
           { path: "mock-test/configure", element: <IndiaAppPage component={MockTestConfigure} /> },
           { path: "mock-test/results/:testId", element: <IndiaAppPage component={MockTestResults} /> },
@@ -698,6 +694,7 @@ const routes = [
             ],
           },
 
+          { path: "*", element: <Page component={NotFound} /> },
         ],
       },
 

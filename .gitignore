@@ -20,13 +20,16 @@ node_modules
 dist
 dist-ssr
 release
+release-new/
 electron-release
+_asar-extract/
 
 # =========================
 # 🔐 Environment Variables (CRITICAL)
 # =========================
 .env
 .env.local
+.env.production
 .env.*.local
 
 # =========================

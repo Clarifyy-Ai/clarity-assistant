@@ -1,0 +1,2543 @@
+================================================================================
+CLARIFY AI — COMPLETE APPLICATION AUDIT
+Full inventory of portals, modules, features, navigation, marketplace, checkout,
+payments, backend, database, desktop app, and implementation status.
+================================================================================
+
+Product name .......... Clarify AI  (package name: "clarify-ai")
+Repo folder ........... clarity-assistant
+Version ............... 1.0.0
+Audit date ............ 28 July 2026
+Audited by ............ Cursor Agent (source-code audit)
+Audit method .......... Direct reading of source code, SQL migrations, and config
+                        files ONLY. No existing .md documentation was used or
+                        trusted. Every claim below traces to a file:line.
+
+WHAT "VERDICT" MEANS IN THIS DOCUMENT
+  FULLY IMPLEMENTED . Works end to end against real data / real services.
+  PARTIAL ........... Core path works, but meaningful pieces are missing,
+                      env-gated, or wired only halfway.
+  STUB / MOCK ....... UI exists but there is no real backend behind it, or the
+                      data shown is hardcoded / faked.
+  DEAD CODE ......... The code exists and may even be complete, but nothing in
+                      the running application ever calls or routes to it.
+  UNKNOWN ........... Cannot be determined from source alone (needs live DB or
+                      dashboard access).
+
+--------------------------------------------------------------------------------
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+PART 1   EXECUTIVE SUMMARY AND SCORECARD
+PART 2   CODEBASE SIZE AND TECHNOLOGY STACK
+PART 3   THE FIVE PORTALS
+PART 4   COMPLETE ROUTE MAP (every URL in the app)
+PART 5   NAVIGATION, SIDEBAR, LAYOUT SHELL, GUARDS
+PART 6   MODULE BY MODULE FEATURE AUDIT
+PART 7   MONETIZATION: PRICING, CHECKOUT, PAYMENTS, CREDITS, "MARKETPLACE"
+PART 8   BACKEND: ALL 46 EDGE FUNCTIONS
+PART 9   THE AI LAYER
+PART 10  DATABASE: TABLES, RLS, FUNCTIONS, STORAGE
+PART 11  SECURITY REVIEW
+PART 12  DESKTOP (ELECTRON) APPLICATION
+PART 13  BUILD, CI/CD, TESTING, ENVIRONMENT
+PART 14  MASTER DEFECT REGISTER (prioritised)
+PART 15  MASTER IMPLEMENTATION STATUS MATRIX
+PART 16  WHAT IS GENUINELY MISSING / NOT BUILT
+
+
+================================================================================
+PART 1 — EXECUTIVE SUMMARY AND SCORECARD
+================================================================================
+
+1.1 WHAT THIS APPLICATION IS
+----------------------------
+Clarify AI is an AI-powered interview preparation and rehearsal platform with a
+second, largely separate product line for Indian government / competitive exam
+MCQ mock tests. It ships as:
+
+  (a) a web application (React SPA, Vite build, Supabase backend), and
+  (b) a Windows/macOS/Linux Electron desktop app that is deliberately
+      overlay-only — the desktop build boots straight into a floating
+      always-on-top coaching overlay and pushes every other page out to the
+      system browser.
+
+The core value proposition in code: during a real or practice interview, the app
+listens to microphone plus system/tab audio, transcribes both sides with
+Deepgram, separates interviewer from candidate, and pushes AI-generated hints and
+full answers into a floating overlay in near real time. Around that core sit
+preparation tools, a document/resume system, an answer library, scheduling,
+company research, analytics, debriefs, a credits-based billing system, an admin
+back office, and the gov-exam test engine.
+
+1.2 HEADLINE VERDICT
+--------------------
+This is a genuinely large, genuinely built application — not a prototype. The
+core loops (auth, onboarding, live coaching, mock interviews, debriefs,
+documents, credits, Stripe/Razorpay checkout, gov-exam tests, admin) all execute
+against real Supabase tables and real AI providers.
+
+However it is NOT uniformly finished. The audit found three consistent patterns
+of incompleteness:
+
+  1. DUPLICATE / ABANDONED PATHS. Several fully-written backend endpoints are
+     never called because the frontend later chose to write to the database
+     directly instead (end-session, save-answer, save-transcript, ai-feedback,
+     billing-status, generate-practice-questions, validate-api-key). Similarly
+     three Settings page components exist with no route.
+
+  2. CLIENT-SIDE GATES WITHOUT SERVER ENFORCEMENT. The UI blocks free users from
+     paid features, but the server-side plan check is effectively a no-op
+     because the "starter" tier is ranked equal to "free" and almost every
+     capability is ranked 0.
+
+  3. DISPLAY-ONLY ADMIN AND SETTINGS SURFACES. Some admin actions and several
+     settings toggles save nothing, or save a value that no code ever reads.
+
+1.3 SCORECARD BY AREA
+---------------------
+Area                              Verdict            One-line reason
+--------------------------------- ------------------ ----------------------------
+Authentication                    FULLY IMPLEMENTED  Email+4 OAuth providers, MFA
+Onboarding (5 steps)              PARTIAL            2 fields never persisted
+Navigation / routing              FULLY IMPLEMENTED  120+ routes, guards correct
+Sidebar / app shell               FULLY IMPLEMENTED  4 sections, admin gated
+Mobile navigation                 PARTIAL            Missing 6 destinations
+Live Practice Coach (core)        FULLY IMPLEMENTED  Real Deepgram + AI + overlay
+Mock Interview                    PARTIAL            No text-to-speech at all
+Sessions list / detail            PARTIAL            Null scores render as 0
+Debrief                           FULLY IMPLEMENTED  AI debrief + sharing works
+Scorecard                         FULLY IMPLEMENTED  AI scoring, share tokens
+Analytics                         FULLY IMPLEMENTED  Real DB aggregation
+Usage / credits dashboard         FULLY IMPLEMENTED  Real ledger
+Dashboard                         FULLY IMPLEMENTED  No fake metrics found
+Prep Lab (6 tools)                FULLY IMPLEMENTED  All call real AI
+Documents / resume parsing        FULLY IMPLEMENTED  Storage + AI parse + OCR
+Gap analysis (resume vs JD)       PARTIAL            API real, UI not wired
+Answer Bank                       PARTIAL            CRUD only, no AI generate
+Interviews (manual)               FULLY IMPLEMENTED  Create/edit/delete/remind
+Calendar sync (Google)            PARTIAL            Returns 501 without secrets
+Calendar sync (Outlook)           NOT BUILT          Type definition only
+Company Research                  FULLY IMPLEMENTED  AI + per-user cache
+Notifications (in-app)            FULLY IMPLEMENTED  Supabase Realtime
+Notifications (email/push)        PARTIAL            Prefs saved, never read
+Gamification engine               FULLY IMPLEMENTED  XP/streak/badges persist
+Profile page display              PARTIAL            Reads wrong column names
+Referrals                         FULLY IMPLEMENTED  RPC grants credits both ways
+Gov Exam Mock Test engine         FULLY IMPLEMENTED  Atomic create/submit/score
+Gov Exam question bank            PARTIAL            Only ~26 seeded questions
+Question scraper service          PARTIAL            Code complete, not deployed
+India-only region gating          DISABLED           Resolver hardcoded to true
+Settings (19 pages)               MIXED              See section 6.21
+Admin portal (15 pages)           MIXED              See section 6.22
+Marketing site (11 pages)         FULLY IMPLEMENTED  DB-backed help/blog
+Pricing / plan catalog            PARTIAL            Client/server drift
+Stripe checkout + webhooks        FULLY IMPLEMENTED  Signature + idempotency
+Razorpay checkout + webhook       PARTIAL            One-time only, no renewal
+Credits system                    FULLY IMPLEMENTED  Server-authoritative
+Plan gating enforcement           PARTIAL            Server gate is a no-op
+Marketplace                       DOES NOT EXIST     See section 7.9
+Refunds (money)                   NOT BUILT          No refund webhooks
+Edge function platform            FULLY IMPLEMENTED  46 functions, shared libs
+AI provider layer                 FULLY IMPLEMENTED  Gemini + OpenAI + Anthropic
+BYOK (bring your own key)         PARTIAL / REMOVED  Client off, server accepts
+Database schema + RLS             PARTIAL            Baseline schema not in repo
+Electron desktop shell            PARTIAL            Signing off, dead preload.ts
+Auto-update                       PARTIAL            Wired, unsigned
+Unit testing                      PARTIAL            209 real tests, ~5% coverage
+E2E testing                       PARTIAL            10 specs, no run evidence
+CI pipeline                       WOULD FAIL         validate-env step rejects env
+Observability                     PARTIAL            Sentry+PostHog on web only
+
+1.4 THE TEN THINGS THAT MATTER MOST
+-----------------------------------
+  1. Server-side plan gating does not actually gate. PLAN_RANK gives "starter"
+     the same rank (0) as "free", so requirePlan(...,"starter") lets free users
+     through. Almost all capabilities are also rank 0.
+     supabase/functions/_shared/billingCatalog.ts:47-53,
+     supabase/functions/_shared/requireCapability.ts:24-37
+
+  2. Three AI endpoints burn money with no credit charge: parse-resume,
+     gap-analysis, parse-document — even though creditEconomics.ts defines
+     resume_analysis = 12 credits.
+
+  3. Buying the top plan ("Max"/enterprise) through Stripe fails, because the
+     client PLANS object has no stripePriceIdMonthly for enterprise.
+     src/lib/billing/subscriptionManager.ts:364-399
+
+  4. Admin revenue numbers are wrong. monthlyRevenueByPlan sums
+     credit_transactions.amount (a credit count) and formats it as money.
+     src/lib/supabase/database.ts:1314-1321, AdminRevenue.tsx:372,499
+
+  5. A failed Stripe invoice sets profiles.credits to an absolute 50, which can
+     erase purchased credit packs.
+     supabase/functions/stripe-webhook/index.ts:573-574
+
+  6. Razorpay "pro_monthly" is a one-time Order, not a subscription. Indian
+     customers get one month and never auto-renew, and cancel/resume do not
+     apply to them.
+
+  7. .env.production is committed to git with a live Supabase anon JWT, and the
+     ~86 MB release-new/ installer output is untracked but NOT gitignored.
+
+  8. CI would fail today: the workflow sets VITE_APP_ENV=test and
+     ci-placeholder* values, both of which scripts/validate-env.js rejects.
+
+  9. The gov-exam product has an engine but almost no content: about 26 MCQs are
+     seeded by SQL. Everything beyond that depends on admin imports or a scraper
+     service that is not deployed.
+
+ 10. India-only gating is switched off in code (indiaRegion.ts returns true
+     unconditionally) while the UI still advertises the restriction.
+
+1.5 HOW MUCH IS REALLY BUILT (rough weighting)
+----------------------------------------------
+Counting the 60 distinct user-facing features catalogued in Part 15:
+
+  Fully implemented and production-usable ......... 38 features  (63%)
+  Partial — usable but incomplete ................. 15 features  (25%)
+  Stub / mock — looks real, is not ................  4 features  ( 7%)
+  Dead code — built but unreachable ...............  3 features  ( 5%)
+
+This is a real product at roughly late-beta maturity, with billing correctness
+and server-side entitlement enforcement being the weakest load-bearing areas.
+
+
+================================================================================
+PART 2 — CODEBASE SIZE AND TECHNOLOGY STACK
+================================================================================
+
+2.1 MEASURED SIZE (counted from disk)
+-------------------------------------
+  TypeScript / TSX files in src/ ................. 580
+  Page components (src/pages/**/*.tsx) ........... 103
+  Reusable components (src/components) ........... 172   across 17 folders
+  Library modules (src/lib) ...................... 154   across 29 folders
+  React hooks (src/hooks) ........................  49
+  Zustand stores (src/store) .....................  15
+  Type modules (src/types) .......................  20
+  Supabase edge functions ........................  46   (incl. _shared)
+  Shared edge modules (_shared) ..................  27
+  SQL migrations .................................  81
+  Real unit test files ...........................  23   (209 passing tests)
+  Placeholder test files .........................  17   (794 it.todo entries)
+  Playwright E2E specs ...........................  10
+  GitHub Actions workflows .......................   2
+
+2.2 FRONTEND STACK
+------------------
+  React 18.3 + React DOM ............ package.json:171-172
+  Vite 5.4 + plugin-react-swc ....... package.json:199,219
+  TypeScript 5.5 .................... strict:false for app (tsconfig.app.json:24)
+  React Router (data router) ........ createBrowserRouter / createHashRouter
+  Tailwind CSS 3.4 .................. + tailwindcss-animate, typography
+  shadcn/ui on Radix UI ............. 56 primitives, 20+ @radix-ui packages
+  Zustand 5 + immer ................. 15 stores
+  TanStack Query 5 .................. server state
+  TanStack Table 8 .................. admin/data tables
+  react-hook-form 7 + Zod 3 ......... NOTE: @hookform/resolvers is NOT installed,
+                                      so zodResolver is not used anywhere
+  Recharts 3 ........................ charts (only 2 usages)
+  framer-motion ..................... animation
+  lucide-react ...................... icons
+  sonner ............................ toasts
+  cmdk .............................. command palette (Ctrl/Cmd+K)
+  dnd-kit ........................... drag and drop
+  jspdf + html2canvas + xlsx ........ PDF and Excel export/import
+  katex + react-katex ............... math rendering for exam questions
+  dompurify ......................... HTML sanitisation
+  @deepgram/sdk ..................... speech to text
+  @supabase/supabase-js ............. auth, DB, storage, realtime
+  @sentry/react ..................... error monitoring
+  posthog-js ........................ product analytics
+
+2.3 BACKEND STACK
+-----------------
+  Supabase Postgres ................. 81 migrations, ~55 tables, RLS throughout
+  Supabase Edge Functions (Deno) .... 46 functions
+  Supabase Auth ..................... email/password + OAuth + TOTP MFA
+  Supabase Storage .................. 5 buckets
+  Supabase Realtime ................. rooms, chat, support, notifications
+  pg_cron + pg_net .................. 3 scheduled retention jobs
+
+2.4 EXTERNAL SERVICES
+---------------------
+  Google Gemini ..... primary LLM (gemini-2.0-flash default)
+  OpenAI ............ gpt-4o / gpt-4o-mini (STAR tools)
+  Anthropic ......... claude-3-5-sonnet / haiku (resume fallback)
+  Deepgram .......... nova-2-meeting streaming STT
+  OCR.space ......... resume OCR fallback
+  Stripe ............ USD subscriptions + credit packs
+  Razorpay .......... INR one-time orders
+  Resend ............ transactional email
+  Google Calendar ... interview import (env-gated)
+  Sentry ............ error tracking
+  PostHog ........... analytics
+
+2.5 DESKTOP STACK
+-----------------
+  Electron 32 ....... overlay-only shell
+  electron-builder 25 NSIS (Windows), DMG (macOS arm64+x64), AppImage (Linux)
+  electron-updater 6  GitHub releases channel
+
+2.6 PYTHON SIDECAR
+------------------
+  scraper/ — a FastAPI service that scrapes previous-year exam papers from
+  government sites and writes questions directly into Supabase. Complete code,
+  registry for 8 exam types, worker + pipeline + storage gateway. It is NOT
+  deployed: the frontend only reaches it if VITE_SCRAPER_URL is set
+  (src/lib/scraper/client.ts:44-48).
+
+
+================================================================================
+PART 3 — THE FIVE PORTALS
+================================================================================
+
+The application is not one interface. It is five distinct surfaces with
+different shells, different guards, and different audiences.
+
+PORTAL 1 — PUBLIC MARKETING SITE
+  Audience ....... anonymous visitors, search engines
+  Shell .......... MarketingLayout (own header + footer)
+  Guard .......... none (wrapped only by ElectronRouteGate)
+  Loading ........ EAGER (deliberately not lazy, for first-paint speed)
+  Pages (11) ..... / (Landing), /pricing, /gov-exams, /help, /help/:slug,
+                   /shortcuts, /blog, /blog/:slug, /terms, /privacy,
+                   /share/:token (public shared debrief/scorecard)
+  Verdict ........ FULLY IMPLEMENTED. Help and Blog are database-backed with a
+                   hardcoded fallback file for Help only.
+
+PORTAL 2 — AUTHENTICATION AND ONBOARDING
+  Audience ....... new and returning users
+  Shell .......... bare full-screen pages, no chrome
+  Guard .......... none on auth pages; /onboarding requires login only
+  Pages (7) ...... /login, /signup, /verify-email, /forgot-password,
+                   /reset-password, /auth/callback, /onboarding
+  Verdict ........ Auth FULLY IMPLEMENTED; onboarding PARTIAL.
+
+PORTAL 3 — MAIN USER APPLICATION
+  Audience ....... signed-in, email-verified, onboarded users
+  Shell .......... AppShell = sidebar + top bar + mobile nav + modals
+  Guard .......... ProtectedRoute requireOnboarded requireEmailVerification
+  Pages .......... ~70 routes across 15 functional modules plus 19 settings tabs
+  Verdict ........ Core FULLY IMPLEMENTED; per-module detail in Part 6.
+
+PORTAL 4 — ADMIN BACK OFFICE
+  Audience ....... users with the 'admin' role in user_roles
+  Shell .......... AdminLayout — a completely separate shell, no user sidebar
+  Guard .......... double-gated: outer ProtectedRoute + inner requireAdmin +
+                   AdminLayout's own redirect
+  Pages (15) ..... dashboard, users, analytics, revenue, model-costs,
+                   feature-flags, seed-questions, bulk-upload, live-chat,
+                   questions (+ :id), audit-log, qa-checklist, support,
+                   promo-codes, billing-settings
+  Verdict ........ MIXED — see 6.22. Core management works; three surfaces are
+                   read-only, fake-save, or localStorage-only.
+
+PORTAL 5 — DESKTOP OVERLAY (ELECTRON)
+  Audience ....... desktop users during a live interview
+  Shell .......... chromeless, always-on-top, 480x640, hash router
+  Guard .......... ElectronRouteGate — an allowlist. Anything not on the list
+                   opens in the system browser instead.
+  Allowed routes . auth pages, /onboarding, /app/live, /app/live/overlay
+  Default boot ... #/app/live/overlay (electron/main.cjs:196-203)
+  Verdict ........ PARTIAL — functional overlay, but unsigned binaries and a
+                   dead preload.ts.
+
+
+================================================================================
+PART 4 — COMPLETE ROUTE MAP
+================================================================================
+
+Router is created in src/App.tsx:756-758 — createHashRouter in Electron,
+createBrowserRouter on web. Every route is nested under ElectronRouteGate
+(App.tsx:482-485).
+
+Guard key:  ER = ElectronRouteGate | PR = ProtectedRoute (auth only)
+            PR+ = ProtectedRoute requireOnboarded requireEmailVerification
+            PRA = ProtectedRoute requireAdmin | IN = IndiaRegionGate
+
+4.1 PUBLIC / MARKETING
+  /                          Landing.tsx                    ER      eager
+  /pricing                   Pricing.tsx                    ER      eager
+  /gov-exams                 GovExams.tsx                   ER      eager
+  /help                      Help.tsx                       ER      eager
+  /help/:slug                HelpArticle.tsx                ER      eager
+  /shortcuts                 Shortcuts.tsx                  ER      eager
+  /blog                      Blog.tsx                       ER      eager
+  /blog/:slug                BlogPost.tsx                   ER      eager
+  /terms                     Terms.tsx                      ER      eager
+  /privacy                   Privacy.tsx                    ER      eager
+  /share/:token              SharedDebrief.tsx              ER      lazy
+  /dashboard                 -> redirect /app/dashboard      ER
+
+4.2 AUTHENTICATION
+  /login                     auth/Login.tsx                 ER   lazy (eager in Electron)
+  /signup                    auth/Signup.tsx                ER      lazy
+  /verify-email              auth/VerifyEmail.tsx           ER      lazy
+  /forgot-password           auth/ResetPassword.tsx         ER      lazy
+  /reset-password            auth/ResetPassword.tsx         ER      lazy
+  /auth/callback             auth/AuthCallback.tsx          ER      lazy
+
+4.3 ONBOARDING
+  /onboarding                OnboardingIndex.tsx            ER+PR   lazy
+  /onboarding/step-1..5      -> redirect /onboarding        ER+PR
+
+4.4 FULL-SCREEN PROTECTED (no app shell)
+  /app/live/overlay          live/LiveOverlay.tsx           ER+PR+  lazy
+  /app/mock-test/session/:testId  mock-test/TestSession.tsx ER+PR++IN lazy
+
+4.5 MAIN APP (inside AppShell)
+  /app                       -> redirect dashboard
+  /app/dashboard             app/Dashboard.tsx
+  /app/interview-day         app/InterviewDay.tsx
+  /app/analytics             app/Analytics.tsx
+  /app/analytics/:sessionId  -> redirect /app/debrief/:sessionId
+  /app/usage                 usage/UsageDashboard.tsx
+  /app/profile               app/Profile.tsx
+  /app/notifications         app/Notifications.tsx
+  /app/referrals             app/Referrals.tsx
+  /app/live                  live/LiveRehearsal.tsx     (hides chrome when active)
+  /app/mock                  mock/MockInterview.tsx
+  /app/mock/warmup           mock/MockWarmup.tsx
+  /app/mock/session          mock/MockSession.tsx
+  /app/mock-test             mock-test/MockTestHub.tsx              [IN]
+  /app/mock-test/configure   mock-test/TestConfigure.tsx            [IN]
+  /app/mock-test/results/:testId    mock-test/TestResults.tsx       [IN]
+  /app/mock-test/my-questions       mock-test/MyQuestions.tsx       [IN]
+  /app/mock-test/upload             mock-test/UploadQuestions.tsx   [IN]
+  /app/mock-test/revision           mock-test/TestRevision.tsx      [IN]
+  /app/mock-test/analytics          mock-test/TestAnalytics.tsx     [IN]
+  /app/mock-test/papers/:examType   mock-test/ExamPapers.tsx        [IN]
+  /app/prep                  prep/PrepLab.tsx
+  /app/prep/star-builder     prep/StarBuilder.tsx
+  /app/prep/project-builder  prep/ProjectBuilder.tsx
+  /app/prep/rephraser        prep/Rephraser.tsx
+  /app/prep/coding-hints     prep/CodingHints.tsx
+  /app/prep/system-design    prep/SystemDesign.tsx
+  /app/sessions              sessions/CallSessions.tsx
+  /app/sessions/history      -> redirect /app/sessions?tab=all
+  /app/sessions/schedule     -> redirect /app/interviews/new
+  /app/sessions/:id          sessions/SessionDetail.tsx
+  /app/documents             documents/Documents.tsx
+  /app/documents/resume/:id  documents/ResumeDetail.tsx
+  /app/documents/jd/:id      documents/JDDetail.tsx
+  /app/answers               answer-bank/AnswerBank.tsx
+  /app/answers/:id           answer-bank/AnswerDetail.tsx
+  /app/interviews            interviews/Interviews.tsx
+  /app/interviews/new        interviews/NewInterview.tsx
+  /app/interviews/:id/edit   interviews/NewInterview.tsx
+  /app/interviews/:id        interviews/InterviewDetail.tsx
+  /app/companies             company-research/CompanyResearch.tsx
+  /app/companies/:id         company-research/CompanyProfile.tsx
+  /app/scorecard/:sessionId  pages/Scorecard.tsx
+  /app/debrief               debrief/Debrief.tsx
+  /app/debrief/:id           debrief/DebriefDetail.tsx
+  /app/guide                 -> guide/Guide.tsx (redirects to practice-coach)
+  /app/guide/practice-coach  guide/PracticeCoachGuide.tsx
+  /app/rooms  and  /app/rooms/*   -> redirect /app/dashboard   [FEATURE DEFERRED]
+
+4.6 SETTINGS (nested under /app/settings, own inner sidebar)
+  index          -> redirect profile
+  /profile       SettingsProfile.tsx
+  /audio         SettingsAudio.tsx
+  /practice-coach SettingsPracticeCoach.tsx  (immediately redirects to guide)
+  /models        SettingsModels.tsx
+  /billing       SettingsBilling.tsx
+  /notifications SettingsNotifications.tsx
+  /privacy       SettingsPrivacy.tsx
+  /security      SettingsSecurity.tsx
+  /security-config SettingsSecurityConfig.tsx
+  /integrations  SettingsIntegrations.tsx
+  /appearance    SettingsAppearance.tsx
+  /data          SettingsData.tsx
+  /danger        SettingsDanger.tsx
+  /hotkeys       SettingsHotkeys.tsx
+  /polish        SettingsPolish.tsx
+  /byok          -> redirect /app/settings/models
+  /subscription  -> redirect /app/settings/billing
+  /credits       -> redirect /app/settings/billing
+
+4.7 ADMIN (own shell)
+  /app/admin                 AdminDashboard.tsx
+  /app/admin/users           AdminUsers.tsx
+  /app/admin/analytics       AdminAnalytics.tsx
+  /app/admin/revenue         AdminRevenue.tsx
+  /app/admin/model-costs     AdminModelCosts.tsx
+  /app/admin/feature-flags   AdminFeatureFlags.tsx
+  /app/admin/seed-questions  AdminSeedQuestions.tsx
+  /app/admin/bulk-upload     AdminBulkUpload.tsx
+  /app/admin/live-chat       AdminLiveChat.tsx
+  /app/admin/questions       AdminQuestionEditor.tsx
+  /app/admin/questions/:id   AdminQuestionEditor.tsx
+  /app/admin/audit-log       AdminAuditLog.tsx
+  /app/admin/qa-checklist    AdminQAChecklist.tsx
+  /app/admin/support         AdminSupport.tsx
+  /app/admin/promo-codes     AdminPromoCodes.tsx
+  /app/admin/billing-settings AdminBillingSettings.tsx
+
+4.8 CATCH-ALL
+  *                          NotFound.tsx
+
+4.9 ROUTING DEFECTS
+  * There is NO splat child under /app. An authenticated user visiting
+    /app/anything-invalid gets a BLANK page inside the app shell instead of the
+    404 page, because the outer "*" never matches. App.tsx:538-697 vs 751.
+  * /app/settings/practice-coach and /app/guide exist only to redirect.
+  * Three settings components have no route at all: SettingsCredits.tsx,
+    SettingsSubscription.tsx, SettingsBYOK.tsx — DEAD CODE.
+  * /app/rooms and /app/rooms/* redirect to the dashboard. Group practice was
+    deferred pending WebRTC, but the Help content still describes it.
+  * No custom URL protocol (clarify://) is registered in Electron, so there are
+    no deep links into the desktop app.
+
+
+================================================================================
+PART 5 — NAVIGATION, SIDEBAR, LAYOUT SHELL, GUARDS
+================================================================================
+
+5.1 THE APP SHELL (src/App.tsx:341-458)
+---------------------------------------
+Two rendering modes:
+
+  MODE A — chromeless. Used when running in Electron, OR when the user is on
+  /app/live and the session status is "active" or "paused". Renders only the
+  session timeout banner, the network banner, and the page. In Electron it also
+  adds an 8px draggable title strip.
+
+  MODE B — full chrome. Skip-to-content link, mobile drawer sidebar with
+  backdrop, desktop AppSidebar, AppTopBar, SessionTimeoutBanner, NetworkBanner,
+  main content area (max-width 7xl, responsive padding), the SetupChecklist
+  banner for users who have not completed onboarding, MobileNav bottom bar, plus
+  three global modals: UpgradeModal, AppWalkthrough, InstallPromptModal.
+
+Global keyboard: Ctrl/Cmd+B toggles the sidebar (App.tsx:359-372).
+
+5.2 THE SIDEBAR (src/components/layout/AppSidebar.tsx)
+------------------------------------------------------
+Four sections. Every item has both a normal label/icon and a "stealth" label/icon
+that is substituted when stealth mode is on, so the sidebar looks like a generic
+productivity tool during screen sharing.
+
+SECTION "PRACTICE"
+  Dashboard ............... /app/dashboard         LayoutDashboard
+  Practice Coach .......... /app/live              Mic
+  Mock Interview .......... /app/mock              ClipboardList
+  Prep Lab ................ /app/prep              FlaskConical
+  Gov Exam Mock Tests ..... /app/mock-test         ClipboardList   [indiaOnly]
+
+SECTION "PROGRESS"
+  Session History ......... /app/sessions          Phone
+  Analytics ............... /app/analytics         BarChart2
+  Credits & Usage ......... /app/usage             CreditCard
+  Debrief ................. /app/debrief           BookMarked
+  Referrals ............... /app/referrals         Gift
+  Documents ............... /app/documents         FileText
+  Answer Bank ............. /app/answers           BookOpen
+
+SECTION "PLANNER"
+  Interview Day ........... /app/interview-day     CalendarDays
+  Interviews .............. /app/interviews        CalendarDays
+  Company Research ........ /app/companies         Building2
+
+FOOTER
+  Guide ................... /app/guide/practice-coach
+  Notifications ........... /app/notifications     Bell
+  Settings ................ /app/settings          Settings
+  Admin Panel ............. /app/admin             ShieldAlert   [isAdmin only]
+  Profile chip ............ /app/profile           avatar
+
+Behaviour:
+  * Collapsed width 16, expanded 56 (Tailwind units).
+  * Collapse state persists in uiStore under localStorage key "confideq-ui".
+  * BUT a viewport effect force-collapses below 1024px and overwrites the
+    persisted value on every breakpoint change (AppSidebar.tsx:252-270). This is
+    a real conflict: the user's preference is lost on resize.
+  * Hover-to-expand when collapsed on desktop.
+  * Active state uses NavLink plus a prefix-match helper.
+  * No badges or counters. No plan-gating on any sidebar item — paid features are
+    gated on the page itself via PlanGate, not hidden from navigation.
+
+5.3 TOP BAR (AppTopBar.tsx)
+---------------------------
+  Hamburger (mobile) | breadcrumb slot | stealth toggle | theme toggle |
+  command palette trigger (Ctrl/Cmd+K) | notification bell with unread badge |
+  credits chip | avatar menu.
+
+  DEFECT: the breadcrumb slot #topbar-breadcrumb is rendered but nothing ever
+  populates it (AppTopBar.tsx:88-91). Breadcrumbs only appear inside pages via
+  PageHeader. This is a STUB.
+
+5.4 MOBILE NAVIGATION (MobileNav.tsx)
+-------------------------------------
+  Bottom tab bar: Home, Coach, Mock, Prep, Gov Exams.
+  "More" sheet: Analytics, Documents, Sessions, Debrief, Interviews, Companies,
+  Answer Bank, Referrals, Settings.
+  MISSING versus desktop sidebar: Usage, Interview Day, Notifications, Profile,
+  Guide, Admin. Verdict PARTIAL.
+
+5.5 COMMAND PALETTE
+-------------------
+  Ctrl/Cmd+K opens CommandPalette.tsx. It searches page routes and actions only.
+  It is NOT a content search — it will not find your sessions, documents, or
+  answers. Verdict: FULLY IMPLEMENTED as navigation, PARTIAL as "search".
+
+5.6 GUARDS — EXACT ORDER OF CHECKS (ProtectedRoute.tsx)
+--------------------------------------------------------
+   1. status idle/loading  -> AppLoadingFallback
+   2. status error         -> error card with a link to login
+   3. no user              -> redirect /login carrying state.from
+   4. billing suspended    -> blocked unless on billing/credits settings.
+                              Suspension = Stripe past_due beyond a 3-day grace
+                              (subscriptionAccess.ts:4,13-24)
+   5. profile.is_banned    -> suspension card + forced sign-out
+   6. requireAdmin         -> wait for profile, then deny non-admins
+   7. requireEmailVerification -> !email_confirmed_at redirects /verify-email
+   8. requireOnboarded     -> !isOnboarded redirects /onboarding
+   9. pass                 -> render children / Outlet
+
+  Session handling: cached session gives optimistic auth at boot; getSession()
+  runs with a timeout; onAuthStateChange handles sign-in/out/refresh; a
+  visibilitychange listener refreshes the session when the tab becomes visible
+  (App.tsx:783-794).
+
+  GUARD HOLES FOUND
+    * /onboarding is protected by auth only — an unverified user can complete
+      onboarding before hitting the email gate at /app.
+    * SessionTimeoutBanner warns 5 minutes before JWT expiry and offers
+      "extend", but it never forces a sign-out when the timer reaches zero.
+    * /verify-email is fully public; an anonymous visitor sees an empty-email UI.
+    * Admin denial and the admin help link use raw <a href> instead of Link,
+      forcing a full page reload (ProtectedRoute.tsx:164-169,
+      AdminLayout.tsx:130-137).
+
+5.7 THEMING
+-----------
+  public/theme-init.js runs before hydration, reads localStorage key
+  "confideq-ui", and toggles the .dark class to prevent a flash.
+  Runtime theme lives in uiStore (light / dark / system -> resolved_theme).
+  Accent colour, font size, and density live in a separate themeStore under key
+  "confideq-theme" and are applied by applyAppearancePreferences.
+  CAVEAT: for theme "system", theme-init trusts the stored resolved_theme rather
+  than calling matchMedia, so a stale value can cause a wrong first paint
+  (theme-init.js:19-21).
+
+5.8 ORPHANS AND DEAD LINKS
+--------------------------
+  Orphan components (exist, no route):
+      SettingsCredits.tsx, SettingsSubscription.tsx, SettingsBYOK.tsx
+      DesktopOnlyGate.tsx (exported, zero consumers)
+  Routed but not linked from any nav (reachable only in-flow or by deep link):
+      /app/scorecard/:sessionId, /app/live/overlay, /app/mock/warmup,
+      /app/mock/session, all /app/prep/* children, all /app/mock-test/*
+      children, /app/interviews/new, /app/interviews/:id/edit, /share/:token
+  Dead links: none found. Every internal Link/href in src/ resolves to a real
+  route. /help/getting-started is valid — HelpArticle treats an unknown slug as
+  a category.
+  Content mismatch: Help content still describes "Group Practice" rooms, but
+  /app/rooms redirects to the dashboard.
+
+
+================================================================================
+PART 6 — MODULE BY MODULE FEATURE AUDIT
+================================================================================
+
+--------------------------------------------------------------------------------
+6.1  AUTHENTICATION                                       FULLY IMPLEMENTED
+--------------------------------------------------------------------------------
+WHAT IT DOES
+  Email/password signup and login, four OAuth providers, email verification,
+  password reset, OAuth/magic-link callback handling, TOTP multi-factor auth,
+  and a client-side brute-force lockout.
+
+FLOW
+  Signup -> Zod validation (signupSchema) + live password-strength meter ->
+  supabase.auth.signUp -> handle_new_user trigger creates the profile row with
+  50 free credits and a free subscription -> verify email -> /onboarding.
+  Login -> Zod loginSchema -> lockout counter in localStorage -> signIn ->
+  AuthCallback resolves ban state and onboarding state, then routes.
+
+FILES
+  src/pages/auth/Login.tsx (OAuth buttons, lockout at :42-53,193+)
+  src/pages/auth/Signup.tsx (referral + plan captured to localStorage)
+  src/pages/auth/VerifyEmail.tsx, ResetPassword.tsx, AuthCallback.tsx
+  src/store/authStore.ts (session cache, profile load, ban enforcement :563-574)
+  src/lib/validators/authSchemas.ts (unit tested)
+
+OAUTH PROVIDERS WIRED
+  Google, GitHub, LinkedIn, Azure — all delegated to Supabase.
+  NOTE: whether each provider is actually enabled in the Supabase dashboard is
+  UNKNOWN from source.
+
+VERDICT  FULLY IMPLEMENTED.
+
+--------------------------------------------------------------------------------
+6.2  ONBOARDING (5 STEPS)                                 PARTIAL
+--------------------------------------------------------------------------------
+STEP 1 — Role.        Collects full name, role type, domain, target role.
+                      Saves to profiles. Not skippable.
+STEP 2 — Experience.  Collects experience level, target companies, and an
+                      anxiety slider. Saves experience_years and
+                      target_companies. THE ANXIETY VALUE IS NEVER PERSISTED
+                      (OnboardingStep2Experience.tsx:61-68). Not skippable.
+STEP 3 — Preferences. Hint style, coach tone, preferred model, interview styles.
+                      Saves response_style, coach_tone, preferred_model,
+                      notification_prefs. Skippable.
+STEP 4 — Audio.       3-second microphone test. Saves auto_transcript and
+                      noise_suppression, but ALWAYS writes
+                      audio_input_device: "default" regardless of which device
+                      the user actually selected
+                      (OnboardingStep4AudioSetup.tsx:169). The Next button is
+                      disabled until the mic test passes. Skippable.
+STEP 5 — Resume.      PDF upload to storage, row in resumes, fire-and-forget
+                      parse-resume edge function. Skippable.
+
+FINISH / RESUME
+  Each step writes to Supabase immediately on Next, so progress survives a
+  reload. onboarding_step tracks position. handleFinish sets
+  onboarding_completed, applies the referral code, and sends a welcome email.
+  An already-onboarded user is redirected to the dashboard unless ?rerun=1.
+  From step 1 there is a "skip everything" path that only flips
+  onboarding_completed.
+
+VERDICT  PARTIAL — two collected values are silently discarded.
+
+--------------------------------------------------------------------------------
+6.3  DASHBOARD                                            FULLY IMPLEMENTED
+--------------------------------------------------------------------------------
+Every widget and its true data source:
+
+  Widget                      Source                                   Real?
+  --------------------------- ---------------------------------------- -----
+  Greeting / date             local clock                              yes
+  Streak, XP, credits         useGamification + authStore + credits    yes
+  Setup checklist             profile.onboarding_completed             yes
+  Desktop download banner     static CTA                               yes
+  Quick launch / actions      hardcoded nav arrays (Dashboard:109-163) nav only
+  "Interview today" banner    useInterviewSchedulerStore               yes
+  First-run CTA               sessionCount === 0 and no documents      yes
+  Stat cards                  sessionsDB.countByUserId, profile        yes
+  Recent activity             sessionsDB.listRecentSummary(userId,10)  yes
+  Upcoming interviews         scheduler store                          yes
+  Readiness score             client formula over sessions/streak/docs derived
+  XP level card               useGamification                          yes
+  Documents status            useDocumentStore active ids              yes
+
+IMPORTANT FINDING: the audit specifically hunted for Math.random() driving any
+displayed metric across the dashboard and session pages. NONE was found. The
+only random usage in scope is ID generation in overlayStore.ts:581,654.
+
+MINOR DEFECT: "has completed a session" is inferred from profile.xp > 0 rather
+than an actual session count (Dashboard.tsx:219).
+
+VERDICT  FULLY IMPLEMENTED.
+
+--------------------------------------------------------------------------------
+6.4  LIVE PRACTICE COACH  (the flagship feature)          FULLY IMPLEMENTED
+--------------------------------------------------------------------------------
+WHAT IT DOES
+  Real-time interview co-pilot. Captures microphone and optionally system/tab
+  audio, streams both to Deepgram, labels the two channels as "candidate" and
+  "interviewer", detects when the interviewer stops speaking, and generates
+  hints or full answers into a floating overlay.
+
+USER FLOW
+   1. PreSessionSetupWizard collects company, role, interview type, AI model,
+      hint style, stealth on/off, system audio on/off, duration, and which
+      resume/JD to attach (LiveRehearsal.tsx:252).
+   2. Stores reset, overlay shows, startSession() calls the start-session edge
+      function which creates the sessions row (useLiveCopilot.ts:692-704).
+   3. Microphone captured via captureMicrophone(); if enabled, tab audio via
+      captureSystemAudio() after an explicit confirmation dialog. Tab audio is
+      Chrome/Edge only (useAudioSession.ts:147-199).
+   4. Two separate Deepgram WebSocket streams (model nova-2-meeting) — one per
+      channel. Auth uses a 60-second scoped key minted by the deepgram-token
+      edge function, refreshed before expiry.
+   5. Voice-activity detection plus diarization decide when a question ended.
+      A hint can then be auto-generated, or triggered manually by hotkey.
+   6. AI responses stream in as chunks and are appended live to the overlay
+      (overlayStore.appendStreamChunk / commitStreamedHint).
+   7. Coding capture: a screen-region screenshot is sent to Gemini vision and a
+      full answer is generated (useLiveCopilot.ts:791-855).
+   8. Pause stops the pipeline; resume restarts it. An auto-end timer enforces
+      the configured duration.
+   9. End persists the session and, if the user allowed it, the full transcript,
+      then links to the scorecard.
+
+STEALTH MODE — IMPORTANT HONESTY NOTE
+  Stealth mode ONLY renames labels and swaps icons so the UI looks like a
+  generic productivity app. Actual screen-capture evasion is explicitly
+  DISABLED in code (stealthActions.ts:14-27, stealthConfig.ts:72-75). On desktop
+  there is a separate setContentProtection IPC call, but the web stealth mode
+  does not hide anything from screen sharing.
+
+HOTKEYS (src/lib/overlay/hotkeys.ts:90-307)
+  Ctrl+Shift+H or U ... toggle overlay
+  Ctrl+Shift+A ........ generate answer
+  Ctrl+Shift+C ........ capture coding problem
+  Ctrl+Shift+P ........ panic — show coaching steps
+  Ctrl+Shift+M ........ toggle mute
+  Ctrl+Shift+E ........ end session
+  Ctrl+Shift+T ........ toggle stealth labels
+  Ctrl+Shift+1..4 ..... dock the overlay to a corner
+
+DEFECTS
+  * The end-session edge function is never called. Finalisation writes to the
+    sessions table directly (useLiveCopilot.ts:747-758), bypassing server-side
+    validation and audit logging.
+  * save-transcript is never called during the session either; the transcript is
+    written in one bulk insert at the end.
+  * useDeepgramStream.ts is a complete parallel implementation that the live
+    path does not use — useAudioSession instantiates DeepgramStreamClient
+    directly. DEAD CODE.
+  * Private mode skips start-session entirely and uses a client-generated UUID.
+  * LiveRehearsal lacks the WindowVisibilityManager that LiveOverlay has.
+
+VERDICT  FULLY IMPLEMENTED. This is the most complete part of the product.
+
+--------------------------------------------------------------------------------
+6.5  MOCK INTERVIEW                                       PARTIAL
+--------------------------------------------------------------------------------
+FLOW
+  Configure (type, company, role, question count, optional warm-up) -> optional
+  warm-up (12-second breathing exercise then warm-up questions) -> session
+  (AI-generated questions, mic on, live transcript, WPM and filler tracking,
+  per-question navigation, timer) -> persist -> summary with links to debrief
+  and scorecard.
+
+DATA SOURCES
+  Session .......... sessions table
+  Questions ........ generate-questions edge function, with a hardcoded offline
+                     bank fallback (src/lib/mock/localQuestionBank.ts)
+  Hints ............ generate-hint edge function, with local fallback
+  Answers .......... session_answers via direct DB write
+  Scoring .......... deferred to the Scorecard (client-side Gemini)
+
+WHAT IS MISSING OR WRONG
+  * NO TEXT-TO-SPEECH ANYWHERE. There is no speechSynthesis, no ElevenLabs, no
+    voice at all. Questions are displayed as text. If you expected a talking
+    interviewer, that does not exist.
+  * Warm-up questions are a hardcoded 10-item array; feedback is a length
+    heuristic, not AI; warm-up answers are never saved.
+  * The configure screen advertises "2 easy warm-up questions"
+    (MockInterview.tsx:256) but WARMUP_MAX is 10 (MockWarmup.tsx:33).
+  * HOTKEY CONFLICT: the mock session registers Ctrl+Shift+C as "toggle overlay"
+    (MockSession.tsx:266-269) while the global registry uses the same combo for
+    "capture coding problem" (hotkeys.ts:183-186).
+  * PlanGate is imported but never rendered (MockInterview.tsx:16).
+  * The company chip list is hardcoded (MockInterview.tsx:38-41).
+  * save-answer edge function unused — direct DB write instead.
+
+VERDICT  PARTIAL.
+
+--------------------------------------------------------------------------------
+6.6  SESSIONS (history and detail)                        PARTIAL
+--------------------------------------------------------------------------------
+  CallSessions.tsx — list with filter and search, backed by
+  sessionsDB.listSummariesByUserId. Recent tab caps at 20, All tab at 500.
+  VERDICT: FULLY IMPLEMENTED.
+
+  SessionDetail.tsx — per-session review with dimension score bars, per-question
+  answers, links to scorecard/debrief, PDF export, share, and "save to answer
+  bank".
+  DEFECT: score bars use session[dim.key] ?? 0, so a session that was never
+  scored displays a confident "0" for every dimension rather than "not scored"
+  (SessionDetail.tsx:246-257).
+  DEFECT: the "Drill this" button sets a chatOpen flag but no drill UI is wired
+  in that file (SessionDetail.tsx:491).
+  VERDICT: PARTIAL.
+
+  DEAD BACKEND: end-session, save-answer, and save-transcript are all fully
+  implemented server-side and typed in src/lib/api/sessions.ts, but no component
+  ever calls them.
+
+--------------------------------------------------------------------------------
+6.7  DEBRIEF AND SCORECARD                                FULLY IMPLEMENTED
+--------------------------------------------------------------------------------
+  DEBRIEF LIST — sessionDebriefsDB.listSummariesByUserId joined with session
+  metadata. Real.
+
+  DEBRIEF DETAIL — tries to load a debrief by id; if not found, treats the URL
+  param as a session_id and calls the generate-debrief edge function (Gemini) to
+  produce it on demand. Renders grade, summary, skill gaps, action plan, and
+  recommended resources. Sharing writes a share token via
+  sessionDebriefsDB.updateShareToken, and /share/:token renders it publicly
+  through a token-scoped RPC.
+  MINOR: the :id param is ambiguous (debrief id or session id) — it works only
+  because of the fallback.
+
+  SCORECARD — loads an existing scorecard or generates one from the session plus
+  answers using CLIENT-SIDE Gemini (useScorecard.ts:79-180). Shares via a random
+  token and scorecardsDB.markShared. Export button is honestly labelled
+  "Export JSON".
+  NOTE: the ai-feedback edge function was built for exactly this and is never
+  used — the client-side path won.
+  MINOR: top_filler_words is often empty because the filler summary does not
+  populate the top-3 field.
+
+VERDICT  FULLY IMPLEMENTED (with one dead backend endpoint).
+
+--------------------------------------------------------------------------------
+6.8  ANALYTICS                                            FULLY IMPLEMENTED
+--------------------------------------------------------------------------------
+  Backed by the analytics-dashboard edge function, which aggregates the sessions
+  and scorecards tables server-side. Not mocked.
+  The score-trend chart is Pro-gated via PlanGate (Analytics.tsx:169-171).
+  DEFECT: the client overwrites the server's total_sessions with
+  recent_sessions.length, which can undercount (useAnalytics.ts:55-57).
+  DEFECT: the dimension radar defaults missing values to 0 rather than omitting
+  them.
+
+--------------------------------------------------------------------------------
+6.9  CREDITS AND USAGE DASHBOARD                          FULLY IMPLEMENTED
+--------------------------------------------------------------------------------
+  Real paginated credit ledger (creditsDB.listByUserIdWithBalancePage) plus
+  session summaries. This is a billing/consumption view, not a performance view.
+
+--------------------------------------------------------------------------------
+6.10 PREP LAB  (6 tools + hub)                            FULLY IMPLEMENTED
+--------------------------------------------------------------------------------
+  HUB (/app/prep) with four tabs:
+    - STAR Builder inline: 4 STAR fields, per-section polish via
+      polish-star-section, full generation via generate-star-answer, save to
+      answer_bank. Resume context is pulled from documentStore.
+    - Question Bank: shows the user's answer_bank rows as practice questions.
+      If the bank is empty it renders a hardcoded STARTER_ANSWER_TEMPLATES array
+      (PrepLab.tsx:364-389).
+    - AI Tools: 6 cards; the Pro-only ones are genuinely gated on plan_id. Each
+      runs the prep-tool edge function.
+    - Company Prep: calls the company-research edge function.
+
+  STANDALONE TOOLS
+    /prep/star-builder ... richer STAR library UI. Polish uses prep-tool
+                           (star_method), NOT polish-star-section. The button
+                           label quotes the star_generate credit cost, which is
+                           the wrong number (StarBuilder.tsx:289).
+    /prep/rephraser ...... rewrites an answer into formal / confident / concise
+                           variants. Offline fallback provides placeholders.
+                           An `error` state exists but is never set — dead UI.
+    /prep/coding-hints ... problems come from the coding_hints table
+                           (published = true). Hints and solutions via
+                           prep-tool. Includes a local code scratchpad.
+    /prep/system-design .. topics from system_design_topics table, whiteboard
+                           presets, AI breakdown via prep-tool, offline template
+                           fallback.
+    /prep/project-builder  generates a project showcase via prep-tool; drafts
+                           persist in localStorage; optional save to answer bank.
+
+  BACKEND: prep-tool is a single multi-tool router supporting jd_fit,
+  question_predict, cover_letter, salary_coach, linkedin_headline, culture_fit,
+  coding_hint, coding_solution, rephrase, project_build, star_method,
+  system_design — each with its own credit cost (prep-tool/index.ts:43-50).
+
+  GAP: the "JD Fit" link from a Job Description page opens the paste-text modal
+  instead of auto-binding the selected resume and JD and calling gap-analysis
+  (JDDetail.tsx:189-192).
+
+--------------------------------------------------------------------------------
+6.11 DOCUMENTS AND RESUMES                                FULLY IMPLEMENTED
+--------------------------------------------------------------------------------
+  UPLOAD RESUME -> storage bucket "resumes" at {userId}/{resumeId}.{ext} -> row
+  in resumes -> fire-and-forget parse-resume edge function, which tries Gemini,
+  then Anthropic, then OCR.space, and writes resumes, resume_versions,
+  documents, and profile fields.
+  COVER LETTER / PORTFOLIO -> documents table + documents bucket + parse-document.
+  JOB DESCRIPTION -> pasted or uploaded, stored in job_descriptions, parsed by
+  CLIENT-SIDE Gemini inside useDocuments (not an edge function).
+  DETAIL PAGES allow view, edit, re-parse, delete, and setting a primary resume.
+
+  NO VERSION HISTORY UI: resume_versions exists as a table, but re-parsing
+  overwrites content; there is no version browser.
+  GAP ANALYSIS: the gap-analysis edge function is real and callable
+  (useDocuments.ts:411), and results land in documentStore.gap_analysis — but no
+  component was found that renders that state. PARTIAL.
+
+--------------------------------------------------------------------------------
+6.12 ANSWER BANK                                          PARTIAL
+--------------------------------------------------------------------------------
+  Full CRUD over the answer_bank table, categories, favourites, search, detail
+  view that can display star_breakdown / ai_feedback / score if those columns
+  are populated (Prep Lab saves do not populate them).
+  MISSING: there is no "generate with AI" button in the Answer Bank itself. The
+  generate-answer edge function exists and is used by the live copilot, but not
+  here. Answers arrive only by manual entry or by saving from Prep Lab.
+
+--------------------------------------------------------------------------------
+6.13 INTERVIEWS AND CALENDAR                              PARTIAL
+--------------------------------------------------------------------------------
+  MANUAL SCHEDULING — create, edit, delete interviews with rounds; on save the
+  schedule-interview edge function inserts a notification row and, if
+  RESEND_API_KEY is set, sends an email. FULLY IMPLEMENTED.
+
+  GOOGLE CALENDAR — connect uses real Supabase OAuth with the
+  calendar.readonly scope. Disconnect revokes the token. BUT the sync-calendar
+  edge function returns HTTP 501 NOT_CONFIGURED unless GOOGLE_CLIENT_ID and
+  GOOGLE_CLIENT_SECRET are set on the server (sync-calendar/index.ts:218-234).
+  The UI then shows a friendly "isn't available yet" message. PARTIAL.
+
+  OUTLOOK — exists only as a string in a TypeScript union
+  (interview.types.ts:119). No OAuth, no sync, no UI. NOT BUILT.
+
+  TWO REAL BUGS: both Interviews.tsx:196-199 and InterviewDay.tsx:67-74 read
+  iv.scheduled_at and iv.status, but the store supplies objects shaped with
+  next_round.scheduled_at. This will render "Invalid Date" and wrong statuses.
+
+--------------------------------------------------------------------------------
+6.14 INTERVIEW DAY                                        PARTIAL
+--------------------------------------------------------------------------------
+  A game-day screen: countdown to today's interview, a preparation checklist,
+  affirmations, and a launch button into the practice coach. The checklist and
+  affirmations are hardcoded arrays (InterviewDay.tsx:31-46). Affected by the
+  same next_round date bug as above.
+
+--------------------------------------------------------------------------------
+6.15 COMPANY RESEARCH                                     FULLY IMPLEMENTED
+--------------------------------------------------------------------------------
+  Search a company -> profile page checks the company_research cache table for
+  this user -> on miss, calls the company-research edge function which asks
+  Gemini for a structured JSON brief (culture, values, interview process, likely
+  questions, recent news) -> result is validated against a schema and cached.
+  The data is AI-GENERATED, not scraped from a live source. Requires starter+
+  plan on the server (though see the plan-rank defect in 1.4).
+  The "popular companies" list is hardcoded (CompanyResearch.tsx:25-29).
+
+--------------------------------------------------------------------------------
+6.16 NOTIFICATIONS                                        PARTIAL
+--------------------------------------------------------------------------------
+  IN-APP: real notifications table, list with mark-read and delete, and a live
+  Supabase Realtime subscription (Notifications.tsx:50-81). Bell badge in the
+  top bar. FULLY IMPLEMENTED.
+  EMAIL: only the schedule-interview function sends email (via Resend). The
+  notification preferences saved to profiles.notification_prefs are not read by
+  any edge function in the repo — there is no digest job, no reminder cron.
+  PUSH: requestPushPermission uses the browser Notification API, but there is no
+  service-worker push pipeline and no push subscription storage.
+  VERDICT: in-app real, email/push largely cosmetic.
+
+--------------------------------------------------------------------------------
+6.17 PROFILE AND GAMIFICATION                             PARTIAL
+--------------------------------------------------------------------------------
+  ENGINE (useGamification.ts) — real. XP, streak_days, longest_streak persist to
+  profiles; badges upsert into user_badges; weekly challenges update on session
+  completion. FULLY IMPLEMENTED.
+  PROFILE PAGE DISPLAY — two genuine bugs:
+    * reads profile.streak_current, but the column is streak_days, so the
+      streak always shows 0 (Profile.tsx:143 vs types.ts:1758)
+    * reads profile.badges as an array, but badges live in user_badges, so the
+      badge count is wrong (Profile.tsx:150)
+
+--------------------------------------------------------------------------------
+6.18 REFERRALS                                            FULLY IMPLEMENTED
+--------------------------------------------------------------------------------
+  Each profile gets a referral_code. Sharing UI on /app/referrals. On signup the
+  code is captured to localStorage and applied during onboarding, which calls
+  the record-referral edge function -> record_referral_reward RPC -> credits
+  granted to BOTH parties plus a single-use promo code for the new user.
+  Reward amounts are configurable by admins in billing_settings.
+  Referred emails are masked in the list via a mask_email SQL helper.
+  MINOR: if the RPC fails, the client falls back to upserting the referrals row
+  without granting credits (referrals.ts:26-33).
+
+--------------------------------------------------------------------------------
+6.19 GUIDE                                                FULLY IMPLEMENTED
+--------------------------------------------------------------------------------
+  /app/guide immediately redirects to /app/guide/practice-coach, a static
+  in-app how-to for the live coaching overlay.
+
+--------------------------------------------------------------------------------
+6.20 GOV EXAM MOCK TEST ENGINE (the second product)
+--------------------------------------------------------------------------------
+This is effectively a separate application sharing the same shell.
+
+EXAM TYPES OFFERED (MockTestHub.tsx:42-115)
+  JEE_MAIN, NEET, UPSC, SSC_CGL, IBPS_PO, HPCL_ENGINEER, PSU, CUSTOM
+  TestConfigure additionally knows JEE_ADV. examTypeMap also maps APPSC_GROUP
+  and TSPSC_GROUP. The scraper knows a different set including GATE and NDA.
+  NAMING BUG: the frontend uses JEE_ADV while the scraper and admin seeder use
+  JEE_ADVANCED — they will not match.
+
+QUESTION BANK REALITY CHECK
+  SQL-seeded public questions total roughly 26:
+    20260525160000_seed_starter_mock_questions.sql .....  6 MCQs
+    20260628150000_seed_gov_exam_questions.sql ......... 20 MCQs + exam_papers
+  Anything beyond that must come from admin PDF/Excel import or the undeployed
+  scraper. The live production count is UNKNOWN without DB access.
+  VERDICT: engine FULLY IMPLEMENTED, content PARTIAL.
+
+QUESTION SELECTION (select-test-questions edge function)
+  Semi-adaptive, not IRT/CAT. It filters the questions table by exam type,
+  subject, topic, year, and source (OFFICIAL_PYP / AI_GENERATED / USER_UPLOAD);
+  reads user_topic_performance and recent weak topics; excludes question ids
+  used in the last 3 tests; fills EASY/MEDIUM/HARD buckets to the configured
+  difficulty mix; prioritises topics where accuracy is below 60%; and, for Pro
+  users with credits, calls Gemini to generate additional questions when the
+  bank cannot fill the request. Free tier is capped at 3 tests per month.
+
+TEST LIFECYCLE
+  TestConfigure -> select-test-questions -> create-test (deducts 3 credits) ->
+  TestSession opens in DRAFT -> explicit Start promotes to IN_PROGRESS and
+  stamps started_at -> answers upsert to test_responses every 30 seconds and on
+  beforeunload -> submit-test -> claim_and_complete_test RPC scores and writes
+  test_analyses in ONE transaction -> revision rows inserted for wrong answers
+  -> update_topic_performance RPC -> TestResults -> optional
+  analyze-test-performance for an AI coaching report (12 credits, cached).
+
+SCORING AND NEGATIVE MARKING
+  Defaults +4 / -1, configurable 0-100 per test; per-question overrides from
+  questions.marks_positive/negative; unattempted scores 0 with no penalty.
+  The "predicted percentile" is a heuristic transform of the percentage score,
+  NOT a real cohort ranking (submit-test/index.ts:617-620). This is presented to
+  users as if it were a rank — treat it as cosmetic.
+
+TIMER AND RESUME
+  Countdown derived from time_limit_minutes and started_at; auto-submit at zero;
+  pause stops the interval and resume shifts started_at forward; a page refresh
+  reloads saved responses and resumes the timer. FULLY IMPLEMENTED.
+
+REVISION / SPACED REPETITION
+  Leitner-style with intervals [1,3,7,14,30] days. Wrong answers enter
+  revision_list with next_review_date = tomorrow. "Knew it" advances the
+  interval, "Still struggling" resets to 1 day, "Mastered" retires the card.
+  FULLY IMPLEMENTED.
+
+IMPORT PIPELINES
+  parse-question-pdf ..... Gemini extracts MCQs from an uploaded PDF (20 credits)
+  UploadQuestions ........ user-facing PDF and manual entry
+  ExcelImportTab ......... XLSX parse, validate, bulk insert (shared user/admin)
+  AdminSeedQuestions ..... admin PDF bulk panel
+  bulk-import-questions .. server-to-server ingest guarded by x-ingest-key
+  collect-exam-papers .... admin-only fetch from an allowlist of government
+                           hosts, then Gemini extraction. Brittle HTML PDF
+                           discovery; only default listings for JEE/NEET/UPSC/SSC.
+
+EXAM PAPERS BROWSER (/app/mock-test/papers/:examType)
+  Lists official paper metadata from the exam_papers table. Papers whose
+  questions have not been ingested show a lock icon meaning "coming soon", NOT
+  a paywall. PARTIAL — many papers will have zero linked questions.
+
+INDIA-ONLY GATING — IMPORTANT
+  The route wrapper IndiaAppPage and IndiaRegionGate exist and would redirect
+  non-India users. But the resolver src/lib/platform/indiaRegion.ts:39-48
+  returns TRUE unconditionally unless VITE_FORCE_INDIA_REGION is set, with a
+  comment saying gov exam access is no longer India-gated. So the gate is
+  effectively DISABLED while the sidebar and marketing copy still imply it.
+
+OTHER DEFECTS
+  * MockTestHub's "total questions" stat calls
+    questionsDB.countByUploadedBy(user.id) — that is the count of questions the
+    user uploaded, not questions attempted or bank size (MockTestHub.tsx:178).
+  * The autosave marks is_attempted true for any visited question even if blank
+    (TestSession.tsx:667). Scores are still correct.
+  * Two SQL functions are dead: acquire_submit_lock and submit_test_atomic were
+    superseded by claim_and_complete_test and are never called.
+
+--------------------------------------------------------------------------------
+6.21 SETTINGS — ALL 19 PAGES, WHAT ACTUALLY PERSISTS
+--------------------------------------------------------------------------------
+Page                  Exposes                          Persists to        Effective?
+--------------------- -------------------------------- ------------------ ----------
+Settings (shell)      nav + sign out                   -                  routing
+SettingsProfile       name, avatar, email, password,   profiles columns   YES
+                      role, experience, domain, socials
+SettingsAppearance    theme, accent, font size,        localStorage       YES
+                      density, default overlay, stealth (uiStore/themeStore)
+SettingsAudio         STT language, filler words, mic  profiles +         YES
+                      device, VAD, auto-gain           ui_preferences
+SettingsNotifications email toggles, categories,       profiles columns   MOSTLY NO
+                      digest frequency                                    (nothing reads them)
+SettingsPrivacy       AI training, transcript storage, profiles.privacy_  MOSTLY NO
+                      analytics, public profile,       prefs              (not read anywhere)
+                      2FA row (disabled)
+SettingsSecurity      password change, TOTP MFA        Supabase Auth      YES
+SettingsSecurityConfig security checklist              localStorage       INFORMATIONAL
+SettingsBilling       plan, Stripe checkout, Razorpay, Stripe/Razorpay +  YES (when
+                      portal, credit packs             profiles (webhook) keys set)
+SettingsModels        default AI model                 profiles.preferred YES
+                                                       _model
+SettingsIntegrations  Google Calendar connect/sync/    OAuth + edge fns   PARTIAL
+                      disconnect; hidden "coming soon"                    (sync 501
+                      LinkedIn/GitHub/Slack/Zapier                        without secrets)
+SettingsData          per-type data export             export-user-data   YES
+SettingsDanger        export, reset progress,          DB + delete-account YES
+                      delete account
+SettingsHotkeys       custom hotkey overrides          localStorage       YES
+SettingsPolish        retention days, notification     profiles.metadata  PARTIAL
+                      channels, test toast, CSV export                    (retention not
+                                                                          enforced)
+SettingsPracticeCoach (redirect only)                  -                  redirect
+SettingsBYOK          deprecation notice               -                  DEAD (no route)
+SettingsCredits       credits UI                       -                  DEAD (no route)
+SettingsSubscription  subscription UI                  -                  DEAD (no route)
+
+NOTE ON SettingsCredits: even though it is unreachable, its hardcoded credit
+cost table is stale (mock session shown as 5, canonical value is 15).
+
+--------------------------------------------------------------------------------
+6.22 ADMIN PORTAL — ALL 15 PAGES
+--------------------------------------------------------------------------------
+PERMISSION MODEL
+  isAdmin comes from userRolesDB.hasRole(userId,'admin'). AdminLayout redirects
+  non-admins. Server-side, bulk_update_users re-checks has_role in SQL, and
+  collect-exam-papers calls requireAdmin. Most other admin pages query tables
+  directly and rely on RLS admin policies — a non-admin sees empty results
+  rather than an explicit 403.
+
+AdminDashboard        Total users, pro/free split, conversion %, estimated MRR,
+                      sessions today, 7-day AI spend.
+                      PARTIAL — counts are real, but MRR is plan price x
+                      subscriber count, not a payment ledger. Trend deltas are
+                      always null.
+
+AdminUsers            Paginated user list, search, plan filter, admin badge.
+                      Actions: ban/unban, grant pro, add credits, make admin.
+                      FULLY IMPLEMENTED — writes go through the
+                      bulk_update_users RPC which enforces admin in SQL.
+                      Minor: the "add credits" action is hardcoded to 100.
+
+AdminAnalytics        DAU/MAU via get_admin_dau_mau, performance via
+                      get_admin_perf_stats, AI usage, mock-test stats, support
+                      stats. FULLY IMPLEMENTED.
+
+AdminRevenue          MRR, ARR, churn, LTV, transactions.
+                      PARTIAL AND NUMERICALLY WRONG — monthlyRevenueByPlan sums
+                      credit_transactions.amount (credit counts) and renders it
+                      with formatCents, so revenue figures are meaningless.
+                      Also flags mrrIsEstimated when Stripe is not configured.
+
+AdminModelCosts       Model usage read from ai_usage_logs (real) plus an editor
+                      for credit costs.
+                      THE SAVE BUTTON IS FAKE — handleSaveCosts is a setTimeout
+                      plus a success toast with no API call
+                      (AdminModelCosts.tsx:177-187). STUB.
+
+AdminFeatureFlags     Shows plan gates from a client constant plus DB flags from
+                      the feature_flags table; saving upserts the DB flags.
+                      FULLY IMPLEMENTED for DB flags; the plan-gate matrix is
+                      read-only client config.
+
+AdminSeedQuestions    Per-exam bank statistics, PDF AI extraction, Excel tab,
+                      collect-exam-papers trigger, scraper job trigger.
+                      PARTIAL — ingest paths are real; the scraper needs a
+                      deployed service; the "gap fill" button is a disabled stub
+                      that only shows a toast (AdminSeedQuestions.tsx:188-193).
+
+AdminBulkUpload       Thin wrapper hosting ExcelImportTab in admin mode plus
+                      BulkPdfUploadPanel. FULLY IMPLEMENTED.
+
+AdminLiveChat         Support threads and messages with Supabase Realtime, reply
+                      box, status changes. FULLY IMPLEMENTED.
+
+AdminQuestionEditor   List, search, filter, and a block editor for questions
+                      with full CRUD.
+                      BUG — the exam filter uses ids like JEE_MAIN while the DB
+                      stores display strings like "JEE Main", so filtering
+                      returns nothing (AdminQuestionEditor.tsx:26 vs
+                      examTypes.ts:51).
+
+AdminAuditLog         Paginated admin_audit_log with filters. Read-only by
+                      design. FULLY IMPLEMENTED.
+
+AdminQAChecklist      A QA checklist loaded from src/data/qaChecklist.json with
+                      statuses stored in localStorage only.
+                      STUB — this is a per-browser notepad, not a QA system.
+
+AdminSupport          A read-only table of support_threads with no reply action
+                      and no link into Live Chat. PARTIAL — duplicates
+                      AdminLiveChat's data without its capabilities.
+
+AdminPromoCodes       Create, list, and toggle promo codes. FULLY IMPLEMENTED,
+                      protected by a promo_codes_admin_all RLS policy.
+
+AdminBillingSettings  Referral reward amounts, Razorpay INR prices in paise,
+                      razorpay_enabled toggle, auto_deduct_credits toggle.
+                      Upserts billing_settings id=1. FULLY IMPLEMENTED —
+                      except auto_deduct_credits, which no edge function reads.
+
+CODE QUALITY NOTE: AdminSeedQuestions, AdminQuestionEditor, and AdminLiveChat
+carry @ts-nocheck, suppressing type errors.
+
+--------------------------------------------------------------------------------
+6.23 MARKETING SITE                                       FULLY IMPLEMENTED
+--------------------------------------------------------------------------------
+  Landing ....... hardcoded STEPS and FEATURES sections; pricing pulled from the
+                  PLANS / LAUNCH_PLANS constants.
+  Pricing ....... renders the three launch plans; CTAs link to
+                  /signup?plan=... — there is NO checkout on the marketing page.
+                  Shows "Max" as "Custom" although the economics file says $79.
+  Help .......... helpArticlesDB.listPublished() from the DB, with
+                  helpArticlesFallback as a static fallback.
+  HelpArticle ... DB lookup by slug, falls back to the static file; unknown
+                  slugs render as category landing pages.
+  Blog/BlogPost . blog_posts table ONLY, with an empty state if there are no
+                  rows. No hardcoded posts.
+  Terms/Privacy . static JSX.
+  GovExams ...... marketing page for the exam product, hardcoded exam list.
+  Shortcuts ..... static hotkey reference.
+  SharedDebrief . public view of a shared debrief or scorecard by token.
+
+
+================================================================================
+PART 7 — MONETIZATION: PRICING, CHECKOUT, PAYMENTS, CREDITS, "MARKETPLACE"
+================================================================================
+
+7.1 PLAN CATALOG — THE SERVER TRUTH
+-----------------------------------
+supabase/functions/_shared/billingCatalog.ts
+
+  Plan id     Display  Active  Shown  Monthly credits  Razorpay product
+  ----------- -------- ------- ------ ---------------- -------------------
+  free        Free     yes     yes    50               -
+  starter     Pro      NO      no     50               -
+  pro         Pro      yes     yes    1,400            pro_monthly
+  elite       Pro      NO      no     1,400            -
+  enterprise  Max      yes     yes    4,000            enterprise_monthly
+
+  Plan ranks: free = 0, starter = 0, pro = 2, elite = 2, enterprise = 4.
+  Only free, pro, and enterprise are actually sold (LAUNCH_PLANS in
+  src/lib/constants/pricing.ts:38). starter and elite are legacy tiers.
+
+7.2 PRICES
+----------
+USD (src/lib/constants/creditEconomics.ts:18-40, stored as cents)
+  pro ......... $29.00 / month     $290.00 / year
+  enterprise .. $79.00 / month     $790.00 / year
+  free ........ $0
+
+USD credit packs (creditEconomics.ts:72-93)
+  50 credits ... $7.99
+  150 credits .. $21.99
+  500 credits .. $69.99
+
+INR defaults, admin-editable in AdminBillingSettings (paise)
+  Pro monthly ......... 249900  = Rs 2,499
+  Enterprise monthly .. 679900  = Rs 6,799
+  50 credits .......... 69900   = Rs 699
+  150 credits ......... 189900  = Rs 1,899
+  500 credits ......... 599900  = Rs 5,999
+  Razorpay always charges in INR (razorpay-create-order/index.ts:196-197).
+
+Stripe-only pack: credits_10 exists in the server catalog but is missing from
+the frontend pack definitions, the Razorpay product list, and the billing
+preflight check — effectively DEAD.
+
+7.3 FEATURE ENTITLEMENTS BY PLAN
+--------------------------------
+Defined in src/lib/billing/subscriptionManager.ts PLANS (lines 52-399). Examples:
+  FREE ....... overlay OFF, company_research OFF, mock_test_ai OFF, 50 credits
+  PRO ........ overlay ON, mock_test_ai ON, 1,400 credits, $29
+  MAX ........ 4,000 credits, $79
+
+Per-action credit costs (creditEconomics.ts:46-68, mirrored server-side in
+_shared/creditEconomics.ts):
+  live_hint 2 | live_answer 8 | live_feedback 3 | generate_hint 2 |
+  generate_answer 8 | generate_questions 12 | generate_star 10 | polish_star 2 |
+  generate_debrief 15 | company_research 20 | mock_session 15 |
+  create_mock_test 3 | mock_test_ai_gap_fill 15 | parse_question_pdf 20 |
+  analyze_test_performance 12 | generate_practice_questions 15 |
+  ai_coach_message 2 | resume_analysis 12 (DEFINED BUT NEVER CHARGED)
+
+7.4 PAYMENT PROVIDERS
+---------------------
+BOTH Stripe and Razorpay are wired, and BOTH are shown simultaneously in
+SettingsBilling. There is no automatic geo-based provider selection.
+  Stripe is considered "configured" on the client when any VITE_STRIPE_PRICE_*
+  env var is present (SettingsBilling.tsx:58-64). If not, the upgrade buttons
+  are disabled.
+  Razorpay is gated by billing_settings.razorpay_enabled (default true) plus the
+  RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET secrets.
+  Which one is actually live in production is UNKNOWN from source — it depends
+  entirely on which env vars are set.
+
+7.5 STRIPE CHECKOUT — STEP BY STEP
+----------------------------------
+   1. User clicks upgrade or buy-credits in SettingsBilling.
+   2. Client calls createCheckoutSession -> POST create-checkout with price_id,
+      success_url, cancel_url, optional coupon_code, and an Idempotency-Key.
+   3. Edge function authenticates, rate-limits (Postgres RPC), and validates the
+      price against an allowlist built from env vars plus the catalog. Prices
+      not on the allowlist are rejected.
+   4. Gets or creates the Stripe customer and stores stripe_customer_id on the
+      profile.
+   5. Creates a Stripe Checkout Session with metadata (plan_id or
+      credit_pack_id) and allow_promotion_codes: true.
+   6. Client redirects to session.url; the user pays on Stripe's hosted page.
+   7. Stripe fires checkout.session.completed to the stripe-webhook function.
+   8. Webhook updates profiles (plan or credits), upserts subscriptions, and for
+      packs calls the add_credits RPC.
+   9. The user returns to /app/settings/billing?checkout=success and the page
+      shows a toast and reloads.
+
+  ENTITLEMENTS ARE GRANTED SERVER-SIDE ONLY. The client never writes plan or
+  credit values. This is correct and important.
+
+7.6 STRIPE WEBHOOK — WHAT IS HANDLED
+------------------------------------
+  Event                            Handled  Notes
+  -------------------------------- -------  --------------------------------
+  checkout.session.completed       yes      plan/pack grant
+  invoice.paid                     yes      resets monthly usage, grants credits
+  customer.subscription.deleted    yes      downgrades to free
+  customer.subscription.updated    yes      syncs status, plan, trial fields
+  invoice.payment_failed           yes      grace period, downgrade after 3 tries
+  charge.refunded                  NO       not handled at all
+  everything else                  logged as unhandled
+
+  Security: HMAC signature verification with a 5-minute replay window;
+  idempotency via the idempotency_log table keyed stripe_event_{id}; production
+  rejects test-mode events; a missing webhook secret causes a hard 503 rather
+  than silently accepting.
+
+  BUG: the invoice.payment_failed branch sets profiles.credits to the absolute
+  value 50 (free tier monthly), which can wipe out purchased credit packs
+  (stripe-webhook/index.ts:573-574).
+
+7.7 RAZORPAY CHECKOUT — STEP BY STEP
+------------------------------------
+   1. Client calls createRazorpayOrder with a product_type.
+   2. Edge function authenticates, loads billing_settings, validates the product
+      type against an enum, and applies a promo code (from the request or from
+      profiles.pending_promo_code).
+   3. Creates a Razorpay Order in INR and inserts a payment_orders row.
+   4. Client loads Razorpay.js and opens the modal.
+   5. Only payment.captured is handled by the webhook. It verifies an HMAC
+      SHA256 signature, claims an idempotency key, grants the plan/credits
+      BEFORE marking the order paid (so a failure can be retried), and records
+      the promo redemption. Missing secret -> 503.
+
+  STRUCTURAL LIMITATION: pro_monthly and enterprise_monthly are ONE-TIME Razorpay
+  Orders, not Razorpay Subscriptions. There is no auto-renewal, no dunning, and
+  the cancel/resume endpoints (which are Stripe-specific) do not apply. Indian
+  customers effectively buy one month at a time and must repurchase manually.
+
+7.8 CREDITS SYSTEM
+------------------
+GRANTS
+  Signup ............... handle_new_user trigger grants 50 credits
+  Stripe pack .......... add_credits RPC, action 'purchase'
+  Stripe renewal ....... add_credits, action 'subscription_grant'
+  Razorpay purchase .... add_credits
+  Referral ............. record_referral_reward RPC grants both parties
+  Promo bonus .......... add_credits with payment id {paymentId}_promo
+  add_credits is granted to service_role ONLY — clients cannot call it.
+
+DEDUCTIONS
+  The deduct-credits edge function is the authoritative path. It ignores the
+  client-supplied cost and re-resolves it server-side via resolveActionCost
+  (deduct-credits/index.ts:259-272). Some AI functions deduct inline using the
+  same deductCreditsAtomic helper.
+  ATOMICITY CAVEAT: deductCreditsAtomic is a JavaScript read-then-conditional-
+  update using .gte("credits", amount), not a single SQL transaction
+  (_shared/supabase.ts:257-338). The .gte guard prevents going negative, but it
+  is weaker than the FOR UPDATE row lock in the original SQL function — and that
+  SQL function (deduct_credits) has been revoked from authenticated users, so
+  the JS path is what runs.
+
+AT ZERO CREDITS
+  The edge function returns HTTP 402 PAYMENT_REQUIRED; the client opens the
+  upgrade modal.
+
+CREDIT LEAKS (AI calls that cost money but charge nothing)
+  parse-resume ...... no deduction, despite resume_analysis = 12
+  gap-analysis ...... no deduction
+  parse-document .... no deduction
+
+7.9 IS THERE A MARKETPLACE?  — DIRECT ANSWER: NO
+------------------------------------------------
+The audit specifically searched for any marketplace, store, or purchasable-
+content surface. There are no files matching *marketplace* anywhere in the repo,
+and no purchasable items other than subscription plans and credit packs.
+
+What might look like a marketplace but is not:
+  ExamPapers.tsx ..... a browser of official exam paper metadata from the
+                       exam_papers table. Locked papers mean "questions not
+                       ingested yet", not "pay to unlock". Nothing is sold.
+  MyQuestions.tsx .... the user's own uploaded questions. Private CRUD.
+  UploadQuestions .... an ingest tool. No monetization hooks.
+  Question bank ...... shared content, free to use; only the AI features on top
+                       of it cost credits.
+
+So the only commerce surfaces in this application are:
+  (1) plan subscription via Stripe (USD) or Razorpay (INR, one-time)
+  (2) credit pack purchase via Stripe or Razorpay
+  (3) promo codes and referral rewards that discount or top up the above
+
+7.10 PROMO CODES, REFERRALS, TRIALS, REFUNDS, CANCELLATION
+----------------------------------------------------------
+  Promo codes (admin) ....... FULLY IMPLEMENTED — table, admin UI, applied
+                              server-side during Razorpay order creation.
+                              Enumeration is closed: the public read policy was
+                              deliberately dropped.
+  Stripe coupons ............ PARTIAL — allow_promotion_codes is on and an
+                              optional coupon_code is forwarded.
+  Referrals ................. FULLY IMPLEMENTED.
+  Trials .................... PARTIAL — the webhook syncs trial_start/trial_end
+                              and helper functions exist, but NOTHING IN THE
+                              CODE EVER CREATES A TRIAL at checkout.
+  Money refunds ............. NOT BUILT — no charge.refunded handler, no
+                              Razorpay refund handler. payment_orders has a
+                              'refunded' status that is never set.
+  Credit refunds ............ implemented for failed AI calls via a
+                              refund_credits RPC.
+  Cancel subscription ....... FULLY IMPLEMENTED (Stripe only) —
+                              cancel_at_period_end.
+  Resume subscription ....... FULLY IMPLEMENTED (Stripe only).
+
+7.11 PLAN GATING — WHERE IT IS AND WHERE IT IS NOT
+---------------------------------------------------
+SERVER-SIDE (weak)
+  requirePlan and requireCapability helpers exist and are called by several AI
+  functions. But:
+    * PLAN_RANK ranks 'starter' at 0, identical to 'free'. Therefore every
+      requirePlan(..., "starter") check — which guards the practice overlay,
+      company research, and others — DOES NOT BLOCK FREE USERS.
+    * CAPABILITY_MIN_RANK sets nearly every capability to 0, so the capability
+      system is a no-op except for priority_models (rank 4).
+  The practical effect: a free user with credits can call server endpoints that
+  the UI presents as paid-only.
+
+CLIENT-SIDE (real but bypassable)
+  planHasFeature / requireFeature in subscriptionManager, PlanGate components,
+  useAuth.canAccessFeature with its own smaller FEATURE_PLAN_MAP (which is not
+  aligned with the full PLANS.features), and credit pre-checks in
+  creditsManager.
+
+ROUTE-LEVEL
+  ProtectedRoute blocks the whole /app area if the Stripe subscription is
+  past_due beyond a 3-day grace. Razorpay one-time buyers never trigger this.
+
+CONFIRMED GAPS
+  Feature                Client blocks free?  Server blocks free?
+  ---------------------- -------------------- ---------------------
+  Company research       yes                  NO (starter rank = 0)
+  Practice overlay       yes                  NO (same reason)
+  Calendar sync          yes                  NO server gate found
+  mock_test_ai           yes                  no plan check on the
+                                              official-questions path
+
+7.12 BILLING DEFECT SUMMARY
+---------------------------
+  * enterprise/Max has no Stripe price id in the client PLANS object, so
+    upgrading to the top tier through Stripe throws.
+  * elite plan credits disagree between files (1,000 vs 1,400).
+  * Pricing page shows Max as "Custom" while the economics file says $79.
+  * SettingsBilling computes creditsUsed = monthlyAllowance - remaining, which
+    breaks (goes negative) once a user buys a credit pack.
+  * Admin revenue treats credit counts as cents.
+  * auto_deduct_credits is stored on both profiles and billing_settings and is
+    exposed in the admin UI, but no edge function ever reads it.
+  * Billing E2E tests exist only as it.todo placeholders.
+
+================================================================================
+PART 8 — BACKEND: ALL 46 EDGE FUNCTIONS
+================================================================================
+
+JWT column = the verify_jwt setting from supabase/config.toml (the API gateway).
+"false" means the function is publicly reachable and must do its own auth.
+CALLED = whether any code in src/ actually invokes it.
+
+8.1 AI AND CONTENT GENERATION
+------------------------------
+FUNCTION                     JWT  CREDITS  RATE LIMIT   CALLED  VERDICT
+generate-answer              yes  8        DB strict 3/m  yes   FULLY IMPLEMENTED
+  SSE streaming answer generator. Gemini streaming by default, OpenAI/Anthropic
+  proxied as chunked SSE. Requires starter for overlay, pro for screenshot.
+generate-hint                yes  2        DB AI 5/m      yes   FULLY IMPLEMENTED
+  3-bullet coaching hints with a model fallback chain.
+generate-questions           yes  12       DB AI          yes   FULLY IMPLEMENTED
+  Mock interview question sets.
+generate-debrief             yes  15       DB strict      yes   FULLY IMPLEMENTED
+  Post-session debrief JSON written to session_debriefs.
+generate-star-answer         yes  10       DB AI          yes   FULLY IMPLEMENTED
+  Full STAR JSON. Defaults to OpenAI gpt-4o.
+polish-star-section          yes  2        DB AI          yes   FULLY IMPLEMENTED
+  Single STAR section polish. Defaults to gpt-4o-mini.
+prep-tool                    yes  3-12     DB AI          yes   FULLY IMPLEMENTED
+  Multi-tool router for the whole Prep Lab. Costs per tool.
+ai-coach-chat                yes  2        DB AI 5/m      yes   FULLY IMPLEMENTED
+  Session-scoped coaching chat that refuses to give direct answers.
+company-research             yes  20       DB AI          yes   FULLY IMPLEMENTED
+  Structured company brief. Requires starter (see gating defect).
+gap-analysis                 yes  NONE     DB AI          yes   FULLY IMPLEMENTED
+  Resume vs JD fit. CHARGES NO CREDITS — cost leak.
+ai-feedback                  yes  3        DB AI          NO    DEAD CODE
+  Complete per-answer feedback generator. Superseded by client-side Gemini in
+  useScorecard. Nothing calls it.
+generate-practice-questions  yes  15       NONE           NO    DEAD CODE
+  Pro-tier weak-topic MCQ generator with no UI hookup.
+
+8.2 DOCUMENTS
+-------------
+parse-resume                 yes  NONE     DB AI          yes   FULLY IMPLEMENTED
+  Gemini -> Anthropic -> OCR.space fallback chain. Writes resumes,
+  resume_versions, documents, profiles. CHARGES NO CREDITS despite
+  resume_analysis = 12 being defined.
+parse-document               yes  NONE     DB AI          yes   FULLY IMPLEMENTED
+  Gemini vision text extraction. No credit charge.
+  SECURITY NOTE: passes the Gemini API key as a URL query parameter
+  (parse-document/index.ts:39) instead of a header — key can leak into logs.
+parse-question-pdf           yes  20       NONE           yes   FULLY IMPLEMENTED
+  Multipart PDF upload -> Gemini MCQ extraction. No rate limit.
+
+8.3 SESSIONS
+------------
+start-session                yes  none     DB session     partial  PARTIAL
+  Only the live copilot calls it. Mock flows create sessions directly.
+end-session                  yes  none     DB session     NO    DEAD CODE
+  Also TRUSTS a client-supplied credits_used value with no reconciliation
+  (end-session/index.ts:52-58) — an integrity risk if it were ever wired.
+save-answer                  yes  none     DB session     NO    DEAD CODE
+save-transcript              yes  none     DB session     NO    DEAD CODE
+deepgram-token               yes  none     DB session     yes   FULLY IMPLEMENTED
+  Mints a 60-second scoped Deepgram key so the browser never sees the real key.
+  Correct design.
+
+8.4 MOCK TEST ENGINE
+--------------------
+create-test                  yes  3        DB session     yes   FULLY IMPLEMENTED
+select-test-questions        yes  15*      NONE           yes   FULLY IMPLEMENTED
+  *only charges when AI gap-fill runs. No rate limit on an expensive endpoint.
+submit-test                  yes  none     DB session     yes   FULLY IMPLEMENTED
+analyze-test-performance     yes  12       NONE           yes   FULLY IMPLEMENTED
+bulk-import-questions        NO   none     DB 30/m        n/a   FULLY IMPLEMENTED
+  Server-to-server ingest guarded by an x-ingest-key header. Intentionally
+  public at the gateway.
+collect-exam-papers          yes  none     NONE           yes   PARTIAL
+  Admin-only. Fetches PDFs from an allowlist of government hosts, then Gemini.
+  Brittle listing-page scraping.
+
+8.5 BILLING
+-----------
+create-checkout              yes  none     DB payment     yes   FULLY IMPLEMENTED
+create-billing-portal        yes  none     DB payment     yes   FULLY IMPLEMENTED
+cancel-subscription          yes  none     DB payment     yes   FULLY IMPLEMENTED
+resume-subscription          yes  none     DB payment     yes   FULLY IMPLEMENTED
+deduct-credits               yes  server   DB payment     yes   FULLY IMPLEMENTED
+  Authoritative debit endpoint. Overrides any client-supplied cost.
+stripe-webhook               NO   grants   NONE           n/a   FULLY IMPLEMENTED
+razorpay-create-order        yes  none     NONE           yes   FULLY IMPLEMENTED
+razorpay-webhook             NO   grants   NONE           n/a   FULLY IMPLEMENTED
+billing-status               yes  none     NONE           NO    DEAD CODE
+  A caller is defined in src/lib/api/billing.ts:194 but never imported.
+record-referral              yes  grants   NONE           yes   FULLY IMPLEMENTED
+
+8.6 ACCOUNT AND DATA
+--------------------
+delete-account               yes  none     DB 1 per 24h   yes   FULLY IMPLEMENTED
+  GDPR wipe across many tables plus storage plus the Supabase Auth admin API,
+  with an optional Google token revoke. Requires typing DELETE.
+export-user-data             yes  none     DB 2 per hour  yes   FULLY IMPLEMENTED
+analytics-dashboard          yes  none     DB 10/m        yes   FULLY IMPLEMENTED
+
+8.7 INTEGRATIONS
+----------------
+sync-calendar                yes  none     NONE           yes   PARTIAL (501 without
+                                                                Google secrets)
+disconnect-calendar          yes  none     NONE           yes   FULLY IMPLEMENTED
+schedule-interview           yes  none     NONE           yes   FULLY IMPLEMENTED
+send-email                   yes  none     NONE           yes   FULLY IMPLEMENTED
+validate-api-key             yes  none     NONE           NO    DEAD CODE (BYOK removed)
+ping                         NO   none     mixed          tests FULLY IMPLEMENTED
+  Health probe. Public basic response; detailed checks need the service role.
+
+8.8 SHARED MODULES (supabase/functions/_shared/) — 27 files
+------------------------------------------------------------
+  aiProvider.ts ......... model fallback, output moderation, logAICost
+  auth.ts ............... JWT verification, admin check, ownership helpers,
+                          service-role client, IP/UA extraction
+  audit.ts .............. non-blocking audit_logs inserts
+  banCheck.ts ........... fail-closed is_banned check
+  billingCatalog.ts ..... canonical plan and pack catalog
+  billingConfig.ts ...... env validation and Stripe price preflight
+  cors.ts ............... origin allowlist, fail-closed in production
+  creditEconomics.ts .... server-side credit costs and action normalisation
+  errors.ts ............. standard JSON errors, JSON body parsing, redaction
+  examAIPrompts.ts ...... gov-exam MCQ generation prompts
+  examTypeMap.ts ........ frontend exam id <-> DB exam_type strings
+  freeTier.ts ........... free session duration and daily limits
+  gemini.ts ............. Gemini generate/chat/PDF + JSON parsing
+  logger.ts ............. structured JSON logging with redaction
+  opsLog.ts ............. billing and webhook operational logs
+  rateLimit.ts .......... in-memory limiter AND a distributed Postgres RPC
+                          limiter (check_rate_limit against rate_limit_buckets)
+  requireCapability.ts .. capability matrix (mostly rank 0 — see defects)
+  requirePlan.ts ........ minimum plan tier gate
+  resolveModel.ts ....... profile + plan -> concrete model id, with fallbacks
+  sessionEnforcement.ts . blocks AI on real live sessions unless practice-tagged
+  supabase.ts ........... clients, deductCreditsAtomic, refunds, idempotency
+  timing.ts ............. performance timers
+  types.ts .............. shared types, legacy CREDIT_COSTS
+  uploadValidation.ts ... PDF/DOCX/TXT MIME allowlist
+  utils.ts .............. legacy all-in-one helper (auth, CORS, callAI, its own
+                          in-memory rate limiter — duplicates rateLimit.ts)
+  validators.ts ......... Zod schemas plus prompt-injection guards
+  withTimeout.ts ........ promise timeout wrapper
+
+8.9 RATE LIMITING — TWO SYSTEMS, UNEVENLY APPLIED
+--------------------------------------------------
+  TIER 1 — in-memory Map inside a single Deno isolate. Ineffective across
+  instances; the file itself documents this (rateLimit.ts:3-7).
+  TIER 2 — Postgres RPC check_rate_limit against the rate_limit_buckets table.
+  Effective globally, and FAIL-CLOSED if the RPC errors or times out.
+
+  Adopted the distributed limiter: generate-answer, generate-hint,
+  generate-debrief, generate-questions, generate-star-answer,
+  polish-star-section, prep-tool, ai-coach-chat, company-research,
+  gap-analysis, parse-document, parse-resume, analytics-dashboard,
+  bulk-import-questions, all billing/payment functions, session functions,
+  delete-account, export-user-data.
+
+  NO RATE LIMIT AT ALL (and several are expensive):
+    select-test-questions, generate-practice-questions, collect-exam-papers,
+    parse-question-pdf, analyze-test-performance, razorpay-create-order,
+    schedule-interview, send-email, sync-calendar, record-referral,
+    disconnect-calendar, billing-status.
+
+8.10 FRONTEND CALLS TO NON-EXISTENT FUNCTIONS
+----------------------------------------------
+  None in production code. The only stale reference is "create-portal-session"
+  in a skip-list inside src/lib/network/fetchEdge.ts:18 — it is never invoked.
+
+8.11 ERROR HANDLING, CORS, OBSERVABILITY
+-----------------------------------------
+  Two parallel error stacks coexist: the modern _shared/errors.ts + auth.ts, and
+  the legacy utils.ts errorResponse. Newer endpoints use Zod validation; older
+  ones use ad-hoc checks.
+  Standard codes: 402 for credits, 429 for rate limit, 503 fail-closed when the
+  rate-limit RPC or a webhook secret is unavailable.
+  CORS is centralised with an origin allowlist that fails closed in production
+  and permits localhost plus Lovable preview origins otherwise.
+  Logging is structured JSON with redaction. THERE IS NO SENTRY IN THE EDGE
+  FUNCTIONS — only a comment noting it as future work (errors.ts:10). Sentry
+  exists on the web client only.
+
+
+================================================================================
+PART 9 — THE AI LAYER
+================================================================================
+
+9.1 PROVIDERS AND MODELS
+------------------------
+  Google Gemini — PRIMARY. Default model gemini-2.0-flash (GEMINI_MODEL_DEFAULT).
+    Also used: gemini-1.5-pro, gemini-2.5-flash. Used for hints, answers,
+    debriefs, company research, prep tools, document parsing, exam question
+    generation, and vision (screenshots and PDFs).
+  OpenAI — gpt-4o, gpt-4o-mini, gpt-4-turbo. Default for STAR generation and
+    STAR section polish.
+  Anthropic — claude-3-5-sonnet-20241022, claude-3-haiku-20240307. Used as a
+    resume-parsing fallback and available via model selection.
+  OCR.space — last-resort OCR for resumes.
+  NOT USED: Groq, and there is no Lovable AI gateway (only Lovable preview
+  origins appear in the CORS allowlist).
+
+9.2 MODEL SELECTION AND FALLBACK
+---------------------------------
+  resolveModel() maps profiles.preferred_model plus profiles.plan_id to a
+  concrete API model id. Free plans are FORCED onto Gemini
+  (resolveModel.ts:48-57). A per-request model override is accepted by some
+  endpoints. The fallback chain is: chosen model -> gemini-2.0-flash ->
+  gemini-1.5-pro, with up to 2 retries per model and retry on transient 429/5xx
+  (aiProvider.ts:213-267).
+
+9.3 STREAMING
+-------------
+  Only generate-answer streams. It uses Gemini's streamGenerateContent with
+  alt=sse, and wraps OpenAI/Anthropic responses into an equivalent SSE stream.
+  The client consumer is streamFunction in src/lib/api/functions.ts:153-271.
+  Everything else is request/response JSON.
+
+9.4 PROMPTS
+-----------
+  Prompts are inline in each edge function, with two shared collections:
+  _shared/examAIPrompts.ts for gov-exam question generation, and the tool prompt
+  table inside prep-tool/index.ts:60-185. Prompt-injection guards are regex
+  patterns in _shared/validators.ts:28-43, duplicated in several functions.
+  These guards are best-effort and bypassable — standard LLM risk.
+
+9.5 COST AND TOKEN ACCOUNTING
+------------------------------
+  ai_usage_logs is written by logAICost() but ONLY from generate-answer,
+  generate-hint, generate-debrief, ai-coach-chat, and prep-tool. All other AI
+  calls are unlogged.
+  model_cost_logs exists as a table and in the generated types but NO EDGE
+  FUNCTION EVER WRITES TO IT.
+  Cost estimates are hardcoded microcent rates in aiProvider.ts:75-93, not real
+  provider billing data. Therefore the admin "AI spend" figures are estimates.
+
+9.6 BYOK (BRING YOUR OWN KEY) — HALF REMOVED
+---------------------------------------------
+  Product decision: REMOVED. The client explicitly disables it
+  (src/lib/api/functions.ts:85-88, src/lib/security/byokVault.ts:1-17), the
+  settings page is a deprecation notice with no route, and /app/settings/byok
+  redirects to models.
+  BUT the server still accepts x-byok-openai, x-byok-anthropic, and
+  x-byok-gemini headers and will use them (utils.ts:82-90, gemini.ts:61-67).
+  The validate-api-key function that would validate such keys is dead.
+  profiles has byok_* columns in the generated types, but no function ever
+  encrypts or stores a submitted key — there is no server-side key vault.
+  Importantly, BYOK does NOT bypass credit deduction (verified by unit test
+  creditsManager.test.ts:91-98).
+
+
+================================================================================
+PART 10 — DATABASE: TABLES, RLS, FUNCTIONS, STORAGE
+================================================================================
+
+81 migrations, roughly 55 public tables plus 2 views. RLS is enabled broadly and
+has been actively hardened in recent migrations.
+
+10.1 TABLE INVENTORY BY DOMAIN
+-------------------------------
+IDENTITY AND PROFILE
+  profiles ............... the central user record: plan_id, credits, XP,
+                           streaks, referral_code, is_banned, stripe_customer_id,
+                           preferences. RLS on. Own select/insert. Update is
+                           PINNED so users cannot escalate privileged columns. A
+                           trigger separately protects is_admin. Admin has ALL.
+  user_roles ............. RBAC with the app_role enum (admin/moderator/user).
+  coaching_context ....... persistent per-user coaching state.
+
+INTERVIEWS AND SESSIONS
+  sessions ............... every live/mock/warmup/rehearsal session.
+  session_answers ........ per-question answers.
+  session_debriefs ....... AI debrief output; public sharing is by token-scoped
+                           RPC only (the broad public policy was dropped).
+  session_transcripts .... transcript chunks.
+  session_ai_interactions  AI call log (baseline table, no CREATE in repo).
+  interviews ............. legacy interview table (baseline).
+  scheduled_interviews ... calendar-scheduled interviews.
+  interview_rounds ....... rounds under a scheduled interview.
+  scorecards ............. per-session scores with is_shared + share_token.
+  feedback ............... user feedback submissions.
+  transcripts / debriefs / answers / saved_answers — LEGACY, superseded, unused
+                           by application code.
+
+MOCK TESTS AND QUESTIONS
+  questions .............. the master bank. Authenticated users can read public
+                           or own questions; anon SELECT was revoked.
+  exam_papers ............ official paper metadata. PUBLIC READ using(true).
+  mock_tests ............. user test sessions.
+  test_responses ......... in-test answers.
+  test_analyses .......... post-submit analysis and AI report.
+  revision_list .......... spaced repetition queue.
+  user_topic_performance . adaptive topic accuracy stats.
+  exam_images ............ scraper image metadata. PUBLIC READ using(true).
+  scrape_jobs / scrape_failures / scrape_ingested — admin only.
+
+DOCUMENTS
+  documents .............. resumes, JDs, cover letters, with soft delete.
+  resumes ................ resume file records.
+  resume_versions ........ parsed versions, owner-scoped through the resume FK.
+  job_descriptions ....... parsed JDs.
+  answer_bank ............ the user's answer library.
+
+BILLING AND CREDITS
+  credit_transactions .... the credit ledger. Client INSERT was REVOKED.
+  credits ................ a second, largely unused credits table. The
+                           authoritative balance is profiles.credits.
+  subscriptions .......... Stripe/Razorpay subscription state.
+  billing_settings ....... admin pricing singleton. ANY authenticated user can
+                           READ it (using(true)).
+  promo_codes ............ non-admin SELECT was removed, closing enumeration.
+  payment_orders ......... Razorpay/Stripe orders, own-select only.
+  referrals .............. referral tracking.
+  idempotency_log ........ webhook and credit dedupe. RLS on, no client
+                           policies — service role only.
+  model_cost_logs ........ per-call cost (baseline table, never written to).
+  model_pricing .......... in types only.
+
+ADMIN, AUDIT, METRICS
+  audit_logs ............. compliance trail; no client INSERT.
+  admin_audit_log ........ admin action log; admin only.
+  ai_usage_logs .......... AI token/cost monitoring; INSERT restricted to
+                           service_role after a fix migration.
+  request_metrics ........ edge latency metrics.
+  rate_limit_buckets ..... distributed rate limiter state; revoked from clients.
+
+ROOMS (deferred feature)
+  practice_rooms, room_participants, room_chat, room_questions — RLS is
+  participant-scoped after a hardening migration. The UI routes redirect away,
+  so these are currently unused.
+  rooms, companies — legacy baseline tables superseded by practice_rooms and
+  company_research.
+
+NOTIFICATIONS, GAMIFICATION, CONTENT
+  notifications, user_badges, weekly_challenges, achievements,
+  user_achievements, feature_flags, blog_posts, help_articles, coding_hints,
+  system_design_topics, company_research, analytics, calendar_integrations
+  (unused by code), support_threads, support_messages.
+
+VIEWS
+  feature_flags_public ... safe projection that hides allowed_users; granted to
+                           anon and authenticated.
+  ai_daily_costs ......... aggregated AI spend; no explicit GRANT, inherits the
+                           underlying table's RLS.
+
+10.2 KEY DATABASE FUNCTIONS
+----------------------------
+  handle_new_user() .............. signup trigger: creates the profile with 50
+                                   credits and a free subscription. Redefined in
+                                   5+ migrations.
+  add_credits(...) ............... service_role only.
+  deduct_credits(...) ............ service_role only (revoked from authenticated
+                                   in 20260727010000).
+  refund_credits(...) ............ service_role variant.
+  increment_profile_credits(...) . revoked from clients.
+  record_referral_reward(...) .... grants both parties.
+  has_role / is_admin ............ RBAC helpers.
+  check_rate_limit(...) .......... distributed rate limiting.
+  check_free_tier_limits(...) .... free quotas, with an auth guard against IDOR.
+  create_test_atomic(...) ........ atomic mock test creation.
+  claim_and_complete_test(...) ... atomic submit + analysis (the one in use).
+  submit_test_atomic / acquire_submit_lock — DEAD, superseded.
+  update_topic_performance(...) .. post-test topic stats upsert.
+  mark_notifications_read(...) ... bulk mark read.
+  get_shared_debrief / get_shared_scorecard — token-scoped public reads,
+                                   granted to anon.
+  get_my_referrals / mask_email .. PII-masked referral list.
+  bulk_update_users(...) ......... admin bulk patch. GRANTED TO authenticated —
+                                   safety depends entirely on the in-function
+                                   has_role check.
+  get_admin_perf_stats / get_admin_dau_mau — admin analytics.
+  delete_expired_session_data / purge_expired_idempotency_log /
+  cleanup_expired_documents — retention jobs run by pg_cron.
+  protect_admin_column() ......... trigger blocking is_admin self-escalation.
+  update_user_streak() ........... gamification trigger.
+
+10.3 ENUMS
+----------
+  Created in repo: app_role (admin, moderator, user).
+  Present in the generated types but created in the baseline schema (not in the
+  repo migrations):
+    ai_model, answer_type, credit_action, debrief_status, document_type,
+    interview_status, notification_type, plan_tier, referral_status,
+    room_status, session_status, session_type, subscription_status.
+
+10.4 STORAGE BUCKETS
+--------------------
+  question-images ..... PUBLIC read; admin write.
+  avatars ............. public bucket; authenticated users can only write into
+                        their own {uid}/ folder.
+  documents ........... PRIVATE; owner-folder CRUD by auth.uid().
+  desktop-releases .... PUBLIC read; service-role write only.
+  resumes ............. referenced by parse-resume but NOT created in any repo
+                        migration — likely created via the dashboard. UNKNOWN
+                        policy set.
+
+10.5 REALTIME AND CRON
+-----------------------
+  Realtime publication includes practice_rooms, room_chat, support_threads,
+  support_messages. profiles was deliberately REMOVED from the publication.
+  realtime.messages has RLS for user-scoped and room-scoped topics.
+  pg_cron jobs: delete-expired-session-data daily at 03:00 UTC,
+  purge-expired-idempotency-log at 04:15, cleanup-expired-documents at 04:30.
+  No Supabase Queues / pgmq usage.
+
+10.6 THE BIGGEST DATABASE RISK — BASELINE SCHEMA DRIFT
+--------------------------------------------------------
+  At least 12 tables are referenced by RLS policies, cron jobs, generated types,
+  and application code, but have NO CREATE TABLE statement anywhere in
+  supabase/migrations:
+
+    interviews, answers, debriefs, rooms, companies, achievements,
+    user_achievements, session_ai_interactions, model_cost_logs,
+    admin_audit_log, transcripts, model_pricing
+
+  Consequences:
+   * A clean `supabase db reset` from migrations alone may FAIL, because policy
+     migrations reference objects that were never created.
+   * Their true RLS status and column sets cannot be verified from the repo.
+   * Disaster recovery from source is not currently possible for these tables.
+  This is the single most important structural issue in the database.
+
+10.7 MIGRATION HYGIENE
+----------------------
+  * Duplicate timestamps create ordering ambiguity:
+      20260322010000 — add_referrals_table.sql AND calendar_sync_columns.sql
+      20260628150000 — billing_razorpay_offers_referrals.sql AND
+                       seed_gov_exam_questions.sql
+  * handle_new_user is redefined in 5+ migrations; several policies are dropped
+    and recreated repeatedly.
+  * Destructive statements exist in migrations (a DELETE on request_metrics, a
+    DROP FUNCTION on an old deduct_credits signature).
+  * One migration created an index on a nonexistent column (questions.category)
+    and needed a follow-up fix migration.
+  * Tables created but never used by app code: saved_answers,
+    calendar_integrations, plus the legacy set above.
+
+10.8 TYPE DRIFT SIGNALS
+-----------------------
+  Several admin pages cast table names to satisfy the generated client, e.g.
+  "promo_codes" as "profiles", "billing_settings" as "profiles",
+  "ai_usage_logs" as "profiles". That is a strong signal the generated types are
+  lagging behind the admin tables.
+
+
+================================================================================
+PART 11 — SECURITY REVIEW
+================================================================================
+
+11.1 WHAT IS DONE WELL (do not regress these)
+----------------------------------------------
+  * Credits are server-authoritative: add_credits and deduct_credits are
+    service_role only, client INSERT into credit_transactions is revoked, and
+    the deduct endpoint ignores the client's claimed cost.
+  * Webhooks verify HMAC signatures, enforce idempotency through a dedicated
+    table, reject test-mode events in production, and hard-fail (503) when the
+    signing secret is absent rather than accepting unverified payloads.
+  * Deepgram keys never reach the browser — a 60-second scoped key is minted
+    server-side per session.
+  * Profile privilege columns are pinned against escalation, with a separate
+    trigger guarding is_admin.
+  * Promo code enumeration was closed by dropping the public read policy.
+  * Public sharing moved from a broad RLS policy to token-scoped SECURITY
+    DEFINER RPCs.
+  * CORS fails closed in production.
+  * Electron is configured correctly: contextIsolation on, nodeIntegration off,
+    sandbox on, a CSP injected via webRequest, will-navigate blocked, and
+    window.open denied.
+  * The distributed rate limiter fails CLOSED on error.
+  * collect-exam-papers uses a host allowlist against SSRF.
+
+11.2 FINDINGS — HIGH
+---------------------
+H1  SERVER PLAN GATING IS A NO-OP FOR THE 'STARTER' TIER.
+    PLAN_RANK: free = 0 and starter = 0 (billingCatalog.ts:47-53). Every
+    requirePlan(..., "starter") therefore passes for free users. This guards the
+    practice overlay and company research among others.
+    Additionally CAPABILITY_MIN_RANK is 0 for nearly every capability
+    (requireCapability.ts:24-37).
+    IMPACT: a free account with credits can reach paid-only server endpoints.
+
+H2  UNCHARGED AI ENDPOINTS.
+    parse-resume, gap-analysis, and parse-document all call paid LLM APIs and
+    deduct nothing, despite resume_analysis = 12 being defined in
+    creditEconomics.ts. IMPACT: uncapped cost exposure per user.
+
+H3  EXPENSIVE ENDPOINTS WITH NO RATE LIMIT.
+    select-test-questions, generate-practice-questions, parse-question-pdf,
+    analyze-test-performance, collect-exam-papers, razorpay-create-order,
+    send-email, schedule-interview, sync-calendar, record-referral.
+
+H4  COMMITTED PRODUCTION ENVIRONMENT FILE.
+    .env.production is tracked in git and contains a live Supabase anon JWT.
+    The anon key is designed to be public, but committing environment files
+    violates the project's own rule stated in .env.example and creates a habit
+    that will eventually leak a real secret.
+
+H5  BASELINE SCHEMA NOT IN MIGRATIONS (see 10.6). RLS status for 12 tables
+    cannot be verified or reproduced from source.
+
+11.3 FINDINGS — MEDIUM
+-----------------------
+M1  BYOK headers still honoured server-side while the feature is removed from
+    the client (utils.ts:82-90). Unintended surface.
+M2  Gemini API key sent as a URL query parameter in parse-document (line 39) —
+    can be captured by proxies and logs.
+M3  end-session trusts a client-supplied credits_used value with no
+    reconciliation. Currently harmless only because nothing calls it.
+M4  Credit deduction is a JS read-then-update rather than one SQL transaction.
+    The .gte guard prevents negatives but concurrent requests can interleave.
+M5  bulk_update_users is GRANTed to authenticated; the only thing standing
+    between a normal user and mass user modification is the in-function
+    has_role check. If that function is ever edited carelessly, it becomes a
+    privilege escalation.
+M6  billing_settings is readable by every authenticated user (using(true)).
+M7  exam_papers and exam_images are world-readable with using(true).
+M8  user_achievements and model_cost_logs allow authenticated users to INSERT
+    their own rows — users could fabricate achievements or cost entries.
+M9  Windows binaries are NOT code signed (signAndEditExecutable: false), and
+    auto-update ships unsigned artifacts. SmartScreen will warn users, and the
+    update channel has weaker integrity guarantees.
+M10 release-new/ (~86 MB of installers) is untracked but not gitignored — one
+    `git add .` away from being committed.
+M11 .env.local contains SERVER secrets (OPENAI_API_KEY, STRIPE_SECRET_KEY,
+    SUPABASE_SERVICE_ROLE_KEY, SENTRY_AUTH_TOKEN) inside a frontend project. It
+    is gitignored, but service-role keys should not live beside VITE_ variables
+    where a naming mistake exposes them to the bundle.
+M12 No Sentry in edge functions — backend failures are invisible outside logs.
+
+11.4 FINDINGS — LOW / INFORMATIONAL
+------------------------------------
+L1  Prompt-injection guards are regex-based and bypassable.
+L2  The legacy in-memory rate limiter in utils.ts is per-isolate only.
+L3  credit_transactions.stripe_payment_id also stores Razorpay ids — naming
+    confusion, not a vulnerability.
+L4  Two parallel auth helper patterns (authenticateRequest vs requireAuth) with
+    slightly different ban handling.
+L5  The session-expiry banner never forces a sign-out.
+L6  Electron's View menu exposes Reload/Force Reload in production builds.
+L7  Electron update listeners in the preload bridge have no unsubscribe helper.
+L8  The stale _asar-extract/ copy of the Electron main process differs from
+    source (1440x900 window, port 8080, no overlay IPC) — drift risk if anyone
+    treats it as the source of truth.
+L9  ai-feedback is dead but fully armed: if it were wired by mistake it would
+    start writing scores into session_answers.
+
+
+================================================================================
+PART 12 — DESKTOP (ELECTRON) APPLICATION
+================================================================================
+
+12.1 DESIGN INTENT
+------------------
+The desktop app is deliberately NOT the whole product. It is an overlay client.
+It boots directly to #/app/live/overlay, allows only auth, onboarding, /app/live
+and /app/live/overlay, and pushes every other route out to the system browser
+via ElectronRouteGate.
+
+12.2 WINDOW
+-----------
+  Default 480x640, alwaysOnTop, minimum 360x320, frameless-style drag strip,
+  single-instance lock, content protection off by default but toggleable.
+  BUG: loadWindowState is called with defaultWidth 480 / defaultHeight 640, but
+  window-state.cjs:32-33,51-52 clamps to a MINIMUM of 800x600, overriding the
+  intended overlay size.
+
+12.3 IPC CHANNEL INVENTORY
+--------------------------
+  invoke handlers in electron/main.cjs
+    shell:openExternal ............ validates http/https before opening
+    set-content-protection ........ screen-capture exclusion
+    overlay:set-always-on-top ..... level whitelist enforced
+    overlay:resize ................ clamped to 320-1200 x 200-900
+    overlay:show-inactive
+    overlay:hide
+  main -> renderer sends
+    global-shortcut, hotkey-conflict, update-available, update-downloaded
+  Global shortcuts registered natively
+    Ctrl/Cmd+Shift+H -> toggle-overlay
+    Ctrl/Cmd+Shift+A -> request-ai-answer
+
+12.4 PRELOAD BRIDGE SECURITY
+-----------------------------
+  electron/preload.cjs exposes only `desktop` and `electronAPI` through
+  contextBridge. No raw ipcRenderer, no Node APIs. URL validation happens in the
+  main process, not the renderer. This is a correct pattern.
+  DEAD FILE: electron/preload.ts declares a stealth:* IPC API that has NO
+  handlers in main.cjs and is never loaded — the runtime uses preload.cjs.
+
+12.5 AUTO-UPDATE AND SIGNING
+-----------------------------
+  electron-updater runs checkForUpdatesAndNotify only when packaged. Publish
+  target is the GitHub repo Clarifyy-Ai/clarity-assistant. A latest.yml exists in
+  release-new/.
+  CODE SIGNING IS DISABLED (package.json:82 signAndEditExecutable: false).
+  Unsigned Windows installers trigger SmartScreen warnings and weaken the
+  update trust chain.
+
+12.6 BUILD TARGETS
+------------------
+  Windows NSIS x64 with a custom install directory, macOS DMG for arm64 and x64,
+  Linux AppImage. ASAR packing enabled. Configured output directory is release/,
+  but the actual local build landed in release-new/ — and the release workflow
+  uploads release/*.exe, so the automated release would find nothing.
+
+
+================================================================================
+PART 13 — BUILD, CI/CD, TESTING, ENVIRONMENT
+================================================================================
+
+13.1 NPM SCRIPTS OF NOTE
+------------------------
+  dev, build, preview ................ standard Vite
+  dev:electron / electron:dev ........ Vite + Electron with wait-on
+  electron:build ..................... BUILD_TARGET=electron vite build
+  dist:win / dist:mac / dist:linux ... electron-builder
+  lint, typecheck, test, test:run, test:coverage, test:e2e
+  validate-env ....................... env schema validation
+  pre-deploy ......................... migration + edge function inventory check
+  release:gates ...................... forbidden copy/security patterns in src
+  release:security-gates ............. edge rate-limit and migration checks
+  billing:parity ..................... frontend/backend billing catalog sync
+  billing:preflight .................. billing env preflight
+  release:capability-gates ........... AI capability gate check
+  publish:desktop-installer .......... uploads the .exe to Supabase Storage
+  supabase:gen ....................... regenerate database types
+
+  Note: there is NO "engines" field in package.json, so no Node version is
+  enforced.
+
+13.2 CI PIPELINE (.github/workflows/ci.yml)
+--------------------------------------------
+  Job "quality" on push to main and on every PR:
+    lint -> typecheck -> validate-env -> unit tests -> 5 release/billing gate
+    scripts -> npm audit (non-blocking) -> build
+  Job "e2e": Playwright on chromium, after quality.
+
+  WOULD IT PASS TODAY?
+    lint ............. likely PASS in clean CI (the 12 local errors come from a
+                       .deploy-payloads/ folder that is gitignored and absent in
+                       CI; 558 warnings do not fail the build)
+    typecheck ........ PASS (verified, exit 0)
+    validate-env ..... FAIL. The workflow sets VITE_APP_ENV=test, which
+                       scripts/validate-env.js:66 does not allow (it accepts
+                       only development/staging/production), and the
+                       "ci-placeholder*" values match its placeholder-rejection
+                       regex at lines 68-85,197-198.
+    unit tests ....... PASS (23 files, 209 tests, verified)
+    release gates .... PASS (verified)
+    build ............ likely PASS
+    e2e .............. UNKNOWN — no report artifacts exist in the repo
+
+  Second workflow, electron-release.yml, triggers on v* tags, builds Windows
+  only, and uploads release/*.exe — which does not match where builds actually
+  land. No macOS or Linux release job exists.
+
+13.3 TESTING REALITY
+--------------------
+  REAL unit tests: 23 files, 209 passing. They cover:
+    billing (7 files: creditsManager, refunds, guards, plan catalog, Stripe
+    webhook logic, Razorpay webhook logic, credit packs), validators (2),
+    audio helpers (wpmTracker, fillerDetector), fetchEdge, overlay hotkeys,
+    overlay pill mode, hash/format utils, and 4 hooks (useAuth, useCredits,
+    useLocalStorage, usePrivateMode).
+
+  PLACEHOLDERS: 17 files under src/test/_placeholders/ containing 794 it.todo
+  entries. These are excluded from the test run by vitest.config.ts:26-27, so
+  they neither pass nor fail. They are a traceability catalogue, not tests.
+
+  ZERO UNIT TEST COVERAGE for:
+    all ~103 pages, all 172 components, 45 of 49 hooks, all 15 stores, all AI
+    client modules, the Supabase integration layer, the Electron bridge, and
+    every edge function.
+
+  E2E: 10 Playwright specs (smoke, login, signup-flow, regression, overlay,
+  documents, mock-debrief, ai-audio, ui-visual-smoke, ui-visual-regression) plus
+  2 visual snapshots. NO test-results/ or playwright-report/ output exists in
+  the repo, so there is no evidence any of them currently pass.
+
+  Coverage thresholds configured are very low: billing 25% lines, authStore 8%.
+
+13.4 ENVIRONMENT
+----------------
+  .env.example ...... complete placeholder template — good.
+  .env.local ........ exists, gitignored, contains ~37 keys INCLUDING server
+                      secrets (see M11).
+  .env.production ... TRACKED IN GIT. Variables set: VITE_SUPABASE_URL,
+                      VITE_SUPABASE_ANON_KEY, VITE_SUPABASE_PUBLISHABLE_KEY,
+                      VITE_APP_URL, VITE_APP_ENV=production,
+                      VITE_DESKTOP_DOWNLOAD_URL_WIN, VITE_GITHUB_RELEASE_REPO.
+
+  src/lib/env.ts fails fast if VITE_SUPABASE_URL or VITE_SUPABASE_ANON_KEY are
+  missing, and treats Sentry, PostHog, and Stripe as optional with helper
+  predicates (isStripeConfigured etc.).
+  MISMATCH: env.ts's AppEnvironment type includes "test" but
+  scripts/validate-env.js does not — the direct cause of the CI failure above.
+
+13.5 PWA AND OFFLINE
+--------------------
+  public/manifest.json plus a minimal service worker (public/sw.js) that caches
+  assets only. Registered in src/main.tsx:82-101 and disabled in dev and in
+  Electron. usePwaInstallPrompt drives an install prompt modal.
+  Offline behaviour: useOfflineFallback, useIsOffline, a NetworkBanner, and the
+  live coach falls back to locally generated talking points when AI is
+  unreachable. Verdict PARTIAL — real but shallow.
+
+13.6 PERFORMANCE
+----------------
+  Manual chunking into 11 vendor/app bundles (vite.config.ts:99-138), lazy
+  loading for all app pages, eager loading for marketing pages to protect first
+  paint, console.log stripped in production, source maps off in production.
+
+13.7 OBSERVABILITY
+------------------
+  Sentry on the web client (init in main.tsx, source map upload via the Vite
+  plugin, capture in GlobalErrorBoundary). PostHog for product analytics with
+  opt-out outside production and identify-on-auth. A Supabase health check runs
+  at boot. Feature flags come from two places: plan-derived client flags in
+  globalStore and DB flags in the feature_flags table.
+  NOTE: ErrorBoundary.tsx:51-54 still references a legacy window.__sentry__
+  global that no longer exists.
+
+
+================================================================================
+PART 14 — MASTER DEFECT REGISTER (PRIORITISED)
+================================================================================
+
+P0 — FIX BEFORE TAKING MORE MONEY
+----------------------------------
+P0-1  Enterprise/Max cannot be purchased via Stripe. PLANS.enterprise has no
+      stripePriceIdMonthly/Yearly, so handleUpgrade("enterprise") fails.
+      src/lib/billing/subscriptionManager.ts:364-399,
+      SettingsBilling.tsx:259-261
+P0-2  invoice.payment_failed sets profiles.credits to an absolute 50, destroying
+      purchased credit packs. supabase/functions/stripe-webhook/index.ts:573-574
+P0-3  Server plan gating does not gate. starter rank = free rank = 0.
+      _shared/billingCatalog.ts:47-53, _shared/requireCapability.ts:24-37
+P0-4  Three AI endpoints charge no credits: parse-resume, gap-analysis,
+      parse-document.
+P0-5  .env.production is committed to git; release-new/ (~86MB) is not
+      gitignored.
+P0-6  Admin revenue figures are wrong — credit counts formatted as currency.
+      src/lib/supabase/database.ts:1314-1321, AdminRevenue.tsx:372,499
+
+P1 — BREAKS A USER-VISIBLE FEATURE
+-----------------------------------
+P1-1  Interview dates render as "Invalid Date" and statuses are wrong.
+      Interviews.tsx:196-199 and InterviewDay.tsx:67-74 read iv.scheduled_at /
+      iv.status but the store supplies next_round.scheduled_at.
+P1-2  Profile streak always shows 0 — reads streak_current, column is
+      streak_days. Profile.tsx:143
+P1-3  Profile badge count wrong — reads profile.badges, badges live in
+      user_badges. Profile.tsx:150
+P1-4  Authenticated users hitting an invalid /app/* URL get a blank page, not a
+      404. App.tsx has no splat child under /app.
+P1-5  Admin question exam filter returns nothing — filter uses JEE_MAIN, DB
+      stores "JEE Main". AdminQuestionEditor.tsx:26 vs examTypes.ts:51
+P1-6  Hotkey collision: Ctrl+Shift+C is "toggle overlay" in a mock session and
+      "capture coding problem" globally. MockSession.tsx:266-269 vs
+      hotkeys.ts:183-186
+P1-7  Session detail shows a confident "0" for every unscored dimension.
+      SessionDetail.tsx:246-257
+P1-8  CI fails at validate-env because VITE_APP_ENV=test and ci-placeholder
+      values are rejected.
+P1-9  Electron overlay is forced to a minimum of 800x600, overriding the 480x640
+      design. window-state.cjs:32-33 vs main.cjs:111-112
+P1-10 Electron release workflow uploads release/*.exe but builds land in
+      release-new/.
+
+P2 — MISLEADING OR INCONSISTENT
+--------------------------------
+P2-1  Warm-up advertises 2 questions, runs 10. MockInterview.tsx:256 vs
+      MockWarmup.tsx:33
+P2-2  Gov-exam hub "total questions" counts the user's own uploads.
+      MockTestHub.tsx:178
+P2-3  "Predicted percentile" is a formula, not a real cohort rank.
+      submit-test/index.ts:617-620
+P2-4  Pricing page shows Max as "Custom" while economics say $79.
+P2-5  StarBuilder's polish button quotes the wrong credit cost.
+      StarBuilder.tsx:289
+P2-6  SettingsBilling computes creditsUsed = allowance - remaining, which goes
+      negative after a pack purchase. SettingsBilling.tsx:212
+P2-7  India-only gating is advertised in the UI but disabled in code.
+      indiaRegion.ts:39-48
+P2-8  Analytics client overwrites the server's total_sessions with a page
+      length. useAnalytics.ts:55-57
+P2-9  Onboarding step 4 always saves audio_input_device: "default".
+P2-10 Onboarding step 2 collects an anxiety value and never saves it.
+P2-11 Sidebar collapse preference is overwritten on every breakpoint change.
+P2-12 Help content still describes Group Practice rooms, which redirect away.
+
+P3 — DEAD CODE AND CLEANUP
+---------------------------
+P3-1  Dead edge functions: ai-feedback, validate-api-key,
+      generate-practice-questions, billing-status, end-session, save-answer,
+      save-transcript.
+P3-2  Dead components: SettingsCredits, SettingsSubscription, SettingsBYOK,
+      DesktopOnlyGate.
+P3-3  Dead hooks/modules: useDeepgramStream (parallel implementation),
+      useAudioCapture in the live path.
+P3-4  Dead SQL: submit_test_atomic, acquire_submit_lock.
+P3-5  Dead flags: auto_deduct_credits stored and shown but never read.
+P3-6  Dead Electron file: electron/preload.ts (stealth IPC with no handlers).
+P3-7  Stale artifact folder: _asar-extract/ diverges from electron/ source.
+P3-8  ~30 archived MCP deploy scripts under scripts/archive/.
+P3-9  credits_10 Stripe pack exists only in the server catalog.
+P3-10 Empty topbar breadcrumb slot.
+P3-11 Rephraser has an error state that is never set.
+P3-12 @ts-nocheck on three admin pages.
+P3-13 prettier.config.js references prettier-plugin-tailwindcss, which is not
+      installed.
+P3-14 @hookform/resolvers is not installed, so Zod schemas are never bound to
+      react-hook-form via zodResolver.
+
+P4 — MISSING SAFETY NETS
+-------------------------
+P4-1  No rate limits on 12 endpoints, several of them expensive.
+P4-2  No refund handling for real money (Stripe or Razorpay).
+P4-3  No Sentry in edge functions.
+P4-4  Zero test coverage for pages, components, stores, and edge functions.
+P4-5  Baseline schema missing from migrations (12 tables).
+P4-6  Windows binaries unsigned.
+P4-7  Session expiry warns but never signs the user out.
+
+
+================================================================================
+PART 15 — MASTER IMPLEMENTATION STATUS MATRIX
+================================================================================
+
+#   FEATURE                              VERDICT             NOTE
+--- ------------------------------------ ------------------- -------------------
+ 1  Email/password auth                  FULLY IMPLEMENTED
+ 2  OAuth (Google/GitHub/LinkedIn/Azure) FULLY IMPLEMENTED   provider enablement UNKNOWN
+ 3  Email verification                   FULLY IMPLEMENTED
+ 4  Password reset                       FULLY IMPLEMENTED
+ 5  TOTP multi-factor auth               FULLY IMPLEMENTED
+ 6  Account lockout (client)             FULLY IMPLEMENTED   localStorage based
+ 7  Onboarding wizard (5 steps)          PARTIAL             2 fields discarded
+ 8  Dashboard                            FULLY IMPLEMENTED
+ 9  Live Practice Coach                  FULLY IMPLEMENTED
+10  System/tab audio capture             FULLY IMPLEMENTED   Chrome/Edge only
+11  Deepgram streaming STT               FULLY IMPLEMENTED
+12  Speaker diarization                  FULLY IMPLEMENTED
+13  Real-time AI hints                   FULLY IMPLEMENTED
+14  Streaming AI answers                 FULLY IMPLEMENTED   SSE
+15  Screenshot/vision coding capture     FULLY IMPLEMENTED
+16  Stealth mode                         PARTIAL             labels only, no capture evasion
+17  Overlay hotkeys                      FULLY IMPLEMENTED
+18  Panic mode                           FULLY IMPLEMENTED   static coaching steps
+19  Mock Interview                       PARTIAL             no TTS
+20  Mock warm-up                         PARTIAL             hardcoded, unscored
+21  Session history                      FULLY IMPLEMENTED
+22  Session detail                       PARTIAL             null scores show as 0
+23  AI Debrief                           FULLY IMPLEMENTED
+24  Debrief sharing (public token)       FULLY IMPLEMENTED
+25  Scorecard                            FULLY IMPLEMENTED   client-side Gemini
+26  Analytics dashboard                  FULLY IMPLEMENTED
+27  Credits & usage dashboard            FULLY IMPLEMENTED
+28  Prep Lab hub                         FULLY IMPLEMENTED
+29  STAR Builder                         FULLY IMPLEMENTED
+30  Project Builder                      FULLY IMPLEMENTED   drafts in localStorage
+31  Rephraser                            FULLY IMPLEMENTED
+32  Coding Hints                         FULLY IMPLEMENTED   DB catalog
+33  System Design                        FULLY IMPLEMENTED   DB topics
+34  12 AI prep tools (prep-tool)         FULLY IMPLEMENTED
+35  Resume upload + AI parse             FULLY IMPLEMENTED   3-provider fallback
+36  Job description parse                FULLY IMPLEMENTED   client-side Gemini
+37  Resume vs JD gap analysis            PARTIAL             API real, UI unwired
+38  Resume version history UI            NOT BUILT           table exists, no UI
+39  Answer Bank CRUD                     FULLY IMPLEMENTED
+40  Answer Bank AI generation            NOT BUILT
+41  Interview scheduling (manual)        FULLY IMPLEMENTED
+42  Interview reminders (email)          FULLY IMPLEMENTED   needs Resend key
+43  Google Calendar connect              FULLY IMPLEMENTED
+44  Google Calendar sync                 PARTIAL             501 without secrets
+45  Outlook Calendar                     NOT BUILT
+46  Interview Day screen                 PARTIAL             date bug
+47  Company Research                     FULLY IMPLEMENTED   AI + cache
+48  In-app notifications + realtime      FULLY IMPLEMENTED
+49  Email notification preferences       PARTIAL             saved, never read
+50  Push notifications                   NOT BUILT           permission only
+51  Gamification engine (XP/streak)      FULLY IMPLEMENTED
+52  Profile page display                 PARTIAL             wrong column names
+53  Referral program                     FULLY IMPLEMENTED
+54  Gov exam test engine                 FULLY IMPLEMENTED
+55  Gov exam question bank content       PARTIAL             ~26 seeded MCQs
+56  Adaptive question selection          FULLY IMPLEMENTED
+57  AI question gap-fill                 FULLY IMPLEMENTED   Pro + credits
+58  Spaced repetition revision           FULLY IMPLEMENTED
+59  Exam papers browser                  PARTIAL             many papers empty
+60  PDF question import                  FULLY IMPLEMENTED
+61  Excel/CSV question import            FULLY IMPLEMENTED
+62  Government site paper collection     PARTIAL             brittle
+63  Python scraper service               PARTIAL             not deployed
+64  India-only region gate               DISABLED
+65  Settings: profile/audio/appearance   FULLY IMPLEMENTED
+66  Settings: security/MFA               FULLY IMPLEMENTED
+67  Settings: data export / delete       FULLY IMPLEMENTED
+68  Settings: hotkeys                    FULLY IMPLEMENTED
+69  Settings: privacy toggles            PARTIAL             saved, never read
+70  Settings: notification toggles       PARTIAL             saved, never read
+71  Settings: retention (polish)         PARTIAL             not enforced
+72  Settings: BYOK                       REMOVED / DEAD
+73  Admin: users management              FULLY IMPLEMENTED
+74  Admin: analytics                     FULLY IMPLEMENTED
+75  Admin: revenue                       PARTIAL             wrong maths
+76  Admin: model costs                   STUB                fake save
+77  Admin: feature flags                 FULLY IMPLEMENTED
+78  Admin: question editor               PARTIAL             filter bug
+79  Admin: bulk upload                   FULLY IMPLEMENTED
+80  Admin: seed questions                PARTIAL             gap-fill stub
+81  Admin: live chat support             FULLY IMPLEMENTED
+82  Admin: support (read-only page)      PARTIAL
+83  Admin: audit log                     FULLY IMPLEMENTED
+84  Admin: QA checklist                  STUB                localStorage only
+85  Admin: promo codes                   FULLY IMPLEMENTED
+86  Admin: billing settings              FULLY IMPLEMENTED
+87  Marketing landing/pricing            FULLY IMPLEMENTED
+88  Help centre (DB + fallback)          FULLY IMPLEMENTED
+89  Blog (DB only)                       FULLY IMPLEMENTED
+90  Terms / Privacy                      FULLY IMPLEMENTED
+91  Stripe subscription checkout         FULLY IMPLEMENTED   except enterprise
+92  Stripe credit packs                  FULLY IMPLEMENTED
+93  Stripe billing portal                FULLY IMPLEMENTED
+94  Stripe cancel / resume               FULLY IMPLEMENTED
+95  Stripe webhooks                      FULLY IMPLEMENTED   no refund event
+96  Razorpay order checkout              FULLY IMPLEMENTED
+97  Razorpay recurring subscriptions     NOT BUILT           one-time only
+98  Razorpay webhook                     FULLY IMPLEMENTED
+99  Credits grant/deduct                 FULLY IMPLEMENTED
+100 Promo codes                          FULLY IMPLEMENTED
+101 Free trials                          NOT BUILT           sync only
+102 Money refunds                        NOT BUILT
+103 Marketplace / content store          DOES NOT EXIST
+104 Electron overlay shell               FULLY IMPLEMENTED
+105 Electron global hotkeys              FULLY IMPLEMENTED
+106 Electron content protection          FULLY IMPLEMENTED   desktop only
+107 Electron auto-update                 PARTIAL             unsigned
+108 Electron code signing                NOT BUILT
+109 Deep links (custom protocol)         NOT BUILT
+110 Group practice rooms (WebRTC)        DEFERRED            tables exist, routes redirect
+111 PWA install + service worker         PARTIAL
+112 Command palette                      FULLY IMPLEMENTED
+113 Global content search                NOT BUILT
+114 Dark mode / theming                  FULLY IMPLEMENTED
+115 Mobile bottom navigation             PARTIAL
+116 Error boundaries                     FULLY IMPLEMENTED
+117 Sentry (web)                         FULLY IMPLEMENTED
+118 Sentry (edge functions)              NOT BUILT
+119 PostHog analytics                    FULLY IMPLEMENTED
+120 Unit tests                           PARTIAL             ~5% coverage
+121 E2E tests                            PARTIAL             10 specs, unverified
+122 CI pipeline                          PARTIAL             would fail today
+
+
+================================================================================
+PART 16 — WHAT IS GENUINELY MISSING / NOT BUILT
+================================================================================
+
+If someone asks "what does this app NOT do", this is the honest list.
+
+COMMERCE
+  * There is no marketplace, no content store, no paid question packs, and no
+    seller/creator side. The only things purchasable are plans and credits.
+  * No recurring billing in India. Razorpay is one-time orders only.
+  * No refund flow for real money.
+  * No free trial creation (the plumbing to read a trial exists; nothing starts
+    one).
+  * No invoicing, no tax/GST handling, no dunning emails.
+
+PRODUCT FEATURES
+  * No text-to-speech. The mock interviewer never speaks.
+  * No video. Everything is audio and text; there is no camera, no body-language
+    analysis, no recording playback.
+  * No group practice / peer interviews. The database tables exist
+    (practice_rooms, room_chat, room_participants, room_questions) and the RLS
+    is written, but WebRTC was never built and the routes redirect away.
+  * No global content search — the command palette only navigates.
+  * No resume version history browser.
+  * No AI generation inside the Answer Bank.
+  * No Outlook or Apple Calendar integration.
+  * No push notifications and no scheduled email digests or reminders beyond the
+    single interview-scheduled email.
+  * No mobile app (the web app is responsive; the mobile nav is incomplete).
+  * No deep links into the desktop app.
+  * No LinkedIn / GitHub / Slack / Zapier integrations — they appear as hidden
+    "coming soon" entries in Settings.
+
+CONTENT
+  * The gov-exam question bank is effectively empty at ~26 SQL-seeded MCQs.
+    The engine is far ahead of the content.
+  * Many exam_papers rows have no linked questions and will show as locked.
+  * The scraper that would fill the bank is written but not deployed.
+
+ENGINEERING
+  * No server-side entitlement enforcement worth the name (see H1).
+  * No baseline schema in migrations — the database cannot be rebuilt from
+    source alone.
+  * No Sentry or APM on the backend.
+  * No test coverage for UI, stores, or edge functions.
+  * No signed desktop binaries.
+  * No working CI (the validate-env step fails on the workflow's own values).
+
+
+================================================================================
+END OF AUDIT
+
+Everything above was derived from reading the source code, SQL migrations, and
+configuration files in this repository on 28 July 2026. Nothing was taken from
+existing markdown documentation. Where source alone was insufficient — live
+database row counts, which OAuth providers are enabled in the Supabase
+dashboard, which environment variables are actually set in production, and
+whether the E2E suite currently passes — the report says UNKNOWN rather than
+guessing.
+================================================================================

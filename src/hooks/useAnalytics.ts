@@ -52,9 +52,6 @@ export function useAnalytics() {
           (s) => !(s as { tags?: string[] }).tags?.includes("private"),
         );
       }
-      if (typeof result?.total_sessions === "number" && result.recent_sessions) {
-        result.total_sessions = result.recent_sessions.length;
-      }
       setData(result);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load analytics");

@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { questionsDB } from "@/lib/supabase/database";
@@ -22,8 +21,9 @@ import BlockRenderer from "@/components/admin/BlockRenderer";
 import {
   type Block, ensureBlocks, blocksToPlainText, makeTextBlock, newId,
 } from "@/components/admin/blocks";
+import { QUESTION_EXAM_TYPE_OPTIONS } from "@/lib/mock-test/examTypes";
 
-const EXAMS = ["JEE_MAIN", "JEE_ADVANCED", "NEET", "UPSC", "SSC_CGL", "IBPS_PO", "NDA", "GENERAL"];
+const EXAMS = [...QUESTION_EXAM_TYPE_OPTIONS];
 const DIFFICULTIES = ["EASY", "MEDIUM", "HARD"];
 const OPTION_LETTERS = ["A", "B", "C", "D"] as const;
 
@@ -79,7 +79,7 @@ function ListView() {
         search: search || undefined,
         limit: 100,
       });
-      setRows(data as QuestionRow[]);
+      setRows(data as unknown as QuestionRow[]);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Failed to load questions");
     } finally {
@@ -133,7 +133,7 @@ function ListView() {
             <SelectContent>
               <SelectItem value="all">All exams</SelectItem>
               {EXAMS.map((e) => (
-                <SelectItem key={e} value={e}>{e.replace(/_/g, " ")}</SelectItem>
+                <SelectItem key={e} value={e}>{e}</SelectItem>
               ))}
             </SelectContent>
           </Select>
@@ -241,7 +241,7 @@ function makeEmpty(): EditorState {
     topic: "",
     subtopic: "",
     difficulty: "MEDIUM",
-    examType: "JEE_MAIN",
+    examType: "JEE Main",
     sourceYear: String(new Date().getFullYear()),
     marksPositive: 4,
     marksNegative: 1,
@@ -277,15 +277,15 @@ function EditorView({ id }: { id?: string }) {
         const optionBlocks: Record<string, Block[]> = {};
         for (const L of OPTION_LETTERS) {
           optionBlocks[L] = ensureBlocks(
-            (r.option_blocks as Record<string, Block[] | undefined>)?.[L],
+            (r.option_blocks as unknown as Record<string, Block[] | undefined> | null)?.[L],
             typeof optsRaw === "object" ? String(optsRaw[L] ?? "") : "",
           );
         }
         setState({
-          qBlocks: ensureBlocks(r.question_blocks as Block[] | null, r.question_text),
+          qBlocks: ensureBlocks(r.question_blocks as unknown as Block[] | null, r.question_text),
           optionBlocks,
           explanationBlocks: ensureBlocks(
-            r.explanation_blocks as Block[] | null,
+            r.explanation_blocks as unknown as Block[] | null,
             r.explanation,
           ),
           correct: (r.correct_answer ?? "A") as "A",
@@ -293,7 +293,7 @@ function EditorView({ id }: { id?: string }) {
           topic: r.topic ?? "",
           subtopic: r.subtopic ?? "",
           difficulty: r.difficulty ?? "MEDIUM",
-          examType: r.exam_type ?? "JEE_MAIN",
+          examType: r.exam_type ?? "JEE Main",
           sourceYear: String(r.source_year ?? new Date().getFullYear()),
           marksPositive: Number(r.marks_positive ?? 4),
           marksNegative: Number(r.marks_negative ?? 1),
@@ -501,7 +501,7 @@ function EditorView({ id }: { id?: string }) {
               <Field label="Exam">
                 <Select value={state.examType} onValueChange={(v) => setState((s) => ({ ...s, examType: v }))}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
-                  <SelectContent>{EXAMS.map((e) => <SelectItem key={e} value={e}>{e.replace(/_/g, " ")}</SelectItem>)}</SelectContent>
+                  <SelectContent>{EXAMS.map((e) => <SelectItem key={e} value={e}>{e}</SelectItem>)}</SelectContent>
                 </Select>
               </Field>
               <Field label="Difficulty">

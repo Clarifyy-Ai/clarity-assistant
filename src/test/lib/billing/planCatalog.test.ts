@@ -9,6 +9,7 @@ import {
 } from "@/lib/billing/planCatalog";
 import { getPlanDisplayName, PLAN_DISPLAY_NAMES } from "@/lib/constants/pricing";
 import { normalizePlanId } from "@/lib/billing/planIds";
+import { PLANS } from "@/lib/billing/subscriptionManager";
 
 describe("plan catalog parity", () => {
   it("ranks match expected backend ranks", () => {
@@ -47,5 +48,15 @@ describe("plan catalog parity", () => {
     for (const id of ["free", "pro", "enterprise", "elite", "starter"] as const) {
       expect(monthlyCreditsForPlan(id)).toBeGreaterThan(0);
     }
+  });
+
+  // P0-1: Max/enterprise must have Stripe price ID fields so checkout can start
+  it("enterprise plan exposes Stripe monthly and yearly price ID fields", () => {
+    expect(Object.keys(PLANS.enterprise)).toEqual(
+      expect.arrayContaining(["stripePriceIdMonthly", "stripePriceIdYearly"]),
+    );
+    expect(Object.keys(PLANS.pro)).toEqual(
+      expect.arrayContaining(["stripePriceIdMonthly", "stripePriceIdYearly"]),
+    );
   });
 });

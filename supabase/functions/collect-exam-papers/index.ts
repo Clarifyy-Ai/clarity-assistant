@@ -9,6 +9,11 @@ import { requireAdmin } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { mapExamType } from "../_shared/examTypeMap.ts";
 import { geminiGenerateWithPdf, parseJSON } from "../_shared/gemini.ts";
+import {
+  createRateLimitKey,
+  enforceRateLimitAsync,
+  RATE_LIMIT_PRESETS,
+} from "../_shared/rateLimit.ts";
 
 const ALLOWED_HOSTS = new Set([
   "nta.ac.in",
@@ -137,6 +142,13 @@ Deno.serve(async (req) => {
 
     const auth = await requireAuth(req);
     await requireAdmin(auth.userId);
+
+    const db = createServiceClient();
+    const rateLimited = await enforceRateLimitAsync(db, {
+      key: createRateLimitKey("collect-exam-papers", auth.userId),
+      ...RATE_LIMIT_PRESETS.BULK_INGEST,
+    });
+    if (rateLimited) return rateLimited;
 
     if (!Deno.env.get("GEMINI_API_KEY")?.trim()) {
       return errorResponse(

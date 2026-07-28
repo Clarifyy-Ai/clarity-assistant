@@ -3,11 +3,11 @@ import {
   requireAuth,
   parseBody,
   errorResponse,
-  deductCredits,
   callAI,
   log,
   getAdminClient,
 } from "../_shared/utils.ts";
+import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import { parseJSON } from "../_shared/gemini.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
@@ -106,7 +106,7 @@ Deno.serve(async (req) => {
     );
     if (rateLimited) return rateLimited;
 
-    const planGate = requirePlan(auth.planId, "starter", req);
+    const planGate = requirePlan(auth.planId, "pro", req);
     if (planGate) return planGate;
 
     const capabilityGate = requireCapabilityForFunction(auth.planId, FN, req);
@@ -128,13 +128,14 @@ Deno.serve(async (req) => {
     const company = rawCompany.slice(0, 100);
     const role = rawRole.slice(0, 100);
 
-    const credit = await deductCredits(
+    const creditResult = await deductCreditsAtomic({
       userId,
-      "company_research" as any,
-      CREDIT_COST
-    );
+      action: "company_research",
+      cost: CREDIT_COST,
+      idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+    });
 
-    if (!credit.success) {
+    if (!creditResult.success) {
       return errorResponse(
         "Insufficient credits.",
         "INSUFFICIENT_CREDITS",
@@ -184,11 +185,11 @@ Return ONLY valid JSON:
         throw new Error("Empty AI response");
       }
     } catch (err) {
-      await deductCredits(
+      await refundCredits({
         userId,
-        "refund_company_research" as any,
-        -CREDIT_COST
-      );
+        cost: CREDIT_COST,
+        reason: "company-research AI call failure",
+      });
 
       log(FN, "error", "AI failed", {
         requestId,

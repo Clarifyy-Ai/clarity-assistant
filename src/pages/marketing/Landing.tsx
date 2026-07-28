@@ -16,7 +16,6 @@ import { PLANS, type PlanId } from "@/lib/billing/subscriptionManager";
 import { LAUNCH_PLANS } from "@/lib/constants/pricing";
 import { SALES_EMAIL } from "@/lib/constants/contact";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
-import { useIndiaRegion } from "@/hooks/useIndiaRegion";
 import {
   AiProviderStrip,
   ProductDemoHero,
@@ -124,7 +123,6 @@ const FEATURES = [
     color: "text-amber-400",
     bg: "bg-amber-500/10",
     border: "border-amber-500/20",
-    indiaOnly: true,
   },
 ];
 
@@ -298,9 +296,6 @@ function CellValue({ value }: { value: boolean | string }) {
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function Landing() {
-  const { isIndia } = useIndiaRegion();
-  const visibleFeatures = FEATURES.filter((f) => !("indiaOnly" in f && f.indiaOnly) || isIndia);
-
   usePageMeta({
     title: "Clarify AI — Practice every interview with AI by your side",
     description: "Live AI practice coach, full mock interview engine with analytics, and a complete prep lab. Multi-model routing across Gemini, GPT-4o, and Claude. Start free with 50 credits / month.",
@@ -372,7 +367,6 @@ export default function Landing() {
               <Play className="w-3.5 h-3.5" />
               See pricing
             </Link>
-            {isIndia && (
             <Link
               to="/gov-exams"
               className="inline-flex items-center gap-2 text-sm font-medium px-5 py-2.5 rounded-xl border border-amber-500/30 text-amber-600 hover:bg-amber-500/10 transition-all"
@@ -380,7 +374,6 @@ export default function Landing() {
               <Landmark className="w-3.5 h-3.5" />
               Gov exam mock tests
             </Link>
-            )}
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
             No credit card required &middot; Free plan includes 50 credits / month
@@ -447,7 +440,6 @@ export default function Landing() {
 
       <PracticeCoachWalkthrough />
 
-      {isIndia && (
       <section id="gov-exams" className="pb-14 sm:pb-16 px-4 sm:px-6 bg-amber-500/5 border-y border-amber-500/10">
         <div className="max-w-5xl mx-auto py-14">
           <m.div className="text-center mb-10" {...fadeUp()}>
@@ -477,7 +469,6 @@ export default function Landing() {
           </m.div>
         </div>
       </section>
-      )}
 
       {/* ── Feature Pillars ─────────────────────────────────────────────────── */}
       <section id="features" className="pb-14 sm:pb-16 px-4 sm:px-6">
@@ -496,7 +487,7 @@ export default function Landing() {
           </m.div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            {visibleFeatures.map((f, i) => (
+            {FEATURES.map((f, i) => (
               <m.div
                 key={f.title}
                 {...fadeUp(i * 0.08)}

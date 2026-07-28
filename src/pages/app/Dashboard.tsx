@@ -33,7 +33,6 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { getStealthLabel } from "@/lib/stealth/stealthConfig";
-import { useIndiaRegion } from "@/hooks/useIndiaRegion";
 import { DesktopDownloadButton } from "@/components/common/DesktopDownloadButton";
 import { isElectronApp } from "@/lib/platform/isElectron";
 import type { Tables } from "@/integrations/supabase/types";
@@ -103,7 +102,6 @@ interface QuickAction {
   sub:          string;
   stealthSub?:  string;
   highlight:    boolean;
-  indiaOnly?:   boolean;
 }
 
 const QUICK_LAUNCH: { to: string; icon: React.ElementType; label: string }[] = [
@@ -140,7 +138,6 @@ const QUICK_ACTIONS: QuickAction[] = [
     sub:         "UPSC · SSC · IBPS MCQ",
     stealthSub:  "Assessment module",
     highlight:   false,
-    indiaOnly:   true,
   },
   {
     to:          "/app/prep",
@@ -167,7 +164,6 @@ const QUICK_ACTIONS: QuickAction[] = [
 export default function Dashboard() {
   const { profile, user, isProfileLoaded } = useAuthStore();
   const stealth    = useUIStore((s) => s.stealth_mode);
-  const { isIndia } = useIndiaRegion();
   const scheduler  = useInterviewSchedulerStore();
   const docStore   = useDocumentStore();
   const gamification = useGamification();
@@ -357,7 +353,7 @@ export default function Dashboard() {
       {/* ── Quick Actions ───────────────────────────────────────────── */}
       {/* FIX Issue 29: smaller padding on xs, truncate labels */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-        {QUICK_ACTIONS.filter((a) => !a.indiaOnly || isIndia).map((action) => {
+        {QUICK_ACTIONS.map((action) => {
           const Icon  = stealth ? (action.stealthIcon ?? action.icon) : action.icon;
           const label = getStealthLabel(action.label, stealth);
           const sub   = stealth ? (action.stealthSub ?? action.sub) : action.sub;

@@ -35,7 +35,7 @@ const ANXIETY_LABELS: Record<number, string> = {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export default function OnboardingStep2Experience({ onNext, onBack }: StepProps) {
-  const { user, setProfile } = useAuthStore();
+  const { user, profile, setProfile } = useAuthStore();
 
   const [level,     setLevel]     = useState("");
   const [companies, setCompanies] = useState("");
@@ -58,12 +58,23 @@ export default function OnboardingStep2Experience({ onNext, onBack }: StepProps)
       intern: 0, junior: 1, mid: 3, senior: 6, staff: 10, manager: 8,
     };
 
+    const existingPrefs =
+      profile?.notification_prefs &&
+      typeof profile.notification_prefs === "object" &&
+      !Array.isArray(profile.notification_prefs)
+        ? (profile.notification_prefs as Record<string, unknown>)
+        : {};
+
     const { data, error: dbError } = await supabase
       .from("profiles")
       .update({
         role_type:         level,
         experience_years:  yearsMap[level] ?? 0,
         target_companies:  targetCompanies,
+        notification_prefs: {
+          ...existingPrefs,
+          interview_anxiety: anxiety,
+        },
         onboarding_step:   3,
       })
       .eq("id", user.id)

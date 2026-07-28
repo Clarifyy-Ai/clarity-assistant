@@ -4,8 +4,27 @@
 // upserts the exam_papers row, and inserts the questions in one call.
 //
 // Auth: header `x-ingest-key` MUST match the `INGEST_API_KEY` secret.
-// This function is intentionally JWT-disabled because the caller is a
-// server-side scraper, not a browser user.
+// This function is intentionally JWT-disabled (config.toml verify_jwt=false)
+// because the caller is a server-side scraper, not a browser user.
+// Fail-closed: missing INGEST_API_KEY → 503 (never open).
+
+import { z } from "https://deno.land/x/zod@v3.22.4/mod.ts";
+import { handleCors, getCorsHeaders, withCorsHeaders } from "../_shared/cors.ts";
+import { createServiceClient } from "../_shared/supabase.ts";
+import { getClientIp } from "../_shared/auth.ts";
+import {
+  createRateLimitKey,
+  enforceRateLimitAsync,
+  RATE_LIMIT_PRESETS,
+} from "../_shared/rateLimit.ts";
+
+const FUNCTION_NAME = "bulk-import-questions";
+/** Soft cap for a 500-question paper payload (text + options + explanations). */
+const MAX_BODY_BYTES = 2 * 1024 * 1024;
+const MAX_QUESTIONS = 500;
+
+const VALID_DIFFICULTY = ["EASY", "MEDIUM", "HARD"] as const;
+const VALID_ANSWER = ["A", "B", "C", "D"] as const;
 
 function timingSafeEqual(a: string, b: string): boolean {
   if (a.length !== b.length) return false;
@@ -15,64 +34,44 @@ function timingSafeEqual(a: string, b: string): boolean {
   }
   return diff === 0;
 }
-//
-// Body shape:
-// {
-//   "exam_type": "SSC Exams (CGL/CHSL)",   // canonical questions.exam_type value
-//   "source_year": 2024,
-//   "paper": {                              // optional — upserts exam_papers row
-//     "exam_name": "SSC CGL Tier 1",
-//     "session": "Sep",
-//     "shift": "1",
-//     "total_questions": 100,
-//     "total_marks": 200,
-//     "duration_minutes": 60,
-//     "difficulty_level": "MEDIUM"
-//   },
-//   "questions": [
-//     {
-//       "question_text": "...",
-//       "options": [{"label":"A","text":"..."}, ...],   // 4 entries
-//       "correct_answer": "B",
-//       "explanation": "...",
-//       "subject": "Quant",
-//       "topic": "Algebra",
-//       "difficulty": "MEDIUM",
-//       "image_url": "https://...",                     // optional
-//       "latex_present": false                          // optional
-//     }
-//   ]
-// }
 
-import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
-import { createServiceClient } from "../_shared/supabase.ts";
+const optionSchema = z.object({
+  label: z.string().max(8).optional(),
+  text: z.string().max(2000).optional(),
+}).passthrough();
 
-type IncomingQuestion = {
-  question_text?: unknown;
-  options?: unknown;
-  correct_answer?: unknown;
-  explanation?: unknown;
-  subject?: unknown;
-  topic?: unknown;
-  difficulty?: unknown;
-  image_url?: unknown;
-  latex_present?: unknown;
-  marks_positive?: unknown;
-  marks_negative?: unknown;
-};
+const questionSchema = z.object({
+  question_text: z.string().min(1).max(4000),
+  options: z.array(optionSchema).max(8).optional(),
+  correct_answer: z.string().max(8).optional(),
+  explanation: z.string().max(4000).optional(),
+  subject: z.string().max(120).optional(),
+  topic: z.string().max(120).optional(),
+  difficulty: z.string().max(16).optional(),
+  image_url: z.string().max(1000).nullable().optional(),
+  latex_present: z.boolean().optional(),
+  marks_positive: z.number().finite().optional(),
+  marks_negative: z.number().finite().optional(),
+}).passthrough();
 
-type PaperMeta = {
-  exam_name?: unknown;
-  session?: unknown;
-  shift?: unknown;
-  total_questions?: unknown;
-  total_marks?: unknown;
-  duration_minutes?: unknown;
-  difficulty_level?: unknown;
-};
+const paperSchema = z.object({
+  exam_name: z.string().min(1).max(200),
+  session: z.string().max(60).optional().nullable(),
+  shift: z.string().max(20).optional().nullable(),
+  total_questions: z.number().finite().optional().nullable(),
+  total_marks: z.number().finite().optional().nullable(),
+  duration_minutes: z.number().finite().optional().nullable(),
+  difficulty_level: z.string().max(16).optional().nullable(),
+}).passthrough();
 
-const VALID_DIFFICULTY = new Set(["EASY", "MEDIUM", "HARD"]);
-const VALID_ANSWER = new Set(["A", "B", "C", "D"]);
+const bodySchema = z.object({
+  exam_type: z.string().min(1).max(120),
+  source_year: z.number().int().min(1990).max(2100),
+  paper: paperSchema.nullable().optional(),
+  questions: z.array(questionSchema).min(1).max(MAX_QUESTIONS),
+});
+
+type IncomingBody = z.infer<typeof bodySchema>;
 
 function json(body: unknown, status: number, req: Request): Response {
   return new Response(JSON.stringify(body), {
@@ -87,12 +86,44 @@ function s(v: unknown, max = 2000): string {
 
 function normalizeDifficulty(v: unknown): "EASY" | "MEDIUM" | "HARD" {
   const u = String(v ?? "").toUpperCase();
-  return VALID_DIFFICULTY.has(u) ? (u as "EASY" | "MEDIUM" | "HARD") : "MEDIUM";
+  return (VALID_DIFFICULTY as readonly string[]).includes(u)
+    ? (u as "EASY" | "MEDIUM" | "HARD")
+    : "MEDIUM";
 }
 
 function normalizeAnswer(v: unknown): "A" | "B" | "C" | "D" {
   const u = String(v ?? "").toUpperCase();
-  return VALID_ANSWER.has(u) ? (u as "A" | "B" | "C" | "D") : "A";
+  return (VALID_ANSWER as readonly string[]).includes(u)
+    ? (u as "A" | "B" | "C" | "D")
+    : "A";
+}
+
+async function hashIngestKey(key: string): Promise<string> {
+  const data = new TextEncoder().encode(key);
+  const digest = await crypto.subtle.digest("SHA-256", data);
+  return Array.from(new Uint8Array(digest))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("")
+    .slice(0, 32);
+}
+
+function rejectOversizedPayload(req: Request): Response | null {
+  const contentLength = req.headers.get("content-length");
+  if (contentLength) {
+    const parsed = Number(contentLength);
+    if (Number.isFinite(parsed) && parsed > MAX_BODY_BYTES) {
+      return json(
+        {
+          error: "Request body is too large.",
+          code: "PAYLOAD_TOO_LARGE",
+          maxBodyBytes: MAX_BODY_BYTES,
+        },
+        413,
+        req,
+      );
+    }
+  }
+  return null;
 }
 
 Deno.serve(async (req) => {
@@ -103,11 +134,13 @@ Deno.serve(async (req) => {
     return json({ error: "Method not allowed" }, 405, req);
   }
 
-  // ── Auth: shared-secret header ───────────────────────────────────────────
+  // ── Auth: shared-secret header (JWT intentionally not required) ──────────
   const expectedKey = Deno.env.get("INGEST_API_KEY")?.trim();
   if (!expectedKey) {
+    // Fail closed — never allow unauthenticated ingest if secret is unset.
+    console.error("[bulk-import-questions] INGEST_API_KEY missing — refusing requests");
     return json(
-      { error: "INGEST_API_KEY not configured on Supabase" },
+      { error: "INGEST_API_KEY not configured on Supabase", code: "INGEST_MISCONFIGURED" },
       503,
       req,
     );
@@ -117,33 +150,67 @@ Deno.serve(async (req) => {
     return json({ error: "Forbidden" }, 403, req);
   }
 
-  let body: Record<string, unknown> | null = null;
+  const oversized = rejectOversizedPayload(req);
+  if (oversized) return oversized;
+
+  // ── Distributed rate limit (keyed by ingest-key hash + IP) ───────────────
+  const db = createServiceClient();
+  const keyHash = await hashIngestKey(providedKey);
+  const clientIp = getClientIp(req) ?? "unknown";
+  const rateLimited = await enforceRateLimitAsync(db, {
+    key: createRateLimitKey(FUNCTION_NAME, keyHash, clientIp),
+    ...RATE_LIMIT_PRESETS.BULK_INGEST,
+  });
+  if (rateLimited) {
+    // backendFailure → 503; quota exceeded → 429 (handled inside rateLimitResponse)
+    return withCorsHeaders(req, rateLimited);
+  }
+
+  let rawText: string;
   try {
-    body = await req.json();
+    rawText = await req.text();
+  } catch {
+    return json({ error: "Invalid request body" }, 400, req);
+  }
+
+  if (rawText.length > MAX_BODY_BYTES) {
+    return json(
+      {
+        error: "Request body is too large.",
+        code: "PAYLOAD_TOO_LARGE",
+        maxBodyBytes: MAX_BODY_BYTES,
+      },
+      413,
+      req,
+    );
+  }
+
+  let parsedJson: unknown;
+  try {
+    parsedJson = JSON.parse(rawText);
   } catch {
     return json({ error: "Invalid JSON body" }, 400, req);
   }
-  if (!body) return json({ error: "Empty body" }, 400, req);
 
+  const validated = bodySchema.safeParse(parsedJson);
+  if (!validated.success) {
+    return json(
+      {
+        error: "Validation failed",
+        code: "VALIDATION_ERROR",
+        details: validated.error.flatten(),
+      },
+      400,
+      req,
+    );
+  }
+
+  const body: IncomingBody = validated.data;
   const examType = s(body.exam_type, 120);
-  const sourceYear = Number(body.source_year);
-  const paper = (body.paper ?? null) as PaperMeta | null;
-  const rawQuestions = Array.isArray(body.questions)
-    ? (body.questions as IncomingQuestion[])
-    : [];
+  const sourceYear = body.source_year;
+  const paper = body.paper ?? null;
+  const rawQuestions = body.questions;
 
-  if (!examType) return json({ error: "exam_type is required" }, 400, req);
-  if (!Number.isFinite(sourceYear) || sourceYear < 1990 || sourceYear > 2100) {
-    return json({ error: "source_year must be a valid year" }, 400, req);
-  }
-  if (rawQuestions.length === 0) {
-    return json({ error: "questions[] is required and non-empty" }, 400, req);
-  }
-  if (rawQuestions.length > 500) {
-    return json({ error: "Max 500 questions per request" }, 400, req);
-  }
-
-  const db = createServiceClient();
   const systemUserId = Deno.env.get("SYSTEM_USER_ID")?.trim() || null;
 
   // ── Upsert exam_papers row (optional) ───────────────────────────────────
@@ -163,7 +230,6 @@ Deno.serve(async (req) => {
         : null,
     };
 
-    // Find-or-insert (no unique constraint on exam_papers to upsert against)
     let existingQuery = db
       .from("exam_papers")
       .select("id")
@@ -191,12 +257,11 @@ Deno.serve(async (req) => {
         paperId = inserted?.id ?? null;
       }
     }
-
   }
 
   // ── Build & insert question rows ────────────────────────────────────────
   const rows = rawQuestions
-    .filter((q) => typeof q.question_text === "string" && (q.question_text as string).trim().length > 5)
+    .filter((q) => typeof q.question_text === "string" && q.question_text.trim().length > 5)
     .map((q) => {
       const options = Array.isArray(q.options) ? q.options.slice(0, 4) : [];
       return {

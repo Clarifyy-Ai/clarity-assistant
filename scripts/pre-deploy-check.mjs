@@ -44,12 +44,10 @@ const REQUIRED_EDGE_FUNCTIONS = [
   "generate-hint",
   "generate-answer",
   "generate-debrief",
-  "ai-feedback",
   "generate-questions",
   "select-test-questions",
   "parse-resume",
   "prep-tool",
-  "billing-status",
 ];
 
 /** Edge functions that must import session enforcement helpers. */
@@ -57,7 +55,6 @@ const AI_ENFORCEMENT_FUNCTIONS = [
   "generate-hint",
   "generate-answer",
   "generate-debrief",
-  "ai-feedback",
 ];
 
 const SESSION_ENFORCEMENT_MARKERS = [
