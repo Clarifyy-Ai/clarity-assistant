@@ -5,9 +5,9 @@ import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { FileText, Download, Trash2, CheckCircle, Clock, Edit, Save, X, Loader2, RefreshCw } from "lucide-react";
+import { FileText, Download, Trash2, CheckCircle, Clock, Edit, Save, X, Loader2, RefreshCw, History } from "lucide-react";
 import { toast } from "sonner";
-import { resumesDB } from "@/lib/supabase/database";
+import { resumesDB, resumeVersionsDB } from "@/lib/supabase/database";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
@@ -17,6 +17,14 @@ import {
   parseResumeContentString,
 } from "@/lib/documents/resumeParse";
 import type { ParsedResume } from "@/types/ai.types";
+
+interface ResumeVersionRow {
+  id: string;
+  resume_id: string;
+  parse_status: string;
+  parse_error: string | null;
+  created_at: string;
+}
 
 interface Resume {
   id: string;
@@ -112,11 +120,25 @@ export default function ResumeDetail() {
   const [reparse,    setReparse]    = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [versions, setVersions] = useState<ResumeVersionRow[]>([]);
+  const [versionsLoading, setVersionsLoading] = useState(false);
 
   const parsed = useMemo(
     () => parseResumeContentString(doc?.content ?? null),
     [doc?.content],
   );
+
+  const loadVersions = useCallback(async (resumeId: string) => {
+    setVersionsLoading(true);
+    try {
+      const rows = await resumeVersionsDB.getByResumeId(resumeId);
+      setVersions(rows as ResumeVersionRow[]);
+    } catch {
+      setVersions([]);
+    } finally {
+      setVersionsLoading(false);
+    }
+  }, []);
 
   const loadResume = useCallback(async () => {
     if (!id || !user?.id) return;
@@ -128,10 +150,10 @@ export default function ResumeDetail() {
         setFetchError("Resume not found");
         setDoc(null);
       } else {
-        const resume = data as Resume;
-        setDoc(resume);
-        setEditName(resume.name ?? "");
-        setForm(parsedToForm(parseResumeContentString(resume.content)));
+        setDoc(data as Resume);
+        setEditName(data.name ?? "");
+        setForm(parsedToForm(parseResumeContentString(data.content)));
+        void loadVersions(id);
       }
     } catch (err) {
       setFetchError(err instanceof Error ? err.message : "Failed to load resume");
@@ -139,7 +161,7 @@ export default function ResumeDetail() {
     } finally {
       setLoading(false);
     }
-  }, [id, user?.id]);
+  }, [id, user?.id, loadVersions]);
 
   useEffect(() => {
     void loadResume();
@@ -466,6 +488,55 @@ export default function ResumeDetail() {
             </div>
           </Card>
         )}
+
+        <Card>
+          <h3 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
+            <History className="w-4 h-4 text-primary" />
+            Version history
+          </h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            Read-only parse snapshots for this resume (newest first).
+          </p>
+          {versionsLoading ? (
+            <p className="text-sm text-muted-foreground">Loading versions…</p>
+          ) : versions.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No saved versions yet. Re-parse or upload updates create version rows when available.
+            </p>
+          ) : (
+            <ul className="space-y-2">
+              {versions.map((v) => (
+                <li
+                  key={v.id}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-border px-3 py-2 text-sm"
+                >
+                  <div>
+                    <p className="font-medium text-foreground tabular-nums text-xs">
+                      {new Date(v.created_at).toLocaleString(undefined, {
+                        dateStyle: "medium",
+                        timeStyle: "short",
+                      })}
+                    </p>
+                    {v.parse_error && (
+                      <p className="text-xs text-red-400 mt-0.5">{v.parse_error}</p>
+                    )}
+                  </div>
+                  <span
+                    className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full ${
+                      v.parse_status === "ready"
+                        ? "bg-emerald-500/15 text-emerald-600"
+                        : v.parse_status === "error"
+                          ? "bg-red-500/15 text-red-500"
+                          : "bg-muted text-muted-foreground"
+                    }`}
+                  >
+                    {v.parse_status}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Card>
       </div>
 
       <ConfirmDialog

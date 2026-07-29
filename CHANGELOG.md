@@ -171,3 +171,32 @@ Source: Clarify AI Complete Application Audit (28 July 2026) + Master Production
 | Secrets / artifacts | `.env.production` + `release-new/` gitignored; `.env.production.example` tracked |
 | Copy honesty | Pricing $79, warm-up/`WARMUP_MAX`, India-only claims stripped, Group Practice coming soon |
 | Deferred | M4 deduct RPC signature; P4-6 code signing; full baseline DDL dump; content gaps above |
+
+---
+
+## Launch gap matrix (2026-07-29)
+
+Launch-fixes pass: gap UI, MobileNav, admin honesty, prefs enforcement, resume versions, gov MCQ seed expansion, Excel hire pack.
+
+| Category | Items |
+|----------|--------|
+| **Blocking launch (product honesty)** | Razorpay is one-time Order only (copy must say so); unsigned Windows SmartScreen without EV/OV cert; apply migration `20260729120000_expand_gov_exam_mcq_seeds` before claiming full mocks |
+| **Blocked on secrets / ops** | Google Calendar OAuth (`BUG-OPEN-03`); Resend for reminders (`BUG-OPEN-26`); Gemini/allowlists for collect/PDF (`BUG-OPEN-17`); anon key rotation in Dashboard (`BUG-OPEN-30`); code signing / auto-update trust (`BUG-OPEN-18/19`) |
+| **Missing / descope** | Outlook Calendar; WebRTC rooms; Push; Mock TTS; Razorpay Subscriptions; real stealth evasion |
+| **Fixed this pass** | OPEN-02 bank expansion; OPEN-05 gap UI; OPEN-06 version history; OPEN-08 email prefs gated; OPEN-10 MobileNav; OPEN-12 model costs read-only; OPEN-13 Support→Live Chat; OPEN-14 QA checklist honesty; OPEN-24 analytics opt-out + honesty |
+
+### Phase A code
+- JDDetail: resume picker + `gap-analysis` edge + 402 handling
+- ResumeDetail: read-only `resume_versions` list
+- MobileNav: `/app/usage`, `/app/interview-day`
+- AdminModelCosts: read-only `AI_CREDIT_COSTS` (no fake Save)
+- AdminSupport: deep link to Live Chat
+- AdminQAChecklist: local-only banner
+- SettingsNotifications honesty + `send-email` pref gate
+- SettingsPrivacy: PostHog opt-out + honesty labels
+
+### Phase B content
+- New migration seeds ~80 MCQs across JEE / NEET / UPSC / SSC / Banking (idempotent)
+
+### Phase C–E QA pack
+- Regenerated `Clarify_AI_QA_Workbook_FULL.xlsx` with Credentials, Environments (+ secrets checklist), Module Playbooks, Launch Status, Smoke Pack; Feature Inventory Route/Deep Link/How-it-works columns; Fixed/Open/Blocked synced

@@ -3,6 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -11,12 +12,28 @@ import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
   FileText, Trash2, Building2, MapPin, DollarSign,
-  CheckCircle, Clock, Edit, Save, X, Loader2,
+  CheckCircle, Clock, Edit, Save, X, Loader2, GitCompare,
 } from "lucide-react";
 import { toast } from "sonner";
 import { jobDescriptionsDB } from "@/lib/supabase/database";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { companyProfilePath } from "@/lib/company/slug";
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
+
+interface ResumeOption {
+  id: string;
+  name: string;
+  is_primary: boolean;
+}
+
+interface GapResult {
+  match_score?: number;
+  matching_skills?: string[];
+  missing_skills?: string[];
+  recommendations?: string[];
+  experience_gap?: string;
+  education_fit?: string;
+}
 
 // ─── Matches actual `job_descriptions` table schema ───────────────────────────
 interface JobDescription {
@@ -56,6 +73,10 @@ export default function JDDetail() {
   const [savingEdit,  setSavingEdit]  = useState(false);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [resumes, setResumes] = useState<ResumeOption[]>([]);
+  const [selectedResumeId, setSelectedResumeId] = useState("");
+  const [gapRunning, setGapRunning] = useState(false);
+  const [gapResult, setGapResult] = useState<GapResult | null>(null);
 
   const loadJd = useCallback(async () => {
     if (!id || !user?.id) return;
@@ -81,6 +102,53 @@ export default function JDDetail() {
   useEffect(() => {
     void loadJd();
   }, [loadJd]);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    void (async () => {
+      const { data } = await supabase
+        .from("resumes")
+        .select("id, name, is_primary")
+        .eq("user_id", user.id)
+        .order("is_primary", { ascending: false });
+      if (cancelled) return;
+      const list = (data ?? []) as ResumeOption[];
+      setResumes(list);
+      const primary = list.find((r) => r.is_primary) ?? list[0];
+      if (primary) setSelectedResumeId(primary.id);
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  async function handleGapAnalysis() {
+    if (!id || !selectedResumeId) {
+      toast.error("Select a resume to compare against this JD.");
+      return;
+    }
+    setGapRunning(true);
+    setGapResult(null);
+    try {
+      const result = await fetchEdgeJson<GapResult>("gap-analysis", {
+        method: "POST",
+        body: { resume_id: selectedResumeId, jd_id: id },
+      });
+      setGapResult(result);
+      toast.success("Gap analysis ready");
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error ? err.message : "Gap analysis failed";
+      if (/insufficient|402|credit/i.test(message)) {
+        toast.error(
+          `Insufficient credits. Gap analysis costs ${AI_CREDIT_COSTS.gap_analysis} credits.`,
+        );
+      } else {
+        toast.error(message);
+      }
+    } finally {
+      setGapRunning(false);
+    }
+  }
 
   async function handleSaveEdit() {
     if (!id || !user?.id) return;
@@ -186,11 +254,16 @@ export default function JDDetail() {
                 Company Brief
               </Button>
             </Link>
-            <Link to="/app/prep?tool=jd_fit">
-              <Button variant="secondary" size="sm" leftIcon={<FileText className="w-4 h-4" />}>
-                Gap Analysis
-              </Button>
-            </Link>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                document.getElementById("gap-analysis-panel")?.scrollIntoView({ behavior: "smooth" });
+              }}
+              leftIcon={<GitCompare className="w-4 h-4" />}
+            >
+              Gap Analysis
+            </Button>
             <Button
               variant="ghost"
               size="sm"
@@ -320,6 +393,110 @@ export default function JDDetail() {
             </div>
           </Card>
         )}
+
+        <Card id="gap-analysis-panel">
+          <h3 className="text-sm font-semibold text-foreground mb-1">Resume ↔ JD Gap Analysis</h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            Costs {AI_CREDIT_COSTS.gap_analysis} credits. Pick a resume and run analysis against this JD.
+          </p>
+          {resumes.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No resumes yet.{" "}
+              <Link to="/app/documents" className="text-primary underline-offset-2 hover:underline">
+                Upload a resume
+              </Link>{" "}
+              first.
+            </p>
+          ) : (
+            <div className="flex flex-wrap items-end gap-3">
+              <div className="min-w-[200px] flex-1">
+                <label className="text-xs text-muted-foreground">Resume</label>
+                <select
+                  value={selectedResumeId}
+                  onChange={(e) => setSelectedResumeId(e.target.value)}
+                  className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+                >
+                  {resumes.map((r) => (
+                    <option key={r.id} value={r.id}>
+                      {r.name}{r.is_primary ? " (primary)" : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => void handleGapAnalysis()}
+                disabled={gapRunning || !selectedResumeId}
+                leftIcon={
+                  gapRunning
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <GitCompare className="w-4 h-4" />
+                }
+              >
+                {gapRunning ? "Analyzing…" : "Run gap analysis"}
+              </Button>
+            </div>
+          )}
+
+          {gapResult && (
+            <div className="mt-4 space-y-3 border-t border-border pt-4">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl bg-primary/10 px-3 py-2 text-center min-w-[72px]">
+                  <p className="text-lg font-bold text-primary tabular-nums">
+                    {Math.round(Number(gapResult.match_score) || 0)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground uppercase">Match</p>
+                </div>
+                <div className="flex-1 text-sm text-muted-foreground space-y-1">
+                  {gapResult.experience_gap && (
+                    <p><span className="font-medium text-foreground">Experience:</span> {gapResult.experience_gap}</p>
+                  )}
+                  {gapResult.education_fit && (
+                    <p><span className="font-medium text-foreground">Education:</span> {gapResult.education_fit}</p>
+                  )}
+                </div>
+              </div>
+              {(gapResult.matching_skills?.length ?? 0) > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-foreground mb-1.5">Matching skills</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {gapResult.matching_skills!.map((s) => (
+                      <span key={s} className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(gapResult.missing_skills?.length ?? 0) > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-foreground mb-1.5">Missing skills</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {gapResult.missing_skills!.map((s) => (
+                      <span key={s} className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-700 dark:text-amber-400">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(gapResult.recommendations?.length ?? 0) > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-foreground mb-1.5">Recommendations</p>
+                  <ul className="space-y-1">
+                    {gapResult.recommendations!.map((r, i) => (
+                      <li key={i} className="text-sm text-muted-foreground flex gap-2">
+                        <span className="text-primary">•</span>
+                        <span>{r}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
 
         <p className="text-[11px] text-muted-foreground">
           Added{" "}

@@ -123,6 +123,16 @@ export default function SettingsNotifications() {
   return (
     <SettingsPageShell title="Notifications">
 
+      <Card className="border-amber-500/20 bg-amber-500/5">
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          <span className="font-medium text-foreground">Email enforcement: </span>
+          Category toggles and the master email switch are checked by the{" "}
+          <code className="text-[11px]">send-email</code> edge function before Resend sends.
+          Push reminders are not available (no push server). Digest frequency is stored for
+          future schedulers — weekly digest jobs are not live yet.
+        </p>
+      </Card>
+
       <Card>
         <h3 className="text-sm font-semibold text-foreground mb-3">Global</h3>
         <div className="space-y-4">

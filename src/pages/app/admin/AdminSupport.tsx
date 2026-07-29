@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
@@ -10,7 +11,7 @@ import {
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
-import { Search, RotateCcw, MessageSquare } from "lucide-react";
+import { Search, RotateCcw, MessageSquare, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
 
@@ -82,18 +83,38 @@ export default function AdminSupport() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
         <div>
           <h1 className="text-xl font-bold text-foreground">Support Threads</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            User conversations awaiting admin response.
+            Read-only queue overview. Reply and resolve threads in Live Chat.
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Badge variant="red" size="sm">{unreadCount} unread</Badge>
           <Badge variant="default" size="sm">{rows.length} threads</Badge>
+          <Link to="/app/admin/live-chat">
+            <Button size="sm" leftIcon={<ExternalLink className="h-3.5 w-3.5" />}>
+              Open Live Chat
+            </Button>
+          </Link>
         </div>
       </div>
+
+      <Card className="border-primary/20 bg-primary/5">
+        <CardContent className="py-4 flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm text-muted-foreground">
+            This page lists threads only. Use{" "}
+            <Link to="/app/admin/live-chat" className="text-primary font-medium underline-offset-2 hover:underline">
+              Live Chat
+            </Link>{" "}
+            to message users.
+          </p>
+          <Link to="/app/admin/live-chat">
+            <Button variant="secondary" size="sm">Go to Live Chat</Button>
+          </Link>
+        </CardContent>
+      </Card>
 
       {/* Filters */}
       <div className="flex items-center gap-3 flex-wrap">

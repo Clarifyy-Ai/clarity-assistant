@@ -406,28 +406,24 @@ ${rawText.slice(0, 4000)}`;
     if (!resume || !jd) return;
 
     try {
-      const { data: { session } } = await supabase.auth.getSession();
-
-      const response = await fetch(`${EDGE_BASE}/gap-analysis`, {
+      const gap = await fetchEdgeJson<Record<string, unknown>>("gap-analysis", {
         method: "POST",
-        headers: {
-          "Content-Type":  "application/json",
-          "Authorization": `Bearer ${session?.access_token ?? ""}`,
-        },
-        body: JSON.stringify({
-          resume_id: resumeId,
-          jd_id:     jdId,
-        }),
+        body: { resume_id: resumeId, jd_id: jdId },
       });
-
-      if (!response.ok) {
-        console.error("[useDocuments] gap-analysis failed:", response.status);
-        return;
+      if (mountedRef.current) {
+        docStore.setGapAnalysis({
+          id: crypto.randomUUID(),
+          user_id: "",
+          resume_id: resumeId,
+          resume_version_id: "",
+          jd_id: jdId,
+          result: gap as never,
+          generated_at: new Date().toISOString(),
+        });
       }
-      const gap = await response.json();
-      if (mountedRef.current) docStore.setGapAnalysis(gap);
     } catch (err) {
       console.error("[useDocuments] runGapAnalysis failed:", err);
+      throw err;
     }
   }, [docStore.resumes, docStore.jds]);
 

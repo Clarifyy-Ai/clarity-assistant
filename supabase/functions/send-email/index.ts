@@ -209,6 +209,44 @@ Deno.serve(async (req) => {
       return errorResponse("Not authorized to send to this address", "FORBIDDEN", 403);
     }
 
+    // Honour profile notification preferences (master + category)
+    const { data: profile } = await getAdminClient()
+      .from("profiles")
+      .select("email_notifications, session_reminders, marketing_emails, notification_prefs")
+      .eq("id", userId)
+      .maybeSingle();
+
+    const prefs = (profile?.notification_prefs ?? {}) as Record<string, unknown>;
+    const emailMaster = profile?.email_notifications !== false;
+
+    const typeAllowed = ((): boolean => {
+      if (type === "welcome") return true; // onboarding always allowed
+      if (!emailMaster) return false;
+      switch (type) {
+        case "interview_reminder":
+          return profile?.session_reminders !== false;
+        case "debrief_ready":
+          return prefs.debrief_ready !== false;
+        case "low_credits":
+          return prefs.credit_low !== false;
+        case "streak_reminder":
+          return prefs.practice_reminders !== false;
+        case "weekly_report":
+          return prefs.digest_frequency !== "off" && prefs.session_complete !== false;
+        default:
+          return true;
+      }
+    })();
+
+    if (!typeAllowed) {
+      log("send-email", "info", "Skipped by notification prefs", { to, type, userId });
+      return successResponse({
+        success: false,
+        skipped: true,
+        reason: "notification_prefs_disabled",
+      });
+    }
+
     const { subject, html } = renderTemplate(type, data ?? {});
     const ok = await sendEmailResend(to, subject, html);
 

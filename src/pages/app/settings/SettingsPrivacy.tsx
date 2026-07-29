@@ -1,5 +1,5 @@
 // @ts-nocheck -- retained: notification_prefs and privacy_prefs JSONB column types not in Supabase generated schema; Toggle component uses Radix UI checked prop which TypeScript does not accept on the wrapper component type.
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
@@ -11,6 +11,20 @@ import { CheckCircle, Shield, Eye, Database, Lock, WifiOff } from "lucide-react"
 import { toast } from "sonner";
 import { usePrivateMode } from "@/hooks/usePrivateMode";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
+import posthog from "posthog-js";
+
+function applyAnalyticsPreference(enabled: boolean) {
+  if (!import.meta.env.VITE_POSTHOG_KEY) return;
+  try {
+    if (enabled) {
+      posthog.opt_in_capturing();
+    } else {
+      posthog.opt_out_capturing();
+    }
+  } catch {
+    // PostHog may be unavailable
+  }
+}
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsPrivacy
@@ -23,17 +37,17 @@ const PRIVACY_SETTINGS = [
       {
         key:   "allow_ai_training",
         label: "Allow anonymised data for AI improvement",
-        desc:  "Help improve our AI models with anonymised session transcripts.",
+        desc:  "Preference stored — not yet enforced server-side. We do not currently train on your sessions for model improvement.",
       },
       {
         key:   "store_transcripts",
         label: "Store session transcripts",
-        desc:  "Keep full transcripts for review. Disable to auto-delete after analysis.",
+        desc:  "Preference stored — auto-delete after analysis is not fully wired yet. Existing sessions remain until you delete them.",
       },
       {
         key:   "analytics_tracking",
         label: "Product analytics",
-        desc:  "Allow anonymous usage analytics to improve the product.",
+        desc:  "When off, PostHog capturing is opted out in this browser. Applies after you save.",
       },
     ],
   },
@@ -43,12 +57,12 @@ const PRIVACY_SETTINGS = [
       {
         key:   "public_profile",
         label: "Public profile",
-        desc:  "Allow your profile to appear in leaderboards and community features.",
+        desc:  "Preference stored — leaderboards/community are not live yet, so this has no effect today.",
       },
       {
         key:   "share_scorecard",
         label: "Allow scorecard sharing",
-        desc:  "Enable the ability to generate public share links for scorecards.",
+        desc:  "Preference stored — public scorecard links are not fully enforced yet.",
       },
     ],
   },
@@ -58,7 +72,7 @@ const PRIVACY_SETTINGS = [
       {
         key:   "login_notifications",
         label: "Email on new login",
-        desc:  "Receive an email when a new device logs in to your account.",
+        desc:  "Preference stored — login alert emails are not yet wired.",
       },
       {
         key:   "two_factor",
@@ -88,6 +102,10 @@ export default function SettingsPrivacy() {
   const [saving, setSaving] = useState(false);
   const [saved,  setSaved]  = useState(false);
 
+  useEffect(() => {
+    applyAnalyticsPreference(Boolean(prefs.analytics_tracking));
+  }, []); // apply once on mount from loaded prefs
+
   function toggle(key: string) {
     setPrefs((p) => ({ ...p, [key]: !p[key] }));
   }
@@ -101,8 +119,10 @@ export default function SettingsPrivacy() {
         .update({ privacy_prefs: prefs })
         .eq("id", user.id);
       if (error) throw error;
+      applyAnalyticsPreference(Boolean(prefs.analytics_tracking));
       setSaved(true);
       setTimeout(() => setSaved(false), 2000);
+      toast.success("Privacy settings saved");
     } catch (err) {
       toast.error(err?.message ?? "Failed to save privacy settings.");
     } finally {
@@ -113,6 +133,14 @@ export default function SettingsPrivacy() {
   return (
     <SettingsPageShell title="Privacy">
 
+      <Card className="border-amber-500/20 bg-amber-500/5">
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          <span className="font-medium text-foreground">Honesty note: </span>
+          Product analytics is enforced via PostHog opt-out when saved off. Other toggles are
+          stored on your profile; items marked “not yet enforced” do not change backend behaviour yet.
+          Private mode (below) does pause cloud AI immediately.
+        </p>
+      </Card>
       <Card className="border-primary/20">
         <div className="flex items-start justify-between gap-4">
           <div className="flex gap-3">

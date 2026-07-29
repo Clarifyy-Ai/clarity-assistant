@@ -17,6 +17,8 @@ import {
   CalendarDays,
   Gift,
   LogOut,
+  Gauge,
+  Sunrise,
   type LucideIcon,
 } from "lucide-react";
 
@@ -53,9 +55,11 @@ const TABS: MobileTab[] = [
 
 const MORE_LINKS: { to: string; icon: LucideIcon; label: string }[] = [
   { to: "/app/analytics", icon: BarChart3, label: "Analytics" },
+  { to: "/app/usage", icon: Gauge, label: "Usage" },
   { to: "/app/documents", icon: FileText, label: "Documents" },
   { to: "/app/sessions", icon: Phone, label: PRODUCT_NAMES.sessionHistory },
   { to: "/app/debrief", icon: MessageSquare, label: PRODUCT_NAMES.debrief },
+  { to: "/app/interview-day", icon: Sunrise, label: "Interview Day" },
   { to: "/app/interviews", icon: CalendarDays, label: PRODUCT_NAMES.interviews },
   { to: "/app/companies", icon: Building2, label: PRODUCT_NAMES.companyResearch },
   { to: "/app/answers", icon: BookOpen, label: PRODUCT_NAMES.answerBank },

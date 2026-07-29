@@ -235,12 +235,15 @@ export default function AdminQAChecklist() {
           <p className="text-xs text-muted-foreground mt-1">
             {stats.total} test cases across {sectionCount} sections
           </p>
+          <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1.5 max-w-xl">
+            Statuses are stored in this browser only (localStorage) — not shared across admins or devices.
+          </p>
         </div>
         <div className="text-xs text-muted-foreground">
           {saving ? (
             <span className="text-indigo-400">Saving…</span>
           ) : (
-            <span className="text-emerald-500">Saved locally</span>
+            <span className="text-emerald-500">Saved locally (this browser)</span>
           )}
         </div>
       </div>

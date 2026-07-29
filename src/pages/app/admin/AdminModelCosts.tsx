@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { creditsDB } from "@/lib/supabase/database";
 import { supabase } from "@/integrations/supabase/client";
 import { formatNumber, formatCents, formatPercent } from "@/lib/utils/formatters";
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { subDays } from "date-fns";
 
 import {
@@ -14,12 +15,10 @@ import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 import { Button }   from "@/components/ui/Button";
-import { Input }    from "@/components/ui/Input";
 import { Skeleton } from "@/components/ui/skeleton";
-import { toast }    from "sonner";
 import {
   Bot, Cpu, DollarSign, TrendingUp,
-  RefreshCw, Save,
+  RefreshCw,
 } from "lucide-react";
 
 interface ModelUsageStat {
@@ -52,26 +51,49 @@ const PROVIDER_COLORS: Record<string, string> = {
   deepgram:  "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300",
 };
 
-const DEFAULT_CREDIT_COSTS: FeatureCreditCost[] = [
-  { feature: "generate_answer",   label: "Generate Answer",  currentCredits: 2, suggestedCredits: 2, callsThisMonth: 0, revenueCredits: 0 },
-  { feature: "generate_feedback", label: "AI Feedback",      currentCredits: 3, suggestedCredits: 3, callsThisMonth: 0, revenueCredits: 0 },
-  { feature: "generate_star",     label: "STAR Builder",     currentCredits: 2, suggestedCredits: 2, callsThisMonth: 0, revenueCredits: 0 },
-  { feature: "generate_hint",     label: "Hints",            currentCredits: 1, suggestedCredits: 1, callsThisMonth: 0, revenueCredits: 0 },
-  { feature: "generate_debrief",  label: "Session Debrief",  currentCredits: 5, suggestedCredits: 5, callsThisMonth: 0, revenueCredits: 0 },
-  { feature: "coach_message",     label: "Coach Reply",      currentCredits: 2, suggestedCredits: 2, callsThisMonth: 0, revenueCredits: 0 },
-  { feature: "company_research",  label: "Company Research", currentCredits: 3, suggestedCredits: 3, callsThisMonth: 0, revenueCredits: 0 },
-  { feature: "resume_analysis",   label: "Resume Analysis",  currentCredits: 5, suggestedCredits: 5, callsThisMonth: 0, revenueCredits: 0 },
-  { feature: "rephrase",          label: "Rephrase",         currentCredits: 1, suggestedCredits: 1, callsThisMonth: 0, revenueCredits: 0 },
-];
+const FEATURE_LABELS: Record<string, string> = {
+  live_hint: "Live hint",
+  live_answer: "Live answer",
+  live_feedback: "Live feedback",
+  screenshot_answer: "Screenshot answer",
+  session_debrief: "Session debrief",
+  ai_coach_message: "Coach message",
+  generate_questions: "Generate questions",
+  star_builder: "STAR builder",
+  rephraser: "Rephraser",
+  company_research: "Company research",
+  coding_hint: "Coding hint",
+  system_design: "System design",
+  mock_session: "Mock session",
+  resume_analysis: "Resume analysis",
+  gap_analysis: "Gap analysis",
+  parse_document: "Parse document",
+  create_mock_test: "Create mock test",
+  mock_test_ai_gap_fill: "Mock AI gap fill",
+  generate_practice_questions: "Practice questions",
+  parse_question_pdf: "Parse question PDF",
+  analyze_test_performance: "Analyze test performance",
+  project_builder: "Project builder",
+  polish_star: "Polish STAR",
+};
+
+function buildCreditCostRows(): FeatureCreditCost[] {
+  return Object.entries(AI_CREDIT_COSTS).map(([feature, credits]) => ({
+    feature,
+    label: FEATURE_LABELS[feature] ?? feature.replace(/_/g, " "),
+    currentCredits: credits,
+    suggestedCredits: credits,
+    callsThisMonth: 0,
+    revenueCredits: 0,
+  }));
+}
 
 export default function AdminModelCosts() {
   const [modelStats,   setModelStats]   = useState<ModelUsageStat[]>([]);
-  const [creditCosts,  setCreditCosts]  = useState<FeatureCreditCost[]>(DEFAULT_CREDIT_COSTS);
+  const [creditCosts,  setCreditCosts]  = useState<FeatureCreditCost[]>(buildCreditCostRows);
   const [dateRange,    setDateRange]    = useState<DateRange>("30d");
   const [isLoading,    setIsLoading]    = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [isDirty,      setIsDirty]      = useState(false);
-  const [isSaving,     setIsSaving]     = useState(false);
 
   const fetchData = async (showRefresh = false) => {
     if (showRefresh) setIsRefreshing(true);
@@ -92,10 +114,11 @@ export default function AdminModelCosts() {
       const data = creditData;
 
       if (data.length > 0) {
+        const catalog = buildCreditCostRows();
         const featureMap: Record<string, number> = {};
         data.forEach((tx) => {
           const action  = String(tx.action ?? "").toLowerCase();
-          const feature = DEFAULT_CREDIT_COSTS.find((c) =>
+          const feature = catalog.find((c) =>
             action.includes(c.feature) || action.includes(c.feature.replace(/_/g, "-"))
           )?.feature ?? "other";
           featureMap[feature] = (featureMap[feature] ?? 0) + Math.abs(Number(tx.amount) || 0);
@@ -105,7 +128,7 @@ export default function AdminModelCosts() {
           prev.map((c) => ({
             ...c,
             revenueCredits: featureMap[c.feature] ?? 0,
-            callsThisMonth: Math.round((featureMap[c.feature] ?? 0) / c.currentCredits),
+            callsThisMonth: Math.round((featureMap[c.feature] ?? 0) / Math.max(c.currentCredits, 1)),
           }))
         );
       }
@@ -163,29 +186,7 @@ export default function AdminModelCosts() {
     }
   };
 
-  useEffect(() => { fetchData(); }, [dateRange]);  
-
-  const handleCreditChange = (feature: string, value: string) => {
-    const num = parseInt(value, 10);
-    if (isNaN(num) || num < 0) return;
-    setCreditCosts((prev) =>
-      prev.map((c) => c.feature === feature ? { ...c, currentCredits: num } : c)
-    );
-    setIsDirty(true);
-  };
-
-  const handleSaveCosts = async () => {
-    setIsSaving(true);
-    try {
-      await new Promise<void>((r) => setTimeout(r, 500));
-      toast.success("Credit costs updated successfully.");
-      setIsDirty(false);
-    } catch {
-      toast.error("Failed to save credit costs.");
-    } finally {
-      setIsSaving(false);
-    }
-  };
+  useEffect(() => { void fetchData(); }, [dateRange]);
 
   const totalCost    = modelStats.reduce((s, m) => s + m.costUSDCents, 0);
   const totalRevCred = modelStats.reduce((s, m) => s + m.revenueCredits, 0);
@@ -310,22 +311,16 @@ export default function AdminModelCosts() {
         </CardContent>
       </Card>
 
-      {/* Credit cost editor */}
+      {/* Credit cost catalog (read-only — source of truth is AI_CREDIT_COSTS) */}
       <Card padding="none">
-        <CardHeader className="px-5 pt-4 flex flex-row items-start justify-between">
+        <CardHeader className="px-5 pt-4">
           <div>
             <CardTitle className="text-base">Credit Cost Configuration</CardTitle>
             <CardDescription>
-              Set how many credits each AI action costs. Changes take effect immediately.
+              Read-only catalog from <code className="text-[11px]">AI_CREDIT_COSTS</code>.
+              Runtime deductions use the shared constant — there is no admin override API yet.
             </CardDescription>
           </div>
-          {isDirty && (
-            <Button size="sm" onClick={handleSaveCosts} disabled={isSaving}
-              leftIcon={<Save className="h-3.5 w-3.5" />}
-            >
-              {isSaving ? "Saving…" : "Save changes"}
-            </Button>
-          )}
         </CardHeader>
         <CardContent className="p-0">
           <Table>
@@ -352,15 +347,8 @@ export default function AdminModelCosts() {
                   <TableCell className="text-right tabular-nums text-sm text-green-600">
                     {formatNumber(c.revenueCredits)}
                   </TableCell>
-                  <TableCell className="text-right">
-                    <Input
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={c.currentCredits}
-                      onChange={(e) => handleCreditChange(c.feature, e.target.value)}
-                      className="w-20 h-7 text-sm text-right ml-auto"
-                    />
+                  <TableCell className="text-right tabular-nums text-sm font-medium">
+                    {c.currentCredits}
                   </TableCell>
                 </TableRow>
               ))}
