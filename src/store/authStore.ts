@@ -89,7 +89,7 @@ export interface AuthActions {
   sendPasswordReset: (email: string) => Promise<void>;
   updatePassword: (newPassword: string) => Promise<void>;
 
-  loadProfile: () => Promise<void>;
+  loadProfile: () => Promise<boolean>;
   updateProfile: (updates: Partial<ProfileRow>) => Promise<void>;
   setProfile: (profile: ProfileRow | null) => void;
   refreshCredits: () => Promise<void>;
@@ -322,7 +322,10 @@ export const useAuthStore = create<AuthStore>()(
                   state.user = session.user as unknown as SupabaseUser;
                 });
 
-                await get().loadProfile();
+                const profileLoaded = await get().loadProfile();
+                if (!profileLoaded) {
+                  return;
+                }
 
                 dset((state) => {
                   state.status = "authenticated";
@@ -349,7 +352,10 @@ export const useAuthStore = create<AuthStore>()(
                     state.user = session.user as unknown as SupabaseUser;
                   });
 
-                  await get().loadProfile();
+                  const profileLoaded = await get().loadProfile();
+                  if (!profileLoaded) {
+                    return;
+                  }
 
                   dset((state) => {
                     state.status = "authenticated";
@@ -377,7 +383,7 @@ export const useAuthStore = create<AuthStore>()(
                     state.user = session.user as unknown as SupabaseUser;
                   });
 
-                  await get().loadProfile();
+                  void get().loadProfile();
                 }
 
                 if (event === "PASSWORD_RECOVERY" && session) {
@@ -421,7 +427,10 @@ export const useAuthStore = create<AuthStore>()(
               state.status = "authenticated";
             });
 
-            await get().loadProfile();
+            const profileLoaded = await get().loadProfile();
+            if (!profileLoaded) {
+              throw new Error(get().error ?? "Failed to load your account profile.");
+            }
           },
 
           signUpWithEmail: async (email, password, fullName) => {
@@ -459,7 +468,10 @@ export const useAuthStore = create<AuthStore>()(
                 state.status = "authenticated";
               });
 
-              await get().loadProfile();
+              const profileLoaded = await get().loadProfile();
+              if (!profileLoaded) {
+                throw new Error(get().error ?? "Failed to load your account profile.");
+              }
             } else {
               dset((state) => {
                 state.status = "unauthenticated";
@@ -539,21 +551,37 @@ export const useAuthStore = create<AuthStore>()(
             const userId = get().user?.id;
 
             if (!userId) {
-              return;
+              return false;
             }
 
             try {
-              const [profile, hasAdminRole] = await Promise.all([
+              const profile = await withTimeout(
                 profilesDB.getByIdMaybe(userId),
+                AUTH_SESSION_TIMEOUT_MS,
+                "Profile load",
+              );
+
+              const hasAdminRole = await withTimeout(
                 userRolesDB.hasRole(userId, "admin"),
-              ]);
+                AUTH_SESSION_TIMEOUT_MS,
+                "Role check",
+              ).catch((err) => {
+                console.warn("[authStore] Admin role check failed; continuing as non-admin:", err);
+                return false;
+              });
 
               if (!profile) {
-                console.error("[authStore] Failed to load profile: not found");
-                set((state) => {
-                  state.isProfileLoaded = false;
+                console.warn("[authStore] Profile not found; routing user to onboarding");
+                dset((state) => {
+                  state.profile = null;
+                  state.isProfileLoaded = true;
+                  state.isAdmin = false;
+                  state.isOnboarded = false;
+                  state.planId = "free";
+                  state.credits = 0;
+                  state.error = null;
                 });
-                return;
+                return true;
               }
 
               const row = profile as unknown as Record<string, unknown>;
@@ -571,7 +599,7 @@ export const useAuthStore = create<AuthStore>()(
                   // Ignore storage failures.
                 }
                 await get().signOut();
-                return;
+                return false;
               }
 
               set((state) => {
@@ -588,11 +616,16 @@ export const useAuthStore = create<AuthStore>()(
               });
 
               syncOverlayFromProfile(row);
+              return true;
             } catch (err) {
               console.error("[authStore] Failed to load profile:", err);
-              set((state) => {
-                state.isProfileLoaded = false;
+              dset((state) => {
+                state.status = "error";
+                state.error = `Unable to load your account profile. ${getErrorMessage(err)}`;
+                state.isProfileLoaded = true;
+                state.isAdmin = false;
               });
+              return false;
             }
           },
 

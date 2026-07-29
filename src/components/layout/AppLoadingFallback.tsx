@@ -5,6 +5,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { RefreshCw, AlertTriangle, ExternalLink } from "lucide-react";
 import { Skeleton } from "@/components/ui/SkeletonLoader";
+import { Button } from "@/components/ui/Button";
 
 const STUCK_TIMEOUT_MS = 10_000;
 
@@ -19,7 +20,17 @@ export function AppLoadingFallback(): JSX.Element {
   const handleRetry = useCallback(() => {
     // Hard reload bypasses HMR + service-worker caches that commonly cause
     // a stale bundle to hang in the preview iframe.
-    window.location.reload();
+    if ("serviceWorker" in navigator) {
+      void navigator.serviceWorker.getRegistrations().then((registrations) => {
+        for (const registration of registrations) void registration.unregister();
+      });
+    }
+    if (window.caches) {
+      void caches.keys().then((keys) => {
+        for (const key of keys) void caches.delete(key);
+      });
+    }
+    window.setTimeout(() => window.location.reload(), 150);
   }, []);
 
   if (stuck) {
@@ -43,14 +54,15 @@ export function AppLoadingFallback(): JSX.Element {
           </p>
         </div>
         <div className="flex flex-wrap items-center justify-center gap-3">
-          <button
+          <Button
             type="button"
             onClick={handleRetry}
-            className="inline-flex items-center gap-2 rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-sm transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            variant="primary"
+            size="md"
+            leftIcon={<RefreshCw className="h-4 w-4" aria-hidden="true" />}
           >
-            <RefreshCw className="h-4 w-4" aria-hidden="true" />
             Retry
-          </button>
+          </Button>
           <a
             href="https://developer.chrome.com/docs/devtools/open"
             target="_blank"

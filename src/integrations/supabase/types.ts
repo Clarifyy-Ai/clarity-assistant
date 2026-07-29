@@ -1701,9 +1701,9 @@ export type Database = {
           avatar_url: string | null
           ban_reason: string | null
           bio: string | null
-          byok_anthropic: boolean
-          byok_gemini: boolean
-          byok_openai: boolean
+          byok_anthropic: boolean | null
+          byok_gemini: boolean | null
+          byok_openai: boolean | null
           created_at: string
           credits: number
           credits_reset_at: string | null
@@ -1783,9 +1783,9 @@ export type Database = {
           avatar_url?: string | null
           ban_reason?: string | null
           bio?: string | null
-          byok_anthropic?: boolean
-          byok_gemini?: boolean
-          byok_openai?: boolean
+          byok_anthropic?: boolean | null
+          byok_gemini?: boolean | null
+          byok_openai?: boolean | null
           created_at?: string
           credits?: number
           credits_reset_at?: string | null
@@ -1865,9 +1865,9 @@ export type Database = {
           avatar_url?: string | null
           ban_reason?: string | null
           bio?: string | null
-          byok_anthropic?: boolean
-          byok_gemini?: boolean
-          byok_openai?: boolean
+          byok_anthropic?: boolean | null
+          byok_gemini?: boolean | null
+          byok_openai?: boolean | null
           created_at?: string
           credits?: number
           credits_reset_at?: string | null
@@ -3751,10 +3751,6 @@ export type Database = {
       }
     }
     Functions: {
-      acquire_submit_lock: {
-        Args: { p_test_id: string; p_user_id: string }
-        Returns: Json
-      }
       add_credits: {
         Args: {
           p_action?: Database["public"]["Enums"]["credit_action"]
@@ -3927,23 +3923,6 @@ export type Database = {
       }
       refund_credits: {
         Args: { p_cost: number; p_reason?: string; p_user_id: string }
-        Returns: Json
-      }
-      submit_test_atomic: {
-        Args: {
-          p_accuracy: number
-          p_attempt_percentage: number
-          p_max_score: number
-          p_predicted_percentile: number
-          p_strong_topics: string[]
-          p_subject_breakdown: Json
-          p_test_id: string
-          p_time_analysis: Json
-          p_topic_breakdown: Json
-          p_total_score: number
-          p_user_id: string
-          p_weak_topics: string[]
-        }
         Returns: Json
       }
       update_topic_performance: {

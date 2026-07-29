@@ -1,7 +1,6 @@
 import { memo } from "react";
 import { Navigate, Outlet, useLocation, Link } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
-import { Spinner } from "@/components/ui/Spinner";
 import { Card } from "@/components/ui/Card";
 import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
 import { AlertCircle } from "lucide-react";
@@ -182,11 +181,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
   // 6) Onboarding check — wait for profile before allowing /app (avoids bypass when profile is null)
   if (requireOnboarded || requireOnboarding) {
     if (!isProfileLoaded) {
-      return (
-        <div className="flex min-h-screen items-center justify-center bg-background">
-          <Spinner size="lg" />
-        </div>
-      );
+      return <AppLoadingFallback />;
     }
     if (!isOnboarded) {
       return <Navigate to="/onboarding" state={{ from: location }} replace />;
