@@ -19,6 +19,10 @@ import {
   LogOut,
   Gauge,
   Sunrise,
+  Bell,
+  BookMarked,
+  UserRound,
+  Shield,
   type LucideIcon,
 } from "lucide-react";
 
@@ -41,6 +45,13 @@ type MobileTab = {
   exact?: boolean;
 };
 
+type MoreLink = {
+  to: string;
+  icon: LucideIcon;
+  label: string;
+  adminOnly?: boolean;
+};
+
 const TABS: MobileTab[] = [
   { to: "/app/dashboard", icon: LayoutDashboard, label: "Home", exact: true },
   { to: "/app/live", icon: Mic, label: "Coach" },
@@ -53,7 +64,7 @@ const TABS: MobileTab[] = [
   },
 ];
 
-const MORE_LINKS: { to: string; icon: LucideIcon; label: string }[] = [
+const MORE_LINKS: MoreLink[] = [
   { to: "/app/analytics", icon: BarChart3, label: "Analytics" },
   { to: "/app/usage", icon: Gauge, label: "Usage" },
   { to: "/app/documents", icon: FileText, label: "Documents" },
@@ -63,8 +74,12 @@ const MORE_LINKS: { to: string; icon: LucideIcon; label: string }[] = [
   { to: "/app/interviews", icon: CalendarDays, label: PRODUCT_NAMES.interviews },
   { to: "/app/companies", icon: Building2, label: PRODUCT_NAMES.companyResearch },
   { to: "/app/answers", icon: BookOpen, label: PRODUCT_NAMES.answerBank },
+  { to: "/app/notifications", icon: Bell, label: "Notifications" },
   { to: "/app/referrals", icon: Gift, label: "Referrals" },
+  { to: "/app/guide/practice-coach", icon: BookMarked, label: "Guide" },
+  { to: "/app/profile", icon: UserRound, label: "Profile" },
   { to: "/app/settings", icon: Settings, label: "Settings" },
+  { to: "/app/admin", icon: Shield, label: "Admin", adminOnly: true },
 ];
 
 function isRouteActive(pathname: string, tab: MobileTab): boolean {
@@ -76,8 +91,10 @@ export function MobileNav(): JSX.Element {
   const location = useLocation();
   const navigate = useNavigate();
   const signOut = useAuthStore((s) => s.signOut);
+  const isAdmin = useAuthStore((s) => s.isAdmin);
   const [moreOpen, setMoreOpen] = useState(false);
-  const moreActive = MORE_LINKS.some(
+  const visibleMore = MORE_LINKS.filter((l) => !l.adminOnly || isAdmin);
+  const moreActive = visibleMore.some(
     (l) => location.pathname === l.to || location.pathname.startsWith(`${l.to}/`),
   );
 
@@ -130,7 +147,7 @@ export function MobileNav(): JSX.Element {
             <SheetTitle>More</SheetTitle>
           </SheetHeader>
           <div className="grid grid-cols-2 gap-2 mt-4">
-            {MORE_LINKS.map((link) => {
+            {visibleMore.map((link) => {
               const Icon = link.icon;
               return (
                 <Link

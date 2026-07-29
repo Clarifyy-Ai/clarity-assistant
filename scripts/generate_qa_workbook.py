@@ -71,6 +71,13 @@ UNLOCKED = Protection(locked=False)
 
 TODAY = date(2026, 7, 29)
 
+NAV_FILL = PatternFill("solid", fgColor="0F766E")
+NAV_FONT = Font(name="Calibri", bold=True, color="FFFFFF", size=9)
+LINK_FONT = Font(name="Calibri", color="0F766E", underline="single", size=10)
+WARN_FILL = PatternFill("solid", fgColor="FEF3C7")
+BLOCK_FILL = PatternFill("solid", fgColor="FEE2E2")
+OK_FILL = PatternFill("solid", fgColor="D1FAE5")
+
 MODULES = [
     ("MOD-01", "Auth & Onboarding", "Auth Portal", "Email/OAuth login, MFA, 5-step onboarding", "Auth Lead", "Critical", "In Progress"),
     ("MOD-02", "Dashboard", "Candidate App", "Home KPIs, sessions, credits, upcoming interviews", "Product", "High", "Completed"),
@@ -251,16 +258,50 @@ def finish_sheet(ws, header_row: int, data_rows: int, ncols: int, filter=True, f
     ws.sheet_view.showGridLines = False
 
 
+def add_nav_bar(ws, current: str):
+    """Power BI–style clickable navigation strip (row 1, from col J)."""
+    hub = [
+        ("01 Dashboard", "Dashboard"),
+        ("NAV Hub", "NAV"),
+        ("03 Feature Inventory", "Features"),
+        ("06 Bug Tracker", "Bugs"),
+        ("24 Launch Status", "Launch"),
+        ("25 Smoke Pack", "Smoke"),
+        ("21 Test Credentials", "Creds"),
+        ("22 Environments", "Env"),
+        ("23 Module Playbooks", "Playbooks"),
+        ("04 Test Case Repository", "Cases"),
+        ("20 Release Sign-Off", "Sign-Off"),
+    ]
+    col = 10
+    for sheet, label in hub:
+        if sheet == current:
+            cell = ws.cell(1, col, f"● {label}")
+            cell.fill = NAV_FILL
+            cell.font = NAV_FONT
+        else:
+            cell = ws.cell(1, col, label)
+            cell.hyperlink = f"#'{sheet}'!A1"
+            cell.font = LINK_FONT
+        cell.alignment = CENTER
+        col += 1
+
+
+def bug_status_counts():
+    from collections import Counter
+    return Counter(b[11] for b in BUGS)
+
+
+def feature_status_counts():
+    from collections import Counter
+    return Counter(f[9] for f in FEATURES)
+
+
 def write_table(ws, title: str, subtitle: str, headers: list, rows: list, header_row: int = 2):
     ws["A1"] = title
     ws["A1"].font = TITLE_FONT
     ws.merge_cells(start_row=1, start_column=1, end_row=1, end_column=min(8, len(headers)))
     if subtitle:
-        ws["A2" if header_row > 2 else "A1"]  # keep title on row 1
-    # Use row 1 title, row 2 headers when header_row==2; put subtitle in A1 comment area via row after title
-    # Convention: A1 title, headers on header_row (2), data from 3
-    if header_row == 2 and subtitle:
-        # put subtitle as note under title by merging — actually use row1 title only
         pass
     for i, h in enumerate(headers, 1):
         ws.cell(header_row, i, h)
@@ -370,38 +411,39 @@ def build_readme(wb: Workbook):
         ("Generated", str(TODAY)),
         ("", ""),
         ("HOW TO USE", ""),
-        ("1", "Open 01 Dashboard — all KPIs and charts are formula-driven. Do not type numbers there."),
-        ("2", "Maintain Modules (02) and Features (03) as scope changes."),
-        ("3", "Author/execute cases in 04; link defects in 06 via Bug ID."),
-        ("4", "Run golden paths in 05 before every RC; fill Daily Log for progress charts."),
-        ("5", "Execute domain packs 14–16 (Live Coaching, Gov Exam, Billing) — not marketplace."),
+        ("1", "Start at NAV Hub (clickable map) or 01 Dashboard — Power BI–style KPIs + charts."),
+        ("2", "Use the teal navigation strip (top-right of sheets) to jump: Dashboard · Features · Bugs · Launch · Smoke · Creds."),
+        ("3", "Maintain Modules (02) and Features (03) as scope changes. Deep links use Environments!B3."),
+        ("4", "Author/execute cases in 04; link defects in 06 via Bug ID. Fill Daily Log for trend charts."),
+        ("5", "Execute domain packs 14–16 (Live Coaching, Gov Exam, Billing)."),
         ("6", "Complete 19 Production Readiness and 20 Release Sign-Off for Go/No-Go."),
-        ("7", "All enums use Lists dropdowns. Track Est Hours / Actual Hours on modules, features, cases, E2E, and regression. Use QA Team sheet for roster capacity."),
+        ("7", "Slicer tip: use AutoFilter on Feature Inventory / Bug Tracker columns (Status, Module, Priority) like Power BI filters."),
         ("", ""),
         ("QA TEAM", ""),
         ("", "Kavya Iyer (QA Lead) · Asha Sharma (Senior QA) · Rohan Mehta (QA Engineer) · Priya Nair (QA Engineer) · Dev Patel (SDET)"),
-        ("Green", "Pass / Yes"),
-        ("Red", "Fail / No / Critical"),
-        ("Yellow", "In Progress / Blocked / Medium"),
+        ("Green", "Pass / Yes / Closed"),
+        ("Red", "Fail / No / Critical / Blocked ops"),
+        ("Yellow", "In Progress / Open / Medium"),
         ("Gray", "Not Started / Not Run"),
         ("Blue", "Completed / Passed / Ready"),
         ("", ""),
         ("SCALING", ""),
         ("", "Designed for hundreds of modules and tens of thousands of test cases. Keep one row per entity; use filters and freeze panes. Dashboard formulas scan to row 5000."),
-        ("Google Sheets", "Upload this .xlsx to Drive → Open with Google Sheets. Charts and data validation transfer; re-check named Lists ranges after import."),
+        ("Google Sheets", "Upload this .xlsx to Drive → Open with Google Sheets. Hyperlinks and charts transfer; re-check Lists ranges after import."),
         ("", ""),
-        ("SHEET INDEX", ""),
-        ("01 Dashboard", "Live KPIs + charts"),
+        ("SHEET INDEX (click sheet tabs or use NAV Hub)", ""),
+        ("NAV Hub", "Clickable map of every sheet — start here"),
+        ("01 Dashboard", "Executive KPIs + charts (Power BI style)"),
         ("02 Module Master", "20 Clarify modules"),
-        ("03 Feature Inventory", "Feature coverage matrix"),
+        ("03 Feature Inventory", "114 features + routes + how-it-works"),
         ("04 Test Case Repository", "Executable cases"),
         ("05 E2E User Flows", "Cross-module journeys"),
-        ("06 Bug Tracker", "Defect lifecycle"),
+        ("06 Bug Tracker", "Defect lifecycle Fixed/Open/Blocked"),
         ("07 UI-UX Testing", "Visual / a11y"),
         ("08 Mobile Responsiveness", "Breakpoints"),
         ("09 API Testing", "Edge functions"),
         ("10 Database Validation", "Schema / RLS"),
-        ("11 Authentication Testing", "Auth matrix"),
+        ("11 Authentication Testing", "Auth matrix + MFA"),
         ("12 Security Testing", "OWASP-style"),
         ("13 Performance Testing", "Latency budgets"),
         ("14 Live Coaching Testing", "Domain: live coach + overlay"),
@@ -411,6 +453,11 @@ def build_readme(wb: Workbook):
         ("18 Regression Testing", "Release regression pack"),
         ("19 Production Readiness", "Go-live checklist"),
         ("20 Release Sign-Off", "Formal approval"),
+        ("21 Test Credentials", "Placeholder QA accounts"),
+        ("22 Environments", "URLs + secrets checklist"),
+        ("23 Module Playbooks", "Happy-path runbooks"),
+        ("24 Launch Status", "Fixed / Open / Blocked counts"),
+        ("25 Smoke Pack", "~20 must-pass cases"),
         ("Daily Log", "Feeds daily progress chart"),
         ("Lists", "Dropdown vocabulary — do not delete"),
     ]
@@ -419,6 +466,22 @@ def build_readme(wb: Workbook):
         cb = ws.cell(i, 2, b)
         ca.font = Font(bold=True)
         cb.alignment = WRAP
+        # Hyperlink sheet index entries
+        if a and a not in ("", "HOW TO USE", "QA TEAM", "SCALING", "SHEET INDEX (click sheet tabs or use NAV Hub)", "Green", "Red", "Yellow", "Gray", "Blue") and not a[0].isdigit() and a not in ("Application", "Description", "Tech stack", "Portals", "Roles", "Version under test", "Generated", "Google Sheets"):
+            # leave non-sheet labels
+            pass
+        sheet_targets = {
+            "NAV Hub", "01 Dashboard", "02 Module Master", "03 Feature Inventory", "04 Test Case Repository",
+            "05 E2E User Flows", "06 Bug Tracker", "07 UI-UX Testing", "08 Mobile Responsiveness",
+            "09 API Testing", "10 Database Validation", "11 Authentication Testing", "12 Security Testing",
+            "13 Performance Testing", "14 Live Coaching Testing", "15 Gov Exam Mock Testing",
+            "16 Billing Credits Testing", "17 Role Based Testing", "18 Regression Testing",
+            "19 Production Readiness", "20 Release Sign-Off", "21 Test Credentials", "22 Environments",
+            "23 Module Playbooks", "24 Launch Status", "25 Smoke Pack", "Daily Log", "Lists",
+        }
+        if a in sheet_targets:
+            ca.hyperlink = f"#'{a}'!A1"
+            ca.font = LINK_FONT
         if a == "Green":
             ca.fill = PASS_F
         elif a == "Red":
@@ -429,18 +492,59 @@ def build_readme(wb: Workbook):
             ca.fill = GRAY_F
         elif a == "Blue":
             ca.fill = BLUE_F
-    ws.column_dimensions["A"].width = 28
+    ws.column_dimensions["A"].width = 36
     ws.column_dimensions["B"].width = 110
     ws.freeze_panes = "A3"
+    add_nav_bar(ws, "00 Read Me")
 
 
 def build_dashboard(wb: Workbook):
     ws = wb.create_sheet("01 Dashboard", 1)
-    ws["A1"] = "Clarify AI — QA Executive Dashboard"
+    ws["A1"] = "Clarify AI — QA Executive Dashboard (Power BI style)"
     ws["A1"].font = TITLE_FONT
     ws.merge_cells("A1:F1")
-    ws["A2"] = "Formula-driven · Do not edit KPI cells (protected intent) · Source sheets 02–20 + Daily Log"
+    add_nav_bar(ws, "01 Dashboard")
+    ws["A2"] = (
+        f"Synced {TODAY} · Formula KPIs + inventory snapshot · "
+        "Use AutoFilter on Features/Bugs as slicers · Click NAV Hub for sheet map"
+    )
     ws["A2"].font = SUB_FONT
+
+    bsc = bug_status_counts()
+    fsc = feature_status_counts()
+    # Snapshot tiles (inventory truth — complements formula KPIs)
+    ws["I3"] = "INVENTORY SNAPSHOT"
+    ws["I3"].font = SECTION_FONT
+    snap = [
+        (4, "Features total", len(FEATURES), OK_FILL),
+        (5, "Features Completed", fsc.get("Completed", 0), OK_FILL),
+        (6, "Bugs Closed", bsc.get("Closed", 0), OK_FILL),
+        (7, "Bugs Open", bsc.get("Open", 0), WARN_FILL),
+        (8, "Bugs Blocked (ops)", bsc.get("Blocked", 0), BLOCK_FILL),
+        (9, "Won't Fix / Descope", bsc.get("Won't Fix", 0), GRAY_F),
+    ]
+    for row, label, val, fill in snap:
+        ws.cell(row, 9, label).font = KPI_LABEL
+        ws.cell(row, 9).fill = CARD
+        ws.cell(row, 9).border = THIN
+        c = ws.cell(row, 10, val)
+        c.fill = fill
+        c.font = Font(name="Calibri", bold=True, size=14)
+        c.alignment = CENTER
+        c.border = THIN
+
+    ws["I11"] = "Quick links"
+    ws["I11"].font = SECTION_FONT
+    for r, (sheet, label) in enumerate([
+        ("NAV Hub", "Open NAV Hub"),
+        ("24 Launch Status", "Launch Status"),
+        ("25 Smoke Pack", "Smoke Pack"),
+        ("06 Bug Tracker", "Bug Tracker"),
+        ("03 Feature Inventory", "Feature Inventory"),
+    ], 12):
+        cell = ws.cell(r, 9, label)
+        cell.hyperlink = f"#'{sheet}'!A1"
+        cell.font = LINK_FONT
 
     # KPI grid — all IFERROR-wrapped; hours from Test Case cols T/U
     kpis = [
@@ -877,7 +981,7 @@ def build_smoke_pack(wb: Workbook):
     cases = [
         ("SMK-01", "Login email", "Free", "/login", "Sign in with seeded free user", "Dashboard loads"),
         ("SMK-02", "Dashboard KPIs", "Free", "/app/dashboard", "Open home", "Credits/sessions visible"),
-        ("SMK-03", "Mobile More nav", "Free", "/app/dashboard", "Open More; tap Usage + Interview Day", "Both routes open"),
+        ("SMK-03", "Mobile More nav", "Free", "/app/dashboard", "Open More; tap Notifications, Guide, Profile, Usage", "All routes open"),
         ("SMK-04", "Live hint", "Pro", "/app/live", "Start + request hint", "Hint returns; credits drop"),
         ("SMK-05", "Mock create", "Free", "/app/mock", "Start mock", "Session creates"),
         ("SMK-06", "Resume parse", "Free", "/app/documents", "Upload resume", "Parsed fields show"),
@@ -885,15 +989,15 @@ def build_smoke_pack(wb: Workbook):
         ("SMK-08", "Resume versions", "Free", "/app/documents", "Open resume detail", "Version history card"),
         ("SMK-09", "Gov mock", "Free", "/app/mock-test", "Create SSC/JEE-style test", "Enough questions load"),
         ("SMK-10", "Billing Stripe test", "Free", "/app/settings/billing", "Checkout with 4242…", "Webhook grants plan/credits"),
-        ("SMK-11", "Razorpay honesty", "Free", "/app/settings/billing", "Read INR copy", "No auto-renew claim"),
+        ("SMK-11", "Razorpay honesty", "Free", "/app/settings/billing", "Read INR copy + button labels", "One-time / no auto-renew disclosed"),
         ("SMK-12", "Notification prefs", "Free", "/app/settings/notifications", "Read honesty + save prefs", "Save succeeds"),
         ("SMK-13", "Privacy analytics", "Free", "/app/settings/privacy", "Turn analytics off + save", "Opt-out applied"),
-        ("SMK-14", "Admin model costs", "Admin", "/app/admin/model-costs", "Open page", "Read-only costs; no fake Save"),
+        ("SMK-14", "Admin model costs", "Admin", "/app/admin/model-costs", "Open page on narrow width", "Read-only; horizontal scroll works"),
         ("SMK-15", "Admin support→chat", "Admin", "/app/admin/support", "Click Live Chat", "Live Chat opens"),
         ("SMK-16", "Admin QA local", "Admin", "/app/admin/qa-checklist", "Read banner", "Says local browser only"),
         ("SMK-17", "Calendar blocked honesty", "Pro", "/app/settings/integrations", "Try sync without secrets", "501/blocked — not silently ok"),
         ("SMK-18", "Company research gate", "Free", "/app/companies", "Try generate", "Upgrade / plan gate"),
-        ("SMK-19", "Interview Day", "Free", "/app/interview-day", "Open with upcoming", "Date/round correct"),
+        ("SMK-19", "MFA challenge", "Free+MFA", "/login", "Sign in with TOTP-enrolled user", "Code screen before app"),
         ("SMK-20", "Electron boot", "Pro", "(desktop)", "Launch unsigned build", "App boots; SmartScreen may warn"),
     ]
     samples = []
@@ -1419,6 +1523,86 @@ def build_signoff(wb: Workbook):
     finish_sheet(ws, 2, len(samples), len(headers))
 
 
+def build_nav_hub(wb: Workbook):
+    ws = wb.create_sheet("NAV Hub")
+    ws["A1"] = "NAV Hub — Clarify AI QA Workbook (Power BI style)"
+    ws["A1"].font = TITLE_FONT
+    ws.merge_cells("A1:D1")
+    add_nav_bar(ws, "NAV Hub")
+    ws["A2"] = "Click any link to jump. Treat AutoFilter columns on Features/Bugs as slicers."
+    ws["A2"].font = SUB_FONT
+
+    groups = [
+        ("Executive", [
+            ("01 Dashboard", "KPIs, charts, inventory snapshot"),
+            ("24 Launch Status", "Fixed / Open / Blocked rollup"),
+            ("20 Release Sign-Off", "Go / No-Go"),
+            ("19 Production Readiness", "Module readiness %"),
+        ]),
+        ("Scope & Coverage", [
+            ("02 Module Master", "20 modules"),
+            ("03 Feature Inventory", "Routes, deep links, how-it-works"),
+            ("23 Module Playbooks", "Happy-path runbooks"),
+            ("17 Role Based Testing", "Plan gates"),
+        ]),
+        ("Execution", [
+            ("04 Test Case Repository", "Case library"),
+            ("05 E2E User Flows", "Golden paths"),
+            ("25 Smoke Pack", "Must-pass (~20)"),
+            ("18 Regression Testing", "Release pack"),
+            ("Daily Log", "Trend feed"),
+        ]),
+        ("Defects & Quality", [
+            ("06 Bug Tracker", "Lifecycle"),
+            ("07 UI-UX Testing", "Visual / a11y"),
+            ("08 Mobile Responsiveness", "Breakpoints"),
+            ("13 Performance Testing", "Latency"),
+        ]),
+        ("Platform", [
+            ("09 API Testing", "Edge functions"),
+            ("10 Database Validation", "Schema / RLS"),
+            ("11 Authentication Testing", "Auth + MFA"),
+            ("12 Security Testing", "OWASP-style"),
+        ]),
+        ("Domains", [
+            ("14 Live Coaching Testing", "Coach + overlay"),
+            ("15 Gov Exam Mock Testing", "MCQ engine"),
+            ("16 Billing Credits Testing", "Stripe / Razorpay"),
+        ]),
+        ("Ops & Hire Pack", [
+            ("21 Test Credentials", "Placeholders only"),
+            ("22 Environments", "URLs + secrets checklist"),
+            ("QA Team", "Roster & capacity"),
+            ("00 Read Me", "How to use"),
+            ("Lists", "Dropdown vocabulary"),
+        ]),
+    ]
+
+    row = 4
+    for group, items in groups:
+        ws.cell(row, 1, group).font = SECTION_FONT
+        ws.cell(row, 1).fill = NAV_FILL
+        ws.cell(row, 1).font = NAV_FONT
+        ws.merge_cells(start_row=row, start_column=1, end_row=row, end_column=3)
+        row += 1
+        for sheet, desc in items:
+            link = ws.cell(row, 1, sheet)
+            link.hyperlink = f"#'{sheet}'!A1"
+            link.font = LINK_FONT
+            ws.cell(row, 2, desc).alignment = WRAP
+            back = ws.cell(row, 3, "Open →")
+            back.hyperlink = f"#'{sheet}'!A1"
+            back.font = LINK_FONT
+            row += 1
+        row += 1
+
+    ws.column_dimensions["A"].width = 32
+    ws.column_dimensions["B"].width = 48
+    ws.column_dimensions["C"].width = 12
+    ws.freeze_panes = "A4"
+    ws.sheet_view.showGridLines = False
+
+
 def main():
     wb = Workbook()
     wb.remove(wb.active)
@@ -1452,10 +1636,17 @@ def main():
     build_playbooks(wb)
     build_launch_status(wb)
     build_smoke_pack(wb)
+    build_nav_hub(wb)
 
-    # Order: Read Me, Dashboard, 02-20, hire-pack sheets, Daily Log, Lists at end
+    # Apply navigable strip to every content sheet
+    for name in wb.sheetnames:
+        if name == "Lists":
+            continue
+        add_nav_bar(wb[name], name)
+
+    # Order: Read Me, NAV, Dashboard, 02-20, hire-pack sheets, Daily Log, Lists at end
     desired = [
-        "00 Read Me", "01 Dashboard",
+        "00 Read Me", "NAV Hub", "01 Dashboard",
         "02 Module Master", "03 Feature Inventory", "04 Test Case Repository",
         "05 E2E User Flows", "06 Bug Tracker", "07 UI-UX Testing", "08 Mobile Responsiveness",
         "09 API Testing", "10 Database Validation", "11 Authentication Testing",
@@ -1478,6 +1669,7 @@ def main():
             print(f"Locked (skipped): {path}")
     print("Sheets:", wb.sheetnames)
     print(f"Features loaded: {len(FEATURES)} | Bugs loaded: {len(BUGS)}")
+    print("Bug status:", dict(bug_status_counts()))
 
 
 if __name__ == "__main__":

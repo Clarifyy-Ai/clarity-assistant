@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 
 import { useAuthStore } from "@/store/authStore";
+import { supabase } from "@/lib/supabase/client";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 
@@ -121,6 +122,10 @@ export default function Login(): JSX.Element {
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [lockTick, setLockTick] = useState(0);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [mfaPending, setMfaPending] = useState(false);
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaVerifying, setMfaVerifying] = useState(false);
 
   const {
     register,
@@ -153,13 +158,14 @@ export default function Login(): JSX.Element {
   }, [searchParams]);
 
   useEffect(() => {
+    if (mfaPending) return;
     if (authStatus !== "authenticated" || !isProfileLoaded) {
       return;
     }
 
     const target = isAdmin ? "/app/admin" : from;
     navigate(target, { replace: true });
-  }, [authStatus, isProfileLoaded, isAdmin, from, navigate]);
+  }, [authStatus, isProfileLoaded, isAdmin, from, navigate, mfaPending]);
 
   useEffect(() => {
     const storedLock = safeGetLocalStorageItem(LOCK_KEY);
@@ -248,6 +254,23 @@ export default function Login(): JSX.Element {
 
       safeRemoveLocalStorageItem(ATTEMPT_KEY);
       safeRemoveLocalStorageItem(LOCK_KEY);
+
+      // If TOTP MFA is enrolled, require challenge before leaving login.
+      try {
+        const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (aal?.currentLevel === "aal1" && aal?.nextLevel === "aal2") {
+          const { data: factors } = await supabase.auth.mfa.listFactors();
+          const totp = factors?.totp?.find((f) => f.status === "verified");
+          if (totp?.id) {
+            setMfaFactorId(totp.id);
+            setMfaCode("");
+            setMfaPending(true);
+            return;
+          }
+        }
+      } catch {
+        // MFA APIs unavailable — continue as authenticated without challenge.
+      }
     } catch (error) {
       const message = formatSupabaseAuthError(error);
 
@@ -287,6 +310,34 @@ export default function Login(): JSX.Element {
           remainingAttempts === 1 ? "" : "s"
         } remaining)`
       );
+    }
+  }
+
+  async function handleMfaVerify(): Promise<void> {
+    if (!mfaFactorId || mfaCode.trim().length < 6) {
+      setAuthError("Enter the 6-digit code from your authenticator app.");
+      return;
+    }
+    setMfaVerifying(true);
+    setAuthError(null);
+    try {
+      const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({
+        factorId: mfaFactorId,
+      });
+      if (challengeError) throw challengeError;
+      const { error: verifyError } = await supabase.auth.mfa.verify({
+        factorId: mfaFactorId,
+        challengeId: challenge.id,
+        code: mfaCode.trim(),
+      });
+      if (verifyError) throw verifyError;
+      setMfaPending(false);
+      setMfaFactorId(null);
+      setMfaCode("");
+    } catch (error) {
+      setAuthError(formatSupabaseAuthError(error));
+    } finally {
+      setMfaVerifying(false);
     }
   }
 
@@ -378,13 +429,47 @@ export default function Login(): JSX.Element {
         <div className="w-full max-w-sm">
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-foreground">
-              Welcome back
+              {mfaPending ? "Two-factor authentication" : "Welcome back"}
             </h1>
             <p className="text-muted-foreground text-sm mt-1">
-              Sign in to your account to continue
+              {mfaPending
+                ? "Enter the 6-digit code from your authenticator app"
+                : "Sign in to your account to continue"}
             </p>
           </div>
 
+          {mfaPending ? (
+            <div className="space-y-4">
+              <Input
+                label="Authenticator code"
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                placeholder="123456"
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, "").slice(0, 8))}
+                required
+              />
+              {authError && (
+                <div className="flex items-center gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2.5">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span>{authError}</span>
+                </div>
+              )}
+              <Button
+                type="button"
+                variant="primary"
+                size="md"
+                loading={mfaVerifying}
+                disabled={mfaVerifying || mfaCode.trim().length < 6}
+                fullWidth
+                onClick={() => void handleMfaVerify()}
+              >
+                Verify and continue
+              </Button>
+            </div>
+          ) : (
+          <>
           <div className="grid grid-cols-2 gap-2">
             <GoogleOAuthButton />
             <GithubOAuthButton />
@@ -513,6 +598,8 @@ export default function Login(): JSX.Element {
               Sign up free
             </Link>
           </p>
+          </>
+          )}
         </div>
       </div>
     </div>

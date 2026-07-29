@@ -474,7 +474,7 @@ export default function AdminRevenue() {
             <CardDescription>Latest {transactions.length} revenue events</CardDescription>
           </CardHeader>
           <CardContent className="p-0">
-            <div className="max-h-[420px] overflow-y-auto">
+            <div className="max-h-[420px] overflow-auto">
               <Table>
                 <TableHeader className="sticky top-0 bg-card">
                   <TableRow>

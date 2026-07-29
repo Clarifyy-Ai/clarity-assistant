@@ -172,7 +172,7 @@ export default function AdminSupport() {
           <CardTitle>Threads</CardTitle>
           <CardDescription>Most recently active first.</CardDescription>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

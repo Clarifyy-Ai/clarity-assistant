@@ -200,3 +200,24 @@ Launch-fixes pass: gap UI, MobileNav, admin honesty, prefs enforcement, resume v
 
 ### Phase C–E QA pack
 - Regenerated `Clarify_AI_QA_Workbook_FULL.xlsx` with Credentials, Environments (+ secrets checklist), Module Playbooks, Launch Status, Smoke Pack; Feature Inventory Route/Deep Link/How-it-works columns; Fixed/Open/Blocked synced
+
+---
+
+## QA sync pass (2026-07-29) — workbook vs source
+
+Compared all workbook sheets to `src/` + edge functions; fixed product gaps and regenerated Power BI–style navigable workbook.
+
+### Code fixes
+- MobileNav More: Notifications, Guide, Profile, Admin (admin-only)
+- Razorpay SettingsBilling: explicit one-time / no auto-renew copy + button labels
+- Login: TOTP MFA AAL2 challenge after password sign-in
+- Admin ModelCosts / Support / Revenue: `overflow-x-auto` for narrow viewports
+- `STRIPE_CONFIGURED` includes enterprise monthly price ID
+- `send-email`: honour `marketing_emails` + `product_updates` in default branch
+
+### Workbook (Power BI style)
+- **NAV Hub** sheet with grouped hyperlinks
+- Teal nav strip on every sheet (Dashboard · Features · Bugs · Launch · Smoke · …)
+- Dashboard inventory snapshot tiles + quick links
+- Read Me sheet index hyperlinked; Smoke Pack updated for MFA / Razorpay honesty
+- Status rollup: Closed 39 · Open 12 · Blocked 6 · Won't Fix 1

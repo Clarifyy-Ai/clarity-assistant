@@ -234,6 +234,9 @@ Deno.serve(async (req) => {
         case "weekly_report":
           return prefs.digest_frequency !== "off" && prefs.session_complete !== false;
         default:
+          // Product/marketing-style mail must honour marketing + product_updates prefs
+          if (profile?.marketing_emails === false) return false;
+          if (prefs.product_updates === false) return false;
           return true;
       }
     })();

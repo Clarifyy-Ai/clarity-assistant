@@ -253,7 +253,7 @@ export default function AdminModelCosts() {
           </CardTitle>
           <CardDescription>Cost, token consumption, and error rates per model.</CardDescription>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>
@@ -322,7 +322,7 @@ export default function AdminModelCosts() {
             </CardDescription>
           </div>
         </CardHeader>
-        <CardContent className="p-0">
+        <CardContent className="p-0 overflow-x-auto">
           <Table>
             <TableHeader>
               <TableRow>

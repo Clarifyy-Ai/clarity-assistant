@@ -60,6 +60,7 @@ const STRIPE_CONFIGURED =
   Boolean(ENV.STRIPE_PRICE_PRO_MONTHLY) ||
   Boolean(ENV.STRIPE_PRICE_STARTER_MONTHLY) ||
   Boolean(ENV.STRIPE_PRICE_ELITE_MONTHLY) ||
+  Boolean(ENV.STRIPE_PRICE_ENTERPRISE_MONTHLY) ||
   Boolean(ENV.STRIPE_PRICE_CREDITS_50) ||
   Boolean(ENV.STRIPE_PRICE_CREDITS_150) ||
   Boolean(ENV.STRIPE_PRICE_CREDITS_500);
@@ -759,6 +760,10 @@ export default function SettingsBilling(): JSX.Element {
             Pay in INR via Razorpay. Referral codes and admin offers apply at checkout.
             Credits auto-deduct when you use AI features.
           </p>
+          <p className="text-xs text-amber-700 dark:text-amber-400 bg-amber-500/10 border border-amber-500/20 rounded-lg px-3 py-2">
+            Razorpay checkout is a one-time payment (Order) — it does not auto-renew.
+            Re-purchase when credits or plan access expire. Stripe subscriptions handle recurring USD billing.
+          </p>
           <input
             className="w-full max-w-xs rounded-lg border border-border bg-background px-3 py-2 text-sm"
             placeholder="Promo / referral code"
@@ -771,7 +776,7 @@ export default function SettingsBilling(): JSX.Element {
               loading={razorpayLoading === "pro_monthly"}
               onClick={() => void handleRazorpayCheckout("pro_monthly")}
             >
-              Pro — Razorpay
+              Pro — one-time (Razorpay)
             </Button>
             <Button
               size="sm"
@@ -779,7 +784,7 @@ export default function SettingsBilling(): JSX.Element {
               loading={razorpayLoading === "credits_150"}
               onClick={() => void handleRazorpayCheckout("credits_150")}
             >
-              150 credits
+              150 credits (one-time)
             </Button>
             <Button
               size="sm"
@@ -787,7 +792,7 @@ export default function SettingsBilling(): JSX.Element {
               loading={razorpayLoading === "credits_500"}
               onClick={() => void handleRazorpayCheckout("credits_500")}
             >
-              500 credits
+              500 credits (one-time)
             </Button>
           </div>
         </Card>
