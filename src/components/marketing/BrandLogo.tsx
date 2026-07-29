@@ -1,16 +1,19 @@
 import { cn } from "@/lib/utils";
-import { Mic } from "lucide-react";
+import { isElectronApp } from "@/lib/platform/isElectron";
+
 interface BrandLogoProps {
   className?: string;
   iconClassName?: string;
   showText?: boolean;
   size?: "sm" | "md" | "lg";
+  /** Web brand mark (crystal) vs installed-app mark (coach reticle). */
+  variant?: "web" | "app" | "auto";
 }
 
 const SIZES = {
-  sm: { icon: "h-8 w-8", text: "text-base", mic: "h-4 w-4" },
-  md: { icon: "h-10 w-10", text: "text-lg", mic: "h-5 w-5" },
-  lg: { icon: "h-12 w-12", text: "text-xl", mic: "h-6 w-6" },
+  sm: { icon: "h-8 w-8", text: "text-base" },
+  md: { icon: "h-10 w-10", text: "text-lg" },
+  lg: { icon: "h-12 w-12", text: "text-xl" },
 };
 
 export function BrandLogo({
@@ -18,24 +21,41 @@ export function BrandLogo({
   iconClassName,
   showText = true,
   size = "md",
+  variant = "auto",
 }: BrandLogoProps) {
   const s = SIZES[size];
+  const isApp =
+    variant === "app" || (variant === "auto" && typeof window !== "undefined" && isElectronApp());
+  const src = isApp ? "/brand/app-icon-192.png" : "/brand/logo-192.png";
+  const alt = isApp ? "Clarify Coach" : "Clarify AI";
 
   return (
     <span className={cn("inline-flex items-center gap-2.5", className)}>
-      <span
+      <img
+        src={src}
+        alt={alt}
+        width={48}
+        height={48}
+        decoding="async"
         className={cn(
-          "flex shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-primary to-indigo-700 shadow-lg shadow-primary/20",
+          "shrink-0 rounded-xl object-cover shadow-lg shadow-cyan-500/15 ring-1 ring-white/10",
           s.icon,
           iconClassName,
         )}
-      >
-        <Mic className={cn("text-white", s.mic)} />
-      </span>
+      />
       {showText && (
         <span className={cn("font-bold tracking-tight text-foreground", s.text)}>
-          Clarify<span className="text-primary"> AI</span>
+          {isApp ? (
+            <>
+              Clarify<span className="text-cyan-500"> Coach</span>
+            </>
+          ) : (
+            <>
+              Clarify<span className="text-primary"> AI</span>
+            </>
+          )}
         </span>
-      )}    </span>
+      )}
+    </span>
   );
 }

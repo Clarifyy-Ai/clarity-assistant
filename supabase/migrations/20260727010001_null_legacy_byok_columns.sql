@@ -9,24 +9,28 @@ BEGIN
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'byok_openai'
   ) THEN
+    EXECUTE 'ALTER TABLE public.profiles ALTER COLUMN byok_openai DROP NOT NULL';
     EXECUTE 'UPDATE public.profiles SET byok_openai = NULL WHERE byok_openai IS NOT NULL';
   END IF;
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'byok_anthropic'
   ) THEN
+    EXECUTE 'ALTER TABLE public.profiles ALTER COLUMN byok_anthropic DROP NOT NULL';
     EXECUTE 'UPDATE public.profiles SET byok_anthropic = NULL WHERE byok_anthropic IS NOT NULL';
   END IF;
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'byok_gemini'
   ) THEN
+    EXECUTE 'ALTER TABLE public.profiles ALTER COLUMN byok_gemini DROP NOT NULL';
     EXECUTE 'UPDATE public.profiles SET byok_gemini = NULL WHERE byok_gemini IS NOT NULL';
   END IF;
   IF EXISTS (
     SELECT 1 FROM information_schema.columns
     WHERE table_schema = 'public' AND table_name = 'profiles' AND column_name = 'byok_key_encrypted'
   ) THEN
+    EXECUTE 'ALTER TABLE public.profiles ALTER COLUMN byok_key_encrypted DROP NOT NULL';
     EXECUTE 'UPDATE public.profiles SET byok_key_encrypted = NULL WHERE byok_key_encrypted IS NOT NULL';
   END IF;
 END $$;

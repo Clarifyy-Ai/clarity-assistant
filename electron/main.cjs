@@ -101,7 +101,7 @@ function showMainWindow() {
 }
 
 function reportLoadFailure(title, detail) {
-  console.error(`[Clarify AI] ${title}:`, detail);
+  console.error(`[Clarify Coach] ${title}:`, detail);
   showMainWindow();
   dialog.showErrorBox(title, detail);
 }
@@ -121,9 +121,10 @@ function createMainWindow() {
     minHeight: 320,
     show: false,
     backgroundColor: "#0F172A",
-    title: "Clarify AI",
+    title: "Clarify Coach",
     autoHideMenuBar: true,
     alwaysOnTop: true,
+    icon: path.join(__dirname, "..", "public", "brand", "app-icon-512.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
       contextIsolation: true,
@@ -165,15 +166,15 @@ function createMainWindow() {
 
   mainWindow.webContents.on("did-fail-load", (_event, errorCode, errorDescription, validatedURL) => {
     reportLoadFailure(
-      "Clarify AI failed to load",
+      "Clarify Coach failed to load",
       `Could not load the app shell (${errorCode}: ${errorDescription}).\n\nURL: ${validatedURL}`,
     );
   });
 
   mainWindow.webContents.on("render-process-gone", (_event, details) => {
     reportLoadFailure(
-      "Clarify AI crashed",
-      `The app window stopped unexpectedly (${details.reason}). Please restart Clarify AI.`,
+      "Clarify Coach crashed",
+      `The app window stopped unexpectedly (${details.reason}). Please restart Clarify Coach.`,
     );
   });
 
@@ -186,7 +187,7 @@ function createMainWindow() {
   // Fallback: never leave the app running with a hidden window.
   const showFallbackTimer = setTimeout(() => {
     if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.isVisible()) {
-      console.warn("[Clarify AI] ready-to-show timeout — forcing window visible");
+      console.warn("[Clarify Coach] ready-to-show timeout — forcing window visible");
       showMainWindow();
     }
   }, 3000);
@@ -227,13 +228,13 @@ function registerGlobalShortcuts() {
         mainWindow.webContents.send("global-shortcut", action);
       });
       if (!ok) {
-        console.warn(`[Clarify AI] Failed to register ${accelerator}`);
+        console.warn(`[Clarify Coach] Failed to register ${accelerator}`);
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send("hotkey-conflict", { key: accelerator });
         }
       }
     } catch (err) {
-      console.warn(`[Clarify AI] Shortcut error ${accelerator}:`, err);
+      console.warn(`[Clarify Coach] Shortcut error ${accelerator}:`, err);
     }
   }
 }

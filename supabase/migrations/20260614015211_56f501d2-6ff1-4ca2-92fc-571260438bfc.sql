@@ -15,15 +15,16 @@ CREATE TABLE IF NOT EXISTS public.scrape_jobs (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.scrape_jobs TO authenticated;
 GRANT ALL ON public.scrape_jobs TO service_role;
 ALTER TABLE public.scrape_jobs ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Admins manage scrape_jobs" ON public.scrape_jobs;
 CREATE POLICY "Admins manage scrape_jobs" ON public.scrape_jobs
   FOR ALL TO authenticated
   USING (public.has_role(auth.uid(),'admin'))
   WITH CHECK (public.has_role(auth.uid(),'admin'));
+DROP TRIGGER IF EXISTS trg_scrape_jobs_updated_at ON public.scrape_jobs;
 CREATE TRIGGER trg_scrape_jobs_updated_at BEFORE UPDATE ON public.scrape_jobs
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 
-DROP TABLE IF EXISTS public.scrape_failures CASCADE;
-CREATE TABLE public.scrape_failures (
+CREATE TABLE IF NOT EXISTS public.scrape_failures (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   job_id UUID REFERENCES public.scrape_jobs(id) ON DELETE CASCADE,
   source_url TEXT NOT NULL,
@@ -34,6 +35,7 @@ CREATE TABLE public.scrape_failures (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.scrape_failures TO authenticated;
 GRANT ALL ON public.scrape_failures TO service_role;
 ALTER TABLE public.scrape_failures ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Admins manage scrape_failures" ON public.scrape_failures;
 CREATE POLICY "Admins manage scrape_failures" ON public.scrape_failures
   FOR ALL TO authenticated
   USING (public.has_role(auth.uid(),'admin'))
@@ -51,6 +53,7 @@ CREATE TABLE IF NOT EXISTS public.scrape_ingested (
 GRANT SELECT, INSERT, UPDATE, DELETE ON public.scrape_ingested TO authenticated;
 GRANT ALL ON public.scrape_ingested TO service_role;
 ALTER TABLE public.scrape_ingested ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Admins manage scrape_ingested" ON public.scrape_ingested;
 CREATE POLICY "Admins manage scrape_ingested" ON public.scrape_ingested
   FOR ALL TO authenticated
   USING (public.has_role(auth.uid(),'admin'))
@@ -70,12 +73,15 @@ CREATE TABLE IF NOT EXISTS public.exam_images (
 GRANT SELECT ON public.exam_images TO anon, authenticated;
 GRANT ALL ON public.exam_images TO service_role;
 ALTER TABLE public.exam_images ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public read exam_images" ON public.exam_images;
 CREATE POLICY "Public read exam_images" ON public.exam_images
   FOR SELECT TO anon, authenticated USING (true);
+DROP POLICY IF EXISTS "Admins write exam_images" ON public.exam_images;
 CREATE POLICY "Admins write exam_images" ON public.exam_images
   FOR ALL TO authenticated
   USING (public.has_role(auth.uid(),'admin'))
   WITH CHECK (public.has_role(auth.uid(),'admin'));
+DROP TRIGGER IF EXISTS trg_exam_images_updated_at ON public.exam_images;
 CREATE TRIGGER trg_exam_images_updated_at BEFORE UPDATE ON public.exam_images
   FOR EACH ROW EXECUTE FUNCTION public.set_updated_at();
 

@@ -853,21 +853,27 @@ def build_features(wb: Workbook):
 def build_credentials(wb: Workbook):
     ws = wb.create_sheet("21 Test Credentials")
     headers = [
-        "Role", "Email (placeholder)", "Password (placeholder)", "Plan", "Credits seed",
+        "Role", "Email", "Password location", "Plan", "Credits seed",
         "Notes", "Owner", "Last rotated",
     ]
     samples = [
-        ("Free", "qa.free@example.com", "REPLACE_ME", "free", "50", "Replace after seeding — never commit real prod secrets", "Asha Sharma", ""),
-        ("Pro", "qa.pro@example.com", "REPLACE_ME", "pro", "1400", "Stripe test checkout path", "Asha Sharma", ""),
-        ("Max / Elite", "qa.max@example.com", "REPLACE_ME", "elite", "1400", "Priority models gate", "Asha Sharma", ""),
-        ("Admin", "qa.admin@example.com", "REPLACE_ME", "pro+", "4000", "profiles.role = admin", "Kavya Iyer", ""),
-        ("Stripe test card", "N/A", "4242 4242 4242 4242", "N/A", "N/A", "Any future expiry + any CVC; Stripe test mode only", "Asha Sharma", ""),
-        ("Razorpay test", "N/A", "Dashboard test keys", "N/A", "N/A", "INR one-time Order — no auto-renew (BUG-OPEN-01)", "Asha Sharma", ""),
+        ("Free", "qa.free@clarify.ai.test", ".env.qa.local → QA_FREE_PASSWORD", "free", "50",
+         "Seeded by npm run qa:seed-accounts — never commit passwords", "Asha Sharma", ""),
+        ("Pro", "qa.pro@clarify.ai.test", ".env.qa.local → QA_PRO_PASSWORD", "pro", "1400",
+         "Stripe test checkout path", "Asha Sharma", ""),
+        ("Max", "qa.max@clarify.ai.test", ".env.qa.local → QA_MAX_PASSWORD", "enterprise", "4000",
+         "Workbook Max/Elite maps to plan_id=enterprise", "Asha Sharma", ""),
+        ("Admin", "qa.admin@clarify.ai.test", ".env.qa.local → QA_ADMIN_PASSWORD", "enterprise", "4000",
+         "user_roles.admin via seed script", "Kavya Iyer", ""),
+        ("Stripe test card", "N/A", "4242 4242 4242 4242", "N/A", "N/A",
+         "Any future expiry + any CVC; Stripe test mode only", "Asha Sharma", ""),
+        ("Razorpay test", "N/A", "Dashboard test keys", "N/A", "N/A",
+         "INR one-time Order — no auto-renew (BUG-OPEN-01); keys not in .env.local yet", "Asha Sharma", ""),
     ]
     write_table(
         ws,
-        "Test Credentials — placeholders only",
-        "Staging base URL lives on Environments sheet. Do not paste production secrets into this workbook.",
+        "Test Credentials — seeded accounts",
+        "Passwords live only in gitignored .env.qa.local (npm run qa:seed-accounts). Do not paste secrets into this workbook.",
         headers,
         samples,
     )
@@ -880,9 +886,11 @@ def build_environments(wb: Workbook):
         "Environment", "Base URL", "Supabase project", "Owner", "Read/Write", "Notes",
     ]
     samples = [
-        ("Local", "http://localhost:5173", "local / linked", "Dev Lead", "Read-Write", "npm run dev"),
-        ("Staging", "https://STAGING_HOST_REPLACE", "staging project ref", "QA Lead", "Read-Write", "Primary QA target — set BaseURL cell B3 used by Feature Deep Links"),
-        ("Prod (read-only QA)", "https://PROD_HOST_REPLACE", "prod project ref", "QA Lead", "Read-only", "No destructive admin tests"),
+        ("Local", "http://localhost:5173", "qzgvjrvtkwlzxpmlddkx (linked)", "Dev Lead", "Read-Write", "npm run dev"),
+        ("Staging / closed beta", "https://clarify.ai.sltfinanceindia.com", "qzgvjrvtkwlzxpmlddkx", "QA Lead", "Read-Write",
+         "Primary QA target — same project as prod until separate staging exists"),
+        ("Prod (read-only QA)", "https://clarify.ai.sltfinanceindia.com", "qzgvjrvtkwlzxpmlddkx", "QA Lead", "Read-only",
+         "Prefer seeded QA_* users; avoid destructive admin tests on shared data"),
     ]
     write_table(ws, "Environments", "B3 (Staging Base URL) powers Feature Inventory Deep Link formulas", headers, samples)
 

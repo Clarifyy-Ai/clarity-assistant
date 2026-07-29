@@ -89,9 +89,9 @@ SELECT * FROM (VALUES
 ('UPI was launched by:', 'MCQ', '[{"label": "A", "text": "RBI"}, {"label": "B", "text": "NPCI"}, {"label": "C", "text": "SEBI"}, {"label": "D", "text": "SBI"}]'::jsonb, 'B', 'National Payments Corporation of India.', 'Banking Awareness', 'Payments', 'EASY', 1, 0.25, 'Banking (IBPS/SBI/RBI)', 2024, 'OFFICIAL_PYP', true, true, false),
 ('Inflation means:', 'MCQ', '[{"label": "A", "text": "Fall in prices"}, {"label": "B", "text": "Rise in general price level"}, {"label": "C", "text": "Rise in employment"}, {"label": "D", "text": "Fall in money supply"}]'::jsonb, 'B', 'General price level rise.', 'Economy', 'Inflation', 'EASY', 1, 0.25, 'Banking (IBPS/SBI/RBI)', 2024, 'OFFICIAL_PYP', true, true, false)
 ) AS v(
-  question_text text, question_type text, options jsonb, correct_answer text, explanation text,
-  subject text, topic text, difficulty text, marks_positive numeric, marks_negative numeric,
-  exam_type text, source_year int, source text, is_verified boolean, is_public boolean, latex_present boolean
+  question_text, question_type, options, correct_answer, explanation,
+  subject, topic, difficulty, marks_positive, marks_negative,
+  exam_type, source_year, source, is_verified, is_public, latex_present
 )
 WHERE NOT EXISTS (
   SELECT 1 FROM public.questions q

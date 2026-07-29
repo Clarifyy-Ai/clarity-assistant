@@ -569,22 +569,6 @@ export async function enforceEmailRateLimitAsync(
   });
 }
 
-export async function enforceSessionRateLimitAsync(
-  adminClient: {
-    rpc: (
-      fn: string,
-      args: Record<string, unknown>
-    ) => Promise<{ data: unknown; error: { message: string } | null }>;
-  },
-  functionName: string,
-  userId: string
-): Promise<Response | null> {
-  return enforceRateLimitAsync(adminClient, {
-    key: createRateLimitKey(functionName, userId),
-    ...RATE_LIMIT_PRESETS.SESSION_ACTION,
-  });
-}
-
 /**
  * Testing/debug helper.
  * Do not call this from production request handlers.

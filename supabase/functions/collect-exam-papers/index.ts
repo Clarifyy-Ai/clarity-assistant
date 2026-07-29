@@ -177,7 +177,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    const db = createServiceClient();
     const systemUserId = Deno.env.get("SYSTEM_USER_ID") ?? auth.userId;
 
     const pdfUrls: string[] = [];
