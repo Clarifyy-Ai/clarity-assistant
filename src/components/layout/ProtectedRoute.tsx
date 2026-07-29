@@ -1,7 +1,6 @@
 import { memo } from "react";
 import { Navigate, Outlet, useLocation, Link } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
-import { Spinner } from "@/components/ui/Spinner";
 import { Card } from "@/components/ui/Card";
 import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
 import { AlertCircle } from "lucide-react";
