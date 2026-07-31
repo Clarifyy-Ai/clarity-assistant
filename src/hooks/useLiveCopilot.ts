@@ -49,6 +49,7 @@ import {
 import { startSession as startSessionApi } from "@/lib/api/sessions";
 import { handleSessionStartError } from "@/lib/billing/sessionStartErrors";
 import { toDbModel } from "@/lib/ai/modelMapping";
+import { markFirstListening } from "@/lib/analytics/uxMetrics";
 import { toast } from "sonner";
 import type { LiveSessionConfig } from "@/types/session.types";
 
@@ -711,6 +712,7 @@ export function useLiveCopilot({
       useOverlayStore.getState().showOverlay();
       await audio.start();
       useSessionStore.getState().setStatus("active");
+      markFirstListening();
     } catch (err) {
       console.error("[useLiveCopilot] Failed to start live session:", err);
       audio.stop();

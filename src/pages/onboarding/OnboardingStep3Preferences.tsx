@@ -10,6 +10,21 @@ import { useOverlayStore } from "@/store/overlayStore";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import {
+  FileText,
+  Lightbulb,
+  Key,
+  HeartHandshake,
+  Target,
+  Brain,
+  CircleHelp,
+  MessageSquare,
+  Monitor,
+  BarChart3,
+  Shuffle,
+  Lock,
+  type LucideIcon,
+} from "lucide-react";
 import type { StepProps } from "@/types/onboarding.types";
 import type { ProfileRow } from "@/types";
 import type { PreferredAIModel } from "@/types/user.types";
@@ -18,25 +33,25 @@ import { normalizeToDisplayTier } from "@/lib/constants/pricing";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const HINT_STYLES = [
-  { value: "full_answer",  label: "Full Answer",    sub: "Complete 2–3 paragraph response", icon: "📝" },
-  { value: "short_hints",  label: "Short Hints",    sub: "2–3 talking point bullets",       icon: "💡" },
-  { value: "keywords",     label: "Keywords Only",  sub: "Key terms to build from",         icon: "🔑" },
-] as const;
+const HINT_STYLES: { value: string; label: string; sub: string; icon: LucideIcon }[] = [
+  { value: "full_answer",  label: "Full Answer",    sub: "Complete 2–3 paragraph response", icon: FileText },
+  { value: "short_hints",  label: "Short Hints",    sub: "2–3 talking point bullets",       icon: Lightbulb },
+  { value: "keywords",     label: "Keywords Only",  sub: "Key terms to build from",         icon: Key },
+];
 
-const COACH_TONES = [
-  { value: "encouraging", label: "Encouraging", icon: "🤗", sub: "Warm, supportive"        },
-  { value: "direct",      label: "Direct",      icon: "🎯", sub: "Honest, concise"         },
-  { value: "analytical",  label: "Analytical",  icon: "🧠", sub: "Detailed feedback"       },
-  { value: "socratic",    label: "Socratic",    icon: "❓", sub: "Guides with questions"   },
-] as const;
+const COACH_TONES: { value: string; label: string; icon: LucideIcon; sub: string }[] = [
+  { value: "encouraging", label: "Encouraging", icon: HeartHandshake, sub: "Warm, supportive"        },
+  { value: "direct",      label: "Direct",      icon: Target,         sub: "Honest, concise"         },
+  { value: "analytical",  label: "Analytical",  icon: Brain,          sub: "Detailed feedback"       },
+  { value: "socratic",    label: "Socratic",    icon: CircleHelp,     sub: "Guides with questions"   },
+];
 
-const INTERVIEW_STYLES = [
-  { value: "behavioral", label: "Behavioral", icon: "💬", sub: "STAR stories & soft skills" },
-  { value: "technical",  label: "Technical",  icon: "💻", sub: "Role-specific depth"        },
-  { value: "case_study", label: "Case",       icon: "📊", sub: "Analytical & consulting"    },
-  { value: "mixed",      label: "Mixed",      icon: "🔀", sub: "Blend of question styles"   },
-] as const;
+const INTERVIEW_STYLES: { value: string; label: string; icon: LucideIcon; sub: string }[] = [
+  { value: "behavioral", label: "Behavioral", icon: MessageSquare, sub: "STAR stories & soft skills" },
+  { value: "technical",  label: "Technical",  icon: Monitor,       sub: "Role-specific depth"        },
+  { value: "case_study", label: "Case",       icon: BarChart3,     sub: "Analytical & consulting"    },
+  { value: "mixed",      label: "Mixed",      icon: Shuffle,       sub: "Blend of question styles"   },
+];
 
 const PREP_BY_STYLE: Record<string, string> = {
   behavioral: "Prep Lab → STAR Builder",
@@ -135,6 +150,7 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
         <div className="grid grid-cols-2 gap-2">
           {INTERVIEW_STYLES.map((s) => {
             const selected = styles.includes(s.value);
+            const Icon = s.icon;
             return (
               <button
                 key={s.value}
@@ -147,7 +163,7 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
                     : "bg-secondary/50 border-border hover:border-primary/30",
                 )}
               >
-                <span className="text-xl">{s.icon}</span>
+                <Icon className="h-5 w-5 shrink-0 mt-0.5" />
                 <div>
                   <p className={cn(
                     "text-xs font-semibold",
@@ -174,7 +190,9 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
           How much help do you want during live sessions?
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-          {HINT_STYLES.map((h) => (
+          {HINT_STYLES.map((h) => {
+            const Icon = h.icon;
+            return (
             <button
               key={h.value}
               type="button"
@@ -186,7 +204,7 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
                   : "bg-secondary/50 border-border hover:border-primary/30",
               )}
             >
-              <span className="text-xl">{h.icon}</span>
+              <Icon className="h-5 w-5" />
               <span className={cn(
                 "text-xs font-semibold",
                 hintStyle === h.value ? "text-primary" : "text-muted-foreground",
@@ -195,7 +213,8 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
               </span>
               <span className="text-[10px] text-muted-foreground">{h.sub}</span>
             </button>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -205,7 +224,9 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
           AI coach tone
         </p>
         <div className="grid grid-cols-2 gap-2">
-          {COACH_TONES.map((t) => (
+          {COACH_TONES.map((t) => {
+            const Icon = t.icon;
+            return (
             <button
               key={t.value}
               type="button"
@@ -217,7 +238,7 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
                   : "bg-secondary/50 border-border hover:border-primary/30",
               )}
             >
-              <span className="text-xl">{t.icon}</span>
+              <Icon className="h-5 w-5 shrink-0" />
               <div>
                 <p className={cn(
                   "text-xs font-semibold",
@@ -228,7 +249,8 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
                 <p className="text-[10px] text-muted-foreground">{t.sub}</p>
               </div>
             </button>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -265,12 +287,19 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
                   </span>
                 </div>
                 <span className={cn(
-                  "text-[10px] px-2 py-0.5 rounded-full border",
+                  "inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full border",
                   m.free
                     ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
                     : "bg-primary/10 border-primary/20 text-primary",
                 )}>
-                  {locked ? "🔒 Pro" : m.badge}
+                  {locked ? (
+                    <>
+                      <Lock className="h-3 w-3" aria-hidden="true" />
+                      Pro
+                    </>
+                  ) : (
+                    m.badge
+                  )}
                 </span>
               </button>
             );

@@ -342,6 +342,7 @@ function LiveOverlaySession() {
         onManualQuestion={handleManualQuestion}
         onStartSession={handleSetup}
         onSetupNewSession={() => setPhase("setup")}
+        onReconnectAudio={() => void copilot.reconnectAudio?.()}
         lastSessionId={lastSessionId}
         isPreparingSession={copilot.isPreparingSession}
         prepStepIndex={copilot.prepStepIndex}

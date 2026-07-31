@@ -322,7 +322,15 @@ export default function MockWarmup() {
             <Button
               variant="primary"
               size="lg"
-              onClick={() => navigate("/app/mock/session", { state: location.state })}
+              onClick={() => {
+                const sid =
+                  warmupSessionId ??
+                  (location.state as { sessionId?: string } | null)?.sessionId;
+                navigate(
+                  sid ? `/app/mock/session/${sid}` : "/app/mock",
+                  { state: location.state },
+                );
+              }}
             >
               Begin Session →
             </Button>

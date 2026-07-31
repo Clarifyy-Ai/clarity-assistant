@@ -5,9 +5,10 @@ import { answerBankDB } from "@/lib/supabase/database";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { BookOpen, Edit, Trash2, Save, X, Loader2, ArrowLeft, AlertCircle } from "lucide-react";
+import { BookOpen, Edit, Trash2, Save, X, Loader2, ArrowLeft, AlertCircle, Mic } from "lucide-react";
 import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import type { Tables } from "@/integrations/supabase";
 
 type Answer = Tables<"answer_bank">;
@@ -133,6 +134,18 @@ export default function AnswerDetail() {
         ]}
         actions={
           <div className="flex gap-2">
+            <Button
+              variant="primary"
+              size="sm"
+              leftIcon={<Mic className="w-4 h-4" />}
+              onClick={() =>
+                navigate("/app/live", {
+                  state: { practicePrompt: answer.question_text },
+                })
+              }
+            >
+              Practice with {PRODUCT_NAMES.practiceCoach}
+            </Button>
             {!editing && (
               <Button variant="secondary" size="sm" onClick={() => setEditing(true)} leftIcon={<Edit className="w-4 h-4" />}>
                 Edit
@@ -143,6 +156,7 @@ export default function AnswerDetail() {
               size="sm"
               onClick={() => setDeleteOpen(true)}
               className="text-red-400 hover:text-red-300"
+              aria-label="Delete answer"
             >
               <Trash2 className="w-4 h-4" />
             </Button>

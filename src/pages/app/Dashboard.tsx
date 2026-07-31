@@ -25,11 +25,11 @@ import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import {
   Mic, ClipboardList, FlaskConical, BarChart2, Landmark,
-  CalendarDays, Flame, Zap, ChevronRight,
+  CalendarDays, Flame, Zap, ChevronRight, ChevronDown,
   Star, TrendingUp, Trophy, Clock,
   Building2, AlertTriangle, Info,
   ListTodo, PenTool, FolderOpen, BarChart3, FileSpreadsheet,
-  Sparkles, FileText, Layers, Upload, CheckCircle, Monitor, Download,
+  Sparkles, Upload, CheckCircle, Monitor,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -107,7 +107,7 @@ interface QuickAction {
 
 const QUICK_LAUNCH: { to: string; icon: React.ElementType; label: string }[] = [
   { to: "/app/mock",      icon: ClipboardList, label: "Mock Interview" },
-  { to: "/app/live/overlay", icon: Layers,     label: "Overlay" },
+  { to: "/app/live", icon: Mic, label: PRODUCT_NAMES.practiceCoach },
   { to: "/app/documents", icon: Upload,         label: "Upload" },
   { to: "/app/analytics", icon: BarChart2,      label: PRODUCT_NAMES.analytics },
 ];
@@ -176,6 +176,7 @@ export default function Dashboard() {
   const [sessionCount, setSessionCount] = useState<number | null>(null);
   const [sessionCountError, setSessionCountError] = useState<string | null>(null);
   const [sessionCountReloadKey, setSessionCountReloadKey] = useState(0);
+  const [showMore, setShowMore] = useState(false);
 
   const userId = profile?.id ?? user?.id;
 
@@ -225,6 +226,11 @@ export default function Dashboard() {
     hour < 12 ? "Good morning" :
     hour < 17 ? "Good afternoon" : "Good evening";
 
+  const sessionCountLoaded = sessionCount !== null;
+  const isNewUser = sessionCountLoaded && sessionCount === 0;
+  const isReturningUser = sessionCountLoaded && sessionCount > 0;
+  const showSecondary = isNewUser ? false : isReturningUser ? showMore : sessionCountLoaded;
+
   return (
     <div className="space-y-6">
 
@@ -232,7 +238,7 @@ export default function Dashboard() {
       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
         <div>
           <h1 className="text-xl sm:text-2xl font-bold text-foreground">
-            {greeting}, {firstName} 👋
+            {greeting}, {firstName}
           </h1>
           <p className="text-muted-foreground text-xs sm:text-sm mt-0.5">
             {format(new Date(), "EEEE, MMMM d")}
@@ -290,7 +296,7 @@ export default function Dashboard() {
         <SetupChecklist prominent dismissible />
       )}
 
-      {!IS_ELECTRON && (
+      {!IS_ELECTRON && showSecondary && (
         <div className="flex items-center gap-4 p-4 rounded-2xl border border-border bg-card">
           <div className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center shrink-0">
             <Monitor className="w-5 h-5 text-primary" />
@@ -304,23 +310,6 @@ export default function Dashboard() {
           <DesktopDownloadButton size="sm" variant="outline" showGuideLink={false} className="shrink-0 max-w-xs" />
         </div>
       )}
-
-      {/* ── Quick Launch Bar (Mock · Overlay · Upload · Analytics) ─── */}
-      <div className="flex flex-wrap gap-2">
-        {QUICK_LAUNCH.map((item) => {
-          const Icon = item.icon;
-          return (
-            <Link
-              key={item.to}
-              to={item.to}
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-card hover:bg-secondary/60 hover:border-primary/30 transition-all text-sm font-medium text-foreground"
-            >
-              <Icon className="w-4 h-4 text-primary" />
-              {item.label}
-            </Link>
-          );
-        })}
-      </div>
 
       {/* ── Interview Day Banner ────────────────────────────────────── */}
       {todayInterview && (
@@ -351,8 +340,81 @@ export default function Dashboard() {
         </div>
       )}
 
+      {/* ── Primary CTA: returning users ───────────────────────────── */}
+      {isReturningUser && (
+        <Link
+          to="/app/live"
+          className="flex items-center gap-4 p-5 rounded-2xl border border-primary/30 bg-gradient-to-r from-primary/15 to-blue-600/10 hover:border-primary/50 hover:from-primary/20 transition-all group"
+        >
+          <div className="w-12 h-12 bg-primary/20 rounded-xl flex items-center justify-center shrink-0">
+            <Mic className="w-6 h-6 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-base font-bold text-foreground">Start Practice</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {getStealthLabel(PRODUCT_NAMES.practiceCoach, stealth)} — jump into a live coaching session
+            </p>
+          </div>
+          <ChevronRight className="w-5 h-5 text-primary shrink-0 group-hover:translate-x-0.5 transition-transform" />
+        </Link>
+      )}
+
+      {/* ── First-run CTA for brand-new users ─────────────────────── */}
+      {isNewUser && (
+        <Card className="bg-gradient-to-br from-primary/10 via-indigo-600/10 to-blue-600/10 border-primary/20">
+          <div className="flex flex-col items-center text-center gap-4 py-4">
+            <div className="w-14 h-14 rounded-2xl bg-primary/20 flex items-center justify-center">
+              <Sparkles className="w-7 h-7 text-primary" />
+            </div>
+            <div className="space-y-1.5 max-w-md">
+              <h3 className="text-lg font-bold text-foreground">Welcome to Clarify AI!</h3>
+              <p className="text-sm text-muted-foreground leading-relaxed">
+                Start your first {getStealthLabel(PRODUCT_NAMES.practiceCoach, stealth).toLowerCase()} session to get real-time coaching.
+              </p>
+            </div>
+            <Link
+              to="/app/live"
+              className="inline-flex items-center gap-2 px-5 py-3 bg-primary text-primary-foreground font-semibold text-sm rounded-xl hover:opacity-90 transition-opacity"
+            >
+              <Mic className="w-4 h-4" />
+              Start {PRODUCT_NAMES.practiceCoach}
+            </Link>
+          </div>
+        </Card>
+      )}
+
+      {isReturningUser && (
+        <button
+          type="button"
+          onClick={() => setShowMore((v) => !v)}
+          className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors"
+          aria-expanded={showMore}
+        >
+          <ChevronDown className={cn("w-4 h-4 transition-transform", showMore && "rotate-180")} />
+          {showMore ? "Less" : "More"}
+        </button>
+      )}
+
+      {showSecondary && (
+        <>
+      {/* ── Quick Launch Bar (Mock · Overlay · Upload · Analytics) ─── */}
+      <div className="flex flex-wrap gap-2">
+        {QUICK_LAUNCH.map((item) => {
+          const Icon = item.icon;
+          return (
+            <Link
+              key={item.to}
+              to={item.to}
+              className="inline-flex items-center gap-2 px-3 py-2 rounded-xl border border-border bg-card hover:bg-secondary/60 hover:border-primary/30 transition-all text-sm font-medium text-foreground"
+            >
+              <Icon className="w-4 h-4 text-primary" />
+              {item.label}
+            </Link>
+          );
+        })}
+      </div>
+
       {/* ── Quick Actions ───────────────────────────────────────────── */}
-      {/* FIX Issue 29: smaller padding on xs, truncate labels */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
         {QUICK_ACTIONS.map((action) => {
           const Icon  = stealth ? (action.stealthIcon ?? action.icon) : action.icon;
@@ -392,39 +454,6 @@ export default function Dashboard() {
           );
         })}
       </div>
-
-      {/* ── First-run CTA for brand-new users ─────────────────────── */}
-      {!profileLoading && !gamificationLoading && sessionCount === 0 && !docStore.active_resume_id && !docStore.active_jd_id && (
-        <Card className="bg-gradient-to-br from-primary/10 via-indigo-600/10 to-blue-600/10 border-primary/20">
-          <div className="flex flex-col items-center text-center gap-4 py-4">
-            <div className="w-14 h-14 rounded-2xl bg-primary/20 flex items-center justify-center">
-              <Sparkles className="w-7 h-7 text-primary" />
-            </div>
-            <div className="space-y-1.5 max-w-md">
-              <h3 className="text-lg font-bold text-foreground">Welcome to Clarify AI!</h3>
-              <p className="text-sm text-muted-foreground leading-relaxed">
-                Start your first mock interview or upload your resume to get personalized coaching.
-              </p>
-            </div>
-            <div className="flex flex-wrap items-center gap-3">
-              <Link
-                to="/app/mock"
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-primary text-primary-foreground font-semibold text-sm rounded-xl hover:opacity-90 transition-opacity"
-              >
-                <ClipboardList className="w-4 h-4" />
-                Start Mock Interview
-              </Link>
-              <Link
-                to="/app/documents"
-                className="inline-flex items-center gap-2 px-4 py-2.5 bg-secondary border border-border text-foreground font-semibold text-sm rounded-xl hover:bg-secondary/80 transition-colors"
-              >
-                <FileText className="w-4 h-4" />
-                Upload Resume
-              </Link>
-            </div>
-          </div>
-        </Card>
-      )}
 
       {/* ── Stats row ───────────────────────────────────────────────── */}
       {sessionCountError && (
@@ -486,6 +515,8 @@ export default function Dashboard() {
           <DocumentsStatusCard />
         </div>
       </div>
+        </>
+      )}
     </div>
   );
 }

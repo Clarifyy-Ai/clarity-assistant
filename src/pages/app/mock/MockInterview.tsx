@@ -109,7 +109,7 @@ export default function MockInterview() {
       // ✅ FIX: navigate() is now strictly inside try — previously a throw in
       // getOrCreateSession could leave startingRef stuck if navigate() had already run.
       navigate(
-        warmup ? "/app/mock/warmup" : "/app/mock/session",
+        warmup ? "/app/mock/warmup" : `/app/mock/session/${session.id}`,
         { state: { config, sessionId: session.id } },
       );
     } catch (err: unknown) {

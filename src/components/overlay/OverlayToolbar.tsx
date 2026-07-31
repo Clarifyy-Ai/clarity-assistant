@@ -86,6 +86,8 @@ interface OverlayToolbarProps {
   onEndSession?: () => void;
   onSetupNewSession?: () => void;
   interviewType?: string;
+  /** Slim toolbar for mobile expanded overlay — secondary tools stay in More menu */
+  compactMobile?: boolean;
 }
 
 export function OverlayToolbar({
@@ -97,6 +99,7 @@ export function OverlayToolbar({
   onEndSession,
   onSetupNewSession,
   interviewType = "behavioral",
+  compactMobile = false,
 }: OverlayToolbarProps) {
   const isMuted = useAudioStore((s) => s.is_muted);
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
@@ -227,7 +230,7 @@ export function OverlayToolbar({
       <div className="flex items-center gap-1.5 flex-1 justify-center">
         <PrimaryButton
           icon={Sparkles}
-          label="AI Help"
+          label={compactMobile ? "Hint" : "AI Help"}
           isActive={isGenerating}
           onClick={onGenerate}
           disabled={isGenerating || !onGenerate}
@@ -238,7 +241,7 @@ export function OverlayToolbar({
           }
         />
 
-        {capturePrimary && (
+        {!compactMobile && capturePrimary && (
           <>
             <PrimaryButton
               icon={Monitor}
@@ -276,10 +279,13 @@ export function OverlayToolbar({
       </div>
 
       <div className="flex items-center gap-1 shrink-0">
-        <div className="shrink-0">
-          <OverlayActivityTimer />
-        </div>
+        {!compactMobile && (
+          <div className="shrink-0">
+            <OverlayActivityTimer />
+          </div>
+        )}
 
+        {!compactMobile && (
         <button
           type="button"
           onClick={handlePillToggle}
@@ -303,13 +309,14 @@ export function OverlayToolbar({
             <Minimize2 className="w-3.5 h-3.5" aria-hidden="true" />
           )}
         </button>
+        )}
 
         <div className="relative" ref={moreMenuRef}>
           <button
             type="button"
             onClick={() => setShowMoreMenu((p) => !p)}
-            title="More tools"
-            aria-label="More tools"
+            title="More"
+            aria-label="More"
             aria-expanded={showMoreMenu}
             aria-haspopup="menu"
             className={cn(
@@ -325,6 +332,18 @@ export function OverlayToolbar({
               <p className="px-3 pb-1 text-[10px] text-white/25 uppercase tracking-widest font-semibold">
                 Tools
               </p>
+              {compactMobile && (
+                <MenuRow
+                  icon={Minimize2}
+                  label="Collapse to hints"
+                  active={false}
+                  onClick={() => {
+                    useOverlayStore.getState().setMinimalMode(true);
+                    useOverlayStore.getState().setActiveTab("answer");
+                    setShowMoreMenu(false);
+                  }}
+                />
+              )}
               <MenuRow
                 icon={MessageSquare}
                 label="Chat"
@@ -389,6 +408,34 @@ export function OverlayToolbar({
                   active={false}
                   onClick={() => {
                     runCapture();
+                    setShowMoreMenu(false);
+                  }}
+                />
+              )}
+
+              {compactMobile && capturePrimary && onCaptureCoding && (
+                <MenuRow
+                  icon={Monitor}
+                  label={
+                    captureOffline
+                      ? "Screen capture (offline)"
+                      : `Screen capture (${captureCreditCost} cr)`
+                  }
+                  active={false}
+                  onClick={() => {
+                    runCapture();
+                    setShowMoreMenu(false);
+                  }}
+                />
+              )}
+
+              {compactMobile && hasRecropSource && onAdjustRegion && (
+                <MenuRow
+                  icon={Crop}
+                  label={`Adjust region (${captureCreditCost} cr)`}
+                  active={false}
+                  onClick={() => {
+                    runAdjustRegion();
                     setShowMoreMenu(false);
                   }}
                 />

@@ -17,46 +17,76 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet";
 
-const ADMIN_NAV: { to: string; icon: React.ElementType; label: string }[] = [
-  { to: "/app/admin",               icon: LayoutDashboard, label: "Dashboard"     },
-  { to: "/app/admin/users",         icon: Users,           label: "Users"         },
-  { to: "/app/admin/analytics",     icon: BarChart2,       label: "Analytics"     },
-  { to: "/app/admin/live-chat",     icon: MessageSquare,   label: "Live Chat"     },
-  { to: "/app/admin/support",       icon: LifeBuoy,        label: "Support"       },
-  { to: "/app/admin/audit-log",     icon: ScrollText,      label: "Audit Log"     },
-  { to: "/app/admin/qa-checklist",  icon: ClipboardCheck,  label: "QA Checklist"  },
-  { to: "/app/admin/questions",     icon: FileText,        label: "Questions"     },
-  { to: "/app/admin/bulk-upload",  icon: Upload,          label: "Bulk Upload"   },
-  { to: "/app/admin/seed-questions",icon: Database,        label: "Seed / Import" },
-  { to: "/app/admin/feature-flags", icon: Flag,            label: "Feature Flags" },
-  { to: "/app/admin/revenue",       icon: DollarSign,      label: "Revenue"       },
-  { to: "/app/admin/promo-codes",   icon: Tag,             label: "Offers"        },
-  { to: "/app/admin/billing-settings", icon: Settings2,   label: "Billing"       },
-  { to: "/app/admin/security-config", icon: Shield,        label: "Security Config" },
-  { to: "/app/admin/model-costs",   icon: Cpu,             label: "Model Costs"   },
+type AdminNavItem = { to: string; icon: React.ElementType; label: string };
+type AdminNavSection = { label: string; items: AdminNavItem[] };
+
+const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
+  {
+    label: "Users & Support",
+    items: [
+      { to: "/app/admin/users",     icon: Users,         label: "Users"     },
+      { to: "/app/admin/live-chat", icon: MessageSquare, label: "Live Chat" },
+      { to: "/app/admin/support",   icon: LifeBuoy,      label: "Support"   },
+      { to: "/app/admin/audit-log", icon: ScrollText,    label: "Audit Log" },
+    ],
+  },
+  {
+    label: "Content",
+    items: [
+      { to: "/app/admin/questions",      icon: FileText,       label: "Questions"     },
+      { to: "/app/admin/bulk-upload",    icon: Upload,         label: "Bulk Upload"   },
+      { to: "/app/admin/seed-questions", icon: Database,       label: "Seed / Import" },
+      { to: "/app/admin/qa-checklist",   icon: ClipboardCheck, label: "QA Checklist"  },
+    ],
+  },
+  {
+    label: "Billing",
+    items: [
+      { to: "/app/admin/revenue",          icon: DollarSign, label: "Revenue" },
+      { to: "/app/admin/promo-codes",      icon: Tag,        label: "Offers"  },
+      { to: "/app/admin/billing-settings", icon: Settings2,  label: "Billing" },
+    ],
+  },
+  {
+    label: "System",
+    items: [
+      { to: "/app/admin",                 icon: LayoutDashboard, label: "Dashboard"       },
+      { to: "/app/admin/analytics",       icon: BarChart2,       label: "Analytics"       },
+      { to: "/app/admin/feature-flags",   icon: Flag,            label: "Feature Flags"   },
+      { to: "/app/admin/security-config", icon: Shield,          label: "Security Config" },
+      { to: "/app/admin/model-costs",     icon: Cpu,             label: "Model Costs"     },
+    ],
+  },
 ];
 
 function AdminNavLinks({ onNavigate }: { onNavigate?: () => void }) {
   return (
     <>
-      {ADMIN_NAV.map((item) => (
-        <NavLink
-          key={item.to}
-          to={item.to}
-          end={item.to === "/app/admin"}
-          onClick={onNavigate}
-          className={({ isActive }) =>
-            cn(
-              "flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all duration-150",
-              isActive
-                ? "bg-red-500/10 text-red-400"
-                : "text-muted-foreground hover:text-foreground hover:bg-accent/5",
-            )
-          }
-        >
-          <item.icon className="w-4 h-4 shrink-0" aria-hidden="true" />
-          {item.label}
-        </NavLink>
+      {ADMIN_NAV_SECTIONS.map((section) => (
+        <div key={section.label} className="pt-2 first:pt-0">
+          <p className="mb-1 px-3 text-[10px] font-semibold uppercase tracking-widest text-muted-foreground">
+            {section.label}
+          </p>
+          {section.items.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              end={item.to === "/app/admin"}
+              onClick={onNavigate}
+              className={({ isActive }) =>
+                cn(
+                  "flex items-center gap-2.5 px-3 py-2 rounded-xl text-sm transition-all duration-150",
+                  isActive
+                    ? "bg-red-500/10 text-red-400"
+                    : "text-muted-foreground hover:text-foreground hover:bg-accent/5",
+                )
+              }
+            >
+              <item.icon className="w-4 h-4 shrink-0" aria-hidden="true" />
+              {item.label}
+            </NavLink>
+          ))}
+        </div>
       ))}
     </>
   );
@@ -95,7 +125,7 @@ export default function AdminLayout() {
                 Admin
               </SheetTitle>
             </SheetHeader>
-            <nav className="p-3 space-y-0.5" aria-label="Admin navigation">
+            <nav className="p-3 space-y-3" aria-label="Admin navigation">
               <AdminNavLinks onNavigate={() => setMobileOpen(false)} />
             </nav>
           </SheetContent>
@@ -116,7 +146,7 @@ export default function AdminLayout() {
           <p className="text-[10px] text-muted-foreground mt-0.5">Clarify AI control panel</p>
         </div>
 
-        <nav className="flex-1 p-3 space-y-0.5" aria-label="Admin navigation">
+        <nav className="flex-1 p-3 space-y-3" aria-label="Admin navigation">
           <AdminNavLinks />
         </nav>
 

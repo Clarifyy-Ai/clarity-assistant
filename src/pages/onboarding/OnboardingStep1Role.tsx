@@ -10,22 +10,33 @@ import { useAuthStore } from "@/store/authStore";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import {
+  Code2,
+  Package,
+  BarChart3,
+  Palette,
+  Cog,
+  ClipboardList,
+  Megaphone,
+  Puzzle,
+  type LucideIcon,
+} from "lucide-react";
 import { normalizeRefCode } from "@/lib/referrals";
 import type { StepProps } from "@/types/onboarding.types";
 import type { ProfileRow } from "@/types";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const ROLES = [
-  { value: "software_engineer", label: "Software Engineer", icon: "💻" },
-  { value: "product_manager",   label: "Product Manager",   icon: "📦" },
-  { value: "data_scientist",    label: "Data Scientist",    icon: "📊" },
-  { value: "designer",          label: "Designer",          icon: "🎨" },
-  { value: "devops_engineer",   label: "DevOps / SRE",      icon: "⚙️" },
-  { value: "business_analyst",  label: "Business Analyst",  icon: "📋" },
-  { value: "marketing",         label: "Marketing",         icon: "📣" },
-  { value: "other",             label: "Other",             icon: "🧩" },
-] as const;
+const ROLES: { value: string; label: string; icon: LucideIcon }[] = [
+  { value: "software_engineer", label: "Software Engineer", icon: Code2 },
+  { value: "product_manager",   label: "Product Manager",   icon: Package },
+  { value: "data_scientist",    label: "Data Scientist",    icon: BarChart3 },
+  { value: "designer",          label: "Designer",          icon: Palette },
+  { value: "devops_engineer",   label: "DevOps / SRE",      icon: Cog },
+  { value: "business_analyst",  label: "Business Analyst",  icon: ClipboardList },
+  { value: "marketing",         label: "Marketing",         icon: Megaphone },
+  { value: "other",             label: "Other",             icon: Puzzle },
+];
 
 const DOMAINS = [
   "Technology", "Finance", "Healthcare", "E-commerce",
@@ -126,7 +137,9 @@ export default function OnboardingStep1Role({ onNext }: StepProps) {
           What role are you interviewing for?
         </p>
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-          {ROLES.map((r) => (
+          {ROLES.map((r) => {
+            const Icon = r.icon;
+            return (
             <button
               key={r.value}
               type="button"
@@ -138,10 +151,11 @@ export default function OnboardingStep1Role({ onNext }: StepProps) {
                   : "bg-secondary/50 border-border text-muted-foreground hover:border-primary/30",
               )}
             >
-              <span className="text-xl">{r.icon}</span>
+              <Icon className="h-5 w-5" />
               {r.label}
             </button>
-          ))}
+            );
+          })}
         </div>
         {role === "other" && (
           <Input

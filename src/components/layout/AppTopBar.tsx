@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
-import { useEffect } from "react";
-import { Bell, Zap, AlertTriangle, Shield, ShieldOff, LogOut, Settings, User, Search } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Bell, Zap, AlertTriangle, Shield, ShieldOff, LogOut, Settings, User, Search, X } from "lucide-react";
 import { useAuthStore } from "@/store/userStore";
 import { useNotificationStore } from "@/store/notificationStore";
 import { useUIStore } from "@/store/uiStore";
@@ -17,6 +17,9 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 import { BrandLogo } from "@/components/marketing";
+import { ProductModePill } from "@/components/layout/ProductModePill";
+
+const CMDK_TIP_KEY = "clarify:cmdk-tip-dismissed";
 
 export function AppTopBar() {
   const { profile, signOut, refreshCredits } = useAuthStore();
@@ -25,12 +28,30 @@ export function AppTopBar() {
   const uiStore     = useUIStore();
   useNotifications();
   const stealthMode = uiStore.stealth_mode;
+  const [showCmdTip, setShowCmdTip] = useState(false);
 
   useEffect(() => {
     const onFocus = () => void refreshCredits();
     window.addEventListener("focus", onFocus);
     return () => window.removeEventListener("focus", onFocus);
   }, [refreshCredits]);
+
+  useEffect(() => {
+    try {
+      if (!localStorage.getItem(CMDK_TIP_KEY)) setShowCmdTip(true);
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  function dismissCmdTip() {
+    try {
+      localStorage.setItem(CMDK_TIP_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setShowCmdTip(false);
+  }
 
   const credits = profile?.credits ?? 0;
   const isLow   = credits <= 2;
@@ -65,7 +86,7 @@ export function AppTopBar() {
       className="sticky top-0 z-[200] h-14 w-full flex-shrink-0 bg-background/95 backdrop-blur border-b border-border flex items-center justify-between px-2 sm:px-4"
     >
 
-      <div style={noDragStyle} className="flex items-center gap-1 min-w-0 shrink-0 md:hidden">
+      <div style={noDragStyle} className="flex items-center gap-1.5 min-w-0 shrink-0 md:hidden">
         <Link
           to="/app"
           className="flex items-center gap-1.5 pr-1"
@@ -73,9 +94,12 @@ export function AppTopBar() {
         >
           <BrandLogo size="sm" />
         </Link>
+        <ProductModePill />
       </div>
 
-      <div className="flex items-center gap-2 min-w-0 flex-1" />
+      <div style={noDragStyle} className="hidden md:flex items-center gap-2 min-w-0 flex-1">
+        <ProductModePill />
+      </div>
 
       <div style={noDragStyle} className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
 
@@ -133,16 +157,47 @@ export function AppTopBar() {
           <ThemeToggle />
         </div>
 
-        <button
-          type="button"
-          style={noDragStyle}
-          onClick={() => uiStore.setCommandPaletteOpen(true)}
-          aria-label="Search (Ctrl+K)"
-          title="Search (Ctrl+K)"
-          className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-xl hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-all"
-        >
-          <Search className="w-4 h-4" />
-        </button>
+        <div className="relative" style={noDragStyle}>
+          <button
+            type="button"
+            onClick={() => {
+              dismissCmdTip();
+              uiStore.setCommandPaletteOpen(true);
+            }}
+            aria-label="Search (Ctrl+K)"
+            title="Search (Ctrl+K)"
+            className="w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-xl hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-all"
+          >
+            <Search className="w-4 h-4" />
+          </button>
+          {showCmdTip && (
+            <div
+              role="status"
+              className="absolute right-0 top-full mt-2 z-50 w-56 rounded-xl border border-border bg-popover p-3 shadow-lg text-xs text-foreground"
+            >
+              <div className="flex items-start gap-2">
+                <p className="flex-1 leading-relaxed">
+                  Press{" "}
+                  <kbd className="px-1.5 py-0.5 rounded bg-secondary border border-border font-mono text-[10px]">
+                    {typeof navigator !== "undefined" && /Mac|iPhone|iPad/.test(navigator.platform)
+                      ? "⌘"
+                      : "Ctrl"}
+                    +K
+                  </kbd>{" "}
+                  to jump anywhere fast.
+                </p>
+                <button
+                  type="button"
+                  onClick={dismissCmdTip}
+                  className="shrink-0 p-0.5 rounded hover:bg-secondary text-muted-foreground"
+                  aria-label="Dismiss tip"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
 
         <Link
           to="/app/notifications"

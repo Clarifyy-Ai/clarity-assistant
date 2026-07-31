@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { m, AnimatePresence } from "framer-motion";
 import { Mic, Brain, Monitor, Zap, ArrowRight } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
 const STEPS = [
   {
@@ -175,10 +176,10 @@ export function PracticeCoachWalkthrough() {
           viewport={{ once: true }}
         >
           <p className="text-xs font-semibold uppercase tracking-widest text-primary mb-2">
-            Live Practice Coach
+            {PRODUCT_NAMES.practiceCoach}
           </p>
           <h2 className="text-2xl sm:text-3xl font-bold">
-            How the live copilot works
+            How {PRODUCT_NAMES.practiceCoach} works
           </h2>
           <p className="mt-3 text-sm text-muted-foreground max-w-xl mx-auto">
             Three steps from question to coached answer — powered by multi-model AI routing

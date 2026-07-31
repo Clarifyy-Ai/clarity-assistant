@@ -1,6 +1,6 @@
 // src/pages/app/mock/MockSession.tsx
 import { useState, useEffect, useRef, useCallback } from "react";
-import { useNavigate, useLocation } from "react-router-dom";
+import { useNavigate, useLocation, useParams } from "react-router-dom";
 import { useSessionOrchestrator } from "@/hooks/useSessionOrchestrator";
 import { useAudioSession } from "@/hooks/useAudioSession";
 import { useFillerWordDetection } from "@/hooks/useFillerWordDetection";
@@ -38,6 +38,8 @@ import { Skeleton } from "@/components/ui/SkeletonLoader";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { PANIC_RESPONSE } from "@/types/session.types";
 import type { LiveSessionConfig, SessionQuestion } from "@/types/session.types";
+import type { PreferredAIModel } from "@/types/user.types";
+import type { Tables } from "@/integrations/supabase";
 import {
   Mic,
   MicOff,
@@ -99,11 +101,54 @@ function formatDuration(seconds: number): string {
   return `${mins}:${String(secs).padStart(2, "0")}`;
 }
 
+function parseMockCompanyFromTitle(title: string | null): string | null {
+  if (!title) return null;
+  const prefix = "Mock — ";
+  if (title.startsWith(prefix)) return title.slice(prefix.length);
+  return null;
+}
+
+function buildConfigFromSessionRow(
+  session: Tables<"sessions">,
+  profile: { target_role?: string | null } | null,
+): LiveSessionConfig {
+  const questionCount = session.questions_asked ?? 5;
+  const interviewType = "behavioural";
+  const model = (session.model_used as PreferredAIModel | null) ?? "gemini-2.0-flash";
+
+  return {
+    company: parseMockCompanyFromTitle(session.title),
+    role: profile?.target_role ?? null,
+    hint_style: "concise",
+    model,
+    smart_routing: true,
+    stealth_mode: false,
+    resume_id: session.document_id ?? null,
+    jd_id: session.jd_id ?? null,
+    interview_type: interviewType,
+    instructions: "",
+    enable_system_audio: true,
+    type: interviewType,
+    count: questionCount,
+    question_count: questionCount,
+  } as LiveSessionConfig;
+}
+
+function sessionDurationSeconds(session: Tables<"sessions">): number {
+  if (session.started_at && session.ended_at) {
+    const ms =
+      new Date(session.ended_at).getTime() - new Date(session.started_at).getTime();
+    return Math.max(1, Math.round(ms / 1000));
+  }
+  return 0;
+}
+
 /* ─── COMPONENT ─────────────────────────────────────────────────────────── */
 
 export default function MockSession() {
   const navigate = useNavigate();
   const location = useLocation();
+  const { sessionId: sessionIdParam } = useParams<{ sessionId?: string }>();
   const profile = useAuthStore((s) => s.profile);
   const planId = profile?.plan_id ?? "free";
   const { checkPostSessionAchievements } = useGamification();
@@ -451,6 +496,10 @@ export default function MockSession() {
         await activateSession(session.id);
       }
 
+      if (dbSessionId) {
+        navigate(`/app/mock/session/${dbSessionId}`, { replace: true, state: location.state });
+      }
+
       const mockConfig = config as MockConfig;
       const { interviewType, questionCount } = resolveMockConfigFields(mockConfig);
 
@@ -514,15 +563,61 @@ export default function MockSession() {
       sessionId?: string;
     } | null;
     const configFromRoute = routeState?.config;
-    const sessionIdFromRoute = routeState?.sessionId;
+    const sessionIdFromRoute = sessionIdParam ?? routeState?.sessionId;
 
-    if (!configFromRoute || autoStartedRef.current || phase !== "idle") return;
+    if (autoStartedRef.current || phase !== "idle") return;
     if (!profile?.id) return;
 
+    if (!configFromRoute && !sessionIdFromRoute) return;
+
     autoStartedRef.current = true;
-    void handleSetup(configFromRoute, sessionIdFromRoute);
+
+    if (configFromRoute) {
+      void handleSetup(configFromRoute, sessionIdFromRoute);
+      return;
+    }
+
+    void (async () => {
+      try {
+        const session = await sessionsDB.getByIdForUser(sessionIdFromRoute!, profile.id);
+        if (!session) {
+          toast.error("Session not found");
+          autoStartedRef.current = false;
+          navigate("/app/mock");
+          return;
+        }
+        if (session.type !== "mock") {
+          toast.error("This link is not a mock session");
+          autoStartedRef.current = false;
+          navigate("/app/mock");
+          return;
+        }
+        if (session.status === "completed") {
+          setSummaryStats({
+            questionsAnswered: session.answers_generated ?? 0,
+            timeTakenSeconds: sessionDurationSeconds(session),
+            creditsUsed: session.credits_used ?? 0,
+            sessionId: session.id,
+          });
+          setPhase("completed");
+          return;
+        }
+        if (session.status === "abandoned") {
+          toast.message("Previous session was abandoned — configure a new mock session.");
+          autoStartedRef.current = false;
+          return;
+        }
+        const config = buildConfigFromSessionRow(session, profile);
+        await handleSetup(config, session.id);
+      } catch (err) {
+        console.error("[MockSession] failed to restore session:", err);
+        toast.error(err instanceof Error ? err.message : "Failed to restore session");
+        autoStartedRef.current = false;
+        navigate("/app/mock");
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.state, phase, profile?.id]);
+  }, [location.state, phase, profile?.id, sessionIdParam]);
 
   async function finalizeSession(skipCapture = false) {
     if (endCalledRef.current) return;
@@ -1145,6 +1240,7 @@ export default function MockSession() {
       <OverlayWindow
         onToggleMic={audio.toggleMute}
         onToggleSystemAudio={audio.toggleSystemAudio}
+        onReconnectAudio={() => void audio.reconnect()}
         onGenerate={() => handleRequestHint()}
         onEndSession={handleEndSession}
         onManualQuestion={(q: string) => {

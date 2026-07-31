@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { BrandLogo } from "@/components/marketing";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Sparkles, TrendingUp, Users } from "lucide-react";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
 type AuthShellProps = {
   children: ReactNode;
@@ -46,7 +47,7 @@ export function AuthShell({
           <ul className="space-y-3 text-sm text-white/90">
             <li className="flex items-center gap-2">
               <Sparkles className="w-4 h-4 shrink-0" aria-hidden />
-              Live Practice Coach Overlay
+              {PRODUCT_NAMES.practiceCoach}
             </li>
             <li className="flex items-center gap-2">
               <TrendingUp className="w-4 h-4 shrink-0" aria-hidden />

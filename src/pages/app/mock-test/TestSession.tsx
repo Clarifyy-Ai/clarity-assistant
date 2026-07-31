@@ -95,6 +95,21 @@ const STATE_COLORS: Record<QuestionState, string> = {
     "bg-red-500/10 text-red-600 border-red-500/40 dark:text-red-400",
 };
 
+/** Non-color status labels for palette + screen readers */
+const STATE_STATUS: Record<
+  QuestionState,
+  { label: string; short: string }
+> = {
+  unattempted: { label: "Not visited", short: "NV" },
+  visited: { label: "Visited, not answered", short: "V" },
+  answered: { label: "Answered", short: "A" },
+  marked: { label: "Marked for review", short: "M" },
+  "answered-marked": { label: "Answered and marked for review", short: "AM" },
+};
+
+const TIMER_WARN_SECONDS = 300;
+const TIMER_CRITICAL_SECONDS = 60;
+
 function formatTime(seconds: number): string {
   const safe = Math.max(0, seconds);
   const mins = Math.floor(safe / 60);
@@ -296,8 +311,10 @@ export default function TestSession() {
   const [paused, setPaused] = useState(false);
   const [pausedAt, setPausedAt] = useState<number | null>(null);
   const [startingTest, setStartingTest] = useState(false);
+  const [timerWarningAnnouncement, setTimerWarningAnnouncement] = useState("");
 
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastTimerWarnRef = useRef<number | null>(null);
   const autoSaveRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const responsesRef = useRef<Record<string, ResponseState>>({});
   const questionsRef = useRef<Question[]>([]);
@@ -361,6 +378,21 @@ export default function TestSession() {
       mountedRef.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!hasTimer) return;
+    let message = "";
+    if (timeLeft === TIMER_WARN_SECONDS) {
+      message = "Warning: 5 minutes remaining";
+    } else if (timeLeft === TIMER_CRITICAL_SECONDS) {
+      message = "Warning: 1 minute remaining";
+    } else if (timeLeft === 0 && lastTimerWarnRef.current !== 0) {
+      message = "Time is up";
+    }
+    if (!message || lastTimerWarnRef.current === timeLeft) return;
+    lastTimerWarnRef.current = timeLeft;
+    setTimerWarningAnnouncement(message);
+  }, [hasTimer, timeLeft]);
 
   useEffect(() => {
     if (!testId || !user?.id) return;
@@ -905,33 +937,49 @@ export default function TestSession() {
     currentResponse?.state === "marked" ||
     currentResponse?.state === "answered-marked";
 
-  const timerTextClass =
-    hasTimer && timeLeft <= 300
-      ? "text-red-500 animate-pulse font-black"
-      : "text-foreground font-bold";
+  const timerIsWarning = hasTimer && timeLeft <= TIMER_WARN_SECONDS;
+  const timerTextClass = timerIsWarning
+    ? "text-red-500 animate-pulse font-black"
+    : "text-foreground font-bold";
 
   function NavigatorGrid() {
     return (
-      <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 md:grid-cols-4 lg:grid-cols-5">
+      <div
+        className="grid grid-cols-4 gap-2 sm:grid-cols-5 md:grid-cols-4 lg:grid-cols-5"
+        role="list"
+        aria-label="Question palette"
+      >
         {questions.map((question, index) => {
           const response = responses[question.id] ?? {
             answer: "",
             state: "unattempted" as QuestionState,
           };
+          const status = STATE_STATUS[response.state];
+          const isCurrent = index === currentIndex;
 
           return (
             <button
               key={question.id}
               type="button"
+              role="listitem"
               onClick={() => navigateTo(index)}
+              title={`Question ${index + 1}: ${status.label}`}
+              aria-label={`Question ${index + 1}, ${status.label}${isCurrent ? ", current" : ""}`}
+              aria-current={isCurrent ? "true" : undefined}
               className={cn(
-                "flex h-9 w-9 items-center justify-center rounded-md border text-xs font-bold transition-all",
+                "relative flex h-9 w-9 flex-col items-center justify-center rounded-md border text-xs font-bold transition-all",
                 STATE_COLORS[response.state],
-                index === currentIndex &&
+                isCurrent &&
                   "ring-2 ring-primary ring-offset-1 ring-offset-background scale-105"
               )}
             >
-              {index + 1}
+              <span aria-hidden="true">{index + 1}</span>
+              <span
+                className="pointer-events-none absolute bottom-0.5 right-0.5 text-[8px] font-black leading-none opacity-80"
+                aria-hidden="true"
+              >
+                {status.short}
+              </span>
             </button>
           );
         })}
@@ -941,6 +989,14 @@ export default function TestSession() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-background font-sans">
+      <div
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        aria-atomic="true"
+      >
+        {timerWarningAnnouncement}
+      </div>
       <div className="flex shrink-0 items-center justify-between border-b border-border bg-card px-4 py-3 md:hidden">
         <div className="flex items-center gap-3">
           <Sheet>
@@ -965,13 +1021,24 @@ export default function TestSession() {
         <div className="flex items-center gap-2">
           {hasTimer ? (
             <div
+              role="timer"
+              aria-label={
+                timerIsWarning
+                  ? `Time remaining warning: ${formatTime(timeLeft)}`
+                  : `Time remaining: ${formatTime(timeLeft)}`
+              }
               className={cn(
                 "flex items-center gap-1.5 rounded-md border bg-muted/30 px-2.5 py-1 font-mono text-base",
                 timerTextClass
               )}
             >
-              <Clock className="h-4 w-4" />
-              {formatTime(timeLeft)}
+              <Clock className="h-4 w-4" aria-hidden />
+              <span aria-hidden="true">{formatTime(timeLeft)}</span>
+              {timerIsWarning && (
+                <span className="ml-1 text-[10px] font-bold uppercase tracking-wide">
+                  Low
+                </span>
+              )}
             </div>
           ) : (
             <div className="rounded-md border bg-muted/30 px-2.5 py-1 text-xs font-semibold text-muted-foreground">
@@ -984,8 +1051,9 @@ export default function TestSession() {
             size="sm"
             className="h-8 w-8"
             onClick={() => setShowSubmitModal(true)}
+            aria-label="Submit test"
           >
-            <Send className="h-4 w-4" />
+            <Send className="h-4 w-4" aria-hidden />
           </Button>
         </div>
       </div>
@@ -1027,27 +1095,40 @@ export default function TestSession() {
             {[
               {
                 label: "Not visited",
+                short: "NV",
                 color: "bg-card border-border",
               },
               {
                 label: "Visited, no ans",
+                short: "V",
                 color: "bg-yellow-500/10 border-yellow-500/40",
               },
               {
                 label: "Answered",
+                short: "A",
                 color: "bg-green-500/10 border-green-500/40",
               },
               {
                 label: "For review",
+                short: "M",
                 color: "bg-purple-500/10 border-purple-500/40",
               },
               {
                 label: "Ans + review",
+                short: "AM",
                 color: "bg-red-500/10 border-red-500/40",
               },
             ].map((item) => (
               <div key={item.label} className="flex items-center gap-2">
-                <div className={cn("h-3.5 w-3.5 rounded border shrink-0", item.color)} />
+                <div
+                  className={cn(
+                    "flex h-3.5 w-3.5 items-center justify-center rounded border shrink-0 text-[7px] font-black",
+                    item.color
+                  )}
+                  aria-hidden
+                >
+                  {item.short}
+                </div>
                 <span className="text-[10px] font-medium text-muted-foreground">
                   {item.label}
                 </span>
@@ -1235,8 +1316,21 @@ export default function TestSession() {
             </p>
 
             {hasTimer ? (
-              <div className={cn("font-mono text-3xl font-black tracking-tight", timerTextClass)}>
-                {formatTime(timeLeft)}
+              <div
+                role="timer"
+                aria-label={
+                  timerIsWarning
+                    ? `Time remaining warning: ${formatTime(timeLeft)}`
+                    : `Time remaining: ${formatTime(timeLeft)}`
+                }
+                className={cn("font-mono text-3xl font-black tracking-tight", timerTextClass)}
+              >
+                <span aria-hidden="true">{formatTime(timeLeft)}</span>
+                {timerIsWarning && (
+                  <p className="mt-1 text-xs font-semibold normal-case tracking-normal text-red-500">
+                    Under 5 minutes
+                  </p>
+                )}
               </div>
             ) : (
               <div className="text-lg font-bold text-muted-foreground">No limit</div>

@@ -39,10 +39,17 @@ export default function LiveRehearsal() {
   );
   const overlayVisible = useOverlayStore((s) => s.is_visible);
   const hasActiveOverlaySession = sessionActive || overlayVisible;
+  const shouldRedirectToOverlay = hasActiveOverlaySession && !endedSessionId;
 
   useEffect(() => {
     setDefaultOverlay(getDefaultOverlayEnabled());
   }, []);
+
+  useEffect(() => {
+    if (shouldRedirectToOverlay) {
+      navigate("/app/live/overlay", { replace: true });
+    }
+  }, [shouldRedirectToOverlay, navigate]);
 
   useEffect(() => {
     notifyOverlayVisibilityOnMobile();
@@ -67,23 +74,10 @@ export default function LiveRehearsal() {
     );
   }
 
-  if (hasActiveOverlaySession) {
+  if (shouldRedirectToOverlay) {
     return (
       <div className="flex items-center justify-center min-h-[60vh] px-4">
-        <div className="text-center space-y-4 max-w-md">
-          <p className="text-lg font-semibold text-foreground">Session in progress</p>
-          <p className="text-sm text-muted-foreground">
-            You already have an active Practice Coach session. Return to the overlay to continue
-            or end it before starting a new setup.
-          </p>
-          <Link
-            to="/app/live/overlay"
-            className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
-          >
-            Open active session
-            <ExternalLink className="w-3.5 h-3.5" aria-hidden />
-          </Link>
-        </div>
+        <p className="text-sm text-muted-foreground">Returning to active session…</p>
       </div>
     );
   }

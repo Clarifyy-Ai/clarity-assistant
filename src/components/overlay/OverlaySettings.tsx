@@ -13,6 +13,7 @@ import {
   RefreshCw,
   LayoutTemplate,
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 interface OverlaySettingsProps {
@@ -210,10 +211,10 @@ export function OverlaySettings({
           label="Simple Language"
           description="Plain, jargon-free AI responses"
         >
-          <Toggle
+          <Switch
             checked={currentSettings.simpleLanguage}
-            onChange={(v) => handleStoreSettingChange("simpleLanguage", v)}
-            ariaLabel="Toggle simple language"
+            onCheckedChange={(v) => handleStoreSettingChange("simpleLanguage", v)}
+            aria-label="Toggle simple language"
           />
         </SettingRow>
 
@@ -221,10 +222,10 @@ export function OverlaySettings({
           label="Auto-Generate"
           description="Automatically generate on question detection"
         >
-          <Toggle
+          <Switch
             checked={currentSettings.autoGenerate}
-            onChange={(v) => handleStoreSettingChange("autoGenerate", v)}
-            ariaLabel="Toggle auto-generate"
+            onCheckedChange={(v) => handleStoreSettingChange("autoGenerate", v)}
+            aria-label="Toggle auto-generate"
           />
         </SettingRow>
 
@@ -263,10 +264,10 @@ export function OverlaySettings({
           label="Minimal Mode"
           description="Compact pill view — toolbar collapses; expand to restore full panel"
         >
-          <Toggle
+          <Switch
             checked={currentSettings.minimalMode}
-            onChange={(v) => handleStoreSettingChange("minimalMode", v)}
-            ariaLabel="Toggle minimal mode"
+            onCheckedChange={(v) => handleStoreSettingChange("minimalMode", v)}
+            aria-label="Toggle minimal mode"
           />
         </SettingRow>
 
@@ -274,16 +275,16 @@ export function OverlaySettings({
           label="Picture-in-Picture"
           description="Float assistant in a separate always-on-top window (Chrome 116+)"
         >
-          <Toggle
+          <Switch
             checked={pipOptIn}
-            onChange={(v) => {
+            onCheckedChange={(v) => {
               if (v && !pipOptIn) {
                 setPipConsentOpen(true);
                 return;
               }
               useOverlayStore.getState().setPipOptIn(false);
             }}
-            ariaLabel="Toggle picture-in-picture"
+            aria-label="Toggle picture-in-picture"
           />
         </SettingRow>
 
@@ -300,11 +301,10 @@ export function OverlaySettings({
             )
           }
         >
-          <Toggle
+          <Switch
             checked={currentSettings.stealthMode}
-            onChange={(v) => handleStoreSettingChange("stealthMode", v)}
-            color="bg-primary"
-            ariaLabel="Toggle discrete UI mode"
+            onCheckedChange={(v) => handleStoreSettingChange("stealthMode", v)}
+            aria-label="Toggle discrete UI mode"
           />
         </SettingRow>
 
@@ -313,11 +313,10 @@ export function OverlaySettings({
           description="Snap overlay to a screen corner (layout only, not concealment)"
           icon={<Shield className="h-3.5 w-3.5 text-emerald-400" aria-hidden="true" />}
         >
-          <Toggle
+          <Switch
             checked={currentSettings.proctorSafe}
-            onChange={(v) => handleStoreSettingChange("proctorSafe", v)}
-            color="bg-emerald-500"
-            ariaLabel="Toggle proctor safe position"
+            onCheckedChange={(v) => handleStoreSettingChange("proctorSafe", v)}
+            aria-label="Toggle proctor safe position"
           />
         </SettingRow>
 
@@ -424,10 +423,10 @@ export function OverlaySettings({
           label="Auto-Hide on Tab Blur"
           description="Hide when switching tabs"
         >
-          <Toggle
+          <Switch
             checked={currentSettings.autoHide}
-            onChange={(v) => handleLocalSettingChange("autoHide", v)}
-            ariaLabel="Toggle auto-hide on tab blur"
+            onCheckedChange={(v) => handleLocalSettingChange("autoHide", v)}
+            aria-label="Toggle auto-hide on tab blur"
           />
         </SettingRow>
 
@@ -435,10 +434,10 @@ export function OverlaySettings({
           label="Screen Capture Detection"
           description="Detect when screen is being recorded"
         >
-          <Toggle
+          <Switch
             checked={currentSettings.screenCaptureDetection}
-            onChange={(v) => handleLocalSettingChange("screenCaptureDetection", v)}
-            ariaLabel="Toggle screen capture detection"
+            onCheckedChange={(v) => handleLocalSettingChange("screenCaptureDetection", v)}
+            aria-label="Toggle screen capture detection"
           />
         </SettingRow>
 
@@ -446,10 +445,10 @@ export function OverlaySettings({
           label="Track Window Visibility"
           description="Monitor for unfocused window or tab"
         >
-          <Toggle
+          <Switch
             checked={currentSettings.windowVisibilityTracking}
-            onChange={(v) => handleLocalSettingChange("windowVisibilityTracking", v)}
-            ariaLabel="Toggle window visibility tracking"
+            onCheckedChange={(v) => handleLocalSettingChange("windowVisibilityTracking", v)}
+            aria-label="Toggle window visibility tracking"
           />
         </SettingRow>
 
@@ -548,42 +547,6 @@ function SettingRow({
       </div>
       <div className="shrink-0">{children}</div>
     </div>
-  );
-}
-
-function Toggle({
-  checked,
-  onChange,
-  color = "bg-indigo-500",
-  ariaLabel,
-}: {
-  checked: boolean;
-  onChange: (v: boolean) => void;
-  color?: string;
-  ariaLabel: string;
-}) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      aria-label={ariaLabel}
-      onClick={() => onChange(!checked)}
-      className={cn(
-        "relative inline-flex h-5 w-9 items-center rounded-full transition-all border",
-        checked
-          ? `${color} border-white/10 shadow-sm`
-          : "bg-white/8 border-white/10"
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className={cn(
-          "inline-block h-3.5 w-3.5 rounded-full bg-white shadow-sm transition-transform",
-          checked ? "translate-x-[18px]" : "translate-x-0.5"
-        )}
-      />
-    </button>
   );
 }
 

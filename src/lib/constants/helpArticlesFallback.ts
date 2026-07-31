@@ -29,7 +29,7 @@ export const HELP_ARTICLES_FALLBACK: HelpArticleItem[] = [
 
 The platform combines three core capabilities:
 
-1. **Live Practice Coach** — Real-time AI suggestions during rehearsal sessions, shown in an on-screen prep overlay
+1. **Practice Coach** — Real-time AI suggestions during rehearsal sessions, shown in an on-screen prep overlay
 2. **Mock Interview** — Full simulation interviews with AI scoring, filler-word tracking, and detailed performance analytics
 3. **Prep Lab** — Tools including STAR builder, answer rephraser, gap analysis, company research, and coding hints
 

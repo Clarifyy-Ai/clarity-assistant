@@ -31,6 +31,8 @@ import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/button";
 import { SessionContextChip } from "@/components/session/SessionContextChip";
+import { AudioOkBadge } from "@/components/session/AudioOkBadge";
+import { markPracticeStart } from "@/lib/analytics/uxMetrics";
 
 interface PreSessionSetupWizardProps {
   onStart: (config: LiveSessionConfig) => void;
@@ -145,8 +147,18 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     !!navigator.mediaDevices &&
     "getDisplayMedia" in navigator.mediaDevices;
 
-  useEffect(() => { setResumeId(activeResumeId); }, [activeResumeId]);
-  useEffect(() => { setJdId(activeJdId); }, [activeJdId]);
+  useEffect(() => {
+    if (!showWizard) setResumeId(activeResumeId);
+  }, [activeResumeId, showWizard]);
+  useEffect(() => {
+    if (!showWizard) setJdId(activeJdId);
+  }, [activeJdId, showWizard]);
+
+  useEffect(() => {
+    if (showWizard && lastSetup) {
+      applyLastSetup(lastSetup);
+    }
+  }, [showWizard, lastSetup]);
 
   const activeSteps = isMobile ? MOBILE_STEPS : STEPS;
   const totalSteps = activeSteps.length;
@@ -166,6 +178,31 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     setInterviewType("behavioral");
     setEnableSystemAudio(systemAudioSupported);
     setStealthMode(false);
+  }
+
+  function applyLastSetup(setup: LiveSessionConfig) {
+    setSessionCallType(setup.session_call_type ?? "interview");
+    setCompany(setup.company ?? "");
+    setRole(setup.role ?? "");
+    setInterviewType(setup.interview_type ?? "behavioral");
+    setLanguage(setup.language ?? "English");
+    setSimpleLanguage(setup.simple_language ?? false);
+    setInstructions(setup.instructions ?? "");
+    setModel(setup.model ?? typedProfile?.preferred_model ?? "gemini-flash");
+    setSmartRouting(setup.smart_routing ?? false);
+    setHintStyle(setup.hint_style ?? typedProfile?.hint_style ?? "short_hints");
+    setResumeId(setup.resume_id ?? activeResumeId);
+    setJdId(setup.jd_id ?? activeJdId);
+    const primaryIds = new Set(
+      [setup.resume_id, setup.jd_id].filter((id): id is string => Boolean(id)),
+    );
+    const ctxIds = setup.context_document_ids ?? [];
+    setExtraDocIds(ctxIds.filter((id) => !primaryIds.has(id)));
+    setSaveTranscript(setup.save_transcript ?? true);
+    const duration = setup.duration_minutes ?? (freePlan ? 5 : 30);
+    setDurationMinutes(Math.min(duration, maxDuration));
+    setEnableSystemAudio(setup.enable_system_audio ?? systemAudioSupported);
+    setStealthMode(setup.stealth_mode ?? false);
   }
 
   function handleUseDefaults() {
@@ -263,6 +300,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     overlay.setSessionLanguage(language);
     setAppStealthMode(stealthMode);
 
+    markPracticeStart({ source: "wizard" });
     onStart(config);
   }
 
@@ -336,6 +374,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
               answer+hint · Session debrief {AI_CREDIT_COSTS.session_debrief} credits
             </p>
           </div>
+          <AudioOkBadge />
           <div
             role="note"
             className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
@@ -348,13 +387,19 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             className="w-full"
             size="lg"
             leftIcon={<Play className="w-4 h-4" />}
-            onClick={() => onStart(lastSetup)}
+            onClick={() => {
+              markPracticeStart({ source: "same_setup" });
+              onStart(lastSetup);
+            }}
           >
             Start Practice (same setup)
           </Button>
           <button
             type="button"
-            onClick={() => setShowWizard(true)}
+            onClick={() => {
+              applyLastSetup(lastSetup);
+              setShowWizard(true);
+            }}
             className="w-full text-sm text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
           >
             Change setup
@@ -1068,6 +1113,8 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
               Use defaults — skip to microphone
             </button>
           )}
+        {isLastStep && <AudioOkBadge />}
+
         <div className="flex gap-3">
           {step > 1 && (
             <button

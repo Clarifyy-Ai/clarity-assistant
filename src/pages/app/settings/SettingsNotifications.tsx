@@ -9,33 +9,21 @@ import { CheckCircle, Bell, Mail, Send } from "lucide-react";
 import { toast } from "sonner";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 
-type DigestFrequency = "daily" | "weekly" | "off";
-
 type NotificationPrefs = {
   session_complete?: boolean;
   credit_low?: boolean;
   product_updates?: boolean;
-  practice_reminders?: boolean;
   debrief_ready?: boolean;
-  digest_frequency?: DigestFrequency;
 };
 
 const CATEGORY_ITEMS: Array<{
   key: keyof NotificationPrefs;
   label: string;
-  channel: "email" | "push";
 }> = [
-  { key: "session_complete", label: "Session completed summaries", channel: "email" },
-  { key: "debrief_ready", label: "Debrief ready notifications", channel: "email" },
-  { key: "credit_low", label: "Low credit warnings", channel: "email" },
-  { key: "practice_reminders", label: "Practice reminders", channel: "push" },
-  { key: "product_updates", label: "Product updates", channel: "email" },
-];
-
-const DIGEST_OPTIONS: { value: DigestFrequency; label: string }[] = [
-  { value: "daily", label: "Daily" },
-  { value: "weekly", label: "Weekly" },
-  { value: "off", label: "Off" },
+  { key: "session_complete", label: "Session completed summaries" },
+  { key: "debrief_ready", label: "Debrief ready notifications" },
+  { key: "credit_low", label: "Low credit warnings" },
+  { key: "product_updates", label: "Product updates" },
 ];
 
 function readPrefs(profile: unknown): NotificationPrefs {
@@ -44,9 +32,7 @@ function readPrefs(profile: unknown): NotificationPrefs {
     session_complete: raw?.session_complete ?? true,
     credit_low: raw?.credit_low ?? true,
     product_updates: raw?.product_updates ?? false,
-    practice_reminders: raw?.practice_reminders ?? true,
     debrief_ready: raw?.debrief_ready ?? true,
-    digest_frequency: raw?.digest_frequency ?? "weekly",
   };
 }
 
@@ -70,10 +56,6 @@ export default function SettingsNotifications() {
     setPrefs((p) => ({ ...p, [key]: !p[key] }));
   }
 
-  function setDigest(value: DigestFrequency) {
-    setPrefs((p) => ({ ...p, digest_frequency: value }));
-  }
-
   function unsubscribeAll() {
     setEmailNotifications(false);
     setSessionReminders(false);
@@ -82,9 +64,7 @@ export default function SettingsNotifications() {
       session_complete: false,
       credit_low: false,
       product_updates: false,
-      practice_reminders: false,
       debrief_ready: false,
-      digest_frequency: "off",
     });
     toast.message("All notifications turned off — save to apply.");
   }
@@ -128,8 +108,7 @@ export default function SettingsNotifications() {
           <span className="font-medium text-foreground">Email enforcement: </span>
           Category toggles and the master email switch are checked by the{" "}
           <code className="text-[11px]">send-email</code> edge function before Resend sends.
-          Push reminders and email digests are <span className="font-medium text-foreground">Coming soon</span>{" "}
-          — preferences below are stored for future schedulers.
+          Push reminders and email digests are <span className="font-medium text-foreground">coming soon</span>.
         </p>
       </Card>
 
@@ -156,7 +135,7 @@ export default function SettingsNotifications() {
       <Card>
         <h3 className="text-sm font-semibold text-foreground mb-3">Categories</h3>
         <div className="space-y-4">
-          {CATEGORY_ITEMS.filter((item) => item.channel !== "push").map((item) => (
+          {CATEGORY_ITEMS.map((item) => (
             <div key={item.key} className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Mail className="w-3 h-3 text-muted-foreground" />
@@ -170,34 +149,18 @@ export default function SettingsNotifications() {
             </div>
           ))}
         </div>
-        <p className="text-[10px] text-muted-foreground mt-4 leading-relaxed">
-          Push preferences — Coming soon (no push server yet). In-app toasts and browser notifications (when permitted) are the only real-time alerts; email covers the categories above.
-        </p>
       </Card>
 
       <Card>
-        <div className="flex items-center gap-2 mb-3">
-          <h3 className="text-sm font-semibold text-foreground">Email digest</h3>
+        <div className="flex items-center gap-2 mb-2">
+          <h3 className="text-sm font-semibold text-foreground">Push &amp; digest</h3>
           <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-muted text-muted-foreground">
             Coming soon
           </span>
         </div>
-        <div className="flex flex-wrap gap-2">
-          {DIGEST_OPTIONS.map((opt) => (
-            <button
-              key={opt.value}
-              type="button"
-              onClick={() => setDigest(opt.value)}
-              className={`px-3 py-1.5 rounded-xl border text-xs font-medium transition-all ${
-                prefs.digest_frequency === opt.value
-                  ? "bg-primary/10 border-primary/30 text-primary"
-                  : "bg-secondary border-border text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+        <p className="text-xs text-muted-foreground leading-relaxed">
+          Push reminders and scheduled email digests are not available yet. In-app toasts and browser notifications (when permitted) are the only real-time alerts; email covers the categories above.
+        </p>
       </Card>
 
       <div className="flex flex-wrap gap-2">

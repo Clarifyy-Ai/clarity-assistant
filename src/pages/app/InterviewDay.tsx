@@ -63,14 +63,15 @@ export default function InterviewDay() {
   }, []);
 
   const [checklist, setChecklist] = useState<Record<string, boolean>>({});
+  const [selectedTodayId, setSelectedTodayId] = useState<string | null>(null);
   const [affIdx,    setAffIdx]    = useState(0);
   const [timeLeft,  setTimeLeft]  = useState("");
   const [breathing, setBreathing] = useState(false);
   const [breathPhase, setBreathPhase] = useState<"in" | "hold" | "out">("in");
   const [breathCount, setBreathCount] = useState(0);
 
-  // Today's interview
-  const todayIv = store.interviews.find((iv) => {
+  // All interviews scheduled for today
+  const todayInterviews = store.interviews.filter((iv) => {
     const d = new Date(getCurrentRoundDate(iv));
     const now = new Date();
     return (
@@ -79,9 +80,75 @@ export default function InterviewDay() {
       d.getDate()     === now.getDate()     &&
       getCurrentRoundStatus(iv) === "scheduled"
     );
-  });
+  }).sort(
+    (a, b) =>
+      new Date(getCurrentRoundDate(a)).getTime() -
+      new Date(getCurrentRoundDate(b)).getTime(),
+  );
+
+  useEffect(() => {
+    const list = store.interviews
+      .filter((iv) => {
+        const d = new Date(getCurrentRoundDate(iv));
+        const now = new Date();
+        return (
+          d.getFullYear() === now.getFullYear() &&
+          d.getMonth() === now.getMonth() &&
+          d.getDate() === now.getDate() &&
+          getCurrentRoundStatus(iv) === "scheduled"
+        );
+      })
+      .sort(
+        (a, b) =>
+          new Date(getCurrentRoundDate(a)).getTime() -
+          new Date(getCurrentRoundDate(b)).getTime(),
+      );
+    if (list.length === 0) {
+      setSelectedTodayId(null);
+      return;
+    }
+    setSelectedTodayId((prev) =>
+      prev && list.some((iv) => iv.id === prev) ? prev : list[0].id,
+    );
+  }, [store.interviews]);
+
+  const todayIv =
+    todayInterviews.find((iv) => iv.id === selectedTodayId) ??
+    todayInterviews[0] ??
+    null;
   const todayRound = todayIv ? getCurrentRound(todayIv) : null;
   const todayScheduledAt = todayIv ? getCurrentRoundDate(todayIv) : null;
+
+  // Persist checklist per interview id
+  useEffect(() => {
+    if (!todayIv?.id) {
+      setChecklist({});
+      return;
+    }
+    const key = `clarify:interview-day-checklist:${todayIv.id}`;
+    try {
+      const raw = localStorage.getItem(key);
+      setChecklist(raw ? (JSON.parse(raw) as Record<string, boolean>) : {});
+    } catch {
+      setChecklist({});
+    }
+  }, [todayIv?.id]);
+
+  function toggleChecklistItem(id: string) {
+    if (!todayIv?.id) return;
+    setChecklist((prev) => {
+      const next = { ...prev, [id]: !prev[id] };
+      try {
+        localStorage.setItem(
+          `clarify:interview-day-checklist:${todayIv.id}`,
+          JSON.stringify(next),
+        );
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }
 
   // Countdown timer
   useEffect(() => {
@@ -168,6 +235,40 @@ export default function InterviewDay() {
         />
       )}
 
+      {/* Multi-interview picker */}
+      {todayInterviews.length > 1 && (
+        <Card className="p-3">
+          <p className="text-xs font-medium text-muted-foreground mb-2">
+            Today&apos;s interviews
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {todayInterviews.map((iv) => {
+              const when = getCurrentRoundDate(iv);
+              const active = iv.id === todayIv?.id;
+              return (
+                <button
+                  key={iv.id}
+                  type="button"
+                  onClick={() => setSelectedTodayId(iv.id)}
+                  aria-pressed={active}
+                  className={cn(
+                    "rounded-xl border px-3 py-2 text-left text-xs transition-all min-h-11",
+                    active
+                      ? "border-primary bg-primary/10 text-foreground"
+                      : "border-border bg-secondary/40 text-muted-foreground hover:text-foreground",
+                  )}
+                >
+                  <span className="font-semibold block">{iv.company_name}</span>
+                  <span className="text-[10px]">
+                    {format(new Date(when), "h:mm a")}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </Card>
+      )}
+
       {/* Interview info + countdown */}
       {todayIv ? (
         <Card className="bg-gradient-to-r from-primary/15 to-blue-600/15 border-primary/30">
@@ -235,8 +336,8 @@ export default function InterviewDay() {
 
       {/* Affirmation ticker */}
       <Card className="text-center py-5 bg-amber-500/5 border-amber-500/20">
-        <Star className="w-5 h-5 text-amber-400 mx-auto mb-2" />
-        <p className="text-sm font-medium text-amber-200 leading-relaxed transition-all">
+        <Star className="w-5 h-5 text-amber-600 dark:text-amber-400 mx-auto mb-2" />
+        <p className="text-sm font-medium text-amber-900 dark:text-amber-200 leading-relaxed transition-all">
           "{AFFIRMATIONS[affIdx]}"
         </p>
         <div className="flex justify-center gap-1 mt-3">
@@ -353,10 +454,9 @@ export default function InterviewDay() {
           {FINAL_CHECKLIST.map((item) => (
             <button
               key={item.id}
-              onClick={() =>
-                setChecklist((p) => ({ ...p, [item.id]: !p[item.id] }))
-              }
-              className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-accent/5 transition-all text-left"
+              type="button"
+              onClick={() => toggleChecklistItem(item.id)}
+              className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-accent/5 transition-all text-left min-h-11"
             >
               <div className={cn(
                 "w-5 h-5 rounded-md border-2 flex items-center justify-center shrink-0 transition-all",

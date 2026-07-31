@@ -1,5 +1,6 @@
 export { AppSidebar } from './AppSidebar';
 export { AppTopBar } from './AppTopBar';
+export { ProductModePill } from './ProductModePill';
 export { MobileNav } from './MobileNav';
 export { NetworkBanner } from './NetworkBanner';
 export { PageHeader } from './PageHeader';

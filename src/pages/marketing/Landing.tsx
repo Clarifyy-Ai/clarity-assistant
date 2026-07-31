@@ -2,7 +2,7 @@ import { Link } from "react-router-dom";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import {
   Brain, BarChart2, Shield, Zap, ArrowRight, CheckCircle2,
-  Mic, Star, Play, TrendingUp, Clock, Target,
+  Mic, Star, TrendingUp, Clock, Target,
   Upload, Cpu, MessageSquare, Landmark,
   Check, X, ChevronRight,
 } from "lucide-react";
@@ -326,31 +326,22 @@ export default function Landing() {
   return (
     <MarketingLayout>
       <LazyMotion features={domAnimation} strict>
-      {/* ── Hero ────────────────────────────────────────────────────────────── */}
-      <section className="pt-20 sm:pt-28 pb-14 px-4 sm:px-6 text-center">
+      {/* ── Hero (first viewport: brand · headline · support · CTA · product visual) ─ */}
+      <section className="pt-20 sm:pt-24 pb-10 px-4 sm:px-6 text-center">
         <m.div
           className="max-w-3xl mx-auto"
           initial={{ opacity: 0, y: 28 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.7 }}
         >
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-xs font-medium text-primary mb-6">
-            <span className="w-1.5 h-1.5 rounded-full bg-primary animate-pulse" />
-            Gemini · GPT-4o · Claude — multi-model AI coaching
-          </div>
-
           <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight leading-[1.08]">
             Practice every interview with{" "}
             <span className="bg-gradient-to-r from-primary via-fuchsia-400 to-blue-400 bg-clip-text text-transparent">
               AI by your side
             </span>
           </h1>
-            <p className="mt-5 text-sm md:text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed">
-            A live AI practice coach, mock interviews, gov exam MCQ tests, and a full prep lab —
-            so you walk into the real interview or exam hall ready, not anxious.
-          </p>
-          <p className="mt-3 text-xs text-muted-foreground/80 max-w-xl mx-auto">
-            AI features are for rehearsal and preparation only — not for use during actual third-party interviews.
+          <p className="mt-5 text-sm md:text-base text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+            A live AI practice coach, mock interviews, and a full prep lab — so you walk into the real interview ready, not anxious.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3 mt-8">
             <Link
@@ -364,15 +355,7 @@ export default function Landing() {
               to="/pricing"
               className="inline-flex items-center gap-2 text-sm font-medium px-5 py-2.5 rounded-xl border border-border text-foreground hover:bg-secondary/60 transition-all"
             >
-              <Play className="w-3.5 h-3.5" />
               See pricing
-            </Link>
-            <Link
-              to="/gov-exams"
-              className="inline-flex items-center gap-2 text-sm font-medium px-5 py-2.5 rounded-xl border border-amber-500/30 text-amber-600 hover:bg-amber-500/10 transition-all"
-            >
-              <Landmark className="w-3.5 h-3.5" />
-              Gov exam mock tests
             </Link>
           </div>
           <p className="mt-4 text-xs text-muted-foreground">
@@ -380,12 +363,31 @@ export default function Landing() {
           </p>
         </m.div>
 
-        <div className="mt-14 max-w-4xl mx-auto">
+        <div className="mt-10 max-w-4xl mx-auto">
           <ProductDemoHero />
-          <p className="mt-3 text-xs text-muted-foreground text-center">
-            A live AI coach guides every answer in your practice session.
+        </div>
+      </section>
+
+      {/* ── Below-fold proof strips (deferred from first viewport) ───────────── */}
+      <section className="pb-10 px-4 sm:px-6">
+        <div className="max-w-4xl mx-auto flex flex-col items-center gap-5">
+          <p className="text-xs text-muted-foreground/80 text-center max-w-xl">
+            AI features are for rehearsal and preparation only — not for use during actual third-party interviews.
           </p>
-          <AiProviderStrip className="mt-6" compact />
+          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-primary/10 border border-primary/20 text-xs font-medium text-primary">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary motion-safe:animate-pulse" />
+            Gemini · GPT-4o · Claude — multi-model AI coaching
+          </div>
+          <AiProviderStrip compact />
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Link
+              to="/gov-exams"
+              className="inline-flex items-center gap-2 text-sm font-medium px-4 py-2 rounded-xl border border-amber-500/30 text-amber-600 hover:bg-amber-500/10 transition-all"
+            >
+              <Landmark className="w-3.5 h-3.5" />
+              Gov exam mock tests
+            </Link>
+          </div>
         </div>
       </section>
 

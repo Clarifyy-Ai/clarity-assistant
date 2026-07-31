@@ -1,0 +1,95 @@
+================================================================================
+CLARIFY AI — VOICE & COPY GUIDE
+Source of truth for product tone and naming. Keep UI/help/support aligned.
+Canonical names: src/lib/constants/productNames.ts (PRODUCT_NAMES).
+================================================================================
+
+TONE
+  Calm, practice-first, non-jargon. Friendly under stress — short sentences,
+  no blame, clear next step. Prefer "you can…" over "you must…".
+  Avoid hype, sarcasm, and engineer-speak (tokens, latency, RPC, edge).
+
+COMPLIANCE (always)
+  Clarify AI is PRACTICE coaching — rehearse before the real interview.
+  Never frame the product as a covert tool for live interviews.
+  Prefer: "practice session", "rehearsal", "when you're practicing".
+  Avoid: "during your interview", "they won't see", "undetectable".
+
+--------------------------------------------------------------------------------
+CANONICAL NAMES (use these exact strings)
+--------------------------------------------------------------------------------
+  Clarify AI
+  Practice Coach .......... live AI practice (Overlay mid-session)
+  Overlay ................. floating mid-session window (/app/live/overlay)
+  Mock Interview .......... timed scored practice
+  Prep Lab ................ offline STAR / rephrase tools
+  Answer Bank ............. saved answers (not "Question Bank")
+  Interview Day ........... day-of checklist / planner
+  Company Research
+  Group Practice
+  Gov Exam Mock Tests
+  Interview Practice ...... product mode (job interviews)
+  Gov Exam Prep ........... product mode (competitive exams)
+  Session History
+  Debrief
+  Skills Analytics
+  Credits & Usage
+  Documents / Referrals / Interviews / Dashboard
+  Nav sections: Practice · Progress · Planner
+
+BANNED ALIASES (do not use in UI, help, or support)
+  Live Co-Pilot / Live Copilot → Practice Coach
+  Live Rehearsal .............. → Practice Coach (or "practice session")
+  Question Bank ............... → Answer Bank (gov "My Question Bank" is separate)
+  Discrete UI ................. → Discrete mode (if the setting is needed)
+
+--------------------------------------------------------------------------------
+LATENCY EXPECTATION (Overlay)
+--------------------------------------------------------------------------------
+  Hints typically appear in ~2–4 seconds after a clear question.
+  Listening indicator tooltip already states this — keep it consistent.
+  While waiting, show a calm status near hints: "Generating hints…" or
+  "Generating full answer…" (or short "Generating…"). Never imply instant.
+
+--------------------------------------------------------------------------------
+ERROR COPY PATTERNS
+--------------------------------------------------------------------------------
+  Mic permission
+    Title: Microphone access needed
+    Body: Allow the mic in your browser (or system) settings, then try again.
+    CTA: Recheck audio / Open settings
+
+  Offline
+    Title: You're offline
+    Body: We'll keep a simple template ready. Reconnect for full AI hints.
+    Overlay badge tone: Offline template — real answer queued when back online.
+
+  Credits exhausted
+    Title: Out of credits
+    Body: Top up or upgrade to keep generating hints and answers.
+    CTA: View Credits & Usage / Upgrade
+    Avoid: "payment failed", "quota exceeded", raw error codes.
+
+  Session ended
+    Title: Session ended
+    Body: Nice work — your notes and scorecard are ready when you are.
+    CTA: View session notes / Back to Practice Coach
+    Never guilt the user for ending early.
+
+GENERAL ERROR SHAPE
+  1) What happened (plain words)
+  2) What to do next (one action)
+  3) Optional: where to get help (Help / support)
+
+--------------------------------------------------------------------------------
+QUICK CHECKLIST FOR NEW COPY
+--------------------------------------------------------------------------------
+  [ ] Uses a PRODUCT_NAMES string (or Overlay / Discrete mode as above)
+  [ ] Practice-only framing
+  [ ] Calm under stress; one clear next step
+  [ ] No banned aliases
+  [ ] Latency: ~2–4s expectation if mentioning wait time
+
+================================================================================
+END
+================================================================================

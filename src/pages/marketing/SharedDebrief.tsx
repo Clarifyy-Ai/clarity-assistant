@@ -191,13 +191,27 @@ export default function SharedDebrief() {
           </Card>
         )}
 
-        <div className="text-center pt-4">
-          <Link
-            to="/signup"
-            className="inline-flex text-sm font-semibold text-primary hover:underline"
-          >
-            Practice with Clarify AI →
-          </Link>
+        <div className="text-center pt-6 space-y-3 border-t border-border mt-2">
+          <p className="text-sm font-medium text-foreground">
+            Ready to improve your next interview?
+          </p>
+          <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+            Practice with Clarify AI — live coaching, mock interviews, and scorecards like this one.
+          </p>
+          <div className="flex flex-wrap items-center justify-center gap-3">
+            <Link
+              to="/signup"
+              className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 min-h-11"
+            >
+              Get started free
+            </Link>
+            <Link
+              to="/login"
+              className="inline-flex text-sm font-medium text-primary hover:underline min-h-11 items-center"
+            >
+              Log in
+            </Link>
+          </div>
         </div>
       </div>
     </SharedShell>

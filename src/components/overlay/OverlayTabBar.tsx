@@ -15,7 +15,12 @@ const TOOL_TABS: { id: ToolTab; label: string }[] = [
   { id: "audit", label: "Status" },
 ];
 
-export function OverlayTabBar() {
+interface OverlayTabBarProps {
+  /** Mobile expanded overlay — hints primary, secondary panels in More menu */
+  compactMobile?: boolean;
+}
+
+export function OverlayTabBar({ compactMobile = false }: OverlayTabBarProps) {
   const activeTab = useOverlayStore((s) => s.active_tab);
   const sessionStatus = useSessionStore((s) => s.status);
 
@@ -52,7 +57,7 @@ export function OverlayTabBar() {
   const isOnTool = activeTab !== "answer";
   const activeToolLabel =
     toolTabs.find((t) => t.id === activeTab)?.label ??
-    (activeTab === "resume" ? contextLabel : "More tools");
+    (activeTab === "resume" ? contextLabel : compactMobile ? "More" : "More tools");
 
   useEffect(() => {
     if (!isSessionActive && activeTab === "resume") {
@@ -74,13 +79,19 @@ export function OverlayTabBar() {
     <div
       className="flex items-center gap-1 px-2 py-1.5 border-b border-white/[0.06] bg-[#0b0b18]/40 shrink-0"
       data-no-drag
+      role="tablist"
+      aria-label="Overlay panels"
     >
       <button
         type="button"
+        role="tab"
+        id="overlay-tab-answer"
+        aria-controls="overlay-panel-answer"
+        aria-selected={activeTab === "answer"}
         onClick={() => useOverlayStore.getState().setActiveTab("answer")}
-        aria-pressed={activeTab === "answer"}
         className={cn(
           "px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all shrink-0",
+          compactMobile && "px-3 py-1.5 text-xs",
           "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40",
           activeTab === "answer"
             ? "bg-indigo-600/20 text-indigo-300 shadow-[0_0_0_1px_rgba(99,102,241,0.3)]"
@@ -93,12 +104,23 @@ export function OverlayTabBar() {
       <div className="relative ml-auto" ref={moreRef} data-coach="more-tools">
         <button
           type="button"
+          role="tab"
+          id="overlay-tab-more"
+          aria-controls={isOnTool ? `overlay-panel-${activeTab}` : undefined}
+          aria-selected={isOnTool}
           onClick={() => setMoreOpen((o) => !o)}
           aria-expanded={moreOpen}
           aria-haspopup="menu"
-          aria-pressed={isOnTool}
+          aria-label={
+            isOnTool
+              ? `${activeToolLabel} panel selected. Open more tools`
+              : compactMobile
+                ? "More panels"
+                : "More tools"
+          }
           className={cn(
             "inline-flex items-center gap-1 px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all",
+            compactMobile && "px-3 py-1.5 text-xs",
             "focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500/40",
             isOnTool || moreOpen
               ? "bg-white/10 text-white/85"
@@ -107,7 +129,7 @@ export function OverlayTabBar() {
         >
           <MoreHorizontal className="w-3 h-3" aria-hidden />
           <span className="max-w-[100px] truncate">
-            {isOnTool ? activeToolLabel : "More tools"}
+            {isOnTool ? activeToolLabel : compactMobile ? "More" : "More tools"}
           </span>
           <ChevronDown className={cn("w-3 h-3 opacity-60", moreOpen && "rotate-180")} aria-hidden />
           {hasContext && !isOnTool && (
@@ -129,7 +151,8 @@ export function OverlayTabBar() {
                 <button
                   key={tab.id}
                   type="button"
-                  role="menuitem"
+                  role="menuitemradio"
+                  aria-checked={isActive}
                   onClick={() => {
                     useOverlayStore.getState().setActiveTab(tab.id);
                     setMoreOpen(false);

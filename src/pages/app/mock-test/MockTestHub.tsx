@@ -20,6 +20,7 @@ import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { LazyMotion, domAnimation } from "framer-motion";
 import { GovExamShowcase } from "@/components/marketing/GovExamShowcase";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { toast } from "sonner";
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -240,6 +241,16 @@ export default function MockTestHub(): React.ReactElement {
         }
       />
 
+      <p className="text-xs text-muted-foreground -mt-2">
+        You are in {PRODUCT_NAMES.govExamPrep}.{" "}
+        <Link
+          to="/app/dashboard"
+          className="text-primary hover:underline underline-offset-2"
+        >
+          Switch to {PRODUCT_NAMES.interviewPractice}
+        </Link>
+      </p>
+
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
       {loadError && (
         <InlineErrorRetry message={loadError} onRetry={() => void loadData()} />
@@ -256,7 +267,7 @@ export default function MockTestHub(): React.ReactElement {
           { icon: ClipboardList, label: "Tests Taken",    value: loading ? "—" : String(stats.totalTests) },
           { icon: Target,        label: "Avg Accuracy",   value: loading ? "—" : `${stats.avgAccuracy}%` },
           { icon: BookOpen,      label: "My uploads",     value: loading ? "—" : String(stats.totalQuestions) },
-          { icon: Flame,         label: "Day Streak",     value: loading ? "—" : `${stats.streakDays}🔥`, streak: true },
+          { icon: Flame,         label: "Day Streak",     value: loading ? "—" : String(stats.streakDays), streak: true },
         ].map(({ icon: Icon, label, value, streak }) => (
           <Card key={label} className="text-center py-3">
             <CardContent className="p-0">

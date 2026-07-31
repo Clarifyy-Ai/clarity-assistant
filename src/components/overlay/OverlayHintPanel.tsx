@@ -1,9 +1,10 @@
 // src/components/overlay/OverlayHintPanel.tsx
-import { memo, useMemo, useState, useCallback } from "react";
+import { memo, useMemo, useState, useCallback, useEffect } from "react";
 import type { HintStyle } from "@/types/user.types";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import { answerBankDB } from "@/lib/supabase/database";
+import { markFirstHint } from "@/lib/analytics/uxMetrics";
 import {
   Loader2,
   Copy,
@@ -98,6 +99,10 @@ function OverlayHintPanelInner({
   const liveText = isStreaming && streamingBuffer.trim().length > 0 ? streamingBuffer : safeText;
   const hasContent = liveText.trim().length > 0;
   const codeExtract = useMemo(() => extractCodeFromAnswer(liveText), [liveText]);
+
+  useEffect(() => {
+    if (hasContent) markFirstHint();
+  }, [hasContent]);
 
   const textForCompose = useMemo(() => {
     if (!liveText) return "";
@@ -274,8 +279,12 @@ function OverlayHintPanelInner({
 
       {/* ── Error ────────────────────────────────────────────────────── */}
       {errorMessage && (
-        <div className="rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2.5 flex items-start gap-2" role="alert">
-          <span className="text-red-400 mt-0.5 shrink-0">⚠</span>
+        <div
+          className="rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-2.5 flex items-start gap-2"
+          role="alert"
+          aria-live="assertive"
+        >
+          <span className="text-red-400 mt-0.5 shrink-0" aria-hidden>⚠</span>
           <div className="flex-1 min-w-0">
             <p className="text-[12px] text-red-400 leading-snug">{errorMessage}</p>
             {onRetry && (
@@ -294,8 +303,13 @@ function OverlayHintPanelInner({
 
       {/* ── Screenshot loading ────────────────────────────────────────── */}
       {isScreenshotLoading && (
-        <div className="flex items-center gap-2.5 rounded-xl bg-sky-500/[0.08] border border-sky-500/15 px-3 py-2.5" role="status">
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400 shrink-0" />
+        <div
+          className="flex items-center gap-2.5 rounded-xl bg-sky-500/[0.08] border border-sky-500/15 px-3 py-2.5"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-sky-400 shrink-0" aria-hidden />
           <span className="text-[12px] text-sky-300/80">Capturing problem — drag a box around the question…</span>
         </div>
       )}
@@ -314,8 +328,13 @@ function OverlayHintPanelInner({
 
       {/* ── Generating state ──────────────────────────────────────────── */}
       {isGenerating && (
-        <div className="flex items-center gap-3 py-2 animate-fade-in" role="status">
-          <div className="flex items-center gap-1">
+        <div
+          className="flex items-center gap-3 py-2 animate-fade-in"
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+        >
+          <div className="flex items-center gap-1" aria-hidden>
             <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "0ms" }} />
             <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "150ms" }} />
             <span className="w-2 h-2 rounded-full bg-indigo-400 animate-bounce" style={{ animationDelay: "300ms" }} />

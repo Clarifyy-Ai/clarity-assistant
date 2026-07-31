@@ -25,11 +25,11 @@ const LEVELS = [
 ] as const;
 
 const ANXIETY_LABELS: Record<number, string> = {
-  1: "Cool as ice 🧊",
-  2: "Mostly calm 😊",
-  3: "A little nervous 😅",
-  4: "Quite anxious 😰",
-  5: "Interview terror 😱",
+  1: "Cool as ice",
+  2: "Mostly calm",
+  3: "A little nervous",
+  4: "Quite anxious",
+  5: "Interview terror",
 };
 
 // ─── Component ───────────────────────────────────────────────────────────────

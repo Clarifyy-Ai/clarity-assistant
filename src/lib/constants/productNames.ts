@@ -14,6 +14,9 @@ export const PRODUCT_NAMES = {
   companyResearch: "Company Research",
   groupPractice: "Group Practice",
   govExams: "Gov Exam Mock Tests",
+  /** Product-mode identity (N7) — Interview Practice vs Gov Exam Prep */
+  interviewPractice: "Interview Practice",
+  govExamPrep: "Gov Exam Prep",
   creditsUsage: "Credits & Usage",
   debrief: "Debrief",
   analytics: "Skills Analytics",

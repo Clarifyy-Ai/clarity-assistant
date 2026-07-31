@@ -38,7 +38,7 @@ import { SessionTimeoutBanner } from "@/components/layout/SessionTimeoutBanner";
 import { PageContent } from "@/components/layout/PageContent";
 import { SetupChecklist } from "@/components/layout/SetupChecklist";
 import { UpgradeModal } from "@/components/billing/UpgradeModal";
-import { AppWalkthrough, InstallPromptModal } from "@/components/onboarding";
+import { AppWalkthrough, InstallPromptModal, ElectronFirstRunModal } from "@/components/onboarding";
 import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
 import { GlobalErrorBoundary } from "@/components/layout/GlobalErrorBoundary";
 import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
@@ -553,7 +553,8 @@ const routes = [
 
           { path: "mock", element: <Page component={MockInterview} /> },
           { path: "mock/warmup", element: <Page component={MockWarmup} /> },
-          { path: "mock/session", element: <Page component={MockSession} /> },
+          { path: "mock/session", element: <Navigate to="/app/mock" replace /> },
+          { path: "mock/session/:sessionId", element: <Page component={MockSession} /> },
 
           // Mock Test (Gov exams)
           { path: "mock-test", element: <IndiaAppPage component={MockTestHub} /> },
@@ -886,6 +887,7 @@ export default function App(): JSX.Element {
 
         <CookieConsent />
         <TabAudioGuideHost />
+        {IS_ELECTRON && <ElectronFirstRunModal />}
       </ErrorBoundary>
     </GlobalErrorBoundary>
   );

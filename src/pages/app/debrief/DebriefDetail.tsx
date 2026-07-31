@@ -207,7 +207,7 @@ export default function DebriefDetail() {
             Generating your debrief…
           </p>
           <p className="text-xs text-muted-foreground">
-            ✨ AI is analysing your session and building a personalised action plan
+            AI is analysing your session and building a personalised action plan
           </p>
         </div>
         <DebriefLoadingSteps activeIndex={loadStep} />

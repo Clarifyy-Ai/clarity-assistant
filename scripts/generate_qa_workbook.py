@@ -36,6 +36,7 @@ from qa_workbook_inventory import (
 OUT = Path(__file__).resolve().parents[1] / "Clarify_AI_Enterprise_QA_Testing_Workbook.xlsx"
 OUT_FALLBACK = Path(__file__).resolve().parents[1] / "Clarify_AI_Enterprise_QA_Testing_Workbook_v2.xlsx"
 OUT_COMPLETE = Path(__file__).resolve().parents[1] / "Clarify_AI_QA_Workbook_COMPLETE.xlsx"
+OUT_COMPLETE_V2 = Path(__file__).resolve().parents[1] / "Clarify_AI_QA_Workbook_COMPLETE_v2.xlsx"
 OUT_FULL = Path(__file__).resolve().parents[1] / "Clarify_AI_QA_Workbook_FULL.xlsx"
 
 # ── Tokens ──────────────────────────────────────────────────────────────────
@@ -115,16 +116,50 @@ PORTALS = ["Marketing Portal", "Auth Portal", "Candidate App", "Admin Portal", "
 ROLES = ["Guest", "Free User", "Pro User", "Max User", "Admin"]
 OWNERS = ["Auth Lead", "Product", "Live Coach", "Sessions", "Analytics", "Prep", "Docs", "Scheduling", "Growth", "GovExams", "Platform", "Admin", "Billing", "Desktop", "QA Lead", "Dev Lead"]
 
-# Full QA roster (dropdown + team sheet)
+# Production QA roster — share with these engineers
 QA_TEAM = [
     # name, role, email, capacity hrs/week, skills
-    ("Kavya Iyer", "QA Lead", "kavya.iyer@clarify.ai", 40, "Sign-off, regression, UAT"),
-    ("Asha Sharma", "Senior QA", "asha.sharma@clarify.ai", 40, "Billing, auth, API"),
-    ("Rohan Mehta", "QA Engineer", "rohan.mehta@clarify.ai", 40, "Gov exams, mobile, admin"),
-    ("Priya Nair", "QA Engineer", "priya.nair@clarify.ai", 40, "Live coach, documents, E2E"),
-    ("Dev Patel", "SDET", "dev.patel@clarify.ai", 40, "Automation, webhooks, Electron"),
+    ("Shreya Patil", "QA Engineer", "shreya.patil@clarify.ai", 40,
+     "Practice Coach, Overlay, Mock Interview, Sessions/Debrief, Documents, UI/UX, Electron"),
+    ("Raj Balani", "QA Engineer", "raj.balani@clarify.ai", 40,
+     "Auth/Onboarding, Billing/Credits, Gov Exam Mock Tests, Admin, Prep Lab, Security, Regression"),
 ]
 TESTERS = [t[0] for t in QA_TEAM]
+
+# Developer roster — bugs Assigned To + Dev Tasks board
+DEV_TEAM = [
+    # name, role, email, capacity hrs/week, focus
+    ("Dev Lead", "Engineering Lead", "dev.lead@clarify.ai", 40, "Triage, release, blockers"),
+    ("Live Coach Dev", "Frontend Engineer", "live.coach@clarify.ai", 40, "Practice Coach, Overlay, Mock"),
+    ("Platform Dev", "Full-Stack Engineer", "platform@clarify.ai", 40, "Auth, Billing, Admin, Edge"),
+    ("GovExams Dev", "Full-Stack Engineer", "govexams@clarify.ai", 40, "Mock tests, question bank"),
+    ("Desktop Dev", "Electron Engineer", "desktop@clarify.ai", 40, "Electron overlay, hotkeys"),
+]
+DEVELOPERS = [d[0] for d in DEV_TEAM]
+
+# Module → default QA owner for task seed rows
+QA_MODULE_OWNER = {
+    "Auth & Onboarding": "Raj Balani",
+    "Dashboard": "Shreya Patil",
+    "Live Practice Coach": "Shreya Patil",
+    "Mock Interview": "Shreya Patil",
+    "Sessions & Debriefs": "Shreya Patil",
+    "Analytics & Usage": "Raj Balani",
+    "Prep Lab": "Raj Balani",
+    "Documents & Resumes": "Shreya Patil",
+    "Answer Bank": "Raj Balani",
+    "Interviews & Calendar": "Shreya Patil",
+    "Company Research": "Raj Balani",
+    "Notifications & Profile": "Raj Balani",
+    "Referrals & Guide": "Raj Balani",
+    "Gov Exam Mock Tests": "Raj Balani",
+    "Settings": "Raj Balani",
+    "Admin Portal": "Raj Balani",
+    "Marketing Site": "Shreya Patil",
+    "Billing & Credits": "Raj Balani",
+    "Electron Desktop Overlay": "Shreya Patil",
+    "Security & Platform": "Raj Balani",
+}
 
 
 def lr(wb, name: str) -> str:
@@ -341,7 +376,7 @@ def build_lists(wb: Workbook):
         "W": ("Sprint", ["Sprint 24", "Sprint 25", "Sprint 26", "Sprint 27", "Hotfix"]),
         "X": ("Release", ["1.0.0-beta", "1.0.0", "1.0.1", "1.1.0"]),
         "Y": ("RootCause", ["Logic Bug", "Missing Validation", "Config/Env", "Race Condition", "UI Regression", "API Contract", "DB/RLS", "Third-party", "Design Gap", "Unknown"]),
-        "Z": ("Modules", [m[1] for m in MODULES]),
+        "Z": ("Modules", [m[1] for m in MODULES] + ["Cross-Cutting", "All Portals"]),
         "AA": ("Portals", PORTALS),
         "AB": ("Roles", ROLES),
         "AC": ("Testers", TESTERS),
@@ -349,6 +384,11 @@ def build_lists(wb: Workbook):
         "AE": ("ImplStatus", ["Fully Implemented", "Partial", "Stub", "Dead Code", "Not Built"]),
         "AF": ("Coverage", ["Yes", "No", "Partial", "N/A"]),
         "AG": ("ModuleStatus", ["Not Started", "In Progress", "Completed", "Blocked", "Deprecated"]),
+        "AH": ("Developers", DEVELOPERS),
+        "AI": ("TaskType", ["Smoke", "Functional", "Regression", "E2E", "UI/UX", "API", "Security", "Retest", "Exploratory"]),
+        "AJ": ("TaskStatus", ["Not Started", "In Progress", "Blocked", "Done", "Deferred"]),
+        "AK": ("DevTaskStatus", ["Queued", "In Progress", "Code Review", "Fixed — Ready for Retest", "Reopened", "Done", "Won't Fix"]),
+        "AL": ("Assignees", DEVELOPERS + OWNERS),
     }
     wb._list_ranges = {}
     for col, (title, values) in lists.items():
@@ -371,14 +411,14 @@ def build_daily_log(wb: Workbook):
         "Date", "QA Person", "Cases Executed", "Passed", "Failed", "Blocked",
         "Bugs Opened", "Bugs Closed", "Hours Logged", "Remarks",
     ]
-    people = ["Asha Sharma", "Priya Nair", "Rohan Mehta", "Dev Patel", "Kavya Iyer", "Asha Sharma", "Priya Nair"]
+    people = ["Shreya Patil", "Raj Balani", "Shreya Patil", "Raj Balani", "Shreya Patil", "Raj Balani", "Shreya Patil"]
     rows = []
     for i in range(7):
         d = TODAY - timedelta(days=6 - i)
         rows.append([
             d, people[i], 8 + i * 2, 6 + i, 1 if i % 3 == 0 else 0, 1 if i == 4 else 0,
             1 if i % 2 == 0 else 0, 1 if i > 3 else 0, round(4.5 + i * 0.5, 1),
-            "Sprint 26 execution",
+            "Sprint execution — production QA",
         ])
     write_table(ws, "Daily Progress Log (feeds Dashboard chart)", "", headers, rows, 2)
     add_dv(ws, lr(wb, "Testers"), "B3:B5000")
@@ -390,6 +430,203 @@ def build_daily_log(wb: Workbook):
         ws.cell(t, col, f"=SUM({letter}3:{letter}{t-1})")
         ws.cell(t, col).font = Font(bold=True)
     finish_sheet(ws, 2, len(rows) + 1, len(headers))
+    return ws
+
+
+def build_qa_tasks(wb: Workbook):
+    """QA task board for Shreya Patil & Raj Balani — execution work queue."""
+    ws = wb.create_sheet("QA Tasks")
+    headers = [
+        "Task ID", "QA Owner", "Module", "Task Type", "Title", "Linked TC / Flow",
+        "Priority", "Status", "Due Date", "Est Hours", "Actual Hours",
+        "Linked Bug ID", "Fails Linked (auto)", "Notes",
+    ]
+    # Seed one primary pack task per module + shared smoke/regression
+    rows = []
+    tid = 1
+    for mid, name, _portal, desc, _owner, pri, _status in MODULES:
+        owner = QA_MODULE_OWNER.get(name, "Shreya Patil")
+        rows.append([
+            f"QAT-{tid:03d}", owner, name, "Functional",
+            f"Execute {name} pack — {desc[:48]}",
+            f"See 04 / domain sheets for {mid}",
+            pri if pri in ("Critical", "High", "Medium", "Low") else "High",
+            "Not Started", TODAY + timedelta(days=7 + (tid % 5)),
+            4.0, 0, "",
+            None,  # auto formula filled below
+            "Mark Fail on TC → create Bug in 06 → Bug ID appears here & on Dev Tasks",
+        ])
+        tid += 1
+    # Shared packs
+    for title, owner, ttype, pri, hours in [
+        ("Smoke Pack — 25 Smoke Pack must-pass", "Shreya Patil", "Smoke", "Critical", 3.0),
+        ("Smoke Pack — 25 Smoke Pack must-pass (pair)", "Raj Balani", "Smoke", "Critical", 3.0),
+        ("Regression — 18 Regression Testing pack", "Raj Balani", "Regression", "High", 6.0),
+        ("UI/UX pass — 07 UI-UX Testing", "Shreya Patil", "UI/UX", "High", 4.0),
+        ("Mobile responsiveness — 08", "Shreya Patil", "UI/UX", "High", 3.0),
+        ("Security pack — 12 Security Testing", "Raj Balani", "Security", "Critical", 4.0),
+        ("API pack — 09 API Testing", "Raj Balani", "API", "High", 4.0),
+        ("E2E golden paths — 05 E2E User Flows", "Shreya Patil", "E2E", "Critical", 5.0),
+        ("Retest queue — bugs in Retest status", "Raj Balani", "Retest", "Critical", 3.0),
+        ("Retest queue — bugs in Retest status (pair)", "Shreya Patil", "Retest", "Critical", 3.0),
+    ]:
+        rows.append([
+            f"QAT-{tid:03d}", owner, "Cross-Cutting",
+            ttype, title, title.split("—")[-1].strip() if "—" in title else "",
+            pri, "Not Started", TODAY + timedelta(days=5), hours, 0, "",
+            None,
+            "Update Status daily; link Bug ID when filing defects",
+        ])
+        tid += 1
+
+    write_table(
+        ws,
+        "QA Tasks — Shreya Patil & Raj Balani work queue",
+        "When a TC Fails: set Pass/Fail=Fail on 04 → create row on 06 Bug Tracker (Reported By = you) → paste Bug ID here. Dev Tasks auto-mirrors open bugs.",
+        headers,
+        [[*r[:12], None, r[13]] for r in rows],
+    )
+    for i in range(len(rows)):
+        r = 3 + i
+        # Count open bugs reported by this task's QA owner (reflective KPI per row owner)
+        ws.cell(r, 13, f"=IFERROR(COUNTIFS('06 Bug Tracker'!N$3:N$5000,B{r},'06 Bug Tracker'!L$3:L$5000,\"<>Closed\",'06 Bug Tracker'!L$3:L$5000,\"<>Won't Fix\",'06 Bug Tracker'!L$3:L$5000,\"<>Duplicate\"),0)")
+        ws.cell(r, 13).protection = LOCKED
+    add_dv(ws, lr(wb, "Testers"), "B3:B5000")
+    add_dv(ws, lr(wb, "Modules"), "C3:C5000")
+    add_dv(ws, lr(wb, "TaskType"), "D3:D5000")
+    add_dv(ws, lr(wb, "Priority"), "G3:G5000")
+    add_dv(ws, lr(wb, "TaskStatus"), "H3:H5000")
+    cf_severity(ws, "G")
+    cf_verdict(ws, "H")
+    # Summary strip
+    tot = 3 + len(rows)
+    ws.cell(tot, 1, "TOTAL / KPIs")
+    ws.cell(tot, 1).font = Font(bold=True, color="FFFFFF")
+    ws.cell(tot, 10, f"=SUM(J3:J{tot-1})")
+    ws.cell(tot, 11, f"=SUM(K3:K{tot-1})")
+    ws.cell(tot, 13, f"=SUM(M3:M{tot-1})")
+    for c in range(1, 15):
+        ws.cell(tot, c).fill = KPI_FILL
+        ws.cell(tot, c).font = Font(bold=True, color="FFFFFF")
+    # Owner split legend
+    ws.cell(tot + 2, 1, "Shreya open bugs (Reported By)")
+    ws.cell(tot + 2, 2, "=IFERROR(COUNTIFS('06 Bug Tracker'!N3:N5000,\"Shreya Patil\",'06 Bug Tracker'!L3:L5000,\"<>Closed\",'06 Bug Tracker'!L3:L5000,\"<>Won't Fix\",'06 Bug Tracker'!L3:L5000,\"<>Duplicate\"),0)")
+    ws.cell(tot + 3, 1, "Raj open bugs (Reported By)")
+    ws.cell(tot + 3, 2, "=IFERROR(COUNTIFS('06 Bug Tracker'!N3:N5000,\"Raj Balani\",'06 Bug Tracker'!L3:L5000,\"<>Closed\",'06 Bug Tracker'!L3:L5000,\"<>Won't Fix\",'06 Bug Tracker'!L3:L5000,\"<>Duplicate\"),0)")
+    ws.cell(tot + 4, 1, "Failed TCs (04 Pass/Fail=Fail)")
+    ws.cell(tot + 4, 2, "=IFERROR(COUNTIF('04 Test Case Repository'!P3:P5000,\"Fail\"),0)")
+    finish_sheet(ws, 2, len(rows) + 1, len(headers))
+    return ws
+
+
+def build_dev_team(wb: Workbook):
+    ws = wb.create_sheet("Dev Team")
+    headers = [
+        "Developer", "Role", "Email", "Capacity Hrs/Week", "Focus Area",
+        "Open Bugs Assigned", "In Progress", "Ready for Retest", "Utilization Hint", "Status", "Remarks",
+    ]
+    write_table(ws, "Dev Team Roster — Clarify AI", "Assigned bugs come from 06 Bug Tracker → Assigned To. Keep names in sync with Lists!Developers.", headers, [])
+    for i, (name, role, email, cap, focus) in enumerate(DEV_TEAM):
+        r = 3 + i
+        ws.cell(r, 1, name)
+        ws.cell(r, 2, role)
+        ws.cell(r, 3, email)
+        ws.cell(r, 4, cap)
+        ws.cell(r, 5, focus)
+        # Open = not Closed / Won't Fix / Duplicate
+        ws.cell(r, 6, f"=IFERROR(COUNTIFS('06 Bug Tracker'!M$3:M$5000,A{r},'06 Bug Tracker'!L$3:L$5000,\"<>Closed\",'06 Bug Tracker'!L$3:L$5000,\"<>Won't Fix\",'06 Bug Tracker'!L$3:L$5000,\"<>Duplicate\"),0)")
+        ws.cell(r, 7, f"=IFERROR(COUNTIFS('06 Bug Tracker'!M$3:M$5000,A{r},'06 Bug Tracker'!L$3:L$5000,\"In Progress\"),0)")
+        ws.cell(r, 8, f"=IFERROR(COUNTIFS('06 Bug Tracker'!M$3:M$5000,A{r},'06 Bug Tracker'!L$3:L$5000,\"Retest\")+COUNTIFS('06 Bug Tracker'!M$3:M$5000,A{r},'06 Bug Tracker'!L$3:L$5000,\"Fixed\"),0)")
+        ws.cell(r, 9, f'=IF(F{r}>8,"Overloaded",IF(F{r}>4,"Busy","OK"))')
+        ws.cell(r, 10, "Active")
+        ws.cell(r, 11, "")
+        for c in (6, 7, 8, 9):
+            ws.cell(r, c).protection = LOCKED
+    add_dv(ws, lr(wb, "Status"), "J3:J50")
+    n = len(DEV_TEAM)
+    tot = 3 + n
+    ws.cell(tot, 1, "TOTAL")
+    ws.cell(tot, 4, f"=SUM(D3:D{tot-1})")
+    ws.cell(tot, 6, f"=SUM(F3:F{tot-1})")
+    ws.cell(tot, 7, f"=SUM(G3:G{tot-1})")
+    ws.cell(tot, 8, f"=SUM(H3:H{tot-1})")
+    for c in range(1, 12):
+        ws.cell(tot, c).fill = KPI_FILL
+        ws.cell(tot, c).font = Font(bold=True, color="FFFFFF")
+    finish_sheet(ws, 2, n + 1, len(headers))
+    return ws
+
+
+def build_dev_tasks(wb: Workbook):
+    """
+    Developer work queue that MIRRORS 06 Bug Tracker.
+    When QA files/updates a bug, the matching row here updates via formulas.
+    Editable columns: Dev Status, Fix ETA, Build Fixed, Retest Owner, Dev Notes.
+    """
+    ws = wb.create_sheet("Dev Tasks")
+    headers = [
+        "Bug ID", "Title", "Module", "Severity", "Priority", "Bug Status",
+        "Reported By (QA)", "Assigned Developer", "Needs Dev Action",
+        "Dev Status", "Fix ETA", "Build Fixed", "Retest Owner (QA)",
+        "Retest Result", "Dev Notes",
+    ]
+    # Mirror up to 150 bug rows (formulas) — empty source rows stay blank
+    mirror_n = 150
+    write_table(
+        ws,
+        "Dev Tasks — live mirror of 06 Bug Tracker",
+        "SOURCE OF TRUTH = 06 Bug Tracker. Columns A–H are formula-linked. When QA sets Status=New/Open/In Progress/Fixed/Retest, Needs Dev Action=Yes. Dev updates Dev Status → QA retests → Bug Status=Closed.",
+        headers,
+        [],
+    )
+    for i in range(mirror_n):
+        r = 3 + i
+        src = 3 + i
+        # A–H mirror Bug Tracker: A Title B Desc C Module … J Severity K Priority L Status M Assigned N Reported
+        # Bug headers: A Bug ID, B Title, C Description, D Module, ... J Severity, K Priority, L Status, M Assigned To, N Reported By
+        ws.cell(r, 1, f"='06 Bug Tracker'!A{src}")
+        ws.cell(r, 2, f"='06 Bug Tracker'!B{src}")
+        ws.cell(r, 3, f"='06 Bug Tracker'!D{src}")
+        ws.cell(r, 4, f"='06 Bug Tracker'!J{src}")
+        ws.cell(r, 5, f"='06 Bug Tracker'!K{src}")
+        ws.cell(r, 6, f"='06 Bug Tracker'!L{src}")
+        ws.cell(r, 7, f"='06 Bug Tracker'!N{src}")
+        ws.cell(r, 8, f"='06 Bug Tracker'!M{src}")
+        ws.cell(r, 9,
+                f'=IF(A{r}="","",IF(OR(F{r}="New",F{r}="Open",F{r}="In Progress",F{r}="Fixed",F{r}="Retest"),"Yes","No"))')
+        # Editable defaults
+        ws.cell(r, 10, f'=IF(A{r}="","",IF(F{r}="Retest","Fixed — Ready for Retest",IF(F{r}="Fixed","Fixed — Ready for Retest",IF(F{r}="In Progress","In Progress",IF(OR(F{r}="New",F{r}="Open"),"Queued",IF(F{r}="Closed","Done",IF(F{r}="Won\'t Fix","Won\'t Fix","")))))))')
+        ws.cell(r, 11, "")
+        ws.cell(r, 12, f"='06 Bug Tracker'!R{src}")  # Build
+        ws.cell(r, 13, f"='06 Bug Tracker'!N{src}")  # Retest owner defaults to reporter
+        ws.cell(r, 14, "")
+        ws.cell(r, 15, "")
+        for c in range(1, 10):
+            ws.cell(r, c).protection = LOCKED
+    add_dv(ws, lr(wb, "DevTaskStatus"), "J3:J5000")
+    add_dv(ws, lr(wb, "Testers"), "M3:M5000")
+    add_dv(ws, lr(wb, "PassFail"), "N3:N5000")
+    cf_severity(ws, "D")
+    cf_severity(ws, "E")
+    cf_verdict(ws, "N")
+    # KPI block above filter end
+    kpi_row = 3 + mirror_n + 1
+    ws.cell(kpi_row, 1, "QUEUE KPIs (auto)")
+    ws.cell(kpi_row, 1).font = Font(bold=True, color="FFFFFF")
+    ws.cell(kpi_row, 1).fill = KPI_FILL
+    labels = [
+        (kpi_row + 1, "Needs Dev Action = Yes", '=IFERROR(COUNTIF(I3:I152,"Yes"),0)'),
+        (kpi_row + 2, "Reported by Shreya (open)", '=IFERROR(COUNTIFS(G3:G152,"Shreya Patil",I3:I152,"Yes"),0)'),
+        (kpi_row + 3, "Reported by Raj (open)", '=IFERROR(COUNTIFS(G3:G152,"Raj Balani",I3:I152,"Yes"),0)'),
+        (kpi_row + 4, "Ready for Retest", '=IFERROR(COUNTIF(J3:J152,"Fixed — Ready for Retest"),0)'),
+        (kpi_row + 5, "HOW TO USE", "1) QA fails TC on 04  2) QA adds bug on 06 (Reported By=Shreya/Raj, Assigned To=dev)  3) Row appears here  4) Dev fixes → set Bug Status=Fixed/Retest on 06  5) QA retests → Closed"),
+    ]
+    for row, label, val in labels:
+        ws.cell(row, 1, label).font = Font(bold=True)
+        ws.cell(row, 2, val)
+        ws.merge_cells(start_row=row, start_column=2, end_row=row, end_column=6)
+    finish_sheet(ws, 2, mirror_n, len(headers))
+    # Note: auto_filter on 150 formula rows is OK — users filter Needs Dev Action=Yes
     return ws
 
 
@@ -411,34 +648,40 @@ def build_readme(wb: Workbook):
         ("Generated", str(TODAY)),
         ("", ""),
         ("HOW TO USE", ""),
-        ("1", "Start at NAV Hub (clickable map) or 01 Dashboard — Power BI–style KPIs + charts."),
-        ("2", "Use the teal navigation strip (top-right of sheets) to jump: Dashboard · Features · Bugs · Launch · Smoke · Creds."),
-        ("3", "Maintain Modules (02) and Features (03) as scope changes. Deep links use Environments!B3."),
-        ("4", "Author/execute cases in 04; link defects in 06 via Bug ID. Fill Daily Log for trend charts."),
-        ("5", "Execute domain packs 14–16 (Live Coaching, Gov Exam, Billing)."),
+        ("1", "Start at NAV Hub or 01 Dashboard — KPIs + charts."),
+        ("2", "QA opens QA Tasks — pick your rows (Shreya / Raj). Execute linked TCs on 04."),
+        ("3", "On Fail: set Pass/Fail=Fail on 04 → add a row on 06 Bug Tracker (Reported By = you, Assigned To = a Developer)."),
+        ("4", "Dev Tasks auto-mirrors 06 — developers see Needs Dev Action=Yes. Filter that column."),
+        ("5", "Dev sets Bug Status=Fixed or Retest on 06 → QA retests → Closed. Fill Daily Log daily."),
         ("6", "Complete 19 Production Readiness and 20 Release Sign-Off for Go/No-Go."),
-        ("7", "Slicer tip: use AutoFilter on Feature Inventory / Bug Tracker columns (Status, Module, Priority) like Power BI filters."),
+        ("7", "Slicer tip: AutoFilter on Bug Tracker / Dev Tasks / QA Tasks (Status, Owner, Priority)."),
         ("", ""),
-        ("QA TEAM", ""),
-        ("", "Kavya Iyer (QA Lead) · Asha Sharma (Senior QA) · Rohan Mehta (QA Engineer) · Priya Nair (QA Engineer) · Dev Patel (SDET)"),
-        ("Green", "Pass / Yes / Closed"),
-        ("Red", "Fail / No / Critical / Blocked ops"),
-        ("Yellow", "In Progress / Open / Medium"),
+        ("QA TEAM (production)", ""),
+        ("", "Shreya Patil — Practice Coach, Overlay, Mock, Sessions/Debrief, Documents, UI/UX, Electron"),
+        ("", "Raj Balani — Auth, Billing, Gov Exams, Admin, Prep Lab, Security, Regression"),
+        ("DEV TEAM", ""),
+        ("", "Dev Lead · Live Coach Dev · Platform Dev · GovExams Dev · Desktop Dev — see Dev Team sheet"),
+        ("Green", "Pass / Yes / Closed / Done"),
+        ("Red", "Fail / No / Critical / Blocked"),
+        ("Yellow", "In Progress / Open / Medium / Queued"),
         ("Gray", "Not Started / Not Run"),
         ("Blue", "Completed / Passed / Ready"),
         ("", ""),
         ("SCALING", ""),
-        ("", "Designed for hundreds of modules and tens of thousands of test cases. Keep one row per entity; use filters and freeze panes. Dashboard formulas scan to row 5000."),
-        ("Google Sheets", "Upload this .xlsx to Drive → Open with Google Sheets. Hyperlinks and charts transfer; re-check Lists ranges after import."),
+        ("", "One row per entity; filters + freeze panes. Dashboard / Dev Tasks formulas scan to row 5000 / 152."),
+        ("Google Sheets", "Upload .xlsx to Drive → Open with Google Sheets. Hyperlinks transfer; confirm Lists ranges after import."),
         ("", ""),
         ("SHEET INDEX (click sheet tabs or use NAV Hub)", ""),
         ("NAV Hub", "Clickable map of every sheet — start here"),
         ("01 Dashboard", "Executive KPIs + charts (Power BI style)"),
+        ("QA Tasks", "Shreya & Raj execution queue"),
+        ("Dev Team", "Developer roster + open-bug counts"),
+        ("Dev Tasks", "Live mirror of Bug Tracker for engineers"),
         ("02 Module Master", "20 Clarify modules"),
         ("03 Feature Inventory", "114 features + routes + how-it-works"),
         ("04 Test Case Repository", "Executable cases"),
         ("05 E2E User Flows", "Cross-module journeys"),
-        ("06 Bug Tracker", "Defect lifecycle Fixed/Open/Blocked"),
+        ("06 Bug Tracker", "Defect lifecycle — source of truth"),
         ("07 UI-UX Testing", "Visual / a11y"),
         ("08 Mobile Responsiveness", "Breakpoints"),
         ("09 API Testing", "Edge functions"),
@@ -458,6 +701,7 @@ def build_readme(wb: Workbook):
         ("23 Module Playbooks", "Happy-path runbooks"),
         ("24 Launch Status", "Fixed / Open / Blocked counts"),
         ("25 Smoke Pack", "~20 must-pass cases"),
+        ("QA Team", "Roster & capacity (Shreya / Raj)"),
         ("Daily Log", "Feeds daily progress chart"),
         ("Lists", "Dropdown vocabulary — do not delete"),
     ]
@@ -471,13 +715,14 @@ def build_readme(wb: Workbook):
             # leave non-sheet labels
             pass
         sheet_targets = {
-            "NAV Hub", "01 Dashboard", "02 Module Master", "03 Feature Inventory", "04 Test Case Repository",
+            "NAV Hub", "01 Dashboard", "QA Tasks", "Dev Team", "Dev Tasks",
+            "02 Module Master", "03 Feature Inventory", "04 Test Case Repository",
             "05 E2E User Flows", "06 Bug Tracker", "07 UI-UX Testing", "08 Mobile Responsiveness",
             "09 API Testing", "10 Database Validation", "11 Authentication Testing", "12 Security Testing",
             "13 Performance Testing", "14 Live Coaching Testing", "15 Gov Exam Mock Testing",
             "16 Billing Credits Testing", "17 Role Based Testing", "18 Regression Testing",
             "19 Production Readiness", "20 Release Sign-Off", "21 Test Credentials", "22 Environments",
-            "23 Module Playbooks", "24 Launch Status", "25 Smoke Pack", "Daily Log", "Lists",
+            "23 Module Playbooks", "24 Launch Status", "25 Smoke Pack", "QA Team", "Daily Log", "Lists",
         }
         if a in sheet_targets:
             ca.hyperlink = f"#'{a}'!A1"
@@ -537,10 +782,11 @@ def build_dashboard(wb: Workbook):
     ws["I11"].font = SECTION_FONT
     for r, (sheet, label) in enumerate([
         ("NAV Hub", "Open NAV Hub"),
-        ("24 Launch Status", "Launch Status"),
-        ("25 Smoke Pack", "Smoke Pack"),
+        ("QA Tasks", "QA Tasks (Shreya/Raj)"),
+        ("Dev Tasks", "Dev Tasks (bug mirror)"),
         ("06 Bug Tracker", "Bug Tracker"),
-        ("03 Feature Inventory", "Feature Inventory"),
+        ("25 Smoke Pack", "Smoke Pack"),
+        ("24 Launch Status", "Launch Status"),
     ], 12):
         cell = ws.cell(r, 9, label)
         cell.hyperlink = f"#'{sheet}'!A1"
@@ -568,6 +814,10 @@ def build_dashboard(wb: Workbook):
         (21, "Actual Hours (Total)", "=IFERROR(SUM('04 Test Case Repository'!U3:U5000),0)"),
         (22, "Hours Variance", "=IFERROR(B21-B20,0)"),
         (23, "QA Team Size", "=IFERROR(COUNTA('QA Team'!A3:A50)-COUNTIF('QA Team'!A3:A50,\"TOTAL\"),0)"),
+        (24, "QA Tasks Open", "=IFERROR(COUNTIFS('QA Tasks'!H3:H5000,\"<>Done\",'QA Tasks'!H3:H5000,\"<>\"),0)"),
+        (25, "Dev Action Queue", "=IFERROR(COUNTIF('Dev Tasks'!I3:I152,\"Yes\"),0)"),
+        (26, "Shreya Open Bugs", "=IFERROR(COUNTIFS('06 Bug Tracker'!N3:N5000,\"Shreya Patil\",'06 Bug Tracker'!L3:L5000,\"<>Closed\",'06 Bug Tracker'!L3:L5000,\"<>Won't Fix\"),0)"),
+        (27, "Raj Open Bugs", "=IFERROR(COUNTIFS('06 Bug Tracker'!N3:N5000,\"Raj Balani\",'06 Bug Tracker'!L3:L5000,\"<>Closed\",'06 Bug Tracker'!L3:L5000,\"<>Won't Fix\"),0)"),
     ]
 
     ws["A3"] = "KEY PERFORMANCE INDICATORS"
@@ -769,11 +1019,11 @@ def build_modules(wb: Workbook):
         "MOD-16": "RLS admin role",
     }
     qa_owners = {
-        "MOD-01": "Asha Sharma", "MOD-02": "Rohan Mehta", "MOD-03": "Priya Nair", "MOD-04": "Priya Nair",
-        "MOD-05": "Priya Nair", "MOD-06": "Rohan Mehta", "MOD-07": "Asha Sharma", "MOD-08": "Priya Nair",
-        "MOD-09": "Asha Sharma", "MOD-10": "Rohan Mehta", "MOD-11": "Asha Sharma", "MOD-12": "Rohan Mehta",
-        "MOD-13": "Rohan Mehta", "MOD-14": "Rohan Mehta", "MOD-15": "Asha Sharma", "MOD-16": "Rohan Mehta",
-        "MOD-17": "Kavya Iyer", "MOD-18": "Asha Sharma", "MOD-19": "Dev Patel", "MOD-20": "Dev Patel",
+        "MOD-01": "Raj Balani", "MOD-02": "Raj Balani", "MOD-03": "Shreya Patil", "MOD-04": "Shreya Patil",
+        "MOD-05": "Shreya Patil", "MOD-06": "Raj Balani", "MOD-07": "Raj Balani", "MOD-08": "Shreya Patil",
+        "MOD-09": "Raj Balani", "MOD-10": "Raj Balani", "MOD-11": "Raj Balani", "MOD-12": "Raj Balani",
+        "MOD-13": "Raj Balani", "MOD-14": "Raj Balani", "MOD-15": "Raj Balani", "MOD-16": "Raj Balani",
+        "MOD-17": "Shreya Patil", "MOD-18": "Raj Balani", "MOD-19": "Shreya Patil", "MOD-20": "Shreya Patil",
     }
     rows = []
     for mid, name, portal, desc, owner, pri, status in MODULES:
@@ -858,17 +1108,17 @@ def build_credentials(wb: Workbook):
     ]
     samples = [
         ("Free", "qa.free@clarify.ai.test", ".env.qa.local → QA_FREE_PASSWORD", "free", "50",
-         "Seeded by npm run qa:seed-accounts — never commit passwords", "Asha Sharma", ""),
+         "Seeded by npm run qa:seed-accounts — never commit passwords", "Raj Balani", ""),
         ("Pro", "qa.pro@clarify.ai.test", ".env.qa.local → QA_PRO_PASSWORD", "pro", "1400",
-         "Stripe test checkout path", "Asha Sharma", ""),
+         "Stripe test checkout path", "Raj Balani", ""),
         ("Max", "qa.max@clarify.ai.test", ".env.qa.local → QA_MAX_PASSWORD", "enterprise", "4000",
-         "Workbook Max/Elite maps to plan_id=enterprise", "Asha Sharma", ""),
+         "Workbook Max/Elite maps to plan_id=enterprise", "Raj Balani", ""),
         ("Admin", "qa.admin@clarify.ai.test", ".env.qa.local → QA_ADMIN_PASSWORD", "enterprise", "4000",
-         "user_roles.admin via seed script", "Kavya Iyer", ""),
+         "user_roles.admin via seed script", "Shreya Patil", ""),
         ("Stripe test card", "N/A", "4242 4242 4242 4242", "N/A", "N/A",
-         "Any future expiry + any CVC; Stripe test mode only", "Asha Sharma", ""),
+         "Any future expiry + any CVC; Stripe test mode only", "Raj Balani", ""),
         ("Razorpay test", "N/A", "Dashboard test keys", "N/A", "N/A",
-         "INR one-time Order — no auto-renew (BUG-OPEN-01); keys not in .env.local yet", "Asha Sharma", ""),
+         "INR one-time Order — no auto-renew (BUG-OPEN-01); keys not in .env.local yet", "Raj Balani", ""),
     ]
     write_table(
         ws,
@@ -1033,51 +1283,51 @@ def build_test_cases(wb: Workbook):
         ("TC-001", "REQ-AUTH-01", "Auth & Onboarding", "Login", "Email login", "/login", "Free User", "Critical", "Critical",
          "Valid credentials", "User signs in with email/password", "Verified account",
          "1. Open /login\n2. Enter credentials\n3. Submit", "Redirect to /app or onboarding", "Landed on dashboard", "Pass", "Completed", "",
-         "Asha Sharma", 1.0, 0.75, TODAY, "1.0.0", "Staging", "Chrome", "Desktop", "Web", "Manual", "Yes", "Yes", "Yes", "Sprint 26", "1.0.0-beta", ""),
+         "Raj Balani", 1.0, 0.75, TODAY, "1.0.0", "Staging", "Chrome", "Desktop", "Web", "Manual", "Yes", "Yes", "Yes", "Sprint 26", "1.0.0-beta", ""),
         ("TC-002", "REQ-AUTH-02", "Auth & Onboarding", "Login", "Lockout", "/login", "Free User", "High", "High",
          "Repeated failures", "Lockout after threshold", "Test account",
          "1. Fail login repeatedly\n2. Observe message", "Temporary lockout shown", "", "Not Run", "Ready", "",
-         "Asha Sharma", 1.5, 0, "", "1.0.0", "Staging", "Chrome", "Desktop", "Web", "Manual", "Yes", "No", "Yes", "Sprint 26", "1.0.0-beta", ""),
+         "Raj Balani", 1.5, 0, "", "1.0.0", "Staging", "Chrome", "Desktop", "Web", "Manual", "Yes", "No", "Yes", "Sprint 26", "1.0.0-beta", ""),
         ("TC-003", "REQ-LIVE-01", "Live Practice Coach", "STT", "Deepgram stream", "/app/live", "Pro User", "Critical", "Critical",
          "Mic open", "Near-real-time transcript", "Pro + mic permission",
          "1. Start live\n2. Speak\n3. Observe transcript", "Segments appear under 2s", "OK", "Pass", "Completed", "",
-         "Priya Nair", 2.0, 1.5, TODAY, "1.0.0", "Staging", "Electron", "Laptop", "Windows", "Manual", "Yes", "Yes", "No", "Sprint 26", "1.0.0-beta", ""),
+         "Shreya Patil", 2.0, 1.5, TODAY, "1.0.0", "Staging", "Electron", "Laptop", "Windows", "Manual", "Yes", "Yes", "No", "Sprint 26", "1.0.0-beta", ""),
         ("TC-004", "REQ-LIVE-02", "Live Practice Coach", "Overlay", "Pro gate", "/app/live/overlay", "Free User", "Critical", "High",
          "Free overlay blocked", "Server rejects overlay capture", "Free account",
          "1. Attempt overlay capture\n2. Check response", "403 / upgrade required", "403 returned", "Pass", "Completed", "BUG-001",
-         "Dev Patel", 1.5, 1.25, TODAY, "1.0.0", "Staging", "Electron", "Desktop", "Windows", "Candidate", "Yes", "Yes", "No", "Sprint 26", "1.0.0-beta", "Retest after P0-3"),
+         "Shreya Patil", 1.5, 1.25, TODAY, "1.0.0", "Staging", "Electron", "Desktop", "Windows", "Candidate", "Yes", "Yes", "No", "Sprint 26", "1.0.0-beta", "Retest after P0-3"),
         ("TC-005", "REQ-BILL-01", "Billing & Credits", "Checkout", "Max Stripe price", "/pricing", "Free User", "Critical", "Critical",
          "Upgrade Max", "Enterprise price id used", "Stripe test keys",
          "1. Select Max\n2. Checkout\n3. Inspect price", "Non-empty enterprise price", "OK", "Pass", "Completed", "",
-         "Asha Sharma", 2.0, 1.5, TODAY, "1.0.0", "Staging", "Chrome", "Desktop", "Web", "Manual", "Yes", "Yes", "Yes", "Sprint 26", "1.0.0-beta", "P0-1"),
+         "Raj Balani", 2.0, 1.5, TODAY, "1.0.0", "Staging", "Chrome", "Desktop", "Web", "Manual", "Yes", "Yes", "Yes", "Sprint 26", "1.0.0-beta", "P0-1"),
         ("TC-006", "REQ-BILL-02", "Billing & Credits", "Webhook", "payment_failed", "stripe-webhook", "Pro User", "Critical", "Critical",
          "Failed invoice", "Wallet not wiped", "credits=500",
          "1. Simulate invoice.payment_failed\n2. Read credits", "Credits remain 500", "Unchanged", "Pass", "Completed", "",
-         "Dev Patel", 1.5, 1.0, TODAY, "1.0.0", "CI", "N/A", "Desktop", "Web", "Automated", "Yes", "Yes", "No", "Sprint 26", "1.0.0-beta", "P0-2"),
+         "Raj Balani", 1.5, 1.0, TODAY, "1.0.0", "CI", "N/A", "Desktop", "Web", "Automated", "Yes", "Yes", "No", "Sprint 26", "1.0.0-beta", "P0-2"),
         ("TC-007", "REQ-DOC-01", "Documents & Resumes", "Parse", "Free onboarding parse", "/onboarding", "Free User", "High", "Medium",
          "First parse free", "No deduct on first onboarding parse", "onboarding_completed=false",
          "1. Upload resume\n2. Check ledger", "Free path / no deduct", "", "Not Run", "Ready", "",
-         "Priya Nair", 1.5, 0, "", "1.0.0", "Staging", "Chrome", "Desktop", "Web", "Manual", "Yes", "No", "Yes", "Sprint 26", "1.0.0-beta", ""),
+         "Shreya Patil", 1.5, 0, "", "1.0.0", "Staging", "Chrome", "Desktop", "Web", "Manual", "Yes", "No", "Yes", "Sprint 26", "1.0.0-beta", ""),
         ("TC-008", "REQ-GOV-01", "Gov Exam Mock Tests", "Submit", "Atomic submit", "/app/mock-test/session/:id", "Free User", "Critical", "High",
          "Submit answers", "Score persisted once", "Active test",
          "1. Answer\n2. Submit\n3. Open results", "Score + breakdown", "OK", "Pass", "Completed", "",
-         "Rohan Mehta", 2.0, 1.75, TODAY, "1.0.0", "Staging", "Chrome", "Android Phone", "Android", "Manual", "Yes", "Yes", "Yes", "Sprint 26", "1.0.0-beta", ""),
+         "Raj Balani", 2.0, 1.75, TODAY, "1.0.0", "Staging", "Chrome", "Android Phone", "Android", "Manual", "Yes", "Yes", "Yes", "Sprint 26", "1.0.0-beta", ""),
         ("TC-009", "REQ-ADM-01", "Admin Portal", "Revenue", "USD vs INR", "/app/admin/revenue", "Admin", "Critical", "High",
          "Admin revenue view", "Currencies separate", "Admin + sample data",
          "1. Open Revenue\n2. Compare hand calc", "USD MRR + INR separate", "OK", "Pass", "Completed", "",
-         "Kavya Iyer", 2.5, 2.0, TODAY, "1.0.0", "Staging", "Chrome", "Desktop", "Web", "Manual", "Yes", "No", "No", "Sprint 26", "1.0.0-beta", "P0-6"),
+         "Raj Balani", 2.5, 2.0, TODAY, "1.0.0", "Staging", "Chrome", "Desktop", "Web", "Manual", "Yes", "No", "No", "Sprint 26", "1.0.0-beta", "P0-6"),
         ("TC-010", "REQ-APP-01", "Dashboard", "Routing", "In-app 404", "/app/does-not-exist", "Pro User", "Medium", "Low",
          "Unknown route", "NotFound in AppShell", "Authenticated",
          "1. Navigate unknown /app path", "In-app NotFound", "OK", "Pass", "Completed", "",
-         "Asha Sharma", 0.5, 0.25, TODAY, "1.0.0", "Staging", "Chrome", "Desktop", "Web", "Manual", "Yes", "Yes", "Yes", "Sprint 26", "1.0.0-beta", "P1-4"),
+         "Shreya Patil", 0.5, 0.25, TODAY, "1.0.0", "Staging", "Chrome", "Desktop", "Web", "Manual", "Yes", "Yes", "Yes", "Sprint 26", "1.0.0-beta", "P1-4"),
         ("TC-011", "REQ-LIVE-03", "Live Practice Coach", "Credits", "Hint deduct", "/app/live", "Pro User", "High", "High",
          "Insufficient credits", "402 when wallet low", "credits below cost",
          "1. Drain credits\n2. Request hint", "402 + message", "In progress", "In Progress", "In Progress", "",
-         "Dev Patel", 1.5, 0.5, TODAY, "1.0.0", "Staging", "Chrome", "Desktop", "Web", "Candidate", "Yes", "No", "No", "Sprint 26", "1.0.0-beta", ""),
+         "Shreya Patil", 1.5, 0.5, TODAY, "1.0.0", "Staging", "Chrome", "Desktop", "Web", "Candidate", "Yes", "No", "No", "Sprint 26", "1.0.0-beta", ""),
         ("TC-012", "REQ-SEC-01", "Security & Platform", "Authz", "Non-admin admin route", "/app/admin", "Free User", "Critical", "Critical",
          "Unauthorized admin", "Redirect / deny", "Non-admin user",
          "1. Open /app/admin", "Denied", "Denied", "Pass", "Completed", "",
-         "Kavya Iyer", 1.0, 0.75, TODAY, "1.0.0", "Staging", "Chrome", "Desktop", "Web", "Manual", "Yes", "Yes", "Yes", "Sprint 26", "1.0.0-beta", ""),
+         "Raj Balani", 1.0, 0.75, TODAY, "1.0.0", "Staging", "Chrome", "Desktop", "Web", "Manual", "Yes", "Yes", "Yes", "Sprint 26", "1.0.0-beta", ""),
     ]
     write_table(ws, "Test Case Repository — Clarify AI", "", headers, samples)
     add_dv(ws, lr(wb, "Modules"), "C3:C5000")
@@ -1120,27 +1370,27 @@ def build_e2e(wb: Workbook):
         ("E2E-01", "Signup to Onboarding to Dashboard", "Auth Portal", "/signup", "/app/dashboard",
          "1. Sign up 2. Verify email 3. Complete 5 steps 4. Land dashboard",
          "Profile + onboarding_completed + starter credits", "OK on Staging", "Pass", "High", "Auth, Email",
-         "Asha Sharma", 3.0, 2.5, ""),
+         "Raj Balani", 3.0, 2.5, ""),
         ("E2E-02", "Free to Pro Stripe checkout", "Candidate App", "/pricing", "/app/settings/billing",
          "1. Choose Pro 2. Stripe Checkout 3. Webhook 4. Open Billing",
          "plan=pro, credits granted, ledger entry", "", "Not Run", "Critical", "Stripe test keys",
-         "Asha Sharma", 4.0, 0, "Money path"),
+         "Raj Balani", 4.0, 0, "Money path"),
         ("E2E-03", "Live coach rehearsal", "Candidate App", "/app/live", "/app/sessions/:id",
          "1. Start 2. Audio 3. Generate answer 4. End 5. Debrief",
          "Session + transcript + debrief", "OK", "Pass", "Critical", "Deepgram, Gemini, Credits",
-         "Priya Nair", 5.0, 4.0, ""),
+         "Shreya Patil", 5.0, 4.0, ""),
         ("E2E-04", "Gov exam create to results", "Candidate App", "/app/mock-test", "/app/mock-test/results/:id",
          "1. Select exam 2. create-test 3. Answer 4. submit 5. Results",
          "Atomic score, no double submit", "OK", "Pass", "High", "Question bank",
-         "Rohan Mehta", 3.5, 3.0, "Thin content"),
+         "Raj Balani", 3.5, 3.0, "Thin content"),
         ("E2E-05", "Admin seed to candidate test", "Admin Portal", "/app/admin/seed-questions", "/app/mock-test",
          "1. Import questions 2. Candidate creates test",
          "Imported questions available", "Blocked", "Blocked", "High", "Admin, Gemini PDF",
-         "Rohan Mehta", 4.0, 1.0, ""),
+         "Raj Balani", 4.0, 1.0, ""),
         ("E2E-06", "Electron overlay boot", "Electron Overlay", "Clarify AI.exe", "Overlay window",
          "1. Launch 2. Auth if needed 3. Overlay topmost 4. Hotkey",
          "Overlay-only shell", "", "Not Run", "Critical", "Code signing deferred",
-         "Dev Patel", 3.0, 0, "Unsigned beta OK"),
+         "Shreya Patil", 3.0, 0, "Unsigned beta OK"),
     ]
     write_table(ws, "End-to-End User Flows — golden paths", "", headers, samples)
     add_dv(ws, lr(wb, "Portals"), "C3:C5000")
@@ -1181,12 +1431,18 @@ def build_bugs(wb: Workbook):
     add_dv(ws, lr(wb, "Severity"), "J3:J5000")
     add_dv(ws, lr(wb, "Priority"), "K3:K5000")
     add_dv(ws, lr(wb, "BugStatus"), "L3:L5000")
-    add_dv(ws, lr(wb, "Owners"), "M3:M5000")
+    # Assigned To = developer or module owner role; Reported By = QA (Shreya/Raj)
+    add_dv(ws, lr(wb, "Assignees"), "M3:M5000")
     add_dv(ws, lr(wb, "Testers"), "N3:N5000")
     add_dv(ws, lr(wb, "Sprint"), "S3:S5000")
     add_dv(ws, lr(wb, "RootCause"), "T3:T5000")
     cf_severity(ws, "J")
     cf_severity(ws, "K")
+    # Workflow hint row under table
+    tip = 3 + len(samples) + 2
+    ws.cell(tip, 1, "WORKFLOW").font = Font(bold=True)
+    ws.cell(tip, 2, "QA (Shreya/Raj) files bug → set Reported By + Assigned To (dev) → Dev Tasks sheet mirrors this row → Dev fixes → Status=Fixed/Retest → QA retests → Closed. Filter Status / Reported By like slicers.")
+    ws.merge_cells(start_row=tip, start_column=2, end_row=tip, end_column=10)
     finish_sheet(ws, 2, len(samples), len(headers))
 
 
@@ -1447,12 +1703,12 @@ def build_regression(wb: Workbook):
         "Pass", "Fail", "Blocked", "Est Hours", "Actual Hours", "Remarks",
     ]
     samples = [
-        ("REG-01", "Auth & Onboarding", "Login/OAuth/MFA", "Asha Sharma", "Yes", 4, 0, 0, 4.0, 3.5, "Smoke green"),
-        ("REG-02", "Live Practice Coach", "STT + answer + overlay", "Priya Nair", "Yes", 4, 0, 0, 6.0, 5.0, "BUG-001 closed"),
-        ("REG-03", "Billing & Credits", "Checkout + webhooks", "Asha Sharma", "Yes", 5, 0, 0, 5.0, 4.5, "Money path"),
-        ("REG-04", "Gov Exam Mock Tests", "Create/submit/results", "Rohan Mehta", "Yes", 3, 0, 1, 4.0, 3.0, "PDF blocked"),
-        ("REG-05", "Admin Portal", "Users/revenue/questions", "Rohan Mehta", "Yes", 4, 0, 0, 4.0, 3.5, ""),
-        ("REG-06", "Electron Desktop Overlay", "Boot + hotkeys", "Dev Patel", "Partial", 2, 0, 1, 3.0, 1.5, "Unsigned"),
+        ("REG-01", "Auth & Onboarding", "Login/OAuth/MFA", "Raj Balani", "Yes", 4, 0, 0, 4.0, 3.5, "Smoke green"),
+        ("REG-02", "Live Practice Coach", "STT + answer + overlay", "Shreya Patil", "Yes", 4, 0, 0, 6.0, 5.0, "BUG-001 closed"),
+        ("REG-03", "Billing & Credits", "Checkout + webhooks", "Raj Balani", "Yes", 5, 0, 0, 5.0, 4.5, "Money path"),
+        ("REG-04", "Gov Exam Mock Tests", "Create/submit/results", "Raj Balani", "Yes", 3, 0, 1, 4.0, 3.0, "PDF blocked"),
+        ("REG-05", "Admin Portal", "Users/revenue/questions", "Raj Balani", "Yes", 4, 0, 0, 4.0, 3.5, ""),
+        ("REG-06", "Electron Desktop Overlay", "Boot + hotkeys", "Shreya Patil", "Partial", 2, 0, 1, 3.0, 1.5, "Unsigned"),
     ]
     write_table(ws, "Regression Testing", "", headers, samples)
     add_dv(ws, lr(wb, "Modules"), "B3:B5000")
@@ -1510,14 +1766,14 @@ def build_signoff(wb: Workbook):
         "Passed", "Known Issues", "Blockers", "Risk Level", "Deployment Approval", "Go/No-Go", "Remarks",
     ]
     samples = [
-        ("1.0.0-beta", "1.0.0", "Staging", "Kavya Iyer", "Dev Lead", "Product",
+        ("1.0.0-beta", "1.0.0", "Staging", "Shreya Patil", "Dev Lead", "Product",
          "Yes", "BUG-OPEN-01 Razorpay one-time; unsigned Electron if no cert",
          "Calendar/Resend/signing secrets if promising those features", "Medium", "Pending", "Conditional Go",
          "Launch-pass code + expanded MCQ seeds; apply migration; ops secrets still Blocked"),
-        ("1.0.0", "1.0.0", "Production", "Kavya Iyer", "Dev Lead", "Product",
+        ("1.0.0", "1.0.0", "Production", "Shreya Patil", "Dev Lead", "Product",
          "No", "See CHANGELOG Launch gap matrix", "Code signing; anon key rotation; Calendar/Resend if promised", "High", "Pending", "No-Go",
          "Await cert + ops secrets"),
-        ("1.0.1", "TBD", "Staging", "Kavya Iyer", "Dev Lead", "Product",
+        ("1.0.1", "TBD", "Staging", "Shreya Patil", "Dev Lead", "Product",
          "No", "", "", "Low", "Deferred", "No-Go", "Placeholder"),
     ]
     write_table(ws, "Release Sign-Off", "", headers, samples)
@@ -1554,6 +1810,7 @@ def build_nav_hub(wb: Workbook):
             ("17 Role Based Testing", "Plan gates"),
         ]),
         ("Execution", [
+            ("QA Tasks", "Shreya & Raj task board"),
             ("04 Test Case Repository", "Case library"),
             ("05 E2E User Flows", "Golden paths"),
             ("25 Smoke Pack", "Must-pass (~20)"),
@@ -1561,7 +1818,9 @@ def build_nav_hub(wb: Workbook):
             ("Daily Log", "Trend feed"),
         ]),
         ("Defects & Quality", [
-            ("06 Bug Tracker", "Lifecycle"),
+            ("06 Bug Tracker", "Lifecycle (source of truth)"),
+            ("Dev Tasks", "Live bug mirror for developers"),
+            ("Dev Team", "Dev roster + load"),
             ("07 UI-UX Testing", "Visual / a11y"),
             ("08 Mobile Responsiveness", "Breakpoints"),
             ("13 Performance Testing", "Latency"),
@@ -1580,7 +1839,7 @@ def build_nav_hub(wb: Workbook):
         ("Ops & Hire Pack", [
             ("21 Test Credentials", "Placeholders only"),
             ("22 Environments", "URLs + secrets checklist"),
-            ("QA Team", "Roster & capacity"),
+            ("QA Team", "Shreya Patil · Raj Balani"),
             ("00 Read Me", "How to use"),
             ("Lists", "Dropdown vocabulary"),
         ]),
@@ -1618,6 +1877,9 @@ def main():
     build_lists(wb)
     build_daily_log(wb)
     build_qa_team(wb)
+    build_qa_tasks(wb)
+    build_dev_team(wb)
+    build_dev_tasks(wb)
     build_readme(wb)
     build_dashboard(wb)
     build_modules(wb)
@@ -1655,6 +1917,7 @@ def main():
     # Order: Read Me, NAV, Dashboard, 02-20, hire-pack sheets, Daily Log, Lists at end
     desired = [
         "00 Read Me", "NAV Hub", "01 Dashboard",
+        "QA Tasks", "QA Team", "Dev Team", "Dev Tasks",
         "02 Module Master", "03 Feature Inventory", "04 Test Case Repository",
         "05 E2E User Flows", "06 Bug Tracker", "07 UI-UX Testing", "08 Mobile Responsiveness",
         "09 API Testing", "10 Database Validation", "11 Authentication Testing",
@@ -1664,12 +1927,12 @@ def main():
         "20 Release Sign-Off",
         "21 Test Credentials", "22 Environments", "23 Module Playbooks",
         "24 Launch Status", "25 Smoke Pack",
-        "QA Team", "Daily Log", "Lists",
+        "Daily Log", "Lists",
     ]
     for i, name in enumerate(desired):
         wb.move_sheet(name, offset=i - wb.sheetnames.index(name))
 
-    for path in (OUT, OUT_FALLBACK, OUT_COMPLETE, OUT_FULL):
+    for path in (OUT, OUT_FALLBACK, OUT_COMPLETE, OUT_COMPLETE_V2, OUT_FULL):
         try:
             wb.save(path)
             print(f"Wrote {path}")

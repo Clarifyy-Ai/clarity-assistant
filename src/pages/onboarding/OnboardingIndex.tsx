@@ -13,6 +13,7 @@ import { useAuthStore } from "@/store";
 import { recordReferral, getStoredRefCode, normalizeRefCode } from "@/lib/referrals";
 import { ROUTES } from "@/lib/constants";
 import { saveLastPracticeSetup } from "@/lib/session/lastPracticeSetup";
+import { markOnboardingComplete } from "@/lib/analytics/uxMetrics";
 import { normalizePreferredModel } from "@/lib/ai/modelOptions";
 import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
 
@@ -171,6 +172,8 @@ export default function OnboardingIndex() {
           freshProfile?.response_style as string | undefined,
         ),
       );
+
+      markOnboardingComplete();
 
       navigate(ROUTES.LIVE_SESSION, { replace: true });
     } catch (err) {

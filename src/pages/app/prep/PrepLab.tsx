@@ -24,12 +24,28 @@ import { refreshCredits } from "@/lib/billing/creditsManager";
 import { EDGE_BASE } from "@/lib/env";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { Link, useSearchParams } from "react-router-dom";
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import {
   StarBuilderForm,
   type StarFieldKey,
   type StarFields,
 } from "@/components/prep/StarBuilderForm";
+
+// Default prep-tool cost for tools without an explicit AI_CREDIT_COSTS entry.
+const PREP_TOOL_DEFAULT_COST = 3;
+
+function getPrepToolCost(toolId: string): number {
+  const mapped: Record<string, number> = {
+    coding_hint: AI_CREDIT_COSTS.coding_hint,
+    coding_solution: AI_CREDIT_COSTS.live_answer,
+    rephrase: AI_CREDIT_COSTS.rephraser,
+    project_build: AI_CREDIT_COSTS.project_builder,
+    star_method: AI_CREDIT_COSTS.star_builder,
+    system_design: AI_CREDIT_COSTS.system_design,
+  };
+  return mapped[toolId] ?? PREP_TOOL_DEFAULT_COST;
+}
 
 // ─────────────────────────────────────────────────────────────────
 // PrepLab — STAR builder, Answer Bank, AI tools
@@ -255,7 +271,7 @@ function STARBuilder() {
               ) : (
                 <Sparkles className="w-3 h-3" />
               )}
-              Polish
+              Polish ({credits.costs.star_analyse} cr)
             </button>
           ) : null
         }
@@ -286,7 +302,7 @@ function STARBuilder() {
           leftIcon={<Zap className="w-4 h-4" />}
           fullWidth
         >
-          Generate polished answer
+          Generate polished answer ({credits.costs.star_generate} credits)
         </Button>
         {generated && (
           <Button
@@ -593,7 +609,9 @@ function AIToolModal({
   toolId:  string | null;
   onClose: () => void;
 }) {
+  const credits = useCredits();
   const tool = AI_TOOLS.find((t) => t.id === toolId);
+  const toolCost = toolId ? getPrepToolCost(toolId) : PREP_TOOL_DEFAULT_COST;
   const [input,  setInput]  = useState("");
   const [output, setOutput] = useState("");
   const [loading, setLoading] = useState(false);
@@ -614,6 +632,7 @@ function AIToolModal({
         input,
       });
       setOutput(data.result ?? "");
+      await refreshCredits();
     } catch (err) {
       console.error("AI tool run() failed:", err);
       toast.error("The AI tool failed to run. Please try again.");
@@ -640,11 +659,11 @@ function AIToolModal({
           size="md"
           fullWidth
           loading={loading}
-          disabled={!input.trim()}
+          disabled={!input.trim() || credits.balance < toolCost}
           onClick={run}
           leftIcon={<Sparkles className="w-4 h-4" />}
         >
-          Run AI tool
+          Run AI tool ({toolCost} credits)
         </Button>
         {output && (
           <div className="bg-secondary border border-border rounded-xl p-4">
@@ -674,6 +693,7 @@ function AIToolModal({
 // ─────────────────────────────────────────────────────────────────
 
 function CompanyPrep() {
+  const credits = useCredits();
   const [company,  setCompany]  = useState("");
   const [role,     setRole]     = useState("");
   const [loading,  setLoading]  = useState(false);
@@ -729,11 +749,11 @@ function CompanyPrep() {
           variant="primary"
           size="md"
           loading={loading}
-          disabled={!company.trim() || !role.trim()}
+          disabled={!company.trim() || !role.trim() || !credits.canAfford("company_brief")}
           onClick={generate}
           leftIcon={<Building2 className="w-4 h-4" />}
         >
-          Generate prep brief
+          Generate prep brief ({AI_CREDIT_COSTS.company_research} credits)
         </Button>
       </Card>
 

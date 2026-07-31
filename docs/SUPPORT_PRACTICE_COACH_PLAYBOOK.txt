@@ -1,0 +1,70 @@
+================================================================================
+CLARIFY AI — SUPPORT PLAYBOOK: Practice Coach / Overlay / Electron
+For support agents explaining the product to confused users.
+================================================================================
+
+PRODUCT POSITIONING (always say this first)
+  Clarify AI is PRACTICE coaching — rehearse interviews before the real one.
+  It is NOT marketed as a covert tool for cheating in live interviews.
+
+--------------------------------------------------------------------------------
+WHY ARE THERE TWO URLS: /app/live AND /app/live/overlay?
+--------------------------------------------------------------------------------
+  /app/live .............. Setup + "Start Practice (same setup)" + post-session
+                           summary (3 bullets). Lives inside the normal app
+                           sidebar (AppShell).
+
+  /app/live/overlay ...... THE mid-session UI (floating Overlay). No sidebar.
+                           Hints, listening indicator, mute, end session.
+
+  On Start, the app navigates from /app/live → /app/live/overlay automatically.
+  If a session is already active and the user opens /app/live, they are
+  redirected back to the overlay.
+
+  User says "I see an empty page" → They likely ended up on /app/live while
+  the Overlay is the real UI. Tell them to click "Open active session" or go
+  to Practice Coach → it should auto-open Overlay. Or check if a popup/
+  floating window is behind other apps (Electron).
+
+--------------------------------------------------------------------------------
+DESKTOP (ELECTRON) VS BROWSER
+--------------------------------------------------------------------------------
+  Desktop app  = Overlay / Practice Coach only (always-on-top coaching).
+  Browser hub  = Dashboard, Settings, Billing, Prep, Sessions, etc.
+
+  First Electron launch shows an education dialog explaining this.
+  Billing and account changes → "Open in browser" from the desktop app.
+
+--------------------------------------------------------------------------------
+COMMON TICKETS
+--------------------------------------------------------------------------------
+  "Where did my session go?"
+    → Overlay is mid-session UI. Check Overlay window or /app/live/overlay.
+      After End → /app/live?ended=… shows Session Notes, then Scorecard.
+
+  "Mic not working"
+    → Practice Coach shows Audio OK badge before Start. Recheck. Browser
+      site settings → allow microphone. Zoom exclusive mic: close Zoom mic
+      test or switch default input in OS settings. Mid-session: red banner
+      with Reconnect.
+
+  "Credits vanished"
+    → Hints/answers spend credits; costs shown before Prep AI / company brief.
+      Settings → Billing or Credits & Usage.
+
+  "Gov Exams vs Interview Practice"
+    → Same login, two product lines. Sidebar: Practice Coach / Mock Interview
+      for job interviews; Gov Exam Mock Tests for competitive exams (India).
+
+--------------------------------------------------------------------------------
+NAMING (use these words with users)
+--------------------------------------------------------------------------------
+  Practice Coach ........ live AI practice (not "Live Co-Pilot" / "Rehearsal")
+  Overlay ............... the floating session window
+  Mock Interview ........ timed scored practice
+  Prep Lab .............. offline STAR / rephrase tools
+  Answer Bank ........... saved answers
+
+================================================================================
+END
+================================================================================

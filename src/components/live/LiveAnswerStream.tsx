@@ -1,6 +1,7 @@
-import { useMemo } from "react";
+import { useEffect, useMemo } from "react";
 import { useOverlayStore } from "@/store/overlayStore";
 import { composeHint } from "@/lib/overlay/overlayCompositor";
+import { markFirstHint } from "@/lib/analytics/uxMetrics";
 import { cn } from "@/lib/utils";
 import { Loader2 } from "lucide-react";
 
@@ -19,6 +20,10 @@ export function LiveAnswerStream() {
   const error_message    = useOverlayStore((s) => s.error_message);
 
   const text = hint_state === "streaming" ? streaming_buffer : current_hint;
+
+  useEffect(() => {
+    if ((text ?? "").trim().length > 0) markFirstHint();
+  }, [text]);
 
   // Compose hint only when text or style changes
   const composed = useMemo(

@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { Calendar, Tag, ArrowRight } from "lucide-react";
 import { motion } from "framer-motion";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
+import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { supabase } from "@/integrations/supabase/client";
+import { FileText } from "lucide-react";
 
 interface BlogPostMeta {
   slug: string;
@@ -33,6 +36,7 @@ function formatDate(dateStr: string) {
 }
 
 export default function Blog() {
+  const navigate = useNavigate();
   usePageMeta({
     title: "Blog — Clarify AI",
     description: "Interview prep guides, STAR method tips, and AI coaching insights from Clarify AI.",
@@ -88,25 +92,37 @@ export default function Blog() {
           )}
 
           {!loading && error && (
-            <div className="text-center py-12 space-y-2">
-              <span className="inline-flex text-xs font-semibold px-2.5 py-1 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400">
-                Temporarily unavailable
-              </span>
-              <p className="text-sm text-muted-foreground">
-                Couldn&apos;t load posts right now. Please try again later.
-              </p>
-            </div>
+            <InlineErrorRetry
+              message={error}
+              onRetry={() => {
+                setLoading(true);
+                setError(null);
+                void (async () => {
+                  const { data, error: err } = await (supabase as any)
+                    .from("blog_posts")
+                    .select("slug, title, excerpt, published_at, category, author, read_time")
+                    .eq("published", true)
+                    .order("published_at", { ascending: false });
+                  if (err) {
+                    setError(err.message);
+                    setPosts([]);
+                  } else {
+                    setPosts((data as BlogPostMeta[]) ?? []);
+                  }
+                  setLoading(false);
+                })();
+              }}
+            />
           )}
 
           {!loading && !error && posts.length === 0 && (
-            <div className="text-center py-12 space-y-2">
-              <span className="inline-flex text-xs font-semibold px-2.5 py-1 rounded-lg border border-primary/30 bg-primary/10 text-primary">
-                Coming soon
-              </span>
-              <p className="text-sm text-muted-foreground">
-                No blog posts yet — we&apos;re preparing guides and tips. Check back soon.
-              </p>
-            </div>
+            <EmptyState
+              icon={FileText}
+              title="No posts yet"
+              description="We're preparing guides and tips. Check back soon, or browse the Help Center."
+              actionLabel="Visit Help Center"
+              onAction={() => navigate("/help")}
+            />
           )}
 
           {!loading && !error && posts.length > 0 && (

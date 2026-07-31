@@ -1,0 +1,437 @@
+================================================================================
+CLARIFY AI — USER-FRIENDLINESS + PARAKEET PARITY GAP AUDIT
+Complete “what’s missing / what’s confusing / how to feel as simple as
+Parakeet AI” companion to the UI/UX Implementation Audit (30 July 2026).
+================================================================================
+
+Product ............... Clarify AI (clarify-ai / clarity-assistant)
+Audit date ............ 31 July 2026
+Status refresh ........ 1 August 2026 (post Full UX Agent Waves)
+Based on ..............
+  - CLARIFY_AI_UI_UX_IMPLEMENTATION_AUDIT.txt (screen inventory)
+  - CLARIFY_AI_UI_UX_GAP_ANALYSIS_AND_ROADMAP.txt (earlier gap plan)
+  - Source review of routes, shell, overlay, onboarding, settings, mock-test
+  - Public Parakeet AI positioning (parakeet-ai.com + 2026 reviews)
+  - Code verification after P0–P3 agent-wave implementation
+
+IMPORTANT POSITIONING NOTE
+  Parakeet AI is marketed as a LIVE interview copilot (real-time answers
+  during real interviews). Clarify AI is positioned as PRACTICE-first with
+  compliance messaging. “Work like Parakeet” here means MATCH THE FEEL:
+  one-click start, minimal mid-session UI, fast confidence, instant wrap-up —
+  NOT copy deceptive “use this on a real interview to cheat” product framing.
+  Keep Clarify’s practice / ethical framing; steal Parakeet’s FRICTIONLESS UX.
+
+HOW TO USE THIS DOC
+  Part 0  Verdict + ship status
+  Part 1  What your existing audit already covered well
+  Part 2  UX layers (beyond screens) — what’s done vs still open
+  Part 3  Parakeet AI UX model → Clarify gap matrix (core “feel”)
+  Part 4  User-friendliness scorecard (post-wave estimates)
+  Part 5  Missing UX patterns inventory (whole app)
+  Part 6  Screen-by-screen checklist (gaps remaining only)
+  Part 7  Concrete suggestions (do / don’t / success criteria)
+  Part 8  Priority backlog P0–P3 with SHIP STATUS
+  Part 9  Definition of Done: “feels like Parakeet” for Practice Coach
+  Part 10 NEXT backlog (post P0–P3 — complete)
+
+
+================================================================================
+PART 0 — VERDICT IN ONE PAGE
+================================================================================
+
+Clarify AI is FEATURE-RICH. Before the UX waves it was FRICTION-HEAVY.
+Parakeet AI is FEATURE-NARROW but FRICTION-LIGHT.
+
+Competitive UX problem = friction on the core practice loop, not missing
+features. Clarify already has Mock, Prep, Answer Bank, Interview Day, Debrief,
+Gov Exams, Analytics, Documents, Guide — Parakeet does not.
+
+Parakeet “wins” on: open → resume ready → listen → answer → auto notes.
+Clarify’s agent waves moved the core loop much closer to that feel.
+
+SHIPPED (P0–P3 agent waves — verified in code 1 Aug 2026)
+  [x] Overlay-only mid-session; /app/live = setup + PostSessionSummary
+  [x] Auto-redirect /app/live → overlay when session already active
+  [x] Start Practice (same setup) + lastPracticeSetup + Change-setup hydrate
+  [x] SessionContextChip (Using: Resume · Language)
+  [x] OverlayListeningIndicator + mid-session Reconnect audio-fail CTA
+  [x] PostSessionSummary 3-bullet wrap-up before Scorecard/Debrief
+  [x] Naming: Practice Coach (no Live Co-Pilot / Dashboard “Overlay” label)
+  [x] Interviews delete confirm + touch-safe actions
+  [x] Settings 5-group IA; Security Config → Admin
+  [x] Notifications Coming-soon honesty (no fake digest/push toggles)
+  [x] PrepLab credit previews; STAR via shared StarBuilderForm
+  [x] Answer Bank list → detail
+  [x] Dashboard progressive disclosure (new vs returning / More)
+  [x] One mobile bottom nav; mobile hints-only Overlay
+  [x] Mock /app/mock/session/:sessionId refresh restore
+  [x] Debrief TOC; mock-test configure wizard; PWA/A2HS
+  [x] ElectronFirstRunModal (Desktop = Overlay; Browser = Hub)
+  [x] SharedDebrief branded; AuthShell; Recharts Analytics/Usage
+  [x] OverlaySettings Switch; emoji chrome cleanup; Admin nav groups
+
+PART 10 STATUS: COMPLETE (N1–N12 via agent waves)
+  Deferred only: full-app global search; Windows case-fold dual-kit delete;
+  undo toasts (nice-to-have); covert positioning (never).
+
+HEADLINE SCORES (post Part 10 — user-friendliness)
+  Practice Coach start → session → wrap-up ..... 8.5 / 10
+  Overlay mid-session simplicity ............... 8 / 10
+  First-run to first practice .................. 7.5 / 10
+  Dashboard / home clarity ..................... 7.5 / 10
+  Mock Interview loop .......................... 8 / 10
+  Prep Lab / Answer Bank ....................... 7.5 / 10
+  Sessions / Scorecard / Debrief ............... 8 / 10
+  Interviews / Interview Day ................... 7.5 / 10
+  Analytics / Usage / Settings ................. 7.5 / 10
+  Gov Exam suite ............................... 7.5 / 10
+  Marketing / Auth / Shared Debrief ............ 7.5 / 8 / 8
+  Mobile overall ............................... 7.5 / 10
+  Electron dual-app mental model ............... 7.5 / 10
+
+Parakeet DoD core path: MET. Remaining work is optional polish only.
+
+
+================================================================================
+PART 1 — WHAT YOUR EXISTING AUDIT ALREADY COVERED WELL
+================================================================================
+
+KEEP AND TRUST THESE FINDINGS (do not re-audit from scratch):
+
+  ✓ Five chrome worlds (Marketing / Auth / AppShell / Overlay / Admin)
+  ✓ Dual Button/Card/Modal history (imports largely lowercase now)
+  ✓ Dual mobile nav — RESOLVED to bottom nav + More
+  ✓ Practice Coach dual path — RESOLVED (redirect + overlay mid-session)
+  ✓ Onboarding / Prep / Settings / Mock / Debrief / SharedDebrief issues
+  ✓ Master issue register H1–H14 / M1–M14 / L1–L7
+  ✓ Phase A–D redesign roadmap foundations
+
+
+================================================================================
+PART 2 — UX LAYERS BEYOND SCREENS (status after waves)
+================================================================================
+
+2.1 TIME-TO-VALUE & COGNITIVE LOAD .......... OPEN (instrument KPIs)
+  Target: ≤ 2 decisions returning; ≤ 4 new; first practice ≤ 2 minutes.
+  Same-setup + shorter onboarding shipped; measurement not wired.
+
+2.2 LATENCY / CONFIDENCE UX ................ MOSTLY SHIPPED
+  Listening strip + Reconnect CTA shipped. Still open: “Answer in ~Xs”
+  skeleton copy; generating live-region polish.
+
+2.3 MICROCOPY & TONE ....................... PARTIAL
+  productNames.ts + naming cleanup shipped. Full Voice & Copy guide open.
+
+2.4 PERMISSION / HARDWARE FIRST-RUN ........ PARTIAL
+  Pre-session mic cards + mid-session Reconnect shipped.
+  Single “Audio OK” green check (one screen) still open.
+
+2.5 FINDABILITY / SEARCH ................... OPEN
+  Command palette tip; in-page search parity; global search.
+
+2.6 RECOVERY & UNDO ........................ PARTIAL
+  Interviews confirm + Mock URL resume shipped. Undo toasts open.
+
+2.7 CREDIT TRANSPARENCY .................... MOSTLY SHIPPED
+  PrepLab / Company / Test AI previews shipped. Full matrix audit optional.
+
+2.8 PROGRESSIVE DISCLOSURE ................. MOSTLY SHIPPED
+  Overlay mobile minimal; Dashboard More; Settings groups.
+
+2.9 MOBILE AS A PRODUCT .................... SHIPPED (hints-only companion)
+
+2.10 SUCCESS / CELEBRATION ................. SHIPPED (PostSessionSummary)
+
+2.11 WHAT’S NEW ............................ PARTIAL
+  WhatsNewModal shipped; in-overlay coach marks for new controls open.
+
+2.12 ACCESSIBILITY DEEP PASS ............... OPEN
+  Live regions, mock-test color+text, Overlay SR path, Interview Day contrast.
+
+2.13 INTERNATIONAL / LANGUAGE .............. PARTIAL
+  Session language on chip when set; product-level multilingual audit open.
+
+2.14 CROSS-PRODUCT IDENTITY ................ SHIPPED
+  Interview Practice vs Gov Exam Prep mode pill in AppTopBar + MockTestHub banner.
+
+2.15 GROWTH SURFACE ........................ PARTIAL
+  SharedDebrief branded; post-share CTA / native referral share open.
+
+2.16 SUPPORT PLAYBOOKS ..................... OPEN
+  Internal “why overlay vs /live” playbook for support.
+
+
+================================================================================
+PART 3 — PARAKEET AI UX MODEL → CLARIFY GAP MATRIX
+================================================================================
+
+Parakeet core loop:
+  Account → Resume → Overlay → Audio → Listen → Answer (2–4s) → Notes
+
+Clarify core loop (NOW):
+  Signup → Verify → Short onboarding → Coach (same setup or short wizard) →
+  Overlay → Hints/listen strip → End → PostSessionSummary → optional Scorecard
+
+---------------------------------------------------------------------------
+PARAKEET CAPABILITY                 CLARIFY STATUS
+---------------------------------------------------------------------------
+One primary job                     Progressive disclosure — KEEP depth behind
+Resume once, reuse                  Documents + context chip — SHIPPED
+Minimal pre-session decisions       Same setup default; Customize — SHIPPED
+One-click restart                   Start Practice (same setup) — SHIPPED
+Overlay = session UI                Mid-session overlay-only — SHIPPED
+Auto Q detect + answer              Still more user-driven — OPEN polish
+Visible listening confidence        Strip + Reconnect — SHIPPED
+Answer latency expectation          Not marketed — OPEN
+Manual chat mid-call                Exists; demoted on mobile — SHIPPED
+Coding analyze screen               Exists — label polish OPEN
+Stealth / practice framing          Compliance banners — KEEP honest
+Auto meeting detection              Not P0 — DEFERRED
+Auto post-call notes                PostSessionSummary — SHIPPED
+Credits clarity                     Pre-spend chips — MOSTLY SHIPPED
+Mobile companion                    Hints-only — SHIPPED
+Desktop deep audio                  Electron + first-run edu — SHIPPED
+Multi-model                         Advanced/wizard — OK
+Shortcuts discover                  Hotkey help — tip OPEN
+Mock/prep depth                     Clarify STRENGTH — KEEP behind Start
+
+PARAKEET FEEL — 7 NON-NEGOTIABLES
+  P1. ONE click returning → listening .................... SHIPPED
+  P2. ≤ 5 primary mid-session controls (esp. mobile) ..... SHIPPED mobile
+  P3. Listening + Using chip + credits/time .............. SHIPPED
+  P4. End → 3-bullet summary < 5s ........................ SHIPPED
+  P5. Audio fail impossible to miss ...................... SHIPPED Reconnect
+  P6. Naming Practice Coach (+ Overlay as window only) ... SHIPPED
+  P7. Mobile companion path .............................. SHIPPED
+
+
+================================================================================
+PART 4 — USER-FRIENDLINESS SCORECARD BY JOURNEY (POST-WAVE)
+================================================================================
+
+JOURNEY 1 New user → first practice ........... ~6.5  (target 8)
+  Still: verify email friction; optional “skip Dashboard → Coach” deep link.
+
+JOURNEY 2 Returning → practice again .......... ~8    (target 9)
+  Same setup primary. Still: last-score teaser on Coach home.
+
+JOURNEY 3 Mock Interview ...................... ~7.5  (target 8)
+  URL session id shipped. Still: warmup skip clarity; mobile conversation-first.
+
+JOURNEY 4 Prep → Answer Bank → Practice ....... ~7    (target 8)
+  STAR unify + credits. Still: “Practice this with Coach” from Answer Bank.
+
+JOURNEY 5 Interview Day ....................... ~6    (target 8)
+  Still: persisted checklist; multi-interview picker.
+
+JOURNEY 6 Post-session learning ............... ~8    (target 8.5)
+  Notes → Scorecard/Debrief path shipped.
+
+JOURNEY 7 Credits / upgrade ................... ~6.5  (target 8)
+  Previews better; success URL / single Billing home polish open.
+
+JOURNEY 8 Gov Exam ............................ ~7    (target 8)
+  Configure wizard shipped; hub marketing residue polish open.
+
+JOURNEY 9 Electron ............................ ~7    (target 8)
+  First-run education shipped.
+
+JOURNEY 10 Settings ........................... ~8    (target 8)
+  5 groups + honest notifications shipped.
+
+
+================================================================================
+PART 5 — PRODUCT RULES (USER-FRIENDLINESS)
+================================================================================
+
+If a screen violates these, it fails review:
+
+  5.1 Page states: Skeleton · EmptyState+CTA · InlineErrorRetry
+  5.2 Forms: shared Input/Select/Switch; unsaved guard
+  5.3 Destructive: ConfirmDialog + plain-language loss
+  5.4 Nav: one mobile pattern; one name per place (productNames)
+  5.5 Feedback: toast + aria-live for session-critical; no emoji chrome
+  5.6 Perception: skeleton; disable double-submit
+  5.7 Help in context: empty → Guide; Overlay first-run marks
+  5.8 Responsive: 44px targets; no hover-only actions
+  5.9 Honest UI: Coming soon for unwired; practice-only framing
+
+
+================================================================================
+PART 6 — SCREEN GAPS REMAINING (ONLY OPEN ITEMS)
+================================================================================
+
+DESIGN SYSTEM .... Delete unused legacy capital files; violet-* leftovers
+APP SHELL ........ Credits click → Usage (with Upgrade inside) if still modal-only
+COMMAND PALETTE .. First-run tip
+LANDING .......... Slim first viewport
+HELP / BLOG ...... Shared empty/error template
+ONBOARDING ....... Skip consequence microcopy; progress “2 min to practice”
+COACH HOME ....... Last score teaser; optional skip-Dashboard for first session
+ANSWER BANK ...... “Practice this with Coach” CTA
+INTERVIEW DAY .... Persist checklist; multi-interview
+REFERRALS ........ Native share; drop jargon
+GOV HUB .......... Drop in-app marketing showcase residue
+GUIDE ............ Stronger link from Coach empty/first Overlay
+SUPPORT .......... Internal playbook for overlay vs /live
+
+(Core Coach/Overlay/Mock/Settings/Dashboard/Electron gaps from original
+ audit are CLOSED — see Part 0 / Part 8.)
+
+
+================================================================================
+PART 7 — SUGGESTIONS SUMMARY
+================================================================================
+
+DO (DONE unless noted)
+  1. Coach = START screen (same setup) .................... DONE
+  2. Overlay = hints + listening; bury advanced ........... DONE (esp. mobile)
+  3. End → Session Notes before Scorecard ................. DONE
+  4. Credit cost + Using chip before Start ................ DONE
+  5. Naming glossary ...................................... DONE (enforce ongoing)
+  6. One mobile nav; hints-only Coach ..................... DONE
+  7. Hide unwired prefs ................................... DONE
+  8. Brand Shared Debrief; AuthShell ...................... DONE
+  9. Electron first-run ................................... DONE
+ 10. Keep Prep/Mock/Gov behind Start ...................... ONGOING
+
+DON’T
+  1. Market as covert live-interview cheater
+  2. Add Dashboard cards before simplifying CTAs
+  3. Bring back dual mid-session UIs
+  4. Use emoji as navigation/chrome
+  5. Force long setup on returning users
+
+SUCCESS METRICS (instrument next)
+  - New user → first listening ≤ 2 minutes (median)
+  - Returning → listening ≤ 10 seconds (median)
+  - % sessions via “same setup” ≥ 60% after week 2
+  - Support tickets “where did my session UI go?” → near zero
+
+
+================================================================================
+PART 8 — PRIORITY BACKLOG + SHIP STATUS
+================================================================================
+
+P0 — PARAKEET FEEL (core loop)
+  [x] Overlay-only mid-session; /app/live = setup + summary only
+  [x] Returning: Start Practice (same setup) default primary CTA
+  [x] Persistent Listening / Generating / Offline strip
+  [x] Pre-start credit + context chip (resume/language)
+  [x] Post-session 3-bullet Session Notes screen
+  [x] Audio fail state impossible to miss (Reconnect CTA)
+  [x] Naming glossary: kill Live / Rehearsal / Live Co-Pilot in UI
+  [x] Delete confirms + no hover-only destructive actions (Interviews)
+
+P1 — USER TRUST & IA
+  [x] Settings → 5 groups; Security Config out of consumer
+  [x] Hide unwired notification channels
+  [x] Unify STAR; Answer Bank list→detail; Answer Bank naming
+  [x] Credit cost before Company Research / Prep AI / Test AI
+  [x] Dashboard progressive disclosure (new vs returning)
+  [x] One mobile nav model
+  [x] Brand Shared Debrief
+
+P2 — MOBILE & DEPTH
+  [x] Mobile hints-only Practice Coach companion mode
+  [x] Mock session URL persistence
+  [x] Debrief tabs + TOC
+  [x] Mock-test configure wizard
+  [x] PWA / Add to Home Screen
+  [x] Electron first-run education
+
+P3 — POLISH SYSTEM
+  [x] Switch in OverlaySettings; Recharts Analytics/Usage
+  [x] Emoji→icons on high-traffic chrome
+  [x] AuthShell
+  [x] Admin nav groups
+  [x] Marketing first-viewport slim — Part 10
+  [x] Command palette tip; native referral share — Part 10
+  [N/A] Dual-kit file deletion on Windows (case-fold)
+
+
+================================================================================
+PART 9 — DEFINITION OF DONE: “FEELS LIKE PARAKEET”
+================================================================================
+
+Returning user (desktop) — ACCEPTANCE (code path exists):
+  1. Click Practice Coach
+  2. See Start Practice (same setup)
+  3. Click once
+  4. Land in Overlay listening (or Connect if permission missing)
+  5. See Listening indicator + Using [Resume] chip
+  6. Get hint/answer without hunting tabs (mobile: hints-only default)
+  7. End → 3 bullet notes + Practice again
+  8. Optionally Full Scorecard / Deep Debrief
+
+New user — MOSTLY MET; polish in Part 10:
+  1. Signup + short onboarding (≤ 2 required steps) — shipped direction
+  2. Land on Coach or Dashboard with single CTA — shipped
+  3. Resume select/skip with consequence — skip copy polish open
+  4. Audio OK one-screen — PARTIAL (wizard connect step, not single badge)
+  5. First hint without reading manual — improved; coach marks open
+
+QA: If any step requires Guide first or an empty AppShell mid-session — FAIL.
+   Mid-session empty AppShell path is CLOSED.
+
+
+================================================================================
+PART 10 — NEXT BACKLOG (POST P0–P3) — COMPLETE 1 Aug 2026
+================================================================================
+
+N1  Instrument TTFP / time-to-first-hint / same-setup % analytics ..... SHIPPED
+    (src/lib/analytics/uxMetrics.ts + onboarding/wizard/live/hint wires)
+N2  Voice & Copy guide + latency expectation copy in Overlay .......... SHIPPED
+    (docs/VOICE_AND_COPY_GUIDE.txt; Generating… + ~2–4s already in Overlay)
+N3  Single “Audio OK” preflight badge before Start .................... SHIPPED
+N4  Command palette first-run tip ..................................... SHIPPED
+    (full-app global search deferred — non-blocking)
+N5  Answer Bank → “Practice this with Coach” .......................... SHIPPED
+N6  Interview Day persisted checklist + multi-interview picker ........ SHIPPED
+N7  Product mode identity (Interview Practice vs Gov Exam Prep) ....... SHIPPED
+    (ProductModePill + MockTestHub banner)
+N8  Marketing hero slim; Blog EmptyState/InlineErrorRetry ............. SHIPPED
+N9  Native referral share; SharedDebrief CTA .......................... SHIPPED
+N10 Delete unused legacy Button/Card/Modal files ...................... N/A
+    (Windows case-fold: git capital names ARE live modules — do not delete)
+N11 Support playbook (overlay vs /live vs Electron) ................... SHIPPED
+N12 A11y deep pass (Overlay live regions + mock-test palette/timer) ... SHIPPED
+
+
+================================================================================
+APPENDIX A — RELATIONSHIP TO EXISTING DOCS
+================================================================================
+
+CLARIFY_AI_UI_UX_IMPLEMENTATION_AUDIT.txt
+  = WHAT exists (screens, components, flows, inconsistencies)
+
+CLARIFY_AI_UI_UX_GAP_ANALYSIS_AND_ROADMAP.txt
+  = Earlier root causes + 5-sprint plan (executed via agent waves)
+
+THIS DOCUMENT
+  = USER-FRIENDLINESS + PARAKEET acceptance criteria + SHIP STATUS
+    + Part 10 next polish backlog
+
+
+================================================================================
+APPENDIX B — CLARIFY ADVANTAGES TO KEEP
+================================================================================
+
+  Mock Interview, Prep Lab, Answer Bank, Documents, Interview Day, Debrief,
+  Analytics, Gov Exam suite, practice-first compliance, command palette,
+  themes, stealth labeling.
+
+Strategy: Parakeet-simple CORE + Clarify-deep SECONDARY surfaces.
+
+
+================================================================================
+END OF DOCUMENT
+Updated 1 August 2026 — P0–P3 + Part 10 (N1–N12) complete via agent waves
+================================================================================
+
+DEFERRED ONLY (explicit non-goals)
+  - Full-app global search beyond Command Palette
+  - Deleting Button/Card/Modal files on Windows (case-fold identity)
+  - Covert live-interview positioning (keep practice/compliance)
+================================================================================

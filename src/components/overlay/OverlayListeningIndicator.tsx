@@ -35,10 +35,13 @@ export const OverlayListeningIndicator = memo(function OverlayListeningIndicator
   ) {
     state = "listening";
     label = "Listening";
+    detail = "Hints typically appear in ~2–4s after a clear question";
   } else if (sessionStatus === "active" || sessionStatus === "warming_up") {
     state = "idle";
     label = "Connecting…";
   }
+
+  const announced = detail ? `${label}: ${detail}` : label;
 
   return (
     <div
@@ -51,11 +54,13 @@ export const OverlayListeningIndicator = memo(function OverlayListeningIndicator
         state === "error" && "border-red-500/40 bg-red-500/15 text-red-300",
         state === "idle" && "border-white/10 bg-white/[0.04] text-white/45",
       )}
-      role="status"
-      aria-live="polite"
+      role={state === "error" ? "alert" : "status"}
+      aria-live={state === "error" ? "assertive" : "polite"}
+      aria-atomic="true"
       title={detail ?? label}
       data-coach="listening-indicator"
     >
+      <span className="sr-only">{announced}</span>
       {state === "muted" ? (
         <MicOff className="w-2.5 h-2.5" aria-hidden />
       ) : state === "paused" ? (
@@ -85,7 +90,7 @@ export const OverlayListeningIndicator = memo(function OverlayListeningIndicator
           })}
         </span>
       )}
-      <span>{label}</span>
+      <span aria-hidden="true">{label}</span>
     </div>
   );
 });

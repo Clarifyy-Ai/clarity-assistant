@@ -18,8 +18,10 @@ const STORAGE_KEY = "clarify:whats-new-dismissed";
 const RELEASE_NOTES = [
   "Practice Coach opens in the overlay — setup and summary stay on /app/live.",
   "Start Practice (same setup) for one-click returning sessions.",
-  "2-step onboarding gets you into your first session faster.",
+  "Mid-session audio issues show a clear Reconnect banner in the overlay.",
   "Mobile: hints-only overlay, swipe-to-delete lists, and Add to Home Screen.",
+  "Mock sessions resume from the URL after refresh; Desktop first-run tips for Electron.",
+  "Dashboard focuses on Start Practice; Prep Lab shows credit costs before AI spend.",
 ];
 
 export function useWhatsNewPrompt(): {

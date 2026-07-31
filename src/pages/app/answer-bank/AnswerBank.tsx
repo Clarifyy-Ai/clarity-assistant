@@ -16,7 +16,7 @@ import { toast } from "sonner";
 import {
   BookOpen, Search, Star, Trash2,
   ChevronDown, ChevronUp, Copy,
-  Edit2, Check, Plus, Sparkles, ExternalLink,
+  Edit2, Check, Plus, Sparkles, ExternalLink, Mic,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -218,9 +218,19 @@ export default function AnswerBank() {
                   {/* Actions */}
                   <div className="flex items-center gap-1.5 shrink-0">
                     <Link
+                      to="/app/live"
+                      state={{ practicePrompt: ans.question_text }}
+                      className="p-1.5 rounded-lg text-primary hover:bg-primary/10 transition-all"
+                      title="Practice this with Coach"
+                      aria-label="Practice this with Coach"
+                    >
+                      <Mic className="w-3.5 h-3.5" />
+                    </Link>
+                    <Link
                       to={`/app/answers/${ans.id}`}
                       className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/5 transition-all"
                       title="Open detail"
+                      aria-label="Open detail"
                     >
                       <ExternalLink className="w-3.5 h-3.5" />
                     </Link>
