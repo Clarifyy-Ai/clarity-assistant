@@ -10,8 +10,8 @@ import {
   scorecardsDB,
 } from "@/lib/supabase/database";
 import { enrichDetailedReport } from "@/lib/debrief/enrichDetailedReport";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -282,7 +282,7 @@ export default function DebriefDetail() {
 
       <nav
         aria-label="Debrief sections"
-        className="sticky top-0 z-10 -mx-1 px-1 py-2 bg-background/95 backdrop-blur border-b border-border flex gap-2 overflow-x-auto text-xs"
+        className="sticky top-14 sm:top-0 z-10 -mx-1 px-1 py-2 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/80 border-b border-border flex gap-2 overflow-x-auto text-xs overscroll-x-contain"
       >
         {[
           { id: "overview", label: "Overview" },
@@ -294,7 +294,7 @@ export default function DebriefDetail() {
           <a
             key={item.id}
             href={`#debrief-${item.id}`}
-            className="shrink-0 rounded-lg border border-border bg-secondary/40 px-3 py-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            className="shrink-0 rounded-lg border border-border bg-secondary/40 px-3 py-2 min-h-11 inline-flex items-center text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
           >
             {item.label}
           </a>
@@ -393,7 +393,7 @@ export default function DebriefDetail() {
       )}
 
       {/* Strengths + improvements */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div id="debrief-strengths" className="grid grid-cols-1 sm:grid-cols-2 gap-4 scroll-mt-24 sm:scroll-mt-16">
         {debrief.strengths?.length > 0 && (
           <Card>
             <div className="flex items-center gap-2 mb-3">
@@ -410,7 +410,7 @@ export default function DebriefDetail() {
           </Card>
         )}
         {debrief.improvements?.length > 0 && (
-          <Card>
+          <Card id="debrief-improvements" className="scroll-mt-24 sm:scroll-mt-16">
             <div className="flex items-center gap-2 mb-3">
               <TrendingUp className="w-4 h-4 text-amber-400" />
               <h3 className="text-sm font-semibold text-foreground">To improve</h3>
@@ -554,8 +554,10 @@ export default function DebriefDetail() {
       )}
       <DebriefEventTimeline events={sessionEvents} />
       <DebriefMissedKeywords report={detailedReport} transcript={transcript} />
+      <div id="debrief-charts" className="space-y-4 scroll-mt-24 sm:scroll-mt-16">
       <DebriefVocalCharts report={detailedReport} />
       <DebriefConfidenceBreakdown scorecard={scorecard} session={session} />
+      </div>
 
       {/* Full transcript */}
       {transcript && (
@@ -573,6 +575,7 @@ export default function DebriefDetail() {
       )}
 
       {/* Sprint B extras */}
+      <div id="debrief-share" className="scroll-mt-24 sm:scroll-mt-16">
       <DebriefExtras
         debriefId={debrief.id}
         wpmSeries={detailedReport.wpm_series}
@@ -580,6 +583,7 @@ export default function DebriefDetail() {
         speakers={detailedReport.speakers}
         initialRating={detailedReport.rating ?? null}
       />
+      </div>
 
       {/* CTA row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

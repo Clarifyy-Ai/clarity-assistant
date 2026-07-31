@@ -30,6 +30,7 @@ import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";
 import { feedbackDB } from "@/lib/supabase/database";
 import type { HintState } from "@/store/overlayStore";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 /* ─── TYPES ─────────────────────────────────────────────────────────────── */
 
@@ -64,6 +65,7 @@ function OverlayHintPanelInner({
   onShorten,
   onExpand,
 }: OverlayHintPanelProps) {
+  const isMobile = useIsMobile();
   const [copied, setCopied] = useState(false);
   const [codeCopied, setCodeCopied] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -490,6 +492,7 @@ function OverlayHintPanelInner({
                     title="Regenerate a different answer"
                     icon={<RefreshCw className="w-3 h-3" />}
                     label="Regenerate"
+                    touchSafe={isMobile}
                   />
                 )}
                 {onShorten && (
@@ -498,6 +501,7 @@ function OverlayHintPanelInner({
                     title="Shorten this answer"
                     icon={<Minimize2 className="w-3 h-3" />}
                     label="Shorten"
+                    touchSafe={isMobile}
                   />
                 )}
                 {onExpand && (
@@ -506,6 +510,7 @@ function OverlayHintPanelInner({
                     title="Expand with more detail"
                     icon={<Maximize2 className="w-3 h-3" />}
                     label="Expand"
+                    touchSafe={isMobile}
                   />
                 )}
               </>
@@ -517,6 +522,7 @@ function OverlayHintPanelInner({
               icon={copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
               label={copied ? "Copied!" : "Copy all"}
               active={copied}
+              touchSafe={isMobile}
             />
 
             {(codeExtract.length > 0 || composed?.hasCode) && (
@@ -526,6 +532,7 @@ function OverlayHintPanelInner({
                 icon={codeCopied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
                 label={codeCopied ? "Code copied!" : "Copy code"}
                 active={codeCopied}
+                touchSafe={isMobile}
               />
             )}
 
@@ -535,6 +542,7 @@ function OverlayHintPanelInner({
               icon={saved ? <Check className="w-3 h-3 text-emerald-400" /> : <BookmarkPlus className="w-3 h-3" />}
               label={saved ? "Saved!" : "Save"}
               active={saved}
+              touchSafe={isMobile}
             />
 
             <ActionButton
@@ -543,6 +551,7 @@ function OverlayHintPanelInner({
               icon={<Pin className={cn("w-3 h-3", isPinned && "fill-indigo-300 text-indigo-300")} />}
               label={isPinned ? "Pinned" : "Pin"}
               active={isPinned}
+              touchSafe={isMobile}
             />
 
             <ActionButton
@@ -551,6 +560,7 @@ function OverlayHintPanelInner({
               icon={<ThumbsUp className={cn("w-3 h-3", feedbackSent === "up" && "text-emerald-400")} />}
               label="Helpful"
               active={feedbackSent === "up"}
+              touchSafe={isMobile}
             />
 
             <ActionButton
@@ -559,6 +569,7 @@ function OverlayHintPanelInner({
               icon={<ThumbsDown className={cn("w-3 h-3", feedbackSent === "down" && "text-red-400")} />}
               label="Not helpful"
               active={feedbackSent === "down"}
+              touchSafe={isMobile}
             />
 
             {historyLen > 1 && (
@@ -631,27 +642,32 @@ function ActionButton({
   icon,
   label,
   active,
+  touchSafe = false,
 }: {
   onClick: () => void;
   title: string;
   icon: React.ReactNode;
   label: string;
   active?: boolean;
+  touchSafe?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       title={title}
+      aria-label={title}
       className={cn(
-        "flex items-center gap-1.5 px-2.5 py-1 text-[11px] font-semibold rounded-lg transition-all border",
+        "flex items-center justify-center gap-1.5 text-[11px] font-semibold rounded-lg transition-all border",
+        touchSafe ? "min-h-11 min-w-11 px-3 py-2" : "px-2.5 py-1",
         active
           ? "text-emerald-400 bg-emerald-500/[0.12] border-emerald-500/20"
           : "text-white/35 hover:text-white/75 bg-white/[0.04] hover:bg-white/[0.08] border-white/[0.07]"
       )}
     >
       {icon}
-      {label}
+      {!touchSafe && label}
+      {touchSafe && <span className="sr-only">{label}</span>}
     </button>
   );
 }
@@ -842,7 +858,8 @@ function CaptureAnswerHistoryBar({
                     else toast.error("Copy failed");
                   });
                 }}
-                className="text-left text-[10px] font-semibold text-sky-300/70 hover:text-sky-200"
+                aria-label="Copy capture answer"
+                className="inline-flex items-center justify-center min-h-11 min-w-11 -mx-2 text-[10px] font-semibold text-sky-300/70 hover:text-sky-200"
               >
                 Copy
               </button>

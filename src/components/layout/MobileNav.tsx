@@ -54,13 +54,13 @@ type MoreLink = {
 
 const TABS: MobileTab[] = [
   { to: "/app/dashboard", icon: LayoutDashboard, label: "Home", exact: true },
-  { to: "/app/live", icon: Mic, label: "Coach" },
-  { to: "/app/mock", icon: ClipboardList, label: "Mock" },
-  { to: "/app/prep", icon: FlaskConical, label: "Prep" },
+  { to: "/app/live", icon: Mic, label: PRODUCT_NAMES.practiceCoach },
+  { to: "/app/mock", icon: ClipboardList, label: PRODUCT_NAMES.mockInterview },
+  { to: "/app/prep", icon: FlaskConical, label: PRODUCT_NAMES.prepLab },
   {
     to: "/app/mock-test",
     icon: Brain,
-    label: "Gov Exams",
+    label: PRODUCT_NAMES.govExams,
   },
 ];
 
@@ -115,7 +115,7 @@ export function MobileNav(): JSX.Element {
             onClick={() => {
               if (tab.to === "/app/live") notifyOverlayVisibilityOnMobile();
             }}
-            aria-label={tab.to === "/app/live" ? PRODUCT_NAMES.practiceCoach : tab.label}
+            aria-label={tab.label}
             className={cn(
               "flex-1 flex flex-col items-center justify-center gap-0.5 py-2 text-[10px] font-medium transition-all",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40",

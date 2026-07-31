@@ -14,7 +14,7 @@ import { useInterviewScheduler } from "@/hooks/useInterviewScheduler";
 import { useDocuments } from "@/hooks/useDocuments";
 import { SetupChecklist } from "@/components/layout/SetupChecklist";
 import { LowCreditBanner, useLowCreditState } from "@/components/billing/LowCreditBanner";
-import { Card } from "@/components/ui/Card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { XPProgressRing } from "@/components/gamification/XPProgressRing";
@@ -337,8 +337,8 @@ export default function Dashboard() {
           <div className="flex-1">
             <p className="text-foreground font-semibold text-sm">
               {stealth
-                ? "📅 Meeting today"
-                : `🎯 Interview today — ${todayInterview.company_name}`}
+                ? "Meeting today"
+                : `Interview today — ${todayInterview.company_name}`}
             </p>
             <p className="text-muted-foreground text-xs mt-0.5">
               {format(new Date(todayInterview.scheduled_at!), "h:mm a")} ·{" "}

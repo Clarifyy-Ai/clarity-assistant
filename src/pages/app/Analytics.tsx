@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card } from "@/components/ui/Card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -168,10 +168,10 @@ export default function Analytics() {
       <Tabs defaultValue="scores">
         <TabsList>
           <TabsTrigger value="scores">Score trends</TabsTrigger>
-          <TabsTrigger value="categories">🗂️ Categories</TabsTrigger>
-          <TabsTrigger value="speech">🎙️ Speech metrics</TabsTrigger>
-          <TabsTrigger value="heatmap">🔥 Activity</TabsTrigger>
-          <TabsTrigger value="compare">⚖️ Compare</TabsTrigger>
+          <TabsTrigger value="categories">Categories</TabsTrigger>
+          <TabsTrigger value="speech">Speech metrics</TabsTrigger>
+          <TabsTrigger value="heatmap">Activity</TabsTrigger>
+          <TabsTrigger value="compare">Compare</TabsTrigger>
         </TabsList>
 
         {/* ── Score trends ────────────────────────────── */}

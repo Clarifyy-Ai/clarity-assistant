@@ -3,8 +3,8 @@ import { refreshCredits } from "@/lib/billing/creditsManager";
 import { useState, useMemo, useEffect } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/Badge";
 import {
   Code2, Search, ChevronRight, Lightbulb, BookOpen,

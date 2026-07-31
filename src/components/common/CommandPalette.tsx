@@ -66,7 +66,7 @@ interface NavCommand {
 
 const COMMANDS: NavCommand[] = [
 
-  { label: "Dashboard", path: "/app/dashboard", icon: Home, group: "Navigate", keywords: "home" },
+  { label: PRODUCT_NAMES.dashboard, path: "/app/dashboard", icon: Home, group: "Navigate", keywords: "home" },
 
   { label: PRODUCT_NAMES.creditsUsage, path: "/app/usage", icon: CreditCard, group: "Navigate", keywords: "billing credits usage" },
 
@@ -110,9 +110,9 @@ const COMMANDS: NavCommand[] = [
 
   { label: "Coding hints", path: "/app/prep/coding-hints", icon: BookOpen, group: "Prep" },
 
-  { label: "Documents", path: "/app/documents", icon: FileText, group: "Prep" },
+  { label: PRODUCT_NAMES.documents, path: "/app/documents", icon: FileText, group: "Prep" },
 
-  { label: "Answer bank", path: "/app/answers", icon: BookOpen, group: "Prep" },
+  { label: PRODUCT_NAMES.answerBank, path: "/app/answers", icon: BookOpen, group: "Prep" },
 
 ];
 

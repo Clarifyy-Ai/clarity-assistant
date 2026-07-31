@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import {
   Download,
-  Monitor,
+  Smartphone,
   Mic,
-  Keyboard,
+  Home,
   Sparkles,
 } from "lucide-react";
 import {
@@ -15,10 +15,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
 import { useUIStore } from "@/store/uiStore";
 import { usePwaInstallPrompt } from "@/hooks/usePwaInstallPrompt";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { DESKTOP_INSTALL_GUIDE_PATH } from "@/lib/constants/desktopDownload";
 import { DesktopDownloadButton } from "@/components/common/DesktopDownloadButton";
@@ -28,13 +29,30 @@ import {
   isInstallPromptSnoozed,
   snoozeInstallPrompt,
 } from "@/lib/onboarding/installPromptStorage";
-import { hasCompletedAppWalkthrough } from "@/lib/onboarding/appWalkthroughStorage";
 import { toast } from "sonner";
 import { isElectronApp } from "@/lib/platform/isElectron";
 
 const IS_ELECTRON = isElectronApp();
 
-const INSTALL_STEPS = [
+const MOBILE_INSTALL_STEPS = [
+  {
+    icon: Download,
+    title: "Add to Home Screen",
+    detail: "Tap Share → Add to Home Screen (Safari) or Install app (Chrome) for quick access.",
+  },
+  {
+    icon: Mic,
+    title: "Allow microphone",
+    detail: "Required for live transcription during Practice Coach on your phone.",
+  },
+  {
+    icon: Home,
+    title: "Open from your home screen",
+    detail: "Launch like a native app — full-screen, no browser chrome in the way.",
+  },
+];
+
+const DESKTOP_INSTALL_STEPS = [
   {
     icon: Download,
     title: "Download the desktop app",
@@ -46,7 +64,7 @@ const INSTALL_STEPS = [
     detail: "Required for live transcription during Practice Coach sessions.",
   },
   {
-    icon: Keyboard,
+    icon: Home,
     title: "Use global hotkeys",
     detail: "Ctrl+Shift+H toggles the overlay; Ctrl+Enter generates AI answers.",
   },
@@ -61,12 +79,13 @@ function isStandalonePwa(): boolean {
 
 export function InstallPromptModal(): JSX.Element | null {
   const navigate = useNavigate();
+  const isMobile = useIsMobile();
   const userId = useAuthStore((s) => s.user?.id);
   const isProfileLoaded = useAuthStore((s) => s.isProfileLoaded);
   const onboardingCompleted = useAuthStore((s) => s.profile?.onboarding_completed);
   const activeTourStep = useUIStore((s) => s.active_tour_step);
 
-  const { canInstall, promptInstall } = usePwaInstallPrompt();
+  const { canInstall, promptInstall, readyAfterPractice } = usePwaInstallPrompt();
   const [open, setOpen] = useState(false);
   const [installing, setInstalling] = useState(false);
 
@@ -88,11 +107,11 @@ export function InstallPromptModal(): JSX.Element | null {
     if (hasDismissedInstallPrompt(userId)) return;
     if (isInstallPromptSnoozed(userId)) return;
     if (activeTourStep) return;
-    if (!hasCompletedAppWalkthrough(userId)) return;
+    if (!readyAfterPractice) return;
 
     const timer = window.setTimeout(() => setOpen(true), 800);
     return () => window.clearTimeout(timer);
-  }, [userId, isProfileLoaded, onboardingCompleted, activeTourStep]);
+  }, [userId, isProfileLoaded, onboardingCompleted, activeTourStep, readyAfterPractice]);
 
   async function handleInstall() {
     setInstalling(true);
@@ -100,7 +119,7 @@ export function InstallPromptModal(): JSX.Element | null {
       if (canInstall) {
         const accepted = await promptInstall();
         if (accepted) {
-          toast.success(`${PRODUCT_NAMES.brand} installed — open it from your home screen or apps menu.`);
+          toast.success(`${PRODUCT_NAMES.brand} installed — open it from your home screen.`);
           dismissPermanent();
           return;
         }
@@ -116,7 +135,9 @@ export function InstallPromptModal(): JSX.Element | null {
 
   if (IS_ELECTRON || !userId || isStandalonePwa()) return null;
 
-  const installButtonLabel = canInstall ? "Install to home screen" : "View install guide";
+  const installSteps = isMobile || canInstall ? MOBILE_INSTALL_STEPS : DESKTOP_INSTALL_STEPS;
+  const installButtonLabel = canInstall ? "Add to Home Screen" : isMobile ? "How to install" : "View install guide";
+  const HeaderIcon = isMobile || canInstall ? Smartphone : Download;
 
   return (
     <Dialog open={open} onOpenChange={(next) => !next && snooze()}>
@@ -125,12 +146,16 @@ export function InstallPromptModal(): JSX.Element | null {
           <DialogHeader className="text-left space-y-2">
             <div className="flex items-center gap-3">
               <div className="w-11 h-11 rounded-xl bg-primary/15 border border-primary/25 flex items-center justify-center shrink-0">
-                <Monitor className="w-5 h-5 text-primary" />
+                <HeaderIcon className="w-5 h-5 text-primary" />
               </div>
               <div>
-                <DialogTitle className="text-xl">Install {PRODUCT_NAMES.brand}</DialogTitle>
+                <DialogTitle className="text-xl">
+                  {isMobile || canInstall ? "Install on your phone" : `Install ${PRODUCT_NAMES.brand}`}
+                </DialogTitle>
                 <DialogDescription className="text-sm mt-0.5">
-                  Get the desktop app for the full Practice Coach overlay experience.
+                  {isMobile || canInstall
+                    ? "Add Clarify to your home screen for faster Practice Coach access."
+                    : "Get the desktop app for the full Practice Coach overlay experience."}
                 </DialogDescription>
               </div>
             </div>
@@ -141,13 +166,22 @@ export function InstallPromptModal(): JSX.Element | null {
           <div className="flex gap-2 rounded-lg border border-indigo-500/25 bg-indigo-500/8 px-3 py-2.5 text-xs text-indigo-100/90 leading-relaxed">
             <Sparkles className="w-4 h-4 shrink-0 mt-0.5 text-indigo-300" aria-hidden />
             <p>
-              The web app supports <strong className="text-indigo-100">Mock Interview</strong> and Prep Lab in your browser.
-              The <strong className="text-indigo-100">desktop installer</strong> unlocks Practice Coach with system-wide hotkeys and a floating overlay.
+              {isMobile || canInstall ? (
+                <>
+                  You completed your first practice session. Install the app for one-tap access to{" "}
+                  <strong className="text-indigo-100">Practice Coach</strong> and Mock Interview on mobile.
+                </>
+              ) : (
+                <>
+                  The web app supports <strong className="text-indigo-100">Mock Interview</strong> and Prep Lab in your browser.
+                  The <strong className="text-indigo-100">desktop installer</strong> unlocks Practice Coach with system-wide hotkeys.
+                </>
+              )}
             </p>
           </div>
 
           <ol className="space-y-3">
-            {INSTALL_STEPS.map((step, index) => {
+            {installSteps.map((step, index) => {
               const Icon = step.icon;
               return (
                 <li key={step.title} className="flex gap-3">
@@ -155,7 +189,7 @@ export function InstallPromptModal(): JSX.Element | null {
                     <div className="w-8 h-8 rounded-lg bg-secondary flex items-center justify-center">
                       <Icon className="w-4 h-4 text-primary" />
                     </div>
-                    {index < INSTALL_STEPS.length - 1 && (
+                    {index < installSteps.length - 1 && (
                       <div className="w-px flex-1 bg-border mt-1 min-h-[12px]" />
                     )}
                   </div>
@@ -168,14 +202,14 @@ export function InstallPromptModal(): JSX.Element | null {
             })}
           </ol>
 
-          {!canInstall && (
+          {!canInstall && !isMobile && (
             <DesktopDownloadButton size="sm" showGuideLink={false} />
           )}
 
-          {!canInstall && (
+          {!canInstall && (isMobile || canInstall) && (
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              On Chrome or Edge you may also use the browser menu → <strong>Install app</strong> after visiting
-              this site.
+              <strong className="text-foreground">iPhone:</strong> Safari → Share → Add to Home Screen.{" "}
+              <strong className="text-foreground">Android:</strong> Chrome menu → Install app or Add to Home screen.
             </p>
           )}
         </div>
@@ -185,7 +219,7 @@ export function InstallPromptModal(): JSX.Element | null {
             type="button"
             variant="ghost"
             size="sm"
-            className="sm:mr-auto text-muted-foreground"
+            className="sm:mr-auto text-muted-foreground min-h-11"
             onClick={snooze}
           >
             Remind me later
@@ -194,6 +228,7 @@ export function InstallPromptModal(): JSX.Element | null {
             type="button"
             variant="outline"
             size="sm"
+            className="min-h-11"
             onClick={() => {
               snooze();
               navigate("/app/mock");
@@ -201,14 +236,14 @@ export function InstallPromptModal(): JSX.Element | null {
           >
             Continue in browser
           </Button>
-          <Button type="button" variant="outline" size="sm" onClick={dismissPermanent}>
+          <Button type="button" variant="outline" size="sm" className="min-h-11" onClick={dismissPermanent}>
             Don&apos;t show again
           </Button>
           {canInstall ? (
             <Button
               type="button"
               size="sm"
-              className="bg-primary hover:bg-primary/90"
+              className="bg-primary hover:bg-primary/90 min-h-11"
               disabled={installing}
               onClick={() => void handleInstall()}
               leftIcon={<Download className="w-4 h-4" />}
@@ -220,12 +255,13 @@ export function InstallPromptModal(): JSX.Element | null {
               type="button"
               variant="outline"
               size="sm"
+              className="min-h-11"
               onClick={() => {
                 snooze();
                 navigate(DESKTOP_INSTALL_GUIDE_PATH);
               }}
             >
-              Install guide
+              {installButtonLabel}
             </Button>
           )}
         </DialogFooter>

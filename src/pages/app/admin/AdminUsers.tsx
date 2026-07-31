@@ -2,15 +2,15 @@ import { useEffect, useState } from "react";
 
 import { supabase } from "@/lib/supabase/client";
 
-import { Card } from "@/components/ui/Card";
+import { Card } from "@/components/ui/card";
 
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 
 import { Badge } from "@/components/ui/Badge";
 
-import { Input } from "@/components/ui/Input";
+import { Input } from "@/components/ui/input";
 
-import { Modal } from "@/components/ui/Modal";
+import { Modal } from "@/components/ui/modal";
 
 import {
   DataTable,

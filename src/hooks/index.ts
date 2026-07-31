@@ -3,6 +3,7 @@ export { useAuth } from "./useAuth";
 
 // ─── UI / Device ──────────────────────────────────────────────────────────────
 export { useIsMobile } from "./use-mobile";
+export { useSwipeAction } from "./useSwipeAction";
 export { useToast } from "./use-toast";
 
 // ─── Storage ─────────────────────────────────────────────────────────────────

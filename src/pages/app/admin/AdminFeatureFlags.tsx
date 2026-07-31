@@ -5,7 +5,7 @@ import { FEATURE_PLAN_GATES }   from "@/lib/constants/features";
 
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
-} from "@/components/ui/Card";
+} from "@/components/ui/card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -14,8 +14,8 @@ import {
 } from "@/components/ui/select";
 import { Badge }    from "@/components/ui/Badge";
 import { Switch }   from "@/components/ui/switch";
-import { Button }   from "@/components/ui/Button";
-import { Input }    from "@/components/ui/Input";
+import { Button }   from "@/components/ui/button";
+import { Input }    from "@/components/ui/input";
 import { toast }    from "sonner";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";

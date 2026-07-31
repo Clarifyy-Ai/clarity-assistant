@@ -2,6 +2,36 @@ import type { LiveSessionConfig } from "@/types/session.types";
 
 const LAST_SETUP_KEY = "clarify:last-practice-setup";
 const PENDING_SETUP_KEY = "clarify:pending-practice-setup";
+const PRACTICE_COUNT_KEY = "clarify:practice-session-count";
+
+export const FIRST_PRACTICE_EVENT = "clarify:first-practice";
+
+export function getPracticeSessionCount(): number {
+  try {
+    const raw = localStorage.getItem(PRACTICE_COUNT_KEY);
+    const n = raw ? Number.parseInt(raw, 10) : 0;
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  } catch {
+    return 0;
+  }
+}
+
+/** True after the user has started at least one Practice Coach session. */
+export function hasCompletedFirstPractice(): boolean {
+  return getPracticeSessionCount() >= 1;
+}
+
+function recordPracticeSessionStarted(): void {
+  try {
+    const next = getPracticeSessionCount() + 1;
+    localStorage.setItem(PRACTICE_COUNT_KEY, String(next));
+    if (next === 1 && typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent(FIRST_PRACTICE_EVENT));
+    }
+  } catch {
+    // ignore quota / private mode
+  }
+}
 
 export function loadLastPracticeSetup(): LiveSessionConfig | null {
   try {
@@ -18,6 +48,7 @@ export function loadLastPracticeSetup(): LiveSessionConfig | null {
 export function saveLastPracticeSetup(config: LiveSessionConfig): void {
   try {
     localStorage.setItem(LAST_SETUP_KEY, JSON.stringify(config));
+    recordPracticeSessionStarted();
   } catch {
     // ignore quota / private mode
   }

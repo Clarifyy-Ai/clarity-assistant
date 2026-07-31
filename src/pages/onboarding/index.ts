@@ -11,8 +11,10 @@ export { default as OnboardingIndex } from "./OnboardingIndex";
 export type { OnboardingData } from "./OnboardingIndex";
 
 // ── Step components (exported for direct use / testing if needed) ─────────────
-export { default as OnboardingStep1Role }         from "./OnboardingStep1Role";
-export { default as OnboardingStep2Experience }   from "./OnboardingStep2Experience";
-export { default as OnboardingStep3Preferences }  from "./OnboardingStep3Preferences";
-export { default as OnboardingStep4AudioSetup }   from "./OnboardingStep4AudioSetup";
-export { default as OnboardingStep5ResumeUpload } from "./OnboardingStep5ResumeUpload";
+export { default as OnboardingStep1Essentials }     from "./OnboardingStep1Essentials";
+export { default as OnboardingStep2OptionalSetup }  from "./OnboardingStep2OptionalSetup";
+export { default as OnboardingStep1Role }           from "./OnboardingStep1Role";
+export { default as OnboardingStep2Experience }     from "./OnboardingStep2Experience";
+export { default as OnboardingStep3Preferences }    from "./OnboardingStep3Preferences";
+export { default as OnboardingStep4AudioSetup }     from "./OnboardingStep4AudioSetup";
+export { default as OnboardingStep5ResumeUpload }   from "./OnboardingStep5ResumeUpload";

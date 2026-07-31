@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Download, ExternalLink, Loader2, RefreshCw } from "lucide-react";
-import { Button, type ButtonProps } from "@/components/ui/Button";
+import { Button, type ButtonProps } from "@/components/ui/button";
 import { useDesktopDownload } from "@/hooks/useDesktopDownload";
 import { cn } from "@/lib/utils";
 

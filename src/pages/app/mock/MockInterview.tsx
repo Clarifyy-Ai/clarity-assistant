@@ -11,8 +11,8 @@ import { useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { PlanGate } from "@/components/layout/PlanGate";
 import { getOrCreateSession } from "@/lib/session/sessionLifecycle";
 import { toDbModel } from "@/lib/ai/modelMapping";
@@ -22,6 +22,8 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
+import { SessionTrustBanner } from "@/components/session/SessionTrustBanner";
 
 // ─────────────────────────────────────────────────────────────────
 // MockInterview — session config page
@@ -129,6 +131,8 @@ export default function MockInterview() {
           { label: "Mock Interview" },
         ]}
       />
+
+      <SessionTrustBanner variant="mock" />
 
       {/* Mock sessions are free */}
       <div className="flex items-center gap-3 p-4 bg-emerald-500/10 border border-emerald-500/20 rounded-2xl">
@@ -277,6 +281,11 @@ export default function MockInterview() {
       </Card>
 
       {/* Start button */}
+      <p className="text-xs text-center text-muted-foreground">
+        Estimated usage: ~{AI_CREDIT_COSTS.generate_questions} credits to generate questions · ~
+        {AI_CREDIT_COSTS.live_hint} credits/hint · Debrief {AI_CREDIT_COSTS.session_debrief}{" "}
+        credits
+      </p>
       <Button
         variant="primary"
         size="lg"

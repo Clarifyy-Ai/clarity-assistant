@@ -28,6 +28,7 @@ import { useOverlayStore } from "@/store/overlayStore";
 import { toast } from "sonner";
 
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
+import { WhatsNewModal, useWhatsNewPrompt } from "@/components/common/WhatsNewModal";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppTopBar } from "@/components/layout/AppTopBar";
 import { MobileNav } from "@/components/layout/MobileNav";
@@ -339,6 +340,7 @@ function AnalyticsDebriefRedirect(): JSX.Element {
 function AppShell(): JSX.Element {
   const profile = useAuthStore((state) => state.profile);
   const location = useLocation();
+  const whatsNew = useWhatsNewPrompt();
 
   const mobileNavOpen = useUIStore((state) => state.mobile_nav_open);
   const setMobileNavOpen = useUIStore((state) => state.setMobileNavOpen);
@@ -445,6 +447,7 @@ function AppShell(): JSX.Element {
       <UpgradeModal />
       <AppWalkthrough />
       <InstallPromptModal />
+      <WhatsNewModal open={whatsNew.open} onDismiss={whatsNew.dismiss} />
     </div>
   );
 }
@@ -656,7 +659,7 @@ const routes = [
               { path: "security", element: <Page component={SettingsSecurity} /> },
               {
                 path: "security-config",
-                element: <Page component={SettingsSecurityConfig} />,
+                element: <Navigate to="/app/admin/security-config" replace />,
               },
               {
                 path: "integrations",
@@ -734,6 +737,10 @@ const routes = [
           { path: "support",   element: <Page component={AdminSupport} /> },
           { path: "promo-codes", element: <Page component={AdminPromoCodes} /> },
           { path: "billing-settings", element: <Page component={AdminBillingSettings} /> },
+          {
+            path: "security-config",
+            element: <Page component={SettingsSecurityConfig} />,
+          },
         ],
       },
     ],

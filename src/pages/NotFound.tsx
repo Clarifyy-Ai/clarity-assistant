@@ -7,7 +7,7 @@ import { AppTopBar } from "@/components/layout/AppTopBar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { NetworkBanner } from "@/components/layout/NetworkBanner";
 import { useAuthStore } from "@/store/authStore";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { ArrowLeft, Home, HelpCircle } from "lucide-react";
 
 function NotFoundContent() {

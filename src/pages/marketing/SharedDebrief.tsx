@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { sessionDebriefsDB, scorecardsDB } from "@/lib/supabase/database";
-import { Card } from "@/components/ui/Card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { BrandLogo } from "@/components/marketing";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { format } from "date-fns";
+import { usePageMeta } from "@/hooks/usePageMeta";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { cn } from "@/lib/utils";
 import type { DetailedReport } from "@/components/debrief/DebriefAnalyticsPanels";
 
@@ -31,13 +33,16 @@ function SharedShell({ children }: { children: React.ReactNode }) {
         </div>
       </header>
       <div className="flex-1">{children}</div>
-      <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">
-        Shared via{" "}
-        <Link to="/" className="text-primary hover:underline">
-          Clarify AI
+      <footer className="border-t border-border py-8 px-4 text-center space-y-3">
+        <p className="text-sm text-muted-foreground">
+          Shared via {PRODUCT_NAMES.brand} — practice-only interview coaching
+        </p>
+        <Link
+          to="/signup"
+          className="inline-flex text-sm font-semibold px-4 py-2 rounded-xl bg-primary text-primary-foreground hover:opacity-90"
+        >
+          Start practicing free
         </Link>
-        {" · "}
-        Practice-only interview coaching
       </footer>
     </div>
   );
@@ -49,6 +54,12 @@ export default function SharedDebrief() {
   const [scorecard, setScorecard] = useState<Record<string, unknown> | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  usePageMeta({
+    title: `Shared session · ${PRODUCT_NAMES.brand}`,
+    description: "Review a shared practice session scorecard and debrief on Clarify AI.",
+    ogType: "website",
+  });
 
   useEffect(() => {
     if (!token) return;

@@ -4,8 +4,8 @@ import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
 import { useInterviewScheduler } from "@/hooks/useInterviewScheduler";
 import { useCalendarSync } from "@/hooks/useCalendarSync";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/Badge";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -21,6 +21,7 @@ import {
 } from "@/lib/interviews/roundHelpers";
 import { format, isToday, isFuture } from "date-fns";
 import { toast } from "sonner";
+import { useSwipeAction } from "@/hooks/useSwipeAction";
 
 // ─────────────────────────────────────────────────────────────────
 // Interviews — full scheduled interview list
@@ -215,6 +216,7 @@ function InterviewRow({
   onDelete:  () => void;
 }) {
   const navigate  = useNavigate();
+  const swipe = useSwipeAction({ maxReveal: 72, threshold: 48 });
   const status    = getCurrentRoundStatus(iv);
   const round     = iv.next_round ?? iv.rounds?.[0] ?? null;
   const d         = new Date(getCurrentRoundDate(iv));
@@ -234,13 +236,36 @@ function InterviewRow({
   const StatusIcon = statusConfig.icon;
 
   return (
-    <div className={cn(
-      "flex items-start gap-4 p-4 rounded-2xl border transition-all group",
+    <div className="relative overflow-hidden rounded-2xl">
+      <div
+        className="absolute inset-y-0 right-0 flex items-stretch pointer-events-none"
+        aria-hidden={!swipe.revealed}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            swipe.reset();
+            onDelete();
+          }}
+          aria-label={`Delete interview at ${iv.company_name}`}
+          className={cn(
+            "w-[72px] flex items-center justify-center bg-red-500/90 text-white transition-opacity min-h-11",
+            swipe.revealed ? "pointer-events-auto" : "pointer-events-none opacity-0",
+          )}
+        >
+          <Trash2 className="w-4 h-4" />
+        </button>
+      </div>
+
+    <div
+      {...swipe.bind}
+      className={cn(
+      "relative flex items-start gap-4 p-4 rounded-2xl border transition-all group bg-card",
       isNow
         ? "bg-primary/10 border-primary/30"
         : isCancelled
-        ? "bg-card border-border opacity-60"
-        : "bg-card border-border hover:bg-secondary/60"
+        ? "border-border opacity-60"
+        : "border-border hover:bg-secondary/60"
     )}>
       {/* Date block */}
       <div className={cn(
@@ -340,6 +365,7 @@ function InterviewRow({
       >
         <Trash2 className="w-3.5 h-3.5" />
       </button>
+    </div>
     </div>
   );
 }

@@ -1,7 +1,6 @@
 // @ts-nocheck -- retained: notification_prefs and privacy_prefs JSONB column types not in Supabase generated schema; Toggle component uses Radix UI checked prop which TypeScript does not accept on the wrapper component type.
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Badge } from "@/components/ui/Badge";
@@ -14,6 +13,12 @@ import { enumerateAudioDevices } from "@/lib/audio/audioCapture";
 import type { AudioDevice } from "@/types/audio.types";
 import { toast } from "sonner";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsAudio — mic, language, filler config
@@ -231,14 +236,16 @@ export default function SettingsAudio() {
 
   return (
     <SettingsPageShell title="Audio & Speech">
-
-      {/* Mic test */}
-      <Card>
-        <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-          <Mic className="w-4 h-4 text-primary" />
-          Microphone
-        </h3>
-        <div className="space-y-4">
+      <Accordion type="multiple" defaultValue={["microphone", "language"]} className="space-y-3">
+        <AccordionItem value="microphone" className="rounded-2xl border border-border bg-card px-5 border-b-0">
+          <AccordionTrigger className="text-sm font-semibold hover:no-underline py-4">
+            <span className="flex items-center gap-2">
+              <Mic className="w-4 h-4 text-primary" />
+              Microphone
+            </span>
+          </AccordionTrigger>
+          <AccordionContent>
+        <div className="space-y-4 pb-2">
           <div>
             <label className="block text-xs text-muted-foreground mb-1.5">Input device</label>
             {micDevices.length > 0 ? (
@@ -329,15 +336,18 @@ export default function SettingsAudio() {
             </p>
           </div>
         </div>
-      </Card>
+          </AccordionContent>
+        </AccordionItem>
 
-      {/* STT language */}
-      <Card>
-        <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-          <Volume2 className="w-4 h-4 text-blue-400" />
-          Speech recognition language
-        </h3>
-        <div className="grid grid-cols-2 gap-2">
+        <AccordionItem value="language" className="rounded-2xl border border-border bg-card px-5 border-b-0">
+          <AccordionTrigger className="text-sm font-semibold hover:no-underline py-4">
+            <span className="flex items-center gap-2">
+              <Volume2 className="w-4 h-4 text-blue-400" />
+              Speech recognition language
+            </span>
+          </AccordionTrigger>
+          <AccordionContent>
+        <div className="grid grid-cols-2 gap-2 pb-2">
           {STT_LANGUAGES.map((lang) => (
             <button
               key={lang.code}
@@ -353,15 +363,18 @@ export default function SettingsAudio() {
             </button>
           ))}
         </div>
-      </Card>
+          </AccordionContent>
+        </AccordionItem>
 
-      {/* Filler words — advanced */}
-      <details className="rounded-2xl border border-border bg-card group">
-        <summary className="cursor-pointer list-none px-5 py-4 flex items-center gap-2 text-sm font-semibold text-foreground">
-          <Settings2 className="w-4 h-4 text-amber-400" aria-hidden />
-          Advanced: filler word tracking
-        </summary>
-        <div className="px-5 pb-5 border-t border-border pt-4">
+        <AccordionItem value="fillers" className="rounded-2xl border border-border bg-card px-5 border-b-0">
+          <AccordionTrigger className="text-sm font-semibold hover:no-underline py-4">
+            <span className="flex items-center gap-2">
+              <Settings2 className="w-4 h-4 text-amber-400" />
+              Advanced: filler word tracking
+            </span>
+          </AccordionTrigger>
+          <AccordionContent>
+        <div className="pb-2">
         <div className="flex flex-wrap gap-2 mb-3">
           {fillerWords.map((w) => (
             <button
@@ -388,7 +401,9 @@ export default function SettingsAudio() {
           </Button>
         </div>
         </div>
-      </details>
+          </AccordionContent>
+        </AccordionItem>
+      </Accordion>
 
       <Button
         variant={saved ? "success" : "primary"}

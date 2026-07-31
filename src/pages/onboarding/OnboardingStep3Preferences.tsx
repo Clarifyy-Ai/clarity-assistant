@@ -7,7 +7,7 @@ import { useState } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { useOverlayStore } from "@/store/overlayStore";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import type { StepProps } from "@/types/onboarding.types";

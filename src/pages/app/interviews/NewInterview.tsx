@@ -20,9 +20,9 @@ import { useCalendarSync } from "@/hooks/useCalendarSync";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useDocumentStore } from "@/store/documentStore";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   CalendarDays, Building2, Clock,
   User, ChevronLeft,

@@ -1,29 +1,22 @@
 import { Check } from "lucide-react";
 import { cn } from "@/lib/utils";
-
-// ─────────────────────────────────────────────────────────────────
-// OnboardingProgress
-// Step indicator used across all 5 onboarding pages.
+// OnboardingProgress — 2-step indicator (~2 minute onboarding).
 // ─────────────────────────────────────────────────────────────────
 
 const STEPS = [
-  { n: 1, label: "Role" },
-  { n: 2, label: "Experience" },
-  { n: 3, label: "Preferences" },
-  { n: 4, label: "Audio" },
-  { n: 5, label: "Resume" },
+  { n: 1, label: "Essentials" },
+  { n: 2, label: "Optional setup" },
 ];
 
-export function OnboardingProgress({ current }: { current: number }) {
+export function OnboardingProgress({ current, className }: { current: number; className?: string }) {
   return (
-    <div className="mb-10 flex items-center gap-0">
+    <div className={cn("flex items-center gap-0", className)}>
       {STEPS.map((step, i) => {
         const done = step.n < current;
         const active = step.n === current;
 
         return (
           <div key={step.n} className="flex flex-1 items-center last:flex-none">
-            {/* Circle */}
             <div className="flex flex-col items-center gap-1">
               <div
                 className={cn(
@@ -32,7 +25,7 @@ export function OnboardingProgress({ current }: { current: number }) {
                     ? "bg-primary border-primary text-primary-foreground"
                     : active
                     ? "bg-transparent border-primary text-primary"
-                    : "bg-transparent border-border text-muted-foreground"
+                    : "bg-transparent border-border text-muted-foreground",
                 )}
               >
                 {done ? <Check className="h-3.5 w-3.5" /> : step.n}
@@ -41,25 +34,15 @@ export function OnboardingProgress({ current }: { current: number }) {
               <span
                 className={cn(
                   "hidden text-[10px] font-medium sm:block",
-                  active
-                    ? "text-primary"
-                    : done
-                    ? "text-gray-400"
-                    : "text-gray-700"
+                  active ? "text-primary" : done ? "text-muted-foreground" : "text-muted-foreground/60",
                 )}
               >
                 {step.label}
               </span>
             </div>
 
-            {/* Connector line */}
             {i < STEPS.length - 1 && (
-              <div
-                className={cn(
-                  "mx-1 h-px flex-1 transition-all",
-                  done ? "bg-primary" : "bg-secondary"
-                )}
-              />
+              <div className={cn("mx-1 h-px flex-1 transition-all", done ? "bg-primary" : "bg-border")} />
             )}
           </div>
         );

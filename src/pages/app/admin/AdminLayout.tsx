@@ -32,6 +32,7 @@ const ADMIN_NAV: { to: string; icon: React.ElementType; label: string }[] = [
   { to: "/app/admin/revenue",       icon: DollarSign,      label: "Revenue"       },
   { to: "/app/admin/promo-codes",   icon: Tag,             label: "Offers"        },
   { to: "/app/admin/billing-settings", icon: Settings2,   label: "Billing"       },
+  { to: "/app/admin/security-config", icon: Shield,        label: "Security Config" },
   { to: "/app/admin/model-costs",   icon: Cpu,             label: "Model Costs"   },
 ];
 

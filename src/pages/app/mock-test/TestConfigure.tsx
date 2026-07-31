@@ -4,9 +4,10 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Loader2, Lock, Zap } from "lucide-react";
 import { useAuthStore } from "@/store/userStore";
 import { useUIStore } from "@/store/uiStore";
-import { Button } from "@/components/ui/Button";
-import { Card, CardContent } from "@/components/ui/Card";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { SessionTrustBanner } from "@/components/session/SessionTrustBanner";
 import { toast } from "sonner";
 import { resolveExamConfigId } from "@/lib/mock-test/examTypes";
 import { launchMockTest } from "@/lib/mock-test/launchMockTest";
@@ -427,6 +428,8 @@ export default function TestConfigure() {
             : "Customize your test settings before you start."
         }
       />
+
+      <SessionTrustBanner variant="test" />
 
       {!isQuick && (
         <div className="flex items-center gap-2">

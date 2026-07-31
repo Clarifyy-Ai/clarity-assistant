@@ -3,7 +3,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { Clock, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 const WARN_BEFORE_MS = 5 * 60 * 1000;

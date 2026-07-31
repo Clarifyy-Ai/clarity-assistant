@@ -3,14 +3,14 @@ import { useParams, useNavigate } from "react-router-dom";
 import { answerBankDB, sessionsDB, sessionAnswersDB } from "@/lib/supabase/database";
 import { exportSessionPdf } from "@/lib/export/sessionPdf";
 import { useAuthStore } from "@/store/userStore";
-import { Card } from "@/components/ui/Card";
+import { Card } from "@/components/ui/card";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
-import { Modal } from "@/components/ui/Modal";
+import { Modal } from "@/components/ui/modal";
 import { toast } from "sonner";
 import {
   BarChart2, Clock, MessageSquare, Download,

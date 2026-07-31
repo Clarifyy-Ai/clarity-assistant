@@ -4,11 +4,12 @@ import { useState } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import {
   Copy, Save, CheckCircle, Sparkles,
   AlertCircle, ArrowRight, Wand2,
+  ClipboardList, Zap, Scissors,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -150,9 +151,9 @@ export default function Rephraser() {
         <div className="space-y-3">
           {(["formal", "confident", "concise"] as const).map((style) => {
             const styleConfig = {
-              formal:    { label: "Formal",    icon: "📋", color: "blue"   },
-              confident: { label: "Confident", icon: "💪", color: "primary" },
-              concise:   { label: "Concise",   icon: "✂️",  color: "emerald" },
+              formal:    { label: "Formal",    Icon: ClipboardList, color: "blue"   },
+              confident: { label: "Confident", Icon: Zap,           color: "primary" },
+              concise:   { label: "Concise",   Icon: Scissors,      color: "emerald" },
             }[style];
 
             const borderClass = {
@@ -173,7 +174,7 @@ export default function Rephraser() {
               <Card key={style} className={borderClass}>
                 <div className="flex items-center justify-between mb-2">
                   <p className={cn("text-xs font-semibold uppercase tracking-widest flex items-center gap-1.5", headerClass)}>
-                    <span>{styleConfig.icon}</span>
+                    <styleConfig.Icon className="w-3.5 h-3.5" aria-hidden />
                     {styleConfig.label}
                   </p>
                   <div className="flex items-center gap-3">

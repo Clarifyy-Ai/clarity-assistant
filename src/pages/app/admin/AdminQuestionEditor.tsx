@@ -3,9 +3,9 @@ import { useNavigate, useParams } from "react-router-dom";
 import { questionsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card, CardContent } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/Badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,

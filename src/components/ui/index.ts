@@ -1,6 +1,5 @@
 // ─── Primitive / Radix-based UI Components ───────────────────────────────────
-// Design-system direction (Sprint 5): prefer shadcn Switch / Dialog / Select /
-// Tabs for new preference UIs and dialogs. Keep branded Button / Card wrappers.
+// Canonical imports: button, card, dialog, input, switch, select, tabs (lowercase paths).
 export { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "./accordion";
 export {
   AlertDialog, AlertDialogPortal, AlertDialogOverlay, AlertDialogTrigger,
@@ -111,7 +110,7 @@ export {
   TableFooter as DataTableFooter,
   TableCaption as DataTableCaption,
 } from "./DataTable";
-export { Textarea } from "./Input";
+export { Textarea } from "./input";
 export { ToastContainer } from "./toast-container";
 export { Toast, ToastAction, ToastClose, ToastDescription, ToastProvider, ToastTitle, ToastViewport } from "./toast";
 export { Toaster } from "./toaster";
@@ -120,11 +119,11 @@ export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./tool
 
 // ─── Custom UI Components ─────────────────────────────────────────────────────
 export { Badge } from "./Badge";
-export { Button } from "./Button";
-export { Card, CardHeader, CardTitle, CardContent, CardFooter } from "./Card";
+export { Button } from "./button";
+export { Card, CardHeader, CardTitle, CardContent, CardFooter } from "./card";
 export { Dropdown } from "./Dropdown";
-export { Input } from "./Input";
-export { Modal } from "./Modal";
+export { Input } from "./input";
+export { Modal } from "./modal";
 export { ProgressBar } from "./ProgressBar";
 export { Spinner } from "./Spinner";
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./Tabs";

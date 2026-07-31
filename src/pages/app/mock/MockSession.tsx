@@ -18,6 +18,8 @@ import { OverlayWindow } from "@/components/overlay/OverlayWindow";
 import { OverlayKeyboardHandler } from "@/components/overlay/OverlayKeyboardHandler";
 import { LiveSessionController } from "@/components/live/LiveSessionController";
 import { PreSessionSetup } from "@/components/session/PreSessionSetup";
+import { PostSessionSummary } from "@/components/session/PostSessionSummary";
+import { saveLastSessionSummary } from "@/lib/session/lastSessionSummary";
 import { MockConversationPanel } from "@/components/mock/MockConversationPanel";
 import {
   sessionsDB,
@@ -29,9 +31,9 @@ import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { getLocalMockQuestions } from "@/lib/mock/localQuestionBank";
 import { isOverlayGhostClickSuppressed } from "@/lib/overlay/ghostClickGuard";
 import { toDbModel } from "@/lib/ai/modelMapping";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/Badge";
-import { Modal } from "@/components/ui/Modal";
+import { Modal } from "@/components/ui/modal";
 import { Skeleton } from "@/components/ui/SkeletonLoader";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { PANIC_RESPONSE } from "@/types/session.types";
@@ -54,7 +56,6 @@ import {
   Play,
   BarChart2,
 } from "lucide-react";
-import { ProgressBar } from "@/components/ui/ProgressBar";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import {
@@ -539,6 +540,17 @@ export default function MockSession() {
     const questionsAnswered = answersRef.current.filter((a) => !a.skipped).length;
     const creditsUsed = useSessionStore.getState().credits_consumed;
     const sessionId = useSessionStore.getState().session_id;
+    const hintsUsed = useOverlayStore.getState().hint_history.length;
+
+    if (sessionId) {
+      saveLastSessionSummary({
+        sessionId,
+        durationSeconds: timeTakenSeconds,
+        questionsDetected: questionsAnswered,
+        hintsUsed,
+        endedAt: Date.now(),
+      });
+    }
 
     setSummaryStats({
       questionsAnswered,
@@ -731,6 +743,15 @@ export default function MockSession() {
           )}
         </div>
       </div>
+    );
+  }
+
+  if (phase === "completed" && summaryStats?.sessionId) {
+    return (
+      <PostSessionSummary
+        sessionId={summaryStats.sessionId}
+        onStartNew={() => navigate("/app/mock")}
+      />
     );
   }
 

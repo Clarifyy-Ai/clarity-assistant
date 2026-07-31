@@ -16,7 +16,6 @@ import type { PreferredAIModel, HintStyle, UserProfile } from "@/types/user.type
 import { runAudioPreflight, type PreflightReport } from "@/lib/validators/audioValidator";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useIsMobile } from "@/hooks/use-mobile";
-import { notifyOverlayVisibilityOnMobile } from "@/lib/overlay/overlayVisibilityNotice";
 import { OverlaySetupGuidePanel } from "@/components/overlay/OverlaySetupGuidePanel";
 import { OVERLAY_VISIBILITY_WARNING } from "@/lib/constants/overlaySetupGuide";
 import { CreditExhaustedState, useCreditExhaustedState } from "@/components/billing/CreditExhaustedState";
@@ -30,7 +29,7 @@ import {
 } from "@/lib/session/lastPracticeSetup";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { SessionContextChip } from "@/components/session/SessionContextChip";
 
 interface PreSessionSetupWizardProps {
@@ -54,6 +53,11 @@ const STEPS = [
   { id: 4, label: "Auto-Generate",      icon: Sparkles },
   { id: 5, label: "Save Transcript",    icon: ScrollText },
   { id: 6, label: "Connect",            icon: CheckCircle2 },
+];
+
+const MOBILE_STEPS = [
+  { id: 1, label: "Resume",       icon: FileText },
+  { id: 2, label: "Microphone",   icon: Volume2 },
 ];
 
 function BooleanSwitch({
@@ -144,9 +148,34 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   useEffect(() => { setResumeId(activeResumeId); }, [activeResumeId]);
   useEffect(() => { setJdId(activeJdId); }, [activeJdId]);
 
-  useEffect(() => {
-    notifyOverlayVisibilityOnMobile();
-  }, []);
+  const activeSteps = isMobile ? MOBILE_STEPS : STEPS;
+  const totalSteps = activeSteps.length;
+  const connectStep = isMobile ? 2 : 6;
+  const resumeStep = isMobile ? 1 : 3;
+
+  function applyProfileDefaults() {
+    setResumeId(activeResumeId);
+    setJdId(activeJdId);
+    setModel(typedProfile?.preferred_model ?? "gemini-flash");
+    setHintStyle(typedProfile?.hint_style ?? "short_hints");
+    setLanguage("English");
+    setAutoGenerate(true);
+    setSaveTranscript(true);
+    setDurationMinutes(freePlan ? 5 : 30);
+    setSessionCallType("interview");
+    setInterviewType("behavioral");
+    setEnableSystemAudio(systemAudioSupported);
+    setStealthMode(false);
+  }
+
+  function handleUseDefaults() {
+    applyProfileDefaults();
+    if (isMobile) {
+      setStep(connectStep);
+    } else {
+      setStep(connectStep);
+    }
+  }
 
   useEffect(() => {
     if (navigator.permissions) {
@@ -160,7 +189,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   }, []);
 
   useEffect(() => {
-    if (step !== 6) return;
+    if (step !== connectStep) return;
     let cancelled = false;
     setPreflightLoading(true);
     void runAudioPreflight()
@@ -173,7 +202,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     return () => {
       cancelled = true;
     };
-  }, [step, micPermission]);
+  }, [step, micPermission, connectStep]);
 
   const checkMicPermission = async () => {
     setMicPermission("checking");
@@ -237,10 +266,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     onStart(config);
   }
 
-  const canProceed = step < 6;
-  const isLastStep = step === 6;
+  const canProceed = step < totalSteps;
+  const isLastStep = step === totalSteps;
 
   useEffect(() => {
+    if (isMobile) return;
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Enter" && !e.shiftKey && canProceed) {
         const target = e.target as HTMLElement;
@@ -255,7 +285,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     };
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [step, canProceed]);
+  }, [step, canProceed, isMobile]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -345,7 +375,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             Session Setup
           </div>
           <h1 className="text-2xl font-bold text-foreground">
-            {STEPS[step - 1].label}
+            {activeSteps[step - 1].label}
           </h1>
           <div className="mt-2 flex justify-center">
             <SessionContextChip
@@ -386,7 +416,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
 
         {/* Progress bar */}
         <div className="flex items-center gap-1">
-          {STEPS.map((s, i) => {
+          {activeSteps.map((s, i) => {
             const StepIcon = s.icon;
             const isActive = s.id === step;
             const isDone = s.id < step;
@@ -404,7 +434,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 >
                   {isDone ? <CheckCircle2 className="w-3.5 h-3.5" /> : <StepIcon className="w-3 h-3" />}
                 </div>
-                {i < STEPS.length - 1 && (
+                {i < activeSteps.length - 1 && (
                   <div className={cn(
                     "flex-1 h-px transition-colors",
                     isDone ? "bg-emerald-500/50" : "bg-border/50"
@@ -593,8 +623,8 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             </div>
           )}
 
-          {/* ── Step 3: Documents ─────────────────────────────── */}
-          {step === 3 && (
+          {/* ── Step 3 / Mobile step 1: Documents ─────────────────────────────── */}
+          {step === resumeStep && (
             <div className="space-y-5">
               <p className="text-xs text-muted-foreground">Attach documents to give the AI more context about you and the role.</p>
 
@@ -806,9 +836,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             </div>
           )}
 
-          {/* ── Step 6: Connect ───────────────────────────────── */}
-          {step === 6 && (
+          {/* ── Step 6 / Mobile step 2: Connect ───────────────────────────────── */}
+          {step === connectStep && (
             <div className="space-y-5">
+              {!isMobile && (
+              <>
               {/* Supported platforms */}
               <div>
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">Works with all platforms</p>
@@ -835,11 +867,25 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 <ol className="text-[11px] text-muted-foreground space-y-1.5 list-decimal list-inside">
                   <li>Open your interview platform (Zoom, Meet, etc.) in a <strong className="text-foreground">browser tab</strong></li>
                   <li>Click "Start" below — Clarify AI will listen automatically</li>
-                  <li>For <strong className="text-foreground">system audio</strong> capture, enable "Share tab audio" when screen-sharing</li>
+                  {!isMobile && (
+                    <li>For <strong className="text-foreground">system audio</strong> capture, enable "Share tab audio" when screen-sharing</li>
+                  )}
                 </ol>
               </div>
+              </>
+              )}
 
-              {/* Summary */}
+              {isMobile && (
+                <div className="bg-blue-500/5 border border-blue-500/15 rounded-xl p-3 space-y-2">
+                  <p className="text-xs font-semibold text-blue-400">Ready on mobile</p>
+                  <p className="text-[11px] text-muted-foreground leading-relaxed">
+                    Allow microphone access below. The coach opens as a bottom sheet — tap <strong className="text-foreground">Expand</strong> anytime for full controls.
+                  </p>
+                </div>
+              )}
+
+              {!isMobile && (
+              <>
               <div className="space-y-2">
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">Session Summary</p>
                 {[
@@ -901,6 +947,8 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   </div>
                 </label>
               </div>
+              </>
+              )}
 
               {preflightLoading && (
                 <p className="text-xs text-muted-foreground text-center">Checking audio readiness…</p>
@@ -920,6 +968,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 </div>
               )}
 
+              {!isMobile && (
               <div className="bg-primary/5 border border-primary/15 rounded-xl p-3 space-y-2">
                 <p className="text-xs font-semibold text-primary/80">Coding capture</p>
                 <p className="text-[11px] text-muted-foreground leading-relaxed">
@@ -928,7 +977,9 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   question, and get a full AI answer. Costs 2 credits per capture answer.
                 </p>
               </div>
+              )}
 
+              {!isMobile && (
               <details className="rounded-xl border border-border bg-secondary/10 px-3 py-2">
                 <summary className="cursor-pointer text-xs font-medium text-muted-foreground hover:text-foreground">
                   Install guide &amp; system settings
@@ -937,8 +988,9 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   <OverlaySetupGuidePanel compact showDesktopInstall showTroubleshooting={false} />
                 </div>
               </details>
+              )}
 
-              <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-border bg-secondary/10 p-3">
+              <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-border bg-secondary/10 p-3 min-h-11">
                 <input
                   type="checkbox"
                   checked={visibilityAck}
@@ -1006,6 +1058,16 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
         </div>
 
         {/* Navigation */}
+        <div className="flex flex-col gap-2">
+          {isMobile && step === resumeStep && (
+            <button
+              type="button"
+              onClick={handleUseDefaults}
+              className="w-full py-2.5 text-sm font-medium text-muted-foreground hover:text-foreground border border-dashed border-border rounded-xl transition-colors min-h-11"
+            >
+              Use defaults — skip to microphone
+            </button>
+          )}
         <div className="flex gap-3">
           {step > 1 && (
             <button
@@ -1043,6 +1105,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
               <ChevronRight className="w-4 h-4" />
             </button>
           )}
+        </div>
         </div>
       </div>
     </div>

@@ -14,6 +14,7 @@ import type { AudioDevice } from "@/types/audio.types";
 import type { LiveSessionConfig } from "@/types/session.types";
 import type { PreferredAIModel, HintStyle, UserProfile } from "@/types/user.types";
 import { CreditExhaustedState, useCreditExhaustedState } from "@/components/billing/CreditExhaustedState";
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 
 interface PreSessionSetupProps {
   onStart: (config: LiveSessionConfig) => void;
@@ -162,6 +163,11 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
             {isMock
               ? "Answer AI-generated questions, get real-time hints, and review your performance."
               : "AI listens, detects questions, and delivers hints directly to your overlay."}
+          </p>
+          <p className="text-xs text-muted-foreground mt-2">
+            {isMock
+              ? `Estimated: ~${AI_CREDIT_COSTS.generate_questions} credits to generate questions · ~${AI_CREDIT_COSTS.live_hint} credits/hint · Debrief ${AI_CREDIT_COSTS.session_debrief} credits`
+              : `Estimated usage: ~${AI_CREDIT_COSTS.live_hint} credits/hint · ${AI_CREDIT_COSTS.live_answer} credits/full answer`}
           </p>
         </div>
 

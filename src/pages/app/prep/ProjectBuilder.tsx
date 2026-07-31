@@ -5,8 +5,8 @@ import { useState, useEffect } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/Badge";
 import {
   Sparkles, Copy, Save, CheckCircle, AlertCircle,
@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { answerBankDB } from "@/lib/supabase/database";
 import {
   listSavedProjects,
@@ -50,6 +51,7 @@ export default function ProjectBuilder() {
   const [saved, setSaved]               = useState(false);
   const [error, setError]               = useState<string | null>(null);
   const [showForm, setShowForm]         = useState(false);
+  const [deleteProjectId, setDeleteProjectId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -120,15 +122,19 @@ export default function ProjectBuilder() {
   }
 
   function handleDelete(id: string) {
-    if (!user?.id) return;
-    if (!window.confirm("Delete this project? This cannot be undone.")) return;
-    deleteSavedProject(user.id, id);
+    setDeleteProjectId(id);
+  }
+
+  function confirmDelete() {
+    if (!user?.id || !deleteProjectId) return;
+    deleteSavedProject(user.id, deleteProjectId);
     setProjects(listSavedProjects(user.id));
-    if (editingId === id) {
+    if (editingId === deleteProjectId) {
       resetForm();
       setShowForm(false);
     }
     toast.success("Project deleted");
+    setDeleteProjectId(null);
   }
 
   async function generateShowcase() {
@@ -190,6 +196,7 @@ export default function ProjectBuilder() {
   }
 
   return (
+    <>
     <div className="space-y-5 max-w-4xl">
       <PageHeader
         title="Project Builder"
@@ -429,6 +436,19 @@ export default function ProjectBuilder() {
       </div>
       )}
     </div>
+
+    <ConfirmDialog
+      open={deleteProjectId != null}
+      onOpenChange={(open) => {
+        if (!open) setDeleteProjectId(null);
+      }}
+      title="Delete this project?"
+      description="This cannot be undone. Your saved draft and showcase will be removed."
+      confirmLabel="Delete"
+      variant="destructive"
+      onConfirm={confirmDelete}
+    />
+    </>
   );
 }
 

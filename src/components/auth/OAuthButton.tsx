@@ -15,7 +15,7 @@ import { useNavigate, useSearchParams } from "react-router-dom";
 import { Github, ShieldOff } from "lucide-react";
 import { toast } from "sonner";
 
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/Spinner";
 import { useAuthStore } from "@/store/authStore";
 import { sanitizeText } from "@/lib/security";

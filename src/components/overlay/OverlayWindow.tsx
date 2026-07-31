@@ -11,6 +11,7 @@ import { useAuthStore } from "@/store/userStore";
 import { profilesDB } from "@/lib/supabase/database";
 import { useDocumentPiP } from "@/lib/overlay/useDocumentPiP";
 import { getOverlayPortalZIndex, type OverlayStackContext } from "@/lib/overlay/zIndexManager";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { installOverlayGhostClickGuard } from "@/lib/overlay/ghostClickGuard";
 import { resizeDesktopOverlayWindow } from "@/lib/platform/electronWindowManager";
 import { isElectronApp } from "@/lib/platform/isElectron";
@@ -75,8 +76,8 @@ function overlayContextModeLabel(
 ): string {
   if (isPreparing) return "Prep";
   if (isSessionActive) {
-    if (sessionMode === "live") return "Live";
-    if (sessionMode === "mock") return "Mock";
+    if (sessionMode === "live") return PRODUCT_NAMES.practiceCoach;
+    if (sessionMode === "mock") return PRODUCT_NAMES.mockInterview;
   }
   return "Prep";
 }
@@ -168,6 +169,15 @@ export function OverlayWindow({
   }, [onGenerate]);
 
   const isMobile = useIsMobile();
+  const mobileMinimalDefaultApplied = useRef(false);
+
+  // Mobile: default to compact pill overlay on first mount
+  useEffect(() => {
+    if (!isMobile || mobileMinimalDefaultApplied.current) return;
+    mobileMinimalDefaultApplied.current = true;
+    useOverlayStore.getState().setMinimalMode(true);
+  }, [isMobile]);
+
   const location = useLocation();
   const stackCtx = overlayStackContext(IS_ELECTRON, location.pathname);
   const inAppShell = stackCtx === "in-app-shell";
@@ -495,6 +505,7 @@ export function OverlayWindow({
       {isMinimalMode && isVisible && (
         <div className="px-3 py-2 space-y-2 shrink-0" data-no-drag>
           <OverlayComplianceBanner variant="pill" />
+          <SessionContextChip compact />
           {(displayText || currentQuestion) && (
             <p className="text-[11px] text-white/75 line-clamp-2 leading-snug">
               {currentQuestion ? (

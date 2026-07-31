@@ -6,7 +6,7 @@ import { motion } from "framer-motion";
 import { SUPPORT_EMAIL, STATUS_PAGE_URL } from "@/lib/constants/contact";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { ComplianceBanner } from "@/components/marketing";
-import { Input } from "@/components/ui/Input";
+import { Input } from "@/components/ui/input";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import {

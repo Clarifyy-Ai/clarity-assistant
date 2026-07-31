@@ -88,57 +88,57 @@ ROOT CAUSE 6 — Emoji is used as UI chrome instead of a proper icon system.
 ================================================================================
 
 CORE PRACTICE EXPERIENCE GAPS
-  [ ] No "quick start" path that skips the 6-step wizard for a returning user
+  [x] No "quick start" path that skips the 6-step wizard for a returning user
       who just wants to jump into another session with their last-used config.
-  [ ] No visible, persistent "what will this cost me" credit estimate BEFORE
+  [x] No visible, persistent "what will this cost me" credit estimate BEFORE
       starting a Practice Coach or Mock session — costs surface after the fact
       in some flows (e.g., Company Research auto-generate, mid-results AI
       analysis on Mock Test).
-  [ ] No lightweight "listening/transcribing" confidence indicator during a
+  [x] No lightweight "listening/transcribing" confidence indicator during a
       live session — users can't easily tell if the mic is actually being
       picked up mid-conversation without checking a meter buried in a tab.
-  [ ] No auto-generated post-session notes/summary comparable to what
+  [x] No auto-generated post-session notes/summary comparable to what
       competitors offer (Parakeet AI auto-writes call notes + action items
       after every session — Clarify AI has Scorecard/Debrief but nothing
       framed as a quick digestible "here's what happened" note).
-  [ ] No clear in-product answer to "will the interviewer be able to see
+  [x] No clear in-product answer to "will the interviewer be able to see
       this?" — stealth/compliance messaging exists but isn't presented as a
       simple confidence statement before a session starts.
 
 ONBOARDING & FIRST-RUN GAPS
-  [ ] No skip-and-explain pattern — skipping audio/resume steps in onboarding
+  [x] No skip-and-explain pattern — skipping audio/resume steps in onboarding
       doesn't explain what the user loses by skipping.
-  [ ] No visible "why we're asking" micro-copy next to role/experience/anxiety
+  [x] No visible "why we're asking" micro-copy next to role/experience/anxiety
       fields — feels like data collection rather than personalization.
-  [ ] No first-session coach marks / tooltips inside the Overlay itself for a
+  [x] No first-session coach marks / tooltips inside the Overlay itself for a
       first-time user — the overlay's tab depth (hints/chat/resume/settings/
       audit) is thrown at users with no progressive reveal.
 
 TRUST, SAFETY & HONESTY GAPS
-  [ ] No visible, plain-language statement of "this is a practice tool, not
+  [x] No visible, plain-language statement of "this is a practice tool, not
       for live/real deceptive use" reinforced consistently across every
       session-starting surface (partially present as a banner, not systemic).
-  [ ] Push/digest notification toggles exist in UI but are admitted as not
+  [x] Push/digest notification toggles exist in UI but are admitted as not
       fully wired — this is a real user-trust risk if shipped as-is.
-  [ ] No warning before a destructive action explains WHAT will be lost in
+  [x] No warning before a destructive action explains WHAT will be lost in
       plain language (several delete flows have no confirm at all — e.g.
       Interviews list hover-delete).
 
 MOBILE-SPECIFIC GAPS
-  [ ] No mobile-optimized Practice Coach path at all — the setup wizard and
+  [x] No mobile-optimized Practice Coach path at all — the setup wizard and
       Overlay are both designed desktop-first; mobile only gets a "works
       best on desktop" notice rather than a real simplified flow.
-  [ ] No swipe gestures anywhere (swipe-to-delete session/interview rows,
+  [x] No swipe gestures anywhere (swipe-to-delete session/interview rows,
       swipe between Overlay tabs) — everything is tap/hover only, and
       hover-only delete actions are literally unusable on touch devices.
-  [ ] No "Add to Home Screen"/PWA prompt despite a meaningful mobile audience
+  [x] No "Add to Home Screen"/PWA prompt despite a meaningful mobile audience
       implied by MobileNav, bottom tabs, and mobile-specific overlay notices.
 
 CONTENT & GROWTH GAPS
-  [ ] No branded chrome on the public Shared Debrief page — this is a growth
+  [x] No branded chrome on the public Shared Debrief page — this is a growth
       loop (users share results) and currently looks unbranded/untrustworthy.
-  [ ] No in-app changelog/what's-new surfacing tied to product updates.
-  [ ] No native share sheet on Referrals (copy-link only) — a missed mobile
+  [x] No in-app changelog/what's-new surfacing tied to product updates.
+  [x] No native share sheet on Referrals (copy-link only) — a missed mobile
       conversion opportunity.
 
 ================================================================================
@@ -192,32 +192,32 @@ of the core practice moment.
 ================================================================================
 5. MOBILE-FRIENDLINESS ACTION CHECKLIST
 ================================================================================
-  [ ] One mobile nav pattern (bottom primary; slim hamburger)
+  [x] One mobile nav pattern (bottom primary; slim hamburger)
   [ ] Elevate Sessions/Documents/Answer Bank if usage warrants
-  [ ] Replace hover-only destructive actions
-  [ ] Delete confirmations everywhere
-  [ ] 44x44px tap targets
-  [ ] Real mobile Practice Coach mode (hints-only Overlay)
+  [x] Replace hover-only destructive actions
+  [x] Delete confirmations everywhere
+  [x] 44x44px tap targets
+  [x] Real mobile Practice Coach mode (hints-only Overlay)
   [ ] Mock Session mobile-first conversation layout
   [ ] Reduced-motion / note-only fallbacks for breathing/whiteboard
   [ ] Toast + persistent on-screen fallback
-  [ ] Color + text/icon for status states
-  [ ] Break long single-page flows into steps/sections
-  [ ] PWA / Add to Home Screen
+  [x] Color + text/icon for status states
+  [x] Break long single-page flows into steps/sections
+  [x] PWA / Add to Home Screen
 
 ================================================================================
 6. USER-FRIENDLINESS CHECKLIST (first-time-user lens)
 ================================================================================
-  [ ] First live practice within 2 minutes of signup
-  [ ] Step counters reflect real remaining work
-  [ ] No field reuse for different questions (role_type bug)
-  [ ] Credit cost visible before spend
+  [x] First live practice within 2 minutes of signup
+  [x] Step counters reflect real remaining work
+  [x] No field reuse for different questions (role_type bug)
+  [x] Credit cost visible before spend
   [ ] No back-to-back welcome/congratulations for same milestone
-  [ ] Destructive actions explain consequence before confirm
+  [x] Destructive actions explain consequence before confirm
   [ ] Search inputs always labeled
-  [ ] Naming consistent (nav / title / empty / marketing)
+  [x] Naming consistent (nav / title / empty / marketing)
   [ ] Coming-soon / broken destinations labeled before click
-  [ ] Unwired notification toggles hidden or marked Coming soon
+  [x] Unwired notification toggles hidden or marked Coming soon
 
 ================================================================================
 7. CANONICAL NAMING GLOSSARY & IA MAP

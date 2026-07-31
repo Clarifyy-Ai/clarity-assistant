@@ -2,8 +2,8 @@
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/Badge";
 import { CheckCircle, Shield, Eye, Database, Lock, WifiOff } from "lucide-react";

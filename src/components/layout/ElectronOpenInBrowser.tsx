@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { ExternalLink, Globe, Monitor } from "lucide-react";
-import { Button } from "@/components/ui/Button";
-import { Card, CardContent } from "@/components/ui/Card";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { openInBrowser, getWebAppUrl } from "@/lib/platform/openInBrowser";
 import { ELECTRON_DEFAULT_PATH } from "@/lib/platform/electronRoutes";
 import { Link } from "react-router-dom";
@@ -41,8 +41,9 @@ export function ElectronOpenInBrowser({
           <div className="space-y-2">
             <h1 className="text-lg font-semibold text-foreground">Open in your browser</h1>
             <p className="text-sm text-muted-foreground leading-relaxed">
-              The Clarify AI desktop app is for Practice Coach overlay sessions only.
-              Dashboard, prep tools, billing, and mock interviews run in your web browser.
+              Your browser has the full Clarify AI product — dashboard, prep, billing, and mock
+              interviews. The desktop app is a lightweight upgrade for Practice Coach overlay
+              convenience during live practice.
             </p>
           </div>
 

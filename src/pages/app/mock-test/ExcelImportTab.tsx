@@ -12,8 +12,9 @@ import {
 import * as XLSX from "xlsx";
 import { questionsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
-import { Button } from "@/components/ui/Button";
-import { Card, CardContent } from "@/components/ui/Card";
+import { Button } from "@/components/ui/button";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
+import { Card, CardContent } from "@/components/ui/card";
 import { toast } from "sonner";
 import { normalizeExamTypeForStorage } from "@/lib/mock-test/examTypes";
 
@@ -113,6 +114,7 @@ export default function ExcelImportTab({
   const [parsed, setParsed] = useState<ParsedRow[] | null>(null);
   const [errors, setErrors] = useState<ParsedRow[]>([]);
   const [saving, setSaving] = useState(false);
+  const [rowToDelete, setRowToDelete] = useState<number | null>(null);
 
   function processFile(file: File) {
     if (file.size > 5 * 1024 * 1024) {
@@ -200,6 +202,11 @@ export default function ExcelImportTab({
 
   function removeRow(idx: number) {
     setParsed((prev) => prev?.filter((row) => row._idx !== idx) ?? null);
+    setRowToDelete(null);
+  }
+
+  function confirmRemoveRow(idx: number) {
+    setRowToDelete(idx);
   }
 
   async function handleSave() {
@@ -458,8 +465,9 @@ export default function ExcelImportTab({
                       <td className="px-3 py-2 text-center">
                         <button
                           type="button"
-                          onClick={() => removeRow(row._idx)}
-                          className="text-muted-foreground opacity-0 transition-opacity hover:text-destructive group-hover:opacity-100"
+                          onClick={() => confirmRemoveRow(row._idx)}
+                          className="rounded p-1 text-muted-foreground transition-colors hover:bg-destructive/10 hover:text-destructive"
+                          aria-label={`Remove row ${index + 1}`}
                         >
                           <X className="mx-auto h-4 w-4" />
                         </button>
@@ -472,6 +480,20 @@ export default function ExcelImportTab({
           </CardContent>
         </Card>
       )}
+
+      <ConfirmDialog
+        open={rowToDelete != null}
+        onOpenChange={(open) => {
+          if (!open) setRowToDelete(null);
+        }}
+        title="Remove question?"
+        description="This row will be removed from the import preview. You can re-upload the file to restore it."
+        confirmLabel="Remove"
+        variant="destructive"
+        onConfirm={() => {
+          if (rowToDelete != null) removeRow(rowToDelete);
+        }}
+      />
 
       {errors.length > 0 && (
         <Card className="border-amber-500/30 bg-amber-500/5">

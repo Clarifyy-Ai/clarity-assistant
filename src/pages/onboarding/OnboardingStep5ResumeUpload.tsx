@@ -26,7 +26,7 @@ import { generateId } from "@/lib/utils";
 
 import { normalizeParsedResume } from "@/lib/documents/resumeParse";
 
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 
 import { ProgressBar } from "@/components/ui/ProgressBar";
 
@@ -739,28 +739,21 @@ export default function OnboardingStep5ResumeUpload({ onNext, onBack, onSkip }: 
               </Button>
 
             ) : (
-
-              <Button
-
-                variant="ghost"
-
-                size="md"
-
-                fullWidth
-
-                onClick={() => onNext({ skipResume: true, resumeFileId: null, resumeFileName: null })}
-
-                rightIcon={<SkipForward className="w-4 h-4" />}
-
-              >
-
-                Skip for now — add later from Documents
-              </Button>
-              <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
-                Skipping means Practice Coach won&apos;t personalize answers from your resume until
-                you upload one in Documents.
-              </p>
-
+              <>
+                <Button
+                  variant="ghost"
+                  size="md"
+                  fullWidth
+                  onClick={() => onNext({ skipResume: true, resumeFileId: null, resumeFileName: null })}
+                  rightIcon={<SkipForward className="w-4 h-4" />}
+                >
+                  Skip for now — add later from Documents
+                </Button>
+                <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
+                  Skipping means Practice Coach won&apos;t personalize answers from your resume until
+                  you upload one in Documents.
+                </p>
+              </>
             )}
 
           </div>

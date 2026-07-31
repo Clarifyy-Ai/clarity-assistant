@@ -3,19 +3,20 @@ import { useAuthStore } from "@/store/userStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { useCredits } from "@/hooks/useCredits";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/Badge";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
 import { PlanGate } from "@/components/layout/PlanGate";
-import { Modal } from "@/components/ui/Modal";
+import { Modal } from "@/components/ui/modal";
 import { toast } from "sonner";
 import {
   Star, BookOpen, Zap,
   Brain, ChevronRight, RefreshCw,
   CheckCircle, Copy, Save, Sparkles,
-  Building2, Target,
+  Building2, Target, FileSearch, Mail, DollarSign, Briefcase,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";
 import { answerBankDB } from "@/lib/supabase/database";
@@ -24,6 +25,11 @@ import { EDGE_BASE } from "@/lib/env";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { Link, useSearchParams } from "react-router-dom";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import {
+  StarBuilderForm,
+  type StarFieldKey,
+  type StarFields,
+} from "@/components/prep/StarBuilderForm";
 
 // ─────────────────────────────────────────────────────────────────
 // PrepLab — STAR builder, Answer Bank, AI tools
@@ -103,35 +109,28 @@ export default function PrepLab() {
 // STAR Builder
 // ─────────────────────────────────────────────────────────────────
 
-const STAR_PROMPTS = {
-  situation: "Set the scene. What was the context? When and where did this happen?",
-  task:      "What was your responsibility or challenge in this situation?",
-  action:    "What specific steps did YOU take? Use 'I', not 'we'.",
-  result:    "What was the outcome? Include metrics if possible (%, $, time saved).",
-};
-
 function STARBuilder() {
   const { user }  = useAuthStore();
   const credits   = useCredits();
   const docStore  = useDocumentStore();
 
   const [question,   setQuestion]   = useState("");
-  const [star, setStar] = useState({ situation: "", task: "", action: "", result: "" });
+  const [star, setStar] = useState<StarFields>({ situation: "", task: "", action: "", result: "" });
   const [generated,  setGenerated]  = useState("");
   const [loading,    setLoading]    = useState(false);
   const [saved,      setSaved]      = useState(false);
-  const [aiLoading,  setAiLoading]  = useState<keyof typeof star | null>(null);
+  const [aiLoading,  setAiLoading]  = useState<StarFieldKey | null>(null);
 
   const wordCounts = Object.fromEntries(
     Object.entries(star).map(([k, v]) => [k, v.trim().split(/\s+/).filter(Boolean).length])
-  );
+  ) as Record<StarFieldKey, number>;
 
   const totalWords = Object.values(wordCounts).reduce((a, b) => a + b, 0);
   const isComplete = Object.values(star).every((v) => v.trim().length > 20);
 
   // ── AI polish one section ─────────────────────────────────────
 
-  async function polishSection(key: keyof typeof star) {
+  async function polishSection(key: StarFieldKey) {
     if (!credits.canAfford("star_analyse")) return;
     setAiLoading(key);
 
@@ -239,67 +238,28 @@ function STARBuilder() {
 
   return (
     <div className="space-y-5">
-      {/* Question input */}
-      <Card>
-        <p className="text-xs font-medium text-foreground mb-2">
-          Interview question you're preparing for
-        </p>
-        <input
-          value={question}
-          onChange={(e) => setQuestion(e.target.value)}
-          placeholder="e.g. Tell me about a time you resolved a conflict at work."
-          className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
-        />
-      </Card>
-
-      {/* STAR sections */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-        {(Object.keys(STAR_PROMPTS) as (keyof typeof STAR_PROMPTS)[]).map((key) => (
-          <Card key={key}>
-            <div className="flex items-center justify-between mb-2">
-              <div className="flex items-center gap-2">
-                <span className={cn(
-                  "text-xs font-black uppercase px-2 py-0.5 rounded-lg",
-                  key === "situation" ? "bg-blue-500/10 text-blue-400" :
-                  key === "task"      ? "bg-primary/10 text-primary" :
-                  key === "action"    ? "bg-emerald-500/10 text-emerald-400" :
-                                        "bg-amber-500/10 text-amber-400"
-                )}>
-                  {key[0].toUpperCase()}
-                </span>
-                <span className="text-sm font-semibold text-foreground capitalize">{key}</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <span className="text-[10px] text-muted-foreground">
-                  {wordCounts[key]}w
-                </span>
-                {star[key].trim().length > 10 && (
-                  <button
-                    onClick={() => polishSection(key)}
-                    disabled={aiLoading === key || !credits.canAfford("star_analyse")}
-                    className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 transition-colors disabled:opacity-40"
-                  >
-                    {aiLoading === key ? (
-                      <RefreshCw className="w-3 h-3 animate-spin" />
-                    ) : (
-                      <Sparkles className="w-3 h-3" />
-                    )}
-                    Polish
-                  </button>
-                )}
-              </div>
-            </div>
-            <p className="text-[11px] text-muted-foreground mb-2">{STAR_PROMPTS[key]}</p>
-            <textarea
-              value={star[key]}
-              onChange={(e) => setStar((p) => ({ ...p, [key]: e.target.value }))}
-              placeholder={`Write your ${key}…`}
-              rows={3}
-              className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-3 py-2 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
-            />
-          </Card>
-        ))}
-      </div>
+      <StarBuilderForm
+        question={question}
+        onQuestionChange={setQuestion}
+        star={star}
+        onStarChange={(key, value) => setStar((p) => ({ ...p, [key]: value }))}
+        renderSectionActions={(key) =>
+          star[key].trim().length > 10 ? (
+            <button
+              onClick={() => polishSection(key)}
+              disabled={aiLoading === key || !credits.canAfford("star_analyse")}
+              className="flex items-center gap-1 text-[10px] text-primary hover:text-primary/80 transition-colors disabled:opacity-40"
+            >
+              {aiLoading === key ? (
+                <RefreshCw className="w-3 h-3 animate-spin" />
+              ) : (
+                <Sparkles className="w-3 h-3" />
+              )}
+              Polish
+            </button>
+          ) : null
+        }
+      />
 
       {/* Word count bar */}
       <div className="flex items-center justify-between text-xs text-muted-foreground">
@@ -518,45 +478,51 @@ function AnswerBankPanel() {
 // AI Tools
 // ─────────────────────────────────────────────────────────────────
 
-const AI_TOOLS = [
+const AI_TOOLS: Array<{
+  id: string;
+  icon: LucideIcon;
+  label: string;
+  desc: string;
+  plan: "free" | "pro";
+}> = [
   {
     id:    "jd_fit",
-    icon:  "🎯",
+    icon:  Target,
     label: "JD Fit Analyser",
     desc:  "Upload a job description — AI rates how well your resume matches and gives a gap report.",
     plan:  "free",
   },
   {
     id:    "question_predict",
-    icon:  "🔮",
+    icon:  FileSearch,
     label: "Question Predictor",
     desc:  "AI predicts the 10 most likely questions for your target role and company.",
     plan:  "free",
   },
   {
     id:    "cover_letter",
-    icon:  "✉️",
+    icon:  Mail,
     label: "Cover Letter Writer",
     desc:  "Generate a tailored cover letter from your resume + JD in one click.",
     plan:  "pro",
   },
   {
     id:    "salary_coach",
-    icon:  "💰",
+    icon:  DollarSign,
     label: "Salary Negotiation Script",
     desc:  "AI writes a customised negotiation script based on role, location, and experience.",
     plan:  "pro",
   },
   {
     id:    "linkedin_headline",
-    icon:  "💼",
+    icon:  Briefcase,
     label: "LinkedIn Headline Optimiser",
     desc:  "Rewrite your headline to attract more recruiters for your target roles.",
     plan:  "pro",
   },
   {
     id:    "culture_fit",
-    icon:  "🏢",
+    icon:  Building2,
     label: "Culture Fit Scorer",
     desc:  "Analyses your answers against a company's stated values and culture.",
     plan:  "pro",
@@ -591,7 +557,9 @@ function AITools({ initialToolId }: { initialToolId?: string }) {
                 <Badge variant="amber" size="sm">Pro</Badge>
               </div>
             )}
-            <span className="text-3xl">{tool.icon}</span>
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10">
+              <tool.icon className="h-5 w-5 text-primary" />
+            </span>
             <div>
               <p className="text-sm font-semibold text-foreground">{tool.label}</p>
               <p className="text-xs text-muted-foreground mt-1 leading-relaxed">{tool.desc}</p>

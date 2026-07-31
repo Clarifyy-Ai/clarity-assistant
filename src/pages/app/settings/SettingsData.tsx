@@ -5,8 +5,8 @@ import { fetchEdge } from "@/lib/network/fetchEdge";
 import { useState } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/Badge";
 import { SkeletonText } from "@/components/ui/SkeletonLoader";
 import {

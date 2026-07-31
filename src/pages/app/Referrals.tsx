@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { referralsDB } from "@/lib/supabase/database";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageContent } from "@/components/layout/PageContent";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
@@ -53,6 +53,26 @@ export default function Referrals() {
     setTimeout(() => setCopied(false), 2000);
   }
 
+  async function shareLink() {
+    if (!link) {
+      toast.error("Referral link unavailable. Refresh the page or contact support.");
+      return;
+    }
+    if (typeof navigator.share === "function") {
+      try {
+        await navigator.share({
+          title: "Join Clarify AI",
+          text: "Practice interviews with AI coaching — use my referral link:",
+          url: link,
+        });
+        return;
+      } catch (err) {
+        if ((err as Error)?.name === "AbortError") return;
+      }
+    }
+    copyLink();
+  }
+
   const steps = [
     { icon: Share2, title: "Share your link", desc: "Send your unique referral link to friends" },
     { icon: Users, title: "They sign up", desc: "Your friend creates a free account" },
@@ -85,10 +105,18 @@ export default function Referrals() {
               </p>
             ) : (
               <>
-                <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-muted rounded-xl px-3 py-2.5 text-sm text-muted-foreground font-mono truncate">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <div className="flex-1 min-w-[200px] bg-muted rounded-xl px-3 py-2.5 text-sm text-muted-foreground font-mono truncate">
                     {link}
                   </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => void shareLink()}
+                    leftIcon={<Share2 className="w-4 h-4" />}
+                  >
+                    Share
+                  </Button>
                   <Button
                     variant={copied ? "success" : "primary"}
                     size="sm"

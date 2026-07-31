@@ -5,10 +5,12 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { PreSessionSetupWizard } from "@/components/session/PreSessionSetupWizard";
 import { PostSessionSummary } from "@/components/session/PostSessionSummary";
 import {
-  AlertTriangle,
   ExternalLink,
   Monitor,
 } from "lucide-react";
+import { SessionTrustBanner } from "@/components/session/SessionTrustBanner";
+import { useSessionStore } from "@/store/sessionStore";
+import { useOverlayStore } from "@/store/overlayStore";
 import { cn } from "@/lib/utils";
 import type { LiveSessionConfig } from "@/types/session.types";
 import { notifyOverlayVisibilityOnMobile } from "@/lib/overlay/overlayVisibilityNotice";
@@ -25,6 +27,11 @@ export default function LiveRehearsal() {
   const [searchParams, setSearchParams] = useSearchParams();
   const endedSessionId = searchParams.get("ended");
   const [defaultOverlay, setDefaultOverlay] = useState(false);
+  const sessionActive = useSessionStore(
+    (s) => s.status === "active" && Boolean(s.session_id),
+  );
+  const overlayVisible = useOverlayStore((s) => s.is_visible);
+  const hasActiveOverlaySession = sessionActive || overlayVisible;
 
   useEffect(() => {
     setDefaultOverlay(getDefaultOverlayEnabled());
@@ -53,19 +60,30 @@ export default function LiveRehearsal() {
     );
   }
 
+  if (hasActiveOverlaySession) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh] px-4">
+        <div className="text-center space-y-4 max-w-md">
+          <p className="text-lg font-semibold text-foreground">Session in progress</p>
+          <p className="text-sm text-muted-foreground">
+            You already have an active Practice Coach session. Return to the overlay to continue
+            or end it before starting a new setup.
+          </p>
+          <Link
+            to="/app/live/overlay"
+            className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 text-sm font-semibold text-primary-foreground hover:opacity-90 transition-opacity"
+          >
+            Open active session
+            <ExternalLink className="w-3.5 h-3.5" aria-hidden />
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <>
-      <div
-        role="note"
-        className="mx-auto max-w-2xl mt-4 mb-2 flex items-start gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-300"
-      >
-        <AlertTriangle className="w-4 h-4 mt-0.5 shrink-0" aria-hidden />
-        <span>
-          <strong>Practice only.</strong> Practice Coach is designed for interview rehearsal with an
-          AI coach. Do not use during real interviews — covert AI assistance violates most employer
-          and assessment policies.
-        </span>
-      </div>
+      <SessionTrustBanner className="mx-auto max-w-2xl mt-4 mb-2" variant="live" />
       <div
         role="note"
         className={cn(

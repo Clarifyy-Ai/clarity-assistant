@@ -4,10 +4,18 @@ import { answerBankDB } from "@/lib/supabase/database";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
-import { Card } from "@/components/ui/Card";
-import { Button } from "@/components/ui/Button";
-import { Modal } from "@/components/ui/Modal";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { Card } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Modal } from "@/components/ui/modal";
 import { PageHeader } from "@/components/layout/PageHeader";
+import {
+  StarBuilderForm,
+  buildStarAnswerText,
+  parseSavedStarAnswer,
+  parseStarResponse,
+  type StarFields,
+} from "@/components/prep/StarBuilderForm";
 import {
   Star, Sparkles, Save, Loader2, BookOpen, Trash2, Pencil, Filter,
 } from "lucide-react";
@@ -24,37 +32,13 @@ const EXAMPLES = [
 
 type StarStory = Tables<"answer_bank">;
 
-function parseSavedStarAnswer(text: string) {
-  const extract = (label: string) => {
-    const re = new RegExp(`\\*\\*${label}:\\*\\*\\s*([\\s\\S]*?)(?=\\n\\n\\*\\*|$)`, "i");
-    const match = text.match(re);
-    return match?.[1]?.trim() ?? "";
-  };
-  return {
-    situation: extract("Situation"),
-    task: extract("Task"),
-    action: extract("Action"),
-    result: extract("Result"),
-  };
-}
-
-function buildStarAnswerText(parts: {
-  situation: string;
-  task: string;
-  action: string;
-  result: string;
-}) {
-  return `**Situation:** ${parts.situation}\n\n**Task:** ${parts.task}\n\n**Action:** ${parts.action}\n\n**Result:** ${parts.result}`;
-}
+const EMPTY_STAR: StarFields = { situation: "", task: "", action: "", result: "" };
 
 export default function StarBuilder() {
   const { user } = useAuthStore();
 
   const [question, setQuestion] = useState("");
-  const [situation, setSituation] = useState("");
-  const [task, setTask] = useState("");
-  const [action, setAction] = useState("");
-  const [result, setResult] = useState("");
+  const [star, setStar] = useState<StarFields>(EMPTY_STAR);
   const [competencyTag, setCompetencyTag] = useState("");
   const [polishing, setPolishing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -66,7 +50,7 @@ export default function StarBuilder() {
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
 
-  const hasContent = situation || task || action || result;
+  const hasContent = Object.values(star).some((value) => value.trim().length > 0);
 
   const loadStories = useCallback(async () => {
     if (!user?.id) {
@@ -106,10 +90,7 @@ export default function StarBuilder() {
 
   function resetForm() {
     setQuestion("");
-    setSituation("");
-    setTask("");
-    setAction("");
-    setResult("");
+    setStar(EMPTY_STAR);
     setCompetencyTag("");
     setEditingId(null);
   }
@@ -117,11 +98,7 @@ export default function StarBuilder() {
   function loadStoryIntoForm(story: StarStory) {
     setEditingId(story.id);
     setQuestion(story.question_text);
-    const parts = parseSavedStarAnswer(story.answer_text);
-    setSituation(parts.situation);
-    setTask(parts.task);
-    setAction(parts.action);
-    setResult(parts.result);
+    setStar(parseSavedStarAnswer(story.answer_text));
     const extraTag = story.tags?.find((t) => t !== "star") ?? "";
     setCompetencyTag(extraTag);
   }
@@ -134,7 +111,7 @@ export default function StarBuilder() {
 
     setPolishing(true);
     try {
-      const input = `Question: ${question || "(general behavioral)"}\n\nSituation: ${situation}\nTask: ${task}\nAction: ${action}\nResult: ${result}`;
+      const input = `Question: ${question || "(general behavioral)"}\n\nSituation: ${star.situation}\nTask: ${star.task}\nAction: ${star.action}\nResult: ${star.result}`;
 
       const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
         tool_id: "star_method",
@@ -143,11 +120,13 @@ export default function StarBuilder() {
 
       const text = data?.result ?? "";
       if (text) {
-        const parts = parseSTAR(text);
-        if (parts.situation) setSituation(parts.situation);
-        if (parts.task) setTask(parts.task);
-        if (parts.action) setAction(parts.action);
-        if (parts.result) setResult(parts.result);
+        const parts = parseStarResponse(text);
+        setStar((prev) => ({
+          situation: parts.situation || prev.situation,
+          task: parts.task || prev.task,
+          action: parts.action || prev.action,
+          result: parts.result || prev.result,
+        }));
         toast.success("Answer polished with AI!");
       }
       await refreshCredits();
@@ -162,7 +141,7 @@ export default function StarBuilder() {
     if (!user?.id || !hasContent) return;
     setSaving(true);
     try {
-      const answerText = buildStarAnswerText({ situation, task, action, result });
+      const answerText = buildStarAnswerText(star);
       const tags = ["star", ...(competencyTag.trim() ? [competencyTag.trim().toLowerCase()] : [])];
 
       if (editingId) {
@@ -216,67 +195,23 @@ export default function StarBuilder() {
         icon={<Star className="w-5 h-5 text-amber-400" />}
         breadcrumbs={[
           { label: "Dashboard", href: "/app/dashboard" },
-          { label: "Prep Lab", href: "/app/prep" },
+          { label: PRODUCT_NAMES.prepLab, href: "/app/prep" },
           { label: "STAR Builder" },
         ]}
       />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
-          <Card>
-            <label className="block text-sm font-medium text-foreground mb-1.5">
-              Interview Question
-            </label>
-            <input
-              type="text"
-              value={question}
-              onChange={(e) => setQuestion(e.target.value)}
-              placeholder="e.g. Tell me about a time you led a team..."
-              className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
-          </Card>
-
-          {(["Situation", "Task", "Action", "Result"] as const).map((label) => {
-            const val = { Situation: situation, Task: task, Action: action, Result: result }[label];
-            const setter = { Situation: setSituation, Task: setTask, Action: setAction, Result: setResult }[label];
-            const hints: Record<string, string> = {
-              Situation: "Describe the context — where, when, and what was happening.",
-              Task: "What was your specific responsibility or challenge?",
-              Action: "What steps did you personally take?",
-              Result: "What was the outcome? Quantify if possible.",
-            };
-            return (
-              <Card key={label}>
-                <div className="flex items-center gap-2 mb-1.5">
-                  <span className="w-6 h-6 rounded-md bg-primary/15 flex items-center justify-center text-xs font-bold text-primary">
-                    {label[0]}
-                  </span>
-                  <label className="text-sm font-medium text-foreground">{label}</label>
-                </div>
-                <p className="text-xs text-muted-foreground mb-2">{hints[label]}</p>
-                <textarea
-                  value={val}
-                  onChange={(e) => setter(e.target.value)}
-                  rows={3}
-                  placeholder={`Write your ${label.toLowerCase()} here...`}
-                  className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50 resize-none"
-                />
-              </Card>
-            );
-          })}
-
-          <Card>
-            <label className="block text-sm font-medium text-foreground mb-1.5">
-              Competency tag (optional)
-            </label>
-            <input
-              type="text"
-              value={competencyTag}
-              onChange={(e) => setCompetencyTag(e.target.value)}
-              placeholder="e.g. leadership, conflict-resolution"
-              className="w-full rounded-xl border border-border bg-background px-3 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
-          </Card>
+          <StarBuilderForm
+            question={question}
+            onQuestionChange={setQuestion}
+            star={star}
+            onStarChange={(key, value) => setStar((prev) => ({ ...prev, [key]: value }))}
+            competencyTag={competencyTag}
+            onCompetencyTagChange={setCompetencyTag}
+            layout="stack"
+            questionPlaceholder="e.g. Tell me about a time you led a team..."
+          />
 
           <div className="flex gap-2 flex-wrap">
             <Button
@@ -440,27 +375,4 @@ export default function StarBuilder() {
       </Modal>
     </div>
   );
-}
-
-function parseSTAR(text: string) {
-  const out = { situation: "", task: "", action: "", result: "" };
-  const lower = text.toLowerCase();
-
-  const sIdx = lower.indexOf("situation");
-  const tIdx = lower.indexOf("task");
-  const aIdx = lower.indexOf("action");
-  const rIdx = lower.indexOf("result");
-
-  function extract(start: number, end: number) {
-    if (start < 0) return "";
-    const raw = text.slice(start, end > 0 ? end : undefined);
-    return raw.replace(/^[^:]*:\s*/i, "").trim();
-  }
-
-  out.situation = extract(sIdx, tIdx);
-  out.task = extract(tIdx, aIdx);
-  out.action = extract(aIdx, rIdx);
-  out.result = extract(rIdx, -1);
-
-  return out;
 }

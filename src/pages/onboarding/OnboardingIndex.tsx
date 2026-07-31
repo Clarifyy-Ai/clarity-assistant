@@ -1,32 +1,30 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// OnboardingIndex.tsx — Master onboarding orchestrator.
-// Manages step progression, shared state across all 5 steps,
-// persistence to Supabase, and final profile completion.
+// OnboardingIndex.tsx — Master onboarding orchestrator (2-step flow).
+// Step 1: Essentials (~60s) · Step 2: Optional setup (accordion).
+// On complete: persist profile, seed lastPracticeSetup, navigate to /app/live.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useCallback, useEffect } from "react";
-import { useNavigate, useSearchParams }      from "react-router-dom";
-import { motion, AnimatePresence }           from "framer-motion";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
 
-import { supabase }                             from "@/lib/supabase/client";
-import { fetchEdgeJson }                        from "@/lib/network/fetchEdge";
-import { useAuthStore }                         from "@/store";
+import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { useAuthStore } from "@/store";
 import { recordReferral, getStoredRefCode, normalizeRefCode } from "@/lib/referrals";
-import { ROUTES }            from "@/lib/constants";
-import { cn }                from "@/lib/utils";
+import { ROUTES } from "@/lib/constants";
+import { saveLastPracticeSetup } from "@/lib/session/lastPracticeSetup";
+import { normalizePreferredModel } from "@/lib/ai/modelOptions";
+import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
 
-import OnboardingStep1Role         from "./OnboardingStep1Role";
-import OnboardingStep2Experience   from "./OnboardingStep2Experience";
-import OnboardingStep3Preferences  from "./OnboardingStep3Preferences";
-import OnboardingStep4AudioSetup   from "./OnboardingStep4AudioSetup";
-import OnboardingStep5ResumeUpload from "./OnboardingStep5ResumeUpload";
+import OnboardingStep1Essentials from "./OnboardingStep1Essentials";
+import OnboardingStep2OptionalSetup from "./OnboardingStep2OptionalSetup";
 
-import { CheckCircle2, Loader2 } from "lucide-react";
-import { Button }                from "@/components/ui/Button";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
 
-// Re-export OnboardingData from the shared types file so consumers can import
-// from either location without creating circular dependencies.
+import type { LiveSessionConfig } from "@/types/session.types";
+import type { HintStyle } from "@/types/user.types";
+
 export type { OnboardingData } from "@/types/onboarding.types";
 import type { OnboardingData } from "@/types/onboarding.types";
 
@@ -38,7 +36,7 @@ const INITIAL_ONBOARDING_DATA: OnboardingData = {
   currentLevel:       "mid",
   techStack:          [],
   interviewTypes:     ["behavioral"],
-  preferredModel:     "gpt-4o",
+  preferredModel:     "gemini-flash",
   preferredLanguage:  "en-US",
   overlayEnabled:     true,
   audioAnalysis:      true,
@@ -50,172 +48,66 @@ const INITIAL_ONBOARDING_DATA: OnboardingData = {
   skipResume:         false,
 };
 
-// ─── Step Config ──────────────────────────────────────────────────────────────
+const TOTAL_STEPS = 2;
 
-interface StepConfig {
-  id:          number;
-  label:       string;
-  description: string;
-  skippable:   boolean;
+function mapHintStyle(style?: string): HintStyle {
+  if (style === "keywords") return "keywords_only";
+  if (style === "full_answer" || style === "short_hints" || style === "keywords_only") {
+    return style;
+  }
+  return "short_hints";
 }
 
-const STEPS: StepConfig[] = [
-  { id: 1, label: "Role",       description: "Your target position",    skippable: false },
-  { id: 2, label: "Experience", description: "Your background",         skippable: false },
-  { id: 3, label: "Settings",   description: "App preferences",         skippable: true  },
-  { id: 4, label: "Audio",      description: "Microphone setup",        skippable: true  },
-  { id: 5, label: "Resume",     description: "Upload your CV",          skippable: true  },
-];
+function buildLiveSetupFromOnboarding(
+  data: OnboardingData,
+  responseStyle?: string | null,
+): LiveSessionConfig {
+  const interviewType = data.interviewTypes?.[0] ?? "behavioral";
+  const company = data.targetCompanies?.[0] ?? null;
 
-const TOTAL_STEPS = STEPS.length;
-
-// ─── Step Progress Bar ────────────────────────────────────────────────────────
-
-function StepProgressBar({
-  currentStep,
-  completedSteps,
-}: {
-  currentStep:    number;
-  completedSteps: Set<number>;
-}) {
-  return (
-    <div className="w-full max-w-lg mx-auto px-4">
-      <div className="flex items-center justify-between relative">
-        <div className="absolute left-0 right-0 top-1/2 -translate-y-1/2 h-0.5 bg-border z-0" />
-
-        <motion.div
-          className="absolute left-0 top-1/2 -translate-y-1/2 h-0.5 bg-primary z-0 origin-left"
-          initial={{ scaleX: 0 }}
-          animate={{ scaleX: (currentStep - 1) / (TOTAL_STEPS - 1) }}
-          transition={{ duration: 0.4, ease: "easeInOut" }}
-        />
-
-        {STEPS.map((step) => {
-          const isDone    = completedSteps.has(step.id);
-          const isCurrent = step.id === currentStep;
-          const isFuture  = step.id > currentStep;
-
-          return (
-            <div key={step.id} className="relative z-10 flex flex-col items-center gap-1.5">
-              <motion.div
-                layout
-                className={cn(
-                  "flex h-8 w-8 items-center justify-center rounded-full border-2 transition-colors",
-                  isDone    && "bg-primary border-primary text-primary-foreground",
-                  isCurrent && "bg-background border-primary text-primary ring-4 ring-primary/20",
-                  isFuture  && "bg-background border-border text-muted-foreground"
-                )}
-                whileHover={!isFuture ? { scale: 1.1 } : {}}
-              >
-                {isDone ? (
-                  <CheckCircle2 className="h-4 w-4" />
-                ) : (
-                  <span className="text-xs font-bold">{step.id}</span>
-                )}
-              </motion.div>
-
-              <span className={cn(
-                "hidden md:block text-[11px] font-medium whitespace-nowrap transition-colors",
-                isCurrent ? "text-primary"         : "",
-                isDone    ? "text-muted-foreground" : "",
-                isFuture  ? "text-muted-foreground/50" : ""
-              )}>
-                {step.label}
-              </span>
-            </div>
-          );
-        })}
-      </div>
-
-      <p className="mt-3 text-center text-xs text-muted-foreground">
-        Step {currentStep} of {TOTAL_STEPS} — {STEPS[currentStep - 1]?.description}
-      </p>
-    </div>
-  );
+  return {
+    company,
+    role: data.targetRole || null,
+    hint_style: mapHintStyle(responseStyle ?? undefined),
+    model: normalizePreferredModel(data.preferredModel),
+    smart_routing: false,
+    stealth_mode: false,
+    resume_id: data.skipResume ? null : data.resumeFileId,
+    jd_id: null,
+    interview_type: interviewType,
+    instructions: "",
+    enable_system_audio: true,
+    mic_device_id: data.selectedMicId !== "default" ? data.selectedMicId : undefined,
+    noise_suppression: true,
+    save_transcript: true,
+    session_call_type: "interview",
+    language: data.preferredLanguage === "en-US" ? "English" : data.preferredLanguage,
+  };
 }
-
-// ─── Completion Screen ────────────────────────────────────────────────────────
-
-function CompletionScreen({ onContinue }: { onContinue: () => void }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, scale: 0.95 }}
-      animate={{ opacity: 1, scale: 1 }}
-      transition={{ duration: 0.4 }}
-      className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6 px-4"
-    >
-      <motion.div
-        initial={{ scale: 0 }}
-        animate={{ scale: 1 }}
-        transition={{ type: "spring", stiffness: 180, damping: 14, delay: 0.15 }}
-        className="flex h-24 w-24 items-center justify-center rounded-full bg-green-100 dark:bg-green-900/30"
-      >
-        <CheckCircle2 className="h-14 w-14 text-green-600 dark:text-green-400" />
-      </motion.div>
-
-      <div className="space-y-2">
-        <motion.h1
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
-          className="text-3xl font-bold tracking-tight"
-        >
-          You're all set! 🎉
-        </motion.h1>
-        <motion.p
-          initial={{ opacity: 0, y: 8 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
-          className="text-muted-foreground max-w-sm mx-auto"
-        >
-          Your profile is ready. Head to the dashboard to start your first
-          practice session or jump straight into a live interview.
-        </motion.p>
-      </div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 8 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ delay: 0.5 }}
-        className="flex flex-col sm:flex-row gap-3"
-      >
-        <Button size="lg" onClick={onContinue} className="min-w-40">
-          Go to dashboard
-        </Button>
-      </motion.div>
-    </motion.div>
-  );
-}
-
-// ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function OnboardingIndex() {
-  const navigate    = useNavigate();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const user            = useAuthStore((s) => s.user);
-  const profile         = useAuthStore((s) => s.profile);
-  const isOnboarded     = useAuthStore((s) => s.isOnboarded);
+  const user = useAuthStore((s) => s.user);
+  const profile = useAuthStore((s) => s.profile);
+  const isOnboarded = useAuthStore((s) => s.isOnboarded);
   const isProfileLoaded = useAuthStore((s) => s.isProfileLoaded);
-  const updateProfile   = useAuthStore((s) => s.updateProfile);
-  const loadProfile     = useAuthStore((s) => s.loadProfile);
+  const updateProfile = useAuthStore((s) => s.updateProfile);
+  const loadProfile = useAuthStore((s) => s.loadProfile);
 
   const isRerun = searchParams.get("rerun") === "1";
   const refCode = normalizeRefCode(searchParams.get("ref")) ?? getStoredRefCode();
 
-  const [currentStep,    setCurrentStep]    = useState(1);
-  const [completedSteps, setCompletedSteps] = useState<Set<number>>(new Set());
-  const [data,           setData]           = useState<OnboardingData>(INITIAL_ONBOARDING_DATA);
-  const [isSaving,       setIsSaving]       = useState(false);
-  const [isComplete,     setIsComplete]     = useState(false);
+  const [currentStep, setCurrentStep] = useState(1);
+  const [data, setData] = useState<OnboardingData>(INITIAL_ONBOARDING_DATA);
+  const [isSaving, setIsSaving] = useState(false);
 
-  // Redirect if already onboarded (unless re-running from Settings)
   useEffect(() => {
     if (isProfileLoaded && isOnboarded && !isRerun) {
       navigate(ROUTES.DASHBOARD, { replace: true });
     }
   }, [isProfileLoaded, isOnboarded, isRerun, navigate]);
 
-  // Re-run: hydrate wizard from existing profile
   useEffect(() => {
     if (!isRerun || !profile) return;
     setData((prev) => ({
@@ -231,24 +123,16 @@ export default function OnboardingIndex() {
     }));
   }, [isRerun, profile]);
 
-  // ── Data merge helper ──────────────────────────────────────────────────────
-
   const mergeData = useCallback((partial: Partial<OnboardingData>) => {
     setData((prev) => ({ ...prev, ...partial }));
   }, []);
-
-  // ── Step navigation ────────────────────────────────────────────────────────
 
   const goToStep = useCallback((step: number) => {
     setCurrentStep(step);
     window.scrollTo({ top: 0, behavior: "smooth" });
   }, []);
 
-  // ── Persist to Supabase — declared BEFORE handleNext/handleSkip so it is
-  //    fully initialised when it appears in their useCallback deps arrays.
-  //    (Referencing a const in a deps array before its declaration = TDZ error)
-
-  const handleFinish = useCallback(async (lastStepData?: Partial<OnboardingData>) => {
+  const finishOnboarding = useCallback(async (lastStepData?: Partial<OnboardingData>) => {
     const finalData = lastStepData ? { ...data, ...lastStepData } : data;
 
     setIsSaving(true);
@@ -279,7 +163,16 @@ export default function OnboardingIndex() {
       }
 
       await loadProfile();
-      setIsComplete(true);
+
+      const freshProfile = useAuthStore.getState().profile;
+      saveLastPracticeSetup(
+        buildLiveSetupFromOnboarding(
+          finalData,
+          freshProfile?.response_style as string | undefined,
+        ),
+      );
+
+      navigate(ROUTES.LIVE_SESSION, { replace: true });
     } catch (err) {
       console.error("[OnboardingIndex] Failed to save onboarding:", err);
       const message =
@@ -288,56 +181,34 @@ export default function OnboardingIndex() {
     } finally {
       setIsSaving(false);
     }
-  }, [data, updateProfile, loadProfile, user, profile, refCode]);
+  }, [data, updateProfile, loadProfile, user, profile, refCode, navigate]);
 
   const handleNext = useCallback((stepData?: Partial<OnboardingData>) => {
     if (stepData) mergeData(stepData);
 
-    setCompletedSteps((prev) => new Set(prev).add(currentStep));
-
     if (currentStep < TOTAL_STEPS) {
       goToStep(currentStep + 1);
     } else {
-      // Last step — pass stepData so handleFinish can merge it with accumulated data
-      handleFinish(stepData);
+      finishOnboarding(stepData);
     }
-  }, [currentStep, mergeData, goToStep, handleFinish]);
+  }, [currentStep, mergeData, goToStep, finishOnboarding]);
 
   const handleBack = useCallback(() => {
     if (currentStep > 1) goToStep(currentStep - 1);
   }, [currentStep, goToStep]);
 
-  const handleSkip = useCallback(() => {
-    setCompletedSteps((prev) => new Set(prev).add(currentStep));
-    if (currentStep < TOTAL_STEPS) {
-      goToStep(currentStep + 1);
-    } else {
-      handleFinish();
-    }
-  }, [currentStep, goToStep, handleFinish]);
-
-  // ── Redirect to dashboard ─────────────────────────────────────────────────
-
-  const handleContinueToDashboard = useCallback(() => {
-    navigate(ROUTES.DASHBOARD, { replace: true });
-  }, [navigate]);
-
   const handleSkipRerun = useCallback(() => {
     navigate(ROUTES.DASHBOARD, { replace: true });
   }, [navigate]);
-
-  // ─── Shared step props ─────────────────────────────────────────────────────
 
   const stepProps = {
     data,
     onNext: handleNext,
     onBack: handleBack,
-    onSkip: handleSkip,
+    onSkip: () => finishOnboarding(),
     isFirstStep: currentStep === 1,
     isLastStep:  currentStep === TOTAL_STEPS,
   };
-
-  // ── Slide animation variants ──────────────────────────────────────────────
 
   const slideVariants = {
     enter: (direction: number) => ({
@@ -363,12 +234,8 @@ export default function OnboardingIndex() {
     handleBack();
   }, [handleBack]);
 
-  // ─────────────────────────────────────────────────────────────────────────────
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-muted/20 to-background">
-
-      {/* ── Header / Branding ──────────────────────────────────────────────── */}
       <header className="sticky top-0 z-10 border-b border-border/50 bg-background/80 backdrop-blur-md">
         <div className="mx-auto max-w-3xl px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2">
@@ -378,9 +245,11 @@ export default function OnboardingIndex() {
             <span className="font-semibold text-sm tracking-tight">Clarify AI</span>
           </div>
 
-          <StepProgressBar currentStep={currentStep} completedSteps={completedSteps} />
+          <div className="hidden sm:block flex-1 max-w-xs mx-4">
+            <OnboardingProgress current={currentStep} />
+          </div>
 
-          {isRerun && profile?.onboarding_completed && !isComplete && (
+          {isRerun && profile?.onboarding_completed && (
             <button
               type="button"
               onClick={handleSkipRerun}
@@ -391,14 +260,14 @@ export default function OnboardingIndex() {
           )}
 
           {!isRerun && <div className="w-16" />}
-          {isRerun && !profile?.onboarding_completed && <div className="w-16" />}
+        </div>
+
+        <div className="sm:hidden px-4 pb-3">
+          <OnboardingProgress current={currentStep} />
         </div>
       </header>
 
-      {/* ── Main Content ───────────────────────────────────────────────────── */}
       <main className="mx-auto max-w-2xl px-4 py-10">
-
-        {/* Saving overlay */}
         {isSaving && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
             <div className="flex flex-col items-center gap-3">
@@ -408,78 +277,43 @@ export default function OnboardingIndex() {
           </div>
         )}
 
-        {/* Completion screen */}
-        {isComplete ? (
-          <CompletionScreen onContinue={handleContinueToDashboard} />
-        ) : (
-          <AnimatePresence mode="wait" custom={slideDirection}>
-            <motion.div
-              key={currentStep}
-              custom={slideDirection}
-              variants={slideVariants}
-              initial="enter"
-              animate="center"
-              exit="exit"
-              transition={{ duration: 0.28, ease: "easeInOut" }}
-            >
-              {/* ── Step 1: Role ─────────────────────────────────────────── */}
-              {currentStep === 1 && (
-                <OnboardingStep1Role
-                  {...stepProps}
-                  onNext={goNext}
-                  onBack={goBack}
-                />
-              )}
+        <AnimatePresence mode="wait" custom={slideDirection}>
+          <motion.div
+            key={currentStep}
+            custom={slideDirection}
+            variants={slideVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            transition={{ duration: 0.28, ease: "easeInOut" }}
+          >
+            {currentStep === 1 && (
+              <OnboardingStep1Essentials
+                {...stepProps}
+                onNext={goNext}
+                onBack={goBack}
+              />
+            )}
 
-              {/* ── Step 2: Experience ───────────────────────────────────── */}
-              {currentStep === 2 && (
-                <OnboardingStep2Experience
-                  {...stepProps}
-                  onNext={goNext}
-                  onBack={goBack}
-                />
-              )}
-
-              {/* ── Step 3: Preferences ──────────────────────────────────── */}
-              {currentStep === 3 && (
-                <OnboardingStep3Preferences
-                  {...stepProps}
-                  onNext={goNext}
-                  onBack={goBack}
-                />
-              )}
-
-              {/* ── Step 4: Audio Setup ───────────────────────────────────── */}
-              {currentStep === 4 && (
-                <OnboardingStep4AudioSetup
-                  {...stepProps}
-                  onNext={goNext}
-                  onBack={goBack}
-                />
-              )}
-
-              {/* ── Step 5: Resume Upload ─────────────────────────────────── */}
-              {currentStep === 5 && (
-                <OnboardingStep5ResumeUpload
-                  {...stepProps}
-                  onNext={goNext}
-                  onBack={goBack}
-                />
-              )}
-            </motion.div>
-          </AnimatePresence>
-        )}
+            {currentStep === 2 && (
+              <OnboardingStep2OptionalSetup
+                {...stepProps}
+                onNext={goNext}
+                onBack={goBack}
+              />
+            )}
+          </motion.div>
+        </AnimatePresence>
       </main>
 
-      {/* ── Skip onboarding entirely (escape hatch) ────────────────────────── */}
-      {!isComplete && currentStep === 1 && !isRerun && (
+      {!isSaving && currentStep === 1 && !isRerun && (
         <div className="pb-8 text-center">
           <button
             type="button"
-            onClick={() => handleFinish()}
+            onClick={() => finishOnboarding()}
             className="text-xs text-muted-foreground/60 hover:text-muted-foreground underline underline-offset-4 transition-colors"
           >
-            Skip setup and go to dashboard
+            Skip setup and start practice
           </button>
         </div>
       )}

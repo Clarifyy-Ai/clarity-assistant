@@ -10,8 +10,8 @@ import { toast } from "sonner";
 
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
-import { Button } from "@/components/ui/Button";
-import { Card, CardContent } from "@/components/ui/Card";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
 

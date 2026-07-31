@@ -14,7 +14,7 @@ import {
 
 import { creditsDB, sessionsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/authStore";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageContent } from "@/components/layout/PageContent";
 import { EmptyState } from "@/components/common/EmptyState";
@@ -26,7 +26,7 @@ import {
   CardDescription,
   CardHeader,
   CardTitle,
-} from "@/components/ui/Card";
+} from "@/components/ui/card";
 import { openBillingPortal } from "@/lib/api/billing";
 import {
   Bar,

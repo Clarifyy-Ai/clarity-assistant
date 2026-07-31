@@ -3,8 +3,8 @@ import { FileText, Loader2, Sparkles, CheckCircle2, AlertCircle } from "lucide-r
 import { supabase } from "@/lib/supabase/client";
 import { questionsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
-import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,

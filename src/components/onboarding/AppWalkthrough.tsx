@@ -19,7 +19,7 @@ import {
   hasCompletedAppWalkthrough,
   markAppWalkthroughCompleted,
 } from "@/lib/onboarding/appWalkthroughStorage";
-import { Button } from "@/components/ui/Button";
+import { Button } from "@/components/ui/button";
 
 type TourPlacement = "center" | "right" | "bottom";
 
