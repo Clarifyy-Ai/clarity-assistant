@@ -12,6 +12,8 @@ import { maxSessionSecondsForPlan, isFreePlan } from "@/lib/constants/freeTier";
 import { toDbModel } from "@/lib/ai/modelMapping";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
+import { Wind } from "lucide-react";
 
 // ─────────────────────────────────────────────────────────────────
 // MockWarmup — 30s breathing + WARMUP_MAX non-scored warmup questions
@@ -39,6 +41,7 @@ export default function MockWarmup() {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, profile } = useAuthStore();
+  const prefersReducedMotion = usePrefersReducedMotion();
   const warmupMaxSeconds = maxSessionSecondsForPlan(profile?.plan_id);
   const warmupStartedRef = useRef<number | null>(null);
 
@@ -203,7 +206,23 @@ export default function MockWarmup() {
               </p>
             </div>
 
-            {/* Animated circle */}
+            {/* Animated circle — note-only when reduced motion */}
+            {prefersReducedMotion ? (
+              <div className="mx-auto max-w-sm rounded-2xl border border-border bg-card p-6 text-left space-y-3">
+                <div className="flex items-center gap-2 text-foreground font-semibold">
+                  <Wind className="w-4 h-4 text-primary" aria-hidden />
+                  {currentBreath.label}
+                </div>
+                <p className="text-sm text-muted-foreground leading-relaxed">
+                  Step {breathIdx + 1} of 3 — follow the timer without the expanding circle.
+                  Inhale through your nose, hold briefly, then exhale through your mouth.
+                </p>
+                <p className="text-2xl font-bold tabular-nums text-primary">
+                  {Math.ceil(currentBreath.duration - (breathPct / 100) * currentBreath.duration)}s
+                </p>
+                <ProgressBar value={breathPct} max={100} color="violet" size="xs" />
+              </div>
+            ) : (
             <div className="relative w-40 h-40 mx-auto">
               <svg className="w-full h-full -rotate-90" viewBox="0 0 160 160">
                 <circle
@@ -239,6 +258,7 @@ export default function MockWarmup() {
                 </p>
               </div>
             </div>
+            )}
 
             <p className="text-xs text-muted-foreground">
               Breathe in through your nose, hold, breathe out through your mouth
@@ -264,7 +284,7 @@ export default function MockWarmup() {
                 {WARMUP_QUESTIONS[qIdx]}
               </h2>
               <p className="text-xs text-muted-foreground mt-2">
-                No score — just warm up your voice 🎤
+                No score — just warm up your voice
               </p>
             </div>
 
@@ -290,9 +310,11 @@ export default function MockWarmup() {
         {/* ── Done — transition ─────────────────────────── */}
         {phase === "done" && (
           <div className="space-y-6">
-            <div className="text-5xl">🚀</div>
+            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/15">
+              <Wind className="w-7 h-7 text-primary" aria-hidden />
+            </div>
             <div>
-              <h2 className="text-2xl font-bold text-foreground">You're warmed up!</h2>
+              <h2 className="text-2xl font-bold text-foreground">You&apos;re warmed up!</h2>
               <p className="text-muted-foreground text-sm mt-2">
                 Your voice is ready. The real questions start now.
               </p>

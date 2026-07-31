@@ -17,6 +17,7 @@ import { toast } from "sonner";
 import { answerBankDB } from "@/lib/supabase/database";
 import { Whiteboard, type WhiteboardHandle } from "@/components/prep/Whiteboard";
 import { SYSTEM_DESIGN_PRESETS } from "@/lib/prep/systemDesignPresets";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 
 type Difficulty = "easy" | "medium" | "hard";
 
@@ -58,7 +59,12 @@ export default function SystemDesign() {
   const credits = useCredits();
   const { user } = useAuthStore();
   const whiteboardRef = useRef<WhiteboardHandle>(null);
+  const prefersReducedMotion = usePrefersReducedMotion();
   const [activePreset, setActivePreset] = useState<string | null>(null);
+  /** 'auto' follows reduced-motion preference; user can override. */
+  const [boardMode, setBoardMode] = useState<"auto" | "notes" | "board">("auto");
+  const useNotesOnly =
+    boardMode === "notes" || (boardMode === "auto" && prefersReducedMotion);
 
   const [topics, setTopics]       = useState<DesignTopic[] | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -303,10 +309,27 @@ export default function SystemDesign() {
               )}
 
               <div className="mt-4">
-                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest mb-2">
-                  Sketch your design
-                </p>
-                <Whiteboard ref={whiteboardRef} height={380} />
+                <div className="flex items-center justify-between gap-2 mb-2">
+                  <p className="text-xs font-semibold text-muted-foreground uppercase tracking-widest">
+                    Sketch your design
+                  </p>
+                  <button
+                    type="button"
+                    className="text-[11px] text-primary hover:underline min-h-11 px-2"
+                    onClick={() => setBoardMode(useNotesOnly ? "board" : "notes")}
+                  >
+                    {useNotesOnly ? "Show whiteboard" : "Use notes only"}
+                  </button>
+                </div>
+                {useNotesOnly ? (
+                  <p className="text-sm text-muted-foreground rounded-xl border border-dashed border-border p-4 leading-relaxed">
+                    {prefersReducedMotion && boardMode === "auto"
+                      ? "Reduced motion is on — sketch in the notes field above (components, data flow, tradeoffs). Switch to whiteboard anytime."
+                      : "Notes-only mode — capture your design outline in the notes field above."}
+                  </p>
+                ) : (
+                  <Whiteboard ref={whiteboardRef} height={380} />
+                )}
               </div>
             </>
           ) : (

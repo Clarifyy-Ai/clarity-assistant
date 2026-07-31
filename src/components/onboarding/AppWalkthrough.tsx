@@ -287,6 +287,11 @@ export function AppWalkthrough(): JSX.Element | null {
 
   const finish = useCallback(() => {
     if (userId) markAppWalkthroughCompleted(userId);
+    try {
+      sessionStorage.setItem("clarify:walkthrough-done-session", "1");
+    } catch {
+      /* ignore */
+    }
     setActiveTourStep(null);
     setOpen(false);
     setMobileNavOpen(false);

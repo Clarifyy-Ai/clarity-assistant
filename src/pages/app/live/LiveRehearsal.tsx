@@ -14,9 +14,14 @@ import { useOverlayStore } from "@/store/overlayStore";
 import { cn } from "@/lib/utils";
 import type { LiveSessionConfig } from "@/types/session.types";
 import { notifyOverlayVisibilityOnMobile } from "@/lib/overlay/overlayVisibilityNotice";
+import {
+  OVERLAY_MOBILE_TOAST_BODY,
+  OVERLAY_MOBILE_TOAST_TITLE,
+} from "@/lib/constants/overlaySetupGuide";
 import { getDefaultOverlayEnabled } from "@/lib/overlay/defaultOverlayPreference";
 import { isElectronApp } from "@/lib/platform/isElectron";
 import { DesktopDownloadButton } from "@/components/common/DesktopDownloadButton";
+import { useIsMobile } from "@/hooks/use-mobile";
 import {
   saveLastPracticeSetup,
   stashPendingPracticeSetup,
@@ -27,6 +32,8 @@ export default function LiveRehearsal() {
   const [searchParams, setSearchParams] = useSearchParams();
   const endedSessionId = searchParams.get("ended");
   const [defaultOverlay, setDefaultOverlay] = useState(false);
+  const [dismissMobileNotice, setDismissMobileNotice] = useState(false);
+  const isMobile = useIsMobile();
   const sessionActive = useSessionStore(
     (s) => s.status === "active" && Boolean(s.session_id),
   );
@@ -84,6 +91,29 @@ export default function LiveRehearsal() {
   return (
     <>
       <SessionTrustBanner className="mx-auto max-w-2xl mt-4 mb-2" variant="live" />
+      {isMobile && !dismissMobileNotice && (
+        <div
+          role="status"
+          className="mx-auto max-w-2xl mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm"
+        >
+          <div className="flex items-start justify-between gap-3">
+            <div>
+              <p className="font-semibold text-foreground">{OVERLAY_MOBILE_TOAST_TITLE}</p>
+              <p className="text-muted-foreground mt-1 text-xs leading-relaxed">
+                {OVERLAY_MOBILE_TOAST_BODY}
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setDismissMobileNotice(true)}
+              className="shrink-0 text-xs text-muted-foreground hover:text-foreground min-h-11 min-w-11"
+              aria-label="Dismiss notice"
+            >
+              Dismiss
+            </button>
+          </div>
+        </div>
+      )}
       <div
         role="note"
         className={cn(

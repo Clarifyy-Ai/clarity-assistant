@@ -28,7 +28,7 @@ import {
 
   User, Bell, Mic, Brain, Calendar, Sparkles, Lock, CreditCard,
 
-  CalendarDays, Building2, Gift, History, Trash2,
+  CalendarDays, Building2, Gift, History, Trash2, Users,
 
 } from "lucide-react";
 
@@ -37,6 +37,8 @@ import { usePrivateMode } from "@/hooks/usePrivateMode";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
 import { useUIStore } from "@/store/uiStore";
+
+import { toast } from "sonner";
 
 import {
 
@@ -61,7 +63,7 @@ interface NavCommand {
   icon: React.ComponentType<{ className?: string }>;
 
   group: "Navigate" | "Sessions" | "Prep" | "Account";
-
+  comingSoon?: boolean;
 }
 
 const COMMANDS: NavCommand[] = [
@@ -97,6 +99,15 @@ const COMMANDS: NavCommand[] = [
   { label: PRODUCT_NAMES.sessionHistory, path: "/app/sessions", icon: Calendar, group: "Sessions", keywords: "history calls" },
 
   { label: PRODUCT_NAMES.debrief, path: "/app/debrief", icon: Sparkles, group: "Sessions", keywords: "debriefs feedback" },
+
+  {
+    label: `${PRODUCT_NAMES.groupPractice} (Coming soon)`,
+    path: "/app/rooms",
+    icon: Users,
+    group: "Sessions",
+    keywords: "rooms collaborative webrtc",
+    comingSoon: true,
+  },
 
   { label: PRODUCT_NAMES.prepLab, path: "/app/prep", icon: BookOpen, group: "Prep" },
 
@@ -184,7 +195,15 @@ export function CommandPalette() {
 
   const go = useCallback(
 
-    (path: string) => {
+    (path: string, comingSoon?: boolean) => {
+
+      if (comingSoon) {
+        toast.message("Coming soon", {
+          description: "Group Practice rooms ship after WebRTC support is ready.",
+        });
+        setOpen(false);
+        return;
+      }
 
       if (canFilter) addRecentSearch(trimmedQuery);
 
@@ -316,7 +335,7 @@ export function CommandPalette() {
 
                   value={`${c.label} ${c.keywords ?? ""} ${c.path}`}
 
-                  onSelect={() => go(c.path)}
+                  onSelect={() => go(c.path, c.comingSoon)}
 
                 >
 
@@ -326,7 +345,9 @@ export function CommandPalette() {
 
                     <span>{c.label}</span>
 
-                    <span className="truncate text-xs text-muted-foreground">{preview}</span>
+                    <span className="truncate text-xs text-muted-foreground">
+                      {c.comingSoon ? "Not available yet" : preview}
+                    </span>
 
                   </div>
 

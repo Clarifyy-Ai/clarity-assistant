@@ -27,6 +27,7 @@ import {
 } from "@/lib/interviews/roundHelpers";
 import { format, differenceInMinutes } from "date-fns";
 import type { LucideIcon } from "lucide-react";
+import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 
 // ─────────────────────────────────────────────────────────────────
 // InterviewDay — focus mode for interview day
@@ -55,6 +56,7 @@ export default function InterviewDay() {
   const { profile } = useAuthStore();
   const store     = useInterviewSchedulerStore();
   const scheduler = useInterviewScheduler();
+  const prefersReducedMotion = usePrefersReducedMotion();
 
   useEffect(() => {
     scheduler.reload();
@@ -280,6 +282,24 @@ export default function InterviewDay() {
         </div>
 
         {breathing ? (
+          prefersReducedMotion ? (
+            <div className="flex flex-col items-center gap-3 py-4 text-center">
+              <p className="text-sm font-bold text-foreground">
+                {breathPhase === "in"   ? "Inhale — 4 seconds" :
+                 breathPhase === "hold" ? "Hold — 4 seconds"   : "Exhale — 4 seconds"}
+              </p>
+              <p className="text-xs text-muted-foreground">
+                Cycle {breathCount + 1} of 4 · follow the text cues (animation reduced)
+              </p>
+              <ProgressBar
+                value={breathCount + 1}
+                max={4}
+                color="blue"
+                size="xs"
+                className="w-32"
+              />
+            </div>
+          ) : (
           <div className="flex flex-col items-center gap-4 py-4">
             <div className={cn(
               "w-24 h-24 rounded-2xl border-4 flex items-center justify-center transition-all duration-[4000ms]",
@@ -309,6 +329,7 @@ export default function InterviewDay() {
               className="w-32"
             />
           </div>
+          )
         ) : (
           <p className="text-xs text-muted-foreground leading-relaxed">
             4-4-4 box breathing: inhale for 4 seconds, hold for 4,

@@ -18,6 +18,15 @@ import {
 import { cn } from "@/lib/utils";
 import { format, subDays } from "date-fns";
 import { PLAN_PRICE_CENTS_MONTHLY, type PlanId } from "@/lib/constants/pricing";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 interface DashboardStats {
   totalUsers:    number;
@@ -335,24 +344,30 @@ function SessionVolumeChart() {
     ).then(setData);
   }, []);
 
-  const max = Math.max(...data.map((d) => d.count), 1);
+  const chartData = data.map((d) => ({
+    day: format(new Date(d.day), "EEE"),
+    count: d.count,
+    full: d.day,
+  }));
 
   return (
-    <div className="flex items-end gap-2 h-24">
-      {data.map((d) => (
-        <div key={d.day} className="flex-1 flex flex-col items-center gap-1 group relative">
-          <div
-            className="w-full bg-primary/60 hover:bg-primary rounded-sm transition-all"
-            style={{ height: `${(d.count / max) * 100}%`, minHeight: "4px" }}
+    <div className="h-40 w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+          <XAxis dataKey="day" tick={{ fontSize: 10 }} />
+          <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+          <Tooltip
+            contentStyle={{ borderRadius: 12, border: "1px solid hsl(var(--border))" }}
+            labelFormatter={(_, payload) =>
+              payload?.[0]?.payload?.full
+                ? format(new Date(payload[0].payload.full), "MMM d")
+                : ""
+            }
           />
-          <span className="text-[9px] text-muted-foreground">
-            {format(new Date(d.day), "EEE")}
-          </span>
-          <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-popover border border-border rounded-lg px-2 py-1 text-[10px] text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 pointer-events-none">
-            {d.count} sessions
-          </div>
-        </div>
-      ))}
+          <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Sessions" />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }

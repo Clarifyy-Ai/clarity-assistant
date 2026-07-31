@@ -10,6 +10,8 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { APP_VERSION, APP_LAST_UPDATED } from "@/lib/constants/version";
+import { useAuthStore } from "@/store/authStore";
+import { hasCompletedAppWalkthrough } from "@/lib/onboarding/appWalkthroughStorage";
 
 const STORAGE_KEY = "clarify:whats-new-dismissed";
 
@@ -25,8 +27,14 @@ export function useWhatsNewPrompt(): {
   dismiss: () => void;
 } {
   const [open, setOpen] = useState(false);
+  const userId = useAuthStore((s) => s.user?.id);
+  const onboardingCompleted = useAuthStore((s) => s.profile?.onboarding_completed);
 
   useEffect(() => {
+    if (!userId || !onboardingCompleted) return;
+    // Don't stack WhatsNew on top of the first-run walkthrough
+    if (!hasCompletedAppWalkthrough(userId)) return;
+
     try {
       const dismissed = localStorage.getItem(STORAGE_KEY);
       if (dismissed !== APP_VERSION) {
@@ -35,7 +43,7 @@ export function useWhatsNewPrompt(): {
     } catch {
       /* ignore */
     }
-  }, []);
+  }, [userId, onboardingCompleted]);
 
   function dismiss() {
     try {

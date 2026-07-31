@@ -154,6 +154,7 @@ export default function CallSessions() {
       <div className="flex flex-col sm:flex-row gap-3">
         <Input
           placeholder="Search sessions…"
+          aria-label="Search sessions"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           leftIcon={<Search className="w-4 h-4" />}

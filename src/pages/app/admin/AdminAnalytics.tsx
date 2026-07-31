@@ -11,6 +11,15 @@ import { format, subDays } from "date-fns";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 type Period = 1 | 7 | 30 | 90;
 
@@ -117,8 +126,6 @@ function OverviewTab({ period }: { period: Period }) {
     );
   }
 
-  const max = Math.max(...signupSeries.map((d) => d.count), 1);
-
   return (
     <div className="space-y-5">
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
@@ -130,15 +137,19 @@ function OverviewTab({ period }: { period: Period }) {
 
       <Card><CardContent className="p-5">
         <h3 className="text-sm font-semibold mb-3">Daily signups</h3>
-        <div className="flex items-end gap-1 h-24">
-          {signupSeries.map((d) => (
-            <div key={d.day} className="flex-1 flex flex-col items-center gap-1 group relative">
-              <div
-                className="w-full bg-primary/50 hover:bg-primary rounded-sm transition-all"
-                style={{ height: `${(d.count / max) * 100}%`, minHeight: "2px" }}
+        <div className="h-40 w-full">
+          <ResponsiveContainer width="100%" height="100%">
+            <BarChart data={signupSeries} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+              <XAxis dataKey="day" tick={{ fontSize: 10 }} tickFormatter={(d) => String(d).slice(5)} />
+              <YAxis allowDecimals={false} tick={{ fontSize: 10 }} />
+              <Tooltip
+                contentStyle={{ borderRadius: 12, border: "1px solid hsl(var(--border))" }}
+                labelFormatter={(d) => String(d)}
               />
-            </div>
-          ))}
+              <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} name="Signups" />
+            </BarChart>
+          </ResponsiveContainer>
         </div>
       </CardContent></Card>
     </div>
@@ -371,16 +382,25 @@ function MockTab({ period }: { period: Period }) {
         {stats.byExam.length === 0 ? (
           <p className="text-xs text-muted-foreground italic">No new questions in this period</p>
         ) : (
-          <div className="space-y-2">
-            {stats.byExam.map((e) => (
-              <div key={e.exam} className="flex items-center gap-3">
-                <span className="text-xs text-foreground w-32 truncate">{e.exam.replace(/_/g, " ")}</span>
-                <div className="flex-1 h-2 bg-muted/30 rounded-full overflow-hidden">
-                  <div className="h-full bg-primary" style={{ width: `${(e.count / stats.byExam[0].count) * 100}%` }} />
-                </div>
-                <span className="text-xs font-bold w-10 text-right">{e.count}</span>
-              </div>
-            ))}
+          <div className="h-48 w-full">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart
+                layout="vertical"
+                data={stats.byExam.map((e) => ({
+                  exam: e.exam.replace(/_/g, " "),
+                  count: e.count,
+                }))}
+                margin={{ top: 4, right: 16, left: 8, bottom: 0 }}
+              >
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" horizontal={false} />
+                <XAxis type="number" allowDecimals={false} tick={{ fontSize: 10 }} />
+                <YAxis type="category" dataKey="exam" width={100} tick={{ fontSize: 10 }} />
+                <Tooltip
+                  contentStyle={{ borderRadius: 12, border: "1px solid hsl(var(--border))" }}
+                />
+                <Bar dataKey="count" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} name="Questions" />
+              </BarChart>
+            </ResponsiveContainer>
           </div>
         )}
       </CardContent></Card>

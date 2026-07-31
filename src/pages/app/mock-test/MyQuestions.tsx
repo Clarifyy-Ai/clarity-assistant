@@ -552,6 +552,7 @@ export default function MyQuestions() {
           <Input
             className="pl-9"
             placeholder="Search questions…"
+            aria-label="Search questions"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />

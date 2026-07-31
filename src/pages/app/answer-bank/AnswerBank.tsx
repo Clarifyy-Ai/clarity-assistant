@@ -129,6 +129,7 @@ export default function AnswerBank() {
       <div className="flex flex-col sm:flex-row gap-3">
         <Input
           placeholder="Search answers…"
+          aria-label="Search answers"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           leftIcon={<Search className="w-4 h-4" />}

@@ -88,14 +88,24 @@ export default function Blog() {
           )}
 
           {!loading && error && (
-            <div className="text-center py-12 text-sm text-muted-foreground">
-              Couldn't load posts right now. Please try again later.
+            <div className="text-center py-12 space-y-2">
+              <span className="inline-flex text-xs font-semibold px-2.5 py-1 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-400">
+                Temporarily unavailable
+              </span>
+              <p className="text-sm text-muted-foreground">
+                Couldn&apos;t load posts right now. Please try again later.
+              </p>
             </div>
           )}
 
           {!loading && !error && posts.length === 0 && (
-            <div className="text-center py-12 text-sm text-muted-foreground">
-              No blog posts yet — check back soon.
+            <div className="text-center py-12 space-y-2">
+              <span className="inline-flex text-xs font-semibold px-2.5 py-1 rounded-lg border border-primary/30 bg-primary/10 text-primary">
+                Coming soon
+              </span>
+              <p className="text-sm text-muted-foreground">
+                No blog posts yet — we&apos;re preparing guides and tips. Check back soon.
+              </p>
             </div>
           )}
 

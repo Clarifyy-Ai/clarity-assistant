@@ -193,14 +193,14 @@ of the core practice moment.
 5. MOBILE-FRIENDLINESS ACTION CHECKLIST
 ================================================================================
   [x] One mobile nav pattern (bottom primary; slim hamburger)
-  [ ] Elevate Sessions/Documents/Answer Bank if usage warrants
+  [x] Elevate Sessions/Documents/Answer Bank if usage warrants
   [x] Replace hover-only destructive actions
   [x] Delete confirmations everywhere
   [x] 44x44px tap targets
   [x] Real mobile Practice Coach mode (hints-only Overlay)
-  [ ] Mock Session mobile-first conversation layout
-  [ ] Reduced-motion / note-only fallbacks for breathing/whiteboard
-  [ ] Toast + persistent on-screen fallback
+  [x] Mock Session mobile-first conversation layout
+  [x] Reduced-motion / note-only fallbacks for breathing/whiteboard
+  [x] Toast + persistent on-screen fallback
   [x] Color + text/icon for status states
   [x] Break long single-page flows into steps/sections
   [x] PWA / Add to Home Screen
@@ -212,11 +212,11 @@ of the core practice moment.
   [x] Step counters reflect real remaining work
   [x] No field reuse for different questions (role_type bug)
   [x] Credit cost visible before spend
-  [ ] No back-to-back welcome/congratulations for same milestone
+  [x] No back-to-back welcome/congratulations for same milestone
   [x] Destructive actions explain consequence before confirm
-  [ ] Search inputs always labeled
+  [x] Search inputs always labeled
   [x] Naming consistent (nav / title / empty / marketing)
-  [ ] Coming-soon / broken destinations labeled before click
+  [x] Coming-soon / broken destinations labeled before click
   [x] Unwired notification toggles hidden or marked Coming soon
 
 ================================================================================

@@ -624,9 +624,41 @@ export function OverlayWindow({
 
                   <div
                     className={cn(
-                      "flex-1 min-h-0 flex flex-col overflow-hidden",
+                      "flex-1 min-h-0 flex flex-col overflow-hidden touch-pan-y",
                       activeTab === "chat" ? "" : "",
                     )}
+                    onTouchStart={(e) => {
+                      const t = e.touches[0];
+                      if (!t) return;
+                      (e.currentTarget as HTMLElement).dataset.swipeX = String(t.clientX);
+                      (e.currentTarget as HTMLElement).dataset.swipeY = String(t.clientY);
+                    }}
+                    onTouchEnd={(e) => {
+                      const el = e.currentTarget as HTMLElement;
+                      const startX = Number(el.dataset.swipeX ?? 0);
+                      const startY = Number(el.dataset.swipeY ?? 0);
+                      const touch = e.changedTouches[0];
+                      if (!touch || !startX) return;
+                      const dx = touch.clientX - startX;
+                      const dy = touch.clientY - startY;
+                      if (Math.abs(dx) < 56 || Math.abs(dx) < Math.abs(dy) * 1.2) return;
+                      const order = (
+                        ["answer", "chat", "transcript", "resume", "audit"] as const
+                      ).filter((tab) => {
+                        if (tab === "chat" && !onManualQuestion) return false;
+                        if (tab === "resume" && !isSessionActive) return false;
+                        return true;
+                      });
+                      const idx = order.indexOf(activeTab as (typeof order)[number]);
+                      if (idx < 0) return;
+                      const next =
+                        dx < 0
+                          ? order[Math.min(order.length - 1, idx + 1)]
+                          : order[Math.max(0, idx - 1)];
+                      if (next && next !== activeTab) {
+                        useOverlayStore.getState().setActiveTab(next);
+                      }
+                    }}
                   >
                     {isPreparingSession ? (
                       <OverlaySessionPreparing stepIndex={prepStepIndex} />

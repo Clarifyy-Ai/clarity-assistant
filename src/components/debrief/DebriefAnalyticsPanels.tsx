@@ -13,6 +13,15 @@ import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/modal";
 import { Tooltip } from "@/components/ui/tooltip";
 import { toast } from "sonner";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
 const WPM_BENCHMARK = 125;
 const CONFIDENCE_DIMS = [
@@ -677,29 +686,19 @@ export function DebriefVocalCharts({ report }: { report: DetailedReport | null |
         {pauses.length > 0 && (
           <div>
             <p className="text-xs font-medium text-muted-foreground mb-2">Pause distribution</p>
-            <div className="flex items-end gap-1.5 h-24">
-              {pauses.map((p, i) => {
-                const max = Math.max(...pauses.map((x) => x.count), 1);
-                const pct = (p.count / max) * 100;
-                return (
-                  <div key={p.bucket} className="flex-1 flex flex-col items-center gap-1 group relative">
-                    <div
-                      className="w-full rounded-sm bg-primary/80 transition-all"
-                      style={{ height: `${pct}%` }}
-                      onMouseEnter={(e) => setHover({ chart: "pause", i, x: e.clientX, y: e.clientY })}
-                      onMouseLeave={() => setHover(null)}
-                    />
-                    <span className="text-[9px] text-muted-foreground truncate w-full text-center">
-                      {p.bucket}
-                    </span>
-                    {hover?.chart === "pause" && hover.i === i && (
-                      <div className="absolute bottom-full mb-1 bg-popover border border-border rounded px-2 py-1 text-[10px] whitespace-nowrap z-10">
-                        {p.count} pauses ({p.bucket})
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
+            <div className="h-28 w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={pauses} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                  <XAxis dataKey="bucket" tick={{ fontSize: 9 }} />
+                  <YAxis allowDecimals={false} tick={{ fontSize: 9 }} />
+                  <Tooltip
+                    contentStyle={{ borderRadius: 12, border: "1px solid hsl(var(--border))" }}
+                    formatter={(value: number) => [`${value} pauses`, "Count"]}
+                  />
+                  <Bar dataKey="count" fill="hsl(var(--primary))" radius={[3, 3, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
         )}
