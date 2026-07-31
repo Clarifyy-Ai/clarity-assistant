@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { answerBankDB } from "@/lib/supabase/database";
 import type { Tables } from "@/integrations/supabase";
@@ -15,12 +16,13 @@ import { toast } from "sonner";
 import {
   BookOpen, Search, Star, Trash2,
   ChevronDown, ChevronUp, Copy,
-  Edit2, Check, Plus, Sparkles,
+  Edit2, Check, Plus, Sparkles, ExternalLink,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { refreshCredits } from "@/lib/billing/creditsManager";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
 // ─────────────────────────────────────────────────────────────────
 // AnswerBank — saved STAR answers + session saves
@@ -109,7 +111,7 @@ export default function AnswerBank() {
       )}
 
       <PageHeader
-        title="Answer Bank"
+        title={PRODUCT_NAMES.answerBank}
         description="Your saved STAR answers and best responses"
         actions={
           <Button
@@ -177,13 +179,20 @@ export default function AnswerBank() {
               <Card key={ans.id}>
                 {/* Header row */}
                 <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                  <Link
+                    to={`/app/answers/${ans.id}`}
+                    className="w-8 h-8 bg-primary/10 rounded-lg flex items-center justify-center shrink-0 mt-0.5 hover:bg-primary/20 transition-colors"
+                    aria-label="Open answer detail"
+                  >
                     <Star className="w-3.5 h-3.5 text-primary" />
-                  </div>
+                  </Link>
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-foreground leading-snug">
+                    <Link
+                      to={`/app/answers/${ans.id}`}
+                      className="text-sm font-medium text-foreground leading-snug hover:text-primary transition-colors block"
+                    >
                       {ans.question_text}
-                    </p>
+                    </Link>
                     <div className="flex items-center gap-2 mt-1.5 flex-wrap">
                       {ans.category && (
                         <Badge variant="default" size="sm">{ans.category}</Badge>
@@ -207,6 +216,13 @@ export default function AnswerBank() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-1.5 shrink-0">
+                    <Link
+                      to={`/app/answers/${ans.id}`}
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/5 transition-all"
+                      title="Open detail"
+                    >
+                      <ExternalLink className="w-3.5 h-3.5" />
+                    </Link>
                     <button
                       onClick={() => navigator.clipboard.writeText(ans.answer_text ?? "")}
                       className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/5 transition-all"

@@ -2,7 +2,7 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Toggle } from "@/components/ui/Toggle";
+import { Switch } from "@/components/ui/switch";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Badge } from "@/components/ui/Badge";
 import { CheckCircle, Mic, Volume2, Settings2, Play, Square } from "lucide-react";
@@ -262,11 +262,11 @@ export default function SettingsAudio() {
           </div>
           <div className="flex items-center justify-between">
             <span className="text-sm text-foreground">Auto gain control</span>
-            <Toggle checked={autoGain} onChange={() => setAutoGain((p) => !p)} />
+            <Switch checked={autoGain} onCheckedChange={setAutoGain} aria-label="Auto gain control" />
           </div>
           <div className="flex items-center justify-between">
             <span className="text-sm text-foreground">Noise suppression</span>
-            <Toggle checked={noiseSup} onChange={() => setNoiseSup((p) => !p)} />
+            <Switch checked={noiseSup} onCheckedChange={setNoiseSup} aria-label="Noise suppression" />
           </div>
 
           {/* Mic level meter + record/playback */}
@@ -355,12 +355,13 @@ export default function SettingsAudio() {
         </div>
       </Card>
 
-      {/* Filler words */}
-      <Card>
-        <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
-          <Settings2 className="w-4 h-4 text-amber-400" />
-          Filler word tracking
-        </h3>
+      {/* Filler words — advanced */}
+      <details className="rounded-2xl border border-border bg-card group">
+        <summary className="cursor-pointer list-none px-5 py-4 flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Settings2 className="w-4 h-4 text-amber-400" aria-hidden />
+          Advanced: filler word tracking
+        </summary>
+        <div className="px-5 pb-5 border-t border-border pt-4">
         <div className="flex flex-wrap gap-2 mb-3">
           {fillerWords.map((w) => (
             <button
@@ -380,12 +381,14 @@ export default function SettingsAudio() {
             onKeyDown={(e) => e.key === "Enter" && addFiller()}
             placeholder="Add a filler word…"
             className="flex-1 bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
+            aria-label="Add a filler word"
           />
           <Button variant="secondary" size="sm" onClick={addFiller}>
             Add
           </Button>
         </div>
-      </Card>
+        </div>
+      </details>
 
       <Button
         variant={saved ? "success" : "primary"}

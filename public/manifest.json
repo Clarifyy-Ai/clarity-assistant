@@ -1,7 +1,7 @@
 {
-  "name": "Clarify Coach",
-  "short_name": "Coach",
-  "description": "Clarify Coach — installed desktop/PWA client for Clarify AI interview practice",
+  "name": "Clarify AI",
+  "short_name": "Clarify",
+  "description": "Clarify AI — interview practice coach for desktop and mobile",
   "start_url": "/app/dashboard",
   "scope": "/",
   "display": "standalone",

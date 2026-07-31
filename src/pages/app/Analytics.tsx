@@ -14,7 +14,8 @@ import {
   Flame, Zap, Brain, Mic,
   AlertTriangle, CheckCircle, Target,
   Calendar, Clock, Volume2, Download, GitCompare,
-} from "lucide-react";import { EmptyState } from "@/components/common/EmptyState";
+} from "lucide-react";
+import { EmptyState } from "@/components/common/EmptyState";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import {
@@ -24,9 +25,19 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import type { AnalyticsPeriod } from "@/types/analytics.types";
 import { cn } from "@/lib/utils";
 import { format, subDays } from "date-fns";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
 // ─────────────────────────────────────────────────────────────────
 // Analytics — progress trends, filler analysis, category scores
@@ -51,7 +62,7 @@ export default function Analytics() {
   if (analytics.error) {
     return (
       <div className="space-y-6 max-w-5xl">
-        <PageHeader title="Analytics" subtitle="Track your interview performance over time" />
+        <PageHeader title={PRODUCT_NAMES.analytics} subtitle="Track your interview performance over time" />
         <Card className="border-red-500/30 bg-red-500/10 p-4">
           <p className="text-sm text-red-300">{analytics.error}</p>
           <button
@@ -74,7 +85,7 @@ export default function Analytics() {
     return (
       <div className="space-y-6 max-w-5xl">
         <PageHeader
-          title="Analytics"
+          title={PRODUCT_NAMES.analytics}
           subtitle="Track your interview performance over time"
         />
         <Card>
@@ -95,7 +106,7 @@ export default function Analytics() {
   return (
     <div className="space-y-6 max-w-5xl">
       <PageHeader
-        title="Analytics"
+        title={PRODUCT_NAMES.analytics}
         subtitle="Track your interview performance over time"
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -156,7 +167,7 @@ export default function Analytics() {
 
       <Tabs defaultValue="scores">
         <TabsList>
-          <TabsTrigger value="scores">📈 Score trends</TabsTrigger>
+          <TabsTrigger value="scores">Score trends</TabsTrigger>
           <TabsTrigger value="categories">🗂️ Categories</TabsTrigger>
           <TabsTrigger value="speech">🎙️ Speech metrics</TabsTrigger>
           <TabsTrigger value="heatmap">🔥 Activity</TabsTrigger>
@@ -253,7 +264,10 @@ function ScoreTrendChart({ data }: { data: { date: string; score: number }[] }) 
     );
   }
 
-  const max = Math.max(...data.map((d) => d.score), 100);
+  const chartData = data.slice(-20).map((d) => ({
+    label: format(new Date(d.date), "MMM d"),
+    score: d.score,
+  }));
 
   return (
     <Card>
@@ -262,32 +276,23 @@ function ScoreTrendChart({ data }: { data: { date: string; score: number }[] }) 
         <Badge variant="primary" size="sm">Last 30 sessions</Badge>
       </div>
 
-      {/* Bar chart */}
-      <div className="flex items-end gap-1.5 h-36">
-        {data.slice(-20).map((d, i) => {
-          const pct = (d.score / max) * 100;
-          const c   =
-            d.score >= 75 ? "bg-emerald-500" :
-            d.score >= 55 ? "bg-amber-500"   : "bg-red-500";
-          return (
-            <div key={i} className="flex-1 flex flex-col items-center gap-1 group relative">
-              <div
-                className={cn("w-full rounded-sm transition-all", c)}
-                style={{ height: `${pct}%` }}
-              />
-              {/* Tooltip */}
-              <div className="absolute bottom-full mb-1 left-1/2 -translate-x-1/2 bg-popover border border-border rounded-lg px-2 py-1 text-[10px] text-foreground whitespace-nowrap opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none z-10">
-                {d.score} · {format(new Date(d.date), "MMM d")}
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      {/* X-axis labels */}
-      <div className="flex justify-between mt-2 text-[10px] text-muted-foreground">
-        <span>{data.length >= 20 ? format(new Date(data[data.length - 20]?.date ?? new Date()), "MMM d") : "Start"}</span>
-        <span>Today</span>
+      <div className="h-44 w-full" role="img" aria-label="Score trend chart">
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+            <XAxis dataKey="label" tick={{ fontSize: 10 }} className="text-muted-foreground" />
+            <YAxis domain={[0, 100]} tick={{ fontSize: 10 }} />
+            <Tooltip
+              contentStyle={{
+                background: "hsl(var(--popover))",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: 8,
+                fontSize: 12,
+              }}
+            />
+            <Bar dataKey="score" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
       </div>
     </Card>
   );

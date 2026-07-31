@@ -8,10 +8,11 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import {
   CalendarDays, Plus, Building2, Clock,
   ChevronRight, CheckCircle, AlertCircle,
-  Circle, Trash2, RefreshCw,
+  Circle, Trash2, RefreshCw, Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -35,6 +36,7 @@ export default function Interviews() {
   const calendar   = useCalendarSync();
 
   const [filter, setFilter] = useState<StatusFilter>("all");
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   useEffect(() => { scheduler.reload(); }, []);
 
@@ -174,13 +176,29 @@ export default function Interviews() {
                 <InterviewRow
                   key={iv.id}
                   interview={iv}
-                  onDelete={() => scheduler.deleteInterview(iv.id)}
+                  onDelete={() => setPendingDeleteId(iv.id)}
                 />
               ))}
             </div>
           </div>
         ))
       )}
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteId(null);
+        }}
+        title="Delete this interview?"
+        description="This permanently removes the interview and its rounds from your schedule. This cannot be undone."
+        confirmLabel="Delete interview"
+        variant="destructive"
+        onConfirm={async () => {
+          if (!pendingDeleteId) return;
+          await scheduler.deleteInterview(pendingDeleteId);
+          setPendingDeleteId(null);
+        }}
+      />
     </div>
   );
 }
@@ -288,8 +306,9 @@ function InterviewRow({
               variant="primary"
               size="xs"
               onClick={() => navigate("/app/interview-day")}
+              leftIcon={<Target className="w-3 h-3" />}
             >
-              🎯 Enter focus mode
+              Enter focus mode
             </Button>
           )}
           <Button
@@ -312,10 +331,12 @@ function InterviewRow({
         </div>
       </div>
 
-      {/* Delete */}
+      {/* Delete — always visible for touch devices */}
       <button
+        type="button"
         onClick={onDelete}
-        className="p-1.5 rounded-lg text-muted-foreground/40 hover:text-red-400 hover:bg-accent/5 opacity-0 group-hover:opacity-100 transition-all shrink-0"
+        aria-label={`Delete interview at ${iv.company_name}`}
+        className="p-2 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-accent/5 transition-all shrink-0 min-h-11 min-w-11 inline-flex items-center justify-center"
       >
         <Trash2 className="w-3.5 h-3.5" />
       </button>

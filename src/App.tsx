@@ -25,7 +25,6 @@ import { applyAppearancePreferences } from "@/lib/theme/applyAppearance";
 import { syncStealthFromOverlay } from "@/lib/stealth/stealthActions";
 import type { PlanId } from "@/lib/constants/pricing";
 import { useOverlayStore } from "@/store/overlayStore";
-import { useSessionStore } from "@/store/sessionStore";
 import { toast } from "sonner";
 
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
@@ -112,7 +111,6 @@ const UsageDashboard = lazy(
   () => import("@/pages/app/usage/UsageDashboard")
 );
 const InterviewDay = lazy(() => import("@/pages/app/InterviewDay"));
-const Profile = lazy(() => import("@/pages/app/Profile"));
 const Notifications = lazy(() => import("@/pages/app/Notifications"));
 const Referrals = lazy(() => import("@/pages/app/Referrals"));
 
@@ -341,14 +339,13 @@ function AnalyticsDebriefRedirect(): JSX.Element {
 function AppShell(): JSX.Element {
   const profile = useAuthStore((state) => state.profile);
   const location = useLocation();
-  const sessionStatus = useSessionStore((state) => state.status);
 
   const mobileNavOpen = useUIStore((state) => state.mobile_nav_open);
   const setMobileNavOpen = useUIStore((state) => state.setMobileNavOpen);
 
-  const hideChromeForLiveSession =
-    location.pathname === "/app/live" &&
-    (sessionStatus === "active" || sessionStatus === "paused");
+  // Mid-session Practice Coach always runs on /app/live/overlay (outside AppShell).
+  // /app/live is setup + post-session summary only — keep chrome visible there.
+  const hideChromeForLiveSession = false;
 
   const showSetupChecklist =
     Boolean(profile) &&
@@ -369,6 +366,12 @@ function AppShell(): JSX.Element {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
+  }, []);
+
+  // Close obsolete mobile sidebar drawer if left open from a previous session
+  useEffect(() => {
+    if (mobileNavOpen) setMobileNavOpen(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (IS_ELECTRON || hideChromeForLiveSession) {
@@ -413,19 +416,7 @@ function AppShell(): JSX.Element {
         />
       )}
 
-      {mobileNavOpen && (
-        <>
-          <div
-            className="fixed inset-0 z-[190] bg-black/50 md:hidden"
-            onClick={() => setMobileNavOpen(false)}
-          />
-
-          <div className="fixed inset-y-0 left-0 z-[200] md:hidden">
-            <AppSidebar onNavClick={() => setMobileNavOpen(false)} />
-          </div>
-        </>
-      )}
-
+      {/* Desktop sidebar only — mobile uses bottom MobileNav + More sheet */}
       <AppSidebar />
 
       <div className="flex flex-1 flex-col overflow-hidden min-w-0">
@@ -552,7 +543,7 @@ const routes = [
             element: <AnalyticsDebriefRedirect />,
           },
           { path: "usage", element: <Page component={UsageDashboard} /> },
-          { path: "profile", element: <Page component={Profile} /> },
+          { path: "profile", element: <Navigate to="/app/settings/profile" replace /> },
           { path: "notifications", element: <Page component={Notifications} /> },
           { path: "referrals", element: <Page component={Referrals} /> },
           { path: "live", element: <Page component={LiveRehearsal} /> },

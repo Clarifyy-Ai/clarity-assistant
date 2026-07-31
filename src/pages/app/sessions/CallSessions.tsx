@@ -3,6 +3,7 @@ import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import { sessionsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
 import { toast } from "sonner";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
@@ -65,6 +66,7 @@ export default function CallSessions() {
   const [error, setError] = useState(false);
   const [filter, setFilter] = useState<FilterType>("all");
   const [search, setSearch] = useState("");
+  const [pendingDeleteId, setPendingDeleteId] = useState<string | null>(null);
 
   const fetchSessions = useCallback(async () => {
     if (!user?.id) return;
@@ -301,8 +303,9 @@ export default function CallSessions() {
                   </Link>
                   <button
                     type="button"
-                    onClick={() => void deleteSession(s.id)}
-                    className="p-1.5 hover:bg-red-500/10 rounded-lg transition-colors"
+                    onClick={() => setPendingDeleteId(s.id)}
+                    className="p-2 hover:bg-red-500/10 rounded-lg transition-colors min-h-11 min-w-11 inline-flex items-center justify-center"
+                    aria-label="Delete session"
                     title="Delete"
                   >
                     <Trash2 className="w-3.5 h-3.5 text-muted-foreground hover:text-red-400" />
@@ -313,6 +316,22 @@ export default function CallSessions() {
           })}
         </div>
       )}
+
+      <ConfirmDialog
+        open={pendingDeleteId !== null}
+        onOpenChange={(open) => {
+          if (!open) setPendingDeleteId(null);
+        }}
+        title="Delete this session?"
+        description="This permanently removes the session record, transcript, and scores. This cannot be undone."
+        confirmLabel="Delete session"
+        variant="destructive"
+        onConfirm={async () => {
+          if (!pendingDeleteId) return;
+          await deleteSession(pendingDeleteId);
+          setPendingDeleteId(null);
+        }}
+      />
     </div>
   );
 }

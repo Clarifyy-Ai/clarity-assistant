@@ -4,10 +4,44 @@ import { sessionDebriefsDB, scorecardsDB } from "@/lib/supabase/database";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
+import { ThemeToggle } from "@/components/ui/ThemeToggle";
+import { BrandLogo } from "@/components/marketing";
 import { AlertTriangle, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import type { DetailedReport } from "@/components/debrief/DebriefAnalyticsPanels";
+
+function SharedShell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-background text-foreground flex flex-col">
+      <header className="sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur">
+        <div className="max-w-2xl mx-auto px-4 h-14 flex items-center justify-between gap-3">
+          <Link to="/" className="flex items-center gap-2 min-w-0">
+            <BrandLogo size="sm" />
+          </Link>
+          <div className="flex items-center gap-2">
+            <ThemeToggle />
+            <Link
+              to="/signup"
+              className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary text-primary-foreground hover:opacity-90"
+            >
+              Get started
+            </Link>
+          </div>
+        </div>
+      </header>
+      <div className="flex-1">{children}</div>
+      <footer className="border-t border-border py-6 text-center text-xs text-muted-foreground">
+        Shared via{" "}
+        <Link to="/" className="text-primary hover:underline">
+          Clarify AI
+        </Link>
+        {" · "}
+        Practice-only interview coaching
+      </footer>
+    </div>
+  );
+}
 
 export default function SharedDebrief() {
   const { token } = useParams<{ token: string }>();
@@ -43,22 +77,26 @@ export default function SharedDebrief() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-3">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
-        <p className="text-sm text-muted-foreground">Loading shared debrief…</p>
-      </div>
+      <SharedShell>
+        <div className="flex flex-col items-center justify-center gap-3 py-24">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+          <p className="text-sm text-muted-foreground">Loading shared debrief…</p>
+        </div>
+      </SharedShell>
     );
   }
 
   if (error || (!debrief && !scorecard)) {
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4 px-4">
-        <AlertTriangle className="w-10 h-10 text-amber-400" />
-        <p className="text-muted-foreground text-sm text-center">{error ?? "Not found"}</p>
-        <Link to="/" className="text-sm text-primary hover:underline">
-          Go to Clarify AI
-        </Link>
-      </div>
+      <SharedShell>
+        <div className="flex flex-col items-center justify-center gap-4 px-4 py-24">
+          <AlertTriangle className="w-10 h-10 text-amber-400" />
+          <p className="text-muted-foreground text-sm text-center">{error ?? "Not found"}</p>
+          <Link to="/" className="text-sm text-primary hover:underline">
+            Go to Clarify AI
+          </Link>
+        </div>
+      </SharedShell>
     );
   }
 
@@ -72,7 +110,7 @@ export default function SharedDebrief() {
     (overallScore ?? 0) >= 55 ? "amber" : "red";
 
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <SharedShell>
       <div className="max-w-2xl mx-auto px-4 py-10 space-y-6">
         <div className="text-center space-y-2">
           <Badge variant="primary" size="sm">Shared read-only</Badge>
@@ -86,15 +124,26 @@ export default function SharedDebrief() {
 
         {overallScore != null && (
           <Card className="text-center py-6">
-            <div className={cn(
-              "text-5xl font-black",
-              scoreColor === "emerald" ? "text-emerald-400" :
-              scoreColor === "amber" ? "text-amber-400" : "text-red-400",
-            )}>
+            <div
+              className={cn(
+                "text-5xl font-black",
+                scoreColor === "emerald"
+                  ? "text-emerald-400"
+                  : scoreColor === "amber"
+                    ? "text-amber-400"
+                    : "text-red-400",
+              )}
+            >
               {overallScore}
             </div>
             <p className="text-xs text-muted-foreground mt-1">Overall score</p>
-            <ProgressBar value={overallScore} max={100} color={scoreColor} size="sm" className="mt-3 max-w-xs mx-auto" />
+            <ProgressBar
+              value={overallScore}
+              max={100}
+              color={scoreColor}
+              size="sm"
+              className="mt-3 max-w-xs mx-auto"
+            />
           </Card>
         )}
 
@@ -110,7 +159,9 @@ export default function SharedDebrief() {
             <h2 className="text-sm font-semibold mb-2">Strengths</h2>
             <ul className="space-y-1">
               {(debrief.strengths as string[]).map((s, i) => (
-                <li key={i} className="text-xs text-foreground">✓ {s}</li>
+                <li key={i} className="text-xs text-foreground">
+                  ✓ {s}
+                </li>
               ))}
             </ul>
           </Card>
@@ -118,25 +169,26 @@ export default function SharedDebrief() {
 
         {Array.isArray(debrief?.improvements) && debrief.improvements.length > 0 && (
           <Card>
-            <h2 className="text-sm font-semibold mb-2">Areas to improve</h2>
+            <h2 className="text-sm font-semibold mb-2">Improvements</h2>
             <ul className="space-y-1">
               {(debrief.improvements as string[]).map((s, i) => (
-                <li key={i} className="text-xs text-foreground">→ {s}</li>
+                <li key={i} className="text-xs text-foreground">
+                  → {s}
+                </li>
               ))}
             </ul>
           </Card>
         )}
 
-        {debrief?.overall_grade && (
-          <p className="text-center text-xs text-muted-foreground">
-            Grade: <span className="font-semibold text-foreground">{String(debrief.overall_grade)}</span>
-          </p>
-        )}
-
-        <p className="text-center text-[10px] text-muted-foreground pt-4">
-          Powered by Clarify AI · This link is read-only
-        </p>
+        <div className="text-center pt-4">
+          <Link
+            to="/signup"
+            className="inline-flex text-sm font-semibold text-primary hover:underline"
+          >
+            Practice with Clarify AI →
+          </Link>
+        </div>
       </div>
-    </div>
+    </SharedShell>
   );
 }

@@ -39,6 +39,8 @@ import {
   Sparkles,
   MessageSquare,
   Crop,
+  ScrollText,
+  BarChart3,
 } from "lucide-react";
 
 import { OverlayActivityTimer } from "./OverlayActivityTimer";
@@ -121,6 +123,8 @@ export function OverlayToolbar({
 
   const sessionStatus = useSessionStore((s) => s.status);
   const isSessionActive = sessionStatus === "active";
+  const showSessionTools =
+    sessionStatus === "active" || sessionStatus === "paused" || sessionStatus === "warming_up";
 
   const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [showHotkeyRef, setShowHotkeyRef] = useState(false);
@@ -188,6 +192,17 @@ export function OverlayToolbar({
     }
     document.addEventListener("mousedown", handleClickOutside);
     return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // Open settings when TabBar "More tools → Overlay settings" fires
+  useEffect(() => {
+    function openSettings() {
+      setShowOverlaySettings(true);
+      setShowHotkeyRef(false);
+      setShowMoreMenu(false);
+    }
+    window.addEventListener("clarify:open-overlay-settings", openSettings);
+    return () => window.removeEventListener("clarify:open-overlay-settings", openSettings);
   }, []);
 
   const handlePillToggle = () => {
@@ -258,17 +273,6 @@ export function OverlayToolbar({
           </>
         )}
 
-        <PrimaryButton
-          icon={MessageSquare}
-          label="Chat"
-          isActive={activeTab === "chat"}
-          onClick={() => useOverlayStore.getState().setActiveTab("chat")}
-          className={
-            activeTab === "chat"
-              ? "bg-brand-500/20 border-brand-500/30 text-brand-300"
-              : "bg-white/6 border-white/10 text-white/60 hover:bg-white/10 hover:text-white/90"
-          }
-        />
       </div>
 
       <div className="flex items-center gap-1 shrink-0">
@@ -304,8 +308,8 @@ export function OverlayToolbar({
           <button
             type="button"
             onClick={() => setShowMoreMenu((p) => !p)}
-            title="More options"
-            aria-label="More options"
+            title="More tools"
+            aria-label="More tools"
             aria-expanded={showMoreMenu}
             aria-haspopup="menu"
             className={cn(
@@ -318,6 +322,50 @@ export function OverlayToolbar({
 
           {showMoreMenu && (
             <div className="absolute top-full right-0 mt-2 w-60 bg-[#0f0f1e] border border-white/[0.1] rounded-2xl shadow-[0_20px_60px_rgba(0,0,0,0.8),0_0_0_1px_rgba(255,255,255,0.04)] z-50 py-2 overflow-hidden animate-fade-in">
+              <p className="px-3 pb-1 text-[10px] text-white/25 uppercase tracking-widest font-semibold">
+                Tools
+              </p>
+              <MenuRow
+                icon={MessageSquare}
+                label="Chat"
+                active={activeTab === "chat"}
+                onClick={() => {
+                  useOverlayStore.getState().setActiveTab("chat");
+                  setShowMoreMenu(false);
+                }}
+              />
+              <MenuRow
+                icon={ScrollText}
+                label="Transcript"
+                active={activeTab === "transcript"}
+                onClick={() => {
+                  useOverlayStore.getState().setActiveTab("transcript");
+                  setShowMoreMenu(false);
+                }}
+              />
+              {showSessionTools && (
+                <MenuRow
+                  icon={FileText}
+                  label="Resume context"
+                  active={activeTab === "resume"}
+                  onClick={() => {
+                    useOverlayStore.getState().setActiveTab("resume");
+                    setShowMoreMenu(false);
+                  }}
+                />
+              )}
+              <MenuRow
+                icon={BarChart3}
+                label="Status"
+                active={activeTab === "audit"}
+                onClick={() => {
+                  useOverlayStore.getState().setActiveTab("audit");
+                  setShowMoreMenu(false);
+                }}
+              />
+
+              <div className="my-2 border-t border-white/[0.06] mx-2" />
+
               {onSetupNewSession && (
                 <MenuRow
                   icon={Plus}

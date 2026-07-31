@@ -1,0 +1,297 @@
+================================================================================
+CLARIFY AI — UI/UX REVIEW, GAP ANALYSIS & USER-FRIENDLINESS ROADMAP
+================================================================================
+Based on: "Clarify AI — Complete UI/UX Implementation Audit" (30 July 2026)
+Goal stated by product owner: the WHOLE app should be simple and friendly to
+use — on desktop AND mobile — and the core live-practice experience should
+feel as fast, light, and frictionless as PARAKEET AI (a focused live-interview
+copilot). This document reviews the existing audit, adds what's missing, and
+gives a concrete plan to get there.
+
+Implementation plan (Cursor): UI UX Roadmap — 5 sprints.
+Locked decision: Overlay is the only mid-session UI; /app/live is setup +
+post-session only (redirect into Overlay on session start).
+================================================================================
+
+--------------------------------------------------------------------------------
+0. HOW TO USE THIS DOCUMENT
+--------------------------------------------------------------------------------
+  1. Section 1 — root causes behind most of the individual issues in the audit.
+  2. Section 2 — what's missing entirely (gaps, not just inconsistencies).
+  3. Section 3 — health scorecard per area.
+  4. Section 4 — "What makes Parakeet AI feel simple" and a direct gap map
+     against Clarify AI's Practice Coach / Overlay experience.
+  5. Section 5 — dedicated MOBILE-friendliness checklist.
+  6. Section 6 — dedicated USER-friendliness checklist (first-time-user lens).
+  7. Section 7 — canonical naming glossary + IA map to end the naming drift.
+  8. Section 8 — prioritized execution roadmap (sprints).
+
+Rating scale used below:
+  Broken / confusing enough to cause drop-off, support tickets, or churn
+  Inconsistent / works but erodes trust, polish, or speed
+  Solid — keep as the reference pattern
+
+================================================================================
+1. TOP-LEVEL DIAGNOSIS — 6 ROOT CAUSES BEHIND MOST ISSUES
+================================================================================
+
+ROOT CAUSE 1 — Naming collisions confuse users before they even use a feature.
+  Symptom: "Practice Coach" vs "Live" vs "Overlay" vs "Rehearsal" all refer to
+  the same thing in different places; "Question Bank" (Prep Lab) vs "Answer
+  Bank" (sidebar) are two different things with confusingly similar names;
+  Analytics ("skills") vs Usage ("credits") aren't labeled clearly enough to
+  tell apart.
+  Fix once, fixes many: freeze ONE naming glossary (Section 7) and grep the
+  whole codebase + copy for every alias, replacing with the canonical term.
+
+ROOT CAUSE 2 — Two design systems coexist (legacy custom kit + shadcn/Radix).
+  Symptom: dual Button/Card/Modal APIs, Toggle vs Switch mixing (with some
+  Toggle instances miswired to checked/onChange — a real a11y bug, not just
+  inconsistency), CSS bar charts on Analytics vs Recharts on Mock-Test
+  Analytics, native <input>/<select> next to shared Input/Select.
+  Fix once, fixes many: pick ONE kit (shadcn/Radix is more complete) and
+  retire the custom primitives; one chart library everywhere.
+
+ROOT CAUSE 3 — The core product (Practice Coach) has two competing UIs.
+  Symptom: /app/live (in-shell, becomes an empty "status" page once the
+  Overlay opens) vs /app/live/overlay (the actual experience). Users land on
+  a page that visually looks broken once the real UI has moved elsewhere.
+  Fix once, fixes many: make the Overlay THE product surface; the in-shell
+  route should only ever be used for setup and the post-session summary —
+  never a mid-session "nothing here" state.
+
+ROOT CAUSE 4 — Long, multi-step setup before any value is delivered.
+  Symptom: 5-step onboarding before first dashboard view; 6-step Practice
+  Coach setup wizard before a session starts; long single-page Mock Test
+  Configure form. Every extra step is a drop-off point.
+  Fix once, fixes many: adopt a "2-minute rule" — a brand-new user should be
+  able to start their FIRST practice session within 2 minutes of signup,
+  with everything else offered as optional/advanced afterward. This is
+  Parakeet AI's biggest structural advantage (see Section 4).
+
+ROOT CAUSE 5 — Settings preferences are scattered across near-duplicate pages.
+  Symptom: Notifications, Polish ("Advanced"), Privacy, and Data pages overlap
+  on notification/retention controls; Security Config (a developer/Supabase
+  checklist) sits inside consumer Settings; Profile page and Settings→Profile
+  duplicate each other.
+  Fix once, fixes many: consolidate into 5 groups (Account, Practice, Privacy
+  & Security, Billing, Advanced) and move Security Config to Admin-only.
+
+ROOT CAUSE 6 — Emoji is used as UI chrome instead of a proper icon system.
+  Symptom: emoji in onboarding tiles, Prep tabs, Analytics tabs, Cookie
+  Consent, Interview Day CTA, streak indicators.
+  Fix once, fixes many: replace every chrome/tab/nav emoji with a Lucide (or
+  equivalent) icon; reserve emoji, if at all, for celebratory toast copy only.
+
+================================================================================
+2. WHAT'S MISSING ENTIRELY (gaps, not bugs — there's no existing UI to fix)
+================================================================================
+
+CORE PRACTICE EXPERIENCE GAPS
+  [ ] No "quick start" path that skips the 6-step wizard for a returning user
+      who just wants to jump into another session with their last-used config.
+  [ ] No visible, persistent "what will this cost me" credit estimate BEFORE
+      starting a Practice Coach or Mock session — costs surface after the fact
+      in some flows (e.g., Company Research auto-generate, mid-results AI
+      analysis on Mock Test).
+  [ ] No lightweight "listening/transcribing" confidence indicator during a
+      live session — users can't easily tell if the mic is actually being
+      picked up mid-conversation without checking a meter buried in a tab.
+  [ ] No auto-generated post-session notes/summary comparable to what
+      competitors offer (Parakeet AI auto-writes call notes + action items
+      after every session — Clarify AI has Scorecard/Debrief but nothing
+      framed as a quick digestible "here's what happened" note).
+  [ ] No clear in-product answer to "will the interviewer be able to see
+      this?" — stealth/compliance messaging exists but isn't presented as a
+      simple confidence statement before a session starts.
+
+ONBOARDING & FIRST-RUN GAPS
+  [ ] No skip-and-explain pattern — skipping audio/resume steps in onboarding
+      doesn't explain what the user loses by skipping.
+  [ ] No visible "why we're asking" micro-copy next to role/experience/anxiety
+      fields — feels like data collection rather than personalization.
+  [ ] No first-session coach marks / tooltips inside the Overlay itself for a
+      first-time user — the overlay's tab depth (hints/chat/resume/settings/
+      audit) is thrown at users with no progressive reveal.
+
+TRUST, SAFETY & HONESTY GAPS
+  [ ] No visible, plain-language statement of "this is a practice tool, not
+      for live/real deceptive use" reinforced consistently across every
+      session-starting surface (partially present as a banner, not systemic).
+  [ ] Push/digest notification toggles exist in UI but are admitted as not
+      fully wired — this is a real user-trust risk if shipped as-is.
+  [ ] No warning before a destructive action explains WHAT will be lost in
+      plain language (several delete flows have no confirm at all — e.g.
+      Interviews list hover-delete).
+
+MOBILE-SPECIFIC GAPS
+  [ ] No mobile-optimized Practice Coach path at all — the setup wizard and
+      Overlay are both designed desktop-first; mobile only gets a "works
+      best on desktop" notice rather than a real simplified flow.
+  [ ] No swipe gestures anywhere (swipe-to-delete session/interview rows,
+      swipe between Overlay tabs) — everything is tap/hover only, and
+      hover-only delete actions are literally unusable on touch devices.
+  [ ] No "Add to Home Screen"/PWA prompt despite a meaningful mobile audience
+      implied by MobileNav, bottom tabs, and mobile-specific overlay notices.
+
+CONTENT & GROWTH GAPS
+  [ ] No branded chrome on the public Shared Debrief page — this is a growth
+      loop (users share results) and currently looks unbranded/untrustworthy.
+  [ ] No in-app changelog/what's-new surfacing tied to product updates.
+  [ ] No native share sheet on Referrals (copy-link only) — a missed mobile
+      conversion opportunity.
+
+================================================================================
+3. SECTION-BY-SECTION HEALTH SCORECARD
+================================================================================
+Area                            Rating   One-line verdict
+-------------------------------- -------- ------------------------------------
+Design System                   Broken   Two component eras + miswired Toggle
+App Shell / Nav                 Broken   Dual mobile nav (hamburger + bottom)
+Command Palette                 Solid    Solid, just needs better discoverability
+Global Overlays/Banners         Mixed    Good triad; thresholds misaligned
+Landing Page                    Mixed    Strong but first viewport overloaded
+Pricing                         Mixed    Plan cards not shared with in-app
+Help / Blog                     Mixed    Help solid; Blog empty/error weaker
+Shared Debrief (public)         Broken   Unbranded — hurts growth loop
+Auth (Login/Signup/Reset)       Mixed    3 different visual languages
+Onboarding                      Broken   5 steps, field reuse, emoji-heavy
+Dashboard                       Broken   Dense; competing CTAs; naming split
+Practice Coach / Overlay        Broken   Dual entry, empty in-shell, 6-step wizard
+Mock Interview                  Mixed    Route-state fragile; duration copy
+Prep Lab                        Broken   Duplicate STAR; Question vs Answer Bank
+Sessions / Scorecard / Debrief  Mixed    Debrief Detail unscannable
+Documents                       Mixed    Upload rules mismatch; uneven tabs
+Answer Bank                     Mixed    List doesn't link to detail
+Interviews / Interview Day      Broken   No delete confirm; checklist not persisted
+Company Research                Mixed    Auto-generate can silently spend credits
+Analytics / Usage               Broken   Emoji tabs; two chart libraries
+Profile / Notifications         Mixed    Profile duplicates Settings; no deep-link
+Settings (all)                  Broken   Preference sprawl; dev page in consumer
+Gov Exam Mock Test Suite        Mixed    Dense; long configure; inconsistent charts
+Admin Portal                    Mixed    Flat ungrouped nav (internal)
+Electron Desktop                Broken   Dual mental model unexplained
+
+================================================================================
+4. THE "PARAKEET AI STANDARD" — WHAT MAKES A LIVE-COPILOT FEEL SIMPLE
+================================================================================
+  P1. ONE-CLICK SESSION START — persist last-used config; "Start Practice
+      (same setup)" primary, "Change setup" secondary.
+  P2. THE OVERLAY IS THE WHOLE PRODUCT DURING A SESSION — redirect into
+      Overlay; never leave an empty in-shell mid-session page.
+  P3. MINIMAL VISIBLE CONTROLS — default hints/answer only; More tools for rest.
+  P4. FAST, VISIBLE CONFIDENCE — persistent listening indicator.
+  P5. AUTOMATIC WRAP-UP — 3-bullet summary immediately; full Scorecard optional.
+  P6. SET-AND-FORGET CONTEXT — "Using: [Resume] · [Language]" chip always visible.
+  P7. BROWSER-FIRST CAPABLE — desktop install is upgrade, not requirement.
+
+BOTTOM LINE: setup once, live surface minimal, payoff immediate. Keep deeper
+product surfaces (Mock, Prep, Gov Exams, Interview Day) but never in the way
+of the core practice moment.
+
+================================================================================
+5. MOBILE-FRIENDLINESS ACTION CHECKLIST
+================================================================================
+  [ ] One mobile nav pattern (bottom primary; slim hamburger)
+  [ ] Elevate Sessions/Documents/Answer Bank if usage warrants
+  [ ] Replace hover-only destructive actions
+  [ ] Delete confirmations everywhere
+  [ ] 44x44px tap targets
+  [ ] Real mobile Practice Coach mode (hints-only Overlay)
+  [ ] Mock Session mobile-first conversation layout
+  [ ] Reduced-motion / note-only fallbacks for breathing/whiteboard
+  [ ] Toast + persistent on-screen fallback
+  [ ] Color + text/icon for status states
+  [ ] Break long single-page flows into steps/sections
+  [ ] PWA / Add to Home Screen
+
+================================================================================
+6. USER-FRIENDLINESS CHECKLIST (first-time-user lens)
+================================================================================
+  [ ] First live practice within 2 minutes of signup
+  [ ] Step counters reflect real remaining work
+  [ ] No field reuse for different questions (role_type bug)
+  [ ] Credit cost visible before spend
+  [ ] No back-to-back welcome/congratulations for same milestone
+  [ ] Destructive actions explain consequence before confirm
+  [ ] Search inputs always labeled
+  [ ] Naming consistent (nav / title / empty / marketing)
+  [ ] Coming-soon / broken destinations labeled before click
+  [ ] Unwired notification toggles hidden or marked Coming soon
+
+================================================================================
+7. CANONICAL NAMING GLOSSARY & IA MAP
+================================================================================
+  "Practice Coach" ......... live AI practice (retire Live / Live Co-Pilot /
+                              Rehearsal as user-facing terms)
+  "Overlay" ................ floating session window (paired with Practice Coach)
+  "Mock Interview" ......... free timed practice mode
+  "Prep Lab" ............... STAR / Rephraser / Coding / System Design hub
+  "Answer Bank" ............ single saved-answers library (retire Question Bank
+                              naming inside Prep Lab for the same concept)
+  "Interview Day" .......... day-of focus mode
+  "Interviews" ............. scheduling/tracking (distinct icon from Interview Day)
+  "Skills Analytics" ....... renamed from Analytics
+  "Credits & Usage" ........ billing-facing usage
+  "Gov Exam Mock Tests" .... consistent everywhere
+
+  Primary nav IA:
+    Practice: Dashboard · Practice Coach · Mock Interview · Prep Lab ·
+              Gov Exam Mock Tests
+    Progress: Sessions · Skills Analytics · Credits & Usage · Debrief ·
+              Documents · Answer Bank · Referrals
+    Planner:  Interview Day · Interviews · Company Research
+    Account:  Guide · Notifications · Settings · Admin (role-gated)
+
+================================================================================
+8. PRIORITIZED EXECUTION ROADMAP
+================================================================================
+SPRINT 1 — Fix trust & core-flow breakage
+  1. End /app/live empty in-shell state (redirect into Overlay)
+  2. Persist last-used setup; "Start Practice (same setup)"
+  3. Fix Onboarding role_type overwrite
+  4. Delete confirmations; remove hover-only destructive actions
+  5. Show credit cost BEFORE credit-consuming actions
+  6. Fix miswired Toggle→Switch
+
+SPRINT 2 — Simplify the live-practice moment (Parakeet standard)
+  7. Default Overlay = hints/answer only; More tools for the rest
+  8. Persistent listening indicator
+  9. Auto 3-bullet post-session summary
+  10. "Using: [Resume] · [Language]" context chip
+
+SPRINT 3 — IA & naming cleanup
+  11. Apply Section 7 glossary everywhere
+  12. Unify STAR Builder; Prep bank → Answer Bank
+  13. Settings into 5 groups; Security Config → Admin
+  14. Merge Profile into Settings→Profile
+  15. Wire Answer Bank list → detail
+
+SPRINT 4 — Mobile-first pass
+  16. One mobile nav pattern
+  17. Simplified mobile Practice Coach mode
+  18. Touch-safe list actions
+  19. PWA / Add to Home Screen
+  20. Break long pages (Configure, Debrief, Audio)
+
+SPRINT 5 — Design system unification & polish
+  21. Retire legacy dual kit toward shadcn-based kit
+  22. One chart library (Recharts)
+  23. Remove emoji from chrome/tabs/nav
+  24. Brand Shared Debrief
+  25. Unify AuthShell across Login/Signup/Reset
+
+================================================================================
+9. CLOSING SUMMARY
+================================================================================
+Clarify AI already has more depth than a focused tool like Parakeet AI.
+The gap is FRICTION: too many setup steps, dual session UIs, naming drift,
+and a mobile notice instead of a real path.
+
+Sprint 1 and Sprint 2 alone — fixing the /app/live dead state, one-click
+session start, and quieting the Overlay default — move the core practice loop
+close to "open it and it just works," while keeping Clarify AI's deeper product.
+
+================================================================================
+END OF DOCUMENT
+================================================================================

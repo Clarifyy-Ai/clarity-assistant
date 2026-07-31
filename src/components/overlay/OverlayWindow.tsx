@@ -42,6 +42,9 @@ import { OverlayAudioStatusBar } from "./OverlayAudioStatusBar";
 import { OverlaySystemAudioBanner } from "./OverlaySystemAudioBanner";
 import { OverlaySessionPreparing } from "./OverlaySessionPreparing";
 import { ScreenCaptureBlocker } from "./ScreenCaptureBlocker";
+import { OverlayListeningIndicator } from "./OverlayListeningIndicator";
+import { OverlayFirstRunCoach } from "./OverlayFirstRunCoach";
+import { SessionContextChip } from "@/components/session/SessionContextChip";
 
 import { LiveTranscriptStream } from "@/components/live/LiveTranscriptStream";
 import { useNetworkMonitor } from "@/hooks/useNetworkMonitor";
@@ -459,6 +462,19 @@ export function OverlayWindow({
         </div>
       </div>
 
+      {/* Context + listening — always visible on main chrome */}
+      {!isMinimalMode && (
+        <div
+          className="flex items-center gap-2 px-3 py-1.5 border-b border-white/[0.05] bg-[#0a0a14]/50 shrink-0"
+          data-no-drag
+        >
+          <SessionContextChip compact />
+          <div className="ml-auto">
+            <OverlayListeningIndicator />
+          </div>
+        </div>
+      )}
+
       {/* TOOLBAR — hidden in compact pill mode */}
       {!isMinimalMode && (
         <div className="shrink-0 border-b border-white/[0.05]" data-no-drag>
@@ -488,6 +504,7 @@ export function OverlayWindow({
             </p>
           )}
           <div className="flex items-center gap-2">
+            <OverlayListeningIndicator />
             <FloatingAIButton
               onGenerate={onGenerate}
               isGenerating={isGenerating}
@@ -605,7 +622,7 @@ export function OverlayWindow({
                     ) : (
                       <>
                         {activeTab === "answer" && (
-                          <div className="flex-1 min-h-0 overflow-y-auto">
+                          <div className="flex-1 min-h-0 overflow-y-auto relative">
                             <OverlayHintPanel
                               text={displayText}
                               hintStyle={hintStyle}
@@ -676,6 +693,7 @@ export function OverlayWindow({
       )}
 
       <OverlayHotkeyHelp />
+      {!isMinimalMode && isVisible && <OverlayFirstRunCoach />}
     </div>
   );
 

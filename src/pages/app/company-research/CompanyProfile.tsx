@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { PageContent } from "@/components/layout/PageContent";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -18,6 +19,7 @@ import {
   CheckCircle, MessageSquare,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 
 export default function CompanyProfile() {
   const { id }     = useParams<{ id: string }>();
@@ -30,11 +32,11 @@ export default function CompanyProfile() {
   const [brief,    setBrief]    = useState<any>(null);
   const [loading,  setLoading]  = useState(true);
   const [error,    setError]    = useState<string | null>(null);
+  const [needsGenerateConfirm, setNeedsGenerateConfirm] = useState(false);
+  const [confirmGenerate, setConfirmGenerate] = useState(false);
 
   // ── Generate or load brief ────────────────────────────────────
-  // FIX 3: wrapped in useCallback with proper deps to avoid stale closures
   const generateBrief = useCallback(async (force = false) => {
-    // FIX 5: guard against empty company name
     if (!companyName.trim()) {
       setError("No company name provided.");
       setLoading(false);
@@ -45,9 +47,6 @@ export default function CompanyProfile() {
     setError(null);
 
     try {
-      // ── Cache check ─────────────────────────────────────────
-      // FIX 2: use .maybeSingle() instead of .single() to avoid
-      // PGRST116 / 406 error when no cached row exists
       if (!force) {
         const { data: cached, error: cacheErr } = await supabase
           .from("company_research")
@@ -56,27 +55,29 @@ export default function CompanyProfile() {
           .ilike("company_name", companyName)
           .order("created_at", { ascending: false })
           .limit(1)
-          .maybeSingle();  // FIX 2: returns null (not error) when 0 rows
+          .maybeSingle();
 
         if (cacheErr) {
-          // Non-fatal — log and fall through to generation
           console.warn("[CompanyProfile] Cache read failed:", cacheErr.message);
         } else if (cached?.raw_data) {
           setBrief(cached.raw_data);
           setLoading(false);
+          setNeedsGenerateConfirm(false);
+          return;
+        } else {
+          // No cache — require explicit confirm before spending credits
+          setLoading(false);
+          setNeedsGenerateConfirm(true);
           return;
         }
       }
 
-      // ── Edge function call ───────────────────────────────────
       const data = await fetchEdgeJson<Record<string, unknown>>("company-research", {
         company: companyName,
       });
       setBrief(data);
+      setNeedsGenerateConfirm(false);
 
-      // ── Cache the result ─────────────────────────────────────
-      // FIX 4: add onConflict so upsert updates existing row
-      // instead of inserting duplicates on every refresh
       const d = data as any;
       const { error: upsertErr } = await supabase
         .from("company_research")
@@ -90,29 +91,70 @@ export default function CompanyProfile() {
             culture:      d.culture   ?? null,
             prep_tips:    Array.isArray(d.tips) ? d.tips.join("; ") : null,
           } as any,
-          { onConflict: "user_id,company_name" }  // FIX 4: update, don't insert
+          { onConflict: "user_id,company_name" }
         );
 
       if (upsertErr) {
-        // Non-fatal — brief is already set, just log
         console.warn("[CompanyProfile] Cache write failed:", upsertErr.message);
       }
 
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to generate brief";
-      // FIX 7: log the real error, show user-friendly message
       console.error("[CompanyProfile] generateBrief error:", err);
       setError(msg);
     } finally {
       setLoading(false);
     }
-  // FIX 6: include user?.id in deps so cache check runs with correct user
   }, [companyName, user?.id, params]);
 
-  // FIX 6: include user?.id in dep array
   useEffect(() => {
-    if (companyName) generateBrief();
+    if (companyName) void generateBrief(false);
   }, [companyName, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (needsGenerateConfirm && !brief && !loading) {
+    return (
+      <PageContent className="max-w-3xl space-y-5">
+        <PageHeader
+          title={companyName || "Company research"}
+          subtitle="Generate an AI interview prep brief"
+          breadcrumbs={[
+            { label: "Company Research", href: "/app/companies" },
+            { label: companyName || "Company" },
+          ]}
+        />
+        <Card className="p-6 space-y-4 text-center">
+          <Building2 className="w-10 h-10 text-primary mx-auto" />
+          <p className="text-sm text-muted-foreground">
+            No saved brief yet for <strong>{companyName}</strong>. Generating costs{" "}
+            <strong>{AI_CREDIT_COSTS.company_research} credits</strong>.
+          </p>
+          <div className="flex justify-center gap-3 flex-wrap">
+            <Button variant="secondary" onClick={() => navigate("/app/companies")}>
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              leftIcon={<Sparkles className="w-4 h-4" />}
+              onClick={() => setConfirmGenerate(true)}
+            >
+              Generate brief ({AI_CREDIT_COSTS.company_research} credits)
+            </Button>
+          </div>
+        </Card>
+        <ConfirmDialog
+          open={confirmGenerate}
+          onOpenChange={setConfirmGenerate}
+          title="Generate company brief?"
+          description={`This uses ${AI_CREDIT_COSTS.company_research} credits to create an AI interview prep brief for ${companyName}.`}
+          confirmLabel={`Spend ${AI_CREDIT_COSTS.company_research} credits`}
+          onConfirm={async () => {
+            setConfirmGenerate(false);
+            await generateBrief(true);
+          }}
+        />
+      </PageContent>
+    );
+  }
 
   // ── Loading state ─────────────────────────────────────────────
 

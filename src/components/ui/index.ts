@@ -1,4 +1,6 @@
 // ─── Primitive / Radix-based UI Components ───────────────────────────────────
+// Design-system direction (Sprint 5): prefer shadcn Switch / Dialog / Select /
+// Tabs for new preference UIs and dialogs. Keep branded Button / Card wrappers.
 export { Accordion, AccordionItem, AccordionTrigger, AccordionContent } from "./accordion";
 export {
   AlertDialog, AlertDialogPortal, AlertDialogOverlay, AlertDialogTrigger,

@@ -755,8 +755,11 @@ export default function OnboardingStep5ResumeUpload({ onNext, onBack, onSkip }: 
               >
 
                 Skip for now — add later from Documents
-
               </Button>
+              <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
+                Skipping means Practice Coach won&apos;t personalize answers from your resume until
+                you upload one in Documents.
+              </p>
 
             )}
 

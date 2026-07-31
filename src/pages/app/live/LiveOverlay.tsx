@@ -27,6 +27,11 @@ import {
   initDesktopOverlayWindow,
   teardownDesktopOverlayWindow,
 } from "@/lib/platform/electronWindowManager";
+import {
+  consumePendingPracticeSetup,
+  saveLastPracticeSetup,
+} from "@/lib/session/lastPracticeSetup";
+import { saveLastSessionSummary } from "@/lib/session/lastSessionSummary";
 
 const PREP_LABELS = [
   "Analysing your profile…",
@@ -97,6 +102,7 @@ function LiveOverlaySession() {
 
   // ── Setup ────────────────────────────────────────────────────────────────
   const handleSetup = useCallback((sessionConfig: LiveSessionConfig) => {
+    saveLastPracticeSetup(sessionConfig);
     useSessionStore.getState().resetSession();
     useOverlayStore.getState().resetSessionState();
 
@@ -113,6 +119,12 @@ function LiveOverlaySession() {
     setConfig(sessionConfig);
     setPhase("starting");
   }, []);
+
+  // Auto-start when redirected from /app/live with a stashed config
+  useEffect(() => {
+    const pending = consumePendingPracticeSetup();
+    if (pending) handleSetup(pending);
+  }, [handleSetup]);
 
   // ── Start live session (creation handled by start-session edge via useLiveCopilot) ──
   useEffect(() => {
@@ -157,12 +169,34 @@ function LiveOverlaySession() {
   const handleStop = useCallback(async () => {
     didEndRef.current = true;
 
-    // Snapshot session_id BEFORE ending — endLiveSession may clear store state
+    // Snapshot before ending — endLiveSession / reset may clear store state
     const sessionId = useSessionStore.getState().session_id;
+    const durationSeconds = useSessionStore.getState().elapsed_seconds;
+    const questionsDetected = useOverlayStore.getState().questions_detected;
+    const hintsUsed = useOverlayStore.getState().hint_history.length;
+
+    if (sessionId) {
+      saveLastSessionSummary({
+        sessionId,
+        durationSeconds,
+        questionsDetected,
+        hintsUsed,
+        endedAt: Date.now(),
+      });
+    }
 
     await copilot.endLiveSession();
     setLastSessionId(sessionId);
-  }, [copilot]);
+
+    // Return to /app/live summary (never leave users on an empty mid-session page)
+    if (sessionId) {
+      if (IS_ELECTRON) {
+        openInBrowser(`/app/live?ended=${sessionId}`);
+      } else {
+        navigate(`/app/live?ended=${sessionId}`, { replace: true });
+      }
+    }
+  }, [copilot, navigate]);
 
   // ── Generate hint ─────────────────────────────────────────────────────────
   const handleGenerate = useCallback(() => {

@@ -1,10 +1,9 @@
-// @ts-nocheck -- retained: notification_prefs and privacy_prefs JSONB column types not in Supabase generated schema; Toggle component uses Radix UI checked prop which TypeScript does not accept on the wrapper component type.
+// @ts-nocheck -- retained: notification_prefs and privacy_prefs JSONB column types not in Supabase generated schema.
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Toggle } from "@/components/ui/Toggle";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/Badge";
 import { CheckCircle, Shield, Eye, Database, Lock, WifiOff } from "lucide-react";
@@ -181,10 +180,11 @@ export default function SettingsPrivacy() {
                     {item.desc}
                   </p>
                 </div>
-                <Toggle
+                <Switch
                   checked={prefs[item.key] ?? false}
-                  onChange={() => !(item as any).disabled && toggle(item.key)}
+                  onCheckedChange={() => !(item as any).disabled && toggle(item.key)}
                   disabled={(item as any).disabled}
+                  aria-label={item.label}
                 />
               </div>
             ))}

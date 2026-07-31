@@ -2,15 +2,19 @@
 
 export const STEALTH_NAV_LABELS: Record<string, string> = {
   "Dashboard": "Home",
-  "Live Co-Pilot": "Daily Standup",
+  "Practice Coach": "Daily Standup",
   "Mock Interview": "Sprint Review",
   "Prep Lab": "Documentation",
   "Sessions": "Meeting Notes",
+  "Session History": "Meeting Notes",
+  "Skills Analytics": "Reports",
   "Analytics": "Reports",
+  "Credits & Usage": "Capacity",
   "Documents": "Files",
   "Answer Bank": "Knowledge Base",
   "Interviews": "Calendar",
   "Companies": "Clients",
+  "Company Research": "Client Research",
   "Practice Rooms": "Team Rooms",
   "Notifications": "Inbox",
   "Settings": "Preferences",
@@ -18,21 +22,25 @@ export const STEALTH_NAV_LABELS: Record<string, string> = {
 
 export const STEALTH_SECTION_LABELS: Record<string, string> = {
   "Core": "Workspace",
+  "Practice": "Workspace",
   "Growth": "Resources",
+  "Progress": "Resources",
   "Planner": "Projects",
 };
 
 export const STEALTH_PAGE_TITLES: Record<string, string> = {
   "Dashboard": "Home",
-  "Live Co-Pilot": "Daily Standup",
+  "Practice Coach": "Daily Standup",
   "Live Session": "Daily Standup",
   "Mock Interview": "Sprint Review",
   "Mock Practice": "Sprint Review",
   "Prep Lab": "Documentation",
   "Sessions": "Meeting Notes",
   "Session History": "Meeting Notes",
+  "Skills Analytics": "Reports",
   "Analytics": "Reports",
   "Performance Analytics": "Performance Reports",
+  "Credits & Usage": "Capacity",
   "Documents": "Files",
   "Answer Bank": "Knowledge Base",
   "Interviews": "Calendar",

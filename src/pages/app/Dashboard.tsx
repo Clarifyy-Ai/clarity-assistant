@@ -22,6 +22,7 @@ import { Tooltip } from "@/components/ui/tooltip";
 import { Skeleton, SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import {
   Mic, ClipboardList, FlaskConical, BarChart2, Landmark,
   CalendarDays, Flame, Zap, ChevronRight,
@@ -108,7 +109,7 @@ const QUICK_LAUNCH: { to: string; icon: React.ElementType; label: string }[] = [
   { to: "/app/mock",      icon: ClipboardList, label: "Mock Interview" },
   { to: "/app/live/overlay", icon: Layers,     label: "Overlay" },
   { to: "/app/documents", icon: Upload,         label: "Upload" },
-  { to: "/app/analytics", icon: BarChart2,      label: "Analytics" },
+  { to: "/app/analytics", icon: BarChart2,      label: PRODUCT_NAMES.analytics },
 ];
 
 const QUICK_ACTIONS: QuickAction[] = [
@@ -116,7 +117,7 @@ const QUICK_ACTIONS: QuickAction[] = [
     to:          "/app/live",
     icon:        Mic,
     stealthIcon: ListTodo,
-    label:       "Practice Coach",
+    label:       PRODUCT_NAMES.practiceCoach,
     sub:         "Practice session",
     stealthSub:  "Join your standup",
     highlight:   true,
@@ -125,7 +126,7 @@ const QUICK_ACTIONS: QuickAction[] = [
     to:          "/app/mock",
     icon:        ClipboardList,
     stealthIcon: PenTool,
-    label:       "Mock Interview",
+    label:       PRODUCT_NAMES.mockInterview,
     sub:         "Practice session",
     stealthSub:  "Review session",
     highlight:   false,
@@ -143,7 +144,7 @@ const QUICK_ACTIONS: QuickAction[] = [
     to:          "/app/prep",
     icon:        FlaskConical,
     stealthIcon: FolderOpen,
-    label:       "Prep Lab",
+    label:       PRODUCT_NAMES.prepLab,
     sub:         "STAR builder + tools",
     stealthSub:  "Document templates",
     highlight:   false,
@@ -152,7 +153,7 @@ const QUICK_ACTIONS: QuickAction[] = [
     to:          "/app/analytics",
     icon:        BarChart2,
     stealthIcon: BarChart3,
-    label:       "Analytics",
+    label:       PRODUCT_NAMES.analytics,
     sub:         "Progress trends",
     stealthSub:  "Team reports",
     highlight:   false,

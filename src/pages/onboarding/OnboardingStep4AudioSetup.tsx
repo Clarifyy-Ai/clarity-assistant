@@ -291,20 +291,34 @@ export default function OnboardingStep4AudioSetup({ onNext, onBack }: StepProps)
       </div>
 
       {/* ── Navigation ──────────────────────────────────────────────────── */}
-      <div className="flex gap-3 pt-2">
-        <Button variant="ghost" size="md" onClick={onBack}>
-          ← Back
-        </Button>
+      <div className="flex flex-col gap-2 pt-2">
+        <div className="flex gap-3">
+          <Button variant="ghost" size="md" onClick={onBack}>
+            ← Back
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
+            fullWidth
+            loading={loading}
+            disabled={!micOk}
+            onClick={handleNext}
+          >
+            Continue →
+          </Button>
+        </div>
         <Button
-          variant="primary"
-          size="md"
+          variant="ghost"
+          size="sm"
           fullWidth
-          loading={loading}
-          disabled={!micOk}
-          onClick={handleNext}
+          onClick={() => onNext({ audioVerified: false, skippedAudio: true })}
         >
-          Continue →
+          Skip audio check for now
         </Button>
+        <p className="text-[11px] text-muted-foreground text-center leading-relaxed">
+          Skipping means Practice Coach may fail to hear you until you verify your microphone in
+          Settings → Audio.
+        </p>
       </div>
     </div>
   );

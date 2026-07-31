@@ -1,8 +1,10 @@
 import { useState } from "react";
+import { Navigate } from "react-router-dom";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ShieldCheck, ExternalLink, CheckCircle2, Circle, AlertTriangle, Database, Radio, Lock, Key } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/store/authStore";
 
 const PROJECT_REF = "qzgvjrvtkwlzxpmlddkx";
 
@@ -169,7 +171,12 @@ const sevColors = {
 };
 
 export default function SettingsSecurityConfig() {
+  const isAdmin = useAuthStore((s) => s.isAdmin);
   const [done, setDone] = useState<Record<string, boolean>>(loadDone);
+
+  if (!isAdmin) {
+    return <Navigate to="/app/settings/security" replace />;
+  }
 
   function toggle(id: string) {
     const next = { ...done, [id]: !done[id] };

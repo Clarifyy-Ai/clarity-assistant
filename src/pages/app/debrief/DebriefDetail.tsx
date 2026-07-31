@@ -280,12 +280,33 @@ export default function DebriefDetail() {
         }
       />
 
+      <nav
+        aria-label="Debrief sections"
+        className="sticky top-0 z-10 -mx-1 px-1 py-2 bg-background/95 backdrop-blur border-b border-border flex gap-2 overflow-x-auto text-xs"
+      >
+        {[
+          { id: "overview", label: "Overview" },
+          { id: "strengths", label: "Strengths" },
+          { id: "improvements", label: "Improvements" },
+          { id: "charts", label: "Charts" },
+          { id: "share", label: "Share" },
+        ].map((item) => (
+          <a
+            key={item.id}
+            href={`#debrief-${item.id}`}
+            className="shrink-0 rounded-lg border border-border bg-secondary/40 px-3 py-1.5 text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+          >
+            {item.label}
+          </a>
+        ))}
+      </nav>
+
       {fetchError && (
         <InlineErrorRetry message={fetchError} onRetry={fetchDebrief} />
       )}
 
       {/* Hero grade card */}
-      <Card className="bg-gradient-to-br from-primary/10 to-blue-600/10 border-primary/20">
+      <Card id="debrief-overview" className="bg-gradient-to-br from-primary/10 to-blue-600/10 border-primary/20 scroll-mt-16">
         <div className="flex items-start gap-3 sm:gap-5">
           <div className={cn(
             "w-14 h-14 sm:w-20 sm:h-20 rounded-2xl flex items-center justify-center text-2xl sm:text-4xl font-black border-2 shrink-0",

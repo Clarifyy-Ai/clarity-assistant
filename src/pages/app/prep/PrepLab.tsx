@@ -11,10 +11,10 @@ import { PlanGate } from "@/components/layout/PlanGate";
 import { Modal } from "@/components/ui/Modal";
 import { toast } from "sonner";
 import {
-  FlaskConical, Star, BookOpen, Zap,
-  Brain, FileText, ChevronRight, RefreshCw,
+  Star, BookOpen, Zap,
+  Brain, ChevronRight, RefreshCw,
   CheckCircle, Copy, Save, Sparkles,
-  Building2, Target, MessageSquare,
+  Building2, Target,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";
@@ -23,10 +23,11 @@ import { refreshCredits } from "@/lib/billing/creditsManager";
 import { EDGE_BASE } from "@/lib/env";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { Link, useSearchParams } from "react-router-dom";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
 // ─────────────────────────────────────────────────────────────────
-// PrepLab — STAR builder, question bank, AI tools
-// Tabs: STAR Builder | Question Bank | AI Tools | Company Prep
+// PrepLab — STAR builder, Answer Bank, AI tools
+// Tabs: STAR Builder | Answer Bank | AI Tools | Company Prep
 // ─────────────────────────────────────────────────────────────────
 
 export default function PrepLab() {
@@ -38,11 +39,11 @@ export default function PrepLab() {
   return (
     <div className="space-y-5 max-w-5xl">
       <PageHeader
-        title="Prep Lab"
-        description="Build STAR answers, study questions, and use AI tools"
+        title={PRODUCT_NAMES.prepLab}
+        description="Build STAR answers, review your Answer Bank, and use AI tools"
         breadcrumbs={[
           { label: "Dashboard", href: "/app/dashboard" },
-          { label: "Prep Lab" },
+          { label: PRODUCT_NAMES.prepLab },
         ]}
       />
       <div className="flex flex-wrap gap-2 -mt-2">
@@ -64,10 +65,18 @@ export default function PrepLab() {
       </div>
       <Tabs defaultValue={defaultTab} key={defaultTab}>
         <TabsList>
-          <TabsTrigger value="star">⭐ STAR Builder</TabsTrigger>
-          <TabsTrigger value="bank">📚 Question Bank</TabsTrigger>
-          <TabsTrigger value="tools">🤖 AI Tools</TabsTrigger>
-          <TabsTrigger value="company">🏢 Company Prep</TabsTrigger>
+          <TabsTrigger value="star" className="gap-1.5">
+            <Star className="w-3.5 h-3.5" aria-hidden /> STAR Builder
+          </TabsTrigger>
+          <TabsTrigger value="bank" className="gap-1.5">
+            <BookOpen className="w-3.5 h-3.5" aria-hidden /> {PRODUCT_NAMES.answerBank}
+          </TabsTrigger>
+          <TabsTrigger value="tools" className="gap-1.5">
+            <Brain className="w-3.5 h-3.5" aria-hidden /> AI Tools
+          </TabsTrigger>
+          <TabsTrigger value="company" className="gap-1.5">
+            <Building2 className="w-3.5 h-3.5" aria-hidden /> Company Prep
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="star">
@@ -75,7 +84,7 @@ export default function PrepLab() {
         </TabsContent>
 
         <TabsContent value="bank">
-          <QuestionBank />
+          <AnswerBankPanel />
         </TabsContent>
 
         <TabsContent value="tools">
@@ -358,7 +367,7 @@ function STARBuilder() {
 }
 
 // ─────────────────────────────────────────────────────────────────
-// Question Bank — display-only starter examples (not persisted)
+// Answer Bank panel — links to the shared Answer Bank (not a separate Q-bank)
 // ─────────────────────────────────────────────────────────────────
 
 const STARTER_ANSWER_TEMPLATES = [
@@ -366,7 +375,6 @@ const STARTER_ANSWER_TEMPLATES = [
     id: "starter-behavioral",
     text: "Tell me about a time you resolved a conflict on your team.",
     category: "Behavioural",
-    difficulty: "medium" as const,
     answerPreview:
       "Situation: Two engineers disagreed on API design during a release crunch. Task: I facilitated alignment without delaying the ship date. Action: I ran a 30-minute decision doc review, listed trade-offs, and proposed a phased rollout. Result: We shipped on time and reduced similar debates by documenting ADRs.",
   },
@@ -374,7 +382,6 @@ const STARTER_ANSWER_TEMPLATES = [
     id: "starter-technical",
     text: "How would you debug a sudden spike in API latency?",
     category: "Technical",
-    difficulty: "hard" as const,
     answerPreview:
       "I'd start with dashboards (p95/p99, error rate), check recent deploys and feature flags, then trace slow requests. I'd compare DB query plans, cache hit rates, and upstream dependencies, roll back if needed, and add an alert on the regression threshold.",
   },
@@ -382,312 +389,127 @@ const STARTER_ANSWER_TEMPLATES = [
     id: "starter-leadership",
     text: "Describe how you mentored a junior teammate to deliver independently.",
     category: "Leadership",
-    difficulty: "medium" as const,
     answerPreview:
       "I paired weekly on their first feature, broke work into milestones, and gave written feedback on PRs. Within six weeks they owned a module end-to-end and presented the demo to stakeholders.",
   },
 ];
 
-// ─────────────────────────────────────────────────────────────────
-// Question Bank
-// ─────────────────────────────────────────────────────────────────
-
-const BANK_CATEGORIES = [
-  "All", "Behavioural", "Technical", "System Design",
-  "Leadership", "Conflict", "Culture Fit", "HR",
-];
-
-type BankQuestion = {
+type BankAnswer = {
   id: string;
-  text: string;
-  category: string;
-  difficulty: string;
-  fromLibrary?: boolean;
+  question_text: string;
+  category: string | null;
 };
 
-function QuestionBank() {
+function AnswerBankPanel() {
   const { user } = useAuthStore();
-  const [feedbackLoading, setFeedbackLoading] = useState(false);
-  const [feedbackText, setFeedbackText] = useState<string | null>(null);
-  const [category,   setCategory]   = useState("All");
-  const [search,     setSearch]     = useState("");
-  const [practicing, setPracticing] = useState<string | null>(null);
-  const [answer,     setAnswer]     = useState("");
-  const [questions,  setQuestions]  = useState<BankQuestion[]>([]);
-  const [loadingBank, setLoadingBank] = useState(true);
+  const [answers, setAnswers] = useState<BankAnswer[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     let cancelled = false;
 
-    async function loadBank() {
+    async function load() {
       if (!user?.id) {
-        setLoadingBank(false);
+        setLoading(false);
         return;
       }
-
       try {
         const rows = await answerBankDB.listByUserId(user.id);
-
-        const fromBank: BankQuestion[] = rows.slice(0, 100)
-          .map((row: { id: string; question_text?: string; category?: string; tags?: string[] }) => ({
-            id: row.id,
-            text: (row.question_text ?? "").trim(),
-            category: row.category ?? "Behavioural",
-            difficulty: "medium",
-            fromLibrary: true,
-          }))
-          .filter((q) => q.text.length > 8);
-
         if (!cancelled) {
-          setQuestions(fromBank);
+          setAnswers(
+            rows.slice(0, 8).map((row: { id: string; question_text?: string; category?: string }) => ({
+              id: row.id,
+              question_text: (row.question_text ?? "").trim(),
+              category: row.category ?? null,
+            })).filter((a) => a.question_text.length > 0),
+          );
         }
       } catch (err) {
-        console.error("[PrepLab/QuestionBank] load failed:", err);
-        if (!cancelled) setQuestions([]);
+        console.error("[PrepLab/AnswerBankPanel] load failed:", err);
+        if (!cancelled) setAnswers([]);
       } finally {
-        if (!cancelled) setLoadingBank(false);
+        if (!cancelled) setLoading(false);
       }
     }
 
-    void loadBank();
+    void load();
     return () => { cancelled = true; };
   }, [user?.id]);
 
-  const filtered = questions.filter((q) => {
-    if (category !== "All" && q.category !== category) return false;
-    if (search && !q.text.toLowerCase().includes(search.toLowerCase())) return false;
-    return true;
-  });
-
-  const activeQ = questions.find((q) => q.id === practicing);
-
-  async function savePracticeToBank() {
-    if (!user || !activeQ || answer.trim().length < 8) return;
-    try {
-      await answerBankDB.create(user.id, {
-        question_text: activeQ.text,
-        answer_text: answer.trim(),
-        category: activeQ.category,
-        source: "prep_lab_practice",
-        tags: ["practice"],
-      });
-      toast.success("Practice answer saved to your bank.");
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to save answer.");
-    }
-  }
-
-  async function getPracticeFeedback() {
-    if (!activeQ || answer.trim().length < 20) return;
-    setFeedbackLoading(true);
-    setFeedbackText(null);
-    try {
-      const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
-        tool_id: "star_method",
-        input: `Question: ${activeQ.text}\n\nCandidate answer:\n${answer.trim()}\n\nGive concise STAR feedback: strengths, gaps, and one improved opening sentence.`,
-      });
-      setFeedbackText(data.result ?? "No feedback returned.");
-      await refreshCredits();
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to get feedback.");
-    } finally {
-      setFeedbackLoading(false);
-    }
-  }
-
   return (
     <div className="space-y-4">
-      {/* Filters */}
-      <div className="flex flex-col sm:flex-row gap-3">
-        <input
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search questions…"
-          className="w-full sm:w-64 bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
-        />
-        <div className="flex flex-wrap gap-1.5">
-          {BANK_CATEGORIES.map((c) => (
-            <button
-              key={c}
-              onClick={() => setCategory(c)}
-              className={cn(
-                "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
-                category === c
-                  ? "bg-primary/10 border-primary/30 text-primary"
-                  : "bg-secondary border-border text-muted-foreground hover:text-foreground"
-              )}
-            >
-              {c}
-            </button>
-          ))}
+      <Card padding="sm" className="flex flex-col sm:flex-row sm:items-center gap-3 justify-between">
+        <div>
+          <p className="text-sm font-medium text-foreground">{PRODUCT_NAMES.answerBank}</p>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            One library for saved STAR answers — open the full bank to add, edit, or review.
+          </p>
         </div>
-      </div>
+        <Link to="/app/answers">
+          <Button variant="primary" size="sm" leftIcon={<BookOpen className="w-3.5 h-3.5" />}>
+            Open {PRODUCT_NAMES.answerBank}
+          </Button>
+        </Link>
+      </Card>
 
-      {loadingBank && (
-        <p className="text-xs text-muted-foreground">Loading your saved questions…</p>
+      {loading && (
+        <p className="text-xs text-muted-foreground">Loading your saved answers…</p>
       )}
 
-      {!loadingBank && questions.every((q) => !q.fromLibrary) && (
-        <p className="text-xs text-muted-foreground">
-          Save STAR answers to your answer bank to build a personal question library. Showing starter examples until then.
-        </p>
-      )}
-
-      {/* Questions list */}
-      <div className="space-y-2">
-        {filtered.length === 0 && !loadingBank && questions.length === 0 && (
-          <div className="space-y-4">
-            <p className="text-xs text-muted-foreground text-center">
-              Starter examples — add your own answers to build your bank.
-            </p>
-            {STARTER_ANSWER_TEMPLATES.map((starter) => (
-              <Card key={starter.id} padding="sm" className="border-dashed border-primary/30">
-                <p className="text-sm font-medium text-foreground">{starter.text}</p>
-                <div className="flex items-center gap-2 mt-2">
-                  <Badge variant="default" size="sm">{starter.category}</Badge>
-                  <Badge variant="primary" size="sm">Example</Badge>
+      {!loading && answers.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Recent answers
+          </p>
+          {answers.map((a) => (
+            <Link key={a.id} to={`/app/answers/${a.id}`} className="block">
+              <Card hover padding="sm" className="flex items-start gap-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-foreground leading-relaxed line-clamp-2">
+                    {a.question_text}
+                  </p>
+                  {a.category && (
+                    <div className="mt-2">
+                      <Badge variant="default" size="sm">{a.category}</Badge>
+                    </div>
+                  )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
-                  {starter.answerPreview}
-                </p>
+                <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" />
               </Card>
-            ))}
-            <div className="text-center pt-2">
-              <Link to="/app/answers" className="text-sm text-primary hover:underline">
-                Open Answer Bank →
-              </Link>
-            </div>
+            </Link>
+          ))}
+          <div className="text-center pt-1">
+            <Link to="/app/answers" className="text-sm text-primary hover:underline">
+              View all in {PRODUCT_NAMES.answerBank} →
+            </Link>
           </div>
-        )}
-        {filtered.length === 0 && !loadingBank && questions.length > 0 && (
-          <div className="text-center py-8">
-            <p className="text-sm text-muted-foreground">No questions match your filters.</p>
-          </div>
-        )}
-        {filtered.map((q) => (
-          <Card
-            key={q.id}
-            hover
-            padding="sm"
-            className="flex items-start gap-4"
-          >
-            <div className="flex-1">
-              <p className="text-sm text-foreground leading-relaxed">{q.text}</p>
-              <div className="flex items-center gap-2 mt-2">
-                <Badge variant="default" size="sm">{q.category}</Badge>
-                <Badge
-                  variant={
-                    q.difficulty === "easy"   ? "emerald" :
-                    q.difficulty === "medium" ? "amber"   : "red"
-                  }
-                  size="sm"
-                >
-                  {q.difficulty}
-                </Badge>
-              </div>
-            </div>
-            <div className="flex gap-2 shrink-0">
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={() => { setPracticing(q.id); setAnswer(""); }}
-                leftIcon={<MessageSquare className="w-3 h-3" />}
-              >
-                Practice
-              </Button>
-              <Button
-                variant="ghost"
-                size="xs"
-                leftIcon={<Save className="w-3 h-3" />}
-                onClick={async () => {
-                  if (!user) return;
-                  try {
-                    await answerBankDB.create(user.id, {
-                      question_text: q.text,
-                      answer_text: "(Draft — open Practice to add your answer)",
-                      category: q.category,
-                      source: "prep_lab_bank",
-                      tags: ["saved_question"],
-                    });
-                    toast.success("Question saved to your bank.");
-                  } catch (err) {
-                    toast.error(err instanceof Error ? err.message : "Failed to save.");
-                  }
-                }}
-              >
-                Save
-              </Button>
-            </div>
-          </Card>
-        ))}
-      </div>
+        </div>
+      )}
 
-      {/* Practice modal */}
-      <Modal
-        open={!!practicing}
-        onClose={() => setPracticing(null)}
-        title="Practice answer"
-        size="lg"
-      >
-        {activeQ && (
-          <div className="space-y-4">
-            <div className="bg-accent/5 rounded-xl p-4">
-              <p className="text-sm font-medium text-foreground">{activeQ.text}</p>
-              <div className="flex gap-2 mt-2">
-                <Badge variant="default" size="sm">{activeQ.category}</Badge>
-                <Badge
-                  variant={
-                    activeQ.difficulty === "easy"   ? "emerald" :
-                    activeQ.difficulty === "medium" ? "amber" : "red"
-                  }
-                  size="sm"
-                >
-                  {activeQ.difficulty}
-                </Badge>
+      {!loading && answers.length === 0 && (
+        <div className="space-y-4">
+          <p className="text-xs text-muted-foreground text-center">
+            Starter examples — save your own answers in {PRODUCT_NAMES.answerBank}.
+          </p>
+          {STARTER_ANSWER_TEMPLATES.map((starter) => (
+            <Card key={starter.id} padding="sm" className="border-dashed border-primary/30">
+              <p className="text-sm font-medium text-foreground">{starter.text}</p>
+              <div className="flex items-center gap-2 mt-2">
+                <Badge variant="default" size="sm">{starter.category}</Badge>
+                <Badge variant="primary" size="sm">Example</Badge>
               </div>
-            </div>
-            <textarea
-              value={answer}
-              onChange={(e) => setAnswer(e.target.value)}
-              placeholder="Type your answer using STAR format…"
-              rows={6}
-              className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
-            />
-            {feedbackText && (
-              <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 text-sm text-foreground whitespace-pre-wrap leading-relaxed">
-                {feedbackText}
-              </div>
-            )}
-            <div className="flex flex-wrap gap-3">
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => setPracticing(null)}
-              >
-                Cancel
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                disabled={answer.trim().length < 8}
-                leftIcon={<Save className="w-3.5 h-3.5" />}
-                onClick={() => void savePracticeToBank()}
-              >
-                Save answer
-              </Button>
-              <Button
-                variant="primary"
-                size="sm"
-                disabled={answer.trim().length < 20 || feedbackLoading}
-                leftIcon={<Zap className="w-3.5 h-3.5" />}
-                onClick={() => void getPracticeFeedback()}
-              >
-                {feedbackLoading ? "Analyzing…" : "Get AI feedback"}
-              </Button>
-            </div>
+              <p className="text-xs text-muted-foreground mt-3 leading-relaxed">
+                {starter.answerPreview}
+              </p>
+            </Card>
+          ))}
+          <div className="text-center pt-2">
+            <Link to="/app/answers" className="text-sm text-primary hover:underline">
+              Open {PRODUCT_NAMES.answerBank} →
+            </Link>
           </div>
-        )}
-      </Modal>
+        </div>
+      )}
     </div>
   );
 }

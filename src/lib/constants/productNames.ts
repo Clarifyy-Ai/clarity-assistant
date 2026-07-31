@@ -16,7 +16,7 @@ export const PRODUCT_NAMES = {
   govExams: "Gov Exam Mock Tests",
   creditsUsage: "Credits & Usage",
   debrief: "Debrief",
-  analytics: "Analytics",
+  analytics: "Skills Analytics",
   documents: "Documents",
   referrals: "Referrals",
   interviews: "Interviews",

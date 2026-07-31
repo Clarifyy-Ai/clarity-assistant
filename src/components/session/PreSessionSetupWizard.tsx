@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useDocumentStore } from "@/store/documentStore";
 import { useAuthStore } from "@/store/userStore";
 import { useOverlayStore } from "@/store/overlayStore";
@@ -8,7 +8,7 @@ import {
   ChevronRight, ChevronLeft, Shield, Zap,
   Users, PhoneCall, ToggleLeft, ToggleRight,
   ScrollText, AlertTriangle, CheckCircle2, Sparkles,
-  BookOpen,
+  BookOpen, Play,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import type { LiveSessionConfig } from "@/types/session.types";
@@ -24,6 +24,14 @@ import {
   isFreePlan,
   maxSessionMinutesForPlan,
 } from "@/lib/constants/freeTier";
+import {
+  formatPracticeSetupSummary,
+  loadLastPracticeSetup,
+} from "@/lib/session/lastPracticeSetup";
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
+import { Switch } from "@/components/ui/switch";
+import { Button } from "@/components/ui/Button";
+import { SessionContextChip } from "@/components/session/SessionContextChip";
 
 interface PreSessionSetupWizardProps {
   onStart: (config: LiveSessionConfig) => void;
@@ -48,23 +56,21 @@ const STEPS = [
   { id: 6, label: "Connect",            icon: CheckCircle2 },
 ];
 
-function Toggle({ checked, onChange }: { checked: boolean; onChange: (v: boolean) => void }) {
+function BooleanSwitch({
+  checked,
+  onChange,
+  "aria-label": ariaLabel,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  "aria-label"?: string;
+}) {
   return (
-    <button
-      type="button"
-      onClick={() => onChange(!checked)}
-      className={cn(
-        "relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none",
-        checked ? "bg-emerald-500" : "bg-secondary"
-      )}
-    >
-      <span
-        className={cn(
-          "inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform",
-          checked ? "translate-x-6" : "translate-x-1"
-        )}
-      />
-    </button>
+    <Switch
+      checked={checked}
+      onCheckedChange={onChange}
+      aria-label={ariaLabel}
+    />
   );
 }
 
@@ -82,6 +88,9 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const freePlan = isFreePlan(typedProfile?.plan_id);
   const maxDuration = maxSessionMinutesForPlan(typedProfile?.plan_id);
   const durationOptions = freePlan ? [5] : [15, 30, 45, 60];
+
+  const lastSetup = useMemo(() => loadLastPracticeSetup(), []);
+  const [showWizard, setShowWizard] = useState(!lastSetup);
 
   const [step, setStep] = useState(1);
 
@@ -269,6 +278,62 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     );
   }
 
+  if (!showWizard && lastSetup) {
+    const quickResumeTitle =
+      resumes.find((r) => r.id === (lastSetup.resume_id ?? activeResumeId))?.title ?? null;
+    const quickLanguage = lastSetup.language ?? "English";
+
+    return (
+      <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
+        <div className="w-full max-w-lg space-y-5">
+          <div className="text-center space-y-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-sm font-medium">
+              <Radio className="w-3.5 h-3.5 animate-pulse" aria-hidden />
+              Ready to practice
+            </div>
+            <h1 className="text-2xl font-bold text-foreground">Start Practice Coach</h1>
+            <p className="text-sm text-muted-foreground">
+              {formatPracticeSetupSummary(lastSetup)}
+            </p>
+            <div className="flex justify-center pt-1">
+              <SessionContextChip
+                resumeLabel={quickResumeTitle}
+                language={quickLanguage}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">
+              Typical cost: ~{AI_CREDIT_COSTS.live_answer + AI_CREDIT_COSTS.live_hint} credits per
+              answer+hint · Session debrief {AI_CREDIT_COSTS.session_debrief} credits
+            </p>
+          </div>
+          <div
+            role="note"
+            className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+          >
+            <strong>Practice only.</strong> This opens the Overlay session window. Interviewers
+            cannot see the Overlay unless you share that window.
+          </div>
+          <Button
+            variant="primary"
+            className="w-full"
+            size="lg"
+            leftIcon={<Play className="w-4 h-4" />}
+            onClick={() => onStart(lastSetup)}
+          >
+            Start Practice (same setup)
+          </Button>
+          <button
+            type="button"
+            onClick={() => setShowWizard(true)}
+            className="w-full text-sm text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
+          >
+            Change setup
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
       <div className="w-full max-w-lg space-y-6">
@@ -282,6 +347,28 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
           <h1 className="text-2xl font-bold text-foreground">
             {STEPS[step - 1].label}
           </h1>
+          <div className="mt-2 flex justify-center">
+            <SessionContextChip
+              resumeLabel={
+                resumes.find((r) => r.id === resumeId)?.title ??
+                (resumeId ? "Selected resume" : null)
+              }
+              language={language}
+            />
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Estimated usage: ~{AI_CREDIT_COSTS.live_hint} credits/hint ·{" "}
+            {AI_CREDIT_COSTS.live_answer} credits/full answer
+          </p>
+          {lastSetup && (
+            <button
+              type="button"
+              onClick={() => setShowWizard(false)}
+              className="mt-2 text-xs text-primary hover:underline"
+            >
+              Back to one-click start
+            </button>
+          )}
         </div>
 
         {isMobile && (
@@ -420,7 +507,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   <p className="text-sm font-medium text-foreground">Simple Language</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">AI replies in plain, jargon-free language</p>
                 </div>
-                <Toggle checked={simpleLanguage} onChange={setSimpleLanguage} />
+                <BooleanSwitch
+                  checked={simpleLanguage}
+                  onChange={setSimpleLanguage}
+                  aria-label="Simple language"
+                />
               </div>
 
               <div>
@@ -661,7 +752,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   <p className="text-sm font-medium text-foreground">Save Transcript</p>
                   <p className="text-[11px] text-muted-foreground mt-0.5">Store the session transcript for later review</p>
                 </div>
-                <Toggle checked={saveTranscript} onChange={setSaveTranscript} />
+                <BooleanSwitch
+                  checked={saveTranscript}
+                  onChange={setSaveTranscript}
+                  aria-label="Save transcript"
+                />
               </div>
 
               {/* Duration setting */}

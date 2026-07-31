@@ -68,12 +68,14 @@ export default function OnboardingStep2Experience({ onNext, onBack }: StepProps)
     const { data, error: dbError } = await supabase
       .from("profiles")
       .update({
-        role_type:         level,
+        // Keep role_type from Step 1 (target role). Experience level is stored
+        // as experience_years + notification_prefs.experience_level only.
         experience_years:  yearsMap[level] ?? 0,
         target_companies:  targetCompanies,
         notification_prefs: {
           ...existingPrefs,
           interview_anxiety: anxiety,
+          experience_level: level,
         },
         onboarding_step:   3,
       })
@@ -103,6 +105,7 @@ export default function OnboardingStep2Experience({ onNext, onBack }: StepProps)
         </h2>
         <p className="text-muted-foreground text-sm">
           This calibrates question difficulty and answer depth to your exact level.
+          Your target role from the previous step stays unchanged.
         </p>
       </div>
 

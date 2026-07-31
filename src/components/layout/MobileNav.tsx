@@ -65,19 +65,19 @@ const TABS: MobileTab[] = [
 ];
 
 const MORE_LINKS: MoreLink[] = [
-  { to: "/app/analytics", icon: BarChart3, label: "Analytics" },
-  { to: "/app/usage", icon: Gauge, label: "Usage" },
-  { to: "/app/documents", icon: FileText, label: "Documents" },
+  { to: "/app/analytics", icon: BarChart3, label: PRODUCT_NAMES.analytics },
+  { to: "/app/usage", icon: Gauge, label: PRODUCT_NAMES.creditsUsage },
+  { to: "/app/documents", icon: FileText, label: PRODUCT_NAMES.documents },
   { to: "/app/sessions", icon: Phone, label: PRODUCT_NAMES.sessionHistory },
   { to: "/app/debrief", icon: MessageSquare, label: PRODUCT_NAMES.debrief },
-  { to: "/app/interview-day", icon: Sunrise, label: "Interview Day" },
+  { to: "/app/interview-day", icon: Sunrise, label: PRODUCT_NAMES.interviewDay },
   { to: "/app/interviews", icon: CalendarDays, label: PRODUCT_NAMES.interviews },
   { to: "/app/companies", icon: Building2, label: PRODUCT_NAMES.companyResearch },
   { to: "/app/answers", icon: BookOpen, label: PRODUCT_NAMES.answerBank },
   { to: "/app/notifications", icon: Bell, label: "Notifications" },
-  { to: "/app/referrals", icon: Gift, label: "Referrals" },
+  { to: "/app/referrals", icon: Gift, label: PRODUCT_NAMES.referrals },
   { to: "/app/guide/practice-coach", icon: BookMarked, label: "Guide" },
-  { to: "/app/profile", icon: UserRound, label: "Profile" },
+  { to: "/app/settings/profile", icon: UserRound, label: "Profile" },
   { to: "/app/settings", icon: Settings, label: "Settings" },
   { to: "/app/admin", icon: Shield, label: "Admin", adminOnly: true },
 ];

@@ -82,7 +82,7 @@ const COMMANDS: NavCommand[] = [
 
   { label: PRODUCT_NAMES.referrals, path: "/app/referrals", icon: Gift, group: "Navigate", keywords: "invite reward" },
 
-  { label: "Profile", path: "/app/profile", icon: User, group: "Account" },
+  { label: "Profile", path: "/app/settings/profile", icon: User, group: "Account" },
 
   { label: "Settings", path: "/app/settings", icon: Settings, group: "Account" },
 

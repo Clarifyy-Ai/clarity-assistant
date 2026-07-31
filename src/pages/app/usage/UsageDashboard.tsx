@@ -28,6 +28,16 @@ import {
   CardTitle,
 } from "@/components/ui/Card";
 import { openBillingPortal } from "@/lib/api/billing";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Legend,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { cn } from "@/lib/utils";
 
 type CreditTransaction = {
@@ -206,46 +216,32 @@ function StatCard({
 }
 
 function UsageTrend({ data }: { data: UsageDay[] }) {
-  const maxValue = Math.max(
-    1,
-    ...data.map((day) => Math.max(day.used, day.added))
-  );
+  const chartData = data.map((day) => ({
+    label: day.date.slice(5),
+    used: day.used,
+    added: day.added,
+  }));
 
   return (
-    <div className="flex items-end gap-2 h-40">
-      {data.map((day) => {
-        const usedHeight = Math.max(
-          4,
-          Math.round((day.used / maxValue) * 130)
-        );
-
-        const addedHeight = Math.max(
-          4,
-          Math.round((day.added / maxValue) * 130)
-        );
-
-        return (
-          <div key={day.date} className="flex-1 flex flex-col items-center gap-1">
-            <div className="w-full flex items-end justify-center gap-1 h-32">
-              <div
-                title={`${day.date}: ${day.used} used`}
-                className="w-2 rounded-t bg-red-500/70"
-                style={{ height: usedHeight }}
-              />
-
-              <div
-                title={`${day.date}: ${day.added} added`}
-                className="w-2 rounded-t bg-emerald-500/70"
-                style={{ height: addedHeight }}
-              />
-            </div>
-
-            <span className="text-[10px] text-muted-foreground">
-              {day.date.slice(5)}
-            </span>
-          </div>
-        );
-      })}
+    <div className="h-44 w-full" role="img" aria-label="Credits used and added over 14 days">
+      <ResponsiveContainer width="100%" height="100%">
+        <BarChart data={chartData} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
+          <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+          <XAxis dataKey="label" tick={{ fontSize: 10 }} />
+          <YAxis tick={{ fontSize: 10 }} />
+          <Tooltip
+            contentStyle={{
+              background: "hsl(var(--popover))",
+              border: "1px solid hsl(var(--border))",
+              borderRadius: 8,
+              fontSize: 12,
+            }}
+          />
+          <Legend wrapperStyle={{ fontSize: 12 }} />
+          <Bar dataKey="used" name="Used" fill="hsl(0 84% 60%)" radius={[3, 3, 0, 0]} />
+          <Bar dataKey="added" name="Added" fill="hsl(142 71% 45%)" radius={[3, 3, 0, 0]} />
+        </BarChart>
+      </ResponsiveContainer>
     </div>
   );
 }

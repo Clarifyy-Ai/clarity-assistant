@@ -1,0 +1,1900 @@
+================================================================================
+CLARIFY AI — COMPLETE UI/UX IMPLEMENTATION AUDIT
+Detailed inventory of every feature, screen, flow, popup, form, dashboard,
+and workflow — documented for redesign and UX enhancement planning.
+================================================================================
+
+Product name .......... Clarify AI  (package: "clarify-ai")
+Repo folder ........... clarity-assistant
+Audit date ............ 30 July 2026
+Audited by ............ Cursor Agent (source-code UI/UX audit)
+Audit method .......... Direct reading of routes (App.tsx), every page under
+                        src/pages/, layout/shell components, shared UI library,
+                        feature components, design tokens (index.css), and
+                        navigation config. No live browser walkthrough.
+
+RELATED DOCUMENTS
+  CLARIFY_AI_FULL_APPLICATION_AUDIT.txt .... feature/backend status audit
+  docs/UI_UX_PRODUCTION_AUDIT.md ........... earlier production polish cycle
+                                           (June 2026; some fixes shipped)
+
+WHAT THIS DOCUMENT IS FOR
+  Capture HOW the existing UI/UX is implemented across the whole app so the
+  product can be redesigned consistently. Each feature section uses a fixed
+  template (name, purpose, components, UX flow, navigation, interactions,
+  patterns, mobile, a11y, issues, suggestions, priority).
+
+PRIORITY MEANING (redesign importance)
+  High ..... Core journey / daily use / first impression / high confusion risk
+  Medium ... Frequent but secondary; inconsistency hurts polish
+  Low ...... Rare, polish-only, or internal/admin surfaces
+
+
+--------------------------------------------------------------------------------
+TABLE OF CONTENTS
+--------------------------------------------------------------------------------
+PART 0   EXECUTIVE SUMMARY & CROSS-CUTTING FINDINGS
+PART 1   DESIGN SYSTEM & GLOBAL CHROME
+PART 2   MARKETING PORTAL
+PART 3   AUTHENTICATION
+PART 4   ONBOARDING
+PART 5   APP SHELL & GLOBAL OVERLAYS
+PART 6   DASHBOARD & HOME
+PART 7   PRACTICE COACH (LIVE) & OVERLAY
+PART 8   MOCK INTERVIEW
+PART 9   PREP LAB & PREP TOOLS
+PART 10  SESSIONS, SCORECARD & DEBRIEF
+PART 11  DOCUMENTS
+PART 12  ANSWER BANK
+PART 13  INTERVIEWS & INTERVIEW DAY
+PART 14  COMPANY RESEARCH
+PART 15  ANALYTICS, USAGE, PROFILE, NOTIFICATIONS, REFERRALS
+PART 16  SETTINGS (ALL PAGES)
+PART 17  GOV EXAM MOCK TEST SUITE
+PART 18  GUIDE
+PART 19  ADMIN PORTAL
+PART 20  ELECTRON / DESKTOP UX
+PART 21  MASTER ISSUE REGISTER
+PART 22  REDESIGN ROADMAP RECOMMENDATIONS
+
+
+================================================================================
+PART 0 — EXECUTIVE SUMMARY & CROSS-CUTTING FINDINGS
+================================================================================
+
+0.1 PRODUCT UX IN ONE PARAGRAPH
+-------------------------------
+Clarify AI is a practice-first interview coaching product with a second product
+line for Indian government/competitive exam MCQ tests. Web users live inside an
+AppShell (sidebar + top bar + mobile bottom nav). The core practice experience
+is a floating dark-glass Overlay (hints, chat, transcript, stealth controls)
+launched from Practice Coach or Mock Interview. Marketing, Auth, Onboarding,
+Admin, Overlay, and Timed Test Session each use a different chrome — five visual
+"worlds" users move between.
+
+0.2 HEADLINE UI/UX VERDICT
+--------------------------
+Strengths: real design tokens (light/dark/stealth), shadcn/Radix foundation,
+shared PageHeader / EmptyState / InlineErrorRetry on many pages, strong Practice
+Coach / Overlay depth, command palette, compliance messaging, reduced-motion
+support.
+
+Weaknesses: pattern fragmentation. Dual Button/Card systems, mixed Modal vs
+Dialog, emoji in chrome/tabs, naming collisions (Practice Coach / Live /
+Overlay / Rehearsal; Question Bank vs Answer Bank), duplicate STAR builders,
+Settings preference sprawl, dual mobile navigation (hamburger sidebar + bottom
+nav), and uneven adoption of empty/error/loading patterns.
+
+0.3 FIVE CHROME WORLDS
+----------------------
+  1. MarketingLayout ........ public marketing + help/blog/legal
+  2. Auth split-panel ....... Login / Signup / VerifyEmail (ResetPassword differs)
+  3. AppShell ............... main product (sidebar / topbar / mobile nav)
+  4. Overlay / full-screen .. Practice Coach overlay, LiveOverlay route,
+                              Mock Test timed session (no AppShell)
+  5. AdminLayout ............ standalone red-accent ops shell
+
+0.4 CROSS-CUTTING INCONSISTENCIES
+---------------------------------
+  - Page wrappers: some use PageHeader + breadcrumbs; Dashboard/Scorecard/Live
+    active/SharedDebrief diverge.
+  - Nested PageContent: AppShell already wraps Outlet in PageContent; some pages
+    wrap again.
+  - Empty/error: EmptyState + InlineErrorRetry common; Blog, Interviews list,
+    AnswerDetail, AuthCallback invent their own.
+  - Forms: mix of shared Input, raw <input>/<textarea>, native date/select,
+    shadcn Select.
+  - Booleans: Switch vs Radix Toggle (often miswired with checked/onChange) vs
+    chip/aria-pressed tiles.
+  - Charts: CSS bar charts on Analytics/Usage vs Recharts on mock-test Analytics.
+  - Naming: stealth maps still say "Live Co-Pilot" while product uses "Practice
+    Coach"; Behavioural vs Behavioral spelling drift.
+  - STAR: PrepLab hub embeds one STAR builder; /app/prep/star-builder is another.
+  - Answer Bank detail route exists but list does not link to it.
+  - Hardcoded violet-* utility classes in places bypass accent/stealth tokens.
+  - Emoji used as UI chrome (onboarding tiles, Prep tabs, Analytics tabs,
+    CookieConsent, Interview Day CTA).
+
+
+================================================================================
+PART 1 — DESIGN SYSTEM & GLOBAL CHROME
+================================================================================
+
+--------------------------------------------------------------------------------
+FEATURE: Design System (tokens, theme, component libraries)
+--------------------------------------------------------------------------------
+Feature name ............. Design System & Theme
+Purpose .................. Visual language, light/dark/stealth, shared primitives
+Current UI components ....
+  - Tokens: src/index.css CSS variables (background, primary indigo ~239 84% 67%,
+    accent cyan, destructive, muted, sidebar, chart-1..5, overlay glass vars)
+  - Tailwind: darkMode class; brand.50–950; status success/warning/danger
+  - Typography: Inter (sans), JetBrains Mono / Fira Code (mono)
+  - Radius: --radius 0.625rem; density via --spacing-scale
+  - Motion: --motion-fast/base/slow; prefers-reduced-motion override
+  - Custom branded: Button, Card, Input, Modal, Tabs, Badge, ProgressBar,
+    Spinner, ThemeToggle, Toggle, DataTable, SkeletonLoader
+  - shadcn/Radix: dialog, alert-dialog, sheet, select, switch, command, dropdown,
+    accordion, toast/sonner, skeleton, table, form, slider, checkbox, radio,
+    tooltip, breadcrumb, sidebar, etc.
+  - Appearance prefs: accent (violet/blue/emerald/rose/amber/cyan), font size
+    (14/16/18), density (compact/default/comfortable)
+Current UX flow .......... ThemeToggle / Settings Appearance → uiStore +
+                           themeStore → html.dark + data-theme + data-stealth
+Navigation flow .......... Global (not a page)
+User interactions ........ Theme cycle, accent/density save, Discrete/Stealth
+Design patterns .......... Semantic HSL tokens; overlay always-dark glass;
+                           Stealth remaps primary to blue and nav labels/icons
+Mobile responsiveness .... Density + font size scale; safe-top/safe-bottom utils
+Accessibility ............ focus-visible rings; reduced-motion; skip links in
+                           AppShell + MarketingLayout
+UI/UX issues ............. Dual Button/Card APIs; Modal vs Dialog; Toggle misuse;
+                           hardcoded violet utilities; unused drawer/popover
+                           consumers; emoji outside design system
+Suggestions .............. Single Button/Card/Modal kit; ban emoji in chrome;
+                           codemod violet-* → semantic tokens; one Switch for
+                           booleans; deprecate unused primitives or adopt them
+Priority ................. High
+
+
+--------------------------------------------------------------------------------
+FEATURE: App Shell (Sidebar, Top Bar, Mobile Nav)
+--------------------------------------------------------------------------------
+Feature name ............. App Shell Chrome
+Purpose .................. Persistent navigation and global actions for /app/*
+Current UI components .... AppSidebar, AppTopBar, MobileNav, PageContent,
+                           NetworkBanner, SessionTimeoutBanner, SetupChecklist,
+                           UpgradeModal, AppWalkthrough, InstallPromptModal
+Current UX flow ..........
+  1. Authenticated onboarded user enters /app
+  2. Sees sidebar (desktop) or hamburger + bottom nav (mobile)
+  3. Top bar: credits → upgrade, Discrete UI, theme, Ctrl/Cmd+K palette,
+     notifications, account menu
+  4. Main content max-w-7xl padded; MobileNav reserves pb-16
+  5. Live active/paused OR Electron: chrome hidden
+Navigation flow ..........
+  Sidebar sections (productNames):
+    Practice: Dashboard, Practice Coach, Mock Interview, Prep Lab, Gov Exams
+    Progress: Sessions, Analytics, Credits & Usage, Debrief, Referrals,
+              Documents, Answer Bank
+    Planner: Interview Day, Interviews, Company Research
+    Footer: Guide, Notifications, Settings, Admin (gated), avatar + logout
+  Mobile bottom: Home | Coach | Mock | Prep | Gov Exams | More (sheet)
+User interactions ........ Nav clicks, collapse sidebar (Ctrl/Cmd+B), hover
+                           expand, stealth label remap, prefetch on hover
+Design patterns .......... Sectioned IA; Stealth mode parallel labels; skip link
+Mobile responsiveness .... md breakpoint; dual mobile entry (drawer + bottom nav)
+Accessibility ............ aria-labels on icon buttons; Main/Mobile nav labels;
+                           skip to #main-content
+UI/UX issues ............. Dual mobile chrome cognitive load; Interviews +
+                           Interview Day same CalendarDays icon; Sessions/
+                           Documents/Answers buried in More; stealth label drift;
+                           credits click opens UpgradeModal not Usage
+Suggestions .............. One mobile pattern (prefer bottom nav + More, drop
+                           hamburger OR make hamburger = More); distinct Planner
+                           icons; surface Sessions in primary mobile IA
+Priority ................. High
+
+
+--------------------------------------------------------------------------------
+FEATURE: Command Palette
+--------------------------------------------------------------------------------
+Feature name ............. Command Palette
+Purpose .................. Power-user jump navigation and quick actions
+Current UI components .... CommandDialog (cmdk), AppTopBar search trigger
+Current UX flow .......... Ctrl/Cmd+K → type → Navigate / Sessions / Prep /
+                           Account groups → route or toggle
+Navigation flow .......... Global within AppShell
+User interactions ........ Keyboard open, typeahead, Enter select
+Design patterns .......... Spotlight search
+Mobile responsiveness .... Usable but small-screen keyboard awkward
+Accessibility ............ Keyboard-first; dialog focus trap via Radix
+UI/UX issues ............. Discoverability depends on TopBar icon knowledge
+Suggestions .............. First-run tip; include Mock Test + Admin when gated
+Priority ................. Low
+
+
+--------------------------------------------------------------------------------
+FEATURE: Global Banners, Toasts, Cookie Consent, Upgrade Modal
+--------------------------------------------------------------------------------
+Feature name ............. Global Overlays & Feedback
+Purpose .................. Billing prompts, network/session warnings, cookies,
+                           toast feedback, install prompts
+Current UI components .... UpgradeModal (Modal), LowCreditBanner, CookieConsent,
+                           Sonner Toaster, NetworkBanner, SessionTimeoutBanner,
+                           InstallPromptModal (Dialog), AppWalkthrough,
+                           TabAudioGuideHost (Dialog), ConfirmDialog (AlertDialog)
+Current UX flow .......... Triggered by credit state, offline, JWT expiry,
+                           first visit, cookie delay, audio setup needs
+Navigation flow .......... Modal → Settings Billing / Pricing / external Stripe
+User interactions ........ Accept/decline cookies, upgrade checkout, extend
+                           session, dismiss walkthrough steps
+Design patterns .......... Banner + modal + toast triad
+Mobile responsiveness .... Cookie banner may compete with MobileNav z-index;
+                           UpgradeModal scrolls on small screens
+Accessibility ............ Dialog titles; some banners lack live regions
+UI/UX issues ............. Cookie emoji; LowCredit thresholds differ from TopBar
+                           pulse; success URL /settings/credits redirects
+Suggestions .............. Align credit thresholds; ensure cookie above bottom
+                           nav with safe-area; remove emoji from consent
+Priority ................. Medium
+
+
+================================================================================
+PART 2 — MARKETING PORTAL
+================================================================================
+
+--------------------------------------------------------------------------------
+FEATURE: Landing Page (/)
+--------------------------------------------------------------------------------
+Feature name ............. Landing
+Purpose .................. Acquire users; explain practice-only positioning;
+                           convert to signup
+Current UI components .... MarketingLayout, BrandLogo, ProductDemoHero,
+                           PracticeCoachWalkthrough, FeatureShowcase,
+                           GovExamShowcase, AiProviderStrip, Accordion FAQ,
+                           Framer Motion sections, comparison table, plan teasers,
+                           ThemeToggle
+Current UX flow ..........
+  1. Hero + primary CTA (Get started / Log in)
+  2. Features / How it works / comparison / testimonials
+  3. FAQ accordion → Pricing teaser → Signup
+Navigation flow .......... Marketing nav → Features hash, Gov Exams, Pricing,
+                           Shortcuts, Blog, Help, Log in, Get started
+User interactions ........ Scroll, CTAs, accordion expand, theme toggle, mobile
+                           hamburger
+Design patterns .......... Dark-friendly indigo→cyan marketing; rounded-2xl
+                           cards; fade-up motion; compliance/practice messaging
+Mobile responsiveness .... Nav collapses <md; stacked sections; hero scales
+Accessibility ............ Skip link; Accordion semantics; motion respects
+                           reduced-motion
+UI/UX issues ............. Dense below-fold; multiple CTAs compete; hero budget
+                           heavy vs "one composition" ideal
+Suggestions .............. Tighten first viewport to brand + one headline + one
+                           CTA + one dominant product visual; defer secondary
+                           strips
+Priority ................. High
+
+
+--------------------------------------------------------------------------------
+FEATURE: Pricing (/pricing)
+--------------------------------------------------------------------------------
+Feature name ............. Pricing
+Purpose .................. Plan comparison and conversion
+Current UI components .... MarketingLayout, monthly/annual toggle (aria-pressed),
+                           custom plan cards (not shared PricingCard),
+                           ComplianceBanner, CTAs to /signup?plan=
+Current UX flow .......... Toggle billing period → compare plans → signup CTA
+Navigation flow .......... Marketing nav; signup with plan query
+User interactions ........ Billing toggle, plan CTA clicks
+Design patterns .......... Toggle + card grid; highlighted "popular" plan
+Mobile responsiveness .... Stacked plan cards
+Accessibility ............ aria-pressed on billing toggle
+UI/UX issues ............. Plan cards diverge from in-app UpgradeModal /
+                           SettingsBilling PricingCard; client/server plan drift
+                           (product issue reflected in UI)
+Suggestions .............. Single PricingCard component for marketing + modal +
+                           settings
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Gov Exams Marketing (/gov-exams)
+--------------------------------------------------------------------------------
+Feature name ............. Gov Exams Marketing
+Purpose .................. Promote MCQ mock-test product line
+Current UI components .... MarketingLayout, GovExamShowcase, exam type cards,
+                           CTAs
+Current UX flow .......... Read value props → pick exam interest → Signup/Login
+Navigation flow .......... Marketing nav; later in-app /app/mock-test (India gate)
+User interactions ........ CTA, exam cards
+Design patterns .......... Showcase + card grid
+Mobile responsiveness .... Stacked
+Accessibility ............ Standard marketing patterns
+UI/UX issues ............. In-app hub also embeds marketing showcase (redundant)
+Suggestions .............. Keep marketing rich; keep in-app hub task-focused
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Help Center (/help, /help/:slug)
+--------------------------------------------------------------------------------
+Feature name ............. Help Center
+Purpose .................. Self-serve FAQ and articles
+Current UI components .... MarketingLayout, Input search, custom expand FAQ
+                           (not Accordion), EmptyState, InlineErrorRetry,
+                           skeleton pulse, ComplianceBanner (index)
+Current UX flow .......... Search → expand FAQ or open article slug
+Navigation flow .......... /help → /help/:slug
+User interactions ........ Search filter, expand/collapse, article links
+Design patterns .......... Searchable FAQ + article detail
+Mobile responsiveness .... Full-width content
+Accessibility ............ Search aria-label; aria-busy on load; custom accordion
+                           may lack aria-expanded
+UI/UX issues ............. Custom accordion vs Landing Accordion; Blog empty/
+                           error weaker than Help
+Suggestions .............. Use Accordion primitive; share Help empty pattern
+                           with Blog
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Blog (/blog, /blog/:slug)
+--------------------------------------------------------------------------------
+Feature name ............. Blog
+Purpose .................. Content marketing
+Current UI components .... MarketingLayout, Link card grid, category badges,
+                           skeletons; empty/error as plain text
+Current UX flow .......... Browse cards → open post
+Navigation flow .......... /blog → /blog/:slug
+User interactions ........ Card hover "Read more"
+Design patterns .......... Content card grid
+Mobile responsiveness .... Responsive grid
+Accessibility ............ Standard links
+UI/UX issues ............. No EmptyState / InlineErrorRetry (inconsistent with
+                           Help)
+Suggestions .............. Match Help state patterns
+Priority ................. Low
+
+
+--------------------------------------------------------------------------------
+FEATURE: Shortcuts, Terms, Privacy
+--------------------------------------------------------------------------------
+Feature name ............. Shortcuts / Terms / Privacy
+Purpose .................. Public keyboard reference and legal pages
+Current UI components .... MarketingLayout; Shortcuts: kbd badges in bordered
+                           rows; Terms/Privacy: prose articles; Terms has
+                           ComplianceBanner, Privacy does not
+Current UX flow .......... Scan/read
+Navigation flow .......... Footer + marketing nav (Shortcuts)
+User interactions ........ Scroll, theme toggle
+Design patterns .......... Prose legal; reference list for shortcuts
+Mobile responsiveness .... Shortcuts uses louder/fixed spacing vs siblings
+Accessibility ............ Prose readable; kbd elements
+UI/UX issues ............. Privacy missing ComplianceBanner; Shortcuts H1/
+                           padding louder than Help/Blog
+Suggestions .............. Standardize page template; add ComplianceBanner to
+                           Privacy
+Priority ................. Low
+
+
+--------------------------------------------------------------------------------
+FEATURE: Shared Debrief (/share/:token)
+--------------------------------------------------------------------------------
+Feature name ............. Shared Debrief (public)
+Purpose .................. Read-only shared scorecard/debrief via token
+Current UI components .... Card, Badge, ProgressBar, spinner, AlertTriangle —
+                           NO MarketingLayout
+Current UX flow .......... Open link → load by token → read summary
+Navigation flow .......... Isolated; home link mainly on error
+User interactions ........ Read-only
+Design patterns .......... Standalone report card
+Mobile responsiveness .... max-w-2xl centered — fine
+Accessibility ............ Decorative check glyphs
+UI/UX issues ............. Outside brand chrome — looks unbranded vs marketing
+Suggestions .............. Minimal branded shell (logo + theme + footer)
+Priority ................. High (if sharing is a growth loop)
+
+
+================================================================================
+PART 3 — AUTHENTICATION
+================================================================================
+
+--------------------------------------------------------------------------------
+FEATURE: Login (/login)
+--------------------------------------------------------------------------------
+Feature name ............. Login
+Purpose .................. Email/password + OAuth sign-in; MFA step
+Current UI components .... Split panel (gradient brand left lg+, form right),
+                           BrandLogo, Input, Button, OAuth buttons (Google,
+                           GitHub, LinkedIn, Azure), password visibility toggle,
+                           remember-me, CSRF hidden field, MFA code step
+Current UX flow ..........
+  1. Enter email/password OR OAuth
+  2. Optional MFA code
+  3. Redirect: admin | onboarding | dashboard
+Navigation flow .......... ↔ Signup; → Forgot password; post-auth routing
+User interactions ........ Form submit, OAuth clicks, show/hide password, MFA
+Design patterns .......... Marketing-style auth panel; inline errors
+Mobile responsiveness .... Left panel hidden <lg; form centered max-w-sm
+Accessibility ............ Labels via Input; password toggle labeling varies
+UI/UX issues ............. Visual system differs from ResetPassword Card layout
+Suggestions .............. Shared AuthShell for all auth pages
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Signup (/signup)
+--------------------------------------------------------------------------------
+Feature name ............. Signup
+Purpose .................. Registration with password strength + terms + referral
+Current UI components .... Same split panel as Login; password strength meter +
+                           checklist; terms checkbox; OAuth
+Current UX flow .......... Fill form → success "check email" → VerifyEmail gate
+Navigation flow .......... ↔ Login; plan query from Pricing
+User interactions ........ Live strength feedback, OAuth, terms accept
+Design patterns .......... Progressive password requirements
+Mobile responsiveness .... Same as Login
+Accessibility ............ Checklist text good; emoji not primary
+UI/UX issues ............. Success screen overlaps VerifyEmail messaging
+Suggestions .............. One clear post-signup verification journey
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Verify Email (/verify-email)
+--------------------------------------------------------------------------------
+Feature name ............. Verify Email
+Purpose .................. Gate unverified users; resend with cooldown
+Current UI components .... Split-panel style, resend button (60s), sign out
+Current UX flow .......... Wait for confirm → auto redirect; or resend / sign out
+Navigation flow .......... ProtectedRoute redirect when email unverified
+User interactions ........ Resend, sign out
+Design patterns .......... Waiting gate screen
+Mobile responsiveness .... Mobile brand strip
+Accessibility ............ Status messaging
+UI/UX issues ............. Can feel like duplicate of signup success
+Suggestions .............. Merge copy with signup success; clearer next steps
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Reset Password (/forgot-password, /reset-password)
+--------------------------------------------------------------------------------
+Feature name ............. Reset Password
+Purpose .................. Request reset email; set new password
+Current UI components .... FormWrapper, Card/CardHeader/Content/Footer, Label,
+                           Alert, Framer AnimatePresence, strength bar
+Current UX flow .......... Email request → success; link → new password → login
+Navigation flow .......... From Login "Forgot"; after reset → Login
+User interactions ........ Form submit, password strength
+Design patterns .......... Card-centered auth (different from Login split)
+Mobile responsiveness .... Centered card
+Accessibility ............ Labels + Alert
+UI/UX issues ............. Different visual language from Login/Signup; duplicated
+                           strength meter colors differ
+Suggestions .............. Unify under AuthShell; one PasswordStrength component
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Auth Callback (/auth/callback)
+--------------------------------------------------------------------------------
+Feature name ............. Auth Callback
+Purpose .................. Complete OAuth/magic-link; route to destination
+Current UI components .... Centered spinner or timeout error + link
+Current UX flow .......... Wait profile → /app/admin | /onboarding | dashboard
+Navigation flow .......... Provider/email → callback → destination
+User interactions ........ Wait; error link to login
+Design patterns .......... Minimal loader
+Mobile responsiveness .... Fine
+Accessibility ............ No live region on spinner
+UI/UX issues ............. Sparse vs polished auth pages
+Suggestions .............. Branded loader + clearer failure states
+Priority ................. Low
+
+
+================================================================================
+PART 4 — ONBOARDING
+================================================================================
+
+--------------------------------------------------------------------------------
+FEATURE: Onboarding Wizard (/onboarding)
+--------------------------------------------------------------------------------
+Feature name ............. Onboarding (5 steps)
+Purpose .................. Collect role, experience, AI prefs, mic test, resume
+                           before app access
+Current UI components .... OnboardingIndex orchestrator, custom StepProgressBar
+                           (motion), Button, Input, ProgressBar, emoji selection
+                           grids, anxiety slider, mic visualizer, drag-drop
+                           upload, CompletionScreen, Sonner toasts
+Current UX flow ..........
+  1. Role: name + role tiles + industry → persist
+  2. Experience: level + companies + anxiety 1–5 → persist
+  3. Preferences: styles, hint style, tone, model (plan-gated) — skippable
+  4. Audio: 3s mic record + playback — skippable
+  5. Resume: PDF/DOCX upload + AI parse preview — skippable
+  6. Completion celebration → Dashboard
+  Note: ?rerun=1 from settings restarts
+Navigation flow .......... Protected /onboarding; old /onboarding/step-N → index
+User interactions ........ Tile selects, inputs, mic permission, file drop,
+                           Back/Next/Skip
+Design patterns .......... Multi-step wizard; selection tiles with primary border;
+                           heavy emoji; per-step DB writes
+Mobile responsiveness .... Progress labels hidden md:block; grids 2→4 cols;
+                           max-w-lg
+Accessibility ............ Buttons for tiles (good); emoji-heavy cues; slider
+                           needs clearer value labels
+UI/UX issues .............
+  - Step 1 role_type vs Step 2 overwriting role_type with experience (confusing)
+  - Long 5-step path for free signup
+  - Skip consequences unclear for audio/resume
+  - Visual language (emoji tiles) ≠ later app chrome
+Suggestions .............. 3 required steps + optional advanced; fix field copy;
+                           icon tiles not emoji; show "why this matters" on skips
+Priority ................. High
+
+
+================================================================================
+PART 5 — APP SHELL & GLOBAL OVERLAYS
+================================================================================
+(Covered in Part 1: App Shell, Command Palette, Global Overlays)
+
+
+================================================================================
+PART 6 — DASHBOARD & HOME
+================================================================================
+
+--------------------------------------------------------------------------------
+FEATURE: Dashboard (/app/dashboard)
+--------------------------------------------------------------------------------
+Feature name ............. Dashboard
+Purpose .................. Daily home: readiness, streak/credits, quick launch,
+                           upcoming interview, recent sessions, setup checklist
+Current UI components .... Card, Badge, ProgressBar, XPProgressRing, Tooltip,
+                           Skeleton/SkeletonCard, EmptyState, InlineErrorRetry,
+                           SetupChecklist, LowCreditBanner, DesktopDownloadButton,
+                           StatCard / Readiness / XP / Documents cards
+Current UX flow ..........
+  1. Greeting + banners (credits / setup / desktop download)
+  2. Quick actions / launch cards
+  3. Stats + readiness + XP + docs status
+  4. Today's interview strip
+  5. Recent sessions → navigate out
+Navigation flow .......... Sidebar Home; quick links to live, mock, overlay, prep,
+                           mock-test, analytics, documents
+User interactions ........ Link cards, retry, dismiss checklist, open billing
+Design patterns .......... Dense card dashboard; gamification chips; stealth
+                           alternate labels; gradient primary CTA card
+Mobile responsiveness .... Header stacks; chips wrap; grids collapse
+Accessibility ............ Tooltip on readiness; emoji greeting; credit color cues
+UI/UX issues ............. Information density high for new users; Quick Launch
+                           vs Quick Actions overlap; Overlay vs Practice Coach
+                           naming split
+Suggestions .............. Progressive disclosure for new users; one primary CTA;
+                           clarify Coach vs Overlay
+Priority ................. High
+
+
+================================================================================
+PART 7 — PRACTICE COACH (LIVE) & OVERLAY
+================================================================================
+
+--------------------------------------------------------------------------------
+FEATURE: Practice Coach Setup & Session (/app/live)
+--------------------------------------------------------------------------------
+Feature name ............. Practice Coach (Live Rehearsal)
+Purpose .................. Core value: live AI practice with mic/system audio and
+                           floating overlay hints
+Current UI components .... PreSessionSetupWizard (6 steps), amber practice-only
+                           banner, DesktopDownloadButton, CreditExhaustedState,
+                           OverlayWindow (+ ~30 overlay subcomponents),
+                           OverlayKeyboardHandler, LiveSessionController,
+                           CallSessionLifecycleBanner, Show Overlay FAB,
+                           WindowVisibilityManager (on overlay route)
+Current UX flow ..........
+  1. Setup wizard: type → AI → docs → auto-gen → transcript → connect/audio
+  2. Start → preparing/active
+  3. Floating overlay for hints/chat/hotkeys; in-shell page shows minimal status
+  4. Pause / Resume / End → Scorecard or new session
+Navigation flow .......... Sidebar Practice Coach; Dashboard; post-session →
+                           /app/scorecard/:id; Electron opens web for non-overlay
+User interactions ........ Multi-step wizard, toggles, model/hint selects,
+                           document picks, overlay drag/dock/minimize, hotkeys,
+                           Generate, Mute, End
+Design patterns .......... Wizard → immersive overlay; compliance banners; toast
+                           errors; desktop-first overlay
+Mobile responsiveness .... Overlay visibility notice; FAB may conflict with
+                           MobileNav; 6-step wizard painful on small screens
+Accessibility ............ role="note" banners; hotkeys assume keyboard literacy;
+                           custom Toggle may lack switch semantics; dense panels
+UI/UX issues .............
+  - Dual entry /app/live vs /app/live/overlay overlapping setup
+  - In-app page becomes empty status while UX is overlay ("broken" feel)
+  - 6-step wizard vs Mock flatter config
+  - Model ID naming differs from Mock
+Suggestions .............. One primary path; collapse wizard to 2–3 steps +
+                           advanced drawer; richer companion panel when overlay
+                           hidden; mobile-simplified coach; align model enums
+Priority ................. High
+
+
+--------------------------------------------------------------------------------
+FEATURE: Live Overlay Route (/app/live/overlay)
+--------------------------------------------------------------------------------
+Feature name ............. Dedicated Overlay Window
+Purpose .................. Full-screen / Electron overlay-first Practice Coach
+Current UI components .... Same OverlayWindow family; sticky back header; no
+                           AppShell sidebar
+Current UX flow .......... Same wizard + session; Electron boots here by default
+Navigation flow .......... Deep link; Electron hash router default
+User interactions ........ Same as Practice Coach + window/stealth window controls
+Design patterns .......... Always-dark glass; screen-capture blocker; stealth
+                           mouse guard
+Mobile responsiveness .... Mobile notice; not primary target
+Accessibility ............ Hotkey help panel; dense toolbar icon buttons with
+                           aria-labels in many cases
+UI/UX issues ............. Cognitive split with /app/live in-shell mode
+Suggestions .............. Treat overlay as THE session UI; in-shell only for
+                           setup/summary
+Priority ................. High
+
+
+--------------------------------------------------------------------------------
+FEATURE: Overlay Subsystem (panels & controls)
+--------------------------------------------------------------------------------
+Feature name ............. Overlay UI Panels
+Purpose .................. Real-time coaching surface during practice
+Current UI components .... OverlayToolbar, OverlayChatPanel, OverlayChatInput,
+                           OverlayQuestionPreview, OverlaySettings,
+                           OverlayAuditPanel, OverlayHotkeyHelp,
+                           OverlayActivityTimer, OverlayAnswerTimer,
+                           OverlayNetworkBadge, OverlayComplianceBanner,
+                           OverlayQuickStart, OverlaySetupGuidePanel,
+                           OverlayResizeHandles, ScreenCaptureBlocker,
+                           StealthMouseGuard, audio bars, tab bar
+Current UX flow .......... Dock/drag → tabs (hints/chat/resume/settings/audit) →
+                           generate answers → end session
+Navigation flow .......... Contained in overlay portal (#overlay-root z-index)
+User interactions ........ Hotkeys, chat, generate, mute, resize, minimize,
+                           stealth toggles
+Design patterns .......... Glass dark panel; compact density; proctor-aware
+UI/UX issues ............. High feature density; steep learning curve; guide not
+                           always discoverable from empty state
+Suggestions .............. Progressive disclosure; first-session coach marks;
+                           consolidate rarely used tabs
+Priority ................. High
+
+
+================================================================================
+PART 8 — MOCK INTERVIEW
+================================================================================
+
+--------------------------------------------------------------------------------
+FEATURE: Mock Interview Setup (/app/mock)
+--------------------------------------------------------------------------------
+Feature name ............. Mock Interview Setup
+Purpose .................. Configure timed free mock practice
+Current UI components .... PageHeader, Card, Button, PlanGate (imported), type
+                           tiles, company chips, custom toggle (role="switch"),
+                           raw <input> (not shared Input)
+Current UX flow .......... Pick type/company/role/count/warmup → create session →
+                           Warmup or Session
+Navigation flow .......... Breadcrumbs Dashboard → Mock; → /mock/warmup or
+                           /mock/session
+User interactions ........ Tile aria-pressed, warmup switch, Start
+Design patterns .......... Config cards; free-tier banner; emoji type icons
+Mobile responsiveness .... Type grid 2→5 cols (tight)
+Accessibility ............ Good aria-pressed / switch; decorative emoji
+UI/UX issues ............. "5 min session" copy vs selectable question counts;
+                           Behavioural spelling; config passed via route state
+                           (fragile on refresh)
+Suggestions .............. Persist config in URL/session id; reconcile duration
+                           copy; shared Input; shared interview-type constants
+Priority ................. High
+
+
+--------------------------------------------------------------------------------
+FEATURE: Mock Warmup (/app/mock/warmup)
+--------------------------------------------------------------------------------
+Feature name ............. Mock Warmup
+Purpose .................. Breathing + unscored warmup questions before scored
+                           mock
+Current UI components .... PageContent, PageHeader, ProgressBar, SkeletonCard,
+                           breathing circle, textarea answers
+Current UX flow .......... Breathe → answer ~10 warmup Qs → proceed to session
+Navigation flow .......... From setup; back to Mock
+User interactions ........ Auto-advance breathing, type answers, next
+Design patterns .......... Calm breathing visual + Q&A
+Mobile responsiveness .... Centered calm UI
+Accessibility ............ Visual breathing may need reduced-motion alternative
+UI/UX issues ............. @ts-nocheck; local-only feedback (not AI); optional
+                           skip unclear
+Suggestions .............. Explicit skip; reduced-motion static calm state
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Mock Session (/app/mock/session)
+--------------------------------------------------------------------------------
+Feature name ............. Mock Session
+Purpose .................. Active scored Q&A with transcript/metrics + overlay
+Current UI components .... MockConversationPanel, PreSessionSetup, OverlayWindow,
+                           Modal (skip/end confirm), Badge, ProgressBar,
+                           InlineErrorRetry, Skeleton, mic/timer controls
+Current UX flow .......... Questions → answer/next → skip/end confirm →
+                           summary/scorecard/debrief
+Navigation flow .......... Depends on route state; end → scorecard/debrief
+User interactions ........ Answer, next, skip, end, mute, overlay tools
+Design patterns .......... Conversation panel + timers + overlay reuse
+Mobile responsiveness .... Dense chrome
+Accessibility ............ Confirm modals good
+UI/UX issues ............. Overlay complexity added on top of mock panel;
+                           refresh loses state
+Suggestions .............. Server-backed session resume; simplify mobile to
+                           conversation-first
+Priority ................. High
+
+
+================================================================================
+PART 9 — PREP LAB & PREP TOOLS
+================================================================================
+
+--------------------------------------------------------------------------------
+FEATURE: Prep Lab Hub (/app/prep)
+--------------------------------------------------------------------------------
+Feature name ............. Prep Lab
+Purpose .................. Hub for offline prep tools and banks
+Current UI components .... PageHeader, Tabs (emoji labels), chip Links to tool
+                           routes, nested STARBuilder / QuestionBank / AITools /
+                           CompanyPrep, Card, Button, Badge, Modal, PlanGate
+Current UX flow .......... Open hub → switch tabs or jump to full-page tools →
+                           generate/save
+Navigation flow .......... Sidebar Prep Lab; ?tool= for tabs; links to /prep/*
+User interactions ........ Tabs, generate (credits), save, navigate tools
+Design patterns .......... Hub + deep tool pages; credit gating
+Mobile responsiveness .... Tabs wrap; 2-col grids stack
+Accessibility ............ Emoji in tab labels
+UI/UX issues ............. Duplicate STAR (hub vs /star-builder); "Question Bank"
+                           vs app "Answer Bank" naming collision; emoji tabs
+Suggestions .............. One STAR surface; rename hub bank; icon tabs;
+                           PrepToolLayout shared wrapper
+Priority ................. High
+
+
+--------------------------------------------------------------------------------
+FEATURE: STAR Builder (/app/prep/star-builder)
+--------------------------------------------------------------------------------
+Feature name ............. STAR Builder
+Purpose .................. Build Situation/Task/Action/Result stories; save to
+                           Answer Bank
+Current UI components .... PageHeader, Card, Button, Badge, Modal, textareas,
+                           AI polish/generate
+Current UX flow .......... Enter question → fill S/T/A/R → polish → save bank
+Navigation flow .......... Prep Lab link; breadcrumbs
+User interactions ........ Edit fields, AI generate, save, delete confirm
+Design patterns .......... Form + AI assist + save
+Mobile responsiveness .... Grids stack
+Accessibility ............ Standard form labels vary
+UI/UX issues ............. Duplicate of hub STAR with different features
+Suggestions .............. Single canonical STAR page; hub embeds same component
+Priority ................. High
+
+
+--------------------------------------------------------------------------------
+FEATURE: Project Builder (/app/prep/project-builder)
+--------------------------------------------------------------------------------
+Feature name ............. Project Builder
+Purpose .................. Project storytelling for interviews
+Current UI components .... PageHeader, Card, form fields, AI showcase, local
+                           library, optional Answer Bank save
+Current UX flow .......... Form → AI showcase → save local (+ optional bank)
+Navigation flow .......... Prep tools
+User interactions ........ Generate, save, browse local library
+Design patterns .......... Form + AI + library
+Mobile responsiveness .... Stacked form
+Accessibility ............ Standard
+UI/UX issues ............. Local-only storage vs cloud Answer Bank inconsistency
+Suggestions .............. Persist to cloud by default
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Rephraser (/app/prep/rephraser)
+--------------------------------------------------------------------------------
+Feature name ............. Rephraser
+Purpose .................. Rewrite answers in multiple styles
+Current UI components .... PageHeader, Card, textareas, style options, copy/save
+Current UX flow .......... Paste answer → choose styles → copy/save
+Navigation flow .......... Prep tools
+User interactions ........ Generate, copy, save to bank
+Design patterns .......... Input → multi-output cards
+Mobile responsiveness .... Stacked outputs
+Accessibility ............ Copy buttons need clear labels
+UI/UX issues ............. None critical beyond shared form inconsistency
+Suggestions .............. Shared PrepToolLayout
+Priority ................. Low
+
+
+--------------------------------------------------------------------------------
+FEATURE: Coding Hints (/app/prep/coding-hints)
+--------------------------------------------------------------------------------
+Feature name ............. Coding Hints
+Purpose .................. Coding interview problem hints + scratchpad
+Current UI components .... PageHeader, Card, CodeScratchpad, CodeHighlight,
+                           filter chips, hint depth controls
+Current UX flow .......... Filter problems → reveal hint/solution depths → code
+Navigation flow .......... Prep tools
+User interactions ........ Filters, reveal, scratchpad typing
+Design patterns .......... Problem list + progressive disclosure
+Mobile responsiveness .... Chips wrap; scratchpad cramped
+Accessibility ............ Filter chips often lack aria-pressed
+Suggestions .............. aria-pressed filters; mobile-friendly editor height
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: System Design (/app/prep/system-design)
+--------------------------------------------------------------------------------
+Feature name ............. System Design Prep
+Purpose .................. Topic breakdown + notes + whiteboard
+Current UI components .... PageHeader, Card, Whiteboard, notes, AI breakdown
+Current UX flow .......... Pick topic → notes/whiteboard → AI breakdown → save
+Navigation flow .......... Prep tools
+User interactions ........ Draw, type, generate, save
+Design patterns .......... Canvas + AI side panel
+Mobile responsiveness .... Whiteboard constrained on small screens
+Accessibility ............ Canvas hard for keyboard/screen reader users
+Suggestions .............. Provide non-canvas note-only path as default on mobile
+Priority ................. Medium
+
+
+================================================================================
+PART 10 — SESSIONS, SCORECARD & DEBRIEF
+================================================================================
+
+--------------------------------------------------------------------------------
+FEATURE: Session History (/app/sessions)
+--------------------------------------------------------------------------------
+Feature name ............. Session History
+Purpose .................. Browse past practice sessions
+Current UI components .... PageHeader, Input search, pill tabs (Recent/All +
+                           type filters), SkeletonCard, EmptyState,
+                           InlineErrorRetry, bordered list (table header
+                           hidden sm:grid), Badge, delete/view
+Current UX flow .......... Filter/search → open detail or delete → CTA to Live
+Navigation flow .......... Sidebar; /sessions/history → ?tab=all;
+                           /sessions/schedule → /interviews/new
+User interactions ........ Tabs, search, delete, navigate detail
+Design patterns .......... Filterable list → detail
+Mobile responsiveness .... Stacked rows; table header hidden
+Accessibility ............ List actions need consistent labels
+UI/UX issues ............. "Start Session" → Live only (not Mock); buried in
+                           mobile More
+Suggestions .............. Start Session chooser (Live vs Mock); elevate in
+                           mobile IA
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Session Detail (/app/sessions/:id)
+--------------------------------------------------------------------------------
+Feature name ............. Session Detail
+Purpose .................. Review Q&A, scores, share, export PDF
+Current UI components .... Card, Badge, Button, ProgressBar, Modal (share),
+                           expand/collapse answers, PDF export
+Current UX flow .......... Open → review → Scorecard / Debrief / Share / PDF
+Navigation flow .......... List → detail → scorecard/debrief
+User interactions ........ Expand answers, share clipboard, export, navigate
+Design patterns .......... Detail report with actions
+Mobile responsiveness .... Actions wrap
+Accessibility ............ Back button may lack accessible name; scores use
+                           color + text partially
+UI/UX issues ............. session_type may mismatch list type field; null score
+                           dimensions show as placeholders/0
+Suggestions .............. Align fields; labeled score dims; confirm destructive
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Scorecard (/app/scorecard/:sessionId)
+--------------------------------------------------------------------------------
+Feature name ............. Scorecard
+Purpose .................. Post-session scored report
+Current UI components .... Custom divs (often not Card/Button), EmptyState,
+                           InlineErrorRetry, SkeletonCard, expand questions,
+                           Share / Export JSON
+Current UX flow .......... End session → scorecard → share/export → debrief
+Navigation flow .......... From Live/Mock end; link to SharedDebrief token path
+User interactions ........ Expand, share, export
+Design patterns .......... Report page (outside PageHeader system)
+Mobile responsiveness .... Header actions wrap poorly
+Accessibility ............ Share/export aria-labels present
+UI/UX issues ............. Outside typical PageHeader/Card system; "Export JSON"
+                           with Download icon mismatch
+Suggestions .............. Use shared layout; real PDF export; unify share UX
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Debrief List (/app/debrief)
+--------------------------------------------------------------------------------
+Feature name ............. Debrief List
+Purpose .................. Browse AI post-session debriefs
+Current UI components .... Grade-colored tiles, Badge score, EmptyState → Mock
+Current UX flow .......... Browse → open detail
+Navigation flow .......... Sidebar Progress; detail /debrief/:id
+User interactions ........ Open item
+Design patterns .......... Grade tiles
+Mobile responsiveness .... Grid stacks
+Accessibility ............ Grade color needs text
+UI/UX issues ............. No search/filter/sort; breadcrumb omitted vs detail
+Suggestions .............. Add filters; PageHeader breadcrumbs
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Debrief Detail (/app/debrief/:id)
+--------------------------------------------------------------------------------
+Feature name ............. Debrief Detail
+Purpose .................. Full analysis: grade, skills, strengths/improvements,
+                           timelines, vocal charts, share
+Current UI components .... PageHeader, DebriefAnalyticsPanels, DebriefExtras,
+                           DebriefLoadingSteps, charts, share controls,
+                           EmptyState
+Current UX flow .......... Load by debrief id OR session id → generate if needed
+                           → long scroll report → share
+Navigation flow .......... List; Analytics/:sessionId redirects here
+User interactions ........ Generate, scroll sections, share
+Design patterns .......... Long-form analytics report
+Mobile responsiveness .... Long scroll; charts squeeze
+Accessibility ............ Emoji in generation copy; charts need text summaries
+UI/UX issues ............. Very long single page; generate vs view chrome differs
+Suggestions .............. Tabbed sections + sticky TOC; clearer generate mode
+Priority ................. High
+
+
+================================================================================
+PART 11 — DOCUMENTS
+================================================================================
+
+--------------------------------------------------------------------------------
+FEATURE: Documents Hub (/app/documents)
+--------------------------------------------------------------------------------
+Feature name ............. Documents
+Purpose .................. Manage resumes, JDs, cover letters, portfolios as AI
+                           context
+Current UI components .... PageHeader, Tabs (Resumes/JDs/Cover/Portfolio),
+                           UploadZone, DocumentSearchBar, DocumentPagination,
+                           card/table view toggle, Modal, ConfirmDialog,
+                           EmptyState, InlineErrorRetry, SkeletonCard, Badge
+Current UX flow .......... Upload/parse → set primary/active → open detail →
+                           edit/reparse/delete
+Navigation flow .......... Sidebar; detail routes resume/:id, jd/:id
+User interactions ........ Drag-drop multi-upload, rename, preview, download,
+                           sort, pagination, confirm delete
+Design patterns .......... Tabbed document manager; parse status badges
+Mobile responsiveness .... Card view preferred; table awkward
+Accessibility ............ Tab emoji aria-hidden wrappers; ConfirmDialog good
+UI/UX issues ............. Upload limits differ from onboarding (5MB vs 10MB /
+                           file types); Cover/Portfolio less polished than
+                           Resumes
+Suggestions .............. Align upload rules; equalize tab UX; clear "active
+                           for AI" indicator synced to Dashboard
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Resume Detail (/app/documents/resume/:id)
+--------------------------------------------------------------------------------
+Feature name ............. Resume Detail
+Purpose .................. Edit parsed resume + version history + reparse
+Current UI components .... Form edit, version history, Badge, Button, Cards
+Current UX flow .......... Open → edit fields → save / reparse / delete
+Navigation flow .......... Documents → detail → back
+User interactions ........ Edit, save, reparse
+Design patterns .......... Detail form + history
+Mobile responsiveness .... Form stacks
+Accessibility ............ Form labels
+UI/UX issues ............. Depth gap vs list management features
+Suggestions .............. Keep parity with list actions
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: JD Detail (/app/documents/jd/:id)
+--------------------------------------------------------------------------------
+Feature name ............. JD Detail
+Purpose .................. Edit JD + gap-analyze against resume
+Current UI components .... Edit form, resume picker, GitCompare gap analysis UI
+Current UX flow .......... Edit → select resume → run gap analysis
+Navigation flow .......... Documents → JD detail
+User interactions ........ Edit, compare
+Design patterns .......... Compare report
+Mobile responsiveness .... Compare tables wrap
+Accessibility ............ Standard
+UI/UX issues ............. None critical beyond density
+Suggestions .............. Summarize top gaps first
+Priority ................. Medium
+
+
+================================================================================
+PART 12 — ANSWER BANK
+================================================================================
+
+--------------------------------------------------------------------------------
+FEATURE: Answer Bank (/app/answers, /app/answers/:id)
+--------------------------------------------------------------------------------
+Feature name ............. Answer Bank
+Purpose .................. Store/reuse STAR and prep answers
+Current UI components .... List: PageHeader, Input, category pills, Card, Badge,
+                           expand/collapse, Modal add/delete, inline edit, copy.
+                           Detail: PageHeader breadcrumbs, Card, STAR grid,
+                           ConfirmDialog, textarea edit
+Current UX flow .......... Browse/filter → expand OR (theoretically) detail →
+                           add/edit/delete; Prep tools also write here
+Navigation flow .......... Sidebar Answer Bank; Prep save-to-bank; Detail
+                           breadcrumbs back — BUT list does not Link to detail
+User interactions ........ Search, category filter, expand, copy, inline edit,
+                           delete, add modal
+Design patterns .......... Expandable cards vs dedicated detail (incomplete wire)
+Mobile responsiveness .... Filters wrap; icon action row tight
+Accessibility ............ Icon actions often title-only not aria-label
+UI/UX issues ............. Detail orphaned from list; Behavioural vs STAR
+                           category mismatch; dual edit UX; Detail errors use
+                           custom Card not InlineErrorRetry
+Suggestions .............. Card click → Detail; unify categories; one edit
+                           pattern; consistent error components
+Priority ................. Medium
+
+
+================================================================================
+PART 13 — INTERVIEWS & INTERVIEW DAY
+================================================================================
+
+--------------------------------------------------------------------------------
+FEATURE: Interviews List (/app/interviews)
+--------------------------------------------------------------------------------
+Feature name ............. Interviews
+Purpose .................. Schedule/track interviews; Google Calendar sync
+Current UI components .... PageHeader, Button, Badge, Card, filter chips, month
+                           grouping, SkeletonCard, date block rows (ad-hoc empty,
+                           not EmptyState)
+Current UX flow .......... Load → filter → row actions (focus / details /
+                           practice) → delete on hover
+Navigation flow .......... Planner → Interviews; CTA new; today → Interview Day;
+                           practice → /mock?company=
+User interactions ........ Calendar sync toasts; delete (no confirm); hover trash
+Design patterns .......... Chip filters; calendar date tiles; today highlight
+Mobile responsiveness .... Filters wrap; hover-gated delete fails on touch
+Accessibility ............ Filter chips lack aria-pressed; delete unlabeled;
+                           emoji CTA
+UI/UX issues ............. No EmptyState; no delete confirm; same CalendarDays
+                           icon as Interview Day
+Suggestions .............. Confirm delete; always-visible mobile actions;
+                           EmptyState; distinct icons
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: New / Edit Interview (/app/interviews/new, /:id/edit)
+--------------------------------------------------------------------------------
+Feature name ............. New / Edit Interview
+Purpose .................. Create/edit interview + round; link JD/resume
+Current UI components .... Back chevron + PageHeader; sectioned Cards; chip
+                           pickers; native date/select (not shared Select/Input);
+                           calendar banner
+Current UX flow .......... Company/role → type/round → schedule → docs →
+                           platform → notes → submit → list or detail
+Navigation flow .......... Back/cancel → list; edit → detail
+User interactions ........ Form fill, calendar connect, chips aria-pressed
+Design patterns .......... Multi-card form; role="alert" errors
+Mobile responsiveness .... max-w-2xl; platform grid 3-col tight
+Accessibility ............ Stronger labels/aria-required than list page
+UI/UX issues ............. @ts-nocheck; native controls diverge; edit updates
+                           only current round
+Suggestions .............. Shared form controls; multi-round editor
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Interview Detail (/app/interviews/:id)
+--------------------------------------------------------------------------------
+Feature name ............. Interview Detail
+Purpose .................. Detail + prep checklist + deep links to Mock/Company
+Current UI components .... Breadcrumbs, status Badge, 2-col meta, checklist +
+                           progress, hover Cards
+Current UX flow .......... Load → today banner → checklist → Mark complete /
+                           Edit / Delete → practice/research
+Navigation flow .......... Breadcrumb list; company profile; mock with query
+User interactions ........ Checklist toggles, mark complete, edit, delete
+Design patterns .......... Detail + checklist + related actions
+Mobile responsiveness .... Meta grid stacks
+Accessibility ............ Standard
+UI/UX issues ............. Checklist not persisted; delete no confirm
+Suggestions .............. Persist checklist per interview; confirm delete
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Interview Day (/app/interview-day)
+--------------------------------------------------------------------------------
+Feature name ............. Interview Day (Focus Mode)
+Purpose .................. Day-of calm focus: countdown, affirmations, breathing,
+                           checklist, launch Coach
+Current UI components .... Gradient hero Card, affirmation ticker, breathing
+                           visual + ProgressBar, checklist, full-width CTA
+Current UX flow .......... Find today's interview → countdown → calm tools →
+                           checklist → Launch Coach (/app/live)
+Navigation flow .......... Planner; empty → schedule new
+User interactions ........ Breathing, checklist, launch
+Design patterns .......... Emotional focus mode / wellness UI
+Mobile responsiveness .... Full-width calm layout
+Accessibility ............ Affirmation light-amber may fail light-theme contrast;
+                           breathing motion
+UI/UX issues ............. Checklist local-only; only first today interview;
+                           @ts-nocheck; fragile auth store import path noted in
+                           audit
+Suggestions .............. Persist checklist; multi-interview picker; theme-safe
+                           colors
+Priority ................. High
+
+
+================================================================================
+PART 14 — COMPANY RESEARCH
+================================================================================
+
+--------------------------------------------------------------------------------
+FEATURE: Company Research Hub (/app/companies)
+--------------------------------------------------------------------------------
+Feature name ............. Company Research
+Purpose .................. Search/generate AI company briefs; list recent
+Current UI components .... Search Card, popular chips, recent list Cards,
+                           EmptyState
+Current UX flow .......... Type/pick company → navigate to profile; ?q= auto
+Navigation flow .......... Planner → Companies → /companies/:id
+User interactions ........ Search, chip pick, Generate
+Design patterns .......... Search → detail
+Mobile responsiveness .... Stacked
+Accessibility ............ Standard
+UI/UX issues ............. loading state may not drive Generate button correctly;
+                           slug path logic inconsistent with helpers
+Suggestions .............. Explicit generate + credit cost preview before spend
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Company Profile (/app/companies/:id)
+--------------------------------------------------------------------------------
+Feature name ............. Company Profile
+Purpose .................. Cached/generated brief: overview, process, questions,
+                           values, tips, practice CTAs
+Current UI components .... Letter avatar, section Cards, Practice ghost buttons
+                           per question, gradient CTA
+Current UX flow .......... Cache check → edge generate → upsert → Refresh
+                           regenerates
+Navigation flow .......... Hub → profile; practice deep links
+User interactions ........ Refresh, practice question, CTA
+Design patterns .......... Sectioned brief report
+Mobile responsiveness .... Sections stack
+Accessibility ............ Standard
+UI/UX issues ............. Slug-to-name mangling; auto-generate may surprise/
+                           spend credits
+Suggestions .............. Confirm before regenerate; better name handling
+Priority ................. Medium
+
+
+================================================================================
+PART 15 — ANALYTICS, USAGE, PROFILE, NOTIFICATIONS, REFERRALS
+================================================================================
+
+--------------------------------------------------------------------------------
+FEATURE: Analytics (/app/analytics)
+--------------------------------------------------------------------------------
+Feature name ............. Analytics
+Purpose .................. Performance over time: KPIs, trends, categories,
+                           speech, heatmap, compare
+Current UI components .... KPI Cards, shadcn Tabs/Select, CSS bar charts,
+                           PlanGate for Pro charts, emoji tab labels
+Current UX flow .......... Period filter → tab panels → CSV export
+Navigation flow .......... Sidebar Progress; :sessionId → debrief redirect
+User interactions ........ Period select, tabs, export
+Design patterns .......... KPI + tabbed charts
+Mobile responsiveness .... Charts squeeze
+Accessibility ............ Emoji tabs; color-only bars need text
+UI/UX issues ............. Emoji tabs; uneven Pro gates; raw retry button;
+                           @ts-nocheck; charting differs from mock-test Recharts
+Suggestions .............. Icon tabs; unify empty/error; clarify free vs Pro;
+                           one chart library
+Priority ................. High
+
+
+--------------------------------------------------------------------------------
+FEATURE: Credits & Usage (/app/usage)
+--------------------------------------------------------------------------------
+Feature name ............. Usage Dashboard
+Purpose .................. Credits used/added, session mins, 14-day trend,
+                           transactions, billing portal
+Current UI components .... CardHeader/Content pattern, StatCards, dual CSS bars,
+                           paginated transactions
+Current UX flow .......... Review usage → open billing portal / upgrade
+Navigation flow .......... Sidebar Credits & Usage; overlaps Settings Billing
+User interactions ........ Paginate tx, open portal
+Design patterns .......... Billing analytics dashboard
+Mobile responsiveness .... Bars/stats stack
+Accessibility ............ Dual bars title-only
+UI/UX issues ............. Overlaps Analytics (skill) vs Usage (credits) without
+                           sharp IA distinction
+Suggestions .............. Explicit nav labels: "Skills Analytics" vs "Credits
+                           & Usage"
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Profile (/app/profile)
+--------------------------------------------------------------------------------
+Feature name ............. Profile
+Purpose .................. Avatar, XP/streak/sessions/badges, details, recent
+Current UI components .... 1+2 grid, skeleton, Edit → settings/profile
+Current UX flow .......... View → edit in settings
+Navigation flow .......... Account menu / More; Edit → Settings Profile
+User interactions ........ Navigate to edit
+Design patterns .......... Profile summary card
+Mobile responsiveness .... Grid stacks
+Accessibility ............ Standard
+UI/UX issues ............. Overlaps Settings Profile; "public profile" copy
+                           without share/privacy controls
+Suggestions .............. Consolidate into Settings or make truly shareable
+Priority ................. Low
+
+
+--------------------------------------------------------------------------------
+FEATURE: Notifications Inbox (/app/notifications)
+--------------------------------------------------------------------------------
+Feature name ............. Notifications
+Purpose .................. In-app inbox with realtime updates
+Current UI components .... Type icons, unread border, mark/delete icon buttons
+Current UX flow .......... Open → mark read / delete
+Navigation flow .......... TopBar bell; Sidebar footer; Settings prefs separate
+User interactions ........ Mark, delete; no deep-link on click
+Design patterns .......... Inbox list
+Mobile responsiveness .... List full width
+Accessibility ............ Icon buttons title not aria-label
+UI/UX issues ............. No deep-link; overlaps Settings notification prefs
+Suggestions .............. Click → relevant entity; aria-labels
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Referrals (/app/referrals)
+--------------------------------------------------------------------------------
+Feature name ............. Referrals
+Purpose .................. Invite link/code; invited count; credits earned
+Current UI components .... Link + copy, 3-step how-it-works, side stats
+Current UX flow .......... Copy link → share externally → track invites
+Navigation flow .......... Sidebar Progress
+User interactions ........ Copy; no native share sheet
+Design patterns .......... Referral card + steps
+Mobile responsiveness .... Fine
+Accessibility ............ Copy button labeling
+UI/UX issues ............. "admin-configurable" jargon in user copy
+Suggestions .............. Native share; user-facing reward copy only
+Priority ................. Low
+
+
+================================================================================
+PART 16 — SETTINGS (ALL PAGES)
+================================================================================
+
+--------------------------------------------------------------------------------
+FEATURE: Settings Hub (/app/settings)
+--------------------------------------------------------------------------------
+Feature name ............. Settings Hub
+Purpose .................. Nested settings navigation for all preference pages
+Current UI components .... Settings.tsx left nav (14 items), SettingsPageShell,
+                           PageHeader (often double with shell), mobile
+                           horizontal chips / root card list, Log out at TOP of
+                           nav
+Current UX flow .......... Open settings → pick section → edit → save (varies)
+Navigation flow .......... /app/settings → profile default; many redirects
+                           (byok→models, subscription/credits→billing)
+User interactions ........ Nav, logout
+Design patterns .......... Nested settings IA
+Mobile responsiveness .... Root list vs chip tabs for subroutes
+Accessibility ............ Nav labels
+UI/UX issues ............. Double titles (PageHeader + SettingsPageShell);
+                           Logout placement unusual; practice-coach route not in
+                           nav (redirects to guide); preference sprawl across
+                           Notifications / Polish / Privacy / Data
+Suggestions .............. Grouped IA: Account | Practice | Privacy & Security |
+                           Billing | Advanced (flag); one title pattern
+Priority ................. High
+
+
+--------------------------------------------------------------------------------
+FEATURE: Settings — Profile
+--------------------------------------------------------------------------------
+Feature name ............. Settings Profile
+Purpose .................. Avatar, name, role, domain, password, onboarding reset
+Current UI components .... Forms, avatar upload, Buttons
+Current UX flow .......... Edit → save; optional onboarding rerun
+Navigation flow .......... Settings nav; overlaps /app/profile
+User interactions ........ Form save, password change
+Design patterns .......... Account form
+Mobile responsiveness .... Stacked
+Accessibility ............ Form labels
+UI/UX issues ............. Duplicate of Profile page; double headers
+Suggestions .............. Single account editor
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Settings — Notifications
+--------------------------------------------------------------------------------
+Feature name ............. Settings Notifications
+Purpose .................. Master + category toggles, digest, test toast
+Current UI components .... Toggle groups (often wrong Radix API), test toast
+Current UX flow .......... Toggle prefs → save; test toast
+Navigation flow .......... Settings
+User interactions ........ Toggles
+Design patterns .......... Preference toggles
+Mobile responsiveness .... List
+Accessibility ............ Miswired Toggle harms a11y state
+UI/UX issues ............. Push/digest not actually live (UI admits); overlaps
+                           Polish channels
+Suggestions .............. Use Switch; hide non-live channels or wire them;
+                           merge with Polish
+Priority ................. High
+
+
+--------------------------------------------------------------------------------
+FEATURE: Settings — Appearance
+--------------------------------------------------------------------------------
+Feature name ............. Settings Appearance
+Purpose .................. Theme, accent, font size, density, Discrete mode,
+                           desktop download
+Current UI components .... Theme previews, accent swatches, Switch for Discrete,
+                           DesktopDownloadButton
+Current UX flow .......... Theme applies immediately; accent/density may need
+                           Save — inconsistent
+Navigation flow .......... Settings; TopBar also toggles theme/discrete
+User interactions ........ Pick theme/accent, toggle discrete
+Design patterns .......... Live preview settings
+Mobile responsiveness .... Swatches wrap
+Accessibility ............ Preview cards need selected state announced
+UI/UX issues ............. Immediate vs Save inconsistency; Discrete naming vs
+                           TopBar "Discrete UI"
+Suggestions .............. All appearance changes live OR all Save; one name
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Settings — Audio
+--------------------------------------------------------------------------------
+Feature name ............. Settings Audio
+Purpose .................. Mic device, level test, record/playback, VAD, fillers,
+                           STT languages
+Current UI components .... Device select (native), level meter, Toggle groups
+Current UX flow .......... Pick mic → test → tune VAD/filler prefs
+Navigation flow .......... Settings; linked from Practice Coach guide
+User interactions ........ Device select, record test, toggles
+Design patterns .......... Hardware setup panel
+Mobile responsiveness .... Dense but usable
+Accessibility ............ Toggle API misuse
+UI/UX issues ............. Dense power-user page; native selects
+Suggestions .............. Progressive disclosure (Basic / Advanced)
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Settings — Privacy / Security / Security Config
+--------------------------------------------------------------------------------
+Feature name ............. Privacy, Security, Security Config
+Purpose .................. Private mode; password/2FA/sessions; Supabase dashboard
+                           checklist (security-config)
+Current UI components .... Switch + Toggle mix; Security own h2; Security Config
+                           checklist cards
+Current UX flow .......... Toggle privacy; manage MFA/sessions; (config) manual
+                           ops checklist
+Navigation flow .......... Settings
+User interactions ........ Toggles, password, MFA enroll, session revoke
+Design patterns .......... Security settings
+Mobile responsiveness .... Stacked
+Accessibility ............ Mixed controls
+UI/UX issues ............. Security Config is admin/dev, not end-user; confuses
+                           consumers
+Suggestions .............. Move Security Config to Admin or hide behind flag
+Priority ................. High (for Security Config relocation)
+
+
+--------------------------------------------------------------------------------
+FEATURE: Settings — Billing
+--------------------------------------------------------------------------------
+Feature name ............. Settings Billing
+Purpose .................. Plan, credits, Stripe/Razorpay packs, customer portal
+Current UI components .... Own PageHeader (opts out of double title), plan cards,
+                           credit packs, portal buttons
+Current UX flow .......... View plan → buy credits / upgrade → portal manage
+Navigation flow .......... Settings; UpgradeModal; Usage dashboard
+User interactions ........ Checkout, portal
+Design patterns .......... Billing console
+Mobile responsiveness .... Cards stack
+Accessibility ............ Standard
+UI/UX issues ............. Success URL /settings/credits redirects; overlaps Usage
+Suggestions .............. Single billing success landing; deep-link packs
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Settings — Models / Integrations / Data / Hotkeys / Polish / Danger /
+                     Practice Coach shortcut
+--------------------------------------------------------------------------------
+Feature name ............. Remaining Settings Pages
+Purpose ..................
+  Models .......... Preferred AI model (Pro locks)
+  Integrations .... Google Calendar live; other OAuth coming-soon cards
+  Data ............ Storage + export
+  Hotkeys ......... Record bindings, conflicts, reset (localStorage)
+  Polish .......... Retention + channels + CSV + test notif ("Advanced" nav)
+  Danger .......... Export, reset progress, delete account + ConfirmDialogs
+  Practice Coach .. Redirect to guide only
+Current UI components .... Model cards; integration cards; export buttons;
+                           hotkey recorder; ConfirmDialogs on Danger
+Current UX flow .......... Page-specific edit/save or redirect
+Navigation flow .......... Settings nav (Practice Coach not listed)
+User interactions ........ Select model, connect calendar, export, record keys,
+                           confirm danger actions
+Design patterns .......... Soft-hide unfinished integrations (good)
+Mobile responsiveness .... Fine
+Accessibility ............ Hotkey recorder keyboard-centric (appropriate)
+UI/UX issues ............. Polish duplicates Notifications/Privacy/Data; nav
+                           label "Advanced" vs route polish; Danger vs Data
+                           export overlap
+Suggestions .............. Merge Polish into proper groups; keep Danger isolated
+Priority ................. High (IA merge); Low for Models/Integrations/Hotkeys
+
+
+================================================================================
+PART 17 — GOV EXAM MOCK TEST SUITE
+================================================================================
+
+--------------------------------------------------------------------------------
+FEATURE: Mock Test Hub (/app/mock-test)
+--------------------------------------------------------------------------------
+Feature name ............. Gov Exam Mock Test Hub
+Purpose .................. Entry to exam picker, stats, drills, papers
+Current UI components .... Showcase, gradient exam cards, streak emoji, stats,
+                           recent attempts, IndiaRegionGate wrapper
+Current UX flow .......... Pick exam → configure / papers / revision / analytics
+Navigation flow .......... Sidebar Practice; India gate; marketing /gov-exams
+User interactions ........ Exam cards, quick drill, links
+Design patterns .......... Product hub with marketing residue
+Mobile responsiveness .... Cards stack
+Accessibility ............ Emoji streak
+UI/UX issues ............. Nav "Gov Exam Mock Tests" vs header "Mock Tests";
+                           marketing showcase inside app hub
+Suggestions .............. Task-focused hub; drop in-app marketing showcase
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: Test Configure (/app/mock-test/configure)
+--------------------------------------------------------------------------------
+Feature name ............. Test Configure
+Purpose .................. Subjects/topics/difficulty/count/duration/marks
+Current UI components .... Large form, PlanGate upgrade hooks, Cards
+Current UX flow .......... Configure → start session
+Navigation flow .......... Hub → configure → session
+User interactions ........ Multi-select subjects, sliders/inputs, start
+Design patterns .......... Long configuration form
+Mobile responsiveness .... Long scroll
+Accessibility ............ Form labels vary
+UI/UX issues ............. Long single page; Pro locks mid-flow surprise
+Suggestions .............. Step wizard; show locks early with upgrade path
+Priority ................. High
+
+
+--------------------------------------------------------------------------------
+FEATURE: Test Session (/app/mock-test/session/:testId)
+--------------------------------------------------------------------------------
+Feature name ............. Timed Test Session
+Purpose .................. Full-screen timed MCQ/TF/numerical exam experience
+Current UI components .... Question view, KaTeX, answer palette, mark-for-review,
+                           mobile Sheet palette, timer — NO AppShell
+Current UX flow .......... Answer / mark / navigate palette → submit → results
+Navigation flow .......... Full-screen; exit/submit → results
+User interactions ........ Select options, numerical entry, mark, palette jump,
+                           submit
+Design patterns .......... NTA-like answered/marked color states; focus mode
+Mobile responsiveness .... Sheet for palette; question chrome dense
+Accessibility ............ Color states need text/icons; timer announcements
+UI/UX issues ............. Easy to feel trapped without clear exit; complex
+Suggestions .............. Clear Exit/Submit hierarchy; pause policy messaging
+Priority ................. High
+
+
+--------------------------------------------------------------------------------
+FEATURE: Test Results (/app/mock-test/results/:testId)
+--------------------------------------------------------------------------------
+Feature name ............. Test Results
+Purpose .................. Score, subject/topic breakdown, optional AI analysis
+Current UI components .... Trophy/metrics, expandable questions, filters,
+                           credit-gated AI analysis
+Current UX flow .......... View score → filter review → optional AI analysis
+Navigation flow .......... Session → results → hub/revision
+User interactions ........ Expand, filter, spend credits for AI
+Design patterns .......... Results report
+Mobile responsiveness .... Long page
+Accessibility ............ Score text + visuals
+UI/UX issues ............. Credit gate mid-results
+Suggestions .............. Preview AI value before charge
+Priority ................. Medium
+
+
+--------------------------------------------------------------------------------
+FEATURE: My Questions / Upload / Revision / Analytics / Papers
+--------------------------------------------------------------------------------
+Feature name ............. Mock Test Supporting Modules
+Purpose ..................
+  My Questions ..... User question bank CRUD
+  Upload ........... Manual + Excel import with KaTeX preview
+  Revision ......... SRS intervals 1–3–7–14–30
+  Analytics ........ Recharts trends, weak topics
+  Papers ........... PYQ browser, launch if bank ready, Coming soon locks
+Current UI components .... shadcn Dialog/AlertDialog/Select heavy on My Questions;
+                           ExcelImportTab; revision cards; Recharts; filters
+Current UX flow .......... Manage bank → upload/review → revise → analyze →
+                           launch papers
+Navigation flow .......... Hub subroutes
+User interactions ........ CRUD, import, flip review, chart filters
+Design patterns .......... Power-user content tools; Coming soon locks (good)
+Mobile responsiveness .... Dense admin-like UIs
+Accessibility ............ Dialogs good; charts need summaries
+UI/UX issues ............. My Questions visual language ≠ hub Cards; Recharts vs
+                           Analytics CSS bars inconsistency; Upload very dense
+Suggestions .............. Shared exam design kit; one chart system
+Priority ................. Medium
+
+
+================================================================================
+PART 18 — GUIDE
+================================================================================
+
+--------------------------------------------------------------------------------
+FEATURE: Practice Coach Guide (/app/guide, /app/guide/practice-coach)
+--------------------------------------------------------------------------------
+Feature name ............. Practice Coach Guide
+Purpose .................. Install/troubleshoot overlay before first session
+Current UI components .... OverlaySetupGuidePanel in Card; links to Audio,
+                           Hotkeys, Start Coach; Guide index redirects
+Current UX flow .......... Read steps → open settings audio/hotkeys → start coach
+Navigation flow .......... Sidebar Guide (desktop); Mobile More; Settings
+                           practice-coach redirect
+User interactions ........ Follow links, start coach
+Design patterns .......... Setup documentation panel
+Mobile responsiveness .... Card content
+Accessibility ............ Standard
+UI/UX issues ............. Easy to miss; not linked strongly from Live empty/
+                           first-run
+Suggestions .............. Surface from Practice Coach empty state / first run
+Priority ................. Medium
+
+
+================================================================================
+PART 19 — ADMIN PORTAL
+================================================================================
+
+--------------------------------------------------------------------------------
+FEATURE: Admin Shell & Pages (/app/admin/*)
+--------------------------------------------------------------------------------
+Feature name ............. Admin Portal
+Purpose .................. Ops: users, analytics, live chat, support, audit, QA,
+                           questions, bulk/seed, flags, revenue, promos, billing
+                           settings, model costs
+Current UI components .... AdminLayout (red accent, 15 nav items, mobile Sheet,
+                           Back to app); KPI cards; DataTable/tables; Modals;
+                           BlockEditor; BulkPdfUploadPanel; mixed PageHeader
+Current UX flow .......... Admin login gate → flat nav → manage entity → action
+                           modals
+Navigation flow .......... /app/admin + nested routes; requireAdmin
+User interactions ........ Search users, toggle flags, upload, chat, CRUD
+                           questions, promo codes, billing config
+Design patterns .......... Standalone ops console; red accent differentiation
+Mobile responsiveness .... Sheet nav; tables horizontal scroll
+Accessibility ............ aria-label on admin nav; Menu labeled
+UI/UX issues ............. Flat ungrouped nav (Billing/Content/Support mixed);
+                           visual parity with user app incomplete
+Suggestions .............. Group nav: Users & Support | Content | Billing |
+                           System; AdminPageShell
+Priority ................. Medium (internal)
+
+
+Admin page inventory (UI purpose one-liners):
+  AdminDashboard ......... KPI overview
+  AdminUsers ............. User search/ban/plan actions + Modal
+  AdminAnalytics ......... Platform analytics
+  AdminLiveChat .......... Live support chat console
+  AdminSupport ........... Support tickets/queue
+  AdminAuditLog .......... Audit trail table
+  AdminQAChecklist ....... Internal QA checklist UI
+  AdminQuestionEditor .... Question CRUD (+ :id)
+  AdminBulkUpload ........ Bulk PDF/content upload
+  AdminSeedQuestions ..... Seed question tools
+  AdminFeatureFlags ...... Flag toggles
+  AdminRevenue ........... Revenue KPIs
+  AdminPromoCodes ........ Promo code management
+  AdminBillingSettings ... Billing configuration
+  AdminModelCosts ........ Model cost tracking
+
+
+================================================================================
+PART 20 — ELECTRON / DESKTOP UX
+================================================================================
+
+--------------------------------------------------------------------------------
+FEATURE: Electron Desktop App UX
+--------------------------------------------------------------------------------
+Feature name ............. Electron Overlay App
+Purpose .................. Desktop always-on-top coaching overlay; push other
+                           pages to system browser
+Current UI components .... ElectronRouteGate, electron drag region, hash router,
+                           OverlayWindow, DesktopDownloadButton (web),
+                           ElectronOpenInBrowser
+Current UX flow .......... Install → boot #/app/live/overlay → practice → open
+                           browser for dashboard/settings/billing
+Navigation flow .......... Allowed: auth, onboarding, /app/live, /app/live/overlay
+User interactions ........ Global shortcuts toggle-overlay / request-ai-answer;
+                           hotkey conflict toasts
+Design patterns .......... Overlay-only desktop; web for full app
+Mobile responsiveness .... N/A (desktop)
+Accessibility ............ OS-level window; hotkeys
+UI/UX issues ............. Dual-app mental model (desktop vs browser) can confuse
+Suggestions .............. Clear first-run: "Desktop = overlay; Browser = hub"
+Priority ................. High (for desktop users)
+
+
+================================================================================
+PART 21 — MASTER ISSUE REGISTER
+================================================================================
+
+HIGH PRIORITY
+  H1  Practice Coach dual paths (/live vs /live/overlay) + empty in-shell status
+  H2  Onboarding length + role_type field confusion + emoji-first visual
+  H3  Dashboard density / competing CTAs / Coach vs Overlay naming
+  H4  Prep Lab duplicate STAR + Question Bank vs Answer Bank naming
+  H5  Settings IA sprawl (Notifications / Polish / Privacy / Data) + Security
+      Config in consumer settings
+  H6  Dual mobile chrome (hamburger sidebar + bottom nav)
+  H7  Mock Interview route-state fragility + duration copy conflict
+  H8  Debrief Detail unscannable long page
+  H9  Analytics emoji tabs + uneven Pro gates + chart library split
+  H10 Interview Day checklist not persisted; multi-interview gap
+  H11 Mock-test configure length + session exit clarity
+  H12 SharedDebrief unbranded chrome (growth loop)
+  H13 Design system dualism (Button/Card/Modal vs shadcn; Toggle misuse)
+  H14 Electron vs browser dual mental model messaging
+
+MEDIUM PRIORITY
+  M1  Auth ResetPassword visual ≠ Login/Signup
+  M2  Sessions Start Session → Live only; mobile burial
+  M3  Scorecard outside PageHeader system; export label mismatch
+  M4  Documents upload rule mismatch vs onboarding; Cover/Portfolio polish
+  M5  Answer Bank detail not linked from list
+  M6  Interviews delete without confirm; hover-only trash; EmptyState missing
+  M7  Company research auto-generate / credit surprise
+  M8  Usage vs Analytics positioning
+  M9  CookieConsent vs MobileNav stacking; emoji title
+  M10 Help custom accordion vs Landing Accordion; Blog empty states
+  M11 Admin nav ungrouped
+  M12 Guide discoverability from Live empty state
+  M13 Hardcoded violet-* bypassing tokens
+  M14 Nested PageContent / PageHeader API drift (subtitle vs description)
+
+LOW PRIORITY
+  L1  Shortcuts/Blog/Terms/Privacy template polish
+  L2  Profile vs Settings Profile consolidation
+  L3  Referrals jargon + native share
+  L4  Command palette first-run tip
+  L5  Emoji→icon cleanup across Prep/Analytics/Cookie
+  L6  Unused drawer/popover primitives
+  L7  Models/Integrations/Hotkeys/Danger polish only
+
+
+================================================================================
+PART 22 — REDESIGN ROADMAP RECOMMENDATIONS
+================================================================================
+
+PHASE A — FOUNDATIONS (do first)
+  1. One component kit: Button, Card, Input, Select, Switch, Modal/Dialog
+  2. One page template: PageHeader + breadcrumbs + EmptyState +
+     InlineErrorRetry + SkeletonCard + max-width rules
+  3. One naming glossary: Practice Coach, Mock Interview, Prep Lab, Answer Bank,
+     Interview Day, Credits & Usage, Skills Analytics
+  4. Remove emoji from chrome/tabs; icons only
+  5. Fix Toggle→Switch; adopt semantic tokens (no raw violet-*)
+
+PHASE B — CORE JOURNEYS
+  1. Collapse Practice Coach to: Setup (2–3 steps) → Overlay session → Scorecard
+  2. Shorten Onboarding to 3 required steps
+  3. Dashboard progressive disclosure + single primary CTA
+  4. Unify STAR; wire Answer Bank detail; fix Mock session persistence
+  5. Debrief tabbed report + TOC
+
+PHASE C — IA CLEANUP
+  1. Settings groups + remove Security Config from consumer
+  2. Mobile: pick one nav model
+  3. Planner icon/copy clarity (Interviews vs Interview Day)
+  4. Analytics vs Usage labeling
+  5. Gov-exam hub task-focused; shared exam kit
+
+PHASE D — POLISH & GROWTH
+  1. Brand SharedDebrief
+  2. AuthShell unification
+  3. Marketing first-viewport simplification
+  4. Admin nav grouping
+  5. Electron first-run education
+
+
+================================================================================
+APPENDIX A — COMPLETE ROUTE → PAGE MAP (UI SURFACES)
+================================================================================
+
+MARKETING
+  /                          Landing.tsx
+  /pricing                   Pricing.tsx
+  /gov-exams                 GovExams.tsx
+  /help                      Help.tsx
+  /help/:slug                HelpArticle.tsx
+  /shortcuts                 Shortcuts.tsx
+  /blog                      Blog.tsx
+  /blog/:slug                BlogPost.tsx
+  /terms                     Terms.tsx
+  /privacy                   Privacy.tsx
+  /share/:token              SharedDebrief.tsx
+
+AUTH
+  /login                     Login.tsx
+  /signup                    Signup.tsx
+  /verify-email              VerifyEmail.tsx
+  /forgot-password           ResetPassword.tsx
+  /reset-password            ResetPassword.tsx
+  /auth/callback             AuthCallback.tsx
+
+ONBOARDING
+  /onboarding                OnboardingIndex.tsx (+ steps 1–5 components)
+
+APP (AppShell)
+  /app/dashboard             Dashboard.tsx
+  /app/live                  LiveRehearsal.tsx
+  /app/mock                  MockInterview.tsx
+  /app/mock/warmup           MockWarmup.tsx
+  /app/mock/session          MockSession.tsx
+  /app/prep                  PrepLab.tsx
+  /app/prep/star-builder     StarBuilder.tsx
+  /app/prep/project-builder  ProjectBuilder.tsx
+  /app/prep/rephraser        Rephraser.tsx
+  /app/prep/coding-hints     CodingHints.tsx
+  /app/prep/system-design    SystemDesign.tsx
+  /app/sessions              CallSessions.tsx
+  /app/sessions/:id          SessionDetail.tsx
+  /app/documents             Documents.tsx
+  /app/documents/resume/:id  ResumeDetail.tsx
+  /app/documents/jd/:id      JDDetail.tsx
+  /app/answers               AnswerBank.tsx
+  /app/answers/:id           AnswerDetail.tsx
+  /app/interviews            Interviews.tsx
+  /app/interviews/new        NewInterview.tsx
+  /app/interviews/:id/edit   NewInterview.tsx
+  /app/interviews/:id        InterviewDetail.tsx
+  /app/interview-day         InterviewDay.tsx
+  /app/companies             CompanyResearch.tsx
+  /app/companies/:id         CompanyProfile.tsx
+  /app/debrief               Debrief.tsx
+  /app/debrief/:id           DebriefDetail.tsx
+  /app/analytics             Analytics.tsx
+  /app/usage                 UsageDashboard.tsx
+  /app/profile               Profile.tsx
+  /app/notifications         Notifications.tsx
+  /app/referrals             Referrals.tsx
+  /app/scorecard/:sessionId  Scorecard.tsx
+  /app/guide                 Guide.tsx → practice-coach
+  /app/guide/practice-coach  PracticeCoachGuide.tsx
+  /app/mock-test             MockTestHub.tsx (+ India gate)
+  /app/mock-test/configure   TestConfigure.tsx
+  /app/mock-test/results/:id TestResults.tsx
+  /app/mock-test/my-questions MyQuestions.tsx
+  /app/mock-test/upload      UploadQuestions.tsx
+  /app/mock-test/revision    TestRevision.tsx
+  /app/mock-test/analytics   TestAnalytics.tsx
+  /app/mock-test/papers/:t   ExamPapers.tsx
+  /app/settings/*            Settings hub + 14+ subpages
+
+FULL-SCREEN (no AppShell)
+  /app/live/overlay          LiveOverlay.tsx
+  /app/mock-test/session/:id TestSession.tsx
+
+ADMIN (AdminLayout)
+  /app/admin                 AdminDashboard.tsx
+  /app/admin/users           AdminUsers.tsx
+  /app/admin/analytics       AdminAnalytics.tsx
+  /app/admin/revenue         AdminRevenue.tsx
+  /app/admin/model-costs     AdminModelCosts.tsx
+  /app/admin/feature-flags   AdminFeatureFlags.tsx
+  /app/admin/seed-questions  AdminSeedQuestions.tsx
+  /app/admin/bulk-upload     AdminBulkUpload.tsx
+  /app/admin/live-chat       AdminLiveChat.tsx
+  /app/admin/questions       AdminQuestionEditor.tsx
+  /app/admin/questions/:id   AdminQuestionEditor.tsx
+  /app/admin/audit-log       AdminAuditLog.tsx
+  /app/admin/qa-checklist    AdminQAChecklist.tsx
+  /app/admin/support         AdminSupport.tsx
+  /app/admin/promo-codes     AdminPromoCodes.tsx
+  /app/admin/billing-settings AdminBillingSettings.tsx
+
+OTHER
+  *                          NotFound.tsx
+
+
+================================================================================
+APPENDIX B — SHARED UI COMPONENT INVENTORY
+================================================================================
+
+src/components/ui/ (primitives + branded)
+  accordion, alert, alert-dialog, aspect-ratio, avatar, breadcrumb, carousel,
+  chart, checkbox, command, context-menu, dialog, drawer, dropdown-menu, form,
+  hover-card, input-otp, label, menubar, navigation-menu, pagination, popover,
+  progress, radio-group, resizable, scroll-area, select, separator, sheet,
+  sidebar, skeleton, slider, sonner, switch, table, textarea, toast/toaster,
+  toggle-group, tooltip, Badge, Button, Card, Dropdown, Input, Modal,
+  ProgressBar, Spinner, Tabs, ThemeToggle, Toggle, DataTable, SkeletonLoader
+
+src/components/common/
+  LoadingScreen, EmptyState, ErrorFallback, ConfirmDialog, InlineErrorRetry,
+  ComplianceBanner, PageStateLoading/Skeleton, UploadZone, NetworkErrorPage,
+  DesktopDownloadButton, CookieConsent, CommandPalette, FormWrapper
+
+src/components/layout/
+  AppSidebar, AppTopBar, MobileNav, MarketingLayout, ProtectedRoute,
+  ElectronRouteGate, IndiaRegionGate, NetworkBanner, SessionTimeoutBanner,
+  PageHeader, PageContent, SetupChecklist, PlanGate, SettingsPageShell,
+  ErrorBoundary, GlobalErrorBoundary, AppLoadingFallback
+
+Feature folders: overlay/, live/, session/, billing/, marketing/, onboarding/,
+  auth/, admin/, prep/, debrief/, documents/, mock/, gamification/, audio/
+
+
+================================================================================
+APPENDIX C — KEY USER JOURNEYS (END-TO-END)
+================================================================================
+
+JOURNEY 1: New user → first practice
+  Landing → Signup → Verify Email → Onboarding (5) → Dashboard → Practice Coach
+  setup wizard → Overlay session → Scorecard → Debrief
+
+JOURNEY 2: Mock interview loop
+  Dashboard/Mock → configure → optional Warmup → Session (+ overlay) →
+  Scorecard/Debrief → Sessions list
+
+JOURNEY 3: Prep then practice
+  Prep Lab → STAR/Rephraser → save Answer Bank → Documents upload resume →
+  Practice Coach with docs selected
+
+JOURNEY 4: Interview day
+  Interviews create → Interview Day focus → Launch Coach → live practice
+
+JOURNEY 5: Gov exam
+  /gov-exams or /app/mock-test → configure → full-screen session → results →
+  revision/analytics
+
+JOURNEY 6: Upgrade
+  Low credits banner / TopBar credits / PlanGate → UpgradeModal → Stripe or
+  Razorpay → Settings Billing
+
+JOURNEY 7: Desktop
+  Download desktop → Electron overlay boot → practice → Open web app for hub
+
+
+================================================================================
+END OF UI/UX IMPLEMENTATION AUDIT
+Generated 30 July 2026 from source analysis of Clarify AI (clarity-assistant).
+================================================================================

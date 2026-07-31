@@ -418,7 +418,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
           )}
         >
           <NavLink
-            to="/app/profile"
+            to="/app/settings/profile"
             onClick={onNavClick}
             title={visuallyCollapsed ? "Profile" : undefined}
             className="shrink-0"

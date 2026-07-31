@@ -16,6 +16,7 @@ import {
 import { useAuthStore } from "@/store/authStore";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { BrandLogo } from "@/components/marketing";
+import { AuthShell } from "@/components/layout/AuthShell";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 
@@ -290,84 +291,8 @@ export default function Signup(): JSX.Element {
   }
 
   return (
-    <div className="min-h-screen flex bg-background">
-      {/* Left panel */}
-      <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] flex-col relative overflow-hidden bg-gradient-to-br from-primary via-indigo-600 to-blue-700 p-10">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 left-0 w-96 h-96 rounded-full bg-white blur-3xl -translate-x-1/2 -translate-y-1/2" />
-          <div className="absolute bottom-0 right-0 w-80 h-80 rounded-full bg-white blur-3xl translate-x-1/2 translate-y-1/2" />
-        </div>
+    <AuthShell>
 
-        <div className="relative z-10 flex flex-col h-full">
-          <div className="flex items-center gap-3">
-            <BrandLogo size="md" showText={false} />
-            <span className="text-xl font-bold text-white">Clarify AI</span>
-          </div>
-
-          <div className="flex-1 flex flex-col justify-center mt-16">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 border border-white/20 text-white text-xs font-medium w-fit mb-6">
-              <Sparkles className="w-3.5 h-3.5" />
-              Free to start — no credit card needed
-            </div>
-
-            <h2 className="text-4xl xl:text-5xl font-black text-white leading-tight mb-4">
-              Ace your next
-              <br />
-              <span className="text-indigo-200">interview</span>
-            </h2>
-
-            <p className="text-indigo-100 text-base leading-relaxed max-w-sm mb-8">
-              Join thousands of engineers who practice smarter and interview
-              with confidence.
-            </p>
-
-            <div className="space-y-3">
-              {BENEFITS.map(({ icon: Icon, text }) => (
-                <div key={text} className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-white/15 border border-white/20 flex items-center justify-center shrink-0">
-                    <Icon className="w-4 h-4 text-white" />
-                  </div>
-                  <span className="text-indigo-100 text-sm">{text}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="bg-white/10 border border-white/15 rounded-2xl p-5 backdrop-blur-sm">
-            <div className="flex items-center gap-3 mb-2">
-              <div className="flex -space-x-2">
-                {["E", "M", "J", "A"].map((letter) => (
-                  <div
-                    key={letter}
-                    className="w-7 h-7 rounded-full bg-indigo-400/40 border-2 border-indigo-600 flex items-center justify-center text-white text-[10px] font-bold"
-                  >
-                    {letter}
-                  </div>
-                ))}
-              </div>
-
-              <p className="text-white text-xs font-semibold">
-                AI-powered interview coaching
-              </p>
-            </div>
-
-            <p className="text-indigo-200 text-xs">
-              Practice mock interviews, Practice Coach sessions, and gov exam prep in one place.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Right panel */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 sm:px-10 py-12">
-        <div className="lg:hidden mb-8 w-full max-w-sm">
-          <div className="w-full py-4 bg-gradient-to-r from-primary to-indigo-600 rounded-2xl flex items-center justify-center gap-2">
-            <BrandLogo size="sm" showText={false} />
-            <span className="text-lg font-bold text-white">Clarify AI</span>
-          </div>
-        </div>
-
-        <div className="w-full max-w-sm">
           <div className="mb-7">
             <h1 className="text-2xl font-bold text-foreground">
               Create your account
@@ -595,8 +520,6 @@ export default function Signup(): JSX.Element {
               Sign in
             </Link>
           </p>
-        </div>
-      </div>
-    </div>
+    </AuthShell>
   );
 }

@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "react-router-dom";
 import { useEffect } from "react";
-import { Bell, Zap, AlertTriangle, Shield, ShieldOff, Menu, X, LogOut, Settings, User, Search } from "lucide-react";
+import { Bell, Zap, AlertTriangle, Shield, ShieldOff, LogOut, Settings, User, Search } from "lucide-react";
 import { useAuthStore } from "@/store/userStore";
 import { useNotificationStore } from "@/store/notificationStore";
 import { useUIStore } from "@/store/uiStore";
@@ -25,7 +25,6 @@ export function AppTopBar() {
   const uiStore     = useUIStore();
   useNotifications();
   const stealthMode = uiStore.stealth_mode;
-  const mobileNavOpen = uiStore.mobile_nav_open;
 
   useEffect(() => {
     const onFocus = () => void refreshCredits();
@@ -67,15 +66,6 @@ export function AppTopBar() {
     >
 
       <div style={noDragStyle} className="flex items-center gap-1 min-w-0 shrink-0 md:hidden">
-        <button
-          type="button"
-          style={noDragStyle}
-          onClick={() => uiStore.setMobileNavOpen(!mobileNavOpen)}
-          className="flex items-center justify-center w-9 h-9 rounded-xl text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all"
-          aria-label={mobileNavOpen ? "Close menu" : "Open menu"}
-        >
-          {mobileNavOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
-        </button>
         <Link
           to="/app"
           className="flex items-center gap-1.5 pr-1"
@@ -189,7 +179,7 @@ export function AppTopBar() {
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end" className="w-48">
             <DropdownMenuItem asChild>
-              <Link to="/app/profile" className="flex items-center gap-2 cursor-pointer">
+              <Link to="/app/settings/profile" className="flex items-center gap-2 cursor-pointer">
                 <User className="w-4 h-4" />
                 Profile
               </Link>

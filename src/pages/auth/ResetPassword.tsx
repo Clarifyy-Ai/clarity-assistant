@@ -34,6 +34,7 @@ import { useAuthStore } from "@/store/authStore";
 import { usePageMeta } from "@/hooks/usePageMeta";
 
 import { FormWrapper } from "@/components/common/FormWrapper";
+import { AuthShell } from "@/components/layout/AuthShell";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/label";
@@ -367,8 +368,10 @@ export default function ResetPassword(): JSX.Element {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-muted/30 to-background px-4 py-12">
+    <AuthShell mobileTitle="Reset password">
+    <div className="w-full">
       <AnimatePresence mode="wait">
+        {/* keep existing phase cards */}
         {/* Phase 1: Request reset link */}
         {mode === "request" && (
           <motion.div
@@ -839,5 +842,6 @@ export default function ResetPassword(): JSX.Element {
         )}
       </AnimatePresence>
     </div>
+    </AuthShell>
   );
 }

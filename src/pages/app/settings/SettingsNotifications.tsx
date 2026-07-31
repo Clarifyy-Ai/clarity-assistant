@@ -4,7 +4,7 @@ import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Toggle } from "@/components/ui/Toggle";
+import { Switch } from "@/components/ui/switch";
 import { CheckCircle, Bell, Mail, Send } from "lucide-react";
 import { toast } from "sonner";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
@@ -128,8 +128,8 @@ export default function SettingsNotifications() {
           <span className="font-medium text-foreground">Email enforcement: </span>
           Category toggles and the master email switch are checked by the{" "}
           <code className="text-[11px]">send-email</code> edge function before Resend sends.
-          Push reminders are not available (no push server). Digest frequency is stored for
-          future schedulers — weekly digest jobs are not live yet.
+          Push reminders and email digests are <span className="font-medium text-foreground">Coming soon</span>{" "}
+          — preferences below are stored for future schedulers.
         </p>
       </Card>
 
@@ -143,7 +143,11 @@ export default function SettingsNotifications() {
           ].map((item) => (
             <div key={item.label} className="flex items-center justify-between">
               <span className="text-sm text-foreground">{item.label}</span>
-              <Toggle checked={item.checked} onChange={() => item.onChange(!item.checked)} />
+              <Switch
+                checked={item.checked}
+                onCheckedChange={(v) => item.onChange(v)}
+                aria-label={item.label}
+              />
             </div>
           ))}
         </div>
@@ -158,20 +162,26 @@ export default function SettingsNotifications() {
                 <Mail className="w-3 h-3 text-muted-foreground" />
                 <span className="text-sm text-foreground">{item.label}</span>
               </div>
-              <Toggle
+              <Switch
                 checked={Boolean(prefs[item.key])}
-                onChange={() => toggleCategory(item.key)}
+                onCheckedChange={() => toggleCategory(item.key)}
+                aria-label={item.label}
               />
             </div>
           ))}
         </div>
         <p className="text-[10px] text-muted-foreground mt-4 leading-relaxed">
-          Push preferences are hidden for now — there is no push server. In-app toasts and browser notifications (when permitted) are the only real-time alerts; email covers the categories above.
+          Push preferences — Coming soon (no push server yet). In-app toasts and browser notifications (when permitted) are the only real-time alerts; email covers the categories above.
         </p>
       </Card>
 
       <Card>
-        <h3 className="text-sm font-semibold text-foreground mb-3">Email digest</h3>
+        <div className="flex items-center gap-2 mb-3">
+          <h3 className="text-sm font-semibold text-foreground">Email digest</h3>
+          <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-muted text-muted-foreground">
+            Coming soon
+          </span>
+        </div>
         <div className="flex flex-wrap gap-2">
           {DIGEST_OPTIONS.map((opt) => (
             <button

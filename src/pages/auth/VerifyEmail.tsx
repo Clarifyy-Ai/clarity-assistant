@@ -13,6 +13,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/Button";
 import { BrandLogo } from "@/components/marketing";
+import { AuthShell } from "@/components/layout/AuthShell";
 
 /**
  * Verify Email gate — shown when an authenticated user has not yet
@@ -71,70 +72,8 @@ export default function VerifyEmail() {
   }
 
   return (
-    <div className="min-h-screen flex bg-background">
-      {/* Left panel */}
-      <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] flex-col relative overflow-hidden bg-gradient-to-br from-primary via-indigo-600 to-blue-700 p-10">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 left-0 w-96 h-96 rounded-full bg-white blur-3xl -translate-x-1/2 -translate-y-1/2" />
-          <div className="absolute bottom-0 right-0 w-80 h-80 rounded-full bg-white blur-3xl translate-x-1/2 translate-y-1/2" />
-        </div>
+    <AuthShell mobileTitle="Verify email">
 
-        <div className="relative z-10 flex flex-col h-full">
-          <div className="flex items-center gap-3">
-            <BrandLogo size="md" showText={false} />
-            <span className="text-xl font-bold text-white">Clarify AI</span>
-          </div>
-
-          <div className="flex-1 flex flex-col justify-center mt-16">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 border border-white/20 text-white text-xs font-medium w-fit mb-6">
-              <Sparkles className="w-3.5 h-3.5" />
-              One step away from your prep dashboard
-            </div>
-
-            <h2 className="text-4xl xl:text-5xl font-black text-white leading-tight mb-4">
-              Confirm your
-              <br />
-              <span className="text-indigo-200">email address</span>
-            </h2>
-
-            <p className="text-indigo-100 text-base leading-relaxed max-w-sm">
-              We use email verification to keep your account secure and make sure you can recover access if needed.
-            </p>
-
-            <div className="space-y-3 mt-10">
-              {[
-                "Check your inbox for the confirmation link",
-                "Click the link to activate your account",
-                "Return here — we'll redirect you automatically",
-              ].map((step) => (
-                <div key={step} className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-lg bg-white/15 border border-white/20 flex items-center justify-center shrink-0">
-                    <Shield className="w-4 h-4 text-white" />
-                  </div>
-                  <span className="text-indigo-100 text-sm">{step}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="bg-white/10 border border-white/15 rounded-2xl p-5 backdrop-blur-sm">
-            <p className="text-white text-sm leading-relaxed">
-              Didn&apos;t receive the email? Check your spam folder or use the resend button after the cooldown.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {/* Right panel */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 sm:px-10 py-12">
-        <div className="lg:hidden mb-8 flex flex-col items-center gap-3 w-full max-w-sm">
-          <div className="w-full py-4 bg-gradient-to-r from-primary to-indigo-600 rounded-2xl flex items-center justify-center gap-2">
-            <BrandLogo size="sm" showText={false} />
-            <span className="text-lg font-bold text-white">Clarify AI</span>
-          </div>
-        </div>
-
-        <div className="w-full max-w-sm space-y-6">
           <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30">
             <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
             <div className="text-sm">
@@ -212,8 +151,6 @@ export default function VerifyEmail() {
             </Link>
             .
           </p>
-        </div>
-      </div>
-    </div>
+    </AuthShell>
   );
 }

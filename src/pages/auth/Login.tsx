@@ -6,9 +6,6 @@ import {
   Eye,
   EyeOff,
   AlertCircle,
-  Sparkles,
-  TrendingUp,
-  Users,
 } from "lucide-react";
 
 import { useAuthStore } from "@/store/authStore";
@@ -27,7 +24,7 @@ import { formatSupabaseAuthError, isSupabaseConfigAuthError } from "@/lib/errors
 import { loginSchema, type LoginInput } from "@/lib/validators";
 import { getCSRFHiddenInputProps, validateCSRFToken } from "@/lib/security";
 import { usePageMeta } from "@/hooks/usePageMeta";
-import { BrandLogo } from "@/components/marketing";
+import { AuthShell } from "@/components/layout/AuthShell";
 
 type LocationState = {
   from?: {
@@ -342,91 +339,8 @@ export default function Login(): JSX.Element {
   }
 
   return (
-    <div className="min-h-screen flex bg-background">
-      {/* Left panel */}
-      <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] flex-col relative overflow-hidden bg-gradient-to-br from-primary via-indigo-600 to-blue-700 p-10">
-        <div className="absolute inset-0 opacity-10">
-          <div className="absolute top-0 left-0 w-96 h-96 rounded-full bg-white blur-3xl -translate-x-1/2 -translate-y-1/2" />
-          <div className="absolute bottom-0 right-0 w-80 h-80 rounded-full bg-white blur-3xl translate-x-1/2 translate-y-1/2" />
-        </div>
+    <AuthShell testimonial={TESTIMONIAL}>
 
-        <div className="relative z-10 flex flex-col h-full">
-          <div className="flex items-center gap-3">
-            <BrandLogo size="md" showText={false} />
-            <span className="text-xl font-bold text-white">Clarify AI</span>
-          </div>
-
-          <div className="flex-1 flex flex-col justify-center mt-16">
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/15 border border-white/20 text-white text-xs font-medium w-fit mb-6">
-              <Sparkles className="w-3.5 h-3.5" />
-              AI-powered interview coaching
-            </div>
-
-            <h2 className="text-4xl xl:text-5xl font-black text-white leading-tight mb-4">
-              Land your dream
-              <br />
-              <span className="text-indigo-200">tech role</span>
-            </h2>
-
-            <p className="text-indigo-100 text-base leading-relaxed max-w-sm">
-              Practice with AI that thinks like a real interviewer. Get instant
-              feedback, improve faster.
-            </p>
-
-            <div className="grid grid-cols-2 gap-4 mt-10">
-              <div className="bg-white/10 border border-white/15 rounded-2xl p-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <TrendingUp className="w-4 h-4 text-indigo-200" />
-                  <span className="text-white font-black text-2xl">Live</span>
-                </div>
-                <p className="text-indigo-200 text-xs">
-                  AI hints while you practice real interview questions
-                </p>
-              </div>
-
-              <div className="bg-white/10 border border-white/15 rounded-2xl p-4">
-                <div className="flex items-center gap-2 mb-1">
-                  <Users className="w-4 h-4 text-indigo-200" />
-                  <span className="text-white font-black text-2xl">Prep</span>
-                </div>
-                <p className="text-indigo-200 text-xs">Mock tests, STAR builder, and answer bank</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="bg-white/10 border border-white/15 rounded-2xl p-5 backdrop-blur-sm">
-            <p className="text-white text-sm leading-relaxed italic">
-              &quot;{TESTIMONIAL.quote}&quot;
-            </p>
-
-            <div className="mt-3 flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-indigo-400/40 flex items-center justify-center text-white text-xs font-bold">
-                {TESTIMONIAL.author[0]}
-              </div>
-
-              <div>
-                <p className="text-white text-xs font-semibold">
-                  {TESTIMONIAL.author}
-                </p>
-                <p className="text-indigo-200 text-[11px]">
-                  {TESTIMONIAL.role}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Right panel */}
-      <div className="flex-1 flex flex-col items-center justify-center px-6 sm:px-10 py-12">
-        <div className="lg:hidden mb-8 flex flex-col items-center gap-3">
-          <div className="w-full py-4 bg-gradient-to-r from-primary to-indigo-600 rounded-2xl flex items-center justify-center gap-2">
-            <BrandLogo size="sm" showText={false} />
-            <span className="text-lg font-bold text-white">Clarify AI</span>
-          </div>
-        </div>
-
-        <div className="w-full max-w-sm">
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-foreground">
               {mfaPending ? "Two-factor authentication" : "Welcome back"}
@@ -600,8 +514,6 @@ export default function Login(): JSX.Element {
           </p>
           </>
           )}
-        </div>
-      </div>
-    </div>
+    </AuthShell>
   );
 }
