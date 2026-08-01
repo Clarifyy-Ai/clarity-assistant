@@ -107,20 +107,35 @@ function normalizePathOrUrl(value: string, fallback: string): string {
   }
 }
 
+// Public (safe-to-ship) fallbacks. The Supabase project URL and anon key are
+// designed to be exposed in the browser bundle — RLS protects the data. Using
+// them as a last resort keeps the app bootable when a build/deploy pipeline
+// fails to inject VITE_* vars, instead of hard-crashing on a blank screen.
+const FALLBACK_SUPABASE_URL = "https://qzgvjrvtkwlzxpmlddkx.supabase.co";
+const FALLBACK_SUPABASE_ANON_KEY =
+  "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6Z3ZqcnZ0a3dsenhwbWxkZGt4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MDE4MzAsImV4cCI6MjA4OTM3NzgzMH0.hsDv4Sk7L8on5zlr9K6LT1FQe3bEEzmav5bCYes-0so";
+
+const SUPABASE_URL_RAW = optional(["VITE_SUPABASE_URL"]);
+if (!SUPABASE_URL_RAW) {
+  console.warn(
+    "[env] VITE_SUPABASE_URL missing from bundle — using public project fallback."
+  );
+}
 const SUPABASE_URL_VALUE = assertValidUrl(
-  firstDefined(["VITE_SUPABASE_URL"]),
+  SUPABASE_URL_RAW || FALLBACK_SUPABASE_URL,
   "VITE_SUPABASE_URL"
 );
 
-const SUPABASE_ANON_KEY_VALUE = firstDefined([
-  "VITE_SUPABASE_ANON_KEY",
-  "VITE_SUPABASE_PUBLISHABLE_KEY",
-]);
+const SUPABASE_ANON_KEY_VALUE = optional(
+  ["VITE_SUPABASE_ANON_KEY", "VITE_SUPABASE_PUBLISHABLE_KEY"],
+  FALLBACK_SUPABASE_ANON_KEY
+);
 
-const SUPABASE_PUBLISHABLE_KEY_VALUE = firstDefined([
-  "VITE_SUPABASE_PUBLISHABLE_KEY",
-  "VITE_SUPABASE_ANON_KEY",
-]);
+const SUPABASE_PUBLISHABLE_KEY_VALUE = optional(
+  ["VITE_SUPABASE_PUBLISHABLE_KEY", "VITE_SUPABASE_ANON_KEY"],
+  FALLBACK_SUPABASE_ANON_KEY
+);
+
 
 const APP_ENV_VALUE = parseAppEnvironment(
   optional(["VITE_APP_ENV"], "development")
