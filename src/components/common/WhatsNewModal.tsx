@@ -8,7 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import { APP_VERSION, APP_LAST_UPDATED } from "@/lib/constants/version";
 import { useAuthStore } from "@/store/authStore";
 import { hasCompletedAppWalkthrough } from "@/lib/onboarding/appWalkthroughStorage";

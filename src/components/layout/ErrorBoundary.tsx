@@ -1,8 +1,8 @@
 // @ts-nocheck
 import React, { ReactNode, useState } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
 
 interface ErrorBoundaryProps {
   children: ReactNode;

@@ -5,7 +5,7 @@
 import { useEffect, useState, useCallback } from "react";
 import { RefreshCw, AlertTriangle, ExternalLink } from "lucide-react";
 import { Skeleton } from "@/components/ui/SkeletonLoader";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 
 const STUCK_TIMEOUT_MS = 10_000;
 

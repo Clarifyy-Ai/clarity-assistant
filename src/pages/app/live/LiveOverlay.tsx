@@ -12,7 +12,7 @@ import { OverlayKeyboardHandler } from "@/components/overlay/OverlayKeyboardHand
 import { WindowVisibilityManager } from "@/components/overlay/WindowVisibilityManager";
 import { LiveSessionController } from "@/components/live/LiveSessionController";
 import { PreSessionSetupWizard } from "@/components/session/PreSessionSetupWizard";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 
 import { ClipboardCheck, AlertTriangle, RefreshCw, Eye, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";

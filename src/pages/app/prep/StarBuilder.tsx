@@ -5,9 +5,9 @@ import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
 import { PageHeader } from "@/components/layout/PageHeader";
 import {
   StarBuilderForm,

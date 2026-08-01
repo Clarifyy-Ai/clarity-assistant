@@ -22,8 +22,8 @@ import {
 import { toast } from "sonner";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/Button";
+import { Card, CardContent } from "@/components/ui/Card";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/lib/supabase/client";

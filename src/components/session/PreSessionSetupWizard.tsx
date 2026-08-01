@@ -29,7 +29,7 @@ import {
 } from "@/lib/session/lastPracticeSetup";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { Switch } from "@/components/ui/switch";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import { SessionContextChip } from "@/components/session/SessionContextChip";
 import { AudioOkBadge } from "@/components/session/AudioOkBadge";
 import { markPracticeStart } from "@/lib/analytics/uxMetrics";

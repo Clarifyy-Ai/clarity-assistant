@@ -1,8 +1,8 @@
 import { useEffect } from "react";
 import { useLocation } from "react-router-dom";
 import { ExternalLink, Globe, Monitor } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Button } from "@/components/ui/Button";
+import { Card, CardContent } from "@/components/ui/Card";
 import { openInBrowser, getWebAppUrl } from "@/lib/platform/openInBrowser";
 import { ELECTRON_DEFAULT_PATH } from "@/lib/platform/electronRoutes";
 import { Link } from "react-router-dom";

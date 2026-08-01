@@ -7,8 +7,8 @@ import {
   setDefaultOverlayEnabled,
 } from "@/lib/overlay/defaultOverlayPreference";
 import { setAppStealthMode } from "@/lib/stealth/stealthActions";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/switch";
 import { DesktopDownloadButton } from "@/components/common/DesktopDownloadButton";
 import { isElectronApp } from "@/lib/platform/isElectron";

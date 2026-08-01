@@ -1,6 +1,6 @@
 import { ReactNode } from 'react';
 import { Check, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Button } from '@/components/ui/Button';
 import { cn } from '@/lib/utils';
 
 /**

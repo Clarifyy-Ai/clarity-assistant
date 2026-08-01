@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import { BrandLogo } from "@/components/marketing";
 import { AuthShell } from "@/components/layout/AuthShell";
 

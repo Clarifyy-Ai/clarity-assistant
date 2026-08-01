@@ -6,11 +6,11 @@ import {
 } from "lucide-react";
 import { format, formatDistanceStrict } from "date-fns";
 import { cn } from "@/lib/utils";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Badge } from "@/components/ui/Badge";
-import { Modal } from "@/components/ui/modal";
+import { Modal } from "@/components/ui/Modal";
 import { Tooltip } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import {

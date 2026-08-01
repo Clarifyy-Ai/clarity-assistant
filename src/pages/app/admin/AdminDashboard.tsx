@@ -6,7 +6,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageContent } from "@/components/layout/PageContent";
-import { Card } from "@/components/ui/card";
+import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {

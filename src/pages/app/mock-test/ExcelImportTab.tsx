@@ -11,9 +11,9 @@ import {
 } from "lucide-react";
 import { questionsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/Card";
 import { toast } from "sonner";
 import { normalizeExamTypeForStorage } from "@/lib/mock-test/examTypes";
 

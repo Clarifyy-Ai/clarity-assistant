@@ -20,7 +20,7 @@ import { generateId, cn } from "@/lib/utils";
 import { normalizeParsedResume } from "@/lib/documents/resumeParse";
 import { MODEL_OPTIONS, normalizePreferredModel } from "@/lib/ai/modelOptions";
 import { normalizeToDisplayTier } from "@/lib/constants/pricing";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import {
   Accordion,

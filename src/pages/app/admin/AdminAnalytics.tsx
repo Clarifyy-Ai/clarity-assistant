@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { adminAnalyticsDB } from "@/lib/supabase/database";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
 import { Badge } from "@/components/ui/Badge";
 import {

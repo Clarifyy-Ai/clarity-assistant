@@ -7,14 +7,14 @@ import { subDays } from "date-fns";
 
 import {
   Card, CardContent, CardHeader, CardTitle, CardDescription,
-} from "@/components/ui/card";
+} from "@/components/ui/Card";
 import {
   Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
-import { Button }   from "@/components/ui/button";
+import { Button }   from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Bot, Cpu, DollarSign, TrendingUp,

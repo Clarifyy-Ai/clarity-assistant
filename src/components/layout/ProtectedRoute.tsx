@@ -1,13 +1,13 @@
 import { memo } from "react";
 import { Navigate, Outlet, useLocation, Link } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
-import { Card } from "@/components/ui/card";
+import { Card } from "@/components/ui/Card";
 import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
 import { AlertCircle } from "lucide-react";
 import { isBillingSuspended } from "@/lib/billing/subscriptionAccess";
 import { isElectronApp } from "@/lib/platform/isElectron";
 import { openInBrowser } from "@/lib/platform/openInBrowser";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 
 interface ProtectedRouteProps {
   requireOnboarding?: boolean;

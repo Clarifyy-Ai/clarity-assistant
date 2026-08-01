@@ -17,8 +17,8 @@ import { useAuthStore } from "@/store/authStore";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { BrandLogo } from "@/components/marketing";
 import { AuthShell } from "@/components/layout/AuthShell";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
 
 import {
   GoogleOAuthButton,

@@ -14,7 +14,7 @@ import { useInterviewScheduler } from "@/hooks/useInterviewScheduler";
 import { useDocuments } from "@/hooks/useDocuments";
 import { SetupChecklist } from "@/components/layout/SetupChecklist";
 import { LowCreditBanner, useLowCreditState } from "@/components/billing/LowCreditBanner";
-import { Card } from "@/components/ui/card";
+import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { XPProgressRing } from "@/components/gamification/XPProgressRing";

@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card } from "@/components/ui/card";
+import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/Tabs";
@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
 import { useNavigate } from "react-router-dom";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import {
   Select,
   SelectContent,
