@@ -27,6 +27,7 @@ export interface OnboardingData {
   // Step 4 — Audio
   selectedMicId:       string;
   audioVerified:       boolean;
+  skippedAudio?:       boolean;
 
   // Step 5 — Resume
   resumeFileId:        string | null;
