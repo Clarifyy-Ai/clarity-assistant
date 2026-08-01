@@ -7,6 +7,7 @@ import type { ReactNode } from "react";
 // ─────────────────────────────────────────────────────────────────
 
 interface CardProps {
+  id?: string;
   children?: ReactNode;
   className?: string;
   padding?: "none" | "sm" | "md" | "lg";
@@ -27,6 +28,7 @@ const PADDING = {
 };
 
 export function Card({
+  id,
   children,
   className,
   padding = "md",
@@ -35,6 +37,7 @@ export function Card({
 }: CardProps) {
   return (
     <div
+      id={id}
       onClick={onClick}
       className={cn(
         "bg-card border border-border rounded-2xl shadow-sm",

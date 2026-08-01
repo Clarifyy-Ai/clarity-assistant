@@ -412,7 +412,7 @@ export default function OnboardingStep2OptionalSetup({
             preferred_model: model,
             notification_prefs: { ...existingPrefs, interview_styles: styles },
             onboarding_step: 2,
-          } as Record<string, unknown>)
+          } as never)
           .eq("id", user.id)
           .select()
           .maybeSingle();
