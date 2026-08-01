@@ -66,6 +66,14 @@ jobs:
       - name: Build
         run: npm run build
 
+      # CI uses placeholder VITE_SUPABASE_URL (see env: block above), so this
+      # confirms the bake-in mechanism itself works, not the real project ref.
+      # Real deploys (Lovable) must run `npm run verify:dist-env` with the
+      # actual VITE_SUPABASE_URL so a missing/blank dashboard env var fails
+      # the deploy instead of shipping a broken bundle (see BUG-LIVE-STAGING-ENV).
+      - name: Verify dist bundle has env baked in
+        run: npm run verify:dist-env
+
   e2e:
     name: Playwright E2E (smoke)
     runs-on: ubuntu-latest

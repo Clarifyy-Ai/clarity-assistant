@@ -31,6 +31,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
   const profile = useAuthStore((s) => s.profile);
   const error   = useAuthStore((s) => s.error);
   const isAdmin = useAuthStore((s) => s.isAdmin);
+  const isAdminResolved = useAuthStore((s) => s.isAdminResolved);
   const isProfileLoaded = useAuthStore((s) => s.isProfileLoaded);
   const isOnboarded = useAuthStore((s) => s.isOnboarded);
 
@@ -145,11 +146,12 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     );
   }
 
-  // 4) Admin check — wait for profile (and role) to finish loading before denying
-  if (requireAdmin && !isProfileLoaded) {
+  // 4) Admin check — wait for profile + definitive role result before denying.
+  // Abort/timeout on user_roles must NOT show Access Denied (false negative).
+  if (requireAdmin && (!isProfileLoaded || !isAdminResolved)) {
     return <AppLoadingFallback />;
   }
-  if (requireAdmin && !isAdmin) {
+  if (requireAdmin && isAdminResolved && !isAdmin) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
         <Card className="w-full max-w-md p-6">

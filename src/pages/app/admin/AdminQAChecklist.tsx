@@ -5,7 +5,8 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/Badge";
 import { PageStateLoading } from "@/components/common/PageStateLoading";
-import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";import {
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -200,32 +201,39 @@ export default function AdminQAChecklist() {
 
   if (loadError) {
     return (
-      <InlineErrorRetry
-        message={loadError}
-        onRetry={() => {
-          setLoadError(null);
-          setSeedData(null);
-          import("@/data/qaChecklist.json")
-            .then((mod) => {
-              const data = mod.default as QaChecklistItem[];
-              setSeedData(data);
-              setTests(mergeStatuses(savedStatuses, data));
-            })
-            .catch((err: unknown) => {
-              setLoadError(
-                err instanceof Error ? err.message : "Failed to load QA checklist",
-              );
-            });
-        }}
-      />
+      <div data-testid="admin-qa-checklist">
+        <InlineErrorRetry
+          message={loadError}
+          onRetry={() => {
+            setLoadError(null);
+            setSeedData(null);
+            import("@/data/qaChecklist.json")
+              .then((mod) => {
+                const data = mod.default as QaChecklistItem[];
+                setSeedData(data);
+                setTests(mergeStatuses(savedStatuses, data));
+              })
+              .catch((err: unknown) => {
+                setLoadError(
+                  err instanceof Error ? err.message : "Failed to load QA checklist",
+                );
+              });
+          }}
+        />
+      </div>
     );
   }
 
   if (!seedData) {
-    return <PageStateLoading message="Loading QA checklist…" />;
+    return (
+      <div data-testid="admin-qa-checklist">
+        <PageStateLoading message="Loading QA checklist…" />
+      </div>
+    );
   }
 
-  return (    <div className="space-y-6 max-w-6xl">
+  return (
+    <div className="space-y-6 max-w-6xl" data-testid="admin-qa-checklist">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">

@@ -63,8 +63,9 @@ echo ""
 echo "Smoke testing: $BASE"
 echo "──────────────────────────────────────────────"
 
-# Public / anon-accessible
+# Public / anon-accessible (ping = real health; health = thin alias)
 check_anon  "ping"                          '{}'
+check_anon  "health"                        '{}'
 
 # Auth-gated (expect 400/401 without a real session, not 500)
 check_auth  "deepgram-token"                '{}'

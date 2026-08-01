@@ -9,7 +9,6 @@ import {
   Pencil,
   X,
 } from "lucide-react";
-import * as XLSX from "xlsx";
 import { questionsDB } from "@/lib/supabase/database";
 import { useAuthStore } from "@/store/userStore";
 import { Button } from "@/components/ui/button";
@@ -130,8 +129,11 @@ export default function ExcelImportTab({
 
     const reader = new FileReader();
 
-    reader.onload = (event) => {
+    reader.onload = async (event) => {
       try {
+        // Deferred: `xlsx` is a large parser, only pull it in once a file is
+        // actually dropped/selected instead of eagerly at module load.
+        const XLSX = await import("xlsx");
         const raw = event.target?.result;
         const workbook =
           ext === "csv"

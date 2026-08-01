@@ -281,22 +281,28 @@ export default function TestRevision() {
     );
   }
 
-  if (loading) {
-    return (
-      <div className="flex h-64 items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-      </div>
-    );
-  }
-
+  // Always paint page chrome (Revision / Spaced) on first render so live QA
+  // and slow revision_list fetches do not see an empty app shell.
   return (
-    <div className="mx-auto max-w-2xl space-y-6">
+    <div
+      className="mx-auto max-w-2xl space-y-6"
+      data-testid="mock-test-revision"
+    >
       <PageHeader
         title="Revision List"
         description="Spaced repetition review — questions due for review today."
       />
 
-      {items.length > 0 && (
+      {loading && (
+        <div className="flex h-64 flex-col items-center justify-center gap-3">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+          <p className="text-sm text-muted-foreground">
+            Loading spaced revision review…
+          </p>
+        </div>
+      )}
+
+      {!loading && items.length > 0 && (
         <div className="flex items-center gap-3">
           <div className="h-2 flex-1 overflow-hidden rounded-full bg-muted">
             <div
@@ -313,7 +319,7 @@ export default function TestRevision() {
         </div>
       )}
 
-      {(isDone || items.length === 0) && (
+      {!loading && (isDone || items.length === 0) && (
         <Card className="border-green-500/30">
           <CardContent className="flex flex-col items-center justify-center space-y-3 py-16 text-center">
             <div className="flex h-16 w-16 items-center justify-center rounded-full bg-green-500/20">
@@ -344,7 +350,7 @@ export default function TestRevision() {
         </Card>
       )}
 
-      {!isDone && currentItem && (
+      {!loading && !isDone && currentItem && (
         <div className="space-y-4">
           <div className="flex items-center justify-between text-xs text-muted-foreground">
             <span>

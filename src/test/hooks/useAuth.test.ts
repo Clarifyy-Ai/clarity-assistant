@@ -92,6 +92,7 @@ function seedProfile(plan: string, isAdmin = false) {
     credits: 10,
     planId: plan,
     isAdmin,
+    isAdminResolved: true,
     isAuthenticated: true,
     isLoading: false,
     status: "authenticated",

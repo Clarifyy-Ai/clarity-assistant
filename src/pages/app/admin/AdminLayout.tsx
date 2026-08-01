@@ -93,10 +93,11 @@ function AdminNavLinks({ onNavigate }: { onNavigate?: () => void }) {
 }
 
 export default function AdminLayout() {
-  const { isAdmin, isProfileLoaded } = useAuthStore();
+  const { isAdmin, isAdminResolved, isProfileLoaded } = useAuthStore();
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  if (!isProfileLoaded) {
+  // Wait for a definitive user_roles result — abort/timeout must not redirect.
+  if (!isProfileLoaded || !isAdminResolved) {
     return <AppLoadingFallback />;
   }
 

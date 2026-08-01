@@ -56,6 +56,37 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
   ]);
 }
 
+/**
+ * Resolve admin role with one retry on abort/timeout/network failure.
+ * Unresolved result must NOT be treated as "not admin".
+ */
+async function resolveAdminRole(
+  userId: string
+): Promise<{ resolved: boolean; isAdmin: boolean }> {
+  const attempt = () =>
+    withTimeout(
+      userRolesDB.hasRole(userId, "admin"),
+      AUTH_SESSION_TIMEOUT_MS,
+      "Role check"
+    );
+
+  try {
+    return { resolved: true, isAdmin: await attempt() };
+  } catch (err) {
+    console.warn("[authStore] Admin role check failed; retrying once:", err);
+    try {
+      return { resolved: true, isAdmin: await attempt() };
+    } catch (retryErr) {
+      console.warn(
+        "[authStore] Admin role check retry failed; leaving unresolved:",
+        retryErr
+      );
+      // Leave unresolved so gates show loading instead of false Access Denied.
+      return { resolved: false, isAdmin: false };
+    }
+  }
+}
+
 export interface AuthState {
   status: AuthStatus;
   session: SupabaseSession | null;
@@ -64,6 +95,8 @@ export interface AuthState {
   isProfileLoaded: boolean;
   error: string | null;
   isAdmin: boolean;
+  /** True only after a successful user_roles read (admin or not). Abort/timeout leave this false. */
+  isAdminResolved: boolean;
   isOnboarded: boolean;
   planId: string;
   credits: number;
@@ -115,6 +148,7 @@ function buildInitialAuthState(): AuthState {
       isProfileLoaded: false,
       error: null,
       isAdmin: false,
+      isAdminResolved: false,
       isOnboarded: false,
       planId: "free",
       credits: 0,
@@ -131,6 +165,7 @@ function buildInitialAuthState(): AuthState {
     isProfileLoaded: false,
     error: null,
     isAdmin: false,
+    isAdminResolved: false,
     isOnboarded: false,
     planId: "free",
     credits: 0,
@@ -554,28 +589,37 @@ export const useAuthStore = create<AuthStore>()(
               return false;
             }
 
-            try {
-              const profile = await withTimeout(
+            const fetchProfile = () =>
+              withTimeout(
                 profilesDB.getByIdMaybe(userId),
                 AUTH_SESSION_TIMEOUT_MS,
                 "Profile load",
               );
 
-              const hasAdminRole = await withTimeout(
-                userRolesDB.hasRole(userId, "admin"),
-                AUTH_SESSION_TIMEOUT_MS,
-                "Role check",
-              ).catch((err) => {
-                console.warn("[authStore] Admin role check failed; continuing as non-admin:", err);
-                return false;
-              });
+            try {
+              let profile: Awaited<ReturnType<typeof profilesDB.getByIdMaybe>>;
+              try {
+                profile = await fetchProfile();
+              } catch (firstErr) {
+                console.warn(
+                  "[authStore] Profile load failed; retrying once:",
+                  firstErr,
+                );
+                profile = await fetchProfile();
+              }
+
+              const roleResult = await resolveAdminRole(userId);
 
               if (!profile) {
                 console.warn("[authStore] Profile not found; routing user to onboarding");
                 dset((state) => {
                   state.profile = null;
                   state.isProfileLoaded = true;
-                  state.isAdmin = false;
+                  if (roleResult.resolved) {
+                    state.isAdmin = roleResult.isAdmin;
+                    state.isAdminResolved = true;
+                  }
+                  // else keep prior isAdminResolved (avoid false deny on abort)
                   state.isOnboarded = false;
                   state.planId = "free";
                   state.credits = 0;
@@ -605,7 +649,11 @@ export const useAuthStore = create<AuthStore>()(
               set((state) => {
                 state.profile = profile as unknown as ProfileRow;
                 state.isProfileLoaded = true;
-                state.isAdmin = hasAdminRole;
+                if (roleResult.resolved) {
+                  state.isAdmin = roleResult.isAdmin;
+                  state.isAdminResolved = true;
+                }
+                // Unresolved role check: leave prior flags; do not set isAdmin=false.
                 state.isOnboarded = getProfileBoolean(
                   row,
                   "onboarding_completed",
@@ -614,6 +662,22 @@ export const useAuthStore = create<AuthStore>()(
                 state.planId = getProfileString(row, "plan_id", "free");
                 state.credits = getProfileNumber(row, "credits", 0);
               });
+
+              // Transient role abort left unresolved — retry once more in background
+              // so a real admin is not stuck behind a permanent loading gate.
+              if (!roleResult.resolved && !get().isAdminResolved) {
+                setTimeout(() => {
+                  void (async () => {
+                    if (get().user?.id !== userId || get().isAdminResolved) return;
+                    const retry = await resolveAdminRole(userId);
+                    if (get().user?.id !== userId || !retry.resolved) return;
+                    set((state) => {
+                      state.isAdmin = retry.isAdmin;
+                      state.isAdminResolved = true;
+                    });
+                  })();
+                }, 750);
+              }
 
               syncOverlayFromProfile(row);
               return true;
@@ -624,6 +688,8 @@ export const useAuthStore = create<AuthStore>()(
                 state.error = `Unable to load your account profile. ${getErrorMessage(err)}`;
                 state.isProfileLoaded = true;
                 state.isAdmin = false;
+                // Profile failed hard — do not claim a definitive non-admin role.
+                state.isAdminResolved = false;
               });
               return false;
             }

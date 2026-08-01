@@ -7,6 +7,10 @@ project_id = "qzgvjrvtkwlzxpmlddkx"
 [functions.ping]
 verify_jwt = false
 
+# Public liveness alias for ping (minimal { status: "ok" } only).
+[functions.health]
+verify_jwt = false
+
 [functions.stripe-webhook]
 verify_jwt = false
 

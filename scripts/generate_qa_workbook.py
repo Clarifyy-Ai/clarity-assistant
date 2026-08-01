@@ -647,10 +647,19 @@ def build_readme(wb: Workbook):
         ("Version under test", "1.0.0 / 1.0.0-beta"),
         ("Generated", str(TODAY)),
         ("", ""),
+        ("IMPORTANT — DATA PROVENANCE (read before trusting Pass/Fail)", ""),
+        ("WARNING", "This workbook is SCRIPT-GENERATED (scripts/generate_qa_workbook.py + qa_workbook_inventory.py)."),
+        ("WARNING", "Modules (20), Features (114), and Bugs (58) are SEEDED from a code/ops AUDIT inventory — not a day-by-day QA log."),
+        ("WARNING", "Sample Pass/Fail / Actual Result / Daily Log hours are ILLUSTRATIVE. Do NOT treat them as proof that Shreya/Raj executed those cases."),
+        ("WARNING", "Live execution starts when QA clears/overwrites sample outcomes on 04, 07–18, Smoke, and fills Actual Hours on QA Tasks."),
+        ("WARNING", "Bug IDs (BUG-P0-*, BUG-OPEN-*) are internal audit IDs — not GitHub issue numbers unless you add a GH URL column."),
+        ("WARNING", "Dev Team names (Dev Lead, Platform Dev, …) are ROLE PLACEHOLDERS — replace with real engineers before assigning bugs."),
+        ("WARNING", "Passwords are NEVER in this xlsx — only in gitignored .env.qa.local (npm run qa:seed-accounts). Do not zip the repo folder carelessly."),
+        ("", ""),
         ("HOW TO USE", ""),
         ("1", "Start at NAV Hub or 01 Dashboard — KPIs + charts."),
         ("2", "QA opens QA Tasks — pick your rows (Shreya / Raj). Execute linked TCs on 04."),
-        ("3", "On Fail: set Pass/Fail=Fail on 04 → add a row on 06 Bug Tracker (Reported By = you, Assigned To = a Developer)."),
+        ("3", "On Fail: set Pass/Fail=Fail on 04 → add a row on 06 Bug Tracker (Reported By = you, Assigned To = a real developer name)."),
         ("4", "Dev Tasks auto-mirrors 06 — developers see Needs Dev Action=Yes. Filter that column."),
         ("5", "Dev sets Bug Status=Fixed or Retest on 06 → QA retests → Closed. Fill Daily Log daily."),
         ("6", "Complete 19 Production Readiness and 20 Release Sign-Off for Go/No-Go."),
@@ -660,7 +669,7 @@ def build_readme(wb: Workbook):
         ("", "Shreya Patil — Practice Coach, Overlay, Mock, Sessions/Debrief, Documents, UI/UX, Electron"),
         ("", "Raj Balani — Auth, Billing, Gov Exams, Admin, Prep Lab, Security, Regression"),
         ("DEV TEAM", ""),
-        ("", "Dev Lead · Live Coach Dev · Platform Dev · GovExams Dev · Desktop Dev — see Dev Team sheet"),
+        ("", "PLACEHOLDERS until filled: Dev Lead · Live Coach Dev · Platform Dev · GovExams Dev · Desktop Dev — edit DEV_TEAM in generate_qa_workbook.py then regenerate"),
         ("Green", "Pass / Yes / Closed / Done"),
         ("Red", "Fail / No / Critical / Blocked"),
         ("Yellow", "In Progress / Open / Medium / Queued"),
@@ -711,7 +720,12 @@ def build_readme(wb: Workbook):
         ca.font = Font(bold=True)
         cb.alignment = WRAP
         # Hyperlink sheet index entries
-        if a and a not in ("", "HOW TO USE", "QA TEAM", "SCALING", "SHEET INDEX (click sheet tabs or use NAV Hub)", "Green", "Red", "Yellow", "Gray", "Blue") and not a[0].isdigit() and a not in ("Application", "Description", "Tech stack", "Portals", "Roles", "Version under test", "Generated", "Google Sheets"):
+        if a and a not in (
+            "", "HOW TO USE", "QA TEAM", "QA TEAM (production)", "DEV TEAM", "SCALING",
+            "SHEET INDEX (click sheet tabs or use NAV Hub)",
+            "IMPORTANT — DATA PROVENANCE (read before trusting Pass/Fail)",
+            "WARNING", "Green", "Red", "Yellow", "Gray", "Blue",
+        ) and not a[0].isdigit() and a not in ("Application", "Description", "Tech stack", "Portals", "Roles", "Version under test", "Generated", "Google Sheets"):
             # leave non-sheet labels
             pass
         sheet_targets = {
@@ -737,6 +751,15 @@ def build_readme(wb: Workbook):
             ca.fill = GRAY_F
         elif a == "Blue":
             ca.fill = BLUE_F
+        elif a == "WARNING":
+            ca.fill = FAIL_F
+            cb.fill = FAIL_F
+            ca.font = Font(bold=True, color="FFFFFF")
+            cb.font = Font(bold=True)
+        elif a.startswith("IMPORTANT"):
+            ca.fill = FAIL_F
+            cb.fill = FAIL_F
+            ca.font = Font(bold=True, color="FFFFFF")
     ws.column_dimensions["A"].width = 36
     ws.column_dimensions["B"].width = 110
     ws.freeze_panes = "A3"

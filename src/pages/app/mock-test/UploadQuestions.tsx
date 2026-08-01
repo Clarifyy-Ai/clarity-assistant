@@ -1,5 +1,5 @@
 // src/pages/app/mock-test/UploadQuestions.tsx
-import { useMemo, useRef, useState } from "react";
+import { lazy, Suspense, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   AlertCircle,
@@ -13,8 +13,6 @@ import {
   Upload,
   X,
 } from "lucide-react";
-import { InlineMath, BlockMath } from "react-katex";
-import "katex/dist/katex.min.css";
 import { toast } from "sonner";
 import { normalizeExamTypeForStorage } from "@/lib/mock-test/examTypes";
 
@@ -45,7 +43,11 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 
-import ExcelImportTab from "./ExcelImportTab";
+// Lazy-loaded so the heavy `xlsx` parser (ExcelImportTab) and `react-katex`
+// (LaTeXPreview) bundles don't block first paint of the Import Questions
+// page chrome (title, tabs). They load on-demand once their tab/preview is used.
+const ExcelImportTab = lazy(() => import("./ExcelImportTab"));
+const LaTeXPreview = lazy(() => import("./LaTeXPreview"));
 
 interface ParsedQuestion {
   question_text: string;
@@ -99,90 +101,11 @@ const SUBJECTS = [
   "Other",
 ];
 
-function LaTeXPreview({ text }: { text: string }) {
-  if (!text?.trim()) {
-    return <p className="text-sm italic text-muted-foreground">Preview will appear here…</p>;
-  }
-
-  const blockRegex = /\$\$([\s\S]+?)\$\$/g;
-  const inlineRegex = /\$((?:[^$\\]|\\.)+?)\$/g;
-
-  let match: RegExpExecArray | null;
-  const segments: Array<{
-    start: number;
-    end: number;
-    type: "block" | "inline";
-    math: string;
-  }> = [];
-
-  blockRegex.lastIndex = 0;
-  while ((match = blockRegex.exec(text)) !== null) {
-    segments.push({
-      start: match.index,
-      end: match.index + match[0].length,
-      type: "block",
-      math: match[1],
-    });
-  }
-
-  inlineRegex.lastIndex = 0;
-  while ((match = inlineRegex.exec(text)) !== null) {
-    const start = match.index;
-    const end = start + match[0].length;
-    const overlaps = segments.some((s) => start < s.end && end > s.start);
-    if (!overlaps) {
-      segments.push({
-        start,
-        end,
-        type: "inline",
-        math: match[1],
-      });
-    }
-  }
-
-  segments.sort((a, b) => a.start - b.start);
-
-  let cursor = 0;
-  const tokens: Array<{ type: "text" | "inline" | "block"; content: string }> = [];
-
-  for (const seg of segments) {
-    if (seg.start > cursor) {
-      tokens.push({ type: "text", content: text.slice(cursor, seg.start) });
-    }
-    tokens.push({ type: seg.type, content: seg.math });
-    cursor = seg.end;
-  }
-
-  if (cursor < text.length) {
-    tokens.push({ type: "text", content: text.slice(cursor) });
-  }
-
+function ImportTabFallback() {
   return (
-    <div className="leading-relaxed text-sm text-foreground">
-      {tokens.map((token, i) => {
-        if (token.type === "block") {
-          return (
-            <div key={i} className="my-2 overflow-x-auto text-center">
-              <BlockMath math={token.content} errorColor="#e74c3c" />
-            </div>
-          );
-        }
-
-        if (token.type === "inline") {
-          return <InlineMath key={i} math={token.content} errorColor="#e74c3c" />;
-        }
-
-        return (
-          <span key={i}>
-            {token.content.split("\n").map((line, j, arr) => (
-              <span key={j}>
-                {line}
-                {j < arr.length - 1 && <br />}
-              </span>
-            ))}
-          </span>
-        );
-      })}
+    <div className="flex flex-col items-center justify-center gap-3 rounded-xl border-2 border-dashed border-border p-10 text-muted-foreground">
+      <Loader2 className="h-8 w-8 animate-spin" />
+      <p className="text-sm">Loading importer…</p>
     </div>
   );
 }
@@ -308,7 +231,13 @@ function ManualCreator({ onSaved }: { onSaved: () => void }) {
 
           {preview ? (
             <div className="min-h-[100px] rounded-lg border bg-muted/10 p-3">
-              <LaTeXPreview text={form.question_text} />
+              <Suspense
+                fallback={
+                  <p className="text-sm text-muted-foreground">Loading preview…</p>
+                }
+              >
+                <LaTeXPreview text={form.question_text} />
+              </Suspense>
             </div>
           ) : (
             <Textarea
@@ -999,7 +928,7 @@ export default function UploadQuestions() {
   const [questionCount, setQuestionCount] = useState(0);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-5" data-testid="mock-test-upload">
       <PageHeader
         title="Import Questions"
         description="Upload questions via Excel, PDF, or create them manually."
@@ -1022,7 +951,9 @@ export default function UploadQuestions() {
         </TabsList>
 
         <TabsContent value="excel" className="mt-5">
-          <ExcelImportTab onImported={(count) => setQuestionCount((prev) => prev + count)} />
+          <Suspense fallback={<ImportTabFallback />}>
+            <ExcelImportTab onImported={(count) => setQuestionCount((prev) => prev + count)} />
+          </Suspense>
         </TabsContent>
 
         <TabsContent value="pdf" className="mt-5 space-y-4">

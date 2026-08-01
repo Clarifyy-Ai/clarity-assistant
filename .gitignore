@@ -54,6 +54,7 @@ test-results/
 playwright-report/
 blob-report/
 playwright/.cache/
+qa-audit-results/
 
 # =========================
 # ⚙️ Cache / Build Tools
