@@ -110,7 +110,7 @@ export {
   TableFooter as DataTableFooter,
   TableCaption as DataTableCaption,
 } from "./DataTable";
-export { Textarea } from "./input";
+export { Textarea } from "./Input";
 export { ToastContainer } from "./toast-container";
 export { Toast, ToastAction, ToastClose, ToastDescription, ToastProvider, ToastTitle, ToastViewport } from "./toast";
 export { Toaster } from "./toaster";
@@ -119,11 +119,11 @@ export { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./tool
 
 // ─── Custom UI Components ─────────────────────────────────────────────────────
 export { Badge } from "./Badge";
-export { Button } from "./button";
-export { Card, CardHeader, CardTitle, CardContent, CardFooter } from "./card";
+export { Button } from "./Button";
+export { Card, CardHeader, CardTitle, CardContent, CardFooter } from "./Card";
 export { Dropdown } from "./Dropdown";
-export { Input } from "./input";
-export { Modal } from "./modal";
+export { Input } from "./Input";
+export { Modal } from "./Modal";
 export { ProgressBar } from "./ProgressBar";
 export { Spinner } from "./Spinner";
 export { Tabs, TabsList, TabsTrigger, TabsContent } from "./Tabs";
