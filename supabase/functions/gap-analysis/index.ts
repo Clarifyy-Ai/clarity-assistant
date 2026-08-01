@@ -5,7 +5,6 @@ import {
   requireAuth, 
   parseBody, 
   errorResponse, 
-  callAI, 
   getAdminClient, 
   log 
 } from "../_shared/utils.ts";
@@ -14,6 +13,7 @@ import {
 } from "../_shared/rateLimit.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
+import { generateWithFallback } from "../_shared/aiProvider.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 
 const GAP_ANALYSIS_COST = creditCost("gap_analysis");
@@ -142,18 +142,24 @@ ${safeJD}
     /* -------------------------------------------------------
        CALL AI SAFELY
     ------------------------------------------------------- */
-    const aiResult = await callAI({
-      model: "gemini-2.0-flash", // Using latest Gemini matching original intent
-      messages: [{ role: "user", content: prompt }],
-      maxTokens: 2048,
-    }).catch(async (err) => {
+    let aiResult;
+    try {
+      aiResult = await generateWithFallback({
+        prompt,
+        maxTokens: 2048,
+        temperature: 0.5,
+        jsonMode: true,
+        userId,
+        action: "gap_analysis",
+      });
+    } catch (err) {
       await refundCredits({
         userId,
         cost: GAP_ANALYSIS_COST,
         reason: "refund_gap_analysis_ai_failure",
       });
       throw err;
-    });
+    }
 
     if (!aiResult?.text) {
       await refundCredits({

@@ -27,6 +27,7 @@ import { checkCreditsForAction, SERVER_AI_CREDIT_COSTS } from "@/lib/billing/cre
 import { toast } from "sonner";
 import { composeHint, splitInlineCode } from "@/lib/overlay/overlayCompositor";
 import { copyTextToClipboard, extractCodeFromAnswer } from "@/lib/overlay/answerTextUtils";
+import { structureForMode } from "@/lib/overlay/responseFormatters";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useSessionStore } from "@/store/sessionStore";
 import { feedbackDB } from "@/lib/supabase/database";
@@ -493,6 +494,45 @@ function OverlayHintPanelInner({
           <span>Want a complete answer instead?</span>
           <ChevronRight className="w-3 h-3 ml-auto shrink-0" />
         </button>
+      )}
+
+      {/* ── Structure frameworks (no credit charge) ───────────────────── */}
+      {!!currentQ && !isStreaming && !isGenerating && (
+        <div className="flex items-center gap-1 flex-wrap pt-1">
+          <ActionButton
+            onClick={() =>
+              useOverlayStore
+                .getState()
+                .setOfflineFallback(structureForMode("star", currentQ))
+            }
+            title="Show STAR structure (framework only — no invented stories)"
+            icon={<Sparkles className="w-3 h-3" />}
+            label="STAR"
+            touchSafe={isMobile}
+          />
+          <ActionButton
+            onClick={() =>
+              useOverlayStore
+                .getState()
+                .setOfflineFallback(structureForMode("technical", currentQ))
+            }
+            title="Show technical answer structure"
+            icon={<AlignLeft className="w-3 h-3" />}
+            label="Technical"
+            touchSafe={isMobile}
+          />
+          <ActionButton
+            onClick={() =>
+              useOverlayStore
+                .getState()
+                .setOfflineFallback(structureForMode("coding", currentQ))
+            }
+            title="Show coding approach structure"
+            icon={<FileText className="w-3 h-3" />}
+            label="Coding"
+            touchSafe={isMobile}
+          />
+        </div>
       )}
 
       {/* ── Action bar ────────────────────────────────────────────────── */}

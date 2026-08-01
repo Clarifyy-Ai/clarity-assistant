@@ -15,6 +15,11 @@ import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { installOverlayGhostClickGuard } from "@/lib/overlay/ghostClickGuard";
 import { resizeDesktopOverlayWindow } from "@/lib/platform/electronWindowManager";
 import { isElectronApp } from "@/lib/platform/isElectron";
+import {
+  applyLayoutModeToDesktop,
+  layoutModeDimensions,
+  layoutModePosition,
+} from "@/lib/overlay/applyOverlayWindowPrefs";
 import { useIsMobile } from "@/hooks/use-mobile";
 
 import { cn } from "@/lib/utils";
@@ -224,6 +229,9 @@ export function OverlayWindow({
   const isPeekActive = useOverlayStore((s) => s.is_peek_active);
   const isMinimalMode = useOverlayStore((s) => s.is_minimal_mode);
   const pipOptIn = useOverlayStore((s) => s.pip_opt_in);
+  const overlayLayoutMode = useOverlayStore((s) => s.overlay_layout_mode);
+  const layoutLocked =
+    overlayLayoutMode === "docked" || overlayLayoutMode === "sidebar";
 
   // User profile for persisting position
   const profileId = useAuthStore((s) => s.profile?.id ?? null);
@@ -311,8 +319,35 @@ export function OverlayWindow({
     handleRef: dragHandleRef,
     panelRef,
     onPositionChange: handlePositionChange,
-    disabled: !isMounted || isMobile || !shouldShow || isProctorSafe,
+    disabled:
+      !isMounted || isMobile || !shouldShow || isProctorSafe || layoutLocked,
   });
+
+  // Apply docked / sidebar / compact geometry when layout mode changes.
+  useEffect(() => {
+    if (isMobile) return;
+    applyLayoutModeToDesktop(overlayLayoutMode);
+    if (overlayLayoutMode === "floating") return;
+    const dims = layoutModeDimensions(overlayLayoutMode);
+    const os = useOverlayStore.getState();
+    os.setOverlaySize(dims.width, dims.height);
+    os.setPosition(layoutModePosition(overlayLayoutMode, os.position));
+  }, [overlayLayoutMode, isMobile]);
+
+  // Keep docked / sidebar snapped to the right edge on viewport resize.
+  useEffect(() => {
+    if (typeof window === "undefined" || !layoutLocked || isMobile) return;
+    const snap = () => {
+      const os = useOverlayStore.getState();
+      os.setPosition(layoutModePosition(os.overlay_layout_mode, os.position));
+      if (os.overlay_layout_mode === "sidebar") {
+        const dims = layoutModeDimensions("sidebar");
+        os.setOverlaySize(dims.width, dims.height);
+      }
+    };
+    window.addEventListener("resize", snap);
+    return () => window.removeEventListener("resize", snap);
+  }, [layoutLocked, isMobile]);
 
   // Document PiP support (user opt-in)
   const pipDoc = useDocumentPiP(pipOptIn && shouldShow);

@@ -123,7 +123,8 @@ function createMainWindow() {
     backgroundColor: "#0F172A",
     title: "Clarify Coach",
     autoHideMenuBar: true,
-    alwaysOnTop: true,
+    // Always-on-top is opt-in via overlay:set-always-on-top (privacy default).
+    alwaysOnTop: false,
     icon: path.join(__dirname, "..", "public", "brand", "app-icon-512.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -215,13 +216,34 @@ app.on("second-instance", () => {
   showMainWindow();
 });
 
-function registerGlobalShortcuts() {
-  const bindings = [
-    { accelerator: "CommandOrControl+Shift+H", action: "toggle-overlay" },
-    { accelerator: "CommandOrControl+Shift+A", action: "request-ai-answer" },
-  ];
+function isSafeAccelerator(accelerator) {
+  if (typeof accelerator !== "string" || accelerator.length < 3 || accelerator.length > 80) {
+    return false;
+  }
+  // Tokens + single key only — no paths, quotes, or shell metacharacters.
+  return /^(?:CommandOrControl|Command|Control|Ctrl|Alt|Option|Shift|Super|Meta|\+|Plus|[A-Za-z0-9])+$/i.test(
+    accelerator,
+  );
+}
 
-  for (const { accelerator, action } of bindings) {
+function registerGlobalShortcuts(bindings) {
+  const list = Array.isArray(bindings) && bindings.length
+    ? bindings
+    : [
+        { accelerator: "CommandOrControl+Shift+H", action: "toggle-overlay" },
+        { accelerator: "CommandOrControl+Shift+A", action: "request-ai-answer" },
+      ];
+
+  globalShortcut.unregisterAll();
+
+  const allowedActions = new Set(["toggle-overlay", "request-ai-answer"]);
+  for (const item of list) {
+    const accelerator = item?.accelerator;
+    const action = item?.action;
+    if (!isSafeAccelerator(accelerator) || !allowedActions.has(action)) {
+      console.warn("[Clarify Coach] Rejected shortcut binding", item);
+      continue;
+    }
     try {
       const ok = globalShortcut.register(accelerator, () => {
         if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -252,8 +274,8 @@ app.whenReady().then(() => {
   });
 
   ipcMain.handle("set-content-protection", (_event, enabled) => {
-    // setContentProtection(true) = window hidden from screen recorders (Parakeet-style).
-    // setContentProtection(false) = window visible (e.g. for diagnostic/support mode).
+    // Opt-in presentation-safe content protection only. Default remains visible.
+    // Does not claim universal invisibility across all capture / share paths.
     mainWindow?.setContentProtection(Boolean(enabled));
   });
 
@@ -280,6 +302,16 @@ app.whenReady().then(() => {
   ipcMain.handle("overlay:hide", () => {
     if (!mainWindow || mainWindow.isDestroyed()) return;
     mainWindow.hide();
+  });
+
+  ipcMain.handle("overlay:sync-global-shortcuts", (_event, bindings) => {
+    try {
+      registerGlobalShortcuts(bindings);
+      return { ok: true };
+    } catch (err) {
+      console.warn("[Clarify Coach] sync-global-shortcuts failed:", err);
+      return { ok: false };
+    }
   });
 
   buildMenu({ isDev });

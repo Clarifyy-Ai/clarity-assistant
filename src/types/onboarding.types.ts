@@ -27,6 +27,7 @@ export interface OnboardingData {
   // Step 4 — Audio
   selectedMicId:       string;
   audioVerified:       boolean;
+  /** True when user skipped device readiness during onboarding. */
   skippedAudio?:       boolean;
 
   // Step 5 — Resume

@@ -190,6 +190,24 @@ function getErrorMessage(error: unknown): string {
   return "Something went wrong.";
 }
 
+/** Stale/revoked refresh tokens should sign the user out locally, not freeze boot. */
+function isInvalidRefreshTokenError(error: unknown): boolean {
+  const msg = getErrorMessage(error).toLowerCase();
+  return (
+    msg.includes("refresh token not found") ||
+    msg.includes("invalid refresh token") ||
+    msg.includes("invalid_grant")
+  );
+}
+
+async function clearStaleLocalSession(): Promise<void> {
+  try {
+    await supabase.auth.signOut({ scope: "local" });
+  } catch {
+    // Best-effort: server session may already be gone.
+  }
+}
+
 function isPostHogEnabled(): boolean {
   return Boolean(import.meta.env.VITE_POSTHOG_KEY);
 }
@@ -373,10 +391,20 @@ export const useAuthStore = create<AuthStore>()(
                 });
               }
             } catch (error) {
-              dset((state) => {
-                state.status = "error";
-                state.error = getErrorMessage(error);
-              });
+              if (isInvalidRefreshTokenError(error)) {
+                console.warn(
+                  "[authStore] Stale refresh token — clearing local session",
+                  error,
+                );
+                await clearStaleLocalSession();
+                resetPostHog();
+                get().reset();
+              } else {
+                dset((state) => {
+                  state.status = "error";
+                  state.error = getErrorMessage(error);
+                });
+              }
             }
 
             const { data } = supabase.auth.onAuthStateChange(
@@ -813,10 +841,20 @@ export const useAuthStore = create<AuthStore>()(
           },
 
           reset: () => {
+            // Never Object.assign(INITIAL_STATE): that snapshot may still hold a
+            // boot-time cached session and would resurrect auth after sign-out.
             dset((state) => {
-              Object.assign(state, INITIAL_STATE);
-
               state.status = "unauthenticated";
+              state.session = null;
+              state.user = null;
+              state.profile = null;
+              state.isProfileLoaded = false;
+              state.error = null;
+              state.isAdmin = false;
+              state.isAdminResolved = false;
+              state.isOnboarded = false;
+              state.planId = "free";
+              state.credits = 0;
               state.isLoading = false;
               state.isAuthenticated = false;
             });

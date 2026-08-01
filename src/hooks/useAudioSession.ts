@@ -133,6 +133,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
     store.setIsCapturing(false);
     store.setStreamError(null);
     store.setDeepgramStatus("connecting");
+    useOverlayStore.getState().setSessionPipelineState("connecting");
 
     try {
       // 1) mic
@@ -209,6 +210,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       const vad = new VADDetector({
         onSpeechStart: () => {
           silenceRef.current?.onCandidateSpeechStart();
+          useOverlayStore.getState().setSessionPipelineState("speech_detected");
         },
         onSpeechEnd: () => {
           const wpm = wpmRef.current?.getCurrentWPM() ?? 0;
@@ -223,7 +225,10 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
       const silenceSeconds =
         useOverlayStore.getState().auto_answer_silence_seconds ?? 3;
       const silenceBoundary = new SilenceBoundaryDetector(
-        (question) => opts.onQuestionDetected(question),
+        (question) => {
+          useOverlayStore.getState().setSessionPipelineState("transcribing");
+          opts.onQuestionDetected(question);
+        },
         Math.max(1000, Math.min(10000, silenceSeconds * 1000)),
       );
       silenceRef.current = silenceBoundary;
@@ -261,9 +266,11 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         }
 
         store.setDeepgramStatus("connected");
+        useOverlayStore.getState().setSessionPipelineState("listening");
       } catch (dgErr) {
         console.warn("[useAudioSession] Deepgram unavailable — mic-only mode:", dgErr);
         store.setDeepgramStatus("disconnected");
+        useOverlayStore.getState().setSessionPipelineState("listening");
         if (!opts.micOptional) {
           store.setStreamError({
             code: "UNKNOWN",
@@ -272,6 +279,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
             suggestion:
               "You can still practice — answers won't be transcribed until transcription reconnects.",
           });
+          useOverlayStore.getState().setSessionPipelineState("audio_unavailable");
         }
       }
 
@@ -304,6 +312,11 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
         suggestion: "Allow microphone access in browser settings, then retry.",
       });
       store.setDeepgramStatus("error");
+      const denied =
+        /permission|denied|notallowed|not allowed/i.test(message);
+      useOverlayStore
+        .getState()
+        .setSessionPipelineState(denied ? "permission_denied" : "audio_unavailable");
     }
   }, [opts.micDeviceId, opts.noiseSuppression, opts.autoGainControl, opts.enableSystemAudio, opts.micOptional, opts.onQuestionDetected, opts.onFillerDetected, opts.onWPMUpdate, handleUtterance, connectDeepgram]);
 
@@ -451,6 +464,7 @@ export function useAudioSession(opts: UseAudioSessionOptions) {
 
   // ── Reconnect ─────────────────────────────────────────────────
   const reconnect = useCallback(async () => {
+    useOverlayStore.getState().setSessionPipelineState("reconnecting");
     stop();
     await new Promise((r) => setTimeout(r, 500));
     await start();

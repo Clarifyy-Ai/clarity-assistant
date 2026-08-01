@@ -1,6 +1,5 @@
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { creditsDB } from "@/lib/supabase/database";
-import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { useUIStore } from "@/store/uiStore";
 import type { PreferredAIModel } from "@/types/user.types";
@@ -242,7 +241,8 @@ export async function deductCreditsForAction(
 
     const remaining = data.credits_remaining ?? 0;
 
-    useAuthStore.getState().updateProfile({ credits: remaining });
+    // Credits are server-pinned — sync local store only (never PATCH profiles.credits).
+    syncLocalCreditFields({ credits: remaining });
 
     if (remaining < LOW_CREDIT_THRESHOLD) {
       showLowCreditWarning(remaining);
@@ -288,10 +288,36 @@ export function showLowCreditWarning(creditsRemaining: number): void {
   }
 }
 
+/** Local-only store sync — never PATCH RLS-pinned profile columns. */
+function syncLocalCreditFields(patch: {
+  credits?: number;
+  plan?: string;
+  plan_id?: string;
+  subscription_status?: string;
+}): void {
+  const auth = useAuthStore.getState() as unknown as {
+    profile?: Record<string, unknown> | null;
+    updateProfile?: (p: Record<string, unknown>) => void;
+    setProfile?: (p: Record<string, unknown> | null) => void;
+    credits?: number;
+  };
+
+  if (typeof auth.updateProfile === "function") {
+    auth.updateProfile(patch);
+    return;
+  }
+
+  if (typeof auth.setProfile === "function" && auth.profile) {
+    auth.setProfile({ ...auth.profile, ...patch });
+  }
+}
+
 export async function refreshCredits(): Promise<number | null> {
   const { user } = useAuthStore.getState();
   if (!user) return null;
 
+  // SELECT-only sync — never PATCH privileged profile columns.
+  const { supabase } = await import("@/lib/supabase/client");
   const { data, error } = await supabase
     .from("profiles")
     .select("credits, plan_id, subscription_status")
@@ -300,14 +326,20 @@ export async function refreshCredits(): Promise<number | null> {
 
   if (error || !data) return null;
 
-  useAuthStore.getState().updateProfile({
-    credits:             data.credits,
-    plan_id:             data.plan_id as any,
-    plan:                data.plan_id as any,
-    subscription_status: data.subscription_status,
+  const credits = Number((data as { credits?: number }).credits ?? 0);
+  const planId = String((data as { plan_id?: string }).plan_id ?? "free");
+  const subscriptionStatus = String(
+    (data as { subscription_status?: string }).subscription_status ?? "active",
+  );
+
+  syncLocalCreditFields({
+    credits,
+    plan: planId,
+    plan_id: planId,
+    subscription_status: subscriptionStatus,
   });
 
-  return data.credits;
+  return useAuthStore.getState().profile?.credits ?? credits;
 }
 
 export interface CreditTransaction {

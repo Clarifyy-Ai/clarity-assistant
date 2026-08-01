@@ -3,9 +3,24 @@ import { memo } from "react";
 import { MicOff, AlertCircle, Pause } from "lucide-react";
 import { useAudioStore } from "@/store/audioStore";
 import { useSessionStore } from "@/store/sessionStore";
+import { useOverlayStore } from "@/store/overlayStore";
+import {
+  overlayStateLabel,
+  overlayStateRecovery,
+  type OverlaySessionState,
+} from "@/lib/overlay/overlaySessionStates";
 import { cn } from "@/lib/utils";
 
-type ListeningState = "listening" | "paused" | "muted" | "error" | "idle";
+type ListeningState = "listening" | "paused" | "muted" | "error" | "idle" | "busy";
+
+const ERROR_PIPELINE: OverlaySessionState[] = [
+  "permission_denied",
+  "audio_unavailable",
+  "backend_unavailable",
+  "ai_provider_unavailable",
+  "rate_limited",
+  "insufficient_credits",
+];
 
 export const OverlayListeningIndicator = memo(function OverlayListeningIndicator() {
   const isMuted = useAudioStore((s) => s.is_muted);
@@ -14,41 +29,64 @@ export const OverlayListeningIndicator = memo(function OverlayListeningIndicator
   const isCapturing = useAudioStore((s) => s.streams?.is_capturing ?? false);
   const currentLevel = useAudioStore((s) => s.levels?.current_level ?? 0);
   const sessionStatus = useSessionStore((s) => s.status);
+  const pipeline = useOverlayStore((s) => s.session_pipeline_state);
 
   let state: ListeningState = "idle";
-  let label = "Idle";
-  let detail: string | undefined;
+  let label = overlayStateLabel(pipeline);
+  let detail: string | undefined = overlayStateRecovery(pipeline);
 
   if (streamError?.message) {
     state = "error";
     label = "Error";
     detail = streamError.message;
+  } else if (ERROR_PIPELINE.includes(pipeline)) {
+    state = "error";
+    label = overlayStateLabel(pipeline);
+    detail = overlayStateRecovery(pipeline);
   } else if (isMuted) {
     state = "muted";
     label = "Muted";
-  } else if (sessionStatus === "paused") {
+    detail = undefined;
+  } else if (sessionStatus === "paused" || pipeline === "paused") {
     state = "paused";
     label = "Paused";
+    detail = overlayStateRecovery("paused");
+  } else if (
+    pipeline === "generating_guidance" ||
+    pipeline === "question_detected" ||
+    pipeline === "transcribing" ||
+    pipeline === "speech_detected" ||
+    pipeline === "reconnecting" ||
+    pipeline === "connecting"
+  ) {
+    state = "busy";
+    label = overlayStateLabel(pipeline);
+    detail = overlayStateRecovery(pipeline);
+  } else if (pipeline === "guidance_ready") {
+    state = "listening";
+    label = overlayStateLabel(pipeline);
+    detail = "Ready for the next question";
   } else if (
     sessionStatus === "active" &&
-    (deepgram === "connected" || isCapturing)
+    (deepgram === "connected" || isCapturing || pipeline === "listening")
   ) {
     state = "listening";
     label = "Listening";
-    detail = "Hints typically appear in ~2–4s after a clear question";
+    detail = "Hints typically appear shortly after a clear question";
   } else if (sessionStatus === "active" || sessionStatus === "warming_up") {
     state = "idle";
-    label = "Connecting…";
+    label = pipeline === "idle" ? "Connecting…" : overlayStateLabel(pipeline);
   }
 
-  const announced = detail ? `${label}: ${detail}` : label;
+  const announced = detail ? `${label}. ${detail}` : label;
 
   return (
     <div
       className={cn(
-        "inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 font-mono text-[10px] font-bold shrink-0",
+        "inline-flex items-center gap-1.5 rounded-lg border px-2 py-1 font-mono text-[10px] font-bold shrink-0 max-w-[220px]",
         state === "listening" &&
           "border-emerald-500/30 bg-emerald-500/10 text-emerald-300",
+        state === "busy" && "border-sky-500/30 bg-sky-500/10 text-sky-300",
         state === "paused" && "border-amber-500/30 bg-amber-500/10 text-amber-300",
         state === "muted" && "border-red-500/30 bg-red-500/10 text-red-300",
         state === "error" && "border-red-500/40 bg-red-500/15 text-red-300",
@@ -70,7 +108,7 @@ export const OverlayListeningIndicator = memo(function OverlayListeningIndicator
       ) : (
         <span className="flex items-end gap-0.5 h-3" aria-hidden>
           {[0.35, 0.65, 1, 0.5].map((base, i) => {
-            const active = state === "listening";
+            const active = state === "listening" || state === "busy";
             const h = active
               ? Math.max(4, Math.min(12, (currentLevel / 100) * 12 * base + (i % 2) * 2))
               : 4 + i;
@@ -90,7 +128,9 @@ export const OverlayListeningIndicator = memo(function OverlayListeningIndicator
           })}
         </span>
       )}
-      <span aria-hidden="true">{label}</span>
+      <span aria-hidden="true" className="truncate">
+        {label}
+      </span>
     </div>
   );
 });

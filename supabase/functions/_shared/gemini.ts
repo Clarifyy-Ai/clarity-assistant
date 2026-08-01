@@ -10,7 +10,7 @@
 const GEMINI_API_VERSION = Deno.env.get("GEMINI_API_VERSION") ?? "v1beta";
 const GEMINI_BASE = `https://generativelanguage.googleapis.com/${GEMINI_API_VERSION}`;
 const DEFAULT_MODEL =
-  Deno.env.get("GEMINI_MODEL_DEFAULT") ?? "gemini-2.0-flash";
+  Deno.env.get("GEMINI_MODEL_DEFAULT") ?? "gemini-2.5-flash";
 
 const DEFAULT_TIMEOUT_MS = 50_000;
 const MAX_PROMPT_LENGTH = 100_000;

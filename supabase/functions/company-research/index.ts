@@ -3,12 +3,12 @@ import {
   requireAuth,
   parseBody,
   errorResponse,
-  callAI,
   log,
   getAdminClient,
 } from "../_shared/utils.ts";
 import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import { parseJSON } from "../_shared/gemini.ts";
+import { generateWithFallback } from "../_shared/aiProvider.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import {
@@ -168,14 +168,14 @@ Return ONLY valid JSON:
     try {
       aiResult = await withTimeout(
         retry(() =>
-          callAI({
-            model: "gemini-2.0-flash",
-            messages: [
-              { role: "system", content: SYSTEM_PROMPT },
-              { role: "user", content: prompt },
-            ],
+          generateWithFallback({
+            prompt,
+            systemPrompt: SYSTEM_PROMPT,
             maxTokens: 2000,
             temperature: 0.5,
+            jsonMode: true,
+            userId,
+            action: "company_research",
           })
         ),
         20000

@@ -52,12 +52,24 @@ It is **not** an HRIS, workforce platform, multi-tenant organization suite, SSO/
 - Public display name: **Max** (high-credit consumer tier)
 - No org seats, SSO, or workforce features
 
+## Government exam pilot (additive)
+
+- Configurable exam registry with versioned patterns/syllabus + official source links
+- Pilot packs (registry): SSC CGL Tier I, RRB NTPC CBT 1, IBPS PO Prelims, UPSC CSE Prelims GS, APPSC Group-II Screening (state PSC pilot)
+- Engine live: bank-first `create-exam-paper` / job polling, admin review console, PYQ ingest + PDF extract (unpublished until review), mastery hooks, validators + reconcile
+- Edge (gov): `search-exams`, `create-exam-paper`, `get-paper-generation-job`, `reconcile-paper-quality`, `ingest-source-document`, `list-previous-papers`, `extract-question-paper`, `recompute-topic-mastery`
+- Search-first prep hub + generate stepper; independent-platform disclaimer
+- Light ops: `docs/GOV_EXAM_MONITORING.md` + `scripts/gov-exam-ops-snapshot.mjs` (manual; alerts deferred)
+- **Not** claiming all Indian government exams
+- Honest status: **CONDITIONAL_GO_PILOT** — **0** full-simulation-ready packs; FE host deploy external; custom/practice path only where bank is short
+
 ## Known limitations
 
 - Mass-market 10,000+ users: **not ready** (no load-test evidence)
 - Enterprise org/SSO: **NO-GO** (not in product scope)
-- Monitoring alerts require external provider wiring
+- Monitoring alerts require external provider wiring (gov: snapshot script only)
 - Live billing secrets must be validated with `billing-config-preflight.mjs` in the ops environment
+- Full-pattern gov mocks: **none certified** (SSC/UPSC/IBPS partial banks; RRB/APPSC empty for verified)
 
 ## Scale boundary
 

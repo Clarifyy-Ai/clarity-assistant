@@ -10,6 +10,7 @@ interface CardProps {
   id?: string;
   children?: ReactNode;
   className?: string;
+  id?: string;
   padding?: "none" | "sm" | "md" | "lg";
   hover?: boolean;
   onClick?: () => void;
@@ -31,6 +32,7 @@ export function Card({
   id,
   children,
   className,
+  id,
   padding = "md",
   hover = false,
   onClick,

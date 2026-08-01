@@ -2,20 +2,27 @@
 import { useCallback, useEffect, useState } from "react";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { RESPONSIBLE_USE_NOTICE } from "@/lib/overlay/responsibleUseConsent";
 
-const STORAGE_KEY = "clarify:overlay-first-run-done";
+const STORAGE_KEY = "clarify:overlay-first-run-done-v2";
 
 const STEPS = [
   {
+    id: "responsible-use",
+    title: "Use only where assistance is allowed",
+    body: RESPONSIBLE_USE_NOTICE,
+    anchor: "responsible-use",
+  },
+  {
     id: "listening",
     title: "Always know you're heard",
-    body: "This chip shows Listening, Paused, Muted, or Error — so you never wonder if audio is working.",
+    body: "This chip shows Listening, Paused, Muted, or Error — so you never wonder if audio is working. Capture never starts until you begin a session.",
     anchor: "listening-indicator",
   },
   {
     id: "more-tools",
     title: "More tools when you need them",
-    body: "Hints stay front and center. Open More tools for Chat, resume context, status, and settings.",
+    body: "Hints stay front and center. Open More tools for Chat, resume context, status, and settings. Always-on-top and presentation-safe mode are opt-in.",
     anchor: "more-tools",
   },
 ] as const;
@@ -29,7 +36,6 @@ export function OverlayFirstRunCoach() {
     } catch {
       return;
     }
-    // Defer so overlay chrome is mounted
     const t = window.setTimeout(() => setStepIndex(0), 600);
     return () => window.clearTimeout(t);
   }, []);
@@ -72,7 +78,7 @@ export function OverlayFirstRunCoach() {
       <div
         className={cn(
           "pointer-events-auto absolute left-3 right-3 max-w-sm",
-          stepIndex === 0 ? "top-24" : "top-36",
+          stepIndex === 0 ? "top-20" : stepIndex === 1 ? "top-24" : "top-36",
         )}
       >
         <div className="rounded-2xl border border-indigo-500/30 bg-[#12122a] shadow-[0_16px_48px_rgba(0,0,0,0.65)] p-3.5 space-y-2.5">

@@ -9,57 +9,14 @@ import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { geminiGenerateWithPdf, parseJSON } from "../_shared/gemini.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
-
 import { creditCost } from "../_shared/creditEconomics.ts";
+import {
+  PDF_QUESTION_EXTRACT_PROMPT,
+  bufferToBase64,
+} from "../_shared/pdfQuestionExtract.ts";
 
 const CREDIT_COST = creditCost("parse_question_pdf");
 const MAX_FILE_SIZE = 15 * 1024 * 1024;
-
-const PDF_EXTRACT_PROMPT = `
-You are an expert exam question extractor. Read this PDF of exam questions and
-extract every MCQ you find as structured JSON.
-
-Rules:
-- Return ONLY valid JSON. No markdown, no commentary, no code fences.
-- Each question must have exactly 4 options labelled A, B, C, D.
-- correct_answer must be one of "A", "B", "C", "D".
-- Preserve mathematical notation using LaTeX in question_text and option text.
-- Skip any item that is not a valid MCQ with 4 options.
-- difficulty must be one of "EASY", "MEDIUM", "HARD".
-
-Schema:
-{
-  "questions": [
-    {
-      "question_text": "string",
-      "options": [
-        {"label": "A", "text": "string"},
-        {"label": "B", "text": "string"},
-        {"label": "C", "text": "string"},
-        {"label": "D", "text": "string"}
-      ],
-      "correct_answer": "A",
-      "explanation": "string",
-      "subject": "string",
-      "topic": "string",
-      "difficulty": "MEDIUM",
-      "marks_positive": 4,
-      "marks_negative": 1,
-      "latex_present": false,
-      "image_url": ""
-    }
-  ]
-}
-`.trim();
-
-function bufferToBase64(buf: ArrayBuffer): string {
-  const bytes = new Uint8Array(buf);
-  let binary = "";
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
-  }
-  return btoa(binary);
-}
 
 async function extractPdf(req: Request) {
   const contentType = req.headers.get("content-type") || "";
@@ -115,10 +72,14 @@ Deno.serve(async (req) => {
 
     let rawText: string;
     try {
-      rawText = await geminiGenerateWithPdf(PDF_EXTRACT_PROMPT, pdf.base64, {
-        temperature: 0.2,
-        maxTokens: 4096,
-      });
+      rawText = await geminiGenerateWithPdf(
+        PDF_QUESTION_EXTRACT_PROMPT,
+        pdf.base64,
+        {
+          temperature: 0.2,
+          maxTokens: 4096,
+        },
+      );
     } catch (err) {
       if (charged) {
         await refundCredits({
@@ -133,7 +94,7 @@ Deno.serve(async (req) => {
         "PDF parsing failed. Credits refunded.",
         "AI_ERROR",
         502,
-        req
+        req,
       );
     }
 
@@ -144,7 +105,7 @@ Deno.serve(async (req) => {
       { questions, count: questions.length },
       undefined,
       200,
-      req
+      req,
     );
   } catch (err) {
     console.error("[parse-question-pdf]", err);
@@ -165,7 +126,7 @@ Deno.serve(async (req) => {
       "Internal server error",
       "INTERNAL",
       500,
-      req
+      req,
     );
   }
 });

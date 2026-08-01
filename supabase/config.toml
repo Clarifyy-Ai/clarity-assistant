@@ -50,6 +50,49 @@ verify_jwt = true
 [functions.create-test]
 verify_jwt = true
 
+[functions.create-exam-paper]
+verify_jwt = true
+
+[functions.process-paper-generation-job]
+# Auth handled in-function (internal secret, service role, admin JWT, or owner JWT).
+verify_jwt = false
+
+[functions.reconcile-paper-quality]
+verify_jwt = true
+
+[functions.get-paper-generation-job]
+verify_jwt = true
+
+[functions.search-exams]
+verify_jwt = true
+
+[functions.get-exam-details]
+verify_jwt = true
+
+[functions.get-exam-pattern]
+verify_jwt = true
+
+[functions.get-exam-syllabus]
+verify_jwt = true
+
+[functions.analyze-paper-trends]
+verify_jwt = true
+
+[functions.cancel-paper-generation-job]
+verify_jwt = true
+
+[functions.report-question]
+verify_jwt = true
+
+[functions.ingest-source-document]
+verify_jwt = true
+
+[functions.extract-question-paper]
+verify_jwt = true
+
+[functions.list-previous-papers]
+verify_jwt = true
+
 [functions.deduct-credits]
 verify_jwt = true
 
@@ -116,6 +159,9 @@ verify_jwt = true
 [functions.submit-test]
 verify_jwt = true
 
+[functions.recompute-topic-mastery]
+verify_jwt = true
+
 [functions.sync-calendar]
 verify_jwt = true
 
@@ -123,4 +169,7 @@ verify_jwt = true
 verify_jwt = true
 
 [functions.record-referral]
+verify_jwt = true
+
+[functions.generate-topic-practice]
 verify_jwt = true

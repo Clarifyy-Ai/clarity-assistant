@@ -45,13 +45,14 @@ import {
   createServiceClient,
 } from "../_shared/supabase.ts";
 
-import { geminiGenerate, parseJSON } from "../_shared/gemini.ts";
+import { parseJSON } from "../_shared/gemini.ts";
+import { generateWithFallback } from "../_shared/aiProvider.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 
 const FUNCTION_NAME = "generate-questions";
 const CREDIT_COST = creditCost("generate_questions");
-const AI_TIMEOUT_MS = 22_000;
+const AI_TIMEOUT_MS = 45_000;
 
 const SYSTEM_PROMPT = `
 You are an expert interview coach.
@@ -667,10 +668,21 @@ Deno.serve(async (req: Request) => {
   let rawAiResponse = "";
 
   try {
-    rawAiResponse = await withTimeout(
-      retry(() => geminiGenerate(prompt, SYSTEM_PROMPT, 0.7, 2048)),
+    const ai = await withTimeout(
+      retry(() =>
+        generateWithFallback({
+          prompt,
+          systemPrompt: SYSTEM_PROMPT,
+          maxTokens: 2048,
+          temperature: 0.7,
+          jsonMode: true,
+          userId: user.id,
+          action: "generate_questions",
+        }),
+      ),
       AI_TIMEOUT_MS,
     );
+    rawAiResponse = ai.text;
   } catch (error) {
     console.error(
       "[generate-questions] AI generation failed:",

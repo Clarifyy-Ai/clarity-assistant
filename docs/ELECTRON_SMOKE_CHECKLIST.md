@@ -31,6 +31,17 @@ Honest product note: the desktop app is a **framed companion overlay window** wi
 
 | Claim | Status |
 |-------|--------|
-| Windows shortcut smoke | Manual checklist ready — execute before claiming |
+| Windows shortcut smoke | Manual checklist ready — **not executed** 2026-08-02 (code: remappable sync + unregisterAll) |
+| Always-on-top default off | Code verified (Electron `alwaysOnTop: false`) |
+| Presentation-safe opt-in | Code verified (settings + `setContentProtection`) |
 | macOS shortcut smoke | NOT executed in this sprint |
 | Signing/notarization | IMPLEMENTED_REQUIRES_EXTERNAL_OPS |
+
+## Windows UAT log (2026-08-02)
+
+| Step | Result |
+|------|--------|
+| `npm run test:run` | PASS 249 |
+| `npm run electron:build` | See PRODUCTION_EVIDENCE |
+| Interactive launch / mic / meeting focus | BLOCKED — no interactive desktop UAT this session |
+| `npm run electron:smoke:static` (2026-08-02 late) | PASS — 9 secure-default / IPC checks |

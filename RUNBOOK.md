@@ -27,6 +27,8 @@
 1. Compare `profiles.credits` vs sum of `credit_transactions`.
 2. Use service-role audited adjustment only; never client RPC.
 3. Record reason + operator + ticket id.
+4. **Privilege check (closed beta):** `authenticated` must NOT have EXECUTE on `public.deduct_credits(text, integer, uuid)` — only `service_role` via `deduct-credits` Edge Function. Verified 2026-08-02 (`auth_can_execute:false`).
+5. Live Stripe checkout requires edge secrets `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, and catalog price IDs — currently may be absent; do not claim payment GO until preflight + test payment succeed.
 
 ## Rate-limit backend outage
 
@@ -61,6 +63,18 @@
 1. Follow `docs/ELECTRON_SMOKE_CHECKLIST.md`.
 2. Confirm quit unregisters shortcuts.
 3. Collision: document conflicting app to user.
+
+## Government paper generation
+
+**Pilot posture: CONDITIONAL_GO_PILOT** — engine/admin/ingest/mastery/validators live; **0** full-sim ready packs; FE host deploy external. Not GO for all exams.
+
+1. Jobs live in `gov_paper_generation_jobs` (durable status + `error_code`).
+2. Full-pattern `generated_mock` fails with `INSUFFICIENT_APPROVED_QUESTIONS` when the public bank is short — do not bypass by lowering quality.
+3. On failure, credits should refund via `refund_credits` (`refund_*` reasons). Investigate if `credits_charged > 0` and status=`failed` without refund row.
+4. Redeploy: `npx supabase@2.111.0 functions deploy create-exam-paper --project-ref <ref> --use-api` (same for `search-exams`, `get-paper-generation-job`, `ingest-source-document`, `extract-question-paper`, `reconcile-paper-quality`, `list-previous-papers`, `recompute-topic-mastery`).
+5. Never present generated papers as official/leaked; keep affiliation disclaimer on discovery surfaces.
+6. Ops snapshot: `SUPABASE_ACCESS_TOKEN=… node scripts/gov-exam-ops-snapshot.mjs` (exam review_state, jobs 7d, bank readiness, translations, ingest jobs). Details: `docs/GOV_EXAM_MONITORING.md`.
+7. Bank readiness: `node scripts/gov-bank-readiness.mjs` — expect partial/empty until packs are certified; do not force full sim.
 
 ## Rollback
 

@@ -160,7 +160,7 @@ const startSessionSchema = z.object({
     .trim()
     .max(100, "Model name is too long.")
     .optional()
-    .default("gemini-1-5-flash"),
+    .default("gemini-2.5-flash"),
 
   hint_style: z
     .enum(allowedHintStyles)
@@ -286,8 +286,9 @@ function toDbModel(model: string): string {
   const value = model.trim();
 
   const map: Record<string, string> = {
-    "gemini-flash": "gemini-1-5-flash",
-    "gemini-pro": "gemini-1-5-pro",
+    "gemini-flash": "gemini-2.5-flash",
+    "gemini-pro": "gemini-2.5-flash",
+    "gemini-2.5-flash": "gemini-2.5-flash",
     "gpt_4o": "gpt-4o",
   };
 
@@ -306,6 +307,14 @@ function toDbModel(model: string): string {
 
 function toDbModelEnum(model: string): string {
   const mapped = toDbModel(model);
+  // sessions.model_used enum may not include newer API ids yet
+  if (
+    mapped === "gemini-2.5-flash" ||
+    mapped === "gemini-flash-latest" ||
+    mapped === "gemini-2.0-flash-lite"
+  ) {
+    return "gemini-2.0-flash";
+  }
   return DB_AI_MODELS.has(mapped) ? mapped : "gemini-1-5-flash";
 }
 
@@ -331,6 +340,27 @@ function buildSessionTags(options: {
   }
 
   return tags;
+}
+
+/** Only keep IDs that exist in public.documents (resume IDs live in resumes). */
+async function resolveDocumentsFk(
+  db: ReturnType<typeof createServiceClient>,
+  id: string | null | undefined,
+): Promise<string | null> {
+  if (!id) return null;
+
+  const { data, error } = await db
+    .from("documents")
+    .select("id")
+    .eq("id", id)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("[start-session] documents FK lookup failed:", error.message);
+    return null;
+  }
+
+  return data?.id ?? null;
 }
 
 function buildSessionTitle(options: {
@@ -662,6 +692,11 @@ Deno.serve(async (req: Request) => {
       });
     }
 
+    // resume_id may point at public.resumes, but sessions.document_id /
+    // sessions.jd_id FK to public.documents — drop invalid IDs instead of 500.
+    const documentId = await resolveDocumentsFk(db, body.resume_id);
+    const jdId = await resolveDocumentsFk(db, body.jd_id);
+
     const { data: createdData, error: insertError } = await db
       .from("sessions")
       .insert({
@@ -673,8 +708,8 @@ Deno.serve(async (req: Request) => {
           sessionType,
           company,
         }),
-        document_id: body.resume_id ?? null,
-        jd_id: body.jd_id ?? null,
+        document_id: documentId,
+        jd_id: jdId,
         started_at: nowIso,
         ended_at: null,
         updated_at: nowIso,

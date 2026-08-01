@@ -3,7 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import {
   BookOpen, Upload, ClipboardList,
   ChevronRight, Zap, Target, Clock,
-  FlaskConical, BarChart2, Flame,
+  FlaskConical, BarChart2, Flame, Search,
 } from "lucide-react";
 import {
   mockTestsDB,
@@ -21,7 +21,26 @@ import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { LazyMotion, domAnimation } from "framer-motion";
 import { GovExamShowcase } from "@/components/marketing/GovExamShowcase";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { searchGovExams, type GovExamSearchResult } from "@/lib/gov-exam/api";
+import { formatBankCoverage } from "@/lib/gov-exam/bankReadiness";
+import { GOV_EXAM_AFFILIATION_DISCLAIMER } from "@/lib/gov-exam/disclaimers";
+import { GovExamReadinessPanel } from "@/components/gov-exam/GovExamReadinessPanel";
+import {
+  fetchLatestExamReadiness,
+  fetchTopicMasteryForExam,
+} from "@/lib/gov-exam/masteryClient";
+import { supabase } from "@/lib/supabase/client";
 import { toast } from "sonner";
+
+const FAMILY_FILTERS = [
+  { id: "", label: "All" },
+  { id: "upsc", label: "UPSC" },
+  { id: "ssc", label: "SSC" },
+  { id: "railways", label: "Railways" },
+  { id: "banking", label: "Banking" },
+] as const;
+
+const RECENT_CHIP_KEY = "clarify_gov_exam_recent";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -162,11 +181,55 @@ export default function MockTestHub(): React.ReactElement {
   });
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [searchQ, setSearchQ] = useState("");
+  const [family, setFamily] = useState("");
+  const [govResults, setGovResults] = useState<GovExamSearchResult[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [recentChips, setRecentChips] = useState<string[]>([]);
+  const [hubReadiness, setHubReadiness] = useState<Awaited<
+    ReturnType<typeof fetchLatestExamReadiness>
+  >>(null);
+  const [hubMastery, setHubMastery] = useState<
+    Awaited<ReturnType<typeof fetchTopicMasteryForExam>>
+  >([]);
+  const [hubExamLabel, setHubExamLabel] = useState<string | null>(null);
 
   useEffect(() => {
     if (!user?.id) return;
     void loadData();
   }, [user?.id]);
+
+  useEffect(() => {
+    try {
+      const raw = localStorage.getItem(RECENT_CHIP_KEY);
+      if (raw) setRecentChips(JSON.parse(raw) as string[]);
+    } catch {
+      /* ignore */
+    }
+    void runGovSearch("");
+  }, []);
+
+  async function runGovSearch(q: string, fam = family) {
+    setSearching(true);
+    try {
+      const data = await searchGovExams({ q, family: fam || undefined });
+      setGovResults(data.results);
+    } catch {
+      setGovResults([]);
+    } finally {
+      setSearching(false);
+    }
+  }
+
+  function rememberChip(label: string) {
+    const next = [label, ...recentChips.filter((c) => c !== label)].slice(0, 6);
+    setRecentChips(next);
+    try {
+      localStorage.setItem(RECENT_CHIP_KEY, JSON.stringify(next));
+    } catch {
+      /* ignore */
+    }
+  }
 
   async function loadData() {
     if (!user?.id) return;
@@ -191,6 +254,32 @@ export default function MockTestHub(): React.ReactElement {
       const streakDays = calcStreakDays(completedDates);
 
       setStats({ totalTests, totalQuestions, avgAccuracy, streakDays });
+
+      try {
+        const latestReady = await fetchLatestExamReadiness(user.id);
+        setHubReadiness(latestReady);
+        if (latestReady?.exam_id) {
+          const mastery = await fetchTopicMasteryForExam(user.id, latestReady.exam_id);
+          setHubMastery(mastery);
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: examRow } = await (supabase as any)
+            .from("gov_exams")
+            .select("name, code")
+            .eq("id", latestReady.exam_id)
+            .maybeSingle();
+          setHubExamLabel(
+            (examRow as { name?: string; code?: string } | null)?.name ??
+              (examRow as { name?: string; code?: string } | null)?.code ??
+              null,
+          );
+        } else {
+          setHubMastery([]);
+          setHubExamLabel(null);
+        }
+      } catch {
+        setHubReadiness(null);
+        setHubMastery([]);
+      }
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : "Failed to load test history.";
       setLoadError(msg);
@@ -218,14 +307,20 @@ export default function MockTestHub(): React.ReactElement {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Mock Tests"
-        description="Practice with previous year papers and AI-generated questions for JEE, NEET, UPSC, SSC, and more."
+        title="Government Exam Prep"
+        description="Which government exam are you preparing for?"
         breadcrumbs={[
           { label: "Dashboard", href: "/app/dashboard" },
           { label: "Mock Tests" },
         ]}
         actions={
           <div className="flex gap-2 shrink-0">
+            <Link
+              to="/app/mock-test/generate"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-all hover:bg-secondary/60"
+            >
+              Generate paper
+            </Link>
             <Link
               to="/app/mock-test/my-questions"
               className="inline-flex items-center gap-1.5 rounded-xl border border-border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-all hover:bg-secondary/60"
@@ -251,9 +346,184 @@ export default function MockTestHub(): React.ReactElement {
         </Link>
       </p>
 
+      <p className="text-xs text-muted-foreground border border-border/50 rounded-lg px-3 py-2 bg-muted/20">
+        {GOV_EXAM_AFFILIATION_DISCLAIMER}
+      </p>
+
       <div className="space-y-6 animate-in fade-in slide-in-from-bottom-2 duration-200">
       {loadError && (
         <InlineErrorRetry message={loadError} onRetry={() => void loadData()} />
+      )}
+
+      {!loading && (
+        <GovExamReadinessPanel
+          examName={hubExamLabel ?? undefined}
+          readiness={hubReadiness}
+          masteryRows={hubMastery}
+          generateHref={
+            hubReadiness?.exam_id
+              ? `/app/mock-test/generate?examId=${hubReadiness.exam_id}&stageId=${hubReadiness.stage_id}&basis=topic`
+              : "/app/mock-test/generate?basis=topic"
+          }
+        />
+      )}
+
+      {/* ── Search-first discovery ─────────────────────────── */}
+      <section className="rounded-2xl border border-border bg-gradient-to-b from-muted/30 to-background p-5 sm:p-6 space-y-4">
+        <form
+          className="relative"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (searchQ.trim()) rememberChip(searchQ.trim());
+            void runGovSearch(searchQ.trim());
+          }}
+        >
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <input
+            type="search"
+            value={searchQ}
+            onChange={(e) => setSearchQ(e.target.value)}
+            placeholder="Search exam, post, recruiting body, or subject — e.g. SSC CGL, Railway NTPC, IBPS PO"
+            className="w-full rounded-xl border border-border bg-background pl-10 pr-4 py-3 text-sm"
+            aria-label="Search government exams"
+          />
+        </form>
+        <div className="flex flex-wrap gap-2 items-center">
+            <span className="text-xs text-muted-foreground">Recent:</span>
+            {(recentChips.length ? recentChips : ["SSC CGL", "RRB NTPC", "IBPS PO"]).map((chip) => (
+              <button
+                key={chip}
+                type="button"
+                className="text-xs rounded-full border border-border px-2.5 py-1 hover:bg-secondary/60"
+                onClick={() => {
+                  setSearchQ(chip);
+                  rememberChip(chip);
+                  void runGovSearch(chip);
+                }}
+              >
+                {chip}
+              </button>
+            ))}
+        </div>
+        <div className="flex flex-wrap gap-2">
+          {FAMILY_FILTERS.map((f) => (
+            <button
+              key={f.id || "all"}
+              type="button"
+              className={`text-xs rounded-lg px-2.5 py-1 border ${
+                family === f.id
+                  ? "border-primary bg-primary/10 text-primary"
+                  : "border-border text-muted-foreground"
+              }`}
+              onClick={() => {
+                setFamily(f.id);
+                void runGovSearch(searchQ.trim(), f.id);
+              }}
+            >
+              {f.label}
+            </button>
+          ))}
+        </div>
+        <div className="space-y-2" aria-busy={searching}>
+          {govResults.length === 0 && !searching && (
+            <p className="text-sm text-muted-foreground">
+              No certified exam packs match. Pilot packs: SSC CGL, RRB NTPC, IBPS PO, UPSC Prelims.
+            </p>
+          )}
+          {govResults.map((exam) => {
+            const bank = exam.bankReadiness;
+            const fullSimOk = bank?.fullSimulationAvailable === true;
+            return (
+            <div
+              key={exam.examId}
+              className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-border bg-card/60 px-4 py-3"
+            >
+              <div className="min-w-0">
+                <p className="font-medium text-foreground">{exam.name}</p>
+                <p className="text-xs text-muted-foreground">
+                  {exam.recruitingBody?.name}
+                  {exam.stage ? ` · ${exam.stage.name}` : ""}
+                  {exam.pattern
+                    ? ` · ${exam.pattern.totalQuestions}Q · ${exam.pattern.durationMinutes}m · −${exam.pattern.negativeMark}`
+                    : ""}
+                  {exam.lastVerified ? ` · pattern ${exam.pattern?.version}` : ""}
+                </p>
+                {bank && (
+                  <p
+                    className={`text-xs mt-1 ${
+                      fullSimOk
+                        ? "text-emerald-700 dark:text-emerald-400"
+                        : "text-amber-700 dark:text-amber-400"
+                    }`}
+                  >
+                    Bank {formatBankCoverage(bank.approvedPublicCount, bank.requiredQuestions)}
+                    {" · "}
+                    {fullSimOk ? "Full simulation available" : "Full simulation unavailable"}
+                  </p>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-2 shrink-0">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => navigate(`/app/mock-test/exam/${exam.code}`)}
+                >
+                  View exam
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={() =>
+                    navigate(
+                      `/app/mock-test/generate?examId=${exam.examId}&stageId=${exam.stage?.id ?? exam.stages[0]?.id ?? ""}&code=${exam.code}`,
+                    )
+                  }
+                >
+                  Generate mock
+                </Button>
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  disabled={!fullSimOk}
+                  title={
+                    fullSimOk
+                      ? "Full pattern simulation"
+                      : bank
+                        ? `Bank ${formatBankCoverage(bank.approvedPublicCount, bank.requiredQuestions)}`
+                        : "Bank coverage unknown"
+                  }
+                  onClick={() =>
+                    navigate(
+                      `/app/mock-test/generate?examId=${exam.examId}&stageId=${exam.stage?.id ?? exam.stages[0]?.id ?? ""}&code=${exam.code}&basis=full_sim`,
+                    )
+                  }
+                >
+                  Full sim
+                </Button>
+              </div>
+            </div>
+            );
+          })}
+        </div>
+      </section>
+
+      {recentTests.some((t) => t.status === "IN_PROGRESS") && (
+        <section className="rounded-xl border border-primary/30 bg-primary/5 px-4 py-3">
+          <p className="text-sm font-medium mb-2">Continue preparation</p>
+          {recentTests
+            .filter((t) => t.status === "IN_PROGRESS")
+            .slice(0, 1)
+            .map((t) => (
+              <div key={t.id} className="flex items-center justify-between gap-3">
+                <p className="text-sm truncate">{t.test_name}</p>
+                <Button
+                  size="sm"
+                  onClick={() => navigate(`/app/mock-test/session/${t.id}`)}
+                >
+                  Continue
+                </Button>
+              </div>
+            ))}
+        </section>
       )}
 
       {/* ── Animated feature preview ───────────────────────── */}

@@ -9,7 +9,11 @@ import { Cpu, Check, Loader2, Lock } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { PreferredAIModel } from "@/types/user.types";
-import { MODEL_OPTIONS, normalizePreferredModel } from "@/lib/ai/modelOptions";
+import {
+  MODEL_OPTIONS,
+  normalizePreferredModel,
+  toDbPreferredModel,
+} from "@/lib/ai/modelOptions";
 import { normalizeToDisplayTier } from "@/lib/constants/pricing";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
 
@@ -36,7 +40,10 @@ export default function SettingsModels() {
     try {
       const { data, error } = await supabase
         .from("profiles")
-        .update({ preferred_model: selected as any, updated_at: new Date().toISOString() })
+        .update({
+          preferred_model: toDbPreferredModel(selected) as any,
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", profile.id)
         .select()
         .single();

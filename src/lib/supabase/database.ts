@@ -8,12 +8,50 @@ import { supabase } from "@/lib/supabase/client";
 import { DatabaseError, ErrorCode, tryCatch } from "@/lib/errors";
 import type { Tables, TablesInsert, TablesUpdate } from "@/integrations/supabase";
 import { PLAN_PRICE_CENTS_MONTHLY } from "@/lib/constants/creditEconomics";
+import { toDbPreferredModel } from "@/lib/ai/modelOptions";
 import {
   mapRowToScorecard,
   mapScorecardToInsert,
   type Scorecard,
   type ScorecardRow,
 } from "@/types/scorecard.types";
+
+/** Client must never PATCH these — server/RLS owns entitlement + gamification. */
+const PROFILE_CLIENT_UPDATE_BLOCKLIST = new Set([
+  "credits",
+  "plan_id",
+  "plan",
+  "is_banned",
+  "ban_reason",
+  "stripe_customer_id",
+  "subscription_id",
+  "subscription_status",
+  "credits_used_this_month",
+  "credits_reset_at",
+  "referred_by",
+  "referral_code",
+  "xp",
+  "level",
+  "total_sessions",
+  "payment_failed_at",
+  "pending_promo_code",
+  "byok_gemini",
+  "byok_openai",
+  "byok_anthropic",
+]);
+
+function sanitizeProfileClientUpdate(
+  updates: TablesUpdate<"profiles"> & Record<string, unknown>,
+): TablesUpdate<"profiles"> {
+  const safe: Record<string, unknown> = { ...updates };
+  for (const key of PROFILE_CLIENT_UPDATE_BLOCKLIST) {
+    delete safe[key];
+  }
+  if (typeof safe.preferred_model === "string") {
+    safe.preferred_model = toDbPreferredModel(safe.preferred_model);
+  }
+  return safe as TablesUpdate<"profiles">;
+}
 
 // ─── Generic Query Helper ─────────────────────────────────────────────────────
 
@@ -113,10 +151,13 @@ export const profilesDB = {
     userId: string,
     updates: TablesUpdate<"profiles">
   ): Promise<Tables<"profiles">> {
+    const safeUpdates = sanitizeProfileClientUpdate(
+      updates as TablesUpdate<"profiles"> & Record<string, unknown>,
+    );
     return query(
       () => supabase
         .from("profiles")
-        .update({ ...updates, updated_at: new Date().toISOString() })
+        .update({ ...safeUpdates, updated_at: new Date().toISOString() })
         .eq("id", userId)
         .select(PROFILE_SAFE_COLUMNS)
         .single() as unknown as PromiseLike<{ data: Tables<"profiles"> | null; error: unknown }>,

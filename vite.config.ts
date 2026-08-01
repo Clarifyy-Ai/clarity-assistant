@@ -72,8 +72,10 @@ export default defineConfig(({ mode }) => {
         : []),
     ],
 
-    // Always relative so file:// loads work in Electron packaged builds.
-    base: isElectron ? "./" : "./",
+    // Electron needs relative asset URLs for file://. Web SPA needs absolute
+    // base so nested routes (/app/live) do not resolve favicons/assets as
+    // /app/live/favicon.svg.
+    base: isElectron ? "./" : "/",
 
     // Silence verbose console.log / console.debug calls in production builds.
     // console.error and console.warn are kept intact (Sentry breadcrumbs).

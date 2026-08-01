@@ -18,7 +18,11 @@ import { useOverlayStore } from "@/store/overlayStore";
 import { useAudioCapture } from "@/hooks/useAudioCapture";
 import { generateId, cn } from "@/lib/utils";
 import { normalizeParsedResume } from "@/lib/documents/resumeParse";
-import { MODEL_OPTIONS, normalizePreferredModel } from "@/lib/ai/modelOptions";
+import {
+  MODEL_OPTIONS,
+  normalizePreferredModel,
+  toDbPreferredModel,
+} from "@/lib/ai/modelOptions";
 import { normalizeToDisplayTier } from "@/lib/constants/pricing";
 import { Button } from "@/components/ui/Button";
 import { ProgressBar } from "@/components/ui/ProgressBar";
@@ -404,15 +408,17 @@ export default function OnboardingStep2OptionalSetup({
       if (!prefsSkipped) {
         const existingPrefs =
           (profile?.notification_prefs as Record<string, unknown> | null) ?? {};
+        const prefsPatch = {
+          response_style: hintStyle,
+          coach_tone: "encouraging" as const,
+          preferred_model: toDbPreferredModel(model),
+          notification_prefs: { ...existingPrefs, interview_styles: styles },
+          onboarding_step: 2,
+        };
         const { data: prefsRow } = await supabase
           .from("profiles")
-          .update({
-            response_style: hintStyle,
-            coach_tone: "encouraging",
-            preferred_model: model,
-            notification_prefs: { ...existingPrefs, interview_styles: styles },
-            onboarding_step: 2,
-          } as never)
+          // Generated Database types can pin update payloads to never for JSON columns.
+          .update(prefsPatch as never)
           .eq("id", user.id)
           .select()
           .maybeSingle();

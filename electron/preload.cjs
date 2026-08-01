@@ -18,6 +18,8 @@ const desktopBridge = {
   resize: (width, height) => ipcRenderer.invoke("overlay:resize", width, height),
   showInactive: () => ipcRenderer.invoke("overlay:show-inactive"),
   hide: () => ipcRenderer.invoke("overlay:hide"),
+  syncGlobalShortcuts: (bindings) =>
+    ipcRenderer.invoke("overlay:sync-global-shortcuts", bindings),
   onGlobalShortcut: (callback) => {
     const handler = (_event, action) => callback(action);
     ipcRenderer.on("global-shortcut", handler);

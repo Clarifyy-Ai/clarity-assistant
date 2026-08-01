@@ -28,7 +28,11 @@ import {
 import type { StepProps } from "@/types/onboarding.types";
 import type { ProfileRow } from "@/types";
 import type { PreferredAIModel } from "@/types/user.types";
-import { MODEL_OPTIONS, normalizePreferredModel } from "@/lib/ai/modelOptions";
+import {
+  MODEL_OPTIONS,
+  normalizePreferredModel,
+  toDbPreferredModel,
+} from "@/lib/ai/modelOptions";
 import { normalizeToDisplayTier } from "@/lib/constants/pricing";
 
 // ─── Constants ───────────────────────────────────────────────────────────────
@@ -101,7 +105,7 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
       .update({
         response_style:  hintStyle,
         coach_tone:      coachTone,
-        preferred_model: model,
+        preferred_model: toDbPreferredModel(model),
         notification_prefs: { ...existingPrefs, interview_styles: styles },
         onboarding_step: 4,
       } as any)

@@ -73,11 +73,11 @@
     <!-- Theme color for mobile browsers -->
     <meta name="theme-color" content="#09090b" />
 
-    <!-- Icons: web favicon (crystal) vs install/app icon (coach) -->
-    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
-    <link rel="icon" type="image/png" sizes="512x512" href="./favicon.png" />
-    <link rel="shortcut icon" href="./favicon.ico" />
-    <link rel="apple-touch-icon" href="./brand/app-icon-192.png" />
+    <!-- Icons: root-absolute so nested SPA routes do not 404 /app/.../favicon.* -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" type="image/png" sizes="512x512" href="/favicon.png" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" href="/brand/app-icon-192.png" />
     <meta name="application-name" content="Clarify Coach" />
     <meta name="apple-mobile-web-app-title" content="Clarify Coach" />
 

@@ -134,6 +134,8 @@ const MockTestUpload = lazy(() => import("@/pages/app/mock-test/UploadQuestions"
 const MockTestRevision = lazy(() => import("@/pages/app/mock-test/TestRevision"));
 const MockTestAnalytics = lazy(() => import("@/pages/app/mock-test/TestAnalytics"));
 const MockTestPapers = lazy(() => import("@/pages/app/mock-test/ExamPapers"));
+const GovExamDetail = lazy(() => import("@/pages/app/mock-test/GovExamDetail"));
+const GenerateGovPaper = lazy(() => import("@/pages/app/mock-test/GenerateGovPaper"));
 
 // Prep
 const PrepLab = lazy(() => import("@/pages/app/prep/PrepLab"));
@@ -284,6 +286,20 @@ const AdminSupport = lazy(() => import("@/pages/app/admin/AdminSupport"));
 const AdminPromoCodes = lazy(() => import("@/pages/app/admin/AdminPromoCodes"));
 const AdminBillingSettings = lazy(
   () => import("@/pages/app/admin/AdminBillingSettings"),
+);
+const AdminGovSources = lazy(() => import("@/pages/app/admin/AdminGovSources"));
+const AdminGovIngest = lazy(() => import("@/pages/app/admin/AdminGovIngest"));
+const AdminGovExamRegistry = lazy(
+  () => import("@/pages/app/admin/AdminGovExamRegistry"),
+);
+const AdminGovQuestionReview = lazy(
+  () => import("@/pages/app/admin/AdminGovQuestionReview"),
+);
+const AdminGovPaperReview = lazy(
+  () => import("@/pages/app/admin/AdminGovPaperReview"),
+);
+const AdminGovTranslationReview = lazy(
+  () => import("@/pages/app/admin/AdminGovTranslationReview"),
 );
 const AdminLayout = lazy(() => import("@/pages/app/admin/AdminLayout"));
 const Scorecard = lazy(() => import("@/pages/Scorecard"));
@@ -559,6 +575,8 @@ const routes = [
           // Mock Test (Gov exams)
           { path: "mock-test", element: <IndiaAppPage component={MockTestHub} /> },
           { path: "mock-test/configure", element: <IndiaAppPage component={MockTestConfigure} /> },
+          { path: "mock-test/exam/:examCode", element: <IndiaAppPage component={GovExamDetail} /> },
+          { path: "mock-test/generate", element: <IndiaAppPage component={GenerateGovPaper} /> },
           { path: "mock-test/results/:testId", element: <IndiaAppPage component={MockTestResults} /> },
           { path: "mock-test/my-questions", element: <IndiaAppPage component={MockTestMyQuestions} /> },
           { path: "mock-test/upload", element: <IndiaAppPage component={MockTestUpload} /> },
@@ -738,6 +756,21 @@ const routes = [
           { path: "support",   element: <Page component={AdminSupport} /> },
           { path: "promo-codes", element: <Page component={AdminPromoCodes} /> },
           { path: "billing-settings", element: <Page component={AdminBillingSettings} /> },
+          { path: "gov/sources", element: <Page component={AdminGovSources} /> },
+          { path: "gov/ingest", element: <Page component={AdminGovIngest} /> },
+          { path: "gov/exams", element: <Page component={AdminGovExamRegistry} /> },
+          {
+            path: "gov/question-review",
+            element: <Page component={AdminGovQuestionReview} />,
+          },
+          {
+            path: "gov/paper-review",
+            element: <Page component={AdminGovPaperReview} />,
+          },
+          {
+            path: "gov/translations",
+            element: <Page component={AdminGovTranslationReview} />,
+          },
           {
             path: "security-config",
             element: <Page component={SettingsSecurityConfig} />,

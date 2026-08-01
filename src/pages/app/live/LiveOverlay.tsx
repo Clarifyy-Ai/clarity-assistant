@@ -71,9 +71,33 @@ function LiveOverlaySession() {
   const didEndRef = useRef(false);
 
   useEffect(() => {
-    void initDesktopOverlayWindow();
+    const prefs = useOverlayStore.getState();
+    void initDesktopOverlayWindow({ alwaysOnTop: prefs.always_on_top });
     return () => {
       void teardownDesktopOverlayWindow();
+    };
+  }, []);
+
+  useEffect(() => {
+    const unsubAot = useOverlayStore.subscribe(
+      (s) => s.always_on_top,
+      (enabled) => {
+        void import("@/lib/overlay/applyOverlayWindowPrefs").then((m) =>
+          m.applyAlwaysOnTopPreference(enabled),
+        );
+      },
+    );
+    const unsubPres = useOverlayStore.subscribe(
+      (s) => s.presentation_safe_mode,
+      (enabled) => {
+        void import("@/lib/overlay/applyOverlayWindowPrefs").then((m) =>
+          m.applyPresentationSafePreference(enabled),
+        );
+      },
+    );
+    return () => {
+      unsubAot();
+      unsubPres();
     };
   }, []);
 

@@ -84,8 +84,18 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
 
   try {
     // Uses robust EDGE url handling + consistent auth headers
+    const idempotencyKey =
+      typeof opts.questionId === "string" && opts.questionId.length > 0
+        ? opts.questionId
+        : undefined;
     const data = await retry(
-      () => fetchEdgeJson<{ hints?: string; hint?: string }>("generate-hint", body, { signal }),
+      () =>
+        fetchEdgeJson<{ hints?: string; hint?: string }>("generate-hint", body, {
+          signal,
+          headers: idempotencyKey
+            ? { "Idempotency-Key": idempotencyKey }
+            : undefined,
+        }),
       1,
       100,
     );

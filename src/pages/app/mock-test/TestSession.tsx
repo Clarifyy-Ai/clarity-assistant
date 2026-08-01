@@ -25,6 +25,13 @@ import { Button } from "@/components/ui/Button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
 import { cn } from "@/lib/utils";
 import { resolveQuestionImageUrl } from "@/lib/mock-test/questionMedia";
+import { resolvePaperClassPresentation } from "@/lib/gov-exam/disclaimers";
+import { fetchApprovedTranslations } from "@/lib/gov-exam/adminOps";
+import {
+  applyApprovedTranslations,
+  isEnglishLanguage,
+  normalizeQuestionLanguage,
+} from "@/lib/gov-exam/questionTranslations";
 
 interface QuestionOption {
   label: string;
@@ -526,9 +533,30 @@ export default function TestSession() {
       }
 
       const uniqueIds = [...new Set(loadedTest.question_ids)];
-      const orderedQuestions = uniqueIds
+      let orderedQuestions = uniqueIds
         .map((id) => questionMap[id])
         .filter(Boolean);
+
+      // Prefer approved regional translations when mock config.language is set
+      // (create-exam-paper stores language on config). Unreviewed drafts never apply.
+      const configLanguage = normalizeQuestionLanguage(
+        loadedTest.config?.language,
+      );
+      if (!isEnglishLanguage(configLanguage) && orderedQuestions.length > 0) {
+        const { byQuestionId, error: trError } = await fetchApprovedTranslations(
+          orderedQuestions.map((q) => q.id),
+          configLanguage,
+        );
+        if (trError) {
+          console.warn("[TestSession] translation fetch skipped:", trError);
+        } else if (Object.keys(byQuestionId).length > 0) {
+          orderedQuestions = applyApprovedTranslations(
+            orderedQuestions,
+            byQuestionId,
+            configLanguage,
+          ) as Question[];
+        }
+      }
 
       const { data: sessionData } = await supabase.auth.getSession();
       const token = sessionData?.session?.access_token ?? "";
@@ -906,6 +934,8 @@ export default function TestSession() {
     );
   }
 
+  const paperMeta = resolvePaperClassPresentation(test.config);
+
   // Pre-start gate: test must be explicitly started by the user.
   if (test.status === "DRAFT") {
     const limitMins = Number(test.time_limit_minutes ?? 0);
@@ -913,6 +943,11 @@ export default function TestSession() {
       <div className="flex h-screen items-center justify-center bg-background p-6">
         <div className="w-full max-w-md rounded-2xl border border-border bg-card p-8 shadow-xl text-center space-y-5">
           <h1 className="text-2xl font-black text-foreground">{test.test_name}</h1>
+          {paperMeta.shortLabel && (
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+              {paperMeta.shortLabel}
+            </p>
+          )}
           <div className="space-y-2 text-sm text-muted-foreground">
             <p><strong className="text-foreground">{questions.length}</strong> questions</p>
             {limitMins > 0 && (
@@ -920,6 +955,11 @@ export default function TestSession() {
             )}
             <p className="text-xs">The timer starts only after you click Start. You can pause and resume during the test.</p>
           </div>
+          {paperMeta.disclaimer && (
+            <p className="text-left text-[11px] leading-relaxed text-muted-foreground border border-border/60 rounded-lg px-3 py-2 bg-muted/30">
+              {paperMeta.disclaimer}
+            </p>
+          )}
           <div className="flex gap-2">
             <Button variant="outline" className="flex-1" onClick={() => navigate("/app/mock-test")}>
               Cancel
@@ -1013,9 +1053,16 @@ export default function TestSession() {
             </SheetContent>
           </Sheet>
 
-          <span className="max-w-[150px] truncate text-sm font-semibold">
-            {test.test_name}
-          </span>
+          <div className="min-w-0">
+            <span className="block max-w-[150px] truncate text-sm font-semibold">
+              {test.test_name}
+            </span>
+            {paperMeta.shortLabel && (
+              <span className="block max-w-[150px] truncate text-[10px] font-medium text-amber-700 dark:text-amber-400">
+                {paperMeta.shortLabel}
+              </span>
+            )}
+          </div>
         </div>
 
         <div className="flex items-center gap-2">
@@ -1060,10 +1107,20 @@ export default function TestSession() {
 
       <div className="flex flex-1 overflow-hidden">
         <div className="hidden w-[240px] shrink-0 flex-col overflow-hidden border-r border-border bg-card md:flex">
-          <div className="border-b border-border p-4">
+          <div className="border-b border-border p-4 space-y-1.5">
             <h1 className="truncate text-sm font-bold text-foreground" title={test.test_name}>
               {test.test_name}
             </h1>
+            {paperMeta.shortLabel && (
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                {paperMeta.shortLabel}
+              </p>
+            )}
+            {paperMeta.disclaimer && (
+              <p className="text-[10px] leading-snug text-muted-foreground line-clamp-3" title={paperMeta.disclaimer}>
+                {paperMeta.disclaimer}
+              </p>
+            )}
           </div>
 
           <div className="border-b border-border bg-muted/10 p-3">

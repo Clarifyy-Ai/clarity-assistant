@@ -33,6 +33,8 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { launchMockTest, countQuestionsForPaper } from "@/lib/mock-test/launchMockTest";
+import { listPreviousPapers, type PreviousYearPaper } from "@/lib/gov-exam/api";
+import { GOV_EXAM_AFFILIATION_DISCLAIMER } from "@/lib/gov-exam/disclaimers";
 
 /* ─── TYPES ────────────────────────────────────────────────────────────────── */
 
@@ -138,6 +140,8 @@ export default function ExamPapers() {
   const isAdmin      = useAuthStore((s) => s.isAdmin);
 
   const [papers,      setPapers]      = useState<ExamPaper[]>([]);
+  const [registryPapers, setRegistryPapers] = useState<PreviousYearPaper[]>([]);
+  const [registryEmpty, setRegistryEmpty] = useState(false);
   const [loading,     setLoading]     = useState(true);
   const [launchingId, setLaunchingId] = useState<string | null>(null);
   const [questionCounts, setQuestionCounts] = useState<Record<string, number>>({});
@@ -167,7 +171,7 @@ export default function ExamPapers() {
       const normalised = (examType ?? "").toUpperCase();
       const dbExamType  = EXAM_DB_MAP[normalised] ?? normalised;
 
-      const [papersRes, testsRes] = await Promise.all([
+      const [papersRes, testsRes, registryRes] = await Promise.all([
         supabase
           .from("exam_papers")
           .select("*")
@@ -181,10 +185,20 @@ export default function ExamPapers() {
               .eq("user_id", user.id)
               .eq("status", "COMPLETED")
           : Promise.resolve({ data: [] as MockTestRow[], error: null }),
+
+        listPreviousPapers({ examCode: normalised }).catch(() => null),
       ]);
 
       const loadedPapers = (papersRes.data ?? []) as ExamPaper[];
       setPapers(loadedPapers);
+
+      if (registryRes) {
+        setRegistryPapers(registryRes.papers);
+        setRegistryEmpty(registryRes.bankEmpty);
+      } else {
+        setRegistryPapers([]);
+        setRegistryEmpty(true);
+      }
 
       const counts: Record<string, number> = {};
       await Promise.all(
@@ -345,6 +359,60 @@ export default function ExamPapers() {
           </Button>
         }
       />
+
+      <p className="text-xs text-muted-foreground border border-border/60 rounded-lg px-3 py-2 bg-muted/30">
+        {GOV_EXAM_AFFILIATION_DISCLAIMER}
+      </p>
+
+      {/* ── REGISTRY PREVIOUS PAPERS ─────────────────────────────────────── */}
+      {!loading && (
+        <section className="space-y-3">
+          <h2 className="text-sm font-semibold tracking-tight">
+            Registry previous papers
+          </h2>
+          {registryEmpty || registryPapers.length === 0 ? (
+            <p className="text-sm text-muted-foreground rounded-xl border border-dashed border-border px-4 py-4">
+              No approved previous-year papers in the government exam registry yet
+              for this exam. Legacy paper cards below (if any) are practice/library
+              metadata — not a copyrighted bank copy.
+            </p>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {registryPapers.map((p) => (
+                <Card key={p.id} className="bg-card shadow-sm">
+                  <CardContent className="p-4 flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      <FileText className="h-5 w-5" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-sm truncate">
+                        {p.title ?? `${examLabel} ${p.year}`}
+                      </p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {p.year}
+                        {p.shift ? ` · ${p.shift}` : ""}
+                        {p.questionCount != null ? ` · ${p.questionCount} Qs` : ""}
+                      </p>
+                      <div className="mt-2">
+                        <Badge
+                          variant="outline"
+                          className={
+                            p.label === "official"
+                              ? "text-[10px] border-emerald-500/40 text-emerald-700 dark:text-emerald-400"
+                              : "text-[10px]"
+                          }
+                        >
+                          {p.label === "official" ? "Official" : "Practice"}
+                        </Badge>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       {/* ── PROGRESS TRACKER ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">

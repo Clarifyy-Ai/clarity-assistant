@@ -4,6 +4,10 @@ import { persist, subscribeWithSelector } from "zustand/middleware";
 import type { HintStyle, PreferredAIModel } from "@/types/user.types";
 import type { ResumeTalkingPoints, ResumeContext } from "@/lib/ai/resumeFallback";
 import { clearLastFullScreenshot } from "@/lib/audio/screenshotCapture";
+import {
+  transitionOverlayState,
+  type OverlaySessionState,
+} from "@/lib/overlay/overlaySessionStates";
 
 // ─────────────────────────────────────────────────────────────────
 // Overlay Position
@@ -123,6 +127,10 @@ interface OverlayStore {
   is_pip_active: boolean;
   pip_opt_in: boolean;
   overlay_layout_mode: OverlayLayoutMode;
+  /** Canonical capture → guidance pipeline state (see overlaySessionStates). */
+  session_pipeline_state: OverlaySessionState;
+  always_on_top: boolean;
+  presentation_safe_mode: boolean;
 
   chat_history: ChatMessage[];
   is_chat_generating: boolean;
@@ -145,6 +153,9 @@ interface OverlayStore {
 
   setCurrentQuestion: (question: string) => void;
   setHintState: (state: HintState) => void;
+  setSessionPipelineState: (state: OverlaySessionState) => void;
+  setAlwaysOnTop: (enabled: boolean) => void;
+  setPresentationSafeMode: (enabled: boolean) => void;
   appendStreamChunk: (chunk: string) => void;
   commitStreamedHint: () => void;
   clearHint: () => void;
@@ -291,6 +302,9 @@ export const useOverlayStore = create<OverlayStore>()(
       is_peek_active: false,
       is_minimal_mode: false,
       overlay_layout_mode: "floating" as OverlayLayoutMode,
+      session_pipeline_state: "idle" as OverlaySessionState,
+      always_on_top: false,
+      presentation_safe_mode: false,
 
       is_hotkey_help_visible: false,
       is_pip_active: false,
@@ -436,12 +450,58 @@ export const useOverlayStore = create<OverlayStore>()(
               : s.activity_log,
         })),
 
-      setHintState: (hint_state) => set({ hint_state }),
+      setHintState: (hint_state) =>
+        set((s) => {
+          let session_pipeline_state = s.session_pipeline_state;
+          if (hint_state === "generating") {
+            session_pipeline_state = transitionOverlayState(
+              s.session_pipeline_state,
+              "generating_guidance",
+            );
+          } else if (hint_state === "streaming") {
+            session_pipeline_state = transitionOverlayState(
+              s.session_pipeline_state,
+              "generating_guidance",
+            );
+          } else if (hint_state === "ready") {
+            session_pipeline_state = transitionOverlayState(
+              s.session_pipeline_state,
+              "guidance_ready",
+            );
+          } else if (hint_state === "error") {
+            session_pipeline_state = transitionOverlayState(
+              s.session_pipeline_state,
+              "ai_provider_unavailable",
+            );
+          } else if (hint_state === "offline_fallback") {
+            session_pipeline_state = transitionOverlayState(
+              s.session_pipeline_state,
+              "backend_unavailable",
+            );
+          }
+          return { hint_state, session_pipeline_state };
+        }),
+
+      setSessionPipelineState: (next) =>
+        set((s) => ({
+          session_pipeline_state: transitionOverlayState(
+            s.session_pipeline_state,
+            next,
+          ),
+        })),
+
+      setAlwaysOnTop: (always_on_top) => set({ always_on_top: Boolean(always_on_top) }),
+      setPresentationSafeMode: (presentation_safe_mode) =>
+        set({ presentation_safe_mode: Boolean(presentation_safe_mode) }),
 
       appendStreamChunk: (chunk) =>
         set((state) => ({
           streaming_buffer: state.streaming_buffer + chunk,
           hint_state: "streaming",
+          session_pipeline_state: transitionOverlayState(
+            state.session_pipeline_state,
+            "generating_guidance",
+          ),
         })),
 
       commitStreamedHint: () =>
@@ -451,6 +511,10 @@ export const useOverlayStore = create<OverlayStore>()(
             return {
               streaming_buffer: "",
               hint_state: "idle" as HintState,
+              session_pipeline_state: transitionOverlayState(
+                state.session_pipeline_state,
+                "listening",
+              ),
             };
           }
 
@@ -467,6 +531,10 @@ export const useOverlayStore = create<OverlayStore>()(
             current_hint: text,
             streaming_buffer: "",
             hint_state: "ready" as HintState,
+            session_pipeline_state: transitionOverlayState(
+              state.session_pipeline_state,
+              "guidance_ready",
+            ),
             hint_history: newHistory,
             hint_history_index: newHistory.length - 1,
             activity_log: [
@@ -477,24 +545,49 @@ export const useOverlayStore = create<OverlayStore>()(
         }),
 
       clearHint: () =>
-        set({
+        set((s) => ({
           current_hint: "",
           streaming_buffer: "",
-          hint_state: "idle",
+          hint_state: "idle" as HintState,
           error_message: null,
           screenshot_hint: null,
-        }),
+          session_pipeline_state: transitionOverlayState(
+            s.session_pipeline_state,
+            "listening",
+          ),
+        })),
 
       setError: (error_message) =>
-        set({ error_message, hint_state: "error" }),
+        set((s) => {
+          const msg = (error_message ?? "").toLowerCase();
+          let next: OverlaySessionState = "ai_provider_unavailable";
+          if (msg.includes("credit")) next = "insufficient_credits";
+          else if (msg.includes("rate") || msg.includes("429")) next = "rate_limited";
+          else if (msg.includes("permission") || msg.includes("mic"))
+            next = "permission_denied";
+          else if (msg.includes("network") || msg.includes("offline"))
+            next = "backend_unavailable";
+          return {
+            error_message,
+            hint_state: "error" as HintState,
+            session_pipeline_state: transitionOverlayState(
+              s.session_pipeline_state,
+              next,
+            ),
+          };
+        }),
 
       setOfflineFallback: (hint) =>
-        set({
+        set((s) => ({
           current_hint: hint,
           streaming_buffer: "",
-          hint_state: "offline_fallback",
+          hint_state: "offline_fallback" as HintState,
           error_message: null,
-        }),
+          session_pipeline_state: transitionOverlayState(
+            s.session_pipeline_state,
+            "guidance_ready",
+          ),
+        })),
 
       setHintStyle: (hint_style) => set({ hint_style }),
 
@@ -604,6 +697,7 @@ export const useOverlayStore = create<OverlayStore>()(
           current_question: "",
           current_hint: "",
           hint_state: "idle",
+          session_pipeline_state: "idle",
           streaming_buffer: "",
           error_message: null,
 
@@ -766,6 +860,8 @@ export const useOverlayStore = create<OverlayStore>()(
         is_minimal_mode: state.is_minimal_mode,
         overlay_layout_mode: state.overlay_layout_mode,
         pip_opt_in: state.pip_opt_in,
+        always_on_top: state.always_on_top,
+        presentation_safe_mode: state.presentation_safe_mode,
       }),
     }
   )

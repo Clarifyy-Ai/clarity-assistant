@@ -34,6 +34,7 @@ import { parseResumeContentString } from "@/lib/documents/resumeParse";
 import { getPrivateMode } from "@/hooks/usePrivateMode";
 import { createDragHandler } from "@/lib/overlay/stealthMouse";
 import { generateId } from "@/lib/utils";
+import { questionFingerprint, hintIdempotencyKey } from "@/lib/ai/questionDetection";
 import {
   sessionsDB,
   jobDescriptionsDB,
@@ -387,14 +388,28 @@ export function useLiveCopilot({
   /**
    * Stable question detected callback (used by audio pipeline).
    */
+  const seenQuestionFingerprintsRef = useRef<Set<string>>(new Set());
+
   const handleQuestionDetected = useCallback((question: string) => {
-    if (question === lastQuestionRef.current) return;
-    lastQuestionRef.current = question;
+    const trimmed = question.trim();
+    if (!trimmed) return;
+    const fingerprint = questionFingerprint(trimmed);
+    if (
+      fingerprint &&
+      seenQuestionFingerprintsRef.current.has(fingerprint)
+    ) {
+      return;
+    }
+    if (trimmed === lastQuestionRef.current) return;
+    if (fingerprint) seenQuestionFingerprintsRef.current.add(fingerprint);
+    lastQuestionRef.current = trimmed;
 
-    useOverlayStore.getState().setCurrentQuestion(question);
+    const overlay = useOverlayStore.getState();
+    overlay.setSessionPipelineState("question_detected");
+    overlay.setCurrentQuestion(trimmed);
 
-    if (useOverlayStore.getState().auto_generate) {
-      void requestLiveHintRef.current(question);
+    if (overlay.auto_generate) {
+      void requestLiveHintRef.current(trimmed);
     }
   }, []);
 
@@ -505,6 +520,7 @@ export function useLiveCopilot({
 
       if (!creditCheck.canProceed) {
         const overlay = useOverlayStore.getState();
+        overlay.setSessionPipelineState("insufficient_credits");
         const tp = overlay.resume_talking_points;
         if (tp) overlay.setOfflineFallback(formatTalkingPointsAsHint(tp));
         else overlay.setError(creditCheck.reason ?? "Out of credits");
@@ -515,7 +531,7 @@ export function useLiveCopilot({
       const controller = new AbortController();
       abortRef.current = controller;
 
-      const requestId = generateId();
+      const requestId = hintIdempotencyKey(sessionIdRef.current, question);
       const overlay = useOverlayStore.getState();
       overlay.setCurrentQuestion(question);
       overlay.setHintState("generating");
@@ -707,9 +723,12 @@ export function useLiveCopilot({
         sessionIdRef.current = generateId();
       }
 
+      seenQuestionFingerprintsRef.current.clear();
+      lastQuestionRef.current = "";
       await initSessionFromConfig();
       setPrepStepIndex(2);
       useOverlayStore.getState().showOverlay();
+      useOverlayStore.getState().setSessionPipelineState("connecting");
       await audio.start();
       useSessionStore.getState().setStatus("active");
       markFirstListening();
@@ -730,6 +749,7 @@ export function useLiveCopilot({
 
   const endLiveSession = useCallback(async () => {
     abortRef.current?.abort();
+    useOverlayStore.getState().setSessionPipelineState("session_ending");
     audio.stop();
 
     const session = useSessionStore.getState();

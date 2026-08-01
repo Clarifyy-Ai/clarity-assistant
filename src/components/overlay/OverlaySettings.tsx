@@ -4,6 +4,13 @@ import { useOverlayStore } from "@/store/overlayStore";
 import type { OverlayLayoutMode } from "@/store/overlayStore";
 import { setAppStealthMode } from "@/lib/stealth/stealthActions";
 import {
+  applyAlwaysOnTopPreference,
+  applyLayoutModeToDesktop,
+  applyPresentationSafePreference,
+  layoutModeDimensions,
+  layoutModePosition,
+} from "@/lib/overlay/applyOverlayWindowPrefs";
+import {
   Settings,
   X,
   Eye,
@@ -15,6 +22,7 @@ import {
 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 interface OverlaySettingsProps {
   isOpen?: boolean;
@@ -58,6 +66,8 @@ export function OverlaySettings({
   const isMinimalMode = useOverlayStore((s) => s.is_minimal_mode);
   const pipOptIn = useOverlayStore((s) => s.pip_opt_in);
   const overlayLayoutMode = useOverlayStore((s) => s.overlay_layout_mode);
+  const alwaysOnTop = useOverlayStore((s) => s.always_on_top);
+  const presentationSafe = useOverlayStore((s) => s.presentation_safe_mode);
 
   const [localSettings, setLocalSettings] =
     useState<LocalOnlySettings>(DEFAULT_LOCAL_SETTINGS);
@@ -77,6 +87,8 @@ export function OverlaySettings({
       minimalMode: isMinimalMode,
       pipOptIn,
       layoutMode: overlayLayoutMode,
+      alwaysOnTop,
+      presentationSafe,
       ...localSettings,
     }),
     [
@@ -91,6 +103,8 @@ export function OverlaySettings({
       isMinimalMode,
       pipOptIn,
       overlayLayoutMode,
+      alwaysOnTop,
+      presentationSafe,
       localSettings,
     ]
   );
@@ -126,8 +140,28 @@ export function OverlaySettings({
       case "minimalMode":
         os.setMinimalMode?.(Boolean(value));
         break;
-      case "layoutMode":
-        os.setOverlayLayoutMode?.(value as OverlayLayoutMode);
+      case "layoutMode": {
+        const mode = value as OverlayLayoutMode;
+        os.setOverlayLayoutMode?.(mode);
+        const dims = layoutModeDimensions(mode);
+        os.setOverlaySize(dims.width, dims.height);
+        os.setPosition(layoutModePosition(mode, os.position));
+        applyLayoutModeToDesktop(mode);
+        break;
+      }
+      case "alwaysOnTop":
+        os.setAlwaysOnTop(Boolean(value));
+        applyAlwaysOnTopPreference(Boolean(value));
+        break;
+      case "presentationSafe":
+        os.setPresentationSafeMode(Boolean(value));
+        void applyPresentationSafePreference(Boolean(value)).then(() => {
+          if (value) {
+            toast.message(
+              "Presentation-safe mode reduces capture on some platforms — it is not invisible on all screen shares.",
+            );
+          }
+        });
         break;
     }
   };
@@ -152,6 +186,10 @@ export function OverlaySettings({
     os.setAutoAnswerSilenceSeconds(3);
     os.setMinimalMode?.(false);
     os.setOverlayLayoutMode?.("floating");
+    os.setAlwaysOnTop(false);
+    applyAlwaysOnTopPreference(false);
+    os.setPresentationSafeMode(false);
+    void applyPresentationSafePreference(false);
 
     setLocalSettings(DEFAULT_LOCAL_SETTINGS);
   };
@@ -268,6 +306,29 @@ export function OverlaySettings({
             checked={currentSettings.minimalMode}
             onCheckedChange={(v) => handleStoreSettingChange("minimalMode", v)}
             aria-label="Toggle minimal mode"
+          />
+        </SettingRow>
+
+        <SettingRow
+          label="Always on top"
+          description="Keep the desktop window above other apps (opt-in; default off)"
+        >
+          <Switch
+            checked={currentSettings.alwaysOnTop}
+            onCheckedChange={(v) => handleStoreSettingChange("alwaysOnTop", v)}
+            aria-label="Toggle always on top"
+          />
+        </SettingRow>
+
+        <SettingRow
+          label="Presentation-safe"
+          description="Opt-in content protection where supported — not universal screen-share invisibility"
+          icon={<Shield className="h-3.5 w-3.5 text-amber-400" aria-hidden="true" />}
+        >
+          <Switch
+            checked={currentSettings.presentationSafe}
+            onCheckedChange={(v) => handleStoreSettingChange("presentationSafe", v)}
+            aria-label="Toggle presentation-safe mode"
           />
         </SettingRow>
 

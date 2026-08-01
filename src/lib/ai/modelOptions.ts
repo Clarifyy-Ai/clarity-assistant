@@ -58,3 +58,30 @@ export function normalizePreferredModel(raw: string | null | undefined): Preferr
   if (!raw) return "gemini-flash";
   return map[raw] ?? (raw as PreferredAIModel);
 }
+
+/** Map UI model slugs to public.ai_model enum values for PostgREST writes. */
+export function toDbPreferredModel(
+  raw: string | null | undefined,
+):
+  | "gpt-4o"
+  | "gpt-4o-mini"
+  | "claude-3-5-sonnet"
+  | "claude-3-haiku"
+  | "gemini-1-5-pro"
+  | "gemini-1-5-flash"
+  | "gemini-2.0-flash" {
+  const slug = normalizePreferredModel(raw);
+  const map: Record<string, ReturnType<typeof toDbPreferredModel>> = {
+    "gemini-flash": "gemini-1-5-flash",
+    "gemini-pro": "gemini-1-5-pro",
+    claude: "claude-3-5-sonnet",
+    "claude-3-5-sonnet": "claude-3-5-sonnet",
+    "claude-3-haiku": "claude-3-haiku",
+    "gpt-4o": "gpt-4o",
+    "gpt-4o-mini": "gpt-4o-mini",
+    "gemini-1-5-flash": "gemini-1-5-flash",
+    "gemini-1-5-pro": "gemini-1-5-pro",
+    "gemini-2.0-flash": "gemini-2.0-flash",
+  };
+  return map[slug] ?? "gemini-1-5-flash";
+}

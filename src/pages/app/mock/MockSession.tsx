@@ -115,7 +115,7 @@ function buildConfigFromSessionRow(
 ): LiveSessionConfig {
   const questionCount = session.questions_asked ?? 5;
   const interviewType = "behavioural";
-  const model = (session.model_used as PreferredAIModel | null) ?? "gemini-2.0-flash";
+  const model = (session.model_used as PreferredAIModel | null) ?? "gemini-flash";
 
   return {
     company: parseMockCompanyFromTitle(session.title),
@@ -129,10 +129,7 @@ function buildConfigFromSessionRow(
     interview_type: interviewType,
     instructions: "",
     enable_system_audio: true,
-    type: interviewType,
-    count: questionCount,
-    question_count: questionCount,
-  } as LiveSessionConfig;
+  };
 }
 
 function sessionDurationSeconds(session: Tables<"sessions">): number {

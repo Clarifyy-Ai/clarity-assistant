@@ -4,10 +4,10 @@
 import {
   handleCors, parseBody, requireAuth,
   successResponse, errorResponse,
-  callAI,
   requireFields, log, getAdminClient
 } from "../_shared/utils.ts";
 import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
+import { generateWithFallback } from "../_shared/aiProvider.ts";
 import type { ModelId } from "../_shared/types.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
@@ -158,14 +158,14 @@ Return ONLY the rewritten ${sectionLabel} text:
     // AI CALL — refund on failure
     let aiResult;
     try {
-      aiResult = await callAI({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user",   content: userPrompt },
-        ],
+      aiResult = await generateWithFallback({
+        prompt: userPrompt,
+        systemPrompt,
         maxTokens: 400,
         temperature: 0.65,
+        model: String(model),
+        userId: auth.userId,
+        action: "polish_star_section",
       });
     } catch (aiErr) {
       try {

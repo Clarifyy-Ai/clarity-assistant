@@ -1,0 +1,117 @@
+#!/usr/bin/env node
+/**
+ * Confirms whether deployed GEMINI_API_KEY works by calling generate-questions.
+ * Also retries with a session-bound generate-hint after start-session.
+ */
+import fs from "node:fs";
+
+function loadEnv(filePath) {
+  const out = {};
+  if (!fs.existsSync(filePath)) return out;
+  for (const line of fs.readFileSync(filePath, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq <= 0) continue;
+    let val = trimmed.slice(eq + 1).trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    ) {
+      val = val.slice(1, -1);
+    }
+    out[trimmed.slice(0, eq).trim()] = val;
+  }
+  return out;
+}
+
+const env = { ...loadEnv(".env.local"), ...loadEnv(".env.qa.local") };
+const base = (env.VITE_SUPABASE_URL || env.QA_SUPABASE_URL || "").replace(/\/$/, "");
+const anon = env.VITE_SUPABASE_ANON_KEY || env.VITE_SUPABASE_PUBLISHABLE_KEY || "";
+const email = env.QA_PRO_EMAIL;
+const password = env.QA_PRO_PASSWORD;
+
+const authRes = await fetch(`${base}/auth/v1/token?grant_type=password`, {
+  method: "POST",
+  headers: { apikey: anon, "Content-Type": "application/json" },
+  body: JSON.stringify({ email, password }),
+});
+const auth = await authRes.json();
+if (!auth.access_token) {
+  console.log(JSON.stringify({ ok: false, step: "auth", status: authRes.status }));
+  process.exit(1);
+}
+const token = auth.access_token;
+const headers = {
+  Authorization: `Bearer ${token}`,
+  apikey: anon,
+  "Content-Type": "application/json",
+};
+
+async function call(name, body) {
+  const t0 = Date.now();
+  const res = await fetch(`${base}/functions/v1/${name}`, {
+    method: "POST",
+    headers,
+    body: JSON.stringify(body),
+  });
+  const text = await res.text();
+  return {
+    name,
+    status: res.status,
+    ms: Date.now() - t0,
+    body: text.slice(0, 400).replace(/\s+/g, " "),
+  };
+}
+
+const session = await call("start-session", {
+  session_type: "rehearsal",
+  type: "rehearsal",
+  is_practice: true,
+  interview_type: "behavioral",
+  duration_minutes: 15,
+});
+console.log(JSON.stringify(session));
+
+let sessionId = null;
+try {
+  sessionId = JSON.parse(session.body).session_id;
+} catch {
+  /* ignore */
+}
+
+if (sessionId) {
+  console.log(
+    JSON.stringify(
+      await call("generate-hint", {
+        session_id: sessionId,
+        question: "Tell me about a challenge you faced at work.",
+        mode: "rehearsal",
+        session_type: "rehearsal",
+        is_practice: true,
+      }),
+    ),
+  );
+  console.log(
+    JSON.stringify(
+      await call("generate-answer", {
+        session_id: sessionId,
+        question: "Why do you want this role?",
+        mode: "rehearsal",
+        session_type: "rehearsal",
+        is_practice: true,
+      }),
+    ),
+  );
+}
+
+console.log(
+  JSON.stringify(
+    await call("generate-questions", {
+      type: "behavioral",
+      count: 1,
+      role: "Engineer",
+      free_session: true,
+    }),
+  ),
+);

@@ -6,7 +6,8 @@ import { useCallback } from "react";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { useAuthStore } from "@/store/userStore";
-import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { generateHint, type GenerateHintRequest } from "@/lib/api/ai";
+import { hintIdempotencyKey } from "@/lib/ai/questionDetection";
 import { buildResumeContextForAI } from "@/lib/documents/interviewContext";
 import { parseResumeContentString } from "@/lib/documents/resumeParse";
 import { getLocalHintFallback } from "@/lib/mock/localHintFallback";
@@ -114,26 +115,20 @@ export function useSessionOrchestrator() {
       overlay.setHintState("generating");
       overlay.setChatGenerating?.(true);
 
-      const data = await fetchEdgeJson<{
-        hints?: string | string[];
-        hint?: string;
-        answer?: string;
-        text?: string;
-      }>(
-        "generate-hint",
-        {
-          question: questionText,
-          resume_context: resumeCtx,
-          transcript: transcript.length > 2500 ? transcript.slice(-2500) : transcript,
-          interview_type: (session.config as { interview_type?: string })?.interview_type ?? "behavioural",
-          model: overlay.active_model ?? "gemini-2.5-flash",
-          session_id: session.session_id,
-          mode: session.session_id ? undefined : "rehearsal",
-        }
-      );
+      const payload: GenerateHintRequest = {
+        question: questionText,
+        resume_context: resumeCtx,
+        transcript: transcript.length > 2500 ? transcript.slice(-2500) : transcript,
+        interview_type:
+          (session.config as { interview_type?: string })?.interview_type ?? "behavioural",
+        model: overlay.active_model ?? "gemini-2.5-flash",
+        session_id: session.session_id ?? undefined,
+      };
+      const data = await generateHint(payload, {
+        idempotencyKey: hintIdempotencyKey(session.session_id, questionText),
+      });
 
-      const rawHints = data?.hints ?? data?.hint ?? data?.answer ?? data?.text ?? "";
-      const hint = Array.isArray(rawHints) ? rawHints.join("\n") : rawHints;
+      const hint = typeof data?.hints === "string" ? data.hints : String(data?.hints ?? "");
       overlay.setCurrentQuestion(questionText);
       overlay.appendStreamChunk(hint);
       overlay.commitStreamedHint();

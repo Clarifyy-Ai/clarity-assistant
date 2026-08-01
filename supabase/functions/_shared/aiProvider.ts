@@ -52,8 +52,8 @@ export interface AIProviderResult {
 /* -------------------------------------------------------------------------- */
 
 const MODELS = {
-  primary: "gemini-2.0-flash",
-  fallback: "gemini-1.5-pro",
+  primary: "gemini-2.5-flash",
+  fallback: "gemini-flash-latest",
 } as const;
 
 const MAX_RETRIES = 2;
@@ -191,6 +191,16 @@ async function callGemini(
 /*                        GENERATE WITH FALLBACK                              */
 /* -------------------------------------------------------------------------- */
 
+function isQuotaOrRateLimitError(err: Error): boolean {
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes("429") ||
+    msg.includes("quota") ||
+    msg.includes("rate limit") ||
+    msg.includes("resource_exhausted")
+  );
+}
+
 export async function generateWithFallback(
   options: AIProviderOptions
 ): Promise<AIProviderResult> {
@@ -205,12 +215,18 @@ export async function generateWithFallback(
 
   const models = getFallbackModels(requestedModel ?? MODELS.primary);
   let lastError: Error | null = null;
+  let skipGeminiFamily = false;
 
   for (let i = 0; i < models.length; i++) {
     const model = models[i];
-    const isFallback = i > 0;
+    const isGemini = model.startsWith("gemini");
+    if (skipGeminiFamily && isGemini) continue;
 
-    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const isFallback = i > 0;
+    // Quota errors rarely recover within a few seconds — one retry max.
+    const attempts = isGemini ? 1 : MAX_RETRIES;
+
+    for (let attempt = 0; attempt <= attempts; attempt++) {
       if (attempt > 0) {
         await new Promise((r) => setTimeout(r, RETRY_DELAY_MS * attempt));
       }
@@ -255,7 +271,12 @@ export async function generateWithFallback(
         };
       } catch (err) {
         lastError = err instanceof Error ? err : new Error(String(err));
-        if (attempt < MAX_RETRIES) continue;
+        if (isGemini && isQuotaOrRateLimitError(lastError)) {
+          // Gemini project quota is shared across models — jump to OpenAI/Anthropic.
+          skipGeminiFamily = true;
+          break;
+        }
+        if (attempt < attempts) continue;
         break;
       }
     }

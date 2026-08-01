@@ -16,6 +16,8 @@ import {
   rateLimitResponse,
   RATE_LIMIT_PRESETS,
 } from "../_shared/rateLimit.ts";
+import { recomputeTopicMasteryFromAttempt } from "../_shared/recomputeTopicMastery.ts";
+import type { AttemptSignal } from "../_shared/masteryEngine.ts";
 
 /* -------------------------------------------------------------------------- */
 /*                                    TYPES                                   */
@@ -754,8 +756,9 @@ Deno.serve(async (req: Request) => {
     }
 
     /* -------------------- UPDATE TOPIC PERFORMANCE -------------------- */
+    const testConfig = (testRaw.config as Record<string, unknown> | null) ?? {};
     try {
-      const examType = safeString((testRaw.config as Record<string, unknown> | null)?.exam_type, "GENERAL");
+      const examType = safeString(testConfig.exam_type, "GENERAL");
 
       for (const [topic, row] of Object.entries(topicBreakdown)) {
         if (row.attempted === 0) continue;
@@ -772,6 +775,68 @@ Deno.serve(async (req: Request) => {
       }
     } catch (topicPerfError) {
       log(FN, "warn", "Topic performance update failed", topicPerfError);
+    }
+
+    /* --------------- GOV EXAM TOPIC MASTERY (best-effort) --------------- */
+    try {
+      const govExamId = safeString(testConfig.gov_exam_id);
+      if (govExamId) {
+        const avgTimeForQuality =
+          timeEntries.length > 0
+            ? timeEntries.reduce((s, t) => s + t.time_seconds, 0) / timeEntries.length
+            : 0;
+        const topicAttemptsMap = new Map<
+          string,
+          AttemptSignal[]
+        >();
+
+        for (const questionId of questionIds) {
+          const question = questionMap[questionId];
+          if (!question) continue;
+          const topic = safeString(question.topic, "General");
+          const response = responseMap[questionId];
+          const isAttempted =
+            Boolean(response?.is_attempted) && !isEmptyAnswer(response?.user_answer);
+          const { correct: isCorrect } = scoreQuestion(
+            question,
+            response ?? {
+              question_id: questionId,
+              user_answer: null,
+              is_attempted: false,
+              time_spent_seconds: 0,
+            },
+          );
+          const timeSpent = Math.max(0, safeNumber(response?.time_spent_seconds, 0));
+          let quality = 1;
+          if (isAttempted && avgTimeForQuality > 0 && timeSpent > 0) {
+            if (timeSpent < Math.max(8, avgTimeForQuality * 0.25)) quality = 0.55;
+            else if (timeSpent > Math.max(avgTimeForQuality * 3, 120)) quality = 0.75;
+          }
+          const list = topicAttemptsMap.get(topic) ?? [];
+          list.push({
+            correct: isCorrect,
+            attempted: isAttempted,
+            difficulty: question.difficulty,
+            daysAgo: 0,
+            quality,
+          });
+          topicAttemptsMap.set(topic, list);
+        }
+
+        const topicAttempts = [...topicAttemptsMap.entries()].map(([topic, attempts]) => ({
+          topic,
+          attempts,
+        }));
+
+        await recomputeTopicMasteryFromAttempt(db, {
+          userId,
+          examId: govExamId,
+          stageId: safeString(testConfig.gov_stage_id) || null,
+          topicAttempts,
+        });
+      }
+    } catch (masteryError) {
+      log(FN, "warn", "Topic mastery update failed", masteryError);
     }
 
     /* -------------------------- FINAL RESPONSE -------------------------- */

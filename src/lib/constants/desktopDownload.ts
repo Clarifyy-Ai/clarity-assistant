@@ -15,10 +15,13 @@ const DESKTOP_DOWNLOAD_URL_MAC =
 const DESKTOP_DOWNLOAD_URL_LINUX =
   (import.meta.env.VITE_DESKTOP_DOWNLOAD_URL_LINUX as string | undefined)?.trim() || "";
 
-/** GitHub repo for auto-resolving latest release asset (owner/repo). */
+/**
+ * GitHub repo for auto-resolving latest release asset (owner/repo).
+ * Only queried when explicitly configured — the default org/repo is often
+ * private or empty, which spams 404s in the browser console.
+ */
 export const GITHUB_RELEASE_REPO =
-  (import.meta.env.VITE_GITHUB_RELEASE_REPO as string | undefined)?.trim() ||
-  "Clarifyy-Ai/clarity-assistant";
+  (import.meta.env.VITE_GITHUB_RELEASE_REPO as string | undefined)?.trim() || "";
 
 /** In-app guide with desktop install steps (see docs/ELECTRON_RELEASE.md). */
 export const DESKTOP_INSTALL_GUIDE_PATH = "/app/guide/practice-coach";
@@ -44,7 +47,9 @@ export function getPlatformDownloadUrlFromEnv(os: DetectedOs): string {
 }
 
 export function isDesktopDownloadExternal(os?: DetectedOs): boolean {
-  if (os) return Boolean(getPlatformDownloadUrlFromEnv(os));
+  if (os) {
+    return Boolean(getPlatformDownloadUrlFromEnv(os) || GITHUB_RELEASE_REPO);
+  }
   return Boolean(
     DESKTOP_DOWNLOAD_URL ||
       DESKTOP_DOWNLOAD_URL_WIN ||

@@ -14,7 +14,7 @@ import { recordReferral, getStoredRefCode, normalizeRefCode } from "@/lib/referr
 import { ROUTES } from "@/lib/constants";
 import { saveLastPracticeSetup } from "@/lib/session/lastPracticeSetup";
 import { markOnboardingComplete } from "@/lib/analytics/uxMetrics";
-import { normalizePreferredModel } from "@/lib/ai/modelOptions";
+import { normalizePreferredModel, toDbPreferredModel } from "@/lib/ai/modelOptions";
 import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
 
 import OnboardingStep1Essentials from "./OnboardingStep1Essentials";
@@ -145,7 +145,7 @@ export default function OnboardingIndex() {
 
       await updateProfile({
         onboarding_completed: true,
-        preferred_model:      finalData.preferredModel,
+        preferred_model:      toDbPreferredModel(finalData.preferredModel),
         ...(refCode ? { referred_by: refCode } : {}),
       } as Record<string, unknown>);
 

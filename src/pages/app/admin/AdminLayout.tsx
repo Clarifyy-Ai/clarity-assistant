@@ -5,7 +5,8 @@ import {
   LayoutDashboard, Users, BarChart2,
   Flag, Shield, ChevronRight, DollarSign, Cpu,
   MessageSquare, FileText, Database, ScrollText, LifeBuoy,
-  ExternalLink, Activity, ClipboardCheck, Upload, Menu, Tag, Settings2,
+  ExternalLink, ClipboardCheck, Upload, Menu, Tag, Settings2,
+  Link2, BookOpen, ListChecks, FileStack, Languages, FileUp,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
@@ -37,6 +38,17 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { to: "/app/admin/bulk-upload",    icon: Upload,         label: "Bulk Upload"   },
       { to: "/app/admin/seed-questions", icon: Database,       label: "Seed / Import" },
       { to: "/app/admin/qa-checklist",   icon: ClipboardCheck, label: "QA Checklist"  },
+    ],
+  },
+  {
+    label: "Gov Exams",
+    items: [
+      { to: "/app/admin/gov/sources",          icon: Link2,      label: "Sources"       },
+      { to: "/app/admin/gov/ingest",           icon: FileUp,     label: "PDF Ingest"    },
+      { to: "/app/admin/gov/exams",            icon: BookOpen,   label: "Exam Registry" },
+      { to: "/app/admin/gov/question-review",  icon: ListChecks, label: "Q Review"      },
+      { to: "/app/admin/gov/paper-review",     icon: FileStack,  label: "Paper Review"  },
+      { to: "/app/admin/gov/translations",     icon: Languages,  label: "Translations"  },
     ],
   },
   {

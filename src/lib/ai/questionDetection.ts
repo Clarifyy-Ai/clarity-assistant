@@ -4,12 +4,35 @@ export interface QuestionDetectionInput {
   transcript: string;
   /** If the UI already knows the question, we just return it. */
   explicitQuestionText?: string;
+  /** Session-scoped fingerprints already charged / guided (skip duplicates). */
+  seenFingerprints?: ReadonlySet<string>;
 }
 
 export interface DetectedQuestion {
   questionText: string;
   confidence: number; // 0–1
   source: "explicit" | "heuristic";
+  fingerprint: string;
+}
+
+/** Normalize question text for duplicate detection within a session. */
+export function questionFingerprint(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, 240);
+}
+
+/** Stable client idempotency key for hint generation (session + fingerprint). */
+export function hintIdempotencyKey(
+  sessionId: string | null | undefined,
+  questionText: string,
+): string {
+  const fp = questionFingerprint(questionText) || "empty";
+  const sid = sessionId?.trim() || "local";
+  return `generate-hint:${sid}:${fp}`;
 }
 
 /**
@@ -21,14 +44,18 @@ export interface DetectedQuestion {
 export async function detectQuestion(
   input: QuestionDetectionInput
 ): Promise<DetectedQuestion | null> {
-  const { transcript, explicitQuestionText } = input;
+  const { transcript, explicitQuestionText, seenFingerprints } = input;
 
   // 1) Explicit override (e.g., clicked from UI / manual selection)
   if (explicitQuestionText && explicitQuestionText.trim().length > 0) {
+    const questionText = explicitQuestionText.trim();
+    const fingerprint = questionFingerprint(questionText);
+    if (seenFingerprints?.has(fingerprint)) return null;
     return {
-      questionText: explicitQuestionText.trim(),
+      questionText,
       confidence: 1,
       source: "explicit",
+      fingerprint,
     };
   }
 
@@ -42,21 +69,22 @@ export async function detectQuestion(
   );
   if (questionCandidates.length === 0) return null;
 
-  const lastQuestion = questionCandidates[questionCandidates.length - 1].trim();
-
-  if (lastQuestion.length < 5) {
-    // too short to be meaningful
-    return null;
+  // Walk newest → oldest until we find a non-duplicate candidate.
+  for (let i = questionCandidates.length - 1; i >= 0; i--) {
+    const lastQuestion = questionCandidates[i].trim();
+    if (lastQuestion.length < 5) continue;
+    const fingerprint = questionFingerprint(lastQuestion);
+    if (seenFingerprints?.has(fingerprint)) continue;
+    const confidence = Math.min(1, Math.max(0.4, lastQuestion.length / 200));
+    return {
+      questionText: lastQuestion,
+      confidence,
+      source: "heuristic",
+      fingerprint,
+    };
   }
 
-  // Confidence is rough; you can later incorporate diarization metadata.
-  const confidence = Math.min(1, Math.max(0.4, lastQuestion.length / 200));
-
-  return {
-    questionText: lastQuestion,
-    confidence,
-    source: "heuristic",
-  };
+  return null;
 }
 
 /* ──────────────────────────────────────────────────────────────── */

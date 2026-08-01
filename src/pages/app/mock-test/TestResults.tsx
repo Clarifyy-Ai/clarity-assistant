@@ -35,6 +35,18 @@ import {
   planHasFeature,
   type PlanId,
 } from "@/lib/billing/subscriptionManager";
+import { buildAttemptInsightSentence } from "@/lib/gov-exam/masteryEngine";
+import { GovExamReadinessPanel } from "@/components/gov-exam/GovExamReadinessPanel";
+import {
+  fetchExamReadiness,
+  fetchTopicMasteryForExam,
+} from "@/lib/gov-exam/masteryClient";
+import type { ExamReadinessSummary, TopicMasterySummary } from "@/lib/gov-exam/api";
+import {
+  primaryActionInsight,
+  resolvePaperClassPresentation,
+} from "@/lib/gov-exam/disclaimers";
+import { reportQuestion } from "@/lib/gov-exam/api";
 
 type QuestionFilter = "all" | "wrong" | "marked";
 
@@ -148,6 +160,9 @@ export default function TestResults() {
   const [creatingRecommendation, setCreatingRecommendation] = useState<
     "weak" | "similar" | "hard" | null
   >(null);
+  const [readiness, setReadiness] = useState<ExamReadinessSummary | null>(null);
+  const [masteryRows, setMasteryRows] = useState<TopicMasterySummary[]>([]);
+  const [attemptInsight, setAttemptInsight] = useState<string | null>(null);
 
   useEffect(() => {
     if (!testId || !user?.id) return;
@@ -241,6 +256,28 @@ export default function TestResults() {
       setAnalysis(loadedAnalysis);
       setQuestions(orderedQuestions);
       setResponses(responseMap);
+
+      setAttemptInsight(
+        buildAttemptInsightSentence({
+          subjectBreakdown: loadedAnalysis.subject_breakdown,
+          weakTopics: loadedAnalysis.weak_topics,
+          accuracy: loadedAnalysis.accuracy,
+        }),
+      );
+
+      const govExamId = String(loadedTest.config?.gov_exam_id ?? "").trim();
+      const govStageId = String(loadedTest.config?.gov_stage_id ?? "").trim();
+      if (govExamId && user?.id) {
+        const [ready, mastery] = await Promise.all([
+          fetchExamReadiness(user.id, govExamId, govStageId || null).catch(() => null),
+          fetchTopicMasteryForExam(user.id, govExamId).catch(() => []),
+        ]);
+        setReadiness(ready);
+        setMasteryRows(mastery);
+      } else {
+        setReadiness(null);
+        setMasteryRows([]);
+      }
     } catch (error) {
       console.error("[TestResults] load error:", error);
       toast.error(error instanceof Error ? error.message : "Failed to load results.");
@@ -447,6 +484,13 @@ export default function TestResults() {
 
   const rankTier = getRankTier(analysis.predicted_percentile ?? 0);
   const isPractice = test.config?.practice_mode === true;
+  const paperMeta = resolvePaperClassPresentation(test.config);
+  const actionInsight = primaryActionInsight({
+    weak_topics: analysis.weak_topics,
+    strong_topics: analysis.strong_topics,
+    subject_breakdown: analysis.subject_breakdown,
+    topic_breakdown: analysis.topic_breakdown,
+  });
 
   return (
     <div className="max-w-4xl space-y-6 pb-16">
@@ -460,6 +504,31 @@ export default function TestResults() {
           </Button>
         }
       />
+
+      {(paperMeta.shortLabel || paperMeta.disclaimer) && (
+        <div className="rounded-lg border border-border/60 bg-muted/30 px-3 py-2 space-y-1">
+          {paperMeta.shortLabel && (
+            <p className="text-xs font-semibold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+              {paperMeta.shortLabel}
+            </p>
+          )}
+          {paperMeta.disclaimer && (
+            <p className="text-xs text-muted-foreground leading-relaxed">{paperMeta.disclaimer}</p>
+          )}
+        </div>
+      )}
+
+      {actionInsight && (
+        <Card className="border-primary/30 bg-primary/5">
+          <CardContent className="flex items-start gap-3 p-4">
+            <Zap className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-primary">Next focus</p>
+              <p className="mt-1 text-sm font-medium text-foreground">{actionInsight}</p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         {[
@@ -482,7 +551,7 @@ export default function TestResults() {
             color: "text-blue-400",
           },
           {
-            label: "Estimated performance band",
+            label: "Score band (not a cohort percentile)",
             value: rankTier,
             icon: <TrendingUp className="h-5 w-5 text-primary" />,
             color: "text-primary",
@@ -498,6 +567,24 @@ export default function TestResults() {
         ))}
       </div>
 
+      {attemptInsight && (
+        <Card className="border-primary/25 bg-primary/5">
+          <CardContent className="py-4">
+            <p className="text-xs font-medium text-muted-foreground mb-1">Next action</p>
+            <p className="text-sm text-foreground">{attemptInsight}</p>
+          </CardContent>
+        </Card>
+      )}
+
+      {String(test.config?.gov_exam_id ?? "").trim() && (
+        <GovExamReadinessPanel
+          examName={test.test_name}
+          readiness={readiness}
+          masteryRows={masteryRows}
+          generateHref={`/app/mock-test/generate?examId=${String(test.config?.gov_exam_id)}&stageId=${String(test.config?.gov_stage_id ?? "")}&basis=topic`}
+        />
+      )}
+
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <Card className="border-primary/20 bg-primary/5">
           <CardContent className="flex items-center gap-3 py-3">
@@ -505,8 +592,9 @@ export default function TestResults() {
               <Trophy className="h-5 w-5 text-primary" />
             </div>
             <div>
-              <p className="text-xs text-muted-foreground">Estimated Rank Tier</p>
+              <p className="text-xs text-muted-foreground">Score-derived band</p>
               <p className="font-bold text-foreground">{rankTier}</p>
+              <p className="text-[10px] text-muted-foreground">Not a real percentile</p>
             </div>
           </CardContent>
         </Card>
@@ -842,6 +930,10 @@ export default function TestResults() {
                       isLikelyGuessed(Number(response?.time_spent_seconds ?? 0), avgTime) &&
                       Boolean(response?.is_attempted)
                     }
+                    paperId={
+                      String(test.config?.gov_paper_id ?? test.config?.paper_id ?? "").trim() ||
+                      undefined
+                    }
                   />
                 );
               })
@@ -877,6 +969,7 @@ interface QuestionReviewCardProps {
   response?: TestResponse;
   isTimeTrap: boolean;
   isGuessed: boolean;
+  paperId?: string;
 }
 
 function QuestionReviewCard({
@@ -885,11 +978,33 @@ function QuestionReviewCard({
   response,
   isTimeTrap,
   isGuessed,
+  paperId,
 }: QuestionReviewCardProps) {
   const [expanded, setExpanded] = useState(false);
+  const [reporting, setReporting] = useState(false);
+  const [reported, setReported] = useState(false);
 
   const isCorrect = Boolean(response?.is_correct);
   const isAttempted = Boolean(response?.is_attempted);
+
+  async function handleReport() {
+    if (reporting || reported) return;
+    setReporting(true);
+    try {
+      await reportQuestion({
+        questionId: question.id,
+        reason: "poor_quality",
+        notes: `Reported from test results review (${question.subject} / ${question.topic})`,
+        paperId,
+      });
+      setReported(true);
+      toast.success("Issue reported. Thanks for helping improve the bank.");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not report question.");
+    } finally {
+      setReporting(false);
+    }
+  }
 
   return (
     <div
@@ -937,13 +1052,30 @@ function QuestionReviewCard({
           <p className="text-sm text-foreground">{question.question_text}</p>
         </div>
 
-        <button type="button" onClick={() => setExpanded((prev) => !prev)}>
-          {expanded ? (
-            <ChevronUp className="h-4 w-4 text-muted-foreground" />
-          ) : (
-            <ChevronDown className="h-4 w-4 text-muted-foreground" />
-          )}
-        </button>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-8 px-2 text-xs text-muted-foreground"
+            disabled={reporting || reported}
+            onClick={() => void handleReport()}
+          >
+            {reporting ? (
+              <Loader2 className="mr-1.5 h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <AlertTriangle className="mr-1.5 h-3.5 w-3.5" />
+            )}
+            {reported ? "Reported" : "Report issue"}
+          </Button>
+          <button type="button" onClick={() => setExpanded((prev) => !prev)}>
+            {expanded ? (
+              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            )}
+          </button>
+        </div>
       </div>
 
       {expanded && (

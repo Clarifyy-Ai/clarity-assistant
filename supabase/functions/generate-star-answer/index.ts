@@ -7,13 +7,13 @@ import {
   requireAuth,
   successResponse,
   errorResponse,
-  callAI,
   requireFields,
   trimToMaxTokens,
   log,
   getAdminClient,
 } from "../_shared/utils.ts";
 import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
+import { generateWithFallback } from "../_shared/aiProvider.ts";
 import type { STARAnswer, ModelId } from "../_shared/types.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
@@ -156,19 +156,21 @@ Return ONLY this JSON:
     // -------------------------------
     // CALL AI (with retry)
     // -------------------------------
-    const runAI = () =>
-      callAI({
-        model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
+    let aiResult;
+    try {
+      aiResult = await generateWithFallback({
+        prompt: userPrompt,
+        systemPrompt,
         maxTokens: 1200,
         temperature: 0.72,
+        jsonMode: true,
+        model: String(model),
+        userId,
+        action: "generate_star_answer",
       });
-
-    let aiResult = await runAI();
-    if (!aiResult?.text) aiResult = await runAI(); // retry once
+    } catch {
+      aiResult = null;
+    }
 
     if (!aiResult?.text) {
       await refundCredits({

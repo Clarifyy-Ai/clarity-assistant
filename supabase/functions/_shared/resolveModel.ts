@@ -3,16 +3,18 @@
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.45.4";
 
-const DEFAULT_MODEL = "gemini-2.0-flash";
+// Prefer 2.5-flash: on current project key, 2.0-flash returns 429 quota while 2.5 works.
+const DEFAULT_MODEL = "gemini-2.5-flash";
 
 /** App / profile slug → API model id */
 const APP_TO_API: Record<string, string> = {
-  "gemini-flash": "gemini-2.0-flash",
-  "gemini-pro": "gemini-1.5-pro",
+  "gemini-flash": "gemini-2.5-flash",
+  "gemini-pro": "gemini-2.5-flash",
   "gemini-2.0-flash": "gemini-2.0-flash",
   "gemini-2.5-flash": "gemini-2.5-flash",
-  "gemini-1.5-pro": "gemini-1.5-pro",
-  "gemini-1.5-flash": "gemini-1.5-flash",
+  "gemini-flash-latest": "gemini-flash-latest",
+  "gemini-1.5-pro": "gemini-2.5-flash",
+  "gemini-1.5-flash": "gemini-2.5-flash",
   "gpt-4o": "gpt-4o",
   "gpt-4o-mini": "gpt-4o-mini",
   "claude": "claude-3-5-sonnet-20241022",
@@ -22,8 +24,10 @@ const APP_TO_API: Record<string, string> = {
 
 const KNOWN_MODELS = new Set([
   "gemini-2.0-flash",
+  "gemini-2.0-flash-lite",
   "gemini-2.5-flash",
   "gemini-2.5-pro",
+  "gemini-flash-latest",
   "gemini-1.5-pro",
   "gemini-1.5-flash",
   "gpt-4o",
@@ -97,7 +101,12 @@ export async function resolveModel(
 
 export function getFallbackModels(primary: string): string[] {
   const chain = [primary];
+  if (primary !== "gemini-2.5-flash") chain.push("gemini-2.5-flash");
+  if (primary !== "gemini-flash-latest") chain.push("gemini-flash-latest");
   if (primary !== "gemini-2.0-flash") chain.push("gemini-2.0-flash");
-  if (primary !== "gemini-1.5-pro") chain.push("gemini-1.5-pro");
+  // When Gemini quota is exhausted (429), fail over to OpenAI if configured.
+  if ((Deno.env.get("OPENAI_API_KEY") ?? "").trim()) {
+    chain.push("gpt-4o-mini");
+  }
   return [...new Set(chain)];
 }

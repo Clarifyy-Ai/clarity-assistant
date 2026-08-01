@@ -27,24 +27,30 @@ function getApi(): ElectronWindowAPI | undefined {
 
 /**
  * Apply desktop overlay window profile.
- * Always-on-top companion window. Screen-capture exclusion is OPT-IN
- * (stealth_mode / explicit enable) — default keeps the window visible on share.
+ * Always-on-top and screen-capture exclusion are OPT-IN.
+ * Defaults favor transparency: visible on share, not pinned above other apps.
  */
-export async function initDesktopOverlayWindow(): Promise<void> {
+export async function initDesktopOverlayWindow(opts?: {
+  alwaysOnTop?: boolean;
+}): Promise<void> {
   const api = getApi();
   if (!api) return;
 
-  api.setAlwaysOnTop?.(true, "floating");
+  api.setAlwaysOnTop?.(Boolean(opts?.alwaysOnTop), "floating");
   api.setFocusable?.(true);
   api.showInactive?.();
   api.resize?.(480, 640);
 
-  // Do not enable capture exclusion by default (compliance / honesty).
   await enableScreenCaptureBlocker({
     excludeFromCapture: false,
     enableOpacityAutoFade: false,
     enableAutoHideOnFocusLoss: false,
   });
+}
+
+/** User-controlled always-on-top (never forced on by default). */
+export function setDesktopAlwaysOnTop(enabled: boolean): void {
+  getApi()?.setAlwaysOnTop?.(Boolean(enabled), "floating");
 }
 
 export async function teardownDesktopOverlayWindow(): Promise<void> {

@@ -9,8 +9,7 @@ import {
   getAdminClient,
 } from "../_shared/utils.ts";
 import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
-import { geminiGenerate } from "../_shared/gemini.ts";
-import { logAICost } from "../_shared/aiProvider.ts";
+import { generateWithFallback, logAICost } from "../_shared/aiProvider.ts";
 import { AI_CREDIT_COSTS } from "../_shared/creditEconomics.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
@@ -251,9 +250,18 @@ Deno.serve(async (req: Request) => {
 
     /* ----------------------- AI CALL ----------------------- */
     let raw: string;
+    let usedModel = "gemini-2.0-flash";
     const aiStartMs = Date.now();
     try {
-      raw = await geminiGenerate(prompt, undefined, 0.6, 1200);
+      const ai = await generateWithFallback({
+        prompt,
+        maxTokens: 1200,
+        temperature: 0.6,
+        userId,
+        action: `prep_tool_${tool_id}`,
+      });
+      raw = ai.text;
+      usedModel = ai.model;
       if (!raw || raw.trim().length === 0) {
         throw new Error("AI returned empty response");
       }
@@ -275,7 +283,7 @@ Deno.serve(async (req: Request) => {
     void logAICost(getAdminClient(), {
       userId,
       action: `prep_tool_${tool_id}`,
-      model: "gemini-2.0-flash",
+      model: usedModel,
       inputTokens: Math.ceil(prompt.length / 4),
       outputTokens: Math.ceil(raw.length / 4),
       latencyMs: Date.now() - aiStartMs,

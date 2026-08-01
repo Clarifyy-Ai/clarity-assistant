@@ -33,6 +33,11 @@ import { Button } from "@/components/ui/Button";
 import { SessionContextChip } from "@/components/session/SessionContextChip";
 import { AudioOkBadge } from "@/components/session/AudioOkBadge";
 import { markPracticeStart } from "@/lib/analytics/uxMetrics";
+import {
+  RESPONSIBLE_USE_NOTICE,
+  acceptResponsibleUseConsent,
+  canStartCoachingSession,
+} from "@/lib/overlay/responsibleUseConsent";
 
 interface PreSessionSetupWizardProps {
   onStart: (config: LiveSessionConfig) => void;
@@ -141,6 +146,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const [preflight,          setPreflight]         = useState<PreflightReport | null>(null);
   const [preflightLoading,   setPreflightLoading]  = useState(false);
   const [visibilityAck,      setVisibilityAck]     = useState(false);
+  const [responsibleUseAck,  setResponsibleUseAck] = useState(false);
 
   const systemAudioSupported =
     typeof navigator !== "undefined" &&
@@ -253,9 +259,14 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   };
 
   function handleStart() {
-    if (micPermission !== "granted") return;
-    if (!visibilityAck) return;
+    const gate = canStartCoachingSession({
+      visibilityAcknowledged: visibilityAck,
+      responsibleUseAcknowledged: responsibleUseAck,
+      micGranted: micPermission === "granted",
+    });
+    if (!gate.ok) return;
     if (preflight && !preflight.ready) return;
+    acceptResponsibleUseConsent();
     // NOTE: tab-audio guidance modal is shown at capture time via
     // confirmTabAudioCapture() inside useAudioSession.start(). We no longer
     // auto-acknowledge here so the user always sees the "tick Share tab
@@ -1050,6 +1061,21 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 </div>
               </label>
 
+              <label className="flex items-start gap-3 cursor-pointer rounded-xl border border-amber-500/25 bg-amber-500/5 p-3 min-h-11">
+                <input
+                  type="checkbox"
+                  checked={responsibleUseAck}
+                  onChange={(e) => setResponsibleUseAck(e.target.checked)}
+                  className="mt-0.5 rounded border-border bg-secondary/40 text-emerald-500"
+                />
+                <div>
+                  <p className="text-sm font-medium text-foreground">Responsible use</p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5 leading-relaxed">
+                    {RESPONSIBLE_USE_NOTICE}
+                  </p>
+                </div>
+              </label>
+
               {micPermission === "denied" && (
                 <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 space-y-3">
                   <div className="flex items-start gap-2.5">
@@ -1130,12 +1156,17 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             <button
               onClick={handleStart}
               disabled={
-                micPermission === "denied" ||
+                micPermission !== "granted" ||
+                !visibilityAck ||
+                !responsibleUseAck ||
                 preflightLoading
               }
               className={cn(
                 "flex-1 py-3.5 font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
-                micPermission === "denied" || preflightLoading
+                micPermission !== "granted" ||
+                  !visibilityAck ||
+                  !responsibleUseAck ||
+                  preflightLoading
                   ? "bg-muted text-muted-foreground cursor-not-allowed"
                   : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-foreground"
               )}
