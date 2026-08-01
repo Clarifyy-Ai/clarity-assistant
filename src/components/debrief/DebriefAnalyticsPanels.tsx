@@ -18,7 +18,7 @@ import {
   BarChart,
   CartesianGrid,
   ResponsiveContainer,
-  Tooltip,
+  Tooltip as RechartsTooltip,
   XAxis,
   YAxis,
 } from "recharts";
@@ -692,7 +692,7 @@ export function DebriefVocalCharts({ report }: { report: DetailedReport | null |
                   <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
                   <XAxis dataKey="bucket" tick={{ fontSize: 9 }} />
                   <YAxis allowDecimals={false} tick={{ fontSize: 9 }} />
-                  <Tooltip
+                  <RechartsTooltip
                     contentStyle={{ borderRadius: 12, border: "1px solid hsl(var(--border))" }}
                     formatter={(value: number) => [`${value} pauses`, "Count"]}
                   />

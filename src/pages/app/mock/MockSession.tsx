@@ -35,6 +35,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { Skeleton } from "@/components/ui/SkeletonLoader";
+import { ProgressBar } from "@/components/ui/ProgressBar";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { PANIC_RESPONSE } from "@/types/session.types";
 import type { LiveSessionConfig, SessionQuestion } from "@/types/session.types";
@@ -119,7 +120,7 @@ function buildConfigFromSessionRow(
   return {
     company: parseMockCompanyFromTitle(session.title),
     role: profile?.target_role ?? null,
-    hint_style: "concise",
+    hint_style: "short_hints",
     model,
     smart_routing: true,
     stealth_mode: false,
