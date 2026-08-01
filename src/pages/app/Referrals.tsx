@@ -1,8 +1,8 @@
 import { useState, useEffect } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { referralsDB } from "@/lib/supabase/database";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageContent } from "@/components/layout/PageContent";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";

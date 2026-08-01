@@ -1,6 +1,6 @@
 import { ENV } from "@/lib/env";
 import { useState } from "react"
-import { Modal } from "@/components/ui/modal"
+import { Modal } from "@/components/ui/Modal"
 import { useUIStore } from "@/store/uiStore"
 import { useAuthStore } from "@/store/userStore"
 import {

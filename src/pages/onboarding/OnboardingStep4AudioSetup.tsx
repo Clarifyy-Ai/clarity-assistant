@@ -7,7 +7,7 @@ import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { useAudioCapture } from "@/hooks/useAudioCapture";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import {
   Mic, Volume2, CheckCircle,
   AlertCircle, Monitor, Info, Play, RotateCcw,

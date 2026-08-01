@@ -9,10 +9,10 @@ import {
   sessionAnswersDB,
   sessionsDB,
 } from "@/lib/supabase/database";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Modal } from "@/components/ui/modal";
-import { Input } from "@/components/ui/input";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
+import { Modal } from "@/components/ui/Modal";
+import { Input } from "@/components/ui/Input";
 import {
   Trash2, Download, AlertTriangle,
   LogOut, RefreshCw,

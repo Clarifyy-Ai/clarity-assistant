@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { supabase } from "@/lib/supabase/client";
 import { toast } from "sonner";
 import {

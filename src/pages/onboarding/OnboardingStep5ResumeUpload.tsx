@@ -26,7 +26,7 @@ import { generateId } from "@/lib/utils";
 
 import { normalizeParsedResume } from "@/lib/documents/resumeParse";
 
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 
 import { ProgressBar } from "@/components/ui/ProgressBar";
 

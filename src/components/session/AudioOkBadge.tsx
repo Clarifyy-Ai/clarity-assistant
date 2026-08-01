@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { CheckCircle2, AlertCircle, Loader2, MicOff } from "lucide-react";
 import { runAudioPreflight, type PreflightReport } from "@/lib/validators/audioValidator";
 import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 
 type BadgeState = "checking" | "ok" | "warn" | "denied" | "error";
 

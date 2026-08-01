@@ -10,8 +10,8 @@ import {
   scorecardsDB,
 } from "@/lib/supabase/database";
 import { enrichDetailedReport } from "@/lib/debrief/enrichDetailedReport";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { EmptyState } from "@/components/common/EmptyState";

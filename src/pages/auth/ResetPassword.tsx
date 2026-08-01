@@ -35,8 +35,8 @@ import { usePageMeta } from "@/hooks/usePageMeta";
 
 import { FormWrapper } from "@/components/common/FormWrapper";
 import { AuthShell } from "@/components/layout/AuthShell";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/Button";
+import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/label";
 import {
   Card,
@@ -45,7 +45,7 @@ import {
   CardFooter,
   CardHeader,
   CardTitle,
-} from "@/components/ui/card";
+} from "@/components/ui/Card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 import {

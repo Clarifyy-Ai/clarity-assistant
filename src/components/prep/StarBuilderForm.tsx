@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-import { Card } from "@/components/ui/card";
+import { Card } from "@/components/ui/Card";
 import { cn } from "@/lib/utils";
 
 export type StarFieldKey = "situation" | "task" | "action" | "result";

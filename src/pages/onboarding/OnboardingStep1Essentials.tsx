@@ -19,8 +19,8 @@ import {
 } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils";
 import { normalizeRefCode } from "@/lib/referrals";
 import type { StepProps } from "@/types/onboarding.types";

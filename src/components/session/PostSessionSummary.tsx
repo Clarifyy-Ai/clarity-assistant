@@ -1,7 +1,7 @@
 // src/components/session/PostSessionSummary.tsx
 import { Link } from "react-router-dom";
 import { ClipboardCheck, RefreshCw } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import {
   buildNextStepSuggestion,
   formatDuration,

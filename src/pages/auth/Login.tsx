@@ -10,8 +10,8 @@ import {
 
 import { useAuthStore } from "@/store/authStore";
 import { supabase } from "@/lib/supabase/client";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/Input";
+import { Button } from "@/components/ui/Button";
 
 import {
   GoogleOAuthButton,

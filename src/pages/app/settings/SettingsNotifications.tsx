@@ -2,8 +2,8 @@
 import { useState } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { Switch } from "@/components/ui/switch";
 import { CheckCircle, Bell, Mail, Send } from "lucide-react";
 import { toast } from "sonner";
