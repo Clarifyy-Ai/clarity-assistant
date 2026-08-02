@@ -149,8 +149,20 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
           </div>
         </div>
 
-        {menuOpen && (
-          <div className="md:hidden border-t border-border bg-background/95 backdrop-blur-xl px-4 py-3 space-y-1">
+      </nav>
+
+      {/* Mobile drawer: full-viewport overlay, independently scrollable panel */}
+      {menuOpen && (
+        <div className="md:hidden fixed inset-0 z-[100]" role="dialog" aria-modal="true" aria-label="Mobile navigation">
+          <button
+            type="button"
+            aria-label="Close menu"
+            onClick={() => setMenuOpen(false)}
+            className="absolute inset-0 h-full w-full bg-background/70 backdrop-blur-sm animate-in fade-in duration-200"
+          />
+          <div
+            className="absolute inset-x-0 top-16 bottom-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] border-t border-border bg-background px-4 py-3 space-y-1 animate-in slide-in-from-top-2 fade-in duration-200"
+          >
             {NAV_LINKS.map((link) => {
               const key = link.to ?? link.href ?? link.label;
               const isActive = link.to ? pathname.startsWith(link.to) : false;
@@ -191,8 +203,9 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
               Log in
             </Link>
           </div>
-        )}
-      </nav>
+        </div>
+      )}
+
 
       <main id="main-content">{children}</main>
 
