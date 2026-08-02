@@ -45,6 +45,6 @@ describe("quantValidator", () => {
       correct_index: 0,
     });
     expect(bad.ok).toBe(false);
-    if (!bad.ok) expect(bad.code).toBe("QUANT_DIV_BY_ZERO");
+    if (bad.ok === false) expect(bad.code).toBe("QUANT_DIV_BY_ZERO");
   });
 });

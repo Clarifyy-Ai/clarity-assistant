@@ -11,11 +11,11 @@ describe("validateExtractQuestionPaperPayload", () => {
   it("requires examId and a content source", () => {
     const missing = validateExtractQuestionPaperPayload({});
     expect(missing.ok).toBe(false);
-    if (!missing.ok) expect(missing.code).toBe("VALIDATION_ERROR");
+    if (missing.ok === false) expect(missing.code).toBe("VALIDATION_ERROR");
 
     const noContent = validateExtractQuestionPaperPayload({ examId: EXAM_ID });
     expect(noContent.ok).toBe(false);
-    if (!noContent.ok) {
+    if (noContent.ok === false) {
       expect(noContent.message).toMatch(/pdfBase64|storagePath|textPayload/);
     }
   });
@@ -27,7 +27,7 @@ describe("validateExtractQuestionPaperPayload", () => {
       downloadRemote: true,
     });
     expect(dl.ok).toBe(false);
-    if (!dl.ok) expect(dl.code).toBe("DOWNLOAD_DISABLED");
+    if (dl.ok === false) expect(dl.code).toBe("DOWNLOAD_DISABLED");
 
     const scrape = validateExtractQuestionPaperPayload({
       examId: EXAM_ID,
@@ -35,7 +35,7 @@ describe("validateExtractQuestionPaperPayload", () => {
       sourceUrl: "https://ssc.gov.in/paper.pdf",
     });
     expect(scrape.ok).toBe(false);
-    if (!scrape.ok) expect(scrape.code).toBe("SCRAPE_FORBIDDEN");
+    if (scrape.ok === false) expect(scrape.code).toBe("SCRAPE_FORBIDDEN");
   });
 
   it("accepts textPayload with license_class and year", () => {

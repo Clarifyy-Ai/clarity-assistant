@@ -7,7 +7,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Button } from "@/components/ui/button";
+import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { GovExamReadinessPanel } from "@/components/gov-exam/GovExamReadinessPanel";

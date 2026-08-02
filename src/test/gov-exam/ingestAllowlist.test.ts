@@ -34,7 +34,7 @@ describe("official domain allowlist", () => {
   it("assertOfficialExamUrl returns structured errors", () => {
     const bad = assertOfficialExamUrl("https://coaching.example/bank.pdf");
     expect(bad.ok).toBe(false);
-    if (!bad.ok) {
+    if (bad.ok === false) {
       expect(bad.code).toBe("FORBIDDEN_HOST");
     }
     const good = assertOfficialExamUrl("https://nta.ac.in/Downloads");
@@ -88,7 +88,7 @@ describe("ingest JSON question validation", () => {
     expect(validateIngestQuestionsPayload([]).ok).toBe(false);
     expect(validateIngestQuestionsPayload(null).ok).toBe(false);
     const empty = validateIngestQuestionsPayload([]);
-    if (!empty.ok) expect(empty.code).toBe("EMPTY_QUESTIONS");
+    if (empty.ok === false) expect(empty.code).toBe("EMPTY_QUESTIONS");
   });
 
   it("rejects duplicate options and bad answers", () => {
@@ -128,7 +128,7 @@ describe("ingest JSON question validation", () => {
       { requireAllValid: true },
     );
     expect(result.ok).toBe(false);
-    if (!result.ok) {
+    if (result.ok === false) {
       expect(result.code).toBe("PARTIAL_VALIDATION_FAILED");
     }
   });
