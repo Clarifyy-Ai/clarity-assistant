@@ -1,4 +1,5 @@
 import { LEGAL_EMAIL, LEGAL_ENTITY_NAME, COMPANY_NAME } from "@/lib/constants/contact";
+import { LEGAL_PROSE_CLASS } from "@/lib/constants/legal";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { ComplianceBanner } from "@/components/marketing";
 import { usePageMeta } from "@/hooks/usePageMeta";
@@ -14,7 +15,7 @@ export default function Terms() {
       <div className="pt-20 sm:pt-28 pb-6 px-4 sm:px-6 max-w-3xl mx-auto">
         <ComplianceBanner />
       </div>
-      <article className="pb-14 px-4 sm:px-6 max-w-3xl mx-auto prose prose-sm dark:prose-invert prose-headings:font-bold prose-headings:text-foreground prose-p:text-muted-foreground prose-li:text-muted-foreground prose-strong:text-foreground">
+      <article className={`pb-14 px-4 sm:px-6 max-w-3xl mx-auto ${LEGAL_PROSE_CLASS}`}>
         <h1>Terms of Service</h1>
         <p className="text-xs text-muted-foreground">Last updated: March 25, 2026</p>
 
