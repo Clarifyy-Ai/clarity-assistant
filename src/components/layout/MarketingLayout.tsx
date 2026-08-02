@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { BrandLogo } from "@/components/marketing";
 import { Menu, X, Twitter, Github } from "lucide-react";
 import { SALES_EMAIL, STATUS_PAGE_URL, LEGAL_ENTITY_NAME } from "@/lib/constants/contact";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { cn } from "@/lib/utils";
 
 const NAV_LINKS: Array<{ to?: string; href?: string; label: string }> = [
@@ -69,12 +70,30 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
   const { pathname } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // 1 + 2 + 3 + 5: lock the background while the drawer is open, restore on close.
+  useBodyScrollLock(menuOpen);
+
+  // Close on route change and on Escape.
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [menuOpen]);
+
+
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:text-sm focus:font-medium">
         Skip to content
       </a>
-      <nav aria-label="Main navigation" className="fixed top-0 inset-x-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
+      <nav aria-label="Main navigation" className="fixed top-0 inset-x-0 z-[110] border-b border-border bg-background/80 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 sm:px-6 h-16">
           <Link to="/" className="flex items-center gap-2.5">
             <BrandLogo size="md" />
@@ -130,8 +149,20 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
           </div>
         </div>
 
-        {menuOpen && (
-          <div className="md:hidden border-t border-border bg-background/95 backdrop-blur-xl px-4 py-3 space-y-1">
+      </nav>
+
+      {/* Mobile drawer: full-viewport overlay, independently scrollable panel */}
+      {menuOpen && (
+        <div className="md:hidden fixed inset-0 z-[100]" role="dialog" aria-modal="true" aria-label="Mobile navigation">
+          <button
+            type="button"
+            aria-label="Close menu"
+            onClick={() => setMenuOpen(false)}
+            className="absolute inset-0 h-full w-full bg-background/70 backdrop-blur-sm animate-in fade-in duration-200"
+          />
+          <div
+            className="absolute inset-x-0 top-16 bottom-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] border-t border-border bg-background px-4 py-3 space-y-1 animate-in slide-in-from-top-2 fade-in duration-200"
+          >
             {NAV_LINKS.map((link) => {
               const key = link.to ?? link.href ?? link.label;
               const isActive = link.to ? pathname.startsWith(link.to) : false;
@@ -172,8 +203,9 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
               Log in
             </Link>
           </div>
-        )}
-      </nav>
+        </div>
+      )}
+
 
       <main id="main-content">{children}</main>
 

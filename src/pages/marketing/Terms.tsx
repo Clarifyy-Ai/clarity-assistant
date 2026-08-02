@@ -1,4 +1,5 @@
 import { LEGAL_EMAIL, LEGAL_ENTITY_NAME, COMPANY_NAME } from "@/lib/constants/contact";
+import { LEGAL_PROSE_CLASS } from "@/lib/constants/legal";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { ComplianceBanner } from "@/components/marketing";
 import { usePageMeta } from "@/hooks/usePageMeta";
@@ -14,7 +15,7 @@ export default function Terms() {
       <div className="pt-20 sm:pt-28 pb-6 px-4 sm:px-6 max-w-3xl mx-auto">
         <ComplianceBanner />
       </div>
-      <article className="pb-14 px-4 sm:px-6 max-w-3xl mx-auto prose prose-sm dark:prose-invert prose-headings:font-bold prose-headings:text-foreground prose-p:text-muted-foreground prose-li:text-muted-foreground prose-strong:text-foreground">
+      <article className={`pb-14 px-4 sm:px-6 max-w-3xl mx-auto ${LEGAL_PROSE_CLASS}`}>
         <h1>Terms of Service</h1>
         <p className="text-xs text-muted-foreground">Last updated: March 25, 2026</p>
 
@@ -28,7 +29,7 @@ export default function Terms() {
           Clarify AI is an AI-powered interview preparation platform providing mock interviews, live practice coaching, analytics, and related tools for rehearsal and preparation. The Service is provided "as is" and "as available."
         </p>
 
-        <h2>2.1 Practice and Rehearsal Only</h2>
+        <h3>2.1 Practice and Rehearsal Only</h3>
         <p>
           Clarify AI is designed exclusively for interview preparation, mock sessions, and rehearsal. You may not use AI assistance features during actual third-party interviews, employer assessments, proctored exams, or any evaluation where outside assistance is prohibited. The on-screen overlay is a standard application window and is visible to screen-sharing and recording tools.
         </p>
@@ -81,12 +82,12 @@ export default function Terms() {
 
         <h2>8. Disclaimer of Warranties</h2>
         <p>
-          THE SERVICE IS PROVIDED "AS IS" WITHOUT WARRANTIES OF ANY KIND, EXPRESS OR IMPLIED. WE DO NOT WARRANT THAT THE SERVICE WILL BE UNINTERRUPTED, ERROR-FREE, OR SECURE.
+          The Service is provided <strong>&quot;as is&quot;</strong> without warranties of any kind, express or implied. We do not warrant that the Service will be uninterrupted, error-free, or secure.
         </p>
 
         <h2>9. Limitation of Liability</h2>
         <p>
-          TO THE MAXIMUM EXTENT PERMITTED BY LAW, {LEGAL_ENTITY_NAME.toUpperCase()} SHALL NOT BE LIABLE FOR ANY INDIRECT, INCIDENTAL, SPECIAL, CONSEQUENTIAL, OR PUNITIVE DAMAGES ARISING FROM YOUR USE OF THE SERVICE.
+          To the maximum extent permitted by law, <strong>{LEGAL_ENTITY_NAME}</strong> shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the Service.
         </p>
 
         <h2>10. Termination</h2>

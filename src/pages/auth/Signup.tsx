@@ -166,6 +166,8 @@ export default function Signup(): JSX.Element {
   const signUpWithEmail = useAuthStore((state) => state.signUpWithEmail);
 
   const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+
   const [formError, setFormError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
   const [submittedEmail, setSubmittedEmail] = useState<string>("");
@@ -442,13 +444,33 @@ export default function Signup(): JSX.Element {
 
             <Input
               label="Confirm password"
-              type={showPassword ? "text" : "password"}
+              type={showConfirmPassword ? "text" : "password"}
               placeholder="Re-enter your password"
               autoComplete="new-password"
               required
               error={errors.confirmPassword?.message}
               {...register("confirmPassword")}
+              rightIcon={
+                <button
+                  type="button"
+                  onClick={() => setShowConfirmPassword((value) => !value)}
+                  className="text-muted-foreground hover:text-foreground transition-colors"
+                  aria-label={
+                    showConfirmPassword
+                      ? "Hide confirm password"
+                      : "Show confirm password"
+                  }
+                  aria-pressed={showConfirmPassword}
+                >
+                  {showConfirmPassword ? (
+                    <EyeOff className="w-4 h-4" />
+                  ) : (
+                    <Eye className="w-4 h-4" />
+                  )}
+                </button>
+              }
             />
+
 
             <label className="flex items-start gap-2.5 cursor-pointer select-none">
               <input
