@@ -19,7 +19,7 @@ describe("reasoningValidator syllogism stub", () => {
       correct_index: 0,
     });
     expect(dup.ok).toBe(false);
-    if (!dup.ok) expect(dup.code).toBe("REASONING_SYLLOGISM_MULTI");
+    if (dup.ok === false) expect(dup.code).toBe("REASONING_SYLLOGISM_MULTI");
   });
 });
 
@@ -44,7 +44,7 @@ describe("reasoningValidator seating uniqueness", () => {
       ],
     });
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.code).toBe("REASONING_NO_SOLUTION");
+    if (r.ok === false) expect(r.code).toBe("REASONING_NO_SOLUTION");
   });
 
   it("rejects multi-solution puzzles", () => {
@@ -53,7 +53,7 @@ describe("reasoningValidator seating uniqueness", () => {
       constraints: [{ type: "adjacent", a: "A", b: "B" }],
     });
     expect(r.ok).toBe(false);
-    if (!r.ok) {
+    if (r.ok === false) {
       expect(r.code).toBe("REASONING_MULTI_SOLUTION");
       expect((r.solutionCount ?? 0) > 1).toBe(true);
     }
