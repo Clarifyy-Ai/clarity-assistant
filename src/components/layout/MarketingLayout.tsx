@@ -93,7 +93,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:text-sm focus:font-medium">
         Skip to content
       </a>
-      <nav aria-label="Main navigation" className="fixed top-0 inset-x-0 z-50 border-b border-border bg-background/80 backdrop-blur-xl">
+      <nav aria-label="Main navigation" className="fixed top-0 inset-x-0 z-[110] border-b border-border bg-background/80 backdrop-blur-xl">
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 sm:px-6 h-16">
           <Link to="/" className="flex items-center gap-2.5">
             <BrandLogo size="md" />
