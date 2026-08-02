@@ -32,7 +32,6 @@ export function Card({
   id,
   children,
   className,
-  id,
   padding = "md",
   hover = false,
   onClick,
