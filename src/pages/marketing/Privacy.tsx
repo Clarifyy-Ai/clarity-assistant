@@ -1,4 +1,5 @@
 import { PRIVACY_EMAIL, LEGAL_ENTITY_NAME, COMPANY_NAME } from "@/lib/constants/contact";
+import { LEGAL_PROSE_CLASS } from "@/lib/constants/legal";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { usePageMeta } from "@/hooks/usePageMeta";
 
