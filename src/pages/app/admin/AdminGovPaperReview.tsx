@@ -1,7 +1,7 @@
 import { Fragment, useEffect, useState } from "react";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { Card } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/Card";
+import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import {
   Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
