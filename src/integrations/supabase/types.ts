@@ -668,6 +668,57 @@ export type Database = {
         }
         Relationships: []
       }
+      content_quality_incidents: {
+        Row: {
+          created_at: string
+          id: string
+          incident_type: string
+          notes: string | null
+          paper_id: string | null
+          question_id: string | null
+          reporter_id: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          incident_type?: string
+          notes?: string | null
+          paper_id?: string | null
+          question_id?: string | null
+          reporter_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          incident_type?: string
+          notes?: string | null
+          paper_id?: string | null
+          question_id?: string | null
+          reporter_id?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "content_quality_incidents_paper_id_fkey"
+            columns: ["paper_id"]
+            isOneToOne: false
+            referencedRelation: "gov_generated_papers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "content_quality_incidents_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       credit_transactions: {
         Row: {
           action: Database["public"]["Enums"]["credit_action"]
@@ -938,6 +989,36 @@ export type Database = {
           },
         ]
       }
+      exam_families: {
+        Row: {
+          code: string
+          created_at: string
+          description: string | null
+          id: string
+          is_active: boolean
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          sort_order?: number
+        }
+        Relationships: []
+      }
       exam_images: {
         Row: {
           alt_text: string | null
@@ -1037,6 +1118,51 @@ export type Database = {
         }
         Relationships: []
       }
+      exam_readiness: {
+        Row: {
+          breakdown: Json
+          exam_id: string
+          id: string
+          score: number
+          stage_id: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          breakdown?: Json
+          exam_id: string
+          id?: string
+          score?: number
+          stage_id: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          breakdown?: Json
+          exam_id?: string
+          id?: string
+          score?: number
+          stage_id?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "exam_readiness_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "exam_readiness_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       feature_flags: {
         Row: {
           allowed_plans: Database["public"]["Enums"]["plan_tier"][] | null
@@ -1113,6 +1239,833 @@ export type Database = {
             columns: ["session_id"]
             isOneToOne: false
             referencedRelation: "sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gov_exam_aliases: {
+        Row: {
+          alias: string
+          exam_id: string
+          id: string
+        }
+        Insert: {
+          alias: string
+          exam_id: string
+          id?: string
+        }
+        Update: {
+          alias?: string
+          exam_id?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gov_exam_aliases_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gov_exam_cycles: {
+        Row: {
+          code: string
+          created_at: string
+          effective_date: string | null
+          exam_id: string
+          id: string
+          name: string
+          notes: string | null
+          review_state: string
+          updated_at: string
+          year: number | null
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          effective_date?: string | null
+          exam_id: string
+          id?: string
+          name: string
+          notes?: string | null
+          review_state?: string
+          updated_at?: string
+          year?: number | null
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          effective_date?: string | null
+          exam_id?: string
+          id?: string
+          name?: string
+          notes?: string | null
+          review_state?: string
+          updated_at?: string
+          year?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gov_exam_cycles_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gov_exam_languages: {
+        Row: {
+          created_at: string
+          exam_id: string
+          id: string
+          language_code: string
+          review_state: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          exam_id: string
+          id?: string
+          language_code: string
+          review_state?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          exam_id?: string
+          id?: string
+          language_code?: string
+          review_state?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gov_exam_languages_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gov_exam_pattern_versions: {
+        Row: {
+          created_at: string
+          duration_minutes: number
+          effective_date: string | null
+          exam_id: string
+          id: string
+          languages: string[]
+          marks_per_question: number
+          negative_mark: number
+          notes: string | null
+          review_state: string
+          source_url: string | null
+          stage_id: string
+          superseded_by: string | null
+          total_marks: number
+          total_questions: number
+          version: string
+        }
+        Insert: {
+          created_at?: string
+          duration_minutes: number
+          effective_date?: string | null
+          exam_id: string
+          id?: string
+          languages?: string[]
+          marks_per_question?: number
+          negative_mark?: number
+          notes?: string | null
+          review_state?: string
+          source_url?: string | null
+          stage_id: string
+          superseded_by?: string | null
+          total_marks: number
+          total_questions: number
+          version: string
+        }
+        Update: {
+          created_at?: string
+          duration_minutes?: number
+          effective_date?: string | null
+          exam_id?: string
+          id?: string
+          languages?: string[]
+          marks_per_question?: number
+          negative_mark?: number
+          notes?: string | null
+          review_state?: string
+          source_url?: string | null
+          stage_id?: string
+          superseded_by?: string | null
+          total_marks?: number
+          total_questions?: number
+          version?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gov_exam_pattern_versions_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gov_exam_pattern_versions_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gov_exam_pattern_versions_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_pattern_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gov_exam_rules: {
+        Row: {
+          created_at: string
+          id: string
+          notes: string | null
+          pattern_version_id: string
+          rule_json: Json
+          rule_key: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          pattern_version_id: string
+          rule_json?: Json
+          rule_key: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          notes?: string | null
+          pattern_version_id?: string
+          rule_json?: Json
+          rule_key?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gov_exam_rules_pattern_version_id_fkey"
+            columns: ["pattern_version_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_pattern_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gov_exam_sections: {
+        Row: {
+          code: string
+          id: string
+          marks: number
+          name: string
+          pattern_version_id: string
+          question_count: number
+          sort_order: number
+        }
+        Insert: {
+          code: string
+          id?: string
+          marks: number
+          name: string
+          pattern_version_id: string
+          question_count: number
+          sort_order?: number
+        }
+        Update: {
+          code?: string
+          id?: string
+          marks?: number
+          name?: string
+          pattern_version_id?: string
+          question_count?: number
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gov_exam_sections_pattern_version_id_fkey"
+            columns: ["pattern_version_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_pattern_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gov_exam_stages: {
+        Row: {
+          code: string
+          exam_id: string
+          id: string
+          name: string
+          sort_order: number
+        }
+        Insert: {
+          code: string
+          exam_id: string
+          id?: string
+          name: string
+          sort_order?: number
+        }
+        Update: {
+          code?: string
+          exam_id?: string
+          id?: string
+          name?: string
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gov_exam_stages_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gov_exam_syllabus_versions: {
+        Row: {
+          created_at: string
+          effective_date: string | null
+          exam_id: string
+          id: string
+          review_state: string
+          source_url: string | null
+          stage_id: string
+          topics_json: Json
+          version: string
+        }
+        Insert: {
+          created_at?: string
+          effective_date?: string | null
+          exam_id: string
+          id?: string
+          review_state?: string
+          source_url?: string | null
+          stage_id: string
+          topics_json?: Json
+          version: string
+        }
+        Update: {
+          created_at?: string
+          effective_date?: string | null
+          exam_id?: string
+          id?: string
+          review_state?: string
+          source_url?: string | null
+          stage_id?: string
+          topics_json?: Json
+          version?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gov_exam_syllabus_versions_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gov_exam_syllabus_versions_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_stages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gov_exam_topics: {
+        Row: {
+          created_at: string
+          exam_id: string
+          id: string
+          name: string
+          section_code: string | null
+          sort_order: number
+          stage_id: string | null
+          syllabus_version_id: string | null
+          topic_code: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          exam_id: string
+          id?: string
+          name: string
+          section_code?: string | null
+          sort_order?: number
+          stage_id?: string | null
+          syllabus_version_id?: string | null
+          topic_code: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          exam_id?: string
+          id?: string
+          name?: string
+          section_code?: string | null
+          sort_order?: number
+          stage_id?: string | null
+          syllabus_version_id?: string | null
+          topic_code?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gov_exam_topics_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gov_exam_topics_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gov_exam_topics_syllabus_version_id_fkey"
+            columns: ["syllabus_version_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_syllabus_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gov_exams: {
+        Row: {
+          code: string
+          created_at: string
+          description: string | null
+          family: string
+          id: string
+          is_public: boolean
+          legacy_exam_type: string | null
+          name: string
+          recruiting_body_id: string
+          review_state: string
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          description?: string | null
+          family: string
+          id?: string
+          is_public?: boolean
+          legacy_exam_type?: string | null
+          name: string
+          recruiting_body_id: string
+          review_state?: string
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          description?: string | null
+          family?: string
+          id?: string
+          is_public?: boolean
+          legacy_exam_type?: string | null
+          name?: string
+          recruiting_body_id?: string
+          review_state?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gov_exams_family_fkey"
+            columns: ["family"]
+            isOneToOne: false
+            referencedRelation: "exam_families"
+            referencedColumns: ["code"]
+          },
+          {
+            foreignKeyName: "gov_exams_recruiting_body_id_fkey"
+            columns: ["recruiting_body_id"]
+            isOneToOne: false
+            referencedRelation: "recruiting_bodies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gov_generated_paper_questions: {
+        Row: {
+          id: string
+          paper_id: string
+          question_id: string
+          section_code: string | null
+          sort_order: number
+          source_class: string
+        }
+        Insert: {
+          id?: string
+          paper_id: string
+          question_id: string
+          section_code?: string | null
+          sort_order?: number
+          source_class?: string
+        }
+        Update: {
+          id?: string
+          paper_id?: string
+          question_id?: string
+          section_code?: string | null
+          sort_order?: number
+          source_class?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gov_generated_paper_questions_paper_id_fkey"
+            columns: ["paper_id"]
+            isOneToOne: false
+            referencedRelation: "gov_generated_papers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gov_generated_paper_questions_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gov_generated_papers: {
+        Row: {
+          blueprint_json: Json
+          created_at: string
+          created_by: string | null
+          disclaimer: string
+          duration_minutes: number
+          exam_id: string
+          id: string
+          job_id: string | null
+          language: string
+          mock_test_id: string | null
+          negative_mark: number
+          paper_class: string
+          pattern_version_id: string | null
+          provenance_json: Json
+          quality_score: number | null
+          question_count: number
+          review_state: string
+          stage_id: string | null
+          syllabus_version_id: string | null
+          title: string
+          total_marks: number
+        }
+        Insert: {
+          blueprint_json?: Json
+          created_at?: string
+          created_by?: string | null
+          disclaimer?: string
+          duration_minutes: number
+          exam_id: string
+          id?: string
+          job_id?: string | null
+          language?: string
+          mock_test_id?: string | null
+          negative_mark?: number
+          paper_class?: string
+          pattern_version_id?: string | null
+          provenance_json?: Json
+          quality_score?: number | null
+          question_count: number
+          review_state?: string
+          stage_id?: string | null
+          syllabus_version_id?: string | null
+          title: string
+          total_marks: number
+        }
+        Update: {
+          blueprint_json?: Json
+          created_at?: string
+          created_by?: string | null
+          disclaimer?: string
+          duration_minutes?: number
+          exam_id?: string
+          id?: string
+          job_id?: string | null
+          language?: string
+          mock_test_id?: string | null
+          negative_mark?: number
+          paper_class?: string
+          pattern_version_id?: string | null
+          provenance_json?: Json
+          quality_score?: number | null
+          question_count?: number
+          review_state?: string
+          stage_id?: string | null
+          syllabus_version_id?: string | null
+          title?: string
+          total_marks?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gov_generated_papers_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gov_generated_papers_job_id_fkey"
+            columns: ["job_id"]
+            isOneToOne: false
+            referencedRelation: "gov_paper_generation_jobs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gov_generated_papers_pattern_version_id_fkey"
+            columns: ["pattern_version_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_pattern_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gov_generated_papers_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gov_generated_papers_syllabus_version_id_fkey"
+            columns: ["syllabus_version_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_syllabus_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gov_official_sources: {
+        Row: {
+          created_at: string
+          document_type: string
+          effective_date: string | null
+          exam_id: string | null
+          file_hash: string | null
+          id: string
+          is_official: boolean
+          language: string | null
+          license_class: string
+          metadata: Json
+          mime_type: string | null
+          publication_date: string | null
+          recruiting_body_id: string | null
+          retrieved_at: string
+          review_state: string
+          source_url: string | null
+          storage_path: string | null
+          superseded_by: string | null
+          title: string
+        }
+        Insert: {
+          created_at?: string
+          document_type: string
+          effective_date?: string | null
+          exam_id?: string | null
+          file_hash?: string | null
+          id?: string
+          is_official?: boolean
+          language?: string | null
+          license_class?: string
+          metadata?: Json
+          mime_type?: string | null
+          publication_date?: string | null
+          recruiting_body_id?: string | null
+          retrieved_at?: string
+          review_state?: string
+          source_url?: string | null
+          storage_path?: string | null
+          superseded_by?: string | null
+          title: string
+        }
+        Update: {
+          created_at?: string
+          document_type?: string
+          effective_date?: string | null
+          exam_id?: string | null
+          file_hash?: string | null
+          id?: string
+          is_official?: boolean
+          language?: string | null
+          license_class?: string
+          metadata?: Json
+          mime_type?: string | null
+          publication_date?: string | null
+          recruiting_body_id?: string | null
+          retrieved_at?: string
+          review_state?: string
+          source_url?: string | null
+          storage_path?: string | null
+          superseded_by?: string | null
+          title?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gov_official_sources_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gov_official_sources_recruiting_body_id_fkey"
+            columns: ["recruiting_body_id"]
+            isOneToOne: false
+            referencedRelation: "recruiting_bodies"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gov_official_sources_superseded_by_fkey"
+            columns: ["superseded_by"]
+            isOneToOne: false
+            referencedRelation: "gov_official_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      gov_paper_generation_jobs: {
+        Row: {
+          attempt_count: number
+          blueprint_json: Json | null
+          completed_at: string | null
+          created_at: string
+          credit_reservation: string | null
+          credits_charged: number
+          error_code: string | null
+          error_message: string | null
+          exam_id: string
+          generated_paper_id: string | null
+          heartbeat_at: string | null
+          id: string
+          idempotency_key: string | null
+          language: string
+          lease_expires_at: string | null
+          mock_test_id: string | null
+          mode: string
+          pattern_version_id: string | null
+          progress_stage: string | null
+          random_seed: string | null
+          request_json: Json
+          retryable: boolean
+          stage_id: string | null
+          started_at: string | null
+          status: string
+          syllabus_version_id: string | null
+          updated_at: string
+          user_id: string
+          worker_id: string | null
+        }
+        Insert: {
+          attempt_count?: number
+          blueprint_json?: Json | null
+          completed_at?: string | null
+          created_at?: string
+          credit_reservation?: string | null
+          credits_charged?: number
+          error_code?: string | null
+          error_message?: string | null
+          exam_id: string
+          generated_paper_id?: string | null
+          heartbeat_at?: string | null
+          id?: string
+          idempotency_key?: string | null
+          language?: string
+          lease_expires_at?: string | null
+          mock_test_id?: string | null
+          mode: string
+          pattern_version_id?: string | null
+          progress_stage?: string | null
+          random_seed?: string | null
+          request_json?: Json
+          retryable?: boolean
+          stage_id?: string | null
+          started_at?: string | null
+          status?: string
+          syllabus_version_id?: string | null
+          updated_at?: string
+          user_id: string
+          worker_id?: string | null
+        }
+        Update: {
+          attempt_count?: number
+          blueprint_json?: Json | null
+          completed_at?: string | null
+          created_at?: string
+          credit_reservation?: string | null
+          credits_charged?: number
+          error_code?: string | null
+          error_message?: string | null
+          exam_id?: string
+          generated_paper_id?: string | null
+          heartbeat_at?: string | null
+          id?: string
+          idempotency_key?: string | null
+          language?: string
+          lease_expires_at?: string | null
+          mock_test_id?: string | null
+          mode?: string
+          pattern_version_id?: string | null
+          progress_stage?: string | null
+          random_seed?: string | null
+          request_json?: Json
+          retryable?: boolean
+          stage_id?: string | null
+          started_at?: string | null
+          status?: string
+          syllabus_version_id?: string | null
+          updated_at?: string
+          user_id?: string
+          worker_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "gov_paper_generation_jobs_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gov_paper_generation_jobs_pattern_version_id_fkey"
+            columns: ["pattern_version_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_pattern_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gov_paper_generation_jobs_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "gov_paper_generation_jobs_syllabus_version_id_fkey"
+            columns: ["syllabus_version_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_syllabus_versions"
             referencedColumns: ["id"]
           },
         ]
@@ -1692,6 +2645,191 @@ export type Database = {
         }
         Relationships: []
       }
+      preparation_plans: {
+        Row: {
+          exam_id: string
+          id: string
+          plan_json: Json
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          exam_id: string
+          id?: string
+          plan_json?: Json
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          exam_id?: string
+          id?: string
+          plan_json?: Json
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "preparation_plans_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      previous_year_paper_questions: {
+        Row: {
+          id: string
+          page_ref: string | null
+          paper_id: string
+          question_id: string
+          section_code: string | null
+          sort_order: number
+        }
+        Insert: {
+          id?: string
+          page_ref?: string | null
+          paper_id: string
+          question_id: string
+          section_code?: string | null
+          sort_order?: number
+        }
+        Update: {
+          id?: string
+          page_ref?: string | null
+          paper_id?: string
+          question_id?: string
+          section_code?: string | null
+          sort_order?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "previous_year_paper_questions_paper_id_fkey"
+            columns: ["paper_id"]
+            isOneToOne: false
+            referencedRelation: "previous_year_papers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "previous_year_paper_questions_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      previous_year_papers: {
+        Row: {
+          answer_key_status: string
+          created_at: string
+          cycle: string | null
+          duration_minutes: number | null
+          exam_id: string
+          id: string
+          language: string
+          marking: Json
+          metadata: Json
+          notes: string | null
+          official_status: string
+          pattern_version_id: string | null
+          question_count: number | null
+          review_status: string
+          shift: string | null
+          source_id: string | null
+          stage_id: string | null
+          syllabus_version_id: string | null
+          tier: string | null
+          title: string | null
+          updated_at: string
+          year: number
+        }
+        Insert: {
+          answer_key_status?: string
+          created_at?: string
+          cycle?: string | null
+          duration_minutes?: number | null
+          exam_id: string
+          id?: string
+          language?: string
+          marking?: Json
+          metadata?: Json
+          notes?: string | null
+          official_status?: string
+          pattern_version_id?: string | null
+          question_count?: number | null
+          review_status?: string
+          shift?: string | null
+          source_id?: string | null
+          stage_id?: string | null
+          syllabus_version_id?: string | null
+          tier?: string | null
+          title?: string | null
+          updated_at?: string
+          year: number
+        }
+        Update: {
+          answer_key_status?: string
+          created_at?: string
+          cycle?: string | null
+          duration_minutes?: number | null
+          exam_id?: string
+          id?: string
+          language?: string
+          marking?: Json
+          metadata?: Json
+          notes?: string | null
+          official_status?: string
+          pattern_version_id?: string | null
+          question_count?: number | null
+          review_status?: string
+          shift?: string | null
+          source_id?: string | null
+          stage_id?: string | null
+          syllabus_version_id?: string | null
+          tier?: string | null
+          title?: string | null
+          updated_at?: string
+          year?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "previous_year_papers_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "previous_year_papers_pattern_version_id_fkey"
+            columns: ["pattern_version_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_pattern_versions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "previous_year_papers_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "gov_official_sources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "previous_year_papers_stage_id_fkey"
+            columns: ["stage_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_stages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "previous_year_papers_syllabus_version_id_fkey"
+            columns: ["syllabus_version_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_syllabus_versions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       profiles: {
         Row: {
           audio_input_device: string | null
@@ -2008,6 +3146,142 @@ export type Database = {
           },
         ]
       }
+      question_provenance: {
+        Row: {
+          created_at: string
+          id: string
+          license_class: string
+          metadata: Json
+          page_ref: string | null
+          question_id: string
+          source_class: string
+          source_id: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          license_class?: string
+          metadata?: Json
+          page_ref?: string | null
+          question_id: string
+          source_class?: string
+          source_id?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          license_class?: string
+          metadata?: Json
+          page_ref?: string | null
+          question_id?: string
+          source_class?: string
+          source_id?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "question_provenance_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "question_provenance_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "gov_official_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      question_reviews: {
+        Row: {
+          action: string
+          created_at: string
+          id: string
+          notes: string | null
+          question_id: string
+          reviewer_id: string | null
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          question_id: string
+          reviewer_id?: string | null
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          id?: string
+          notes?: string | null
+          question_id?: string
+          reviewer_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "question_reviews_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      question_translations: {
+        Row: {
+          created_at: string
+          explanation: string | null
+          id: string
+          language: string
+          options: Json | null
+          question_id: string
+          question_text: string
+          review_state: string
+          reviewer_id: string | null
+          source_version: string | null
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          explanation?: string | null
+          id?: string
+          language: string
+          options?: Json | null
+          question_id: string
+          question_text: string
+          review_state?: string
+          reviewer_id?: string | null
+          source_version?: string | null
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          explanation?: string | null
+          id?: string
+          language?: string
+          options?: Json | null
+          question_id?: string
+          question_text?: string
+          review_state?: string
+          reviewer_id?: string | null
+          source_version?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "question_translations_question_id_fkey"
+            columns: ["question_id"]
+            isOneToOne: false
+            referencedRelation: "questions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       questions: {
         Row: {
           correct_answer: string
@@ -2026,6 +3300,7 @@ export type Database = {
           latex_present: boolean | null
           marks_negative: number | null
           marks_positive: number | null
+          metadata: Json
           option_blocks: Json | null
           options: Json | null
           question_blocks: Json | null
@@ -2059,6 +3334,7 @@ export type Database = {
           latex_present?: boolean | null
           marks_negative?: number | null
           marks_positive?: number | null
+          metadata?: Json
           option_blocks?: Json | null
           options?: Json | null
           question_blocks?: Json | null
@@ -2092,6 +3368,7 @@ export type Database = {
           latex_present?: boolean | null
           marks_negative?: number | null
           marks_positive?: number | null
+          metadata?: Json
           option_blocks?: Json | null
           options?: Json | null
           question_blocks?: Json | null
@@ -2125,6 +3402,42 @@ export type Database = {
           count?: number
           key?: string
           reset_at?: string
+        }
+        Relationships: []
+      }
+      recruiting_bodies: {
+        Row: {
+          code: string
+          created_at: string
+          disclaimer_note: string | null
+          id: string
+          is_active: boolean
+          jurisdiction: string
+          name: string
+          official_url: string | null
+          updated_at: string
+        }
+        Insert: {
+          code: string
+          created_at?: string
+          disclaimer_note?: string | null
+          id?: string
+          is_active?: boolean
+          jurisdiction?: string
+          name: string
+          official_url?: string | null
+          updated_at?: string
+        }
+        Update: {
+          code?: string
+          created_at?: string
+          disclaimer_note?: string | null
+          id?: string
+          is_active?: boolean
+          jurisdiction?: string
+          name?: string
+          official_url?: string | null
+          updated_at?: string
         }
         Relationships: []
       }
@@ -3133,6 +4446,123 @@ export type Database = {
           },
         ]
       }
+      source_conflicts: {
+        Row: {
+          created_at: string
+          field: string
+          id: string
+          notes: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          source_a: string
+          source_b: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          field: string
+          id?: string
+          notes?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          source_a: string
+          source_b: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          field?: string
+          id?: string
+          notes?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          source_a?: string
+          source_b?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "source_conflicts_source_a_fkey"
+            columns: ["source_a"]
+            isOneToOne: false
+            referencedRelation: "gov_official_sources"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "source_conflicts_source_b_fkey"
+            columns: ["source_b"]
+            isOneToOne: false
+            referencedRelation: "gov_official_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      source_ingestion_jobs: {
+        Row: {
+          completed_at: string | null
+          created_at: string
+          created_by: string | null
+          error: string | null
+          id: string
+          metadata: Json
+          paper_id: string | null
+          parser_version: string
+          questions_imported: number
+          source_id: string
+          started_at: string | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          id?: string
+          metadata?: Json
+          paper_id?: string | null
+          parser_version?: string
+          questions_imported?: number
+          source_id: string
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          completed_at?: string | null
+          created_at?: string
+          created_by?: string | null
+          error?: string | null
+          id?: string
+          metadata?: Json
+          paper_id?: string | null
+          parser_version?: string
+          questions_imported?: number
+          source_id?: string
+          started_at?: string | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "source_ingestion_jobs_paper_id_fkey"
+            columns: ["paper_id"]
+            isOneToOne: false
+            referencedRelation: "previous_year_papers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "source_ingestion_jobs_source_id_fkey"
+            columns: ["source_id"]
+            isOneToOne: false
+            referencedRelation: "gov_official_sources"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subscriptions: {
         Row: {
           advanced_analytics: boolean
@@ -3484,6 +4914,47 @@ export type Database = {
           },
         ]
       }
+      topic_mastery: {
+        Row: {
+          evidence_count: number
+          exam_id: string
+          id: string
+          mastery_score: number
+          state: string
+          topic: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          evidence_count?: number
+          exam_id: string
+          id?: string
+          mastery_score?: number
+          state?: string
+          topic: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          evidence_count?: number
+          exam_id?: string
+          id?: string
+          mastery_score?: number
+          state?: string
+          topic?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "topic_mastery_exam_id_fkey"
+            columns: ["exam_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exams"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       transcripts: {
         Row: {
           content: string | null
@@ -3581,6 +5052,48 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      user_gov_exam_preferences: {
+        Row: {
+          preferred_language: string
+          recent_searches: Json
+          target_exam_id: string | null
+          target_stage_id: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          preferred_language?: string
+          recent_searches?: Json
+          target_exam_id?: string | null
+          target_stage_id?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          preferred_language?: string
+          recent_searches?: Json
+          target_exam_id?: string | null
+          target_stage_id?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_gov_exam_preferences_target_exam_id_fkey"
+            columns: ["target_exam_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exams"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "user_gov_exam_preferences_target_stage_id_fkey"
+            columns: ["target_stage_id"]
+            isOneToOne: false
+            referencedRelation: "gov_exam_stages"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       user_roles: {
         Row: {
@@ -3749,6 +5262,25 @@ export type Database = {
         }
         Relationships: []
       }
+      gov_exam_bank_readiness: {
+        Row: {
+          approved_public_count: number | null
+          exam_code: string | null
+          exam_id: string | null
+          exam_name: string | null
+          family: string | null
+          full_simulation_available: boolean | null
+          legacy_exam_type: string | null
+          pattern_version: string | null
+          pattern_version_id: string | null
+          public_count: number | null
+          required_questions: number | null
+          stage_code: string | null
+          stage_id: string | null
+          status: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
       add_credits: {
@@ -3796,6 +5328,10 @@ export type Database = {
         Returns: Json
       }
       cleanup_expired_documents: { Args: never; Returns: number }
+      compute_gov_bank_readiness_status: {
+        Args: { p_approved_count: number; p_required: number }
+        Returns: string
+      }
       create_test_atomic: {
         Args: {
           p_config: Json
@@ -3830,6 +5366,25 @@ export type Database = {
           p50_ms: number
           p95_ms: number
           p99_ms: number
+        }[]
+      }
+      get_gov_exam_bank_readiness: {
+        Args: { p_exam_id?: string }
+        Returns: {
+          approved_public_count: number
+          exam_code: string
+          exam_id: string
+          exam_name: string
+          family: string
+          full_simulation_available: boolean
+          legacy_exam_type: string
+          pattern_version: string
+          pattern_version_id: string
+          public_count: number
+          required_questions: number
+          stage_code: string
+          stage_id: string
+          status: string
         }[]
       }
       get_my_referrals: {
@@ -3916,6 +5471,10 @@ export type Database = {
         Returns: undefined
       }
       mask_email: { Args: { p_email: string }; Returns: string }
+      profiles_own_update_allowed: {
+        Args: { proposed: Database["public"]["Tables"]["profiles"]["Row"] }
+        Returns: boolean
+      }
       purge_expired_idempotency_log: { Args: never; Returns: number }
       record_referral_reward: {
         Args: { p_referral_code: string; p_referred_id: string }
