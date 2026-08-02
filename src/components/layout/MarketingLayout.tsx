@@ -70,6 +70,24 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
   const { pathname } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
 
+  // 1 + 2 + 3 + 5: lock the background while the drawer is open, restore on close.
+  useBodyScrollLock(menuOpen);
+
+  // Close on route change and on Escape.
+  useEffect(() => {
+    setMenuOpen(false);
+  }, [pathname]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [menuOpen]);
+
+
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
       <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:text-sm focus:font-medium">
