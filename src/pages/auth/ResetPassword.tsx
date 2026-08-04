@@ -325,16 +325,23 @@ export default function ResetPassword(): JSX.Element {
 
     async function verifyRecoverySession(): Promise<void> {
       try {
-        const {
+        let {
           data: { session },
-          error,
         } = await supabase.auth.getSession();
+
+        if (!session) {
+          // PKCE / OTP links need an explicit exchange before a session exists.
+          const exchanged = await establishRecoverySession();
+          if (exchanged) {
+            session = (await supabase.auth.getSession()).data.session;
+          }
+        }
 
         if (cancelled) {
           return;
         }
 
-        if (error || !session) {
+        if (!session) {
           setMode("request");
           setGeneralError(
             "This reset link has expired. Please request a new one."
@@ -349,6 +356,7 @@ export default function ResetPassword(): JSX.Element {
         }
       }
     }
+
 
     void verifyRecoverySession();
 
