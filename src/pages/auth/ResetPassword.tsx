@@ -88,9 +88,46 @@ function isRecoveryUrl(): boolean {
     pathname.includes("reset-password") &&
     (hash.includes("access_token") ||
       hash.includes("type=recovery") ||
-      search.includes("type=recovery"))
+      search.includes("type=recovery") ||
+      // PKCE / OTP-style recovery links
+      new URLSearchParams(search).has("code") ||
+      new URLSearchParams(search).has("token_hash"))
   );
 }
+
+/**
+ * Turn a PKCE (`?code=`) or OTP (`?token_hash=`) recovery link into a session.
+ * Implicit-flow links (`#access_token=`) are handled by the Supabase client itself.
+ */
+async function establishRecoverySession(): Promise<boolean> {
+  if (typeof window === "undefined") return false;
+
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("code");
+  const tokenHash = params.get("token_hash");
+
+  try {
+    if (code) {
+      const { error } = await supabase.auth.exchangeCodeForSession(code);
+      if (error) return false;
+    } else if (tokenHash) {
+      const { error } = await supabase.auth.verifyOtp({
+        type: "recovery",
+        token_hash: tokenHash,
+      });
+      if (error) return false;
+    } else {
+      return false;
+    }
+
+    // Strip the single-use token from the address bar.
+    window.history.replaceState({}, "", window.location.pathname);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 
 function getPasswordStrength(password: string): PasswordStrength {
   const feedback: string[] = [];
