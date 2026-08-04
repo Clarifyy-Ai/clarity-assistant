@@ -35,7 +35,8 @@ const INITIAL_ONBOARDING_DATA: OnboardingData = {
   jobDescription:     "",
   yearsOfExperience:  0,
   // No pre-selected experience level — the user must choose explicitly.
-  currentLevel:       "" as OnboardingData["currentLevel"],
+  currentLevel:       "",
+
 
   techStack:          [],
   interviewTypes:     ["behavioral"],
