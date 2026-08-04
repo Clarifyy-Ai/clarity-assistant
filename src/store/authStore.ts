@@ -724,6 +724,8 @@ export const useAuthStore = create<AuthStore>()(
               set((state) => {
                 state.profile = profile as unknown as ProfileRow;
                 state.isProfileLoaded = true;
+                if (state.status === "error") state.status = "authenticated";
+
                 state.error = null;
                 if (roleResult.resolved) {
                   state.isAdmin = roleResult.isAdmin;
