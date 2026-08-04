@@ -628,18 +628,31 @@ export const useAuthStore = create<AuthStore>()(
               return false;
             }
 
+            // Dedupe: initialize(), SIGNED_IN and route guards can all trigger a
+            // load for the same user within the same tick.
+            if (inFlightProfileLoad && inFlightProfileLoad.userId === userId) {
+              return inFlightProfileLoad.promise;
+            }
+
+            const run = async (): Promise<boolean> => {
             const fetchProfile = () =>
               withTimeout(
                 profilesDB.getByIdMaybe(userId),
-                AUTH_SESSION_TIMEOUT_MS,
+                PROFILE_FETCH_TIMEOUT_MS,
                 "Profile load",
               );
 
             try {
               let profile: Awaited<ReturnType<typeof profilesDB.getByIdMaybe>>;
+              // Role lookup runs in parallel — it must never add latency to routing.
+              const rolePromise = resolveAdminRole(userId);
+
               try {
                 profile = await fetchProfile();
               } catch (firstErr) {
+                if (isInvalidRefreshTokenError(firstErr)) {
+                  throw firstErr;
+                }
                 console.warn(
                   "[authStore] Profile load failed; retrying once:",
                   firstErr,
@@ -647,7 +660,7 @@ export const useAuthStore = create<AuthStore>()(
                 profile = await fetchProfile();
               }
 
-              const roleResult = await resolveAdminRole(userId);
+              const roleResult = await rolePromise;
 
               if (!profile) {
                 console.warn("[authStore] Profile not found; routing user to onboarding");
@@ -688,6 +701,7 @@ export const useAuthStore = create<AuthStore>()(
               set((state) => {
                 state.profile = profile as unknown as ProfileRow;
                 state.isProfileLoaded = true;
+                state.error = null;
                 if (roleResult.resolved) {
                   state.isAdmin = roleResult.isAdmin;
                   state.isAdminResolved = true;
@@ -722,17 +736,39 @@ export const useAuthStore = create<AuthStore>()(
               return true;
             } catch (err) {
               console.error("[authStore] Failed to load profile:", err);
+
+              // A dead refresh token is an auth failure, not a profile failure:
+              // clear it locally instead of parking the user on an error screen.
+              if (isInvalidRefreshTokenError(err)) {
+                await clearStaleLocalSession();
+                resetPostHog();
+                get().reset();
+                return false;
+              }
+
               dset((state) => {
                 state.status = "error";
-                state.error = `Unable to load your account profile. ${getErrorMessage(err)}`;
-                state.isProfileLoaded = true;
+                state.error = PROFILE_ERROR_MESSAGE;
+                state.isProfileLoaded = false;
                 state.isAdmin = false;
                 // Profile failed hard — do not claim a definitive non-admin role.
                 state.isAdminResolved = false;
               });
               return false;
             }
+            };
+
+            const promise = run().finally(() => {
+              if (inFlightProfileLoad?.userId === userId) {
+                inFlightProfileLoad = null;
+              }
+            });
+
+            inFlightProfileLoad = { userId, promise };
+
+            return promise;
           },
+
 
           updateProfile: async (updates) => {
             const userId = get().user?.id;
