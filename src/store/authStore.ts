@@ -45,7 +45,16 @@ export type AuthStatus =
   | "unauthenticated"
   | "error";
 
-const AUTH_SESSION_TIMEOUT_MS = isElectronApp() ? 12_000 : 20_000;
+const AUTH_SESSION_TIMEOUT_MS = isElectronApp() ? 12_000 : 15_000;
+
+/** Per-attempt budget for the profile read. Two attempts stay well under 10s total. */
+const PROFILE_FETCH_TIMEOUT_MS = 4_000;
+
+/** Role lookup is non-blocking for routing; keep it short. */
+const ROLE_CHECK_TIMEOUT_MS = 4_000;
+
+const PROFILE_ERROR_MESSAGE =
+  "We're having trouble loading your profile. Please try again.";
 
 function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise<T> {
   return Promise.race([
@@ -55,6 +64,7 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
     }),
   ]);
 }
+
 
 /**
  * Resolve admin role with one retry on abort/timeout/network failure.
