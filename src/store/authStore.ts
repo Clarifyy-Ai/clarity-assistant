@@ -189,6 +189,10 @@ const INITIAL_STATE: AuthState = buildInitialAuthState();
 
 let unsubAuthListener: (() => void) | null = null;
 
+/** Dedupes concurrent profile loads for the same user. */
+let inFlightProfileLoad: { userId: string; promise: Promise<boolean> } | null = null;
+
+
 function getErrorMessage(error: unknown): string {
   if (error instanceof Error) {
     return error.message;
