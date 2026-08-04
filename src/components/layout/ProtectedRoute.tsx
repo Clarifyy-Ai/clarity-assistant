@@ -42,7 +42,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     return <AppLoadingFallback />;
   }
 
-  // 2) Error
+  // 2) Error — recoverable: offer an in-place retry before sending users to login.
   if (status === "error") {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -50,22 +50,34 @@ export const ProtectedRoute = memo(function ProtectedRoute({
           <div className="flex gap-3">
             <AlertCircle className="h-5 w-5 text-destructive mt-1 flex-shrink-0" />
             <div>
-              <h2 className="text-lg font-semibold mb-2">Authentication Error</h2>
+              <h2 className="text-lg font-semibold mb-2">We couldn&apos;t load your account</h2>
               <p className="text-sm text-muted-foreground mb-4">
-                {error || "Failed to verify your authentication. Please try logging in again."}
+                {error ||
+                  "We're having trouble loading your profile. Please try again."}
               </p>
-              <a
-                href={loginPath}
-                className="inline-block px-4 py-2 bg-primary rounded-lg text-sm font-medium text-primary-foreground hover:opacity-90 transition"
-              >
-                Return to Login
-              </a>
+              <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  onClick={() => {
+                    void useAuthStore.getState().loadProfile();
+                  }}
+                >
+                  Try again
+                </Button>
+                <a
+                  href={loginPath}
+                  className="inline-block px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-secondary transition"
+                >
+                  Return to login
+                </a>
+              </div>
             </div>
           </div>
         </Card>
       </div>
     );
   }
+
 
   // 3) Not authenticated
   if (!user || status === "unauthenticated") {

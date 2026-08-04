@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useLocation, useNavigate } from "react-router-dom";
 import {
   MailCheck,
   AlertCircle,
@@ -25,8 +25,13 @@ import { AuthShell } from "@/components/layout/AuthShell";
  */
 export default function VerifyEmail() {
   const navigate = useNavigate();
+  const location = useLocation();
   const user = useAuthStore((s) => s.user);
-  const email = user?.email ?? "";
+  // Signup has no session yet (email confirmation required), so fall back to
+  // the address passed through router state.
+  const stateEmail = (location.state as { email?: string } | null)?.email ?? "";
+  const email = user?.email ?? stateEmail;
+
 
   const [resending, setResending] = useState(false);
   const [resendOk, setResendOk] = useState(false);

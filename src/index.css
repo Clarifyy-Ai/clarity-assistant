@@ -176,7 +176,10 @@
     text-rendering: optimizeLegibility;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    /* Reserve the scrollbar track so short pages don't shift horizontally. */
+    scrollbar-gutter: stable;
   }
+
 
   body {
     @apply text-foreground font-sans;
