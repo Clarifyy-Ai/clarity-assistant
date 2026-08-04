@@ -76,9 +76,10 @@ async function resolveAdminRole(
   const attempt = () =>
     withTimeout(
       userRolesDB.hasRole(userId, "admin"),
-      AUTH_SESSION_TIMEOUT_MS,
+      ROLE_CHECK_TIMEOUT_MS,
       "Role check"
     );
+
 
   try {
     return { resolved: true, isAdmin: await attempt() };
