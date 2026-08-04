@@ -499,16 +499,33 @@ export const useAuthStore = create<AuthStore>()(
               throw error;
             }
 
+            // Keep status "loading" until the profile (and ban check) resolves so a
+            // suspended account is never briefly treated as authenticated.
             dset((state) => {
               state.session = data.session as unknown as SupabaseSession;
               state.user = data.user as unknown as SupabaseUser;
-              state.status = "authenticated";
             });
 
             const profileLoaded = await get().loadProfile();
+
             if (!profileLoaded) {
-              throw new Error(get().error ?? "Failed to load your account profile.");
+              let banMessage: string | null = null;
+              try {
+                banMessage = sessionStorage.getItem("clarify_auth_ban_message");
+                if (banMessage) sessionStorage.removeItem("clarify_auth_ban_message");
+              } catch {
+                // Ignore storage failures.
+              }
+
+              throw new Error(
+                banMessage ?? get().error ?? PROFILE_ERROR_MESSAGE
+              );
             }
+
+            dset((state) => {
+              state.status = "authenticated";
+            });
+
           },
 
           signUpWithEmail: async (email, password, fullName) => {
