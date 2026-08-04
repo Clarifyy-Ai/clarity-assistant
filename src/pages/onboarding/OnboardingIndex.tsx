@@ -34,7 +34,9 @@ const INITIAL_ONBOARDING_DATA: OnboardingData = {
   targetCompanies:    [],
   jobDescription:     "",
   yearsOfExperience:  0,
-  currentLevel:       "mid",
+  // No pre-selected experience level — the user must choose explicitly.
+  currentLevel:       "" as OnboardingData["currentLevel"],
+
   techStack:          [],
   interviewTypes:     ["behavioral"],
   preferredModel:     "gemini-flash",
