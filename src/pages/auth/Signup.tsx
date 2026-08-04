@@ -253,6 +253,10 @@ export default function Signup(): JSX.Element {
 
       setSubmittedEmail(data.email);
       setDone(true);
+
+      // Single canonical "verify your email" surface (supports resend + auto-redirect).
+      navigate("/verify-email", { replace: true, state: { email: data.email } });
+
     } catch (error) {
       const message =
         error instanceof Error
