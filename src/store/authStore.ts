@@ -688,6 +688,8 @@ export const useAuthStore = create<AuthStore>()(
                 dset((state) => {
                   state.profile = null;
                   state.isProfileLoaded = true;
+                  if (state.status === "error") state.status = "authenticated";
+
                   if (roleResult.resolved) {
                     state.isAdmin = roleResult.isAdmin;
                     state.isAdminResolved = true;
