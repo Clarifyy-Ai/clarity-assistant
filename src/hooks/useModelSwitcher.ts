@@ -21,7 +21,12 @@ export function useModelSwitcher() {
       "gemini-flash": "Gemini Flash ⚡",
       "gemini-pro":   "Gemini Pro",
       "gpt-4o":       "GPT-4o",
+      "gpt-4o-mini":  "GPT-4o mini",
       "claude":       "Claude",
+      "claude-3-5-sonnet": "Claude 3.5 Sonnet",
+      "claude-3-haiku": "Claude 3 Haiku",
+      "gemini-1-5-pro": "Gemini 1.5 Pro",
+      "gemini-1-5-flash": "Gemini 1.5 Flash",
     };
     return labels[model] ?? model;
   }, []);

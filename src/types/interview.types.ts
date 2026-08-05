@@ -99,6 +99,10 @@ export interface ScheduledInterview {
   is_today: boolean;               // computed — next_round is today
   calendar_event_id: string | null; // Google/Outlook event ID
   company_research_id: string | null;
+  /** Optional interview-level duration when no round is selected. */
+  duration_minutes?: number | null;
+  /** Optional meeting URL when no round is selected. */
+  meeting_link?: string | null;
   created_at: string;
   updated_at: string;
 }

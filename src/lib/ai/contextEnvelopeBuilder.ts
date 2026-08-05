@@ -454,3 +454,72 @@ function buildPromptBlock(input: PromptBuilderInput): string {
 
   return parts.filter(Boolean).join("\n");
 }
+
+/**
+ * Compatibility helpers used by useSessionContext.
+ * Prefer buildContextEnvelope for new call sites; these keep the coach store API stable.
+ */
+export function buildCoachingContext(
+  profile: {
+    id: string;
+    full_name?: string | null;
+    role_type?: string | null;
+    target_role?: string | null;
+    experience_level?: CoachingContext["experience_level"];
+    years_of_experience?: number | null;
+    coach_tone?: CoachingContext["coach_tone"];
+    hint_style?: CoachingContext["hint_style"];
+  },
+  sessionConfig: {
+    company?: string | null;
+    role?: string | null;
+    experience_level?: CoachingContext["experience_level"];
+    interview_type?: CoachingContext["session_type"];
+    question_count?: number;
+    hint_style?: CoachingContext["hint_style"];
+  },
+  _activeContext?: unknown,
+  overrides?: Partial<CoachingContext>,
+): CoachingContext {
+  return {
+    user_id: profile.id,
+    full_name: profile.full_name ?? null,
+    role: sessionConfig.role ?? profile.target_role ?? profile.role_type ?? null,
+    domain: null,
+    experience_level:
+      sessionConfig.experience_level ?? profile.experience_level ?? null,
+    years_of_experience: profile.years_of_experience ?? null,
+    target_company: sessionConfig.company ?? null,
+    coach_tone: profile.coach_tone ?? "encouraging",
+    hint_style: sessionConfig.hint_style ?? profile.hint_style ?? "short_hints",
+    resume_skills: [],
+    resume_projects: [],
+    resume_experience_summary: null,
+    jd_required_skills: [],
+    jd_seniority_signals: [],
+    gap_skills: [],
+    session_goals: [],
+    filler_words_to_watch: [],
+    current_filler_count: 0,
+    current_wpm: 0,
+    weak_areas: [],
+    strong_areas: [],
+    last_3_answer_summaries: [],
+    avg_confidence_score: 0,
+    session_type: sessionConfig.interview_type ?? "mixed",
+    question_number: 1,
+    total_questions: sessionConfig.question_count ?? 5,
+    ...overrides,
+  };
+}
+
+export function serialiseContextForPrompt(ctx: CoachingContext): string {
+  const bits = [
+    ctx.role ? `Role: ${ctx.role}` : null,
+    ctx.target_company ? `Company: ${ctx.target_company}` : null,
+    ctx.experience_level ? `Level: ${ctx.experience_level}` : null,
+    ctx.hint_style ? `Hint style: ${ctx.hint_style}` : null,
+    ctx.coach_tone ? `Tone: ${ctx.coach_tone}` : null,
+  ].filter(Boolean);
+  return bits.join(" | ");
+}

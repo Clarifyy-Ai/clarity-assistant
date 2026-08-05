@@ -25,13 +25,21 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
 
 /** Resolve a notification to an in-app URL based on type + entity id. */
 function resolveNotificationUrl(n: Notification): string | null {
-  const eid = (n as any).entity_id as string | undefined;
-  switch (n.type) {
-    case "session":   return eid ? `/app/sessions/${eid}` : "/app/sessions";
-    case "debrief":   return eid ? `/app/debrief/${eid}` : "/app/debrief";
-    case "credit":    return "/app/settings/billing";
-    case "alert":     return "/app/usage";
-    default:          return null;
+  const eid = (n as { entity_id?: string }).entity_id;
+  const type = String(n.type);
+  switch (type) {
+    case "session":
+      return eid ? `/app/sessions/${eid}` : "/app/sessions";
+    case "debrief":
+      return eid ? `/app/debrief/${eid}` : "/app/debrief";
+    case "credit":
+    case "billing":
+      return "/app/settings/billing";
+    case "alert":
+    case "system":
+      return "/app/usage";
+    default:
+      return null;
   }
 }
 

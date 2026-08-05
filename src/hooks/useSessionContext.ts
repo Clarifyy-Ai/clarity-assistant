@@ -19,7 +19,13 @@ export function useSessionContext() {
   // ── Build fresh context for session start ─────────────────────
 
   const initContext = useCallback((overrides?: Partial<CoachingContext>): void => {
-    const profile = authStore.profile;
+    const profile = authStore.profile as
+      | (NonNullable<typeof authStore.profile> & {
+          experience_level?: CoachingContext["experience_level"];
+          preferred_model?: string;
+          hint_style?: CoachingContext["hint_style"];
+        })
+      | null;
     if (!profile) return;
 
     const { active_context } = docStore;
@@ -32,12 +38,12 @@ export function useSessionContext() {
       question_count: overrides?.total_questions ?? 5,
       time_per_question_seconds: 180,
       model: profile.preferred_model,
-      hint_style: profile.hint_style,
+      hint_style: profile.hint_style ?? "short_hints",
       include_warmup: false,
       resume_id: null,
       jd_id: null,
       focus_areas: [],
-    }, active_context, overrides);
+    } as Parameters<typeof buildCoachingContext>[1], active_context, overrides);
 
     coachStore.initContext(context);
   }, [authStore.profile, docStore]);
