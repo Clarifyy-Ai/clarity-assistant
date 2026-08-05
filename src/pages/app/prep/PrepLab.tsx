@@ -114,7 +114,9 @@ export default function PrepLab() {
         </TabsContent>
 
         <TabsContent value="company">
-          <CompanyPrep />
+          <PlanGate requiredPlan="pro">
+            <CompanyPrep />
+          </PlanGate>
         </TabsContent>
       </Tabs>
     </div>

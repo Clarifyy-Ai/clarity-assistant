@@ -11,7 +11,7 @@ import {
   type Subscription,
 } from "@/lib/billing/subscriptionManager";
 
-import { LAUNCH_PLANS } from "@/lib/constants/pricing";
+import { LAUNCH_PLANS, getPlanDisplayName } from "@/lib/constants/pricing";
 
 import {
   formatPrice,
@@ -162,6 +162,7 @@ export default function SettingsBilling(): JSX.Element {
 
   const effectivePlanId = (planId as PlanId) || "free";
   const currentPlan = PLANS[effectivePlanId] ?? PLANS.free;
+  const currentPlanLabel = getPlanDisplayName(effectivePlanId);
 
   async function reloadBillingState(): Promise<void> {
     if (!user?.id) {
@@ -493,7 +494,7 @@ export default function SettingsBilling(): JSX.Element {
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="text-sm font-semibold text-foreground">
-                  {currentPlan.name}
+                  {currentPlanLabel}
                 </h3>
 
                 {statusInfo && !loadingSub && (
@@ -651,7 +652,7 @@ export default function SettingsBilling(): JSX.Element {
 
               <div className="flex justify-between gap-3">
                 <span className="text-muted-foreground">Plan</span>
-                <span className="text-foreground">{currentPlan.name}</span>
+                <span className="text-foreground">{currentPlanLabel}</span>
               </div>
 
               {subscription?.currentPeriodEnd && (
