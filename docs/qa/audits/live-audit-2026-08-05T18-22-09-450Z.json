@@ -1,0 +1,978 @@
+{
+  "base": "https://clarify.ai.sltfinanceindia.com",
+  "supabase": "https://qzgvjrvtkwlzxpmlddkx.supabase.co",
+  "generatedAt": "2026-08-05T18:22:09.450Z",
+  "summary": {
+    "PASS": 58,
+    "FAIL": 4,
+    "WARN": 2,
+    "BLOCKED": 0,
+    "INFO": 2
+  },
+  "results": [
+    {
+      "section": "CSP",
+      "id": "PROD has structured-data.js",
+      "status": "FAIL",
+      "detail": "Old deploy still injects structured-data.js (CSP risk)",
+      "evidence": {
+        "found": true
+      },
+      "ts": "2026-08-05T18:20:06.356Z"
+    },
+    {
+      "section": "CSP",
+      "id": "PROD has clarify-page-jsonld slot",
+      "status": "FAIL",
+      "detail": "Remediation NOT deployed",
+      "evidence": {
+        "found": false
+      },
+      "ts": "2026-08-05T18:20:06.358Z"
+    },
+    {
+      "section": "CSP",
+      "id": "cdn.gpteng.co in CSP",
+      "status": "PASS",
+      "detail": "present",
+      "evidence": {
+        "found": true
+      },
+      "ts": "2026-08-05T18:20:06.358Z"
+    },
+    {
+      "section": "CSP",
+      "id": "font-src",
+      "status": "PASS",
+      "detail": "present",
+      "evidence": {
+        "found": true
+      },
+      "ts": "2026-08-05T18:20:06.358Z"
+    },
+    {
+      "section": "CSP",
+      "id": "script-src 'self'",
+      "status": "PASS",
+      "detail": "present",
+      "evidence": {
+        "found": true
+      },
+      "ts": "2026-08-05T18:20:06.358Z"
+    },
+    {
+      "section": "CSP",
+      "id": "theme-init.js",
+      "status": "PASS",
+      "detail": "present",
+      "evidence": {
+        "found": true
+      },
+      "ts": "2026-08-05T18:20:06.358Z"
+    },
+    {
+      "section": "CSP",
+      "id": "boot-watchdog.js",
+      "status": "PASS",
+      "detail": "present",
+      "evidence": {
+        "found": true
+      },
+      "ts": "2026-08-05T18:20:06.358Z"
+    },
+    {
+      "section": "ROUTES",
+      "id": "HTTP /",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=48 ct=text/html; charset=utf-8",
+      "evidence": {
+        "status": 200,
+        "ms": 48,
+        "spa": true,
+        "finalUrl": "https://clarify.ai.sltfinanceindia.com/"
+      },
+      "ts": "2026-08-05T18:20:06.407Z"
+    },
+    {
+      "section": "ROUTES",
+      "id": "HTTP /login",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1291 ct=text/html; charset=utf-8",
+      "evidence": {
+        "status": 200,
+        "ms": 1291,
+        "spa": true,
+        "finalUrl": "https://clarify.ai.sltfinanceindia.com/login"
+      },
+      "ts": "2026-08-05T18:20:07.699Z"
+    },
+    {
+      "section": "ROUTES",
+      "id": "HTTP /signup",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1046 ct=text/html; charset=utf-8",
+      "evidence": {
+        "status": 200,
+        "ms": 1046,
+        "spa": true,
+        "finalUrl": "https://clarify.ai.sltfinanceindia.com/signup"
+      },
+      "ts": "2026-08-05T18:20:08.745Z"
+    },
+    {
+      "section": "ROUTES",
+      "id": "HTTP /pricing",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1222 ct=text/html; charset=utf-8",
+      "evidence": {
+        "status": 200,
+        "ms": 1222,
+        "spa": true,
+        "finalUrl": "https://clarify.ai.sltfinanceindia.com/pricing"
+      },
+      "ts": "2026-08-05T18:20:09.967Z"
+    },
+    {
+      "section": "ROUTES",
+      "id": "HTTP /help",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1019 ct=text/html; charset=utf-8",
+      "evidence": {
+        "status": 200,
+        "ms": 1019,
+        "spa": true,
+        "finalUrl": "https://clarify.ai.sltfinanceindia.com/help"
+      },
+      "ts": "2026-08-05T18:20:10.986Z"
+    },
+    {
+      "section": "ROUTES",
+      "id": "HTTP /terms",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1099 ct=text/html; charset=utf-8",
+      "evidence": {
+        "status": 200,
+        "ms": 1099,
+        "spa": true,
+        "finalUrl": "https://clarify.ai.sltfinanceindia.com/terms"
+      },
+      "ts": "2026-08-05T18:20:12.085Z"
+    },
+    {
+      "section": "ROUTES",
+      "id": "HTTP /privacy",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1516 ct=text/html; charset=utf-8",
+      "evidence": {
+        "status": 200,
+        "ms": 1516,
+        "spa": true,
+        "finalUrl": "https://clarify.ai.sltfinanceindia.com/privacy"
+      },
+      "ts": "2026-08-05T18:20:13.601Z"
+    },
+    {
+      "section": "ROUTES",
+      "id": "HTTP /gov-exams",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1368 ct=text/html; charset=utf-8",
+      "evidence": {
+        "status": 200,
+        "ms": 1368,
+        "spa": true,
+        "finalUrl": "https://clarify.ai.sltfinanceindia.com/gov-exams"
+      },
+      "ts": "2026-08-05T18:20:14.969Z"
+    },
+    {
+      "section": "ROUTES",
+      "id": "HTTP /blog",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1034 ct=text/html; charset=utf-8",
+      "evidence": {
+        "status": 200,
+        "ms": 1034,
+        "spa": true,
+        "finalUrl": "https://clarify.ai.sltfinanceindia.com/blog"
+      },
+      "ts": "2026-08-05T18:20:16.003Z"
+    },
+    {
+      "section": "ROUTES",
+      "id": "HTTP /shortcuts",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1195 ct=text/html; charset=utf-8",
+      "evidence": {
+        "status": 200,
+        "ms": 1195,
+        "spa": true,
+        "finalUrl": "https://clarify.ai.sltfinanceindia.com/shortcuts"
+      },
+      "ts": "2026-08-05T18:20:17.199Z"
+    },
+    {
+      "section": "ROUTES",
+      "id": "HTTP /dashboard",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1432 ct=text/html; charset=utf-8",
+      "evidence": {
+        "status": 200,
+        "ms": 1432,
+        "spa": true,
+        "finalUrl": "https://clarify.ai.sltfinanceindia.com/dashboard"
+      },
+      "ts": "2026-08-05T18:20:18.632Z"
+    },
+    {
+      "section": "ROUTES",
+      "id": "HTTP /app/dashboard",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1117 ct=text/html; charset=utf-8",
+      "evidence": {
+        "status": 200,
+        "ms": 1117,
+        "spa": true,
+        "finalUrl": "https://clarify.ai.sltfinanceindia.com/app/dashboard"
+      },
+      "ts": "2026-08-05T18:20:19.750Z"
+    },
+    {
+      "section": "ROUTES",
+      "id": "HTTP /app/live",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1528 ct=text/html; charset=utf-8",
+      "evidence": {
+        "status": 200,
+        "ms": 1528,
+        "spa": true,
+        "finalUrl": "https://clarify.ai.sltfinanceindia.com/app/live"
+      },
+      "ts": "2026-08-05T18:20:21.278Z"
+    },
+    {
+      "section": "ROUTES",
+      "id": "HTTP /app/mock",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1287 ct=text/html; charset=utf-8",
+      "evidence": {
+        "status": 200,
+        "ms": 1287,
+        "spa": true,
+        "finalUrl": "https://clarify.ai.sltfinanceindia.com/app/mock"
+      },
+      "ts": "2026-08-05T18:20:22.565Z"
+    },
+    {
+      "section": "ROUTES",
+      "id": "HTTP /app/prep",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1072 ct=text/html; charset=utf-8",
+      "evidence": {
+        "status": 200,
+        "ms": 1072,
+        "spa": true,
+        "finalUrl": "https://clarify.ai.sltfinanceindia.com/app/prep"
+      },
+      "ts": "2026-08-05T18:20:23.637Z"
+    },
+    {
+      "section": "ROUTES",
+      "id": "HTTP /app/answers",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1168 ct=text/html; charset=utf-8",
+      "evidence": {
+        "status": 200,
+        "ms": 1168,
+        "spa": true,
+        "finalUrl": "https://clarify.ai.sltfinanceindia.com/app/answers"
+      },
+      "ts": "2026-08-05T18:20:24.805Z"
+    },
+    {
+      "section": "ROUTES",
+      "id": "HTTP /app/admin",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1391 ct=text/html; charset=utf-8",
+      "evidence": {
+        "status": 200,
+        "ms": 1391,
+        "spa": true,
+        "finalUrl": "https://clarify.ai.sltfinanceindia.com/app/admin"
+      },
+      "ts": "2026-08-05T18:20:26.196Z"
+    },
+    {
+      "section": "ROUTES",
+      "id": "HTTP /this-route-should-404-clarify",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1127 ct=text/html; charset=utf-8",
+      "evidence": {
+        "status": 200,
+        "ms": 1127,
+        "spa": true,
+        "finalUrl": "https://clarify.ai.sltfinanceindia.com/this-route-should-404-clarify"
+      },
+      "ts": "2026-08-05T18:20:27.324Z"
+    },
+    {
+      "section": "AUTH_API",
+      "id": "Free login",
+      "status": "PASS",
+      "detail": "loginMs=1473 user=d17262d4…",
+      "evidence": {
+        "loginMs": 1473,
+        "userId": "d17262d4-a63c-4f6d-9543-51452997144b"
+      },
+      "ts": "2026-08-05T18:20:28.803Z"
+    },
+    {
+      "section": "AUTH_API",
+      "id": "Free profile",
+      "status": "PASS",
+      "detail": "profileMs=1443 plan=free credits=34 onboarded=true banned=false",
+      "evidence": {
+        "profileMs": 1443,
+        "plan_id": "free",
+        "credits": 34,
+        "full_name": "QA Audit User",
+        "email": "qa.free@clarify.ai.test"
+      },
+      "ts": "2026-08-05T18:20:30.246Z"
+    },
+    {
+      "section": "AUTH_API",
+      "id": "Free roles",
+      "status": "PASS",
+      "detail": "roleMs=857 isAdmin=false roles=[]",
+      "evidence": {
+        "roleMs": 857,
+        "isAdmin": false,
+        "roles": []
+      },
+      "ts": "2026-08-05T18:20:31.103Z"
+    },
+    {
+      "section": "AUTH_API",
+      "id": "Free sessions RLS",
+      "status": "PASS",
+      "detail": "ms=1360 count=1",
+      "evidence": {},
+      "ts": "2026-08-05T18:20:32.463Z"
+    },
+    {
+      "section": "AUTH_API",
+      "id": "Pro login",
+      "status": "PASS",
+      "detail": "loginMs=453 user=692978b7…",
+      "evidence": {
+        "loginMs": 453,
+        "userId": "692978b7-153a-4dcd-811a-8a7133fba8c8"
+      },
+      "ts": "2026-08-05T18:20:33.393Z"
+    },
+    {
+      "section": "AUTH_API",
+      "id": "Pro profile",
+      "status": "PASS",
+      "detail": "profileMs=512 plan=pro credits=1029 onboarded=true banned=false",
+      "evidence": {
+        "profileMs": 512,
+        "plan_id": "pro",
+        "credits": 1029,
+        "full_name": "QA Audit User",
+        "email": "qa.pro@clarify.ai.test"
+      },
+      "ts": "2026-08-05T18:20:33.905Z"
+    },
+    {
+      "section": "AUTH_API",
+      "id": "Pro roles",
+      "status": "PASS",
+      "detail": "roleMs=879 isAdmin=false roles=[]",
+      "evidence": {
+        "roleMs": 879,
+        "isAdmin": false,
+        "roles": []
+      },
+      "ts": "2026-08-05T18:20:34.784Z"
+    },
+    {
+      "section": "AUTH_API",
+      "id": "Pro sessions RLS",
+      "status": "PASS",
+      "detail": "ms=866 count=5",
+      "evidence": {},
+      "ts": "2026-08-05T18:20:35.650Z"
+    },
+    {
+      "section": "AUTH_API",
+      "id": "Max login",
+      "status": "PASS",
+      "detail": "loginMs=868 user=106dcb1b…",
+      "evidence": {
+        "loginMs": 868,
+        "userId": "106dcb1b-8432-4d4e-b1a0-3ed471bd06b1"
+      },
+      "ts": "2026-08-05T18:20:36.795Z"
+    },
+    {
+      "section": "AUTH_API",
+      "id": "Max profile",
+      "status": "PASS",
+      "detail": "profileMs=359 plan=enterprise credits=4000 onboarded=true banned=false",
+      "evidence": {
+        "profileMs": 359,
+        "plan_id": "enterprise",
+        "credits": 4000,
+        "full_name": "QA Audit User",
+        "email": "qa.max@clarify.ai.test"
+      },
+      "ts": "2026-08-05T18:20:37.154Z"
+    },
+    {
+      "section": "AUTH_API",
+      "id": "Max roles",
+      "status": "PASS",
+      "detail": "roleMs=354 isAdmin=false roles=[]",
+      "evidence": {
+        "roleMs": 354,
+        "isAdmin": false,
+        "roles": []
+      },
+      "ts": "2026-08-05T18:20:37.509Z"
+    },
+    {
+      "section": "AUTH_API",
+      "id": "Max sessions RLS",
+      "status": "PASS",
+      "detail": "ms=334 count=0",
+      "evidence": {},
+      "ts": "2026-08-05T18:20:37.843Z"
+    },
+    {
+      "section": "AUTH_API",
+      "id": "Admin login",
+      "status": "PASS",
+      "detail": "loginMs=414 user=487ebbad…",
+      "evidence": {
+        "loginMs": 414,
+        "userId": "487ebbad-4ef5-49ef-b633-828c49f71f09"
+      },
+      "ts": "2026-08-05T18:20:38.561Z"
+    },
+    {
+      "section": "AUTH_API",
+      "id": "Admin profile",
+      "status": "PASS",
+      "detail": "profileMs=858 plan=enterprise credits=4000 onboarded=true banned=false",
+      "evidence": {
+        "profileMs": 858,
+        "plan_id": "enterprise",
+        "credits": 4000,
+        "full_name": "QA Audit User",
+        "email": "qa.admin@clarify.ai.test"
+      },
+      "ts": "2026-08-05T18:20:39.419Z"
+    },
+    {
+      "section": "AUTH_API",
+      "id": "Admin roles",
+      "status": "PASS",
+      "detail": "roleMs=603 isAdmin=true roles=[{\"role\":\"admin\"}]",
+      "evidence": {
+        "roleMs": 603,
+        "isAdmin": true,
+        "roles": [
+          {
+            "role": "admin"
+          }
+        ]
+      },
+      "ts": "2026-08-05T18:20:40.023Z"
+    },
+    {
+      "section": "AUTH_API",
+      "id": "Admin sessions RLS",
+      "status": "PASS",
+      "detail": "ms=389 count=0",
+      "evidence": {},
+      "ts": "2026-08-05T18:20:40.412Z"
+    },
+    {
+      "section": "AUTH_API",
+      "id": "invalid refresh token response",
+      "status": "PASS",
+      "detail": "status=400 body={\"code\":400,\"error_code\":\"validation_failed\",\"msg\":\"Refresh token is not valid\"}",
+      "evidence": {
+        "status": 400,
+        "body": "{\"code\":400,\"error_code\":\"validation_failed\",\"msg\":\"Refresh token is not valid\"}"
+      },
+      "ts": "2026-08-05T18:20:41.545Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "cold load CSP console",
+      "status": "FAIL",
+      "detail": "Executing inline script violates the following Content Security Policy directive 'script-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-94vmev1ZHn894g2iVWfQ1aQu9FkC2BtPA7fJnXbTA7Y='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked.",
+      "evidence": {
+        "count": 1,
+        "samples": [
+          {
+            "type": "error",
+            "text": "Executing inline script violates the following Content Security Policy directive 'script-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-94vmev1ZHn894g2iVWfQ1aQu9FkC2BtPA7fJnXbTA7Y='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked."
+          }
+        ]
+      },
+      "ts": "2026-08-05T18:20:51.547Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "cold load console errors",
+      "status": "WARN",
+      "detail": "Executing inline script violates the following Content Security Policy directive 'script-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-94vmev1ZHn894g2iVWfQ1aQu9FkC2BtPA7fJnXbTA7Y='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked.",
+      "evidence": {
+        "count": 1
+      },
+      "ts": "2026-08-05T18:20:51.547Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "pageerrors",
+      "status": "PASS",
+      "detail": "none",
+      "evidence": {},
+      "ts": "2026-08-05T18:20:51.547Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "page /login",
+      "status": "PASS",
+      "detail": "title=Sign in | Clarify AI url=https://clarify.ai.sltfinanceindia.com/login",
+      "evidence": {},
+      "ts": "2026-08-05T18:20:53.650Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "page /signup",
+      "status": "PASS",
+      "detail": "title=Create account | Clarify AI url=https://clarify.ai.sltfinanceindia.com/signup",
+      "evidence": {},
+      "ts": "2026-08-05T18:20:55.628Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "page /pricing",
+      "status": "PASS",
+      "detail": "title=Pricing — Clarify AI url=https://clarify.ai.sltfinanceindia.com/pricing",
+      "evidence": {},
+      "ts": "2026-08-05T18:20:57.774Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "page /help",
+      "status": "PASS",
+      "detail": "title=Help Center — Clarify AI url=https://clarify.ai.sltfinanceindia.com/help",
+      "evidence": {},
+      "ts": "2026-08-05T18:20:59.724Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "anon /app/dashboard → login",
+      "status": "PASS",
+      "detail": "landed=https://clarify.ai.sltfinanceindia.com/login",
+      "evidence": {},
+      "ts": "2026-08-05T18:21:06.593Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "anon /dashboard behavior",
+      "status": "PASS",
+      "detail": "landed=https://clarify.ai.sltfinanceindia.com/login",
+      "evidence": {},
+      "ts": "2026-08-05T18:21:12.079Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "Pro UI login → /app",
+      "status": "PASS",
+      "detail": "ms=2572 url=https://clarify.ai.sltfinanceindia.com/app/dashboard profileError=false stillLoading=false",
+      "evidence": {
+        "loginUiMs": 2572,
+        "url": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+        "hasProfileError": false,
+        "stillLoading": false
+      },
+      "ts": "2026-08-05T18:21:20.011Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "shell text after login",
+      "status": "INFO",
+      "detail": "Clarify AI\n\nPRACTICE\n\nDashboard\nPractice Coach\nMock Interview\nPrep Lab\nGov Exam Mock Tests\n\nPROGRESS\n\nSession History\nSkills Analytics\nCredits & Usage\nDebrief\nReferrals\nDocuments\nAnswer Bank\n\nPLANNER\n\nInterview Day\nInterviews\nCompany Research\nGuide\nNotifications\nSettings\nQ\n\nQA Audit User\n\nPro | Interview Practice\n1029\ncredits\nDiscrete UI\n\nPress Ctrl+K to jump anywhere fast.\n\nQ | Edit with",
+      "evidence": {},
+      "ts": "2026-08-05T18:21:20.043Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "Pro hard refresh keeps session",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "evidence": {},
+      "ts": "2026-08-05T18:21:26.920Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "authed /app/live",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/live badProfile=false",
+      "evidence": {},
+      "ts": "2026-08-05T18:21:31.302Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "authed /app/mock",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/mock badProfile=false",
+      "evidence": {},
+      "ts": "2026-08-05T18:21:35.989Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "authed /app/prep",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/prep badProfile=false",
+      "evidence": {},
+      "ts": "2026-08-05T18:21:40.319Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "authed /app/answers",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/answers badProfile=false",
+      "evidence": {},
+      "ts": "2026-08-05T18:21:44.738Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "authed /app/sessions",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/sessions badProfile=false",
+      "evidence": {},
+      "ts": "2026-08-05T18:21:49.108Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "authed /app/settings/profile",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/settings/profile badProfile=false",
+      "evidence": {},
+      "ts": "2026-08-05T18:21:55.209Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "authed /app/usage",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/usage badProfile=false",
+      "evidence": {},
+      "ts": "2026-08-05T18:21:59.663Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "Pro /app/admin Access Denied",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/admin snip=Access Denied You don't have admin privileges to access this page. Go to Dashboard Cookie Notice We use essential cookies for authentication and optional an",
+      "evidence": {},
+      "ts": "2026-08-05T18:22:04.903Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "session_expired banner",
+      "status": "FAIL",
+      "detail": "message missing (remediation may be undeployed)",
+      "evidence": {},
+      "ts": "2026-08-05T18:22:07.571Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "mobile landing",
+      "status": "PASS",
+      "detail": "title=Clarify AI — Practice every interview with AI by your side",
+      "evidence": {},
+      "ts": "2026-08-05T18:22:09.303Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "supabase API samples during UI",
+      "status": "INFO",
+      "detail": "67 captured",
+      "evidence": {
+        "samples": [
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/help_articles?select=slug%2Cquestion%2Canswer%2Cbody_md%2Ccategory_slug%2Ccategory_title%2Csort_order&published=eq.true&order=sort_",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/auth/v1/token?grant_type=password",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/user_roles?select=role&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&role=eq.admin",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/profiles?select=audio_input_device%2Caudio_output_device%2Cauto_transcript%2Cavatar_url%2Cban_reason%2Cbio%2Ccreated_at%2Ccredits%2",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/user_roles?select=role&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&role=eq.admin",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/profiles?select=audio_input_device%2Caudio_output_device%2Cauto_transcript%2Cavatar_url%2Cban_reason%2Cbio%2Ccreated_at%2Ccredits%2",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/notifications?select=*&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&order=created_at.desc&limit=50",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/scheduled_interviews?select=*%2Cinterview_rounds%28*%29&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&order=created_at.desc",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/user_badges?select=badge_id&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/weekly_challenges?select=*&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&week_end=gte.2026-08-05T18%3A21%3A17.068Z",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/job_descriptions?select=*&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&order=created_at.desc",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/resumes?select=*&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&order=created_at.desc",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/sessions?select=id&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/answer_bank?select=*&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&order=created_at.desc",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/user_roles?select=role&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&role=eq.admin",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/profiles?select=audio_input_device%2Caudio_output_device%2Cauto_transcript%2Cavatar_url%2Cban_reason%2Cbio%2Ccreated_at%2Ccredits%2",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/notifications?select=*&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&order=created_at.desc&limit=50",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/resumes?select=*&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&order=created_at.desc",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/scheduled_interviews?select=*%2Cinterview_rounds%28*%29&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&order=created_at.desc",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/user_badges?select=badge_id&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/answer_bank?select=*&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&order=created_at.desc",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/weekly_challenges?select=*&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&week_end=gte.2026-08-05T18%3A21%3A22.398Z",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/sessions?select=id&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/job_descriptions?select=*&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&order=created_at.desc",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/user_roles?select=role&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&role=eq.admin",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/profiles?select=audio_input_device%2Caudio_output_device%2Cauto_transcript%2Cavatar_url%2Cban_reason%2Cbio%2Ccreated_at%2Ccredits%2",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/notifications?select=*&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&order=created_at.desc&limit=50",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/job_descriptions?select=*&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&order=created_at.desc",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/answer_bank?select=*&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&order=created_at.desc",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/resumes?select=*&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&order=created_at.desc",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/user_roles?select=role&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&role=eq.admin",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/profiles?select=audio_input_device%2Caudio_output_device%2Cauto_transcript%2Cavatar_url%2Cban_reason%2Cbio%2Ccreated_at%2Ccredits%2",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/notifications?select=*&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&order=created_at.desc&limit=50",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/user_roles?select=role&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&role=eq.admin",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/profiles?select=audio_input_device%2Caudio_output_device%2Cauto_transcript%2Cavatar_url%2Cban_reason%2Cbio%2Ccreated_at%2Ccredits%2",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/notifications?select=*&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&order=created_at.desc&limit=50",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/user_roles?select=role&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&role=eq.admin",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/profiles?select=audio_input_device%2Caudio_output_device%2Cauto_transcript%2Cavatar_url%2Cban_reason%2Cbio%2Ccreated_at%2Ccredits%2",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/notifications?select=*&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&order=created_at.desc&limit=50",
+            "status": 200,
+            "ok": true
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/answer_bank?select=*&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8&order=created_at.desc",
+            "status": 200,
+            "ok": true
+          }
+        ]
+      },
+      "ts": "2026-08-05T18:22:09.448Z"
+    },
+    {
+      "section": "BROWSER",
+      "id": "failed requests",
+      "status": "WARN",
+      "detail": "net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/sessions?select=id&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8 || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/sessions?select=id&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8 || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+      "evidence": {
+        "failedRequests": [
+          {
+            "url": "https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+            "error": "net::ERR_ABORTED"
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/sessions?select=id&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8",
+            "error": "net::ERR_ABORTED"
+          },
+          {
+            "url": "https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+            "error": "net::ERR_ABORTED"
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/sessions?select=id&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8",
+            "error": "net::ERR_ABORTED"
+          },
+          {
+            "url": "https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+            "error": "net::ERR_ABORTED"
+          },
+          {
+            "url": "https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+            "error": "net::ERR_ABORTED"
+          },
+          {
+            "url": "https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+            "error": "net::ERR_ABORTED"
+          },
+          {
+            "url": "https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+            "error": "net::ERR_ABORTED"
+          },
+          {
+            "url": "https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+            "error": "net::ERR_ABORTED"
+          },
+          {
+            "url": "https://clarify.ai.sltfinanceindia.com/app/settings/theme-init.js",
+            "error": "net::ERR_ABORTED"
+          },
+          {
+            "url": "https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+            "error": "net::ERR_ABORTED"
+          },
+          {
+            "url": "https://clarify.ai.sltfinanceindia.com/app/theme-init.js",
+            "error": "net::ERR_ABORTED"
+          },
+          {
+            "url": "https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/sessions?select=id&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8",
+            "error": "net::ERR_ABORTED"
+          }
+        ]
+      },
+      "ts": "2026-08-05T18:22:09.448Z"
+    }
+  ]
+}

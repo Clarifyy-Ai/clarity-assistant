@@ -1,0 +1,175 @@
+{
+  "title": "Post-deploy DEFINER grants check",
+  "project_ref": "qzgvjrvtkwlzxpmlddkx",
+  "startedAt": "2026-08-05T20:13:08.069Z",
+  "finishedAt": "2026-08-05T20:13:16.669Z",
+  "overall": "PASS",
+  "summary": [
+    {
+      "id": "execute_grants_matrix",
+      "status": "PASS",
+      "detail": "EXECUTE privileges for anon/authenticated/public match expected (admin: auth-only; share: anon+auth; public revoked)"
+    },
+    {
+      "id": "anon_cannot_execute_admin_rpcs",
+      "status": "PASS",
+      "detail": "anon denied on bulk_update_users / get_admin_dau_mau / get_admin_perf_stats"
+    },
+    {
+      "id": "anon_can_execute_share_rpcs",
+      "status": "PASS",
+      "detail": "anon can execute get_shared_debrief / get_shared_scorecard (no permission denied)"
+    },
+    {
+      "id": "pro_non_admin_bulk_update_users_admin_only",
+      "status": "PASS",
+      "detail": "Pro non-admin got Admin only from bulk_update_users"
+    }
+  ],
+  "checks": [
+    {
+      "id": "execute_grants_matrix",
+      "status": "PASS",
+      "detail": "EXECUTE privileges for anon/authenticated/public match expected (admin: auth-only; share: anon+auth; public revoked)",
+      "evidence": {
+        "grantMatrix": {
+          "bulk_update_users": {
+            "found": true,
+            "actual": {
+              "anon": false,
+              "authenticated": true,
+              "public": false,
+              "args": "p_user_ids uuid[], p_patch jsonb"
+            },
+            "expected": {
+              "anon": false,
+              "authenticated": true,
+              "public": false
+            },
+            "match": true
+          },
+          "get_admin_dau_mau": {
+            "found": true,
+            "actual": {
+              "anon": false,
+              "authenticated": true,
+              "public": false,
+              "args": "p_days integer"
+            },
+            "expected": {
+              "anon": false,
+              "authenticated": true,
+              "public": false
+            },
+            "match": true
+          },
+          "get_admin_perf_stats": {
+            "found": true,
+            "actual": {
+              "anon": false,
+              "authenticated": true,
+              "public": false,
+              "args": "p_days integer"
+            },
+            "expected": {
+              "anon": false,
+              "authenticated": true,
+              "public": false
+            },
+            "match": true
+          },
+          "get_shared_debrief": {
+            "found": true,
+            "actual": {
+              "anon": true,
+              "authenticated": true,
+              "public": false,
+              "args": "p_token text"
+            },
+            "expected": {
+              "anon": true,
+              "authenticated": true,
+              "public": false
+            },
+            "match": true
+          },
+          "get_shared_scorecard": {
+            "found": true,
+            "actual": {
+              "anon": true,
+              "authenticated": true,
+              "public": false,
+              "args": "p_token text"
+            },
+            "expected": {
+              "anon": true,
+              "authenticated": true,
+              "public": false
+            },
+            "match": true
+          }
+        }
+      }
+    },
+    {
+      "id": "anon_cannot_execute_admin_rpcs",
+      "status": "PASS",
+      "detail": "anon denied on bulk_update_users / get_admin_dau_mau / get_admin_perf_stats",
+      "evidence": {
+        "anonAdminResults": {
+          "bulk_update_users": {
+            "blocked": true,
+            "error": "permission denied for function bulk_update_users",
+            "hasData": false
+          },
+          "get_admin_dau_mau": {
+            "blocked": true,
+            "error": "permission denied for function get_admin_dau_mau",
+            "hasData": false
+          },
+          "get_admin_perf_stats": {
+            "blocked": true,
+            "error": "permission denied for function get_admin_perf_stats",
+            "hasData": false
+          }
+        }
+      }
+    },
+    {
+      "id": "anon_can_execute_share_rpcs",
+      "status": "PASS",
+      "detail": "anon can execute get_shared_debrief / get_shared_scorecard (no permission denied)",
+      "evidence": {
+        "anonShareResults": {
+          "get_shared_debrief": {
+            "executable": true,
+            "permissionDenied": false,
+            "error": null,
+            "dataIsNull": false
+          },
+          "get_shared_scorecard": {
+            "executable": true,
+            "permissionDenied": false,
+            "error": null,
+            "dataIsNull": false
+          }
+        }
+      }
+    },
+    {
+      "id": "pro_non_admin_bulk_update_users_admin_only",
+      "status": "PASS",
+      "detail": "Pro non-admin got Admin only from bulk_update_users",
+      "evidence": {
+        "signedIn": true,
+        "error": "Admin only",
+        "hasData": false
+      }
+    }
+  ],
+  "notes": [
+    "Expected: admin RPCs EXECUTE for authenticated only (anon/public false).",
+    "Expected: share RPCs EXECUTE for anon+authenticated (public false).",
+    "No secrets/tokens/passwords included in this report."
+  ]
+}

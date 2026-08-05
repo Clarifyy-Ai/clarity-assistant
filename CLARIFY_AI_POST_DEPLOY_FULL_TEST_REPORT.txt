@@ -1,0 +1,175 @@
+================================================================================
+CLARIFY AI — POST-DEPLOY FULL TEST REPORT
+================================================================================
+Site      : https://clarify.ai.sltfinanceindia.com
+Generated : 2026-08-05T20:17:20.522Z
+Summary   : PASS=61 FAIL=2 WARN=2 BLOCKED=0
+Decision  : CONDITIONAL GO
+
+NOTE: SUPABASE_ACCESS_TOKEN used from env only; rotate if exposed in chat.
+
+--------------------------------------------------------------------------------
+PHASE: DEPLOY
+--------------------------------------------------------------------------------
+[PASS] no structured-data.js script
+  absent (comment-only OK)
+[PASS] clarify-page-jsonld slot
+  present
+[WARN] theme-init absolute path
+  ./theme-init.js still relative
+[PASS] /dashboard not 503
+  status=200
+[FAIL] cold load CSP console
+  Executing inline script violates the following Content Security Policy directive 'script-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-94vmev1ZHn894g2iVWfQ1aQu9FkC2BtPA7fJnXbTA7Y='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked.
+[PASS] session_expired banner
+  visible
+[WARN] gate
+  Deploy gate soft-continue: some remediations imperfect; continuing deeper suites for evidence
+--------------------------------------------------------------------------------
+PHASE: PUBLIC_API
+--------------------------------------------------------------------------------
+[PASS] HTTP /
+  status=200 spa=true ms=1316
+[PASS] HTTP /login
+  status=200 spa=true ms=1141
+[PASS] HTTP /signup
+  status=200 spa=true ms=1005
+[PASS] HTTP /pricing
+  status=200 spa=true ms=1123
+[PASS] HTTP /help
+  status=200 spa=true ms=1058
+[PASS] HTTP /terms
+  status=200 spa=true ms=1132
+[PASS] HTTP /privacy
+  status=200 spa=true ms=1012
+[PASS] HTTP /gov-exams
+  status=200 spa=true ms=1099
+[PASS] HTTP /blog
+  status=200 spa=true ms=1026
+[PASS] HTTP /shortcuts
+  status=200 spa=true ms=1127
+[PASS] HTTP /dashboard
+  status=200 spa=true ms=1022
+--------------------------------------------------------------------------------
+PHASE: PUBLIC_UI
+--------------------------------------------------------------------------------
+[PASS] UI /
+  title=Clarify AI — Practice every interview with AI by your side h1=Practice every interview with AI by your side consoleErrors=1
+[PASS] UI /login
+  title=Sign in | Clarify AI h1=Practice interviews with an AI coach that feels real. consoleErrors=1
+[PASS] UI /pricing
+  title=Pricing — Clarify AI h1=Simple, transparent pricing consoleErrors=1
+[PASS] UI /help
+  title=Help Center — Clarify AI h1=Help Center consoleErrors=1
+--------------------------------------------------------------------------------
+PHASE: AUTH
+--------------------------------------------------------------------------------
+[PASS] Free API login
+  ms=1032
+[PASS] Free profile
+  ms=952 plan=free credits=34
+[PASS] Free admin role
+  isAdmin=false
+[PASS] Pro API login
+  ms=472
+[PASS] Pro profile
+  ms=564 plan=pro credits=1029
+[PASS] Pro admin role
+  isAdmin=false
+[PASS] Max API login
+  ms=441
+[PASS] Max profile
+  ms=509 plan=enterprise credits=4000
+[PASS] Max admin role
+  isAdmin=false
+[PASS] Admin API login
+  ms=422
+[PASS] Admin profile
+  ms=401 plan=enterprise credits=4000
+[PASS] Admin admin role
+  isAdmin=true
+[PASS] invalid password UI
+  url=https://clarify.ai.sltfinanceindia.com/login
+[PASS] anon /app/dashboard → login
+  url=https://clarify.ai.sltfinanceindia.com/login?returnTo=%2Fapp%2Fdashboard
+[PASS] returnTo present
+  url=https://clarify.ai.sltfinanceindia.com/login?returnTo=%2Fapp%2Fdashboard
+[PASS] Pro UI login
+  ms=4240 url=https://clarify.ai.sltfinanceindia.com/app/dashboard profileErr=false
+[PASS] Pro hard refresh session
+  url=https://clarify.ai.sltfinanceindia.com/app/dashboard
+[PASS] Pro /app/live
+  url=https://clarify.ai.sltfinanceindia.com/app/live
+[PASS] Pro /app/mock
+  url=https://clarify.ai.sltfinanceindia.com/app/mock
+[PASS] Pro /app/prep
+  url=https://clarify.ai.sltfinanceindia.com/app/prep
+[PASS] Pro /app/answers
+  url=https://clarify.ai.sltfinanceindia.com/app/answers
+[PASS] Pro /app/sessions
+  url=https://clarify.ai.sltfinanceindia.com/app/sessions
+[PASS] Pro /app/settings/profile
+  url=https://clarify.ai.sltfinanceindia.com/app/settings/profile
+[PASS] Pro /app/usage
+  url=https://clarify.ai.sltfinanceindia.com/app/usage
+[PASS] Pro admin denied
+  Access Denied You don't have admin privileges to access this page. Go to Dashboard Cookie Notice We use essential co
+[PASS] logout clears /app access
+  url=https://clarify.ai.sltfinanceindia.com/login?returnTo=%2Fapp%2Fdashboard
+[PASS] Free UI shell
+  ms=3936 shell=Clarify AI PRACTICE Dashboard Practice Coach Mock Interview Prep Lab Gov Exam Mock Tests PROGRESS Session History Skills Analytics Credits & Usage Debrief Referrals Documents Answer Bank PLANNER 
+[PASS] Admin UI portal
+  ms=3766 snip=Admin Clarify AI control panel USERS & SUPPORT Users Live Chat Support Audit Log CONTENT Questions Bulk Upload Seed / Import QA Checklist GOV EXAMS Sourc
+[PASS] Max UI login
+  ms=3922 url=https://clarify.ai.sltfinanceindia.com/app/dashboard
+--------------------------------------------------------------------------------
+PHASE: SECURITY
+--------------------------------------------------------------------------------
+[FAIL] bundle secret /assets/chunk-stores-CoxfsmPL.js
+  sensitive token pattern found
+[PASS] Pro cannot read Free profile
+  empty/denied
+[PASS] Pro cannot read Free sessions
+  empty
+[PASS] RLS enabled core tables
+  [{"table_name":"answers","policy_count":2,"rls_enabled":true},{"table_name":"credit_transactions","policy_count":2,"rls_enabled":true},{"table_name":"documents","policy_count":2,"rls_enabled":true},{"table_name":"profiles","policy_count":4,"rls_enabled":true},{"table_name":"session_transcripts","policy_count":2,"rls_enabled":true},{"table_name":"sessions","policy_count":2,"rls_enabled":true},{"table_name":"user_roles","policy_count":4,"rls_enabled":true}]
+[PASS] release-security-gates
+  OK: release security gates passed
+
+--------------------------------------------------------------------------------
+PHASE: RESPONSIVE
+--------------------------------------------------------------------------------
+[PASS] dashboard iphone-ish 375x812
+  hang=false overflowX=false url=https://clarify.ai.sltfinanceindia.com/app/dashboard
+[PASS] dashboard pixel-ish 390x844
+  hang=false overflowX=false url=https://clarify.ai.sltfinanceindia.com/app/dashboard
+[PASS] dashboard tablet 768x1024
+  hang=false overflowX=false url=https://clarify.ai.sltfinanceindia.com/app/dashboard
+[PASS] dashboard desktop 1440x900
+  hang=false overflowX=false url=https://clarify.ai.sltfinanceindia.com/app/dashboard
+--------------------------------------------------------------------------------
+PHASE: UX
+--------------------------------------------------------------------------------
+[PASS] login controls focusable
+  Sign in + email present
+[PASS] login has heading
+  h1=Practice interviews with an AI coach that feels real.
+[PASS] Free shell name/plan/credits
+  Clarify AI PRACTICE Dashboard Practice Coach Mock Interview Prep Lab Gov Exam Mock Tests PROGRESS Session History Skills Analytics Credits & Usage Debrief Referrals Documents Answer Bank PLANNER Interview Day Interviews Company Research Guide N
+--------------------------------------------------------------------------------
+PHASE: LOAD
+--------------------------------------------------------------------------------
+[PASS] anon concurrent GET x20
+  errRate=0.0% p50=1555ms p95=2165ms
+[PASS] Pro login+profile x10
+  fails=0 login p50=428 p95=759 profile p50=315 p95=726
+
+================================================================================
+BLOCKERS / FOLLOW-UPS
+================================================================================
+- [DEPLOY] cold load CSP console: Executing inline script violates the following Content Security Policy directive 'script-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-94vmev1ZHn894g2iVWfQ1aQu9FkC2BtPA7fJnXbTA7Y='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked.
+- [SECURITY] bundle secret /assets/chunk-stores-CoxfsmPL.js: sensitive token pattern found
+
+Manual remaining: mic/Deepgram, Stripe checkout, OAuth popups, Electron.
+JSON: C:\Users\TECH-GENIUSES\Downloads\clarity-assistant\docs\qa\audits\post-deploy-full-2026-08-05T20-17-20-506Z.json
+================================================================================

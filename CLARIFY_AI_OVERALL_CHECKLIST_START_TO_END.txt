@@ -1,0 +1,374 @@
+================================================================================
+CLARIFY AI — OVERALL COMPLETE CHECKLIST (START TO END)
+================================================================================
+Product   : Clarify AI — Interview Prep & Practice Platform
+Site      : https://clarify.ai.sltfinanceindia.com/
+Date      : _______________
+Tester    : _______________
+Browser   : _______________   OS: _______________
+Build/SHA : _______________
+
+Mark each item:  [ ] Not run   [P] Pass   [F] Fail   [B] Blocked   [N/A]
+Priority: P0 = must pass | P1 = high | P2 = if time
+
+================================================================================
+A. TEST SETUP
+================================================================================
+URL base     : https://clarify.ai.sltfinanceindia.com/
+Login        : https://clarify.ai.sltfinanceindia.com/login
+Signup       : https://clarify.ai.sltfinanceindia.com/signup
+Dashboard    : https://clarify.ai.sltfinanceindia.com/app/dashboard
+
+QA accounts (internal — do not post publicly):
+
+Role   | Email                      | Password
+-------|----------------------------|----------------------
+Free   | qa.free@clarify.ai.test    | (see .env.qa.local — do not commit)
+Pro    | qa.pro@clarify.ai.test     | (see .env.qa.local — do not commit)
+Max    | qa.max@clarify.ai.test     | (see .env.qa.local — do not commit)
+Admin  | qa.admin@clarify.ai.test   | (see .env.qa.local — do not commit)
+
+Suggested order: Pro → Free → Max → Admin
+
+Stripe TEST card: 4242 4242 4242 4242 | Exp 12/34 | CVC 123 | ZIP 400001
+
+Before you start:
+[ ] P0  Use Chrome (primary). Keep DevTools Console open.
+[ ] P0  Prefer Incognito / clean profile for first auth pass.
+[ ] P0  Confirm you can open the site URL (not localhost unless asked).
+
+================================================================================
+B. PRE-FLIGHT / COLD LOAD (START HERE)
+================================================================================
+[ ] P0  Open / — leaves "Loading Clarify AI…" and shows landing
+[ ] P0  Brand, headline, primary CTA visible
+[ ] P0  Console: NO fatal red errors on cold load
+[ ] P0  Console: NO CSP font errors (cdn.gpteng.co / CameraPlainVariable)
+[ ] P0  Console: NO CSP "Refused to execute inline script"
+[ ] P0  Console: health log shows supabaseConfigured=true (NO key= fragment)
+[ ] P0  /login and /signup open without hang
+[ ] P0  GET /dashboard returns page (not HTTP 503) and routes to login or app
+[ ] P1  Mobile width 375px: landing usable
+[ ] P1  Hard refresh (Ctrl+Shift+R) still loads
+
+================================================================================
+C. AUTHENTICATION (START → ACCOUNT READY)
+================================================================================
+C1. Signup (new disposable email if allowed)
+[ ] P0  /signup form loads
+[ ] P0  Email validation rejects bad formats
+[ ] P0  Password rules shown (8+, upper, number, special)
+[ ] P0  Show/hide password works
+[ ] P0  T&C required
+[ ] P0  Successful signup creates account
+[ ] P0  Unverified user blocked from /app/* → /verify-email
+[ ] P1  Resend verification works (if email configured)
+[ ] P1  Duplicate email shows clear error
+[ ] P2  /signup?ref=CODE records referral
+
+C2. Login
+[ ] P0  Pro login succeeds
+[ ] P0  After login, profile loads and /app/dashboard opens (< 2 seconds ideal)
+[ ] P0  NO "Authentication Error" / "Unable to load your account profile"
+[ ] P0  NO "Profile load timed out"
+[ ] P0  NO endless "We couldn't load your account" spinner
+[ ] P0  Invalid password shows friendly error (no account leak)
+[ ] P0  Show/hide password works
+[ ] P0  Logout clears session; /app/* redirects to login
+[ ] P1  Free / Max / Admin logins each succeed once
+[ ] P1  Lockout after ~5 failed attempts (message shown)
+[ ] P1  Deep link /app/live while logged out → login → returns toward intended page
+
+C3. Password reset
+[ ] P0  /forgot-password accepts email
+[ ] P1  Reset email arrives (if Resend live)
+[ ] P1  /reset-password updates password
+[ ] P2  Used/expired link handled cleanly
+
+C4. OAuth (if providers configured; else mark B)
+[ ] P1  Google OAuth
+[ ] P2  GitHub / LinkedIn / Azure
+[ ] P1  Cancel OAuth returns cleanly
+
+C5. Session stability
+[ ] P0  Hard refresh on /app/dashboard keeps valid session (does NOT force logout)
+[ ] P0  Stale/invalid refresh token → ONE clear → /login?reason=session_expired
+[ ] P0  Banner: "Your session expired. Please sign in again."
+[ ] P0  No refresh-token request loop in Network tab
+[ ] P1  Two tabs: logout in tab A → tab B cannot stay in /app/*
+[ ] P1  Browser Back after logout cannot reopen protected pages with data
+
+C6. Access gates
+[ ] P0  Unverified → /verify-email
+[ ] P1  Incomplete onboarding → /onboarding
+[ ] P1  Banned → suspended screen
+[ ] P1  Billing past_due beyond grace → billing recovery only
+
+================================================================================
+D. PROFILE CONSISTENCY & LOADING
+================================================================================
+[ ] P0  Profile loads after login without timeout
+[ ] P0  Error screen (if shown) has: Try again | Reload | Contact support | Login
+[ ] P0  Sidebar name / avatar / plan match Settings → Profile
+[ ] P0  Top bar avatar / credits match same profile
+[ ] P0  Edit name in Settings → Save → Sidebar & Top bar update immediately
+[ ] P1  Credits shown consistently on Usage page and Top bar
+[ ] P1  Plan label Free / Pro / Max consistent (not Starter/Elite)
+[ ] P1  Missing profile row is repaired (user reaches app or onboarding, not infinite error)
+
+================================================================================
+E. ONBOARDING
+================================================================================
+[ ] P0  New user gets 2-step onboarding (Essentials → Optional)
+[ ] P0  Completing onboarding unlocks /app/dashboard
+[ ] P1  Seeded QA users skip onboarding and land in app
+[ ] P1  Legacy /onboarding/step-* redirects to /onboarding
+[ ] P2  /onboarding?rerun=1 works if supported
+
+================================================================================
+F. APP SHELL & NAVIGATION
+================================================================================
+[ ] P0  /app/dashboard loads for Pro
+[ ] P0  Sidebar / nav links resolve (no blank/500)
+[ ] P0  Mobile bottom nav: Home, Practice Coach, Mock, Prep, Gov
+[ ] P0  Mobile More sheet opens
+[ ] P1  Cmd/Ctrl+K search opens
+[ ] P1  /dashboard redirects to /app/dashboard (authenticated) or login
+[ ] P1  /app/rooms* redirects to dashboard (retired)
+[ ] P2  Discrete UI toggle renames labels only
+
+================================================================================
+G. DASHBOARD
+================================================================================
+[ ] P0  Overview loads for Free / Pro / Max
+[ ] P0  Primary CTAs (Practice Coach, Mock, Prep) work
+[ ] P1  Recent sessions / empty state OK
+[ ] P1  Credits / usage entry visible
+
+================================================================================
+H. PRACTICE COACH (LIVE)
+================================================================================
+[ ] P0  /app/live setup wizard loads
+[ ] P0  Role / company / resume-JD / model / mic selectable
+[ ] P0  Start → /app/live/overlay
+[ ] P0  Mic transcription works (grant permission)
+[ ] P0  AI hints appear; credits deduct
+[ ] P0  End session → summary / debrief path
+[ ] P0  Overlay STAYS visible during screen share (no stealth evasion)
+[ ] P1  Mic denied shows clear error
+[ ] P1  Credit exhausted shows friendly UI
+[ ] P1  Mobile shows limitation notice
+[ ] P2  Calm mode / hotkeys work
+
+================================================================================
+I. MOCK INTERVIEW
+================================================================================
+[ ] P0  /app/mock configure + start
+[ ] P1  Optional warmup
+[ ] P0  /app/mock/session/:id Q&A runs
+[ ] P0  Complete → scorecard / debrief
+[ ] P1  Credits deduct
+[ ] P1  Invalid session id handled
+
+================================================================================
+J. PREP LAB
+================================================================================
+[ ] P0  /app/prep hub loads
+[ ] P0  STAR builder works
+[ ] P0  Project builder works
+[ ] P0  Rephraser works
+[ ] P1  Coding hints / System design
+[ ] P1  Save to Answer Bank
+[ ] P0  Credits deduct; insufficient credits blocked clearly
+
+================================================================================
+K. DOCUMENTS
+================================================================================
+[ ] P0  /app/documents list or empty state
+[ ] P0  Upload resume + JD
+[ ] P0  Parse + detail pages
+[ ] P1  Invalid/oversized file rejected
+[ ] P0  Attach document to live/mock setup
+[ ] P1  Delete / rename
+
+================================================================================
+L. ANSWER BANK
+================================================================================
+[ ] P0  List / filter / empty state
+[ ] P0  Create / edit / delete / detail
+[ ] P1  Prep Lab saves appear here
+
+================================================================================
+M. INTERVIEWS & INTERVIEW DAY
+================================================================================
+[ ] P0  CRUD scheduled interviews
+[ ] P0  /app/interview-day checklist
+[ ] P1  Launch Practice Coach from Interview Day
+[ ] P2  Google Calendar connect (if secrets live)
+
+================================================================================
+N. COMPANY RESEARCH
+================================================================================
+[ ] P0  Free: upgrade gate (not broken page)
+[ ] P0  Pro/Max: generate + open company detail
+[ ] P1  Credits deduct
+
+================================================================================
+O. SESSIONS / SCORECARD / DEBRIEF / ANALYTICS
+================================================================================
+[ ] P0  /app/sessions list + detail
+[ ] P0  Scorecard after session
+[ ] P0  Debrief list + detail
+[ ] P1  Share debrief → /share/:token public
+[ ] P0  /app/analytics loads
+[ ] P1  Invalid share token errors cleanly
+
+================================================================================
+P. USAGE / NOTIFICATIONS / REFERRALS / GUIDES
+================================================================================
+[ ] P0  /app/usage credit balance
+[ ] P0  /app/notifications list or empty
+[ ] P0  /app/referrals link/code
+[ ] P1  /app/guide pages load
+
+================================================================================
+Q. GOV EXAM MOCK TESTS (INDIA)
+================================================================================
+[ ] P0  Non-India may redirect to dashboard (note B if so)
+[ ] P0  Hub loads for India / allowed region
+[ ] P0  Configure → generate → take timed session → results
+[ ] P1  Upload PDF/Excel questions
+[ ] P1  Revision / analytics
+[ ] P1  Mobile fullscreen session usable
+
+================================================================================
+R. SETTINGS (FULL PASS)
+================================================================================
+[ ] P0  Profile — edit + save
+[ ] P1  Appearance — theme/density apply
+[ ] P1  Notifications prefs save
+[ ] P1  Audio — mic selection
+[ ] P1  Practice Coach defaults
+[ ] P1  Hotkeys
+[ ] P1  Privacy
+[ ] P0  Security — password change
+[ ] P0  Billing — plan visible (see section S)
+[ ] P1  Models — preferred model
+[ ] P2  Integrations — Calendar
+[ ] P1  Data export
+[ ] P0  Logout from settings / mobile More
+[ ] P2  Danger — delete account (disposable account ONLY)
+
+================================================================================
+S. BILLING & PLANS
+================================================================================
+[ ] P0  Free limits enforced (credits / gated features)
+[ ] P0  Pricing shows Free / Pro / Max
+[ ] P1  Stripe upgrade Free→Pro with test card 4242…
+[ ] P1  Success redirect; plan + credits update
+[ ] P1  Customer portal opens
+[ ] P2  Credit packs / Razorpay (if configured)
+[ ] P0  Credit exhausted UI blocks AI actions
+[ ] P1  Past-due / suspended recovery path
+
+================================================================================
+T. ADMIN PORTAL (Admin account only)
+================================================================================
+[ ] P0  Non-admin → Access Denied on /app/admin
+[ ] P0  Admin dashboard loads (not infinite spinner)
+[ ] P1  Users / support / audit log
+[ ] P1  Questions / bulk upload / QA checklist
+[ ] P1  Gov ops pages
+[ ] P1  Revenue / promo / billing settings
+[ ] P1  Feature flags / security-config / model-costs
+
+================================================================================
+U. MARKETING & PUBLIC PAGES
+================================================================================
+[ ] P0  /pricing
+[ ] P1  /gov-exams
+[ ] P1  /help and /help/:slug
+[ ] P2  /shortcuts
+[ ] P1  /blog
+[ ] P0  /terms /privacy
+[ ] P1  Footer links no 404
+[ ] P1  Unknown route → NotFound
+
+================================================================================
+V. RESPONSIVE / BROWSERS / A11Y
+================================================================================
+[ ] P0  Chrome desktop smoke: login → dashboard → one feature → logout
+[ ] P1  Edge smoke
+[ ] P1  Firefox / Safari smoke
+[ ] P0  Mobile 375/414: login, dashboard, bottom nav
+[ ] P1  Keyboard focus visible on main forms
+[ ] P1  Empty states not blank white pages
+[ ] P1  Loading skeletons appear; never hang forever
+
+================================================================================
+W. SECURITY & DATA
+================================================================================
+[ ] P0  Unauthenticated cannot access /app/*
+[ ] P0  User A cannot see User B sessions/documents/answers
+[ ] P0  Admin routes require admin role
+[ ] P0  No service-role key in client bundle / Network responses
+[ ] P1  Shared debrief token cannot enumerate private data
+[ ] P1  Logs do not show passwords, refresh tokens, or full anon key
+
+================================================================================
+X. INCIDENT REGRESSION (AUTH / CSP / DASHBOARD) — MUST PASS BEFORE GO
+================================================================================
+[ ] P0  Cold load: zero CSP font + inline script violations
+[ ] P0  Login Pro → dashboard without profile timeout
+[ ] P0  Hard refresh keeps session
+[ ] P0  /dashboard is NOT 503; SPA routes correctly
+[ ] P0  Stale refresh → session_expired once (no loop)
+[ ] P0  Error recovery shows Try again / Reload / Contact support
+[ ] P0  Sidebar / Top bar / Settings profile data match
+[ ] P0  structured-data.js is NOT loaded (check Network / view-source)
+[ ] P0  Health log: supabaseConfigured=true only (no key=)
+
+================================================================================
+Y. SAME-DAY TIMEBOX (OPTIONAL GUIDE)
+================================================================================
+Morning   : B Pre-flight + C Auth + D Profile + E Onboarding + F/G Dashboard
+Afternoon : H Live + I Mock + J Prep + K Documents + L Answers + O Debrief
+Evening   : R Settings + S Billing + T Admin + X Incident regression + Sign-off
+
+================================================================================
+Z. FAIL / BLOCKED LOG
+================================================================================
+ID | Area | Account | URL | Steps | Expected | Actual | Screenshot
+---|------|---------|-----|-------|----------|--------|-----------
+   |      |         |     |       |          |        |
+   |      |         |     |       |          |        |
+   |      |         |     |       |          |        |
+
+================================================================================
+SIGN-OFF
+================================================================================
+Site tested     : https://clarify.ai.sltfinanceindia.com/
+P0 Pass / Fail / Blocked / N/A totals: ______ / ______ / ______ / ______
+Overall items run: ______
+
+P0 failures (must list):
+1. ________________________________________________
+2. ________________________________________________
+3. ________________________________________________
+
+Release recommendation: [ ] GO   [ ] CONDITIONAL GO   [ ] NO-GO
+
+Tester   : _________________  Date: _______________
+Reviewer : _________________  Date: _______________
+
+================================================================================
+NOTES
+================================================================================
+- Overlay must remain visible on screen share (practice-only; no capture evasion).
+- Plan names: Free / Pro / Max (enterprise in DB for Max).
+- Practice Rooms retired — redirect, do not 500.
+- Onboarding is 2-step (Essentials + Optional).
+- Gov exams may be India-region gated.
+- Detailed incident ledger: docs/qa/incidents/2026-08-auth-csp-dashboard-remediation.md
+- Passwords are for QA only — rotate if this sheet is shared outside the team.
+================================================================================

@@ -1,0 +1,101 @@
+{
+  "base": "https://clarify.ai.sltfinanceindia.com",
+  "role": "Pro",
+  "startedAt": "2026-08-05T20:08:00.892Z",
+  "viewports": {
+    "375x812": {
+      "status": "PASS",
+      "hang": false,
+      "overflowX": false,
+      "scrollWidth": 369,
+      "clientWidth": 375,
+      "url": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "mobileNavOrMenu": {
+        "present": true,
+        "labels": [
+          {
+            "text": "Interview Practice",
+            "tag": "A",
+            "y": 15,
+            "bottomish": false
+          },
+          {
+            "text": "Start Practice Practice Coach — jump into a live coaching se",
+            "tag": "A",
+            "y": 183,
+            "bottomish": false
+          },
+          {
+            "text": "More",
+            "tag": "BUTTON",
+            "y": 307,
+            "bottomish": false
+          },
+          {
+            "text": "Home Practice Coach Mock Interview Prep Lab Gov Exam Mock Te",
+            "tag": "NAV",
+            "y": 748,
+            "bottomish": true
+          },
+          {
+            "text": "Home",
+            "tag": "A",
+            "y": 754,
+            "bottomish": true
+          },
+          {
+            "text": "Practice Coach",
+            "tag": "A",
+            "y": 747,
+            "bottomish": true
+          },
+          {
+            "text": "More",
+            "tag": "BUTTON",
+            "y": 754,
+            "bottomish": true
+          }
+        ]
+      }
+    },
+    "390x844": {
+      "status": "PASS",
+      "hang": false,
+      "overflowX": false,
+      "scrollWidth": 384,
+      "clientWidth": 390,
+      "url": "https://clarify.ai.sltfinanceindia.com/app/dashboard"
+    },
+    "768x1024": {
+      "status": "PASS",
+      "hang": false,
+      "overflowX": false,
+      "scrollWidth": 762,
+      "clientWidth": 768,
+      "url": "https://clarify.ai.sltfinanceindia.com/app/dashboard"
+    },
+    "1440x900": {
+      "status": "PASS",
+      "hang": false,
+      "overflowX": false,
+      "scrollWidth": 1434,
+      "clientWidth": 1440,
+      "url": "https://clarify.ai.sltfinanceindia.com/app/dashboard"
+    }
+  },
+  "loginPage1440": {
+    "status": "PASS",
+    "signInVisible": true,
+    "emailVisible": true,
+    "h1Present": true,
+    "h1": "Practice interviews with an AI coach that feels real."
+  },
+  "summary": {
+    "375x812": "PASS",
+    "390x844": "PASS",
+    "768x1024": "PASS",
+    "1440x900": "PASS",
+    "loginPage1440": "PASS"
+  },
+  "finishedAt": "2026-08-05T20:08:28.110Z"
+}

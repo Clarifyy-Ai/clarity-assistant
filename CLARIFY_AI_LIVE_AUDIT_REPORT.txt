@@ -1,0 +1,203 @@
+================================================================================
+CLARIFY AI — GENUINE LIVE PRODUCTION AUDIT REPORT
+================================================================================
+Site      : https://clarify.ai.sltfinanceindia.com
+Supabase  : https://qzgvjrvtkwlzxpmlddkx.supabase.co
+Generated : 2026-08-05T18:22:09.452Z
+Summary   : PASS=58 FAIL=4 WARN=2 BLOCKED=0 INFO=2
+
+METHOD: HTTP probes + Supabase Auth/REST API + Playwright Chromium
+        (console CSP, network failures, UI login, route smoke)
+
+--------------------------------------------------------------------------------
+SECTION: CSP
+--------------------------------------------------------------------------------
+[FAIL] PROD has structured-data.js
+  Old deploy still injects structured-data.js (CSP risk)
+[FAIL] PROD has clarify-page-jsonld slot
+  Remediation NOT deployed
+[PASS] cdn.gpteng.co in CSP
+  present
+[PASS] font-src
+  present
+[PASS] script-src 'self'
+  present
+[PASS] theme-init.js
+  present
+[PASS] boot-watchdog.js
+  present
+--------------------------------------------------------------------------------
+SECTION: ROUTES
+--------------------------------------------------------------------------------
+[PASS] HTTP /
+  status=200 spa=true ms=48 ct=text/html; charset=utf-8
+[PASS] HTTP /login
+  status=200 spa=true ms=1291 ct=text/html; charset=utf-8
+[PASS] HTTP /signup
+  status=200 spa=true ms=1046 ct=text/html; charset=utf-8
+[PASS] HTTP /pricing
+  status=200 spa=true ms=1222 ct=text/html; charset=utf-8
+[PASS] HTTP /help
+  status=200 spa=true ms=1019 ct=text/html; charset=utf-8
+[PASS] HTTP /terms
+  status=200 spa=true ms=1099 ct=text/html; charset=utf-8
+[PASS] HTTP /privacy
+  status=200 spa=true ms=1516 ct=text/html; charset=utf-8
+[PASS] HTTP /gov-exams
+  status=200 spa=true ms=1368 ct=text/html; charset=utf-8
+[PASS] HTTP /blog
+  status=200 spa=true ms=1034 ct=text/html; charset=utf-8
+[PASS] HTTP /shortcuts
+  status=200 spa=true ms=1195 ct=text/html; charset=utf-8
+[PASS] HTTP /dashboard
+  status=200 spa=true ms=1432 ct=text/html; charset=utf-8
+[PASS] HTTP /app/dashboard
+  status=200 spa=true ms=1117 ct=text/html; charset=utf-8
+[PASS] HTTP /app/live
+  status=200 spa=true ms=1528 ct=text/html; charset=utf-8
+[PASS] HTTP /app/mock
+  status=200 spa=true ms=1287 ct=text/html; charset=utf-8
+[PASS] HTTP /app/prep
+  status=200 spa=true ms=1072 ct=text/html; charset=utf-8
+[PASS] HTTP /app/answers
+  status=200 spa=true ms=1168 ct=text/html; charset=utf-8
+[PASS] HTTP /app/admin
+  status=200 spa=true ms=1391 ct=text/html; charset=utf-8
+[PASS] HTTP /this-route-should-404-clarify
+  status=200 spa=true ms=1127 ct=text/html; charset=utf-8
+--------------------------------------------------------------------------------
+SECTION: AUTH_API
+--------------------------------------------------------------------------------
+[PASS] Free login
+  loginMs=1473 user=d17262d4…
+[PASS] Free profile
+  profileMs=1443 plan=free credits=34 onboarded=true banned=false
+[PASS] Free roles
+  roleMs=857 isAdmin=false roles=[]
+[PASS] Free sessions RLS
+  ms=1360 count=1
+[PASS] Pro login
+  loginMs=453 user=692978b7…
+[PASS] Pro profile
+  profileMs=512 plan=pro credits=1029 onboarded=true banned=false
+[PASS] Pro roles
+  roleMs=879 isAdmin=false roles=[]
+[PASS] Pro sessions RLS
+  ms=866 count=5
+[PASS] Max login
+  loginMs=868 user=106dcb1b…
+[PASS] Max profile
+  profileMs=359 plan=enterprise credits=4000 onboarded=true banned=false
+[PASS] Max roles
+  roleMs=354 isAdmin=false roles=[]
+[PASS] Max sessions RLS
+  ms=334 count=0
+[PASS] Admin login
+  loginMs=414 user=487ebbad…
+[PASS] Admin profile
+  profileMs=858 plan=enterprise credits=4000 onboarded=true banned=false
+[PASS] Admin roles
+  roleMs=603 isAdmin=true roles=[{"role":"admin"}]
+[PASS] Admin sessions RLS
+  ms=389 count=0
+[PASS] invalid refresh token response
+  status=400 body={"code":400,"error_code":"validation_failed","msg":"Refresh token is not valid"}
+--------------------------------------------------------------------------------
+SECTION: BROWSER
+--------------------------------------------------------------------------------
+[FAIL] cold load CSP console
+  Executing inline script violates the following Content Security Policy directive 'script-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-94vmev1ZHn894g2iVWfQ1aQu9FkC2BtPA7fJnXbTA7Y='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked.
+[WARN] cold load console errors
+  Executing inline script violates the following Content Security Policy directive 'script-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-94vmev1ZHn894g2iVWfQ1aQu9FkC2BtPA7fJnXbTA7Y='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked.
+[PASS] pageerrors
+  none
+[PASS] page /login
+  title=Sign in | Clarify AI url=https://clarify.ai.sltfinanceindia.com/login
+[PASS] page /signup
+  title=Create account | Clarify AI url=https://clarify.ai.sltfinanceindia.com/signup
+[PASS] page /pricing
+  title=Pricing — Clarify AI url=https://clarify.ai.sltfinanceindia.com/pricing
+[PASS] page /help
+  title=Help Center — Clarify AI url=https://clarify.ai.sltfinanceindia.com/help
+[PASS] anon /app/dashboard → login
+  landed=https://clarify.ai.sltfinanceindia.com/login
+[PASS] anon /dashboard behavior
+  landed=https://clarify.ai.sltfinanceindia.com/login
+[PASS] Pro UI login → /app
+  ms=2572 url=https://clarify.ai.sltfinanceindia.com/app/dashboard profileError=false stillLoading=false
+[INFO] shell text after login
+  Clarify AI
+
+PRACTICE
+
+Dashboard
+Practice Coach
+Mock Interview
+Prep Lab
+Gov Exam Mock Tests
+
+PROGRESS
+
+Session History
+Skills Analytics
+Credits & Usage
+Debrief
+Referrals
+Documents
+Answer Bank
+
+PLANNER
+
+Interview Day
+Interviews
+Company Research
+Guide
+Notifications
+Settings
+Q
+
+QA Audit User
+
+Pro | Interview Practice
+1029
+credits
+Discrete UI
+
+Press Ctrl+K to jump anywhere fast.
+
+Q | Edit with
+[PASS] Pro hard refresh keeps session
+  url=https://clarify.ai.sltfinanceindia.com/app/dashboard
+[PASS] authed /app/live
+  url=https://clarify.ai.sltfinanceindia.com/app/live badProfile=false
+[PASS] authed /app/mock
+  url=https://clarify.ai.sltfinanceindia.com/app/mock badProfile=false
+[PASS] authed /app/prep
+  url=https://clarify.ai.sltfinanceindia.com/app/prep badProfile=false
+[PASS] authed /app/answers
+  url=https://clarify.ai.sltfinanceindia.com/app/answers badProfile=false
+[PASS] authed /app/sessions
+  url=https://clarify.ai.sltfinanceindia.com/app/sessions badProfile=false
+[PASS] authed /app/settings/profile
+  url=https://clarify.ai.sltfinanceindia.com/app/settings/profile badProfile=false
+[PASS] authed /app/usage
+  url=https://clarify.ai.sltfinanceindia.com/app/usage badProfile=false
+[PASS] Pro /app/admin Access Denied
+  url=https://clarify.ai.sltfinanceindia.com/app/admin snip=Access Denied You don't have admin privileges to access this page. Go to Dashboard Cookie Notice We use essential cookies for authentication and optional an
+[FAIL] session_expired banner
+  message missing (remediation may be undeployed)
+[PASS] mobile landing
+  title=Clarify AI — Practice every interview with AI by your side
+[INFO] supabase API samples during UI
+  67 captured
+[WARN] failed requests
+  net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/sessions?select=id&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8 || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://qzgvjrvtkwlzxpmlddkx.supabase.co/rest/v1/sessions?select=id&user_id=eq.692978b7-153a-4dcd-811a-8a7133fba8c8 || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js || net::ERR_ABORTED https://clarify.ai.sltfinanceindia.com/app/theme-init.js
+
+================================================================================
+RELEASE DECISION (from this audit)
+================================================================================
+NO-GO / CONDITIONAL GO — production HTML still on OLD deploy (structured-data.js present, clarify-page-jsonld missing).
+Deploy current workspace remediations, then re-run this audit.
+
+JSON evidence: C:\Users\TECH-GENIUSES\Downloads\clarity-assistant\docs\qa\audits\live-audit-2026-08-05T18-22-09-450Z.json
+================================================================================

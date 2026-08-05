@@ -1,0 +1,531 @@
+================================================================================
+CLARIFY AI — COMPLETE APPLICATION QA CHECKLIST
+================================================================================
+FOR QA TESTER — FULL PASS TARGET: SAME DAY
+Product : Clarify AI (Interview Prep & Practice Platform)
+Date    : _______________
+Tester  : _______________
+Browser : Chrome (primary) + one of Edge/Firefox/mobile Safari
+OS      : _______________
+
+--------------------------------------------------------------------------------
+TEST SITE (USE THIS ONLY)
+--------------------------------------------------------------------------------
+URL: https://clarify.ai.sltfinanceindia.com/
+
+Login page : https://clarify.ai.sltfinanceindia.com/login
+Signup     : https://clarify.ai.sltfinanceindia.com/signup
+App home   : https://clarify.ai.sltfinanceindia.com/app/dashboard
+
+Do NOT use localhost unless asked. All checks below are against the published site.
+
+If the page stays on "Loading Clarify AI…" for more than ~10 seconds:
+  - Hard refresh (Ctrl+Shift+R)
+  - Try Incognito
+  - Note FAIL on Pre-flight and stop until build is fixed
+  - Open DevTools → Console and paste any red errors into Notes
+
+--------------------------------------------------------------------------------
+QA LOGIN CREDENTIALS (share only with QA — do not post publicly)
+--------------------------------------------------------------------------------
+All accounts are email-verified and already onboarded (seeded).
+
+Role   | Email                      | Password
+-------|----------------------------|----------------------
+Free   | qa.free@clarify.ai.test    | Qa!zhYtmnqMbeaTPmbT
+Pro    | qa.pro@clarify.ai.test     | Qa!oAsIgtemsX9tVPx2
+Max    | qa.max@clarify.ai.test     | Qa!xUVwdU4NSObRvoj_
+Admin  | qa.admin@clarify.ai.test   | Qa!0KisyHK4tmDPCeyv
+
+Suggested order for today:
+  1) Pro account  — most feature coverage (Practice Coach, Mock, Prep, Billing)
+  2) Free account — plan limits / upgrade gates / low credits
+  3) Max account  — Max-tier / high-credit features
+  4) Admin        — /app/admin portal only
+
+Stripe TEST card (billing upgrades):
+  Card   : 4242 4242 4242 4242
+  Expiry : any future date (e.g. 12/34)
+  CVC    : any 3 digits (e.g. 123)
+  ZIP    : any (e.g. 400001)
+
+India / Gov Exam section:
+  Site is India-focused; if Gov Mock Tests redirect you to dashboard,
+  note BLOCKED and continue other sections (region gate).
+
+--------------------------------------------------------------------------------
+HOW TO MARK RESULTS
+--------------------------------------------------------------------------------
+[ ] Not run   [P] Pass   [F] Fail   [B] Blocked   [N/A] Not applicable
+Priority: P0 = must pass today | P1 = high (same day if time) | P2 = if time left
+
+Same-day focus: finish ALL P0 first, then P1, then P2.
+Write Fail notes at the bottom (URL + steps + screenshot name).
+
+--------------------------------------------------------------------------------
+0. PRE-FLIGHT / ENVIRONMENT  (site: https://clarify.ai.sltfinanceindia.com/)
+--------------------------------------------------------------------------------
+[ ] P0  Open URL — app leaves splash and shows landing (not stuck loading)
+[ ] P0  Landing shows Clarify AI brand, headline, CTA
+[ ] P0  No fatal red errors in browser Console on cold load
+[ ] P0  /login and /signup pages open
+[ ] P0  Login with Pro credentials succeeds → reaches /app/dashboard
+[ ] P1  Hard refresh still works; session persists until logout
+[ ] P1  CORS / API calls from this domain succeed (no blocked Edge errors)
+
+--------------------------------------------------------------------------------
+1. MARKETING & PUBLIC PAGES
+--------------------------------------------------------------------------------
+[ ] P0  / loads correctly (desktop + mobile)
+[ ] P0  /pricing shows Free / Pro / Max plans
+[ ] P1  Pricing CTAs route to signup or billing correctly
+[ ] P1  /gov-exams marketing page loads
+[ ] P1  /help and /help/:slug articles open
+[ ] P2  /shortcuts page lists keyboard shortcuts
+[ ] P1  /blog and /blog/:slug load
+[ ] P0  /terms and /privacy load and are readable
+[ ] P1  /share/:token public shared debrief (valid token)
+[ ] P1  /share/:token invalid/expired token shows error
+[ ] P2  Footer/nav links from landing all resolve (no 404)
+[ ] P1  404 / NotFound page for unknown public routes
+
+--------------------------------------------------------------------------------
+2. AUTHENTICATION
+--------------------------------------------------------------------------------
+2.1 Signup
+[ ] P0  /signup loads registration form
+[ ] P0  Email validation rejects invalid formats
+[ ] P0  Password strength rules shown (8+, upper, number, special)
+[ ] P0  Show/hide password toggle works
+[ ] P0  T&C checkbox required before submit
+[ ] P0  Successful signup creates account
+[ ] P0  Unverified user redirected to /verify-email
+[ ] P1  Referral signup /signup?ref=CODE records referral
+[ ] P1  Duplicate email shows clear error
+[ ] P2  Privacy Policy / Terms links open
+
+2.2 Login
+[ ] P0  /login with valid credentials succeeds
+[ ] P0  Invalid credentials show error (no account leak)
+[ ] P0  Show/hide password works
+[ ] P1  Return-to redirect after login (protected deep link)
+[ ] P1  Client lockout after ~5 failed attempts (~30 min)
+[ ] P0  Logout clears session; cannot access /app/*
+
+2.3 Email verification & password reset
+[ ] P0  Verification email received (when Resend configured)
+[ ] P0  Verify link unlocks /app access
+[ ] P1  Resend verification works
+[ ] P0  Unverified user blocked from /app/*
+[ ] P0  /forgot-password accepts email
+[ ] P0  Reset email arrives; /reset-password updates password
+[ ] P1  Used/expired reset link handled gracefully
+
+2.4 OAuth / magic link (if providers configured)
+[ ] P1  Google OAuth signup/login
+[ ] P1  GitHub OAuth
+[ ] P2  LinkedIn OAuth
+[ ] P2  Azure AD OAuth
+[ ] P1  OAuth cancel returns to auth page cleanly
+[ ] P1  New OAuth user → onboarding; returning → app
+[ ] P2  Magic link (if exposed) works via /auth/callback
+
+2.5 Access gates
+[ ] P0  Banned user sees suspended screen
+[ ] P0  Billing past_due beyond grace → billing recovery only
+[ ] P0  Auth loading / error screens do not hang forever
+
+--------------------------------------------------------------------------------
+3. ONBOARDING
+--------------------------------------------------------------------------------
+[ ] P0  New user lands on /onboarding (2-step: Essentials → Optional)
+[ ] P0  Essentials step requires required fields
+[ ] P0  Optional step can be skipped or completed
+[ ] P0  Completing onboarding unlocks /app/dashboard
+[ ] P1  Legacy /onboarding/step-1…5 redirect to /onboarding
+[ ] P1  Already-onboarded user visiting /onboarding redirects to app
+[ ] P2  /onboarding?rerun=1 allows re-run if supported
+[ ] P1  Incomplete onboarding cannot reach /app/* features
+
+--------------------------------------------------------------------------------
+4. APP SHELL & NAVIGATION
+--------------------------------------------------------------------------------
+[ ] P0  Authenticated + verified + onboarded → /app/dashboard
+[ ] P0  Sidebar / nav links resolve to correct pages
+[ ] P0  Mobile bottom nav: Home, Practice Coach, Mock, Prep, Gov
+[ ] P0  Mobile "More" sheet opens settings / extra links
+[ ] P1  Cmd/Ctrl+K global search opens and finds destinations
+[ ] P1  What's New / walkthroughs do not block core flows
+[ ] P1  /dashboard redirects to /app/dashboard
+[ ] P1  /app/rooms* redirects to dashboard (retired feature)
+[ ] P2  Discrete UI toggle renames labels only (overlay still visible)
+[ ] P1  Install / PWA prompt does not break navigation
+
+--------------------------------------------------------------------------------
+5. DASHBOARD
+--------------------------------------------------------------------------------
+[ ] P0  /app/dashboard loads overview for Free / Pro / Max
+[ ] P0  Primary CTAs (Practice Coach, Mock, Prep) work
+[ ] P1  Recent sessions / upcoming interviews widgets (or empty state)
+[ ] P1  Credit/usage summary visible or linked
+[ ] P2  Notifications entry point works
+
+--------------------------------------------------------------------------------
+6. PRACTICE COACH (LIVE)
+--------------------------------------------------------------------------------
+6.1 Setup
+[ ] P0  /app/live loads Pre-Session Setup wizard
+[ ] P0  Select role, company, resume/JD, model, hint style
+[ ] P0  Mic device selectable; permission prompt handled
+[ ] P1  System audio option (Chrome/Edge)
+[ ] P0  Start session navigates to /app/live/overlay
+[ ] P1  Cannot start without required setup fields
+
+6.2 Live overlay session
+[ ] P0  Overlay UI appears (dock / resize)
+[ ] P0  Mic transcription produces text (Deepgram)
+[ ] P0  AI hints / answers appear during session
+[ ] P0  Credits deduct on AI actions
+[ ] P0  Hotkeys work (document expected shortcuts)
+[ ] P1  Calm mode / coaching steps (e.g. Ctrl+Shift+P)
+[ ] P0  Screen share: overlay REMAINS visible (no stealth evasion)
+[ ] P0  End session → post-session summary
+[ ] P1  Mic permission denied shows clear error
+[ ] P1  Deepgram disconnect / silence handled
+[ ] P1  Credit exhausted mid-session shows CreditExhaustedState
+[ ] P1  Mobile shows overlay-visibility / limitation notice
+[ ] P2  Electron desktop overlay preferred path (if testing desktop)
+
+--------------------------------------------------------------------------------
+7. MOCK INTERVIEW
+--------------------------------------------------------------------------------
+[ ] P0  /app/mock configuration page loads
+[ ] P0  Configure role/company/difficulty and start
+[ ] P1  Optional /app/mock/warmup flow works
+[ ] P0  /app/mock/session/:id runs AI interviewer Q&A
+[ ] P0  Complete mock → scorecard / debrief path
+[ ] P1  Mid-session refresh/reconnect behavior acceptable
+[ ] P1  Credits deduct for mock AI usage
+[ ] P1  Empty/error states if session id invalid
+
+--------------------------------------------------------------------------------
+8. PREP LAB
+--------------------------------------------------------------------------------
+[ ] P0  /app/prep hub loads all tool entry points
+[ ] P0  STAR builder generates and displays content
+[ ] P0  Project builder works
+[ ] P0  Rephraser works
+[ ] P1  Coding hints tool works
+[ ] P1  System design tool works
+[ ] P1  Save to Answer Bank from prep tools
+[ ] P0  Credits deduct on generation
+[ ] P1  Insufficient credits blocked with clear UI
+[ ] P1  Provider/model failure shows retry/error
+
+--------------------------------------------------------------------------------
+9. DOCUMENTS (RESUME / JD VAULT)
+--------------------------------------------------------------------------------
+[ ] P0  /app/documents list loads (or empty state)
+[ ] P0  Upload resume (PDF/DOC) succeeds
+[ ] P0  Upload JD succeeds
+[ ] P0  Parse completes; detail page shows extracted data
+[ ] P1  Invalid file type / oversized file rejected
+[ ] P1  Parse failure shows error + retry
+[ ] P0  Attach document to live/mock setup
+[ ] P1  Delete / rename document works
+[ ] P1  Resume detail and JD detail routes load
+
+--------------------------------------------------------------------------------
+10. ANSWER BANK
+--------------------------------------------------------------------------------
+[ ] P0  /app/answers list / filter / empty state
+[ ] P0  Open /app/answers/:id detail
+[ ] P0  Create / edit / delete answer
+[ ] P1  Filter/search works
+[ ] P1  Answers created from Prep Lab appear here
+[ ] P1  Use answer in prep/session flows if supported
+
+--------------------------------------------------------------------------------
+11. INTERVIEWS & INTERVIEW DAY
+--------------------------------------------------------------------------------
+[ ] P0  /app/interviews list loads
+[ ] P0  Create interview (/app/interviews/new)
+[ ] P0  Edit interview (/app/interviews/:id/edit)
+[ ] P0  View interview detail
+[ ] P0  Delete interview
+[ ] P1  Google Calendar connect/sync/disconnect (if secrets set)
+[ ] P0  /app/interview-day checklist / focus mode
+[ ] P1  Countdown / launch Practice Coach from Interview Day
+[ ] P1  Empty state when no upcoming interviews
+
+--------------------------------------------------------------------------------
+12. COMPANY RESEARCH
+--------------------------------------------------------------------------------
+[ ] P0  /app/companies loads (plan-gated for Free as designed)
+[ ] P1  Free user sees upgrade gate (not broken page)
+[ ] P0  Pro/Max: search/generate company card
+[ ] P0  /app/companies/:id detail profile loads
+[ ] P1  Credits deduct for research generation
+[ ] P1  Empty / error / rate-limit states
+
+--------------------------------------------------------------------------------
+13. SESSIONS, SCORECARD, DEBRIEF, ANALYTICS
+--------------------------------------------------------------------------------
+[ ] P0  /app/sessions list + empty state
+[ ] P0  /app/sessions/:id detail
+[ ] P0  /app/scorecard/:sessionId loads after session
+[ ] P0  /app/debrief and /app/debrief/:id
+[ ] P1  Share debrief → public /share/:token works
+[ ] P0  /app/analytics skills dashboard
+[ ] P1  /app/analytics/:sessionId redirects to debrief as designed
+[ ] P1  Debrief generation failures show retry
+[ ] P1  Credits deduct for debrief generation when applicable
+
+--------------------------------------------------------------------------------
+14. USAGE, NOTIFICATIONS, REFERRALS, GUIDES
+--------------------------------------------------------------------------------
+[ ] P0  /app/usage shows credit balance and burn
+[ ] P1  Usage matches billing plan allotment after upgrade
+[ ] P0  /app/notifications list + empty state
+[ ] P1  Mark read / clear notifications if available
+[ ] P0  /app/referrals shows link/code and stats
+[ ] P1  Successful referral grants credits (seeded flow)
+[ ] P1  /app/guide and /app/guide/practice-coach load
+
+--------------------------------------------------------------------------------
+15. GOV EXAM MOCK TESTS (INDIA-GATED)
+--------------------------------------------------------------------------------
+[ ] P0  Non-India locale/TZ → redirect to dashboard (unless force flag)
+[ ] P0  With India / VITE_FORCE_INDIA_REGION: /app/mock-test hub loads
+[ ] P0  Exam families visible (UPSC/SSC/Railways/Banking, JEE/NEET cards)
+[ ] P1  Search / readiness / mastery widgets
+[ ] P0  Configure and generate paper
+[ ] P0  Take session (fullscreen) with timer / navigation
+[ ] P0  Submit → results page
+[ ] P1  Revision and analytics views
+[ ] P1  Upload PDF/Excel questions
+[ ] P1  Previous papers / my-questions bank
+[ ] P1  Invalid upload rejected
+[ ] P1  Mobile fullscreen test UX usable
+
+--------------------------------------------------------------------------------
+16. SETTINGS
+--------------------------------------------------------------------------------
+[ ] P0  /app/settings/profile — edit name, role, experience, avatar
+[ ] P1  Appearance — theme, accent, font size, density apply
+[ ] P1  Notifications — email/in-app prefs save
+[ ] P1  Audio — mic device, speech, noise suppression
+[ ] P1  Practice Coach defaults save and apply on next session
+[ ] P1  Hotkeys — customize and persist
+[ ] P1  Privacy — private/offline mode, retention options
+[ ] P0  Security — password change works
+[ ] P0  Billing — plan, portal, packs (see section 17)
+[ ] P1  Models — preferred AI model selection
+[ ] P1  Integrations — Google Calendar connect/disconnect
+[ ] P1  Data — export sessions/transcripts/answers/ZIP
+[ ] P2  Polish settings save
+[ ] P0  Danger — delete account (test on disposable account only)
+[ ] P0  Logout from settings / mobile more menu
+[ ] P1  Legacy redirects: profile, byok→models, subscription→billing
+
+--------------------------------------------------------------------------------
+17. BILLING & PAYMENTS
+--------------------------------------------------------------------------------
+[ ] P0  Free plan limits enforced (credits, gated features)
+[ ] P0  Upgrade to Pro via Stripe Checkout (test card 4242…)
+[ ] P0  Success redirect; plan_id=pro; credits updated
+[ ] P1  Upgrade to Max / enterprise path
+[ ] P0  Stripe Customer Portal open (manage / cancel / resume)
+[ ] P1  Webhook reflects cancel/resume within ~10s
+[ ] P1  Credit packs one-time purchase
+[ ] P1  Razorpay India checkout (if configured)
+[ ] P0  Credit exhausted UI blocks AI actions clearly
+[ ] P0  Past-due / suspended → only billing recovery paths
+[ ] P1  /pricing and in-app billing CTAs consistent (Free/Pro/Max)
+[ ] P2  Promo codes (admin-issued) apply correctly
+
+--------------------------------------------------------------------------------
+18. ADMIN PORTAL (qa.admin only)
+--------------------------------------------------------------------------------
+[ ] P0  Non-admin → Access Denied on /app/admin
+[ ] P0  Admin → /app/admin dashboard loads
+[ ] P1  Users management
+[ ] P1  Live chat / support / audit log
+[ ] P1  Questions editor, bulk-upload, seed-questions
+[ ] P1  Admin QA Checklist page loads
+[ ] P1  Gov ops: sources, PDF ingest, exam registry, reviews
+[ ] P1  Billing: revenue, promo-codes, billing-settings
+[ ] P1  System: analytics, feature-flags, security-config, model-costs
+[ ] P1  Admin actions write audit trail where expected
+
+--------------------------------------------------------------------------------
+19. CREDITS & PLAN GATING MATRIX (SMOKE)
+--------------------------------------------------------------------------------
+[ ] P0  Free: low credits; company research gated; core practice works until empty
+[ ] P0  Pro: higher credits; gated Pro features unlock
+[ ] P0  Max: highest credits; Max features unlock
+[ ] P0  402 / INSUFFICIENT_CREDITS surfaces friendly UI (not raw error)
+
+--------------------------------------------------------------------------------
+20. RESPONSIVE / CROSS-BROWSER / DESKTOP
+--------------------------------------------------------------------------------
+[ ] P0  Desktop Chrome: full smoke (login → dashboard → live → logout)
+[ ] P1  Desktop Edge: same smoke + system audio
+[ ] P1  Firefox: login, dashboard, settings (audio may be limited)
+[ ] P1  Safari: login, dashboard, settings smoke
+[ ] P0  Mobile 375px / 414px: landing, login, dashboard, bottom nav
+[ ] P1  Mobile Practice Coach limitation messaging
+[ ] P1  Mobile gov exam session usable
+[ ] P2  Admin on tablet/mobile smoke (may be weaker)
+[ ] P1  Electron (if shipped): auth/onboarding/overlay; other URLs open browser
+
+--------------------------------------------------------------------------------
+21. ACCESSIBILITY & UX POLISH
+--------------------------------------------------------------------------------
+[ ] P1  Keyboard navigation through primary forms
+[ ] P1  Focus visible on interactive controls
+[ ] P1  Reduced motion respected where implemented
+[ ] P2  Contrast readable in light/dark themes
+[ ] P1  Loading skeletons / PageLoader appear during navigation
+[ ] P1  Empty states use shared EmptyState (not blank pages)
+[ ] P1  InlineErrorRetry recovers from transient failures
+
+--------------------------------------------------------------------------------
+22. ERROR / EDGE CASES
+--------------------------------------------------------------------------------
+[ ] P0  Offline / network drop shows recoverable error
+[ ] P0  Invalid deep links show NotFound or redirect safely
+[ ] P1  Concurrent tabs: logout in one tab behaves correctly
+[ ] P1  Long session: no silent freeze (overlay / mock / gov test)
+[ ] P1  Large file upload limits enforced
+[ ] P0  Missing env on deploy → failed-to-start UI (not infinite splash)
+[ ] P1  CORS failure on Edge calls shows actionable error
+
+--------------------------------------------------------------------------------
+23. SECURITY SMOKE
+--------------------------------------------------------------------------------
+[ ] P0  Unauthenticated cannot access /app/*
+[ ] P0  RLS: user A cannot see user B sessions/documents/answers
+[ ] P0  Admin routes require admin role
+[ ] P1  CSRF / form protections on auth forms
+[ ] P1  No secrets (service role keys) in client bundle
+[ ] P1  Shared debrief token cannot enumerate private data
+
+--------------------------------------------------------------------------------
+24. INTEGRATIONS HEALTH (CONFIG DEPENDENT)
+--------------------------------------------------------------------------------
+[ ] P1  OpenAI / Anthropic / Gemini generation succeeds
+[ ] P1  Deepgram live STT token + stream works
+[ ] P1  Stripe test mode checkout + webhook
+[ ] P2  Razorpay + webhook
+[ ] P2  Resend transactional email
+[ ] P2  Google Calendar sync
+[ ] P2  PostHog / Sentry receive events (optional)
+
+--------------------------------------------------------------------------------
+25. REGRESSION / RETIRED FEATURES
+--------------------------------------------------------------------------------
+[ ] P1  Practice Rooms routes redirect (not 500)
+[ ] P1  BYOK settings route redirects to Models
+[ ] P1  No marketing copy claiming stealth / invisible overlay
+[ ] P1  Plan names in UI are Free / Pro / Max (not Starter/Elite)
+
+================================================================================
+SAME-DAY TIMEBOX (SUGGESTED)
+================================================================================
+Morning
+  [ ] Pre-flight + Auth (login all 4 accounts once) + Onboarding gates
+  [ ] Dashboard + Navigation (desktop + mobile width)
+  [ ] Practice Coach full path (Pro) — setup → overlay → end → summary
+  [ ] Mock interview full path (Pro)
+
+Afternoon
+  [ ] Prep Lab tools + Documents + Answer Bank
+  [ ] Interviews / Interview Day + Company research (Pro/Max)
+  [ ] Sessions / Scorecard / Debrief / Analytics / Usage
+  [ ] Billing: view plans; Stripe test upgrade if allowed (Free→Pro path)
+
+Evening / wrap
+  [ ] Settings smoke + Referrals + Notifications
+  [ ] Gov Exam mocks (if India gate allows)
+  [ ] Admin portal (Admin account only)
+  [ ] Free vs Pro vs Max gating matrix
+  [ ] Fill Fail list + Sign-off
+
+================================================================================
+SIGN-OFF
+================================================================================
+Site tested          : https://clarify.ai.sltfinanceindia.com/
+Total items run      : ______
+Passed               : ______
+Failed               : ______
+Blocked              : ______
+N/A                  : ______
+
+P0 failures (must list — include URL + steps):
+1. ________________________________________________
+2. ________________________________________________
+3. ________________________________________________
+
+Release recommendation: [ ] Go  [ ] Go with known issues  [ ] No-go
+
+Tester signature: _________________  Date: _______________
+Reviewer        : _________________  Date: _______________
+
+================================================================================
+FAIL / BLOCKED LOG (copy rows as needed)
+================================================================================
+ID/Area | Account used | URL | Steps | Expected | Actual | Screenshot
+--------|--------------|-----|-------|----------|--------|-----------
+        |              |     |       |          |        |
+        |              |     |       |          |        |
+        |              |     |       |          |        |
+
+================================================================================
+NOTES FOR TESTER
+================================================================================
+- Base URL for every check: https://clarify.ai.sltfinanceindia.com/
+- Passwords are on page 1 of this sheet — keep internal; do not commit to public chat/repos.
+- Onboarding is 2-step (Essentials + Optional) for NEW signups; seeded QA users skip it.
+- Overlay must STAY visible during screen share (no stealth / hide-from-capture).
+- Plan names in UI should be Free / Pro / Max (not Starter/Elite).
+- Practice Rooms are retired — those URLs should redirect to dashboard, not 500.
+- If email/OAuth/Calendar/Razorpay fails, mark [B] Blocked (likely secrets not live) and continue.
+- Prefer Chrome desktop for Practice Coach + system audio; also spot-check mobile.
+================================================================================
+
+================================================================================
+INCIDENT RECHECK � INC-2026-08-005 (Auth / CSP / Dashboard) � 2026-08-05
+================================================================================
+Site: https://clarify.ai.sltfinanceindia.com/
+Ledger: docs/qa/incidents/2026-08-auth-csp-dashboard-remediation.md
+
+[P] P0  GET /dashboard returns SPA HTML (HTTP 200) � hosting rewrite OK
+[P] P0  Vitest sessionRecovery (14/14) � invalid refresh, returnTo, redaction
+[ ] P0  Deploy follow-up CHG-013+ so structured-data.js is removed from prod HTML
+[ ] P0  Cold load console: no CSP font/inline script violations after deploy
+[ ] P0  Stale refresh token ? /login?reason=session_expired (single clear, no loop)
+[ ] P0  Login banner: "Your session expired. Please sign in again."
+[ ] P0  Pro login ? /app/dashboard; hard refresh keeps session
+[ ] P1  Health log shows supabaseConfigured=true (no key= fragment)
+[ ] P1  Playwright e2e/auth-recovery.spec.ts on deployed URL
+
+Release decision (repo): CONDITIONAL GO � awaiting production redeploy + smoke.
+
+================================================================================
+INCIDENT RECHECK � Profile timeout / CSP / consistency � 2026-08-05 (evening)
+================================================================================
+Root causes addressed in repo (deploy required for production):
+[P] Profile fetch uses BOOT columns + 2s timeout (was slow wide select / 4�20s)
+[P] Missing profile rows auto-upserted for authenticated users
+[P] AppLoadingFallback stuck budget 20s + soft retry (was 10s hard reload race)
+[P] ProtectedRoute: Try again / Reload / Contact support (no raw timeout string)
+[P] Admin role unresolved ? recoverable error after 8s (not infinite spinner)
+[P] Settings + TopBar use authStore as single profile source
+[P] CSP: static JSON-LD + gpteng font-src; structured-data.js removed
+[ ] Deploy to https://clarify.ai.sltfinanceindia.com/
+[ ] Post-deploy: Pro login ? dashboard <2s; hard refresh keeps session
+[ ] Post-deploy: console clean of CSP font/inline script errors
+[ ] Post-deploy: inject stale refresh ? session_expired once (no loop)
+
+Decision: CONDITIONAL GO � code ready; production redeploy still required.

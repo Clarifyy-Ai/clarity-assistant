@@ -1,0 +1,41 @@
+{
+  "out": [
+    {
+      "id": "Admin UI /app/admin",
+      "ms": 4777,
+      "url": "https://clarify.ai.sltfinanceindia.com/app/admin",
+      "accessDenied": false,
+      "looksLikeAdmin": true,
+      "snip": "Admin Clarify AI control panel USERS & SUPPORT Users Live Chat Support Audit Log CONTENT Questions Bulk Upload Seed / Import QA Checklist GOV EXAMS Sources PDF Ingest Exam Registry Q Review Paper Review Translations BILLING Revenue Offers Billing SYSTEM Dashboard Analy"
+    },
+    {
+      "id": "Free /app/companies",
+      "ms": 4200,
+      "url": "https://clarify.ai.sltfinanceindia.com/app/companies",
+      "snip": "Skip to content Clarify AI PRACTICE Dashboard Practice Coach Mock Interview Prep Lab Gov Exam Mock Tests PROGRESS Session History Skills Analytics Credits & Usage Debrief Referrals Documents Answer Bank PLANNER Interview Day Interviews Company Research Guide Notifications S"
+    },
+    {
+      "id": "Free shell consistency",
+      "shell": "Clarify AI\n\nPRACTICE\n\nDashboard\nPractice Coach\nMock Interview\nPrep Lab\nGov Exam Mock Tests\n\nPROGRESS\n\nSession History\nSkills Analytics\nCredits & Usage\nDebrief\nReferrals\nDocuments\nAnswer Bank\n\nPLANNER\n\nInterview Day\nInterviews\nCompany Research\nGuide\nNotifications\nSettings\nQ\n\nQA Audit User\n\nFree | Interview Practice\n34\ncredits\nDiscrete UI\n\nPress Ctrl+K to jump anywhere fast.\n\nQ | Edit with"
+    },
+    {
+      "id": "Max /app/usage",
+      "ms": 3424,
+      "url": "https://clarify.ai.sltfinanceindia.com/app/usage",
+      "snip": "Skip to content Clarify AI PRACTICE Dashboard Practice Coach Mock Interview Prep Lab Gov Exam Mock Tests PROGRESS Session History Skills Analytics Credits & Usage Debrief Referrals Documents Answer Bank PLANNER Interview Day Interviews Company Research Guide Notifications S"
+    }
+  ],
+  "consoleHits": [
+    "Executing inline script violates the following Content Security Policy directive 'script-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-94vmev1ZHn894g2iVWfQ1aQu9FkC2BtPA7fJnXbTA7Y='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked.",
+    "Refused to execute script from 'https://clarify.ai.sltfinanceindia.com/app/theme-init.js' because its MIME type ('text/plain') is not executable, and strict MIME type checking is enabled.",
+    "Executing inline script violates the following Content Security Policy directive 'script-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-94vmev1ZHn894g2iVWfQ1aQu9FkC2BtPA7fJnXbTA7Y='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked.",
+    "Executing inline script violates the following Content Security Policy directive 'script-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-94vmev1ZHn894g2iVWfQ1aQu9FkC2BtPA7fJnXbTA7Y='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked.",
+    "Refused to execute script from 'https://clarify.ai.sltfinanceindia.com/app/theme-init.js' because its MIME type ('text/plain') is not executable, and strict MIME type checking is enabled.",
+    "Executing inline script violates the following Content Security Policy directive 'script-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-94vmev1ZHn894g2iVWfQ1aQu9FkC2BtPA7fJnXbTA7Y='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked.",
+    "Refused to execute script from 'https://clarify.ai.sltfinanceindia.com/app/theme-init.js' because its MIME type ('text/plain') is not executable, and strict MIME type checking is enabled.",
+    "Executing inline script violates the following Content Security Policy directive 'script-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-94vmev1ZHn894g2iVWfQ1aQu9FkC2BtPA7fJnXbTA7Y='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked.",
+    "Executing inline script violates the following Content Security Policy directive 'script-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-94vmev1ZHn894g2iVWfQ1aQu9FkC2BtPA7fJnXbTA7Y='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked.",
+    "Refused to execute script from 'https://clarify.ai.sltfinanceindia.com/app/theme-init.js' because its MIME type ('text/plain') is not executable, and strict MIME type checking is enabled.",
+    "Executing inline script violates the following Content Security Policy directive 'script-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-94vmev1ZHn894g2iVWfQ1aQu9FkC2BtPA7fJnXbTA7Y='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked."
+  ]
+}

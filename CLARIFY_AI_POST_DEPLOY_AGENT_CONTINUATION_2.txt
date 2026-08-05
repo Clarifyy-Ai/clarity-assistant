@@ -1,0 +1,52 @@
+================================================================================
+CLARIFY AI — AGENT CONTINUATION #2 (ops blockers + re-verify)
+================================================================================
+Site       : https://clarify.ai.sltfinanceindia.com/
+Generated  : 2026-08-06
+Prior      : CLARIFY_AI_POST_DEPLOY_AGENT_CONTINUATION_REPORT.txt
+Ops runbook: docs/qa/incidents/2026-08-06-csp-flock-theme-ops.md
+Suite JSON : docs/qa/audits/post-deploy-full-2026-08-05T20-17-20-506Z.json
+DEFINER    : docs/qa/audits/post-deploy-definer-grants-check.json
+Build      : docs/qa/audits/theme-init-build-verify.json
+
+AGENTS USED
+  - Explore: flock/CSP source ([Find flock](ae9a2f6a-e1d7-4cac-91f3-3e379aa75523))
+  - Explore: DEFINER / share RPC safety ([Auth advisors](b31c4062-0ea4-475a-8145-de45b1bb13de))
+  - Shell: live EXECUTE grants + Pro Admin-only ([Verify grants](2d8a54a5-4d0b-4776-a90e-b99156fd77a5))
+  - Shell: vite build theme-init absolute ([Rebuild dist](d63c0588-37d8-44e6-ad43-652953c90bad))
+  - Shell: full suite re-run ([Re-run suite](2b00ce1d-3b16-421b-a26e-56aff8b8c852))
+  - Shell: bundle scanner false-positive fix ([Fix scanner](e98a909e-e37c-4ca9-a3e0-46f406b4a868))
+
+================================================================================
+WHAT WE FIXED / VERIFIED IN REPO (not yet live for theme-init)
+================================================================================
+[P] index.html + fresh dist: src="/theme-init.js" (absolute) — READY TO DEPLOY
+[P] DEFINER grants: admin RPCs authenticated-only + in-fn has_role; share RPCs
+    anon+authenticated token-gated; Pro non-admin → "Admin only"
+[P] Bundle "service_role" FAIL was false positive (logger redaction field names);
+    scanner tightened in scripts/post-deploy-full-suite.mjs
+[P] Suite re-run: PASS 61 / FAIL 2 / WARN 2 / BLOCKED 0
+    (FAIL = CSP flock + old bundle pattern; WARN = relative theme-init on LIVE)
+
+================================================================================
+HOST / PLAN BLOCKERS (cannot fix in git alone)
+================================================================================
+[F] CSP: /~flock.js Lovable "Edit with" host injection — disable in Lovable
+    dashboard + republish (see ops runbook RC-A)
+[W] Live HTML still ./theme-init.js — commit + redeploy absolute tip (RC-B)
+[W] Auth HIBP / leaked-password: Management API → 402 Payment Required
+    (Pro plan feature). Advisor WARN accepted until upgrade (RC-C)
+
+================================================================================
+FINAL DECISION
+================================================================================
+CONDITIONAL GO (unchanged)
+
+Unconditional GO requires:
+1. Lovable: disable production flock/badge → no /~flock.js, clean CSP console
+2. Redeploy tip with /theme-init.js (working tree + dist already verified)
+3. Optional: upgrade Supabase to Pro+ and enable password_hibp_enabled
+
+Rotate the Supabase PAT shared in chat after this testing window.
+Ask before commit/push if you want the theme-init + reports + suite fix shipped.
+================================================================================

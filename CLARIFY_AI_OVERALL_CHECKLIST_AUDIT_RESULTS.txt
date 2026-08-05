@@ -1,0 +1,229 @@
+================================================================================
+CLARIFY AI — OVERALL CHECKLIST WITH LIVE AUDIT RESULTS
+================================================================================
+Site        : https://clarify.ai.sltfinanceindia.com/
+Audit date  : 2026-08-05 (genuine run — HTTP + Supabase API + Playwright Chromium)
+Method      : scripts/production-live-audit.mjs + production-live-audit-roles.mjs
+Evidence    : CLARIFY_AI_LIVE_AUDIT_REPORT.txt
+              docs/qa/audits/live-audit-*.json
+              docs/qa/audits/live-audit-extra-roles.json
+
+Mark legend used below:
+  [P] Pass (verified live)   [F] Fail (verified live)   [W] Warn
+  [B] Blocked / needs deploy or secrets   [ ] Not exercised in this automated pass
+
+LIVE SUMMARY: PASS≈58+  FAIL=4  WARN=2  (plus role UI add-on: Admin OK, Free/Max login OK)
+RELEASE DECISION FROM AUDIT: NO-GO / CONDITIONAL GO until remediations are DEPLOYED
+  Blockers: old HTML still has structured-data.js; CSP inline script blocked;
+            session_expired banner not on live; clarify-page-jsonld missing.
+
+================================================================================
+A. TEST SETUP
+================================================================================
+[P] Site reachable https://clarify.ai.sltfinanceindia.com/
+[P] QA accounts credentials work (Free/Pro/Max/Admin via Auth API + UI)
+[W] Node TLS leaf cert incomplete for this host (browser OK; Node needed TLS bypass for probe)
+
+================================================================================
+B. PRE-FLIGHT / COLD LOAD
+================================================================================
+[P] / returns HTTP 200 SPA HTML
+[P] Landing loads (Playwright title OK)
+[P] font-src includes cdn.gpteng.co (in shipped HTML CSP)
+[P] theme-init.js + boot-watchdog.js present
+[F] structured-data.js STILL present on production (old deploy) — CSP risk
+[F] clarify-page-jsonld slot MISSING on production — remediations not deployed
+[F] Console CSP: Refused to execute inline script (sha256-94vmev1ZHn894g2iVWfQ1aQu9FkC2BtPA7fJnXbTA7Y=)
+[P] No uncaught pageerror on cold load
+[W] Some console.error noise from CSP block
+[P] /dashboard HTTP 200 SPA (NOT 503)
+[P] /app/dashboard HTTP 200 SPA shell
+[P] Mobile 390px landing loads
+
+================================================================================
+C. AUTHENTICATION
+================================================================================
+C2 Login (API timing)
+[P] Free login API 1473ms  user d17262d4…  plan=free credits=34 onboarded
+[P] Pro  login API  453ms  user 692978b7…  plan=pro credits=1029 onboarded
+[P] Max  login API  868ms  user 106dcb1b…  plan=enterprise credits=4000 onboarded
+[P] Admin login API 414ms  user 487ebbad…  plan=enterprise credits=4000 + admin role
+
+C2 Login (UI)
+[P] Pro UI login → /app/dashboard in 2572ms — NO profile timeout / auth error card
+[P] Free UI login → /app (4200ms) shell shows Free | 34 credits
+[P] Max UI login → /app/usage (3424ms)
+[P] Admin UI login → /app/admin (4777ms) admin nav visible (Users, Revenue, QA Checklist…)
+
+C2 Session
+[P] Pro hard refresh keeps /app/dashboard session
+[P] Anon /app/dashboard → /login
+[P] Anon /dashboard → /login
+[P] Invalid refresh token API returns HTTP 400 validation_failed
+[F] /login?reason=session_expired banner MISSING on live (code in repo, not deployed)
+
+C4 OAuth / C3 reset / C1 signup
+[ ] Not fully exercised in this automated pass (email/OAuth provider dependent)
+
+================================================================================
+D. PROFILE CONSISTENCY & LOADING
+================================================================================
+[P] Free profile API 1443ms (<2s target)
+[P] Pro  profile API  512ms
+[P] Max  profile API  359ms
+[P] Admin profile API 858ms
+[P] All four accounts have profile rows (not missing)
+[P] Pro shell after login: "QA Audit User" + "Pro | Interview Practice" + "1029 credits"
+[P] Free shell: "QA Audit User" + "Free | Interview Practice" + "34 credits"
+[P] Pro settings/profile route loads without profile error
+[ ] Manual edit-name→sidebar sync not UI-automated this pass (store fix in repo)
+
+================================================================================
+E. ONBOARDING
+================================================================================
+[P] Seeded QA users onboarded=true — skip onboarding into app
+[ ] New-user 2-step onboarding not created in this pass
+
+================================================================================
+F–G. APP SHELL / DASHBOARD
+================================================================================
+[P] Pro /app/dashboard loads (no auth error)
+[P] Nav groups PRACTICE / PROGRESS / PLANNER visible
+[P] Discrete UI + Cmd/Ctrl+K tip visible
+[P] /dashboard not 503; client routes to login when anon
+
+================================================================================
+H–Q. FEATURE ROUTES (authed Pro smoke — page open, no profile failure)
+================================================================================
+[P] /app/live
+[P] /app/mock
+[P] /app/prep
+[P] /app/answers
+[P] /app/sessions
+[P] /app/settings/profile
+[P] /app/usage
+[P] Free /app/companies opens (shell present; gate copy not fully asserted)
+[ ] Live mic/Deepgram end-to-end, mock full Q&A, prep generation, uploads — needs manual/hardware
+[ ] Gov exam timed session — needs India gate / manual
+[ ] Debrief share token — not exercised
+[ ] Notifications / Referrals deep checks — not exercised
+
+================================================================================
+R–S. SETTINGS / BILLING
+================================================================================
+[P] /app/settings/profile loads for Pro
+[P] Credits shown in shell match API (Pro 1029, Free 34, Max 4000)
+[ ] Stripe checkout / portal — not charged in this audit
+[ ] Full settings matrix (appearance/audio/hotkeys…) — not fully exercised
+
+================================================================================
+T. ADMIN
+================================================================================
+[P] Pro on /app/admin → Access Denied (verified UI text)
+[P] Admin on /app/admin → full control panel (Users, Live Chat, QA Checklist, Gov, Billing…)
+[P] Admin role API isAdmin=true; Free/Pro/Max isAdmin=false
+
+================================================================================
+U. MARKETING PAGES
+================================================================================
+[P] /login /signup /pricing /help titles correct
+[P] / /terms /privacy /gov-exams /blog /shortcuts HTTP 200 SPA
+
+================================================================================
+V. RESPONSIVE / BROWSERS
+================================================================================
+[P] Chromium desktop Playwright smoke
+[P] Mobile viewport landing
+[ ] Edge/Firefox/Safari — not in this run
+
+================================================================================
+W. SECURITY
+================================================================================
+[P] Anon blocked from /app (redirect login)
+[P] Non-admin denied admin routes
+[P] Invalid refresh rejected by Supabase
+[P] Sessions RLS queries succeed for own user_id (counts returned)
+[ ] Cross-user data isolation (User A vs B) — not dual-session contested this pass
+[W] Failed requests observed: /app/theme-init.js ERR_ABORTED (relative path under /app/*)
+    + some aborted sessions polls during navigation (likely route change abort)
+
+================================================================================
+X. INCIDENT REGRESSION (AUTH / CSP / DASHBOARD) — LIVE VERDICT
+================================================================================
+[F] Cold load CSP inline script still blocked (structured-data.js path)
+[P] /dashboard not 503
+[P] Pro login → dashboard without profile timeout
+[P] Hard refresh keeps session
+[F] session_expired UX not live yet
+[P] Sidebar shows consistent Pro name/plan/credits after login
+[F] Production still serving OLD bundle (remediations pending deploy)
+
+================================================================================
+NETWORK / API EVIDENCE HIGHLIGHTS
+================================================================================
+Supabase Auth: POST /auth/v1/token (password grant) — success for 4 QA users
+Supabase Auth: refresh with junk token — 400 validation_failed
+Supabase REST: GET /rest/v1/profiles?id=eq.<uid> — all <2s for Pro/Max/Admin; Free 1.4s
+Supabase REST: GET /rest/v1/user_roles — Admin has [{role:admin}]
+During UI: 67 Supabase API samples captured (see JSON evidence)
+
+Known live HTML issues (view-source /):
+  - Includes structured-data.js
+  - CSP font-src allows cdn.gpteng.co
+  - Missing #clarify-page-jsonld
+
+================================================================================
+WHAT WAS *NOT* FULLY AUTOMATED (still on master checklist for manual QA)
+================================================================================
+- Real microphone / system audio / Deepgram stream
+- Full mock interview completion + scorecard generation
+- Prep Lab AI generation + credit burn assertion
+- Document upload/parse
+- Stripe real checkout
+- OAuth providers
+- Password reset email delivery
+- Gov exam fullscreen timed paper
+- Cross-tab logout race
+- Electron desktop
+
+================================================================================
+NEXT ACTIONS (ENGINEERING)
+================================================================================
+1. DEPLOY current workspace tip (auth/CSP/profile remediations) to
+   https://clarify.ai.sltfinanceindia.com/
+2. Re-run: node scripts/production-live-audit.mjs
+3. Expect FAIL→PASS for: structured-data.js gone, clarify-page-jsonld present,
+   CSP console clean, session_expired banner visible
+4. Fix relative theme-init.js requests under /app/* (use absolute /theme-init.js)
+5. Manual hardware pass for Live Coach + uploads
+
+================================================================================
+SIGN-OFF
+================================================================================
+Automated live audit completed: YES
+P0 production blockers remaining: YES (undeployed CSP/session_expired remediations)
+Recommendation: CONDITIONAL GO / NO-GO until deploy + re-audit PASS
+
+Auditor   : Cursor agent (Playwright + API)   Date: 2026-08-05
+Human QA  : _________________                 Date: _______________
+================================================================================
+
+================================================================================
+POST-DEPLOY FULL SUITE � 2026-08-06
+================================================================================
+Report: CLARIFY_AI_POST_DEPLOY_FULL_TEST_REPORT.txt
+Script: scripts/post-deploy-full-suite.mjs
+Summary (raw): PASS=61 FAIL=2 WARN=2 ? after triage FAIL CSP remains, bundle FAIL cleared
+
+[P] Deploy: no structured-data.js script; jsonld slot; session_expired banner; /dashboard 200
+[W] theme-init still relative on live
+[F] CSP console still blocks some inline script (host/widget � investigate)
+[P] Public HTTP+UI pages
+[P] Free/Pro/Max/Admin API+UI logins; profile <2s; hard refresh; logout; returnTo
+[P] Pro denied admin; Admin portal OK
+[P] RLS core tables; cross-user isolation; release-security-gates
+[P] Responsive 375/390/768/1440; login UX; Free shell credits
+[P] Load probe anon+auth
+[P] Advisors reviewed (WARN list documented � not GO blockers alone)
+
+Decision: CONDITIONAL GO (CSP injector + theme-init redeploy + auth leaked-pw setting)

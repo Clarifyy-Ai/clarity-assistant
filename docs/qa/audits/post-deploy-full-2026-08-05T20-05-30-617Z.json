@@ -1,0 +1,621 @@
+{
+  "base": "https://clarify.ai.sltfinanceindia.com",
+  "summary": {
+    "PASS": 60,
+    "FAIL": 2,
+    "WARN": 2,
+    "BLOCKED": 1,
+    "INFO": 0
+  },
+  "results": [
+    {
+      "phase": "DEPLOY",
+      "id": "no structured-data.js script",
+      "status": "PASS",
+      "detail": "absent (comment-only OK)",
+      "evidence": {},
+      "ts": "2026-08-05T20:02:32.262Z"
+    },
+    {
+      "phase": "DEPLOY",
+      "id": "clarify-page-jsonld slot",
+      "status": "PASS",
+      "detail": "present",
+      "evidence": {},
+      "ts": "2026-08-05T20:02:32.267Z"
+    },
+    {
+      "phase": "DEPLOY",
+      "id": "theme-init absolute path",
+      "status": "WARN",
+      "detail": "./theme-init.js still relative",
+      "evidence": {},
+      "ts": "2026-08-05T20:02:32.268Z"
+    },
+    {
+      "phase": "DEPLOY",
+      "id": "/dashboard not 503",
+      "status": "PASS",
+      "detail": "status=200",
+      "evidence": {},
+      "ts": "2026-08-05T20:02:33.242Z"
+    },
+    {
+      "phase": "DEPLOY",
+      "id": "cold load CSP console",
+      "status": "FAIL",
+      "detail": "Executing inline script violates the following Content Security Policy directive 'script-src 'self''. Either the 'unsafe-inline' keyword, a hash ('sha256-94vmev1ZHn894g2iVWfQ1aQu9FkC2BtPA7fJnXbTA7Y='), or a nonce ('nonce-...') is required to enable inline execution. The action has been blocked.",
+      "evidence": {
+        "count": 1
+      },
+      "ts": "2026-08-05T20:02:41.279Z"
+    },
+    {
+      "phase": "DEPLOY",
+      "id": "session_expired banner",
+      "status": "PASS",
+      "detail": "visible",
+      "evidence": {},
+      "ts": "2026-08-05T20:02:44.671Z"
+    },
+    {
+      "phase": "DEPLOY",
+      "id": "gate",
+      "status": "WARN",
+      "detail": "Deploy gate soft-continue: some remediations imperfect; continuing deeper suites for evidence",
+      "evidence": {},
+      "ts": "2026-08-05T20:02:44.672Z"
+    },
+    {
+      "phase": "PUBLIC_API",
+      "id": "HTTP /",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1092",
+      "evidence": {},
+      "ts": "2026-08-05T20:02:45.765Z"
+    },
+    {
+      "phase": "PUBLIC_API",
+      "id": "HTTP /login",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1105",
+      "evidence": {},
+      "ts": "2026-08-05T20:02:46.871Z"
+    },
+    {
+      "phase": "PUBLIC_API",
+      "id": "HTTP /signup",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1110",
+      "evidence": {},
+      "ts": "2026-08-05T20:02:47.981Z"
+    },
+    {
+      "phase": "PUBLIC_API",
+      "id": "HTTP /pricing",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1076",
+      "evidence": {},
+      "ts": "2026-08-05T20:02:49.058Z"
+    },
+    {
+      "phase": "PUBLIC_API",
+      "id": "HTTP /help",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1023",
+      "evidence": {},
+      "ts": "2026-08-05T20:02:50.082Z"
+    },
+    {
+      "phase": "PUBLIC_API",
+      "id": "HTTP /terms",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1216",
+      "evidence": {},
+      "ts": "2026-08-05T20:02:51.298Z"
+    },
+    {
+      "phase": "PUBLIC_API",
+      "id": "HTTP /privacy",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1114",
+      "evidence": {},
+      "ts": "2026-08-05T20:02:52.412Z"
+    },
+    {
+      "phase": "PUBLIC_API",
+      "id": "HTTP /gov-exams",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1062",
+      "evidence": {},
+      "ts": "2026-08-05T20:02:53.475Z"
+    },
+    {
+      "phase": "PUBLIC_API",
+      "id": "HTTP /blog",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1135",
+      "evidence": {},
+      "ts": "2026-08-05T20:02:54.611Z"
+    },
+    {
+      "phase": "PUBLIC_API",
+      "id": "HTTP /shortcuts",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1138",
+      "evidence": {},
+      "ts": "2026-08-05T20:02:55.749Z"
+    },
+    {
+      "phase": "PUBLIC_API",
+      "id": "HTTP /dashboard",
+      "status": "PASS",
+      "detail": "status=200 spa=true ms=1044",
+      "evidence": {},
+      "ts": "2026-08-05T20:02:56.793Z"
+    },
+    {
+      "phase": "PUBLIC_UI",
+      "id": "UI /",
+      "status": "PASS",
+      "detail": "title=Clarify AI — Practice every interview with AI by your side h1=Practice every interview with AI by your side consoleErrors=1",
+      "evidence": {},
+      "ts": "2026-08-05T20:02:58.506Z"
+    },
+    {
+      "phase": "PUBLIC_UI",
+      "id": "UI /login",
+      "status": "PASS",
+      "detail": "title=Sign in | Clarify AI h1=Practice interviews with an AI coach that feels real. consoleErrors=1",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:01.018Z"
+    },
+    {
+      "phase": "PUBLIC_UI",
+      "id": "UI /pricing",
+      "status": "PASS",
+      "detail": "title=Pricing — Clarify AI h1=Simple, transparent pricing consoleErrors=1",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:03.473Z"
+    },
+    {
+      "phase": "PUBLIC_UI",
+      "id": "UI /help",
+      "status": "PASS",
+      "detail": "title=Help Center — Clarify AI h1=Help Center consoleErrors=1",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:06.397Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Free API login",
+      "status": "PASS",
+      "detail": "ms=1469",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:07.882Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Free profile",
+      "status": "PASS",
+      "detail": "ms=1120 plan=free credits=34",
+      "evidence": {
+        "profileMs": 1120,
+        "plan_id": "free",
+        "credits": 34
+      },
+      "ts": "2026-08-05T20:03:09.002Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Free admin role",
+      "status": "PASS",
+      "detail": "isAdmin=false",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:09.481Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Pro API login",
+      "status": "PASS",
+      "detail": "ms=534",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:11.333Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Pro profile",
+      "status": "PASS",
+      "detail": "ms=579 plan=pro credits=1029",
+      "evidence": {
+        "profileMs": 579,
+        "plan_id": "pro",
+        "credits": 1029
+      },
+      "ts": "2026-08-05T20:03:11.912Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Pro admin role",
+      "status": "PASS",
+      "detail": "isAdmin=false",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:12.360Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Max API login",
+      "status": "PASS",
+      "detail": "ms=584",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:13.750Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Max profile",
+      "status": "PASS",
+      "detail": "ms=492 plan=enterprise credits=4000",
+      "evidence": {
+        "profileMs": 492,
+        "plan_id": "enterprise",
+        "credits": 4000
+      },
+      "ts": "2026-08-05T20:03:14.242Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Max admin role",
+      "status": "PASS",
+      "detail": "isAdmin=false",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:14.865Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Admin API login",
+      "status": "PASS",
+      "detail": "ms=423",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:16.104Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Admin profile",
+      "status": "PASS",
+      "detail": "ms=434 plan=enterprise credits=4000",
+      "evidence": {
+        "profileMs": 434,
+        "plan_id": "enterprise",
+        "credits": 4000
+      },
+      "ts": "2026-08-05T20:03:16.538Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Admin admin role",
+      "status": "PASS",
+      "detail": "isAdmin=true",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:16.845Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "invalid password UI",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/login",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:22.705Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "anon /app/dashboard → login",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/login?returnTo=%2Fapp%2Fdashboard",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:28.595Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "returnTo present",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/login?returnTo=%2Fapp%2Fdashboard",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:28.596Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Pro UI login",
+      "status": "PASS",
+      "detail": "ms=4493 url=https://clarify.ai.sltfinanceindia.com/app/dashboard profileErr=false",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:35.085Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Pro hard refresh session",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:40.638Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Pro /app/live",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/live",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:44.760Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Pro /app/mock",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/mock",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:50.605Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Pro /app/prep",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/prep",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:54.500Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Pro /app/answers",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/answers",
+      "evidence": {},
+      "ts": "2026-08-05T20:03:58.327Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Pro /app/sessions",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/sessions",
+      "evidence": {},
+      "ts": "2026-08-05T20:04:02.192Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Pro /app/settings/profile",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/settings/profile",
+      "evidence": {},
+      "ts": "2026-08-05T20:04:06.339Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Pro /app/usage",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/app/usage",
+      "evidence": {},
+      "ts": "2026-08-05T20:04:10.133Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Pro admin denied",
+      "status": "PASS",
+      "detail": "Access Denied You don't have admin privileges to access this page. Go to Dashboard Cookie Notice We use essential co",
+      "evidence": {},
+      "ts": "2026-08-05T20:04:15.186Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "logout clears /app access",
+      "status": "PASS",
+      "detail": "url=https://clarify.ai.sltfinanceindia.com/login?returnTo=%2Fapp%2Fdashboard",
+      "evidence": {},
+      "ts": "2026-08-05T20:04:23.770Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Free UI shell",
+      "status": "PASS",
+      "detail": "ms=3659 shell=Clarify AI PRACTICE Dashboard Practice Coach Mock Interview Prep Lab Gov Exam Mock Tests PROGRESS Session History Skills Analytics Credits & Usage Debrief Referrals Documents Answer Bank PLANNER ",
+      "evidence": {},
+      "ts": "2026-08-05T20:04:29.525Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Admin UI portal",
+      "status": "PASS",
+      "detail": "ms=3441 snip=Admin Clarify AI control panel USERS & SUPPORT Users Live Chat Support Audit Log CONTENT Questions Bulk Upload Seed / Import QA Checklist GOV EXAMS Sourc",
+      "evidence": {},
+      "ts": "2026-08-05T20:04:39.822Z"
+    },
+    {
+      "phase": "AUTH",
+      "id": "Max UI login",
+      "status": "PASS",
+      "detail": "ms=3577 url=https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "evidence": {},
+      "ts": "2026-08-05T20:04:45.315Z"
+    },
+    {
+      "phase": "SECURITY",
+      "id": "bundle secret /assets/chunk-stores-CoxfsmPL.js",
+      "status": "FAIL",
+      "detail": "sensitive token pattern found",
+      "evidence": {},
+      "ts": "2026-08-05T20:04:47.686Z"
+    },
+    {
+      "phase": "SECURITY",
+      "id": "Pro cannot read Free profile",
+      "status": "PASS",
+      "detail": "empty/denied",
+      "evidence": {},
+      "ts": "2026-08-05T20:04:49.280Z"
+    },
+    {
+      "phase": "SECURITY",
+      "id": "Pro cannot read Free sessions",
+      "status": "PASS",
+      "detail": "empty",
+      "evidence": {},
+      "ts": "2026-08-05T20:04:49.694Z"
+    },
+    {
+      "phase": "SECURITY",
+      "id": "RLS spot-check",
+      "status": "BLOCKED",
+      "detail": "SUPABASE_ACCESS_TOKEN not set",
+      "evidence": {},
+      "ts": "2026-08-05T20:04:50.081Z"
+    },
+    {
+      "phase": "SECURITY",
+      "id": "release-security-gates",
+      "status": "PASS",
+      "detail": "OK: release security gates passed\n",
+      "evidence": {},
+      "ts": "2026-08-05T20:04:50.486Z"
+    },
+    {
+      "phase": "RESPONSIVE",
+      "id": "dashboard iphone-ish 375x812",
+      "status": "PASS",
+      "detail": "hang=false overflowX=false url=https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "evidence": {},
+      "ts": "2026-08-05T20:04:59.773Z"
+    },
+    {
+      "phase": "RESPONSIVE",
+      "id": "dashboard pixel-ish 390x844",
+      "status": "PASS",
+      "detail": "hang=false overflowX=false url=https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "evidence": {},
+      "ts": "2026-08-05T20:05:03.426Z"
+    },
+    {
+      "phase": "RESPONSIVE",
+      "id": "dashboard tablet 768x1024",
+      "status": "PASS",
+      "detail": "hang=false overflowX=false url=https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "evidence": {},
+      "ts": "2026-08-05T20:05:07.090Z"
+    },
+    {
+      "phase": "RESPONSIVE",
+      "id": "dashboard desktop 1440x900",
+      "status": "PASS",
+      "detail": "hang=false overflowX=false url=https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "evidence": {},
+      "ts": "2026-08-05T20:05:10.700Z"
+    },
+    {
+      "phase": "UX",
+      "id": "login controls focusable",
+      "status": "PASS",
+      "detail": "Sign in + email present",
+      "evidence": {},
+      "ts": "2026-08-05T20:05:12.702Z"
+    },
+    {
+      "phase": "UX",
+      "id": "login has heading",
+      "status": "PASS",
+      "detail": "h1=Practice interviews with an AI coach that feels real.",
+      "evidence": {},
+      "ts": "2026-08-05T20:05:12.707Z"
+    },
+    {
+      "phase": "UX",
+      "id": "Free shell name/plan/credits",
+      "status": "PASS",
+      "detail": "Clarify AI PRACTICE Dashboard Practice Coach Mock Interview Prep Lab Gov Exam Mock Tests PROGRESS Session History Skills Analytics Credits & Usage Debrief Referrals Documents Answer Bank PLANNER Interview Day Interviews Company Research Guide N",
+      "evidence": {},
+      "ts": "2026-08-05T20:05:17.945Z"
+    },
+    {
+      "phase": "LOAD",
+      "id": "anon concurrent GET x20",
+      "status": "PASS",
+      "detail": "errRate=0.0% p50=904ms p95=1440ms",
+      "evidence": {
+        "statuses": [
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "times": [
+          236,
+          279,
+          264,
+          270,
+          347,
+          717,
+          680,
+          705,
+          711,
+          904,
+          933,
+          1135,
+          1224,
+          1258,
+          1295,
+          1275,
+          1376,
+          1440,
+          1436,
+          1664
+        ]
+      },
+      "ts": "2026-08-05T20:05:20.267Z"
+    },
+    {
+      "phase": "LOAD",
+      "id": "Pro login+profile x10",
+      "status": "PASS",
+      "detail": "fails=0 login p50=401 p95=537 profile p50=316 p95=344",
+      "evidence": {
+        "loginMs": [
+          385,
+          385,
+          393,
+          396,
+          401,
+          404,
+          415,
+          436,
+          493,
+          537
+        ],
+        "profileMs": [
+          294,
+          297,
+          300,
+          307,
+          316,
+          316,
+          322,
+          327,
+          335,
+          344
+        ],
+        "fails": 0
+      },
+      "ts": "2026-08-05T20:05:30.615Z"
+    }
+  ]
+}

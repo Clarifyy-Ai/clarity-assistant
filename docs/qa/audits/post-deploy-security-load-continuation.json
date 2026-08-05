@@ -1,0 +1,202 @@
+{
+  "base": "https://clarify.ai.sltfinanceindia.com",
+  "project": "qzgvjrvtkwlzxpmlddkx",
+  "generatedAt": "2026-08-05T20:05:05.739Z",
+  "summary": {
+    "PASS": 5,
+    "FAIL": 0,
+    "WARN": 0,
+    "BLOCKED": 1,
+    "INFO": 1
+  },
+  "results": [
+    {
+      "phase": "SECURITY",
+      "id": "RLS spot-check (rls-spot-check.mjs)",
+      "status": "BLOCKED",
+      "detail": "SUPABASE_ACCESS_TOKEN not set in process env - skipped (no invented tokens)",
+      "evidence": {},
+      "ts": "2026-08-05T20:04:43.910Z"
+    },
+    {
+      "phase": "SECURITY",
+      "id": "client bundle secrets",
+      "status": "PASS",
+      "detail": "scanned 7/7 assets - no service_role JWT / sbp_ tokens; false-positive identifiers (service_role_key) in 1 asset(s) - treated as PASS",
+      "evidence": {
+        "scanned": 7,
+        "totalAssets": 7,
+        "falsePositives": [
+          {
+            "asset": "/assets/chunk-stores-CoxfsmPL.js",
+            "bareHits": 1,
+            "note": "redaction-list field name"
+          }
+        ]
+      },
+      "ts": "2026-08-05T20:04:47.966Z"
+    },
+    {
+      "phase": "SECURITY",
+      "id": "Pro cannot read Free profile",
+      "status": "PASS",
+      "detail": "empty/denied",
+      "evidence": {},
+      "ts": "2026-08-05T20:04:49.276Z"
+    },
+    {
+      "phase": "SECURITY",
+      "id": "Pro cannot read Free sessions",
+      "status": "PASS",
+      "detail": "empty",
+      "evidence": {},
+      "ts": "2026-08-05T20:04:50.401Z"
+    },
+    {
+      "phase": "LOAD",
+      "id": "anon concurrent GET / and /login x20",
+      "status": "PASS",
+      "detail": "errRate=0.0% p50=1215ms p95=3005ms",
+      "evidence": {
+        "statuses": [
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200,
+          200
+        ],
+        "times": [
+          125,
+          192,
+          205,
+          207,
+          805,
+          1200,
+          1204,
+          1211,
+          1214,
+          1215,
+          1218,
+          1231,
+          1800,
+          1976,
+          2085,
+          2112,
+          2446,
+          2985,
+          3005,
+          3085
+        ],
+        "p50": 1215,
+        "p95": 3005,
+        "errRate": 0
+      },
+      "ts": "2026-08-05T20:04:53.878Z"
+    },
+    {
+      "phase": "LOAD",
+      "id": "Pro login+profile x10 serial",
+      "status": "PASS",
+      "detail": "fails=0 login p50=424 p95=833 profile p50=316 p95=365",
+      "evidence": {
+        "loginMs": [
+          401,
+          402,
+          403,
+          422,
+          424,
+          427,
+          435,
+          461,
+          639,
+          833
+        ],
+        "profileMs": [
+          303,
+          305,
+          310,
+          315,
+          316,
+          323,
+          324,
+          334,
+          359,
+          365
+        ],
+        "fails": 0,
+        "login_p50": 424,
+        "login_p95": 833,
+        "profile_p50": 316,
+        "profile_p95": 365
+      },
+      "ts": "2026-08-05T20:05:05.737Z"
+    },
+    {
+      "phase": "SECURITY",
+      "id": "MCP get_advisors (security)",
+      "status": "INFO",
+      "detail": "available - 20 WARN, 2 INFO (noted only)",
+      "evidence": {
+        "source": "plugin-supabase-supabase.get_advisors"
+      },
+      "ts": "2026-08-05T20:05:05.739Z"
+    }
+  ],
+  "advisors": {
+    "available": true,
+    "type": "security",
+    "note": "MCP get_advisors noted only - not treated as suite gate",
+    "counts": {
+      "warn": 20,
+      "info": 2,
+      "error": 0
+    },
+    "items": [
+      {
+        "name": "rls_enabled_no_policy",
+        "level": "INFO",
+        "detail": "Table public.idempotency_log has RLS enabled, but no policies exist"
+      },
+      {
+        "name": "rls_enabled_no_policy",
+        "level": "INFO",
+        "detail": "Table public.rate_limit_buckets has RLS enabled, but no policies exist"
+      },
+      {
+        "name": "extension_in_public",
+        "level": "WARN",
+        "detail": "Extension pg_net is installed in the public schema"
+      },
+      {
+        "name": "anon_security_definer_function_executable",
+        "level": "WARN",
+        "detail": "anon can execute SECURITY DEFINER public.get_shared_debrief / get_shared_scorecard"
+      },
+      {
+        "name": "authenticated_security_definer_function_executable",
+        "level": "WARN",
+        "detail": "authenticated can execute multiple SECURITY DEFINER RPCs (bulk_update_users, admin stats, claim_and_complete_test, etc.)"
+      },
+      {
+        "name": "auth_leaked_password_protection",
+        "level": "WARN",
+        "detail": "Leaked password protection is currently disabled"
+      }
+    ]
+  }
+}
