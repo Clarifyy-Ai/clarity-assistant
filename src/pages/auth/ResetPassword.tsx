@@ -75,6 +75,41 @@ type PasswordStrength = {
 // Helpers
 // ─────────────────────────────────────────────────────────────────────────────
 
+/**
+ * Supabase Auth appends `#error=...&error_code=...&error_description=...`
+ * (or the same as query params, depending on flow) when a recovery link is
+ * expired, already used, or otherwise invalid. Without this check the user
+ * silently lands on the "request a new link" form with no explanation.
+ */
+function getRecoveryLinkIssue(): string | null {
+  if (typeof window === "undefined") {
+    return null;
+  }
+
+  const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+  const searchParams = new URLSearchParams(window.location.search);
+
+  const errorCode = hashParams.get("error_code") ?? searchParams.get("error_code");
+  const error = hashParams.get("error") ?? searchParams.get("error");
+  const errorDescription =
+    hashParams.get("error_description") ?? searchParams.get("error_description");
+
+  if (!error && !errorCode) {
+    return null;
+  }
+
+  if (errorCode === "otp_expired") {
+    return "This reset link has expired. Please request a new one.";
+  }
+
+  if (errorDescription) {
+    // URLSearchParams already decodes percent-encoding and "+" as space.
+    return errorDescription;
+  }
+
+  return "This reset link is invalid or has already been used. Please request a new one.";
+}
+
 function isRecoveryUrl(): boolean {
   if (typeof window === "undefined") {
     return false;
@@ -315,6 +350,21 @@ export default function ResetPassword(): JSX.Element {
   const [showConfirm, setShowConfirm] = useState(false);
 
   const strength = useMemo(() => getPasswordStrength(password), [password]);
+
+  // Runs once: surface a friendly message when the user arrives via an
+  // expired/invalid/already-used recovery link instead of silently showing
+  // a blank "request a new link" form.
+  useEffect(() => {
+    const issue = getRecoveryLinkIssue();
+    if (!issue) {
+      return;
+    }
+
+    setMode("request");
+    setGeneralError(issue);
+    window.history.replaceState({}, "", window.location.pathname);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     if (mode !== "reset") {

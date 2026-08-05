@@ -6,6 +6,7 @@
 
 import { supabase } from "@/lib/supabase/client";
 import { AuthError, ErrorCode, tryCatch } from "@/lib/errors";
+import { buildAuthRedirectUrl } from "@/lib/auth/redirectUrl";
 import type { User, Session, AuthChangeEvent } from "@supabase/supabase-js";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -209,10 +210,15 @@ export async function sendMagicLink(email: string): Promise<void> {
  */
 export async function sendPasswordReset(email: string): Promise<void> {
   const [, err] = await tryCatch(async () => {
-    const configured = String(import.meta.env.VITE_APP_URL ?? "").replace(/\/$/, "");
-    const origin = configured || window.location.origin;
+    const redirectTo = buildAuthRedirectUrl({
+      path: "/reset-password",
+      configuredAppUrl: import.meta.env.VITE_APP_URL,
+      appEnv: import.meta.env.VITE_APP_ENV,
+      windowOrigin:
+        typeof window !== "undefined" ? window.location.origin : null,
+    });
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${origin}/reset-password`,
+      redirectTo,
     });
     if (error) throw error;
   });

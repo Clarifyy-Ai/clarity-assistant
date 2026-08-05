@@ -36,6 +36,7 @@ import {
   isNonRetryableAuthError,
   redirectToSessionExpiredLogin,
 } from "@/lib/auth/sessionErrors";
+import { buildAuthRedirectUrl } from "@/lib/auth/redirectUrl";
 
 import type {
   SupabaseSession,
@@ -757,17 +758,18 @@ export const useAuthStore = create<AuthStore>()(
           },
 
           sendPasswordReset: async (email) => {
-            const configured =
-              typeof import.meta !== "undefined"
-                ? String(import.meta.env.VITE_APP_URL ?? "").replace(/\/$/, "")
-                : "";
-            const origin =
-              configured ||
-              (typeof window !== "undefined" ? window.location.origin : "");
+            const redirectTo = buildAuthRedirectUrl({
+              path: "/reset-password",
+              configuredAppUrl: import.meta.env.VITE_APP_URL,
+              appEnv: import.meta.env.VITE_APP_ENV,
+              windowOrigin:
+                typeof window !== "undefined" ? window.location.origin : null,
+            });
+
             const { error } = await supabase.auth.resetPasswordForEmail(
               email.trim(),
               {
-                redirectTo: `${origin}/reset-password`,
+                redirectTo,
               },
             );
 
