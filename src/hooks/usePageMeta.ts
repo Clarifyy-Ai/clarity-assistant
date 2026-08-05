@@ -182,16 +182,20 @@ export function usePageMeta({
       });
     }
 
-    // JSON-LD
+    // JSON-LD — mutate the static #clarify-page-jsonld slot from index.html.
+    // Never document.createElement("script"): CSP script-src 'self' treats that
+    // as an inline executable script even when type is application/ld+json.
     if (jsonLd) {
-      const script = document.createElement("script");
-      script.type = "application/ld+json";
-      script.setAttribute("data-page-meta", "true");
-      script.textContent = JSON.stringify(jsonLd);
-      document.head.appendChild(script);
-      cleanups.push(() => {
-        script.remove();
-      });
+      const slot = document.getElementById(
+        "clarify-page-jsonld",
+      ) as HTMLScriptElement | null;
+      if (slot) {
+        const prev = slot.textContent ?? "{}";
+        slot.textContent = JSON.stringify(jsonLd);
+        cleanups.push(() => {
+          slot.textContent = prev;
+        });
+      }
     }
 
     return () => {

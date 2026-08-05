@@ -25,6 +25,11 @@ import { loginSchema, type LoginInput } from "@/lib/validators";
 import { getCSRFHiddenInputProps, validateCSRFToken } from "@/lib/security";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { AuthShell } from "@/components/layout/AuthShell";
+import { sanitizeReturnTo } from "@/lib/auth/safeReturnTo";
+import {
+  SESSION_EXPIRED_MESSAGE,
+  SESSION_EXPIRED_REASON,
+} from "@/lib/auth/sessionErrors";
 
 type LocationState = {
   from?: {
@@ -105,7 +110,9 @@ export default function Login(): JSX.Element {
   const [searchParams] = useSearchParams();
 
   const locationState = location.state as LocationState | null;
-  const from = locationState?.from?.pathname ?? "/app";
+  const returnToFromQuery = sanitizeReturnTo(searchParams.get("returnTo"));
+  const returnToFromState = sanitizeReturnTo(locationState?.from?.pathname);
+  const explicitReturnTo = returnToFromQuery ?? returnToFromState;
 
   const authStatus = useAuthStore((state) => state.status);
   const isAdmin = useAuthStore((state) => state.isAdmin);
@@ -137,7 +144,10 @@ export default function Login(): JSX.Element {
   useEffect(() => {
     const message = searchParams.get("message");
     const errorCode = searchParams.get("error");
-    if (message) {
+    const reason = searchParams.get("reason");
+    if (reason === SESSION_EXPIRED_REASON) {
+      setAuthError(SESSION_EXPIRED_MESSAGE);
+    } else if (message) {
       setAuthError(decodeURIComponent(message.replace(/\+/g, " ")));
     } else if (errorCode) {
       setAuthError(`Sign-in failed (${errorCode}). Please try again.`);
@@ -160,9 +170,11 @@ export default function Login(): JSX.Element {
       return;
     }
 
-    const target = isAdmin ? "/app/admin" : from;
+    // Honor deep-link returnTo when present; otherwise send admins to admin home.
+    const target =
+      explicitReturnTo ?? (isAdmin ? "/app/admin" : "/app/dashboard");
     navigate(target, { replace: true });
-  }, [authStatus, isProfileLoaded, isAdmin, from, navigate, mfaPending]);
+  }, [authStatus, isProfileLoaded, isAdmin, explicitReturnTo, navigate, mfaPending]);
 
   useEffect(() => {
     const storedLock = safeGetLocalStorageItem(LOCK_KEY);

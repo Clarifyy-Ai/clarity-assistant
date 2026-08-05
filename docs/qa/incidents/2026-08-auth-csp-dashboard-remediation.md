@@ -11,7 +11,7 @@
 | **Supabase Project** | qzgvjrvtkwlzxpmlddkx |
 | **Severity** | P0 — Dashboard blocked for all users |
 | **Owner** | Engineering |
-| **Status** | FIXED — Pending production deployment |
+| **Status** | FIXED — See REL-2026-08-05-STAB in `2026-08-production-stabilization-release.md` for ship decision |
 
 ---
 
@@ -122,6 +122,26 @@
 | CHG-010 | 2026-08-05 | `src/lib/supabase/auth.ts` | Replaced `localStorage.clear()` with targeted auth key removal | Fix RC-8: destructive storage clear | ✅ Applied |
 | CHG-011 | 2026-08-05 | `src/lib/logger.ts` | Created structured logger with redaction and Sentry breadcrumb integration | Structured logging requirement | ✅ Applied |
 | CHG-012 | 2026-08-05 | `public/.htaccess` | Added documentation comments for SPA routing | Fix RC-6: documentation of /dashboard route requirement | ✅ Applied |
+| CHG-013 | 2026-08-05 | `src/lib/auth/safeReturnTo.ts` | Sanitize same-origin `returnTo` + `buildLoginUrl` | Open-redirect safe post-login restore | ✅ Applied |
+| CHG-014 | 2026-08-05 | `src/lib/auth/sessionErrors.ts` | Shared classifiers + `redirectToSessionExpiredLogin()` | Deterministic invalid-refresh recovery UX | ✅ Applied |
+| CHG-015 | 2026-08-05 | `src/store/authStore.ts` | Call session-expired redirect; wire profile/role/bootstrap LogEvents | Close auth loop + observability | ✅ Applied |
+| CHG-016 | 2026-08-05 | `src/pages/auth/Login.tsx` | Banner for `reason=session_expired`; honor `returnTo` query | User-facing session expired message | ✅ Applied |
+| CHG-017 | 2026-08-05 | `src/components/layout/ProtectedRoute.tsx` | Login redirect includes sanitized `returnTo` | Deep-link restore after auth | ✅ Applied |
+| CHG-018 | 2026-08-05 | `src/hooks/usePageMeta.ts` | Mutate static `#clarify-page-jsonld` slot (no createElement script) | Prevent CSP inline-script regression | ✅ Applied |
+| CHG-019 | 2026-08-05 | `index.html` | Added `#clarify-page-jsonld` static slot | Supports CHG-018 | ✅ Applied |
+| CHG-020 | 2026-08-05 | `public/structured-data.js` | Deleted orphaned dynamic JSON-LD injector | Remove CSP risk source | ✅ Applied |
+| CHG-021 | 2026-08-05 | `public/_redirects` | Cloudflare/Netlify SPA fallback `/* → /index.html 200` | Hosting-level `/dashboard` 503 mitigation | ✅ Applied |
+| CHG-022 | 2026-08-05 | `public/sw.js` | Cache bump `clarify-ai-v3` | Force clients off stale HTML/CSP | ✅ Applied |
+| CHG-023 | 2026-08-05 | `src/test/lib/auth/sessionRecovery.test.ts` | Vitest: refresh-token, returnTo, redaction, redirect | Automated regression | ✅ Applied |
+| CHG-024 | 2026-08-05 | `e2e/auth-recovery.spec.ts` | Playwright: `/dashboard`, session_expired banner, CSP console | E2E smoke for incident | ✅ Applied |
+| CHG-025 | 2026-08-05 | `tsconfig.app.json` | Restored `baseUrl: "."` for `@/*` paths | Unblock `tsc` path resolution | ✅ Applied |
+| CHG-026 | 2026-08-05 | `src/store/authStore.ts` | Profile/role timeout 2s; session 8s; ensure missing profile via upsert; error→loading on retry | Profile &lt;2s + orphan repair | ✅ Applied |
+| CHG-027 | 2026-08-05 | `src/lib/supabase/database.ts` | `PROFILE_BOOT_COLUMNS` for `getByIdMaybe` | Faster auth bootstrap query | ✅ Applied |
+| CHG-028 | 2026-08-05 | `AppLoadingFallback.tsx` | Stuck UI 20s; soft Try again / Reload / Contact support | Stop 10s hard-reload race vs session budget | ✅ Applied |
+| CHG-029 | 2026-08-05 | `ProtectedRoute.tsx` | Retry/Reload/Support; admin role wait then recoverable error | No infinite admin loader; friendly errors | ✅ Applied |
+| CHG-030 | 2026-08-05 | `SettingsProfile.tsx` + `AppTopBar.tsx` | Single `authStore` source; `updateProfile` for saves | Profile consistency | ✅ Applied |
+| CHG-031 | 2026-08-05 | `index.html` | CSP comment no longer references deleted structured-data.js | CSP hygiene | ✅ Applied |
+| CHG-032 | 2026-08-05 | `src/lib/auth/recoveryActions.ts` | Shared friendly error + hard reload + support mailto | Consistent recovery UX | ✅ Applied |
 
 ---
 
@@ -129,11 +149,15 @@
 
 | Test ID | Description | Expected | Status |
 |---------|-------------|----------|--------|
-| T-AUTO-001 | TypeScript compilation — `npx tsc --noEmit` | Zero errors | ✅ PASS |
-| T-MANUAL-001 | Cold load `/dashboard` (anonymous) | Redirect to `/login` (client-side via SPA) | ⏳ Requires deployment |
+| T-AUTO-001 | Vitest `sessionRecovery.test.ts` (15 cases) | All pass | ✅ PASS (2026-08-05) |
+| T-AUTO-002 | Playwright `e2e/auth-recovery.spec.ts` | Local/CI after deploy | ⏳ Run after deploy |
+| T-PROD-001 | `GET https://clarify.ai.sltfinanceindia.com/dashboard` | HTTP &lt; 500, SPA HTML (`id="root"`) | ✅ PASS — HTTP 200, `text/html`, SPA body (2026-08-05 probe) |
+| T-PROD-002 | Production home CSP includes `cdn.gpteng.co` in font-src | Present | ✅ PASS (already on prod tip) |
+| T-PROD-003 | Production home still references `structured-data.js` | Absent after next deploy | ⚠️ FAIL on live — deploy CHG-020 required |
+| T-MANUAL-001 | Cold load `/dashboard` (anonymous) | Redirect to `/login` (client-side via SPA) | ⏳ Requires deploy of CHG-013+ |
 | T-MANUAL-002 | Hard refresh `/app/dashboard` (valid session) | Dashboard loads | ⏳ Requires deployment |
 | T-MANUAL-003 | Inject stale refresh token in localStorage | Clear + redirect to `/login?reason=session_expired` | ⏳ Requires deployment |
-| T-MANUAL-004 | Browser console — cold load | Zero CSP violations | ⏳ Requires deployment |
+| T-MANUAL-004 | Browser console — cold load | Zero CSP violations for structured-data / gpteng font | ⏳ Requires deployment |
 | T-MANUAL-005 | Browser console — no `key=` fragment | Health log shows `supabaseConfigured=true` | ⏳ Requires deployment |
 | T-MANUAL-006 | Sign out with invalid session | User preferences intact (theme preserved) | ⏳ Requires deployment |
 | T-MANUAL-007 | React DevTools → StrictMode double-effect | Console shows `StrictMode guard` warning only once | ⏳ Local dev |
@@ -144,29 +168,37 @@
 
 | Risk | Severity | Mitigation |
 |------|----------|-----------|
-| `/dashboard` 503 may be Nginx/CDN config, not `.htaccess` | HIGH | Verify hosting platform rewrite rules independently. `.htaccess` only applies to Apache. |
-| `cdn.gpteng.co` origin — only verified as Lovable platform CDN | MEDIUM | If deployed outside Lovable, confirm no external font requests occur. Remove from CSP if not needed in production. |
-| `_bootstrapping` flag is module-scoped (not reset on HMR) | LOW | In development only: hot-module-reload may require page reload after auth store HMR. Acceptable in dev. |
-| Profile/role timeout values (4s) remain unchanged | LOW | Values are reasonable for normal Supabase latency. If DB is slow, increase timeouts with observed p95 data. |
-| Playwright E2E suite not yet written | MEDIUM | Manual tests cover happy paths; E2E automation is tracked as follow-up work. |
+| Production still serving older HTML with `structured-data.js` | HIGH | Deploy this branch; confirm `HAS_STRUCTURED=no` and `#clarify-page-jsonld` present |
+| Pre-existing `tsc` errors in SettingsPracticeCoach / ai.types / Input casing | MEDIUM | Outside this incident; do not block auth/CSP ship if Vite build succeeds |
+| `cdn.gpteng.co` origin — Lovable platform CDN only | MEDIUM | If deployed outside Lovable, confirm no external font requests; remove from CSP if unused |
+| `_bootstrapping` flag is module-scoped (not reset on HMR) | LOW | Dev-only; full reload after auth-store HMR |
+| Profile/role timeout values (4s) unchanged | LOW | Non-retryable auth path prevents timeout storms; calibrate with p95 later |
 
 ---
 
 ## Final Release Decision
 
-**CONDITIONAL GO**
+**CONDITIONAL GO** — code complete for INC-2026-08-005 follow-up; production must be redeployed.
 
 ### Conditions
-1. ✅ Code changes are applied and TypeScript compiles without errors
-2. ⚠️ **REQUIRED**: Verify the hosting platform (Apache/.htaccess, Nginx, Vercel, Netlify) correctly serves `index.html` for `/dashboard` — otherwise the 503 persists
-3. ⚠️ **REQUIRED**: Deploy to production and verify zero CSP violations in the browser console
-4. ⚠️ **REQUIRED**: Confirm `/dashboard` no longer returns 503 after deployment
+1. ✅ Auth/CSP remediation code applied in repo (CHG-001–CHG-025)
+2. ✅ Vitest session-recovery suite passes (14/14)
+3. ✅ Live `GET /dashboard` returns HTTP 200 SPA HTML (hosting rewrite OK as of 2026-08-05 probe)
+4. ⚠️ **REQUIRED**: Deploy to https://clarify.ai.sltfinanceindia.com so `structured-data.js` is gone and session-expired UX ships
+5. ⚠️ **REQUIRED**: Post-deploy browser console: zero CSP violations for font/inline script; health log has no key fragment
+6. ⚠️ **REQUIRED**: Post-deploy stale refresh token → `/login?reason=session_expired` once (no loop)
 
-### Blockers for GO
-- Production smoke test confirming `/dashboard` reaches the SPA and redirects correctly
-- Browser console showing no CSP violations on cold load
+### Blockers for unconditional GO
+- Production redeploy of this workspace tip
+- Post-deploy CSP + session-expired smoke
+
+### Rollback
+1. Revert deploy to previous Lovable/CDN release (pre-CHG-013 tip / `dc727596` baseline if only follow-ups fail).
+2. Or `git revert` CHG-013–CHG-025 commits and redeploy.
+3. Clients on `clarify-ai-v3` SW will reclaim on next navigation; hard refresh if stuck.
 
 ### Not Blocking (Follow-up Work)
-- Playwright E2E suite
+- Full Playwright auth matrix (suspended/unverified/admin) beyond `auth-recovery.spec.ts`
 - p95 timeout calibration from production metrics
 - CSP Report-Only header in staging
+- Clean remaining unrelated `tsc` errors (SettingsPracticeCoach / Input casing)

@@ -1,0 +1,4 @@
+# Cloudflare Pages / Netlify SPA fallback.
+# Serves index.html for all non-file routes so React Router can handle
+# /dashboard → /app/dashboard and /app/* without a CDN 404/503.
+/*    /index.html   200

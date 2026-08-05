@@ -12,11 +12,13 @@
     <!--
       Security Policy:
       script-src: no 'unsafe-inline' — Vite prod injects module scripts only;
-      theme + JSON-LD live in /theme-init.js and /structured-data.js.
+      theme lives in /theme-init.js; JSON-LD is static in this document
+      (#clarify-page-jsonld for page-level updates — never createElement('script')).
       style-src keeps 'unsafe-inline' for Tailwind runtime + boot-splash
       inline style attributes (nonce/hash CSP can remove this later at CDN).
       Electron CSP is tightened separately in electron/main.cjs — do not weaken it.
       connect-src is intentionally allowlisted to known backends only.
+      font-src allows self-hosted @fontsource assets plus Lovable widget font CDN.
     -->
     <meta
       http-equiv="Content-Security-Policy"
@@ -129,6 +131,11 @@
       ]
     }
     </script>
+    <!--
+      Page-level JSON-LD slot. usePageMeta updates textContent on this existing
+      element — never createElement('script'), which CSP treats as inline JS.
+    -->
+    <script type="application/ld+json" id="clarify-page-jsonld">{}</script>
     <script src="./theme-init.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </head>

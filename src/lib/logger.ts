@@ -112,6 +112,13 @@ function redact(obj: Record<string, unknown>): Record<string, unknown> {
   return safe;
 }
 
+/** Exported for unit tests — same redaction used by the logger. */
+export function redactSensitiveFields(
+  obj: Record<string, unknown>,
+): Record<string, unknown> {
+  return redact(obj);
+}
+
 // ── Environment helpers ────────────────────────────────────────────────────────
 
 const IS_PRODUCTION = import.meta.env.PROD;

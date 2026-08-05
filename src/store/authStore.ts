@@ -31,6 +31,11 @@ import { normalizePreferredModel } from "@/lib/ai/modelOptions";
 import { isElectronApp } from "@/lib/platform/isElectron";
 import { clearBYOKVault } from "@/lib/security/byokVault";
 import { logger, LogEvents } from "@/lib/logger";
+import {
+  isInvalidRefreshTokenError,
+  isNonRetryableAuthError,
+  redirectToSessionExpiredLogin,
+} from "@/lib/auth/sessionErrors";
 
 import type {
   SupabaseSession,
@@ -46,13 +51,13 @@ export type AuthStatus =
   | "unauthenticated"
   | "error";
 
-const AUTH_SESSION_TIMEOUT_MS = isElectronApp() ? 12_000 : 15_000;
+const AUTH_SESSION_TIMEOUT_MS = isElectronApp() ? 10_000 : 8_000;
 
-/** Per-attempt budget for the profile read. Two attempts stay well under 10s total. */
-const PROFILE_FETCH_TIMEOUT_MS = 4_000;
+/** Per-attempt budget for the profile read. Target: <2s p95 under normal load. */
+const PROFILE_FETCH_TIMEOUT_MS = 2_000;
 
 /** Role lookup is non-blocking for routing; keep it short. */
-const ROLE_CHECK_TIMEOUT_MS = 4_000;
+const ROLE_CHECK_TIMEOUT_MS = 2_000;
 
 const PROFILE_ERROR_MESSAGE =
   "We're having trouble loading your profile. Please try again.";
@@ -68,22 +73,6 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 
 
 /**
- * Returns true for Supabase errors that are non-retryable auth failures.
- * These should NOT be retried — retrying burns time and creates log noise.
- */
-function isNonRetryableAuthError(error: unknown): boolean {
-  const msg = getErrorMessage(error).toLowerCase();
-  return (
-    isInvalidRefreshTokenError(error) ||
-    msg.includes("jwt expired") ||
-    msg.includes("not authenticated") ||
-    msg.includes("invalid api key") ||
-    msg.includes("permission denied") ||
-    msg.includes("row-level security")
-  );
-}
-
-/**
  * Resolve admin role with one retry on abort/timeout/network failure.
  * Non-retryable auth errors are propagated immediately.
  * Unresolved result must NOT be treated as "not admin".
@@ -91,6 +80,12 @@ function isNonRetryableAuthError(error: unknown): boolean {
 async function resolveAdminRole(
   userId: string
 ): Promise<{ resolved: boolean; isAdmin: boolean }> {
+  const startedAt = Date.now();
+  logger.info(LogEvents.AUTH_ROLE_LOAD_STARTED, {
+    operation: "role.load",
+    attempt: 1,
+  });
+
   const attempt = () =>
     withTimeout(
       userRolesDB.hasRole(userId, "admin"),
@@ -98,19 +93,74 @@ async function resolveAdminRole(
       "Role check"
     );
 
-
   try {
-    return { resolved: true, isAdmin: await attempt() };
+    const isAdmin = await attempt();
+    logger.info(LogEvents.AUTH_ROLE_LOAD_SUCCEEDED, {
+      operation: "role.load",
+      attempt: 1,
+      durationMs: Date.now() - startedAt,
+      outcome: "succeeded",
+      authState: isAdmin ? "admin" : "non_admin",
+    });
+    return { resolved: true, isAdmin };
   } catch (err) {
+    const timedOut = getErrorMessage(err).toLowerCase().includes("timed out");
     // Do not retry auth failures — they will fail again immediately.
     if (isNonRetryableAuthError(err)) {
+      logger.warn(LogEvents.AUTH_ROLE_LOAD_FAILED, {
+        operation: "role.load",
+        attempt: 1,
+        durationMs: Date.now() - startedAt,
+        outcome: "failed",
+        retryable: false,
+        recoveryAction: "skip_retry",
+      });
       console.warn("[authStore] Admin role check: non-retryable auth error", getErrorMessage(err));
       return { resolved: false, isAdmin: false };
     }
+    if (timedOut) {
+      logger.warn(LogEvents.AUTH_ROLE_LOAD_TIMED_OUT, {
+        operation: "role.load",
+        attempt: 1,
+        durationMs: Date.now() - startedAt,
+        outcome: "timed_out",
+        retryable: true,
+      });
+    } else {
+      logger.warn(LogEvents.NETWORK_RETRY, {
+        operation: "role.load",
+        attempt: 1,
+        retryable: true,
+      });
+    }
     console.warn("[authStore] Admin role check failed; retrying once:", err);
     try {
-      return { resolved: true, isAdmin: await attempt() };
+      const isAdmin = await attempt();
+      logger.info(LogEvents.AUTH_ROLE_LOAD_SUCCEEDED, {
+        operation: "role.load",
+        attempt: 2,
+        durationMs: Date.now() - startedAt,
+        outcome: "succeeded",
+        authState: isAdmin ? "admin" : "non_admin",
+      });
+      return { resolved: true, isAdmin };
     } catch (retryErr) {
+      const retryTimedOut = getErrorMessage(retryErr)
+        .toLowerCase()
+        .includes("timed out");
+      logger.error(
+        retryTimedOut
+          ? LogEvents.AUTH_ROLE_LOAD_TIMED_OUT
+          : LogEvents.AUTH_ROLE_LOAD_FAILED,
+        {
+          operation: "role.load",
+          attempt: 2,
+          durationMs: Date.now() - startedAt,
+          outcome: retryTimedOut ? "timed_out" : "failed",
+          retryable: false,
+          recoveryAction: "leave_unresolved",
+        },
+      );
       console.warn(
         "[authStore] Admin role check retry failed; leaving unresolved:",
         retryErr
@@ -236,22 +286,17 @@ function getErrorMessage(error: unknown): string {
   return "Something went wrong.";
 }
 
-/** Stale/revoked refresh tokens should sign the user out locally, not freeze boot. */
-function isInvalidRefreshTokenError(error: unknown): boolean {
-  const msg = getErrorMessage(error).toLowerCase();
-  return (
-    msg.includes("refresh token not found") ||
-    msg.includes("invalid refresh token") ||
-    msg.includes("invalid_grant")
-  );
-}
-
 async function clearStaleLocalSession(): Promise<void> {
   try {
     await supabase.auth.signOut({ scope: "local" });
   } catch {
     // Best-effort: server session may already be gone.
   }
+  logger.info(LogEvents.AUTH_SESSION_CLEARED, {
+    operation: "session.clear",
+    recoveryAction: "clear_stale_session",
+    outcome: "succeeded",
+  });
 }
 
 function isPostHogEnabled(): boolean {
@@ -385,6 +430,9 @@ export const useAuthStore = create<AuthStore>()(
               return;
             }
             _bootstrapping = true;
+            logger.info(LogEvents.BOOTSTRAP_STARTED, {
+              operation: "initialize",
+            });
 
             if (unsubAuthListener) {
               unsubAuthListener();
@@ -442,18 +490,28 @@ export const useAuthStore = create<AuthStore>()(
                 });
 
                 const profileLoaded = await get().loadProfile();
-                if (!profileLoaded) {
-                  return;
+                // Do not return early on profile failure — listener registration and
+                // bootstrap lock release must still run below.
+                if (profileLoaded) {
+                  dset((state) => {
+                    state.status = "authenticated";
+                  });
+
+                  logger.info(LogEvents.BOOTSTRAP_COMPLETED, {
+                    operation: "initialize",
+                    authState: "authenticated",
+                    outcome: "succeeded",
+                  });
+                  identifyPostHogUser(session.user as unknown as SupabaseUser);
                 }
-
-                dset((state) => {
-                  state.status = "authenticated";
-                });
-
-                identifyPostHogUser(session.user as unknown as SupabaseUser);
               } else {
                 dset((state) => {
                   state.status = "unauthenticated";
+                });
+                logger.info(LogEvents.BOOTSTRAP_COMPLETED, {
+                  operation: "initialize",
+                  authState: "anonymous",
+                  outcome: "succeeded",
                 });
               }
             } catch (error) {
@@ -469,6 +527,7 @@ export const useAuthStore = create<AuthStore>()(
                 await clearStaleLocalSession();
                 resetPostHog();
                 get().reset();
+                redirectToSessionExpiredLogin();
               } else {
                 logger.error(LogEvents.BOOTSTRAP_FAILED, {
                   outcome: "failed",
@@ -479,67 +538,72 @@ export const useAuthStore = create<AuthStore>()(
                   state.error = getErrorMessage(error);
                 });
               }
-            } finally {
-              // Release the bootstrap lock so a deliberate re-init (e.g. after
-              // a password reset or OAuth return) can run.
-              _bootstrapping = false;
             }
 
-            const { data } = supabase.auth.onAuthStateChange(
-              async (event, session) => {
-                if (event === "SIGNED_IN" && session) {
-                  dset((state) => {
-                    state.session = session as unknown as SupabaseSession;
-                    state.user = session.user as unknown as SupabaseUser;
-                  });
+            try {
+              // Register the auth listener before releasing the bootstrap lock so a
+              // StrictMode double-mount cannot start a second initialize() that races
+              // listener registration.
+              const { data } = supabase.auth.onAuthStateChange(
+                async (event, session) => {
+                  if (event === "SIGNED_IN" && session) {
+                    dset((state) => {
+                      state.session = session as unknown as SupabaseSession;
+                      state.user = session.user as unknown as SupabaseUser;
+                    });
 
-                  const profileLoaded = await get().loadProfile();
-                  if (!profileLoaded) {
-                    return;
+                    const profileLoaded = await get().loadProfile();
+                    if (!profileLoaded) {
+                      return;
+                    }
+
+                    dset((state) => {
+                      state.status = "authenticated";
+                    });
+
+                    identifyPostHogUser(
+                      session.user as unknown as SupabaseUser
+                    );
                   }
 
-                  dset((state) => {
-                    state.status = "authenticated";
-                  });
+                  if (event === "SIGNED_OUT") {
+                    resetPostHog();
+                    get().reset();
+                  }
 
-                  identifyPostHogUser(
-                    session.user as unknown as SupabaseUser
-                  );
+                  if (event === "TOKEN_REFRESHED" && session) {
+                    dset((state) => {
+                      state.session = session as unknown as SupabaseSession;
+                    });
+                  }
+
+                  if (event === "USER_UPDATED" && session) {
+                    dset((state) => {
+                      state.session = session as unknown as SupabaseSession;
+                      state.user = session.user as unknown as SupabaseUser;
+                    });
+
+                    void get().loadProfile();
+                  }
+
+                  if (event === "PASSWORD_RECOVERY" && session) {
+                    dset((state) => {
+                      state.session = session as unknown as SupabaseSession;
+                      state.user = session.user as unknown as SupabaseUser;
+                      state.status = "authenticated";
+                    });
+                  }
                 }
+              );
 
-                if (event === "SIGNED_OUT") {
-                  resetPostHog();
-                  get().reset();
-                }
-
-                if (event === "TOKEN_REFRESHED" && session) {
-                  dset((state) => {
-                    state.session = session as unknown as SupabaseSession;
-                  });
-                }
-
-                if (event === "USER_UPDATED" && session) {
-                  dset((state) => {
-                    state.session = session as unknown as SupabaseSession;
-                    state.user = session.user as unknown as SupabaseUser;
-                  });
-
-                  void get().loadProfile();
-                }
-
-                if (event === "PASSWORD_RECOVERY" && session) {
-                  dset((state) => {
-                    state.session = session as unknown as SupabaseSession;
-                    state.user = session.user as unknown as SupabaseUser;
-                    state.status = "authenticated";
-                  });
-                }
-              }
-            );
-
-            unsubAuthListener = () => {
-              data.subscription.unsubscribe();
-            };
+              unsubAuthListener = () => {
+                data.subscription.unsubscribe();
+              };
+            } finally {
+              // Release after listener attach so deliberate re-init (OAuth / password
+              // reset) can run, but concurrent StrictMode boots stay serialized.
+              _bootstrapping = false;
+            }
           },
 
           signInWithEmail: async (email, password) => {
@@ -718,7 +782,22 @@ export const useAuthStore = create<AuthStore>()(
               return inFlightProfileLoad.promise;
             }
 
+            // Surface loading UI when recovering from a prior error state.
+            if (get().status === "error") {
+              set((state) => {
+                state.status = "loading";
+                state.error = null;
+                state.isLoading = true;
+              });
+            }
+
             const run = async (): Promise<boolean> => {
+            const profileStartedAt = Date.now();
+            logger.info(LogEvents.AUTH_PROFILE_LOAD_STARTED, {
+              operation: "profile.load",
+              attempt: 1,
+            });
+
             const fetchProfile = () =>
               withTimeout(
                 profilesDB.getByIdMaybe(userId),
@@ -734,10 +813,28 @@ export const useAuthStore = create<AuthStore>()(
               try {
                 profile = await fetchProfile();
               } catch (firstErr) {
-                // Non-retryable auth errors must not be retried \u2014 they will fail
+                // Non-retryable auth errors must not be retried — they will fail
                 // immediately again and waste another PROFILE_FETCH_TIMEOUT_MS.
                 if (isNonRetryableAuthError(firstErr)) {
                   throw firstErr;
+                }
+                const timedOut = getErrorMessage(firstErr)
+                  .toLowerCase()
+                  .includes("timed out");
+                if (timedOut) {
+                  logger.warn(LogEvents.AUTH_PROFILE_LOAD_TIMED_OUT, {
+                    operation: "profile.load",
+                    attempt: 1,
+                    durationMs: Date.now() - profileStartedAt,
+                    outcome: "timed_out",
+                    retryable: true,
+                  });
+                } else {
+                  logger.warn(LogEvents.NETWORK_RETRY, {
+                    operation: "profile.load",
+                    attempt: 1,
+                    retryable: true,
+                  });
                 }
                 console.warn(
                   "[authStore] Profile load failed; retrying once:",
@@ -749,23 +846,58 @@ export const useAuthStore = create<AuthStore>()(
               const roleResult = await rolePromise;
 
               if (!profile) {
-                console.warn("[authStore] Profile not found; routing user to onboarding");
-                dset((state) => {
-                  state.profile = null;
-                  state.isProfileLoaded = true;
-                  if (state.status === "error") state.status = "authenticated";
-
-                  if (roleResult.resolved) {
-                    state.isAdmin = roleResult.isAdmin;
-                    state.isAdminResolved = true;
-                  }
-                  // else keep prior isAdminResolved (avoid false deny on abort)
-                  state.isOnboarded = false;
-                  state.planId = "free";
-                  state.credits = 0;
-                  state.error = null;
+                // Orphan auth users (trigger miss / deleted row): repair once.
+                logger.warn(LogEvents.AUTH_PROFILE_LOAD_FAILED, {
+                  operation: "profile.ensure",
+                  outcome: "failed",
+                  recoveryAction: "upsert_missing_profile",
+                  retryable: true,
                 });
-                return true;
+                console.warn(
+                  "[authStore] Profile not found — ensuring profile row for authenticated user",
+                );
+                try {
+                  const meta = (get().user?.user_metadata ?? {}) as Record<
+                    string,
+                    unknown
+                  >;
+                  const email = get().user?.email ?? "";
+                  const fullName =
+                    (typeof meta.full_name === "string" && meta.full_name) ||
+                    (typeof meta.name === "string" && meta.name) ||
+                    (email.includes("@") ? email.split("@")[0] : "User");
+                  const avatarUrl =
+                    typeof meta.avatar_url === "string"
+                      ? meta.avatar_url
+                      : typeof meta.picture === "string"
+                        ? meta.picture
+                        : null;
+
+                  profile = await withTimeout(
+                    profilesDB.upsert({
+                      id: userId,
+                      email,
+                      full_name: fullName,
+                      avatar_url: avatarUrl,
+                      credits: 50,
+                      plan_id: "free",
+                      onboarding_completed: false,
+                    } as Parameters<typeof profilesDB.upsert>[0]),
+                    PROFILE_FETCH_TIMEOUT_MS,
+                    "Profile ensure",
+                  );
+                } catch (ensureErr) {
+                  logger.error(LogEvents.AUTH_PROFILE_LOAD_FAILED, {
+                    operation: "profile.ensure",
+                    outcome: "failed",
+                    retryable: false,
+                  });
+                  throw ensureErr;
+                }
+              }
+
+              if (!profile) {
+                throw new Error(PROFILE_ERROR_MESSAGE);
               }
 
               const row = profile as unknown as Record<string, unknown>;
@@ -823,6 +955,11 @@ export const useAuthStore = create<AuthStore>()(
               }
 
               syncOverlayFromProfile(row);
+              logger.info(LogEvents.AUTH_PROFILE_LOAD_SUCCEEDED, {
+                operation: "profile.load",
+                durationMs: Date.now() - profileStartedAt,
+                outcome: "succeeded",
+              });
               return true;
             } catch (err) {
               console.error("[authStore] Failed to load profile:", err);
@@ -830,11 +967,33 @@ export const useAuthStore = create<AuthStore>()(
               // A dead refresh token is an auth failure, not a profile failure:
               // clear it locally instead of parking the user on an error screen.
               if (isInvalidRefreshTokenError(err)) {
+                logger.warn(LogEvents.AUTH_SESSION_RECOVERY_INVALID_TOKEN, {
+                  operation: "profile.load",
+                  outcome: "failed",
+                  recoveryAction: "clear_stale_session",
+                  retryable: false,
+                });
                 await clearStaleLocalSession();
                 resetPostHog();
                 get().reset();
+                redirectToSessionExpiredLogin();
                 return false;
               }
+
+              const timedOut = getErrorMessage(err)
+                .toLowerCase()
+                .includes("timed out");
+              logger.error(
+                timedOut
+                  ? LogEvents.AUTH_PROFILE_LOAD_TIMED_OUT
+                  : LogEvents.AUTH_PROFILE_LOAD_FAILED,
+                {
+                  operation: "profile.load",
+                  durationMs: Date.now() - profileStartedAt,
+                  outcome: timedOut ? "timed_out" : "failed",
+                  retryable: false,
+                },
+              );
 
               dset((state) => {
                 state.status = "error";

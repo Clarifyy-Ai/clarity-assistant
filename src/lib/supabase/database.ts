@@ -105,6 +105,32 @@ const PROFILE_SAFE_COLUMNS = [
   "years_of_exp",
 ].join(", ");
 
+/** Minimal columns for auth bootstrap — keeps profile load under the 2s budget. */
+const PROFILE_BOOT_COLUMNS = [
+  "id",
+  "email",
+  "full_name",
+  "avatar_url",
+  "credits",
+  "plan_id",
+  "subscription_status",
+  "payment_failed_at",
+  "is_banned",
+  "ban_reason",
+  "onboarding_completed",
+  "onboarding_step",
+  "preferred_model",
+  "target_role",
+  "role_type",
+  "overlay_opacity",
+  "overlay_position",
+  "overlay_font_size",
+  "stealth_mode",
+  "timezone",
+  "locale",
+  "updated_at",
+].join(", ");
+
 export const profilesDB = {
   async getById(userId: string): Promise<Tables<"profiles">> {
     return query(
@@ -116,7 +142,7 @@ export const profilesDB = {
   async getByIdMaybe(userId: string): Promise<Tables<"profiles"> | null> {
     const { data, error } = await supabase
       .from("profiles")
-      .select(PROFILE_SAFE_COLUMNS)
+      .select(PROFILE_BOOT_COLUMNS)
       .eq("id", userId)
       .maybeSingle();
 

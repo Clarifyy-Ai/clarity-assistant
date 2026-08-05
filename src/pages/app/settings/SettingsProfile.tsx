@@ -1,7 +1,7 @@
 // @ts-nocheck -- retained: notification_prefs and privacy_prefs JSONB column types not in Supabase generated schema; Toggle component uses Radix UI checked prop which TypeScript does not accept on the wrapper component type.
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { useAuthStore } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
 import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -43,7 +43,9 @@ const TARGET_ROLES = [
 ];
 
 export default function SettingsProfile() {
-  const { profile, user, setProfile } = useAuthStore();
+  const profile = useAuthStore((s) => s.profile);
+  const user = useAuthStore((s) => s.user);
+  const updateProfile = useAuthStore((s) => s.updateProfile);
 
   const [name,       setName]       = useState(profile?.full_name ?? "");
   const [bio,        setBio]        = useState(profile?.bio ?? "");
@@ -55,6 +57,27 @@ export default function SettingsProfile() {
   const [saved,      setSaved]      = useState(false);
   const [avatarUrl,  setAvatarUrl]  = useState(profile?.avatar_url ?? "");
   const [uploading,  setUploading]  = useState(false);
+
+  // Keep local form fields in sync when authStore profile updates (single source of truth).
+  useEffect(() => {
+    if (!profile) return;
+    setName(profile.full_name ?? "");
+    setBio(profile.bio ?? "");
+    setLocation(profile.timezone ?? "");
+    setWebsite(profile.website_url ?? "");
+    setExperience(yearsToLabel(profile.experience_years));
+    setTargetRole(profile.target_role ?? "");
+    setAvatarUrl(profile.avatar_url ?? "");
+  }, [
+    profile?.id,
+    profile?.full_name,
+    profile?.bio,
+    profile?.timezone,
+    profile?.website_url,
+    profile?.experience_years,
+    profile?.target_role,
+    profile?.avatar_url,
+  ]);
 
   const [newEmail,       setNewEmail]       = useState("");
   const [emailPassword,  setEmailPassword]  = useState("");
@@ -175,18 +198,10 @@ export default function SettingsProfile() {
       experience_years: yearsNum,
       target_role:      targetRole || null,
       avatar_url:       avatarUrl,
-      updated_at:       new Date().toISOString(),
     };
 
     try {
-      const { error } = await supabase
-        .from("profiles")
-        .update(updates)
-        .eq("id", user.id);
-
-      if (error) throw error;
-
-      setProfile({ ...profile, ...updates } as any);
+      await updateProfile(updates as any);
       setSaved(true);
       toast.success("Profile saved");
       setTimeout(() => setSaved(false), 2000);
