@@ -1,6 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { NavLink, Outlet, Navigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
+import { logger } from "@/lib/logger";
+import { toast } from "sonner";
 import {
   LayoutDashboard, Users, BarChart2,
   Flag, Shield, ChevronRight, DollarSign, Cpu,
@@ -107,6 +109,16 @@ function AdminNavLinks({ onNavigate }: { onNavigate?: () => void }) {
 export default function AdminLayout() {
   const { isAdmin, isAdminResolved, isProfileLoaded } = useAuthStore();
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  useEffect(() => {
+    if (isProfileLoaded && isAdminResolved && !isAdmin) {
+      logger.warn("route.rbac.access_denied", {
+        route: window.location.pathname,
+        reason: "User lacks admin role",
+      });
+      toast.error("Unauthorized: Admin privileges required.");
+    }
+  }, [isProfileLoaded, isAdminResolved, isAdmin]);
 
   // Wait for a definitive user_roles result — abort/timeout must not redirect.
   if (!isProfileLoaded || !isAdminResolved) {

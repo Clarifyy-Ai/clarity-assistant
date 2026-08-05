@@ -27,7 +27,7 @@
         script-src 'self';
         style-src 'self' 'unsafe-inline';
         img-src 'self' data: blob: https:;
-        font-src 'self' data:;
+        font-src 'self' data: https://cdn.gpteng.co;
         connect-src 'self'
           https://api.github.com
           https://*.supabase.co
@@ -101,7 +101,34 @@
     <meta name="twitter:card" content="summary_large_image" />
     <meta name="twitter:image" content="https://clarify.ai.sltfinanceindia.com/images/og-cover.png" />
 
-    <script src="./structured-data.js"></script>
+    <!--
+      Structured data (JSON-LD) — static data block; not an executable script.
+      Embedding directly avoids the CSP violation triggered by structured-data.js
+      which used document.createElement("script") at runtime.
+    -->
+    <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@graph": [
+        {
+          "@type": "Organization",
+          "name": "Clarify AI",
+          "url": "https://clarify.ai.sltfinanceindia.com/",
+          "logo": "https://clarify.ai.sltfinanceindia.com/icon.png",
+          "sameAs": [
+            "https://twitter.com/clarifyai",
+            "https://github.com/clarifyai"
+          ]
+        },
+        {
+          "@type": "WebSite",
+          "name": "Clarify AI",
+          "url": "https://clarify.ai.sltfinanceindia.com/",
+          "description": "AI-powered interview preparation with live practice coaching, mock sessions, prep lab, and multi-model AI routing."
+        }
+      ]
+    }
+    </script>
     <script src="./theme-init.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </head>

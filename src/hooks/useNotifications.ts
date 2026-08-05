@@ -1,8 +1,7 @@
-// @ts-nocheck
 import { useCallback, useEffect } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useNotificationStore } from "@/store/notificationStore";
-import { useAuthStore } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
 import type { AppNotification } from "@/types/user.types";
 
 export function useNotifications() {
@@ -15,15 +14,16 @@ export function useNotifications() {
   }, [user?.id]);
 
   async function loadNotifications(): Promise<void> {
+    if (!user) return;
     store.setIsLoading(true);
     const { data } = await supabase
       .from("notifications")
       .select("*")
-      .eq("user_id", user!.id)
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(50);
 
-    if (data) store.setNotifications(data as AppNotification[]);
+    if (data) store.setNotifications(data as unknown as AppNotification[]);
     store.setIsLoading(false);
   }
 

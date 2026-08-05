@@ -1,7 +1,6 @@
-// @ts-nocheck
 import { useCallback } from "react";
 import { useCoachStore } from "@/store/coachStore";
-import { useAuthStore } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
 import { useDocumentStore } from "@/store/documentStore";
 import { buildCoachingContext, serialiseContextForPrompt } from "@/lib/ai/contextEnvelopeBuilder";
 import type { CoachingContext } from "@/types/ai.types";

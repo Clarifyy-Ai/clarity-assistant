@@ -4,7 +4,7 @@ import {
   useEffect,
   useState,
 } from "react";
-import { NavLink, useLocation } from "react-router-dom";
+import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import {
   LayoutDashboard,
   Mic,
@@ -36,6 +36,10 @@ import {
   ShieldAlert,
   CreditCard,
   Star,
+  GraduationCap,
+  Award,
+  Coins,
+  CalendarCheck,
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
@@ -124,8 +128,8 @@ const NAV_SECTIONS: NavSection[] = [
       },
       {
         to: "/app/mock-test",
-        icon: ClipboardList,
-        stealthIcon: PenTool,
+        icon: GraduationCap,
+        stealthIcon: Award,
         label: PRODUCT_NAMES.govExams,
       },
     ],
@@ -148,7 +152,7 @@ const NAV_SECTIONS: NavSection[] = [
       {
         to: "/app/usage",
         icon: CreditCard,
-        stealthIcon: BarChart3,
+        stealthIcon: Coins,
         label: PRODUCT_NAMES.creditsUsage,
       },
       {
@@ -189,7 +193,7 @@ const NAV_SECTIONS: NavSection[] = [
       },
       {
         to: "/app/interviews",
-        icon: CalendarDays,
+        icon: CalendarCheck,
         stealthIcon: Calendar,
         label: PRODUCT_NAMES.interviews,
       },
@@ -225,6 +229,7 @@ function isPathActive(currentPath: string, itemPath: string): boolean {
 
 export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
   const location = useLocation();
+  const navigate = useNavigate();
 
   const sidebarCollapsed = useUIStore((state) => state.sidebar_collapsed);
   const stealthMode = useUIStore((state) => state.stealth_mode);
@@ -268,7 +273,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
   async function handleLogout(): Promise<void> {
     try {
       await signOut();
-      window.location.href = "/login";
+      navigate("/login");
     } catch (error) {
       console.error("[AppSidebar] Sign out failed:", error);
     }

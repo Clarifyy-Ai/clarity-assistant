@@ -13,6 +13,7 @@ import {
 import { Search, RotateCcw, ChevronLeft, ChevronRight } from "lucide-react";
 import { format } from "date-fns";
 import { toast } from "sonner";
+import { logger } from "@/lib/logger";
 
 interface AuditRow {
   id: string;
@@ -63,7 +64,10 @@ export default function AdminAuditLog() {
         setRows((data ?? []) as AuditRow[]);
         setTotal(count ?? 0);
       } catch (err) {
-        if (!cancelled) toast.error(err instanceof Error ? err.message : "Failed to load audit log");
+        if (!cancelled) {
+          logger.error("admin.audit_log.load.failed", { error: err });
+          toast.error(err instanceof Error ? err.message : "Failed to load audit log");
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }

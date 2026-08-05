@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
@@ -338,7 +337,7 @@ export default function InterviewDay() {
       <Card className="text-center py-5 bg-amber-500/5 border-amber-500/20">
         <Star className="w-5 h-5 text-amber-600 dark:text-amber-400 mx-auto mb-2" />
         <p className="text-sm font-medium text-amber-900 dark:text-amber-200 leading-relaxed transition-all">
-          "{AFFIRMATIONS[affIdx]}"
+          &ldquo;{AFFIRMATIONS[affIdx]}&rdquo;
         </p>
         <div className="flex justify-center gap-1 mt-3">
           {AFFIRMATIONS.map((_, i) => (

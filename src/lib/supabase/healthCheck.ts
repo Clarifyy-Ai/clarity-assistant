@@ -80,11 +80,19 @@ export async function logSupabaseHealth(): Promise<SupabaseHealth> {
   const result = await checkSupabaseHealth();
   const tag = "[supabase:health]";
   if (result.ok) {
+    // SECURITY: Do not log key fragments. Log only non-sensitive config indicators.
     console.info(
-      `${tag} ✅ connected (${result.latencyMs}ms) url=${result.url} key=${result.keyPreview}`
+      `${tag} \u2705 connected (${result.latencyMs}ms) url=${result.url} supabaseConfigured=true`
     );
   } else {
-    console.error(`${tag} ❌ ${result.error}`, result);
+    console.error(`${tag} \u274c ${result.error}`, {
+      ok: result.ok,
+      envPresent: result.envPresent,
+      canConnect: result.canConnect,
+      url: result.url,
+      latencyMs: result.latencyMs,
+      // key intentionally omitted
+    });
   }
   return result;
 }

@@ -122,7 +122,7 @@ export default function Settings() {
     <div className="flex flex-col gap-6 max-w-5xl w-full">
       {showSettingsHeader && (
         <PageHeader
-          title={activeNav?.label ?? "Settings"}
+          title="Settings"
           breadcrumbs={[
             { label: "App", href: "/app/dashboard" },
             ...(isRoot

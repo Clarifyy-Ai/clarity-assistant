@@ -208,6 +208,7 @@ export default function CodingHints() {
               <button
                 key={c.id}
                 onClick={() => setCategory(c.id)}
+                aria-pressed={category === c.id}
                 className={cn(
                   "px-2.5 py-1.5 rounded-xl border text-xs font-medium transition-all",
                   category === c.id
@@ -226,6 +227,7 @@ export default function CodingHints() {
               <button
                 key={d}
                 onClick={() => setDifficulty(d)}
+                aria-pressed={difficulty === d}
                 className={cn(
                   "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all capitalize",
                   difficulty === d

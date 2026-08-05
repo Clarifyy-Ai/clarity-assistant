@@ -129,6 +129,7 @@ export default function Interviews() {
           <button
             key={f}
             onClick={() => setFilter(f)}
+            aria-pressed={filter === f}
             className={cn(
               "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all capitalize",
               filter === f

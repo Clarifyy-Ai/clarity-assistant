@@ -195,8 +195,10 @@ const DebriefDetail = lazy(
   () => import("@/pages/app/debrief/DebriefDetail")
 );
 
-// Rooms — group practice deferred until WebRTC ships (routes redirect)
-
+// Rooms — group practice waitlist preview
+const GroupPracticeComingSoon = lazy(
+  () => import("@/pages/app/rooms/GroupPracticeComingSoon")
+);
 // Settings
 const Settings = lazy(() => import("@/pages/app/settings/Settings"));
 const SettingsProfile = lazy(
@@ -654,8 +656,8 @@ const routes = [
 
           { path: "guide", element: <Page component={Guide} /> },
           { path: "guide/practice-coach", element: <Page component={PracticeCoachGuide} /> },
-          { path: "rooms", element: <Navigate to="/app/dashboard" replace /> },
-          { path: "rooms/*", element: <Navigate to="/app/dashboard" replace /> },
+          { path: "rooms", element: <Page component={GroupPracticeComingSoon} /> },
+          { path: "rooms/*", element: <Page component={GroupPracticeComingSoon} /> },
 
           {
             path: "settings",

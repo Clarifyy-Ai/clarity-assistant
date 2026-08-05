@@ -43,10 +43,14 @@ export interface CreditPackCatalogEntry {
   active: boolean;
 }
 
-/** Rank for entitlement comparisons (aliases share ranks). */
+/** Rank for entitlement comparisons (aliases share ranks).
+ *  free=0, starter=1, pro/elite=2, enterprise=4.
+ *  starter must be > free so requirePlanRank("starter",...) correctly
+ *  blocks free users even though starter is a legacy/inactive plan.
+ */
 export const PLAN_RANK: Record<CanonicalPlanId, number> = {
   free: 0,
-  starter: 0,
+  starter: 1,
   pro: 2,
   elite: 2,
   enterprise: 4,

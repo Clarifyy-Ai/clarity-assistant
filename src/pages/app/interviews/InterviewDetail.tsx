@@ -306,10 +306,13 @@ export default function InterviewDetail() {
       {/* Prep checklist */}
       {!isPassed && (
         <Card>
-          <h3 className="text-sm font-semibold text-foreground mb-4 flex items-center gap-2">
+          <h3 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
             <CheckCircle className="w-4 h-4 text-emerald-400" />
             Pre-interview checklist
           </h3>
+          <p className="text-xs text-muted-foreground mb-4">
+            Note: Checklist items are for quick session prep and reset when you navigate away.
+          </p>
           <div className="space-y-2">
             {PREP_CHECKLIST.map((item, i) => (
               <button

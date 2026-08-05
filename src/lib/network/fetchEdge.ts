@@ -4,6 +4,7 @@ import { useAuthStore } from "@/store/userStore";
 import { getPrivateMode } from "@/hooks/usePrivateMode";
 import { EDGE_BASE, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
 import { refreshCredits } from "@/lib/billing/creditsManager";
+import { logger } from "@/lib/logger";
 
 /** Edge calls blocked while private mode is on (no cloud AI / analysis). */
 const PRIVATE_MODE_ALLOWLIST = new Set([
@@ -24,7 +25,7 @@ const CREDIT_REFRESH_SKIP = new Set([
 async function readToken(): Promise<string | undefined> {
   const { data, error } = await supabase.auth.getSession();
   if (error) {
-    console.warn("[fetchEdge] getSession failed:", error.message);
+    logger.warn("auth.session.recovery.failed", { error: error.message });
   }
   const fresh = data?.session?.access_token;
   if (fresh) return fresh;
@@ -90,10 +91,19 @@ export async function fetchEdge(
 
   const timeoutController = new AbortController();
   const timeout =
-    timeoutMs > 0 ? setTimeout(() => timeoutController.abort(), timeoutMs) : null;
+    timeoutMs > 0 ? setTimeout(() => timeoutController.abort(new Error("Timeout")), timeoutMs) : null;
 
-  // If caller provides a signal, we respect it. Otherwise we use internal timeout.
-  const signal = options?.signal ?? timeoutController.signal;
+  // Combine caller signal with internal timeout timer so both can abort the request
+  if (options?.signal) {
+    if (options.signal.aborted) {
+      timeoutController.abort(options.signal.reason);
+    } else {
+      options.signal.addEventListener("abort", () => {
+        timeoutController.abort(options?.signal?.reason ?? new Error("Aborted by caller"));
+      });
+    }
+  }
+  const signal = timeoutController.signal;
 
   const headers = await getAuthHeaders({
     ...(isFormData ? {} : { "Content-Type": "application/json" }),
@@ -118,9 +128,14 @@ export async function fetchEdge(
     return response;
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {
+      if (options?.signal?.aborted) {
+        throw new Error(`Edge Function "${fnName}" call was aborted`);
+      }
+      logger.warn("network.request.transient_failure", { fnName, timeoutMs, reason: "timeout" });
       throw new Error(`Edge Function "${fnName}" timed out after ${timeoutMs}ms`);
     }
     if (err instanceof TypeError) {
+      logger.error("network.request.transient_failure", { fnName, reason: "unreachable" });
       throw new Error(
         `Edge Function "${fnName}" is unreachable. Check CORS configuration and deployment.`
       );

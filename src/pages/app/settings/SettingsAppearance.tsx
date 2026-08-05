@@ -164,17 +164,22 @@ export default function SettingsAppearance() {
         </div>
       </Card>
 
-      <Button
-        variant={saved ? "success" : "primary"}
-        size="md"
-        onClick={handleSave}
-        leftIcon={saved
-          ? <CheckCircle className="w-4 h-4" />
-          : <Palette className="w-4 h-4" />
-        }
-      >
-        {saved ? "Applied!" : "Apply changes"}
-      </Button>
+      <div>
+        <Button
+          variant={saved ? "success" : "primary"}
+          size="md"
+          onClick={handleSave}
+          leftIcon={saved
+            ? <CheckCircle className="w-4 h-4" />
+            : <Palette className="w-4 h-4" />
+          }
+        >
+          {saved ? "Applied!" : "Apply changes"}
+        </Button>
+        <p className="text-xs text-muted-foreground mt-2">
+          Theme selection applies instantly. Click apply to save accent color, font size, and layout density.
+        </p>
+      </div>
 
       {/* ── Discrete / Stealth mode ── */}
       <Card>

@@ -1,4 +1,9 @@
 # SPA fallback — serve static files (manifest.json, sw.js) when present.
+# All other paths (including /dashboard, /app/*, /login, etc.) are served
+# via index.html and handled by React Router on the client.
+#
+# /dashboard \u2192 React Router \u2192 <Navigate to="/app/dashboard" replace />
+# If this rewrite is missing, /dashboard returns 404/503 from the server.
 <IfModule mod_rewrite.c>
   RewriteEngine On
   RewriteBase /

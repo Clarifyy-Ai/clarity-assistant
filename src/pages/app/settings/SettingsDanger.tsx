@@ -1,8 +1,8 @@
-// @ts-nocheck
+// @ts-nocheck -- retained: Supabase RPC / table types not in generated schema
 import { fetchEdge } from "@/lib/network/fetchEdge";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAuthStore } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
 import { supabase } from "@/lib/supabase/client";
 import {
   answerBankDB,

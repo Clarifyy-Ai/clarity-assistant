@@ -12,9 +12,10 @@ import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
+import { Input } from "@/components/ui/Input";
 import {
   Brain, ChevronRight, AlertTriangle,
-  CalendarDays,
+  CalendarDays, Search,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -38,6 +39,7 @@ export default function Debrief() {
   const [sessions, setSessions] = useState<Record<string, SessionMeta>>({});
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
 
   const fetchDebriefs = useCallback(async () => {
     if (!user) return;
@@ -77,6 +79,19 @@ export default function Debrief() {
     }
   }, [user?.id]);
 
+  const filteredDebriefs = search
+    ? debriefs.filter((d) => {
+        const q = search.toLowerCase();
+        const sess = d.session_id ? sessions[d.session_id] ?? null : null;
+        return (
+          (sess?.type ?? "").toLowerCase().includes(q) ||
+          (sess?.title ?? "").toLowerCase().includes(q) ||
+          (d.priority_focus ?? "").toLowerCase().includes(q) ||
+          (d.overall_grade ?? "").toLowerCase().includes(q)
+        );
+      })
+    : debriefs;
+
   useEffect(() => {
     void fetchDebriefs();
   }, [fetchDebriefs]);
@@ -93,7 +108,14 @@ export default function Debrief() {
   if (loading) {
     return (
       <PageContent className="space-y-5 max-w-3xl">
-        <PageHeader title="Debriefs" subtitle="Deep-dive AI analysis of each session" />
+        <PageHeader
+          title="Debriefs"
+          subtitle="Deep-dive AI analysis of each session"
+          breadcrumbs={[
+            { label: "Dashboard", href: "/app/dashboard" },
+            { label: "Debriefs" },
+          ]}
+        />
         <div className="space-y-3">
           {[...Array(3)].map((_, i) => <SkeletonCard key={i} />)}
         </div>
@@ -106,6 +128,19 @@ export default function Debrief() {
       <PageHeader
         title="Debriefs"
         subtitle="Deep-dive AI analysis of each session"
+        breadcrumbs={[
+          { label: "Dashboard", href: "/app/dashboard" },
+          { label: "Debriefs" },
+        ]}
+      />
+
+      <Input
+        placeholder="Search debriefs…"
+        aria-label="Search debriefs"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        leftIcon={<Search className="w-4 h-4" />}
+        className="max-w-sm"
       />
 
       {fetchError && (
@@ -115,21 +150,21 @@ export default function Debrief() {
         />
       )}
 
-      {!fetchError && debriefs.length === 0 && (
+      {!fetchError && filteredDebriefs.length === 0 && (
         <Card>
           <EmptyState
             icon={Brain}
-            title="No debriefs yet"
-            description="Complete a mock session to get your first AI debrief with grades, focus areas, and improvement tips."
-            actionLabel="Start mock session"
-            onAction={() => navigate("/app/mock")}
+            title={search ? "No matching debriefs" : "No debriefs yet"}
+            description={search ? `No debriefs match "${search}".` : "Complete a mock session to get your first AI debrief with grades, focus areas, and improvement tips."}
+            actionLabel={search ? undefined : "Start mock session"}
+            onAction={search ? undefined : () => navigate("/app/mock")}
           />
         </Card>
       )}
 
-      {!fetchError && debriefs.length > 0 && (
+      {!fetchError && filteredDebriefs.length > 0 && (
         <div className="space-y-3">
-          {debriefs.map((d) => {
+          {filteredDebriefs.map((d) => {
             const sess = d.session_id ? sessions[d.session_id] ?? null : null;
             const gc = gradeColor(d.overall_grade ?? "");
 

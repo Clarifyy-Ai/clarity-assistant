@@ -1,6 +1,5 @@
-// @ts-nocheck
 import { useEffect, useState } from "react";
-import { useAuthStore } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
 import { useAnalytics } from "@/hooks/useAnalytics";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
@@ -50,10 +49,20 @@ export default function Analytics() {
 
   if (analytics.isLoading) {
     return (
-      <div className="space-y-5">
-        <SkeletonCard />
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
+      <div className="space-y-6 max-w-5xl">
+        <PageHeader
+          title={PRODUCT_NAMES.analytics}
+          subtitle="Track your interview performance over time"
+          breadcrumbs={[
+            { label: "Dashboard", href: "/app/dashboard" },
+            { label: "Analytics" },
+          ]}
+        />
+        <div className="space-y-5">
+          <SkeletonCard />
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {[...Array(4)].map((_, i) => <SkeletonCard key={i} />)}
+          </div>
         </div>
       </div>
     );
@@ -62,7 +71,14 @@ export default function Analytics() {
   if (analytics.error) {
     return (
       <div className="space-y-6 max-w-5xl">
-        <PageHeader title={PRODUCT_NAMES.analytics} subtitle="Track your interview performance over time" />
+        <PageHeader
+          title={PRODUCT_NAMES.analytics}
+          subtitle="Track your interview performance over time"
+          breadcrumbs={[
+            { label: "Dashboard", href: "/app/dashboard" },
+            { label: "Analytics" },
+          ]}
+        />
         <Card className="border-red-500/30 bg-red-500/10 p-4">
           <p className="text-sm text-red-300">{analytics.error}</p>
           <button
@@ -87,6 +103,10 @@ export default function Analytics() {
         <PageHeader
           title={PRODUCT_NAMES.analytics}
           subtitle="Track your interview performance over time"
+          breadcrumbs={[
+            { label: "Dashboard", href: "/app/dashboard" },
+            { label: "Analytics" },
+          ]}
         />
         <Card>
           <EmptyState
@@ -108,6 +128,10 @@ export default function Analytics() {
       <PageHeader
         title={PRODUCT_NAMES.analytics}
         subtitle="Track your interview performance over time"
+        breadcrumbs={[
+          { label: "Dashboard", href: "/app/dashboard" },
+          { label: "Analytics" },
+        ]}
         actions={
           <div className="flex flex-wrap items-center gap-2">
             <Select

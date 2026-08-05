@@ -524,7 +524,7 @@ export default function DebriefDetail() {
           <div>
             <p className="text-xs font-semibold text-primary mb-1">AI insight</p>
             <p className="text-sm text-foreground leading-relaxed italic">
-              "{debrief.insight}"
+              &ldquo;{debrief.insight}&rdquo;
             </p>
           </div>
         </Card>

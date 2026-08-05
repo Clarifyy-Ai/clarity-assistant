@@ -368,6 +368,10 @@ export default function UsageDashboard(): JSX.Element {
       <PageHeader
         title="Usage & Analytics"
         description="Track credits, sessions, and recent billing-related activity."
+        breadcrumbs={[
+          { label: "Dashboard", href: "/app/dashboard" },
+          { label: "Usage & Credits" },
+        ]}
         actions={
           <div className="flex gap-2">
             <Button

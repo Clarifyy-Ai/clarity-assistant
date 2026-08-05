@@ -253,9 +253,25 @@ export async function signOut(): Promise<void> {
   });
 
   if (err) {
-    // Even if server-side sign-out fails, clear local storage
-    try { localStorage.clear(); } catch {}
-    console.warn("[auth] Sign out error (session cleared locally):", err.message);
+    // Even if server-side sign-out fails, clear the Supabase auth token locally.
+    // SECURITY: Do NOT call localStorage.clear() \u2014 that destroys all user
+    // preferences (theme, layout settings, etc.) which is unnecessary and harmful.
+    // Only remove the Supabase auth-token entries.
+    try {
+      const keysToRemove: string[] = [];
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key && key.endsWith("-auth-token")) {
+          keysToRemove.push(key);
+        }
+      }
+      for (const key of keysToRemove) {
+        localStorage.removeItem(key);
+      }
+    } catch {
+      // Storage may be unavailable (private browsing, quota exceeded, etc.)
+    }
+    console.warn("[auth] Sign out error (Supabase auth token cleared locally):", err.message);
   }
 }
 

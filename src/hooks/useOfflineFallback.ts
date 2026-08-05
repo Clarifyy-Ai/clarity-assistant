@@ -1,4 +1,3 @@
-// @ts-nocheck
 import { useCallback } from "react";
 import { useNetworkMonitor } from "./useNetworkMonitor";
 import { useOverlayStore } from "@/store/overlayStore";
@@ -14,15 +13,13 @@ export function useOfflineFallback() {
   const isOffline = mode === "offline";
 
   const serveFallback = useCallback((questionText: string): boolean => {
-    const { mode: currentMode } = useOverlayStore.getState();
-    if (currentMode !== undefined && mode !== "offline") return false;
+    const storeState = useOverlayStore.getState() as { mode?: string; setOfflineFallback?: (text: string) => void };
+    if (storeState.mode !== undefined && mode !== "offline") return false;
 
-    // Use getState() so the callback stays stable (no store object in dep array)
-    const store = useOverlayStore.getState();
     const template =
       `Consider this question: "${questionText.slice(0, 100)}"\n\n` +
       `You're offline. Use the STAR framework:\nSituation → Task → Action → Result.`;
-    store.setOfflineFallback?.(template);
+    storeState.setOfflineFallback?.(template);
     return mode === "offline";
   }, [mode]);
 

@@ -1,9 +1,9 @@
-// @ts-nocheck
 import { useEffect, useState, useCallback } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { companyProfilePath } from "@/lib/company/slug";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
@@ -13,7 +13,7 @@ import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import {
   Building2, Search, ChevronRight,
-  Plus, Sparkles, Clock, Star,
+  Plus, Sparkles, Clock, Star, Coins,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
@@ -110,6 +110,10 @@ export default function CompanyResearch() {
           >
             Generate brief
           </Button>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground mt-2.5">
+          <Coins className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+          <span>Generating a new deep-dive brief consumes {AI_CREDIT_COSTS.company_research} credits</span>
         </div>
 
         {/* Popular companies */}

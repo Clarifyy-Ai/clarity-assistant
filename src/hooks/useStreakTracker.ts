@@ -1,8 +1,7 @@
-// @ts-nocheck
 import { useCallback, useEffect } from "react";
 import { supabase } from "@/lib/supabase/client";
 import { useGamificationStore } from "@/hooks/useGamification";
-import { useAuthStore } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
 
 export function useStreakTracker() {
   const { user } = useAuthStore();

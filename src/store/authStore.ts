@@ -30,6 +30,7 @@ import { useOverlayStore } from "@/store/overlayStore";
 import { normalizePreferredModel } from "@/lib/ai/modelOptions";
 import { isElectronApp } from "@/lib/platform/isElectron";
 import { clearBYOKVault } from "@/lib/security/byokVault";
+import { logger, LogEvents } from "@/lib/logger";
 
 import type {
   SupabaseSession,
@@ -67,7 +68,24 @@ function withTimeout<T>(promise: Promise<T>, ms: number, label: string): Promise
 
 
 /**
+ * Returns true for Supabase errors that are non-retryable auth failures.
+ * These should NOT be retried — retrying burns time and creates log noise.
+ */
+function isNonRetryableAuthError(error: unknown): boolean {
+  const msg = getErrorMessage(error).toLowerCase();
+  return (
+    isInvalidRefreshTokenError(error) ||
+    msg.includes("jwt expired") ||
+    msg.includes("not authenticated") ||
+    msg.includes("invalid api key") ||
+    msg.includes("permission denied") ||
+    msg.includes("row-level security")
+  );
+}
+
+/**
  * Resolve admin role with one retry on abort/timeout/network failure.
+ * Non-retryable auth errors are propagated immediately.
  * Unresolved result must NOT be treated as "not admin".
  */
 async function resolveAdminRole(
@@ -84,6 +102,11 @@ async function resolveAdminRole(
   try {
     return { resolved: true, isAdmin: await attempt() };
   } catch (err) {
+    // Do not retry auth failures — they will fail again immediately.
+    if (isNonRetryableAuthError(err)) {
+      console.warn("[authStore] Admin role check: non-retryable auth error", getErrorMessage(err));
+      return { resolved: false, isAdmin: false };
+    }
     console.warn("[authStore] Admin role check failed; retrying once:", err);
     try {
       return { resolved: true, isAdmin: await attempt() };
@@ -188,6 +211,14 @@ function buildInitialAuthState(): AuthState {
 const INITIAL_STATE: AuthState = buildInitialAuthState();
 
 let unsubAuthListener: (() => void) | null = null;
+
+/**
+ * Prevents concurrent initialize() calls.
+ * React StrictMode mounts → unmounts → mounts in development which can
+ * fire the useEffect twice before the first run completes. This flag
+ * ensures only one bootstrap sequence runs at a time.
+ */
+let _bootstrapping = false;
 
 /** Dedupes concurrent profile loads for the same user. */
 let inFlightProfileLoad: { userId: string; promise: Promise<boolean> } | null = null;
@@ -340,6 +371,21 @@ export const useAuthStore = create<AuthStore>()(
           ...INITIAL_STATE,
 
           initialize: async () => {
+            // ── Bootstrap guard ──────────────────────────────────────────────
+            // React StrictMode fires effects twice (mount→unmount→mount) in
+            // development. The second call arrives before the first completes,
+            // so we guard with a module-level flag rather than a store flag
+            // (store state updates are async and would arrive too late).
+            if (_bootstrapping) {
+              logger.warn(LogEvents.BOOTSTRAP_DUPLICATE_PREVENTED, {
+                operation: "initialize",
+                outcome: "skipped",
+              });
+              console.warn("[authStore] initialize() called while already bootstrapping — skipped (StrictMode guard)");
+              return;
+            }
+            _bootstrapping = true;
+
             if (unsubAuthListener) {
               unsubAuthListener();
               unsubAuthListener = null;
@@ -366,9 +412,14 @@ export const useAuthStore = create<AuthStore>()(
               // Ignore vault wipe failures.
             }
 
-            if (hadCachedSession && get().user?.id) {
-              void get().loadProfile();
-            }
+            // ── NOTE: Do NOT call loadProfile() here based on cached session. ──
+            // The cached session may hold a stale/revoked refresh token.
+            // Always wait for getSession() to confirm the token is valid before
+            // starting profile or role queries. Calling loadProfile() before
+            // getSession() completes causes:
+            //   (a) duplicate profile load (once here, once after getSession),
+            //   (b) profile/role requests failing with 401 on a stale token,
+            //   (c) repeated timeout warnings that look like an auth loop.
 
             try {
               const {
@@ -407,19 +458,31 @@ export const useAuthStore = create<AuthStore>()(
               }
             } catch (error) {
               if (isInvalidRefreshTokenError(error)) {
+                logger.warn(LogEvents.AUTH_SESSION_RECOVERY_INVALID_TOKEN, {
+                  outcome: "failed",
+                  recoveryAction: "clear_stale_session",
+                  retryable: false,
+                });
                 console.warn(
-                  "[authStore] Stale refresh token — clearing local session",
-                  error,
+                  "[authStore] Stale refresh token detected — clearing local session and redirecting to login",
                 );
                 await clearStaleLocalSession();
                 resetPostHog();
                 get().reset();
               } else {
+                logger.error(LogEvents.BOOTSTRAP_FAILED, {
+                  outcome: "failed",
+                  operation: "session.check",
+                });
                 dset((state) => {
                   state.status = "error";
                   state.error = getErrorMessage(error);
                 });
               }
+            } finally {
+              // Release the bootstrap lock so a deliberate re-init (e.g. after
+              // a password reset or OAuth return) can run.
+              _bootstrapping = false;
             }
 
             const { data } = supabase.auth.onAuthStateChange(
@@ -671,7 +734,9 @@ export const useAuthStore = create<AuthStore>()(
               try {
                 profile = await fetchProfile();
               } catch (firstErr) {
-                if (isInvalidRefreshTokenError(firstErr)) {
+                // Non-retryable auth errors must not be retried \u2014 they will fail
+                // immediately again and waste another PROFILE_FETCH_TIMEOUT_MS.
+                if (isNonRetryableAuthError(firstErr)) {
                   throw firstErr;
                 }
                 console.warn(

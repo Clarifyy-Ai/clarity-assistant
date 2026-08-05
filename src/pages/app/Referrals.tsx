@@ -76,7 +76,7 @@ export default function Referrals() {
   const steps = [
     { icon: Share2, title: "Share your link", desc: "Send your unique referral link to friends" },
     { icon: Users, title: "They sign up", desc: "Your friend creates a free account" },
-    { icon: Zap, title: "You both earn credits", desc: "50% off first purchase + bonus credits when they join (admin-configurable)" },
+    { icon: Zap, title: "You both earn credits", desc: "You both receive bonus credits when your friend creates their first session" },
   ];
 
   return (

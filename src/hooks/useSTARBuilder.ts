@@ -2,7 +2,7 @@
 import { useState, useCallback } from "react";
 import { callGemini } from "@/lib/ai/geminiClient";
 import { callOpenAI } from "@/lib/ai/openaiClient";
-import { useAuthStore } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
 import { useDocuments } from "./useDocuments";
 import type { STARComponents, SavedAnswer, AnswerCategory } from "@/types/document.types";
 

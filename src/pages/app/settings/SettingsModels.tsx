@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabase/client";
-import { useAuthStore } from "@/store/userStore";
+import { useAuthStore } from "@/store/authStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";

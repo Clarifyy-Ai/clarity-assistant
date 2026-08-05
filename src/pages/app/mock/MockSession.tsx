@@ -336,6 +336,12 @@ export default function MockSession() {
       if (useOverlayStore.getState().auto_generate) {
         void handleRequestHint(qText);
       }
+      if (typeof window !== "undefined" && "speechSynthesis" in window) {
+        window.speechSynthesis.cancel();
+        const utterance = new SpeechSynthesisUtterance(qText);
+        utterance.rate = 1.0;
+        window.speechSynthesis.speak(utterance);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, question, qIndex, injectInterviewerQuestion]);

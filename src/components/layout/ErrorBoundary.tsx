@@ -1,8 +1,10 @@
-// @ts-nocheck
-import React, { ReactNode, useState } from 'react';
+import React, { ReactNode } from 'react';
 import { AlertTriangle, RefreshCw } from 'lucide-react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+
+import * as Sentry from '@sentry/react';
+import { logger } from '@/lib/logger';
 
 interface ErrorBoundaryProps {
   children: ReactNode;
@@ -42,16 +44,22 @@ export class ErrorBoundary extends React.Component<
 
   componentDidCatch(error: Error, errorInfo: React.ErrorInfo) {
     // Log error to console in development
-    if (process.env.NODE_ENV === 'development') {
+    if (import.meta.env.DEV) {
       console.error('Error caught by boundary:', error);
       console.error('Error info:', errorInfo);
     }
 
-    // Optional: Send to error tracking service (Sentry)
-    if (window.__sentry__) {
-      window.__sentry__.captureException(error, {
+    logger.error("ui.component.error", {
+      error,
+      componentStack: errorInfo.componentStack,
+    });
+
+    try {
+      Sentry.captureException(error, {
         contexts: { react: { componentStack: errorInfo.componentStack } },
       });
+    } catch {
+      // Ignore if Sentry is disabled or unavailable
     }
   }
 
@@ -81,7 +89,7 @@ export class ErrorBoundary extends React.Component<
                     'An unexpected error occurred. Please try again.'}
                 </p>
 
-                {process.env.NODE_ENV === 'development' && (
+                {import.meta.env.DEV && (
                   <details className="mb-4 text-xs text-red-100">
                     <summary className="cursor-pointer font-semibold mb-2">
                       Error Details

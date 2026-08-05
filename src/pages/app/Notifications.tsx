@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuthStore } from "@/store/userStore";
+import { useNavigate } from "react-router-dom";
 import { notificationsDB } from "@/lib/supabase/database";
 import { supabase } from "@/lib/supabase/client";
 import { Card } from "@/components/ui/Card";
@@ -22,8 +23,21 @@ const TYPE_ICONS: Record<string, React.ElementType> = {
   session: Bell,
 };
 
+/** Resolve a notification to an in-app URL based on type + entity id. */
+function resolveNotificationUrl(n: Notification): string | null {
+  const eid = (n as any).entity_id as string | undefined;
+  switch (n.type) {
+    case "session":   return eid ? `/app/sessions/${eid}` : "/app/sessions";
+    case "debrief":   return eid ? `/app/debrief/${eid}` : "/app/debrief";
+    case "credit":    return "/app/settings/billing";
+    case "alert":     return "/app/usage";
+    default:          return null;
+  }
+}
+
 export default function Notifications() {
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -154,7 +168,12 @@ export default function Notifications() {
             return (
               <Card
                 key={n.id}
-                className={cn(!n.is_read && "border-primary/30")}
+                className={cn(!n.is_read && "border-primary/30", resolveNotificationUrl(n) && "cursor-pointer")}
+                onClick={() => {
+                  const url = resolveNotificationUrl(n);
+                  if (!n.is_read) markRead(n.id);
+                  if (url) navigate(url);
+                }}
               >
                 <div className="flex items-start gap-3">
                   <div className={cn(
@@ -174,11 +193,19 @@ export default function Notifications() {
                   </div>
                   <div className="flex items-center gap-1">
                     {!n.is_read && (
-                      <button onClick={() => markRead(n.id)} className="p-1.5 rounded-lg hover:bg-accent/10 text-muted-foreground hover:text-foreground" title="Mark as read">
+                      <button
+                        onClick={(e) => { e.stopPropagation(); markRead(n.id); }}
+                        className="p-1.5 rounded-lg hover:bg-accent/10 text-muted-foreground hover:text-foreground"
+                        aria-label="Mark as read"
+                      >
                         <Check className="w-3.5 h-3.5" />
                       </button>
                     )}
-                    <button onClick={() => deleteNotification(n.id)} className="p-1.5 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-500" title="Delete">
+                    <button
+                      onClick={(e) => { e.stopPropagation(); deleteNotification(n.id); }}
+                      className="p-1.5 rounded-lg hover:bg-red-500/10 text-muted-foreground hover:text-red-500"
+                      aria-label="Delete notification"
+                    >
                       <Trash2 className="w-3.5 h-3.5" />
                     </button>
                   </div>
