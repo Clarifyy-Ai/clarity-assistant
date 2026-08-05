@@ -247,11 +247,13 @@ def build_overrides(report: dict) -> dict[str, tuple[str, str, str]]:
     put("QA-040", "Pass", "anon", "Live AUTH-03 /forgot-password Pass — email field present.")
     put(
         "QA-041",
-        "Fail",
+        "Blocked",
         "—",
-        "Prior QA: reset email missing CTA / connection refused. Code now uses VITE_APP_URL "
-        "redirectTo. Ops: Auth email template + Site URL allowlist still required. "
-        "Mark Pass only after ops + redeploy smoke.",
+        "Code fixed 007c2816: buildAuthRedirectUrl() never bakes localhost into prod "
+        "reset emails; ResetPassword shows expired-link UX. Remaining OPS: Supabase Auth "
+        "email template CTA ({{ .ConfirmationURL }}) + redirect allowlist + deploy with "
+        "VITE_APP_URL=https://clarify.ai.sltfinanceindia.com. See "
+        "docs/qa/incidents/2026-08-05-qa-041-password-reset-redirect.md.",
     )
     put(
         "QA-042",
@@ -834,8 +836,14 @@ def apply():
     )
     inst["A27"].font = Font(bold=True, color="C00000" if PROD_STALE else "006100")
 
-    wb.save(WB_PATH)
-    print("Updated", WB_PATH)
+    try:
+        wb.save(WB_PATH)
+        print("Updated", WB_PATH)
+    except PermissionError:
+        alt = ROOT / "Clarify_AI_QA_Checklist_Basic_AUDITED.xlsx"
+        wb.save(alt)
+        print("LOCKED original — wrote", alt)
+        print("Close Excel and re-run to refresh Clarify_AI_QA_Checklist_Basic.xlsx")
     print("Counts:", counts)
     print("Fail Log rows:", len(fail_rows))
     for fr in fail_rows:
