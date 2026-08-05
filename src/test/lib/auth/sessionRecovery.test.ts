@@ -3,7 +3,9 @@ import {
   isInvalidRefreshTokenError,
   isNonRetryableAuthError,
   redirectToSessionExpiredLogin,
+  redirectAfterCrossTabSignOut,
   SESSION_EXPIRED_REASON,
+  SIGNED_OUT_ELSEWHERE_REASON,
 } from "@/lib/auth/sessionErrors";
 import {
   sanitizeReturnTo,
@@ -128,6 +130,52 @@ describe("redirectToSessionExpiredLogin", () => {
     expect(window.location.assign).toHaveBeenCalledWith(
       "/login?reason=session_expired&returnTo=%2Fapp%2Fdashboard",
     );
+  });
+});
+
+describe("redirectAfterCrossTabSignOut [QA-231]", () => {
+  const originalLocation = window.location;
+
+  beforeEach(() => {
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        pathname: "/app/dashboard",
+        search: "",
+        hash: "",
+        assign: vi.fn(),
+      },
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: originalLocation,
+    });
+  });
+
+  it("assigns login with signed_out_elsewhere for protected routes", () => {
+    redirectAfterCrossTabSignOut("/app/live");
+    expect(window.location.assign).toHaveBeenCalledWith(
+      "/login?reason=signed_out_elsewhere&returnTo=%2Fapp%2Flive",
+    );
+  });
+
+  it("does not redirect when already on login", () => {
+    (window.location as { pathname: string }).pathname = "/login";
+    redirectAfterCrossTabSignOut("/login");
+    expect(window.location.assign).not.toHaveBeenCalled();
+  });
+
+  it("does not redirect from public marketing paths", () => {
+    (window.location as { pathname: string }).pathname = "/pricing";
+    redirectAfterCrossTabSignOut("/pricing");
+    expect(window.location.assign).not.toHaveBeenCalled();
+  });
+
+  it("uses a distinct reason from session_expired", () => {
+    expect(SIGNED_OUT_ELSEWHERE_REASON).not.toBe(SESSION_EXPIRED_REASON);
   });
 });
 

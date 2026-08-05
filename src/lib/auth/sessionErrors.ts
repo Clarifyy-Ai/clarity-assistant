@@ -43,6 +43,11 @@ export const SESSION_EXPIRED_REASON = "session_expired" as const;
 export const SESSION_EXPIRED_MESSAGE =
   "Your session expired. Please sign in again.";
 
+/** Shown when a sign-out in another browser tab ended this tab's session too. */
+export const SIGNED_OUT_ELSEWHERE_REASON = "signed_out_elsewhere" as const;
+export const SIGNED_OUT_ELSEWHERE_MESSAGE =
+  "You were signed out because this account signed out in another tab.";
+
 /**
  * Normalize browser + Electron hash-router locations to an app path.
  * Examples:
@@ -83,11 +88,12 @@ function isProtectedAppPath(path: string): boolean {
 }
 
 /**
- * Hard-navigate to login after an invalid refresh token.
- * Uses assign() so half-mounted protected UI cannot keep retrying.
- * Supports Electron hash-router (`/#/app/...`) locations.
+ * Hard-navigate to login with a given `reason`. Shared by session-expiry and
+ * cross-tab sign-out flows. Uses assign() so half-mounted protected UI cannot
+ * keep retrying. Supports Electron hash-router (`/#/app/...`) locations.
  */
-export function redirectToSessionExpiredLogin(
+function redirectToLoginWithReason(
+  reason: string,
   currentPath?: string | null,
 ): void {
   if (typeof window === "undefined") {
@@ -114,9 +120,28 @@ export function redirectToSessionExpiredLogin(
   const returnTo =
     sanitizeReturnTo(resolveAppPath(path)) ?? "/app/dashboard";
   const target = buildLoginUrl({
-    reason: SESSION_EXPIRED_REASON,
+    reason,
     returnTo,
   });
 
   window.location.assign(target);
+}
+
+/**
+ * Hard-navigate to login after an invalid refresh token.
+ */
+export function redirectToSessionExpiredLogin(
+  currentPath?: string | null,
+): void {
+  redirectToLoginWithReason(SESSION_EXPIRED_REASON, currentPath);
+}
+
+/**
+ * Hard-navigate to login after another tab signed this account out
+ * (concurrent-tab logout sync).
+ */
+export function redirectAfterCrossTabSignOut(
+  currentPath?: string | null,
+): void {
+  redirectToLoginWithReason(SIGNED_OUT_ELSEWHERE_REASON, currentPath);
 }

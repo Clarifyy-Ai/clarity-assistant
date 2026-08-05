@@ -35,6 +35,7 @@ import {
   isInvalidRefreshTokenError,
   isNonRetryableAuthError,
   redirectToSessionExpiredLogin,
+  redirectAfterCrossTabSignOut,
 } from "@/lib/auth/sessionErrors";
 import { buildAuthRedirectUrl } from "@/lib/auth/redirectUrl";
 
@@ -273,6 +274,87 @@ let _bootstrapping = false;
 
 /** Dedupes concurrent profile loads for the same user. */
 let inFlightProfileLoad: { userId: string; promise: Promise<boolean> } | null = null;
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Concurrent-tab logout sync (QA-231)
+//
+// Supabase's JS client does not broadcast sign-out across tabs on its own —
+// each tab keeps whatever session state it already loaded into memory until
+// its next network call fails. We close that gap two ways:
+//   1. BroadcastChannel — signOut() posts a message; other tabs react instantly.
+//   2. `storage` event fallback — catches the case where the Supabase auth
+//      token key is removed from localStorage by another tab/context that
+//      doesn't go through our signOut() (e.g. an older tab, a future code
+//      path), so tabs without BroadcastChannel support still self-heal.
+// ─────────────────────────────────────────────────────────────────────────────
+
+const CROSS_TAB_AUTH_CHANNEL_NAME = "clarify-auth-sync-v1";
+const CROSS_TAB_SIGNED_OUT_SIGNAL = "signed-out";
+const SUPABASE_AUTH_STORAGE_KEY_PATTERN = /^sb-.*-auth-token$/;
+
+let crossTabAuthChannel: BroadcastChannel | null = null;
+let crossTabListenersAttached = false;
+
+function getCrossTabAuthChannel(): BroadcastChannel | null {
+  if (typeof window === "undefined" || typeof BroadcastChannel === "undefined") {
+    return null;
+  }
+  if (!crossTabAuthChannel) {
+    try {
+      crossTabAuthChannel = new BroadcastChannel(CROSS_TAB_AUTH_CHANNEL_NAME);
+    } catch {
+      crossTabAuthChannel = null;
+    }
+  }
+  return crossTabAuthChannel;
+}
+
+/** Called by this tab's signOut() so every other open tab drops its session too. */
+function notifyOtherTabsSignedOut(): void {
+  try {
+    getCrossTabAuthChannel()?.postMessage(CROSS_TAB_SIGNED_OUT_SIGNAL);
+  } catch {
+    // Best-effort; the storage-event fallback still applies.
+  }
+}
+
+function handleCrossTabSignOutSignal(): void {
+  const state = useAuthStore.getState();
+  if (!state.isAuthenticated) {
+    return;
+  }
+  resetPostHog();
+  state.reset();
+  // Fire-and-forget: drop this tab's in-memory GoTrue session too, so a
+  // stale access token isn't reused before the redirect completes.
+  void clearStaleLocalSession();
+  redirectAfterCrossTabSignOut();
+}
+
+/** Idempotent — safe to call every initialize(); only attaches listeners once per tab. */
+function attachCrossTabSignOutListeners(): void {
+  if (crossTabListenersAttached || typeof window === "undefined") {
+    return;
+  }
+  crossTabListenersAttached = true;
+
+  const channel = getCrossTabAuthChannel();
+  channel?.addEventListener("message", (event: MessageEvent) => {
+    if (event.data === CROSS_TAB_SIGNED_OUT_SIGNAL) {
+      handleCrossTabSignOutSignal();
+    }
+  });
+
+  window.addEventListener("storage", (event: StorageEvent) => {
+    if (
+      event.key &&
+      SUPABASE_AUTH_STORAGE_KEY_PATTERN.test(event.key) &&
+      event.newValue === null
+    ) {
+      handleCrossTabSignOutSignal();
+    }
+  });
+}
 
 
 function getErrorMessage(error: unknown): string {
@@ -602,6 +684,8 @@ export const useAuthStore = create<AuthStore>()(
               unsubAuthListener = () => {
                 data.subscription.unsubscribe();
               };
+
+              attachCrossTabSignOutListeners();
             } finally {
               // Release after listener attach so deliberate re-init (OAuth / password
               // reset) can run, but concurrent StrictMode boots stay serialized.
@@ -750,6 +834,8 @@ export const useAuthStore = create<AuthStore>()(
                 // Ignore local vault clearing failure.
               }
               get().reset();
+              // Let any other open tabs for this account drop their session too.
+              notifyOtherTabsSignedOut();
             }
           },
 

@@ -29,6 +29,8 @@ import { sanitizeReturnTo } from "@/lib/auth/safeReturnTo";
 import {
   SESSION_EXPIRED_MESSAGE,
   SESSION_EXPIRED_REASON,
+  SIGNED_OUT_ELSEWHERE_MESSAGE,
+  SIGNED_OUT_ELSEWHERE_REASON,
 } from "@/lib/auth/sessionErrors";
 
 type LocationState = {
@@ -147,6 +149,8 @@ export default function Login(): JSX.Element {
     const reason = searchParams.get("reason");
     if (reason === SESSION_EXPIRED_REASON) {
       setAuthError(SESSION_EXPIRED_MESSAGE);
+    } else if (reason === SIGNED_OUT_ELSEWHERE_REASON) {
+      setAuthError(SIGNED_OUT_ELSEWHERE_MESSAGE);
     } else if (message) {
       setAuthError(decodeURIComponent(message.replace(/\+/g, " ")));
     } else if (errorCode) {

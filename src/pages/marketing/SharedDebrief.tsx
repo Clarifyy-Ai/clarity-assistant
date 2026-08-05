@@ -62,7 +62,11 @@ export default function SharedDebrief() {
   });
 
   useEffect(() => {
-    if (!token) return;
+    if (!token || !token.trim()) {
+      setLoading(false);
+      setError("This shared link is invalid or has expired.");
+      return;
+    }
     (async () => {
       setLoading(true);
       setError(null);
