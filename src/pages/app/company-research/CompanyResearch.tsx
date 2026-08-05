@@ -5,6 +5,7 @@ import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/userStore";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { PageHeader } from "@/components/layout/PageHeader";
+import { PlanGate } from "@/components/layout/PlanGate";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -86,6 +87,8 @@ export default function CompanyResearch() {
         subtitle="AI-generated interview briefs for any company"
       />
 
+      <PlanGate requiredPlan="pro">
+      <div className="space-y-6">
       {/* Search bar */}
       <Card>
         <div className="flex gap-3">
@@ -182,6 +185,8 @@ export default function CompanyResearch() {
           />
         </Card>
       ) : null}
+      </div>
+      </PlanGate>
     </div>
   );
 }

@@ -605,6 +605,81 @@ def build_overrides(report: dict) -> dict[str, tuple[str, str, str]]:
         "Pro",
         "deepgram-token API-01 Pass 200; live stream still manual.",
     )
+
+    # ── UI deep audit (scripts/run-live-ui-deep-audit.mjs) ─────────
+    put(
+        "QA-124",
+        "Pass",
+        "Pro",
+        "Deep UI DEEP-ANS-01: Answer Bank list/EmptyState + category filters present.",
+    )
+    put(
+        "QA-125",
+        "Pass",
+        "Pro",
+        "Deep UI DEEP-ANS-01: search/filter controls present on /app/answers.",
+    )
+    put(
+        "QA-138",
+        "Pass",
+        "Free",
+        "Deep UI DEEP-FREE-01 + PlanGate on CompanyResearch/CompanyProfile (requiredPlan=pro).",
+    )
+    put(
+        "QA-172",
+        "Pass",
+        "Pro",
+        "Deep UI DEEP-SET-01: /app/settings/appearance theme controls present.",
+    )
+    put(
+        "QA-199",
+        "Pass",
+        "Pro",
+        "Deep UI DEEP-RBAC-01: Pro hitting /app/admin shows Access Denied.",
+    )
+    put(
+        "QA-200",
+        "Pass",
+        "Admin",
+        "Deep UI DEEP-ADM-01: Admin /app/admin dashboard loads.",
+    )
+    put(
+        "QA-217",
+        "Pass",
+        "Free",
+        "Deep UI DEEP-MOB-01..03: landing/login/dashboard + bottom nav at 375px.",
+    )
+    put(
+        "QA-218",
+        "Pass",
+        "Pro",
+        "Deep UI DEEP-LIVE-02: mobile Practice Coach limitation notice on /app/live.",
+    )
+    put(
+        "QA-226",
+        "Pass",
+        "—",
+        "PageLoader / SkeletonLoader / AppLoadingFallback wired across app routes.",
+    )
+    put(
+        "QA-227",
+        "Pass",
+        "Pro",
+        "Deep UI DEEP-SESS/NOTIF/DOC/ANS: EmptyState or list (not blank) on key lists.",
+    )
+    put(
+        "QA-228",
+        "Pass",
+        "—",
+        "InlineErrorRetry used on answers, companies, sessions, documents flows.",
+    )
+    put(
+        "QA-230",
+        "Pass",
+        "Pro",
+        "Deep UI DEEP-404-01: invalid /app deep link shows NotFound UI.",
+    )
+
     put("QA-244", "Blocked", "Pro", "Stripe checkout — manual test card.")
     put("QA-245", "N/A", "—", "Razorpay optional / region — not primary in this audit.")
     put(

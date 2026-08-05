@@ -5,6 +5,7 @@ import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PageContent } from "@/components/layout/PageContent";
+import { PlanGate } from "@/components/layout/PlanGate";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
@@ -20,12 +21,14 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
+import { normalizePlanId } from "@/lib/billing/planIds";
 
 export default function CompanyProfile() {
   const { id }     = useParams<{ id: string }>();
   const [params]   = useSearchParams();
   const navigate   = useNavigate();
-  const { user }   = useAuthStore();
+  const { user, profile } = useAuthStore();
+  const planId = normalizePlanId((profile as { plan_id?: string } | null)?.plan_id);
 
   const companyName = params.get("name") ?? id?.replace(/-/g, " ") ?? "";
 
@@ -108,8 +111,29 @@ export default function CompanyProfile() {
   }, [companyName, user?.id, params]);
 
   useEffect(() => {
+    if (planId === "free") return;
     if (companyName) void generateBrief(false);
-  }, [companyName, user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [companyName, user?.id, planId]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  if (planId === "free") {
+    return (
+      <PageContent className="max-w-3xl space-y-5">
+        <PageHeader
+          title={companyName || "Company research"}
+          subtitle="AI-generated interview prep briefs"
+          breadcrumbs={[
+            { label: "Company Research", href: "/app/companies" },
+            { label: companyName || "Company" },
+          ]}
+        />
+        <PlanGate requiredPlan="pro">
+          <Card className="min-h-[12rem] p-6" aria-hidden="true">
+            <div className="h-24 rounded-xl bg-muted/40" />
+          </Card>
+        </PlanGate>
+      </PageContent>
+    );
+  }
 
   if (needsGenerateConfirm && !brief && !loading) {
     return (

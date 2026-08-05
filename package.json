@@ -34,6 +34,7 @@
     "qa:sync-secrets": "node --use-system-ca scripts/sync-edge-secrets-from-env.mjs",
     "qa:setup": "node --use-system-ca scripts/seed-qa-accounts.mjs && node --use-system-ca scripts/sync-edge-secrets-from-env.mjs",
     "qa:live-audit": "node --use-system-ca scripts/run-live-qa-audit.mjs",
+    "qa:ui-deep-audit": "node --use-system-ca scripts/run-live-ui-deep-audit.mjs",
     "qa:apply-workbook": "python scripts/apply_live_qa_to_workbook.py",
     "pre-deploy": "node scripts/pre-deploy-check.mjs",
     "billing:preflight": "node scripts/billing-config-preflight.mjs",

@@ -28,7 +28,11 @@ export function CookieConsent() {
   if (!visible) return null;
 
   return (
-    <div className="fixed bottom-0 inset-x-0 z-[9998] p-3 sm:p-4">
+    <div
+      className="fixed inset-x-0 z-[9998] p-3 sm:p-4 bottom-16 md:bottom-0"
+      role="dialog"
+      aria-label="Cookie notice"
+    >
       <div className="max-w-2xl mx-auto bg-card border border-border rounded-2xl shadow-2xl shadow-black/20 p-4 sm:p-5 flex flex-col sm:flex-row items-start sm:items-center gap-3 sm:gap-4">
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-foreground mb-1">Cookie Notice</p>

@@ -17,11 +17,12 @@ import { runAudioPreflight, type PreflightReport } from "@/lib/validators/audioV
 import { enumerateAudioDevices } from "@/lib/audio/audioCapture";
 import type { AudioDevice } from "@/types/audio.types";
 import { useDocuments } from "@/hooks/useDocuments";
-import { Link } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { OverlaySetupGuidePanel } from "@/components/overlay/OverlaySetupGuidePanel";
 import { OVERLAY_VISIBILITY_WARNING } from "@/lib/constants/overlaySetupGuide";
 import { CreditExhaustedState, useCreditExhaustedState } from "@/components/billing/CreditExhaustedState";
+import { EmptyState } from "@/components/common/EmptyState";
 import {
   isFreePlan,
   maxSessionMinutesForPlan,
@@ -93,6 +94,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const { isExhausted: creditsExhausted } = useCreditExhaustedState();
   useDocuments();
   const isMobile = useIsMobile();
+  const navigate = useNavigate();
   const resumes        = useDocumentStore((s) => s.resumes);
   const jds            = useDocumentStore((s) => s.jds);
   const activeResumeId = useDocumentStore((s) => s.active_resume_id);
@@ -765,19 +767,15 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
               </div>
 
               {resumes.length === 0 && jds.length === 0 && (
-                <div className="bg-secondary/20 border border-border rounded-xl p-4 text-center">
-                  <BookOpen className="w-8 h-8 text-muted-foreground/60 mx-auto mb-2" />
-                  <p className="text-xs text-muted-foreground">No documents uploaded yet.</p>
-                  <p className="text-[10px] text-muted-foreground/60 mt-1">
-                    Upload a resume or JD in Documents, then return here.
-                  </p>
-                  <Link
-                    to="/app/documents"
-                    className="inline-flex mt-3 text-xs font-medium text-primary hover:underline"
-                  >
-                    Open Documents
-                  </Link>
-                </div>
+                <EmptyState
+                  icon={BookOpen}
+                  title="No documents uploaded yet"
+                  description="Upload a resume or JD in Documents, then return here."
+                  actionLabel="Open Documents"
+                  onAction={() => navigate("/app/documents")}
+                  compact
+                  className="bg-secondary/20 border border-border rounded-xl"
+                />
               )}
 
               {/* Extra documents (all resumes + JDs as additional context) */}

@@ -203,7 +203,8 @@ const FEATURE_PLAN_GATES: Record<FeatureFlagId, PlanId> = {
   rephraser: "free",
   ai_coach: "free",
 
-  company_research: "starter",
+  // Align with PlanGate + edge: Pro+ (legacy "starter" maps to free in planIds).
+  company_research: "pro",
   coding_hints: "starter",
   system_design: "starter",
   session_debrief: "starter",
