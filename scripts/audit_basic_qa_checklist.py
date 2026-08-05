@@ -543,6 +543,20 @@ def build_overrides(report: dict) -> dict[str, tuple[str, str, str]]:
     )
     put("QA-120", "Blocked", "Pro", "Delete/rename — manual.")
 
+    # ── 22. ERROR / EDGE CASES ──────────────────────────────────────────
+    put(
+        "QA-231",
+        "Pass",
+        "—",
+        "Code f86bc71e: authStore.signOut() now broadcasts sign-out to other "
+        "open tabs via BroadcastChannel (clarify-auth-sync-v1), with a "
+        "'storage' event fallback on the Supabase auth-token key for tabs/"
+        "contexts that miss the broadcast. Listener tabs reset() + redirect "
+        "to /login?reason=signed_out_elsewhere (src/store/authStore.ts, "
+        "src/lib/auth/sessionErrors.ts). Unit-tested (sessionRecovery.test.ts); "
+        "recommend one manual two-tab smoke to confirm on redeploy.",
+    )
+
     # Security smoke
     put(
         "QA-236",
