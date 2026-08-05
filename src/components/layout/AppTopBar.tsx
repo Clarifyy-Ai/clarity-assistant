@@ -139,7 +139,7 @@ export function AppTopBar() {
               : "Use neutral nav labels for private practice (does not hide the app from screen sharing)"
           }
           className={cn(
-            "flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl border text-[10px] sm:text-xs font-medium transition-all",
+            "hidden md:flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl border text-[10px] sm:text-xs font-medium transition-all",
             stealthMode
               ? "bg-blue-500/10 border-blue-500/30 text-blue-500 dark:text-blue-400"
               : "bg-secondary/60 border-border text-muted-foreground hover:bg-secondary hover:text-foreground"
@@ -153,11 +153,11 @@ export function AppTopBar() {
           <span className="hidden sm:inline">Discrete UI</span>
         </button>
 
-        <div style={noDragStyle}>
+        <div style={noDragStyle} className="hidden md:block">
           <ThemeToggle />
         </div>
 
-        <div className="relative" style={noDragStyle}>
+        <div className="relative shrink-0" style={noDragStyle}>
           <button
             type="button"
             onClick={() => {
@@ -203,7 +203,7 @@ export function AppTopBar() {
           to="/app/notifications"
           style={noDragStyle}
           aria-label={notifStore.unread_count > 0 ? `${notifStore.unread_count} unread notifications` : "Notifications"}
-          className="relative w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-xl hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-all"
+          className="relative shrink-0 w-8 h-8 sm:w-9 sm:h-9 flex items-center justify-center rounded-xl hover:bg-secondary/60 text-muted-foreground hover:text-foreground transition-all"
         >
           <Bell className="w-4 h-4" />
           {notifStore.unread_count > 0 && (

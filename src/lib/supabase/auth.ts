@@ -209,8 +209,10 @@ export async function sendMagicLink(email: string): Promise<void> {
  */
 export async function sendPasswordReset(email: string): Promise<void> {
   const [, err] = await tryCatch(async () => {
+    const configured = String(import.meta.env.VITE_APP_URL ?? "").replace(/\/$/, "");
+    const origin = configured || window.location.origin;
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
-      redirectTo: `${window.location.origin}/reset-password`,
+      redirectTo: `${origin}/reset-password`,
     });
     if (error) throw error;
   });

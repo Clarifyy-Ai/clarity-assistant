@@ -150,6 +150,24 @@ export default function OnboardingIndex() {
         onboarding_completed: true,
         preferred_model:      toDbPreferredModel(finalData.preferredModel),
         ...(refCode ? { referred_by: refCode } : {}),
+        ...(finalData.currentLevel
+          ? {
+              experience_years:
+                finalData.yearsOfExperience ??
+                (finalData.currentLevel === "junior"
+                  ? 1
+                  : finalData.currentLevel === "senior"
+                    ? 6
+                    : finalData.currentLevel === "staff"
+                      ? 10
+                      : 3),
+              notification_prefs: {
+                ...((profile as { notification_prefs?: Record<string, unknown> } | null)
+                  ?.notification_prefs ?? {}),
+                experience_level: finalData.currentLevel,
+              },
+            }
+          : {}),
       } as Record<string, unknown>);
 
       if (user?.email) {
@@ -313,14 +331,34 @@ export default function OnboardingIndex() {
       </main>
 
       {!isSaving && currentStep === 1 && !isRerun && (
-        <div className="pb-8 text-center">
+        <div className="pb-8 text-center space-y-2 px-4">
           <button
             type="button"
-            onClick={() => finishOnboarding()}
+            onClick={() => {
+              const level = data.currentLevel?.trim();
+              if (!level) {
+                toast.message("Choose an experience level first, or pick Mid-level to skip.", {
+                  action: {
+                    label: "Use Mid-level & skip",
+                    onClick: () => {
+                      void finishOnboarding({
+                        currentLevel: "mid",
+                        yearsOfExperience: 3,
+                      });
+                    },
+                  },
+                });
+                return;
+              }
+              void finishOnboarding();
+            }}
             className="text-xs text-muted-foreground/60 hover:text-muted-foreground underline underline-offset-4 transition-colors"
           >
             Skip setup and start practice
           </button>
+          <p className="text-[10px] text-muted-foreground/50 max-w-sm mx-auto">
+            Skip still needs an experience level so coaching tips match you. You can change it anytime in Settings.
+          </p>
         </div>
       )}
     </div>

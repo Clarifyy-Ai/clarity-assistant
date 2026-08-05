@@ -14,7 +14,10 @@ import { cn } from "@/lib/utils";
 import type { LiveSessionConfig } from "@/types/session.types";
 import type { PreferredAIModel, HintStyle, UserProfile } from "@/types/user.types";
 import { runAudioPreflight, type PreflightReport } from "@/lib/validators/audioValidator";
+import { enumerateAudioDevices } from "@/lib/audio/audioCapture";
+import type { AudioDevice } from "@/types/audio.types";
 import { useDocuments } from "@/hooks/useDocuments";
+import { Link } from "react-router-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { OverlaySetupGuidePanel } from "@/components/overlay/OverlaySetupGuidePanel";
 import { OVERLAY_VISIBILITY_WARNING } from "@/lib/constants/overlaySetupGuide";
@@ -143,6 +146,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const [enableSystemAudio, setEnableSystemAudio] = useState(true);
   const [stealthMode,        setStealthMode]       = useState(false);
   const [micPermission,      setMicPermission]     = useState<"unknown" | "granted" | "denied" | "checking">("unknown");
+  const [micDevices,         setMicDevices]        = useState<AudioDevice[]>([]);
+  const [selectedMicId,      setSelectedMicId]     = useState<string | null>(null);
+  const [isOnline,           setIsOnline]          = useState(
+    typeof navigator !== "undefined" ? navigator.onLine : true,
+  );
   const [preflight,          setPreflight]         = useState<PreflightReport | null>(null);
   const [preflightLoading,   setPreflightLoading]  = useState(false);
   const [visibilityAck,      setVisibilityAck]     = useState(false);
@@ -250,13 +258,46 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const checkMicPermission = async () => {
     setMicPermission("checking");
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const constraints: MediaStreamConstraints = {
+        audio: selectedMicId
+          ? { deviceId: { exact: selectedMicId } }
+          : true,
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       stream.getTracks().forEach((t) => t.stop());
       setMicPermission("granted");
+      const devices = await enumerateAudioDevices();
+      setMicDevices(devices);
+      if (!selectedMicId && devices.length > 0) {
+        setSelectedMicId((devices.find((d) => d.isDefault) ?? devices[0]).deviceId);
+      }
     } catch {
       setMicPermission("denied");
     }
   };
+
+  useEffect(() => {
+    if (micPermission !== "granted") return;
+    void enumerateAudioDevices()
+      .then((devices) => {
+        setMicDevices(devices);
+        if (!selectedMicId && devices.length > 0) {
+          setSelectedMicId((devices.find((d) => d.isDefault) ?? devices[0]).deviceId);
+        }
+      })
+      .catch(() => {});
+  }, [micPermission, selectedMicId]);
+
+  useEffect(() => {
+    const on = () => setIsOnline(true);
+    const off = () => setIsOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
 
   function handleStart() {
     const gate = canStartCoachingSession({
@@ -266,6 +307,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     });
     if (!gate.ok) return;
     if (preflight && !preflight.ready) return;
+    if (!isOnline) return;
     acceptResponsibleUseConsent();
     // NOTE: tab-audio guidance modal is shown at capture time via
     // confirmTabAudioCapture() inside useAudioSession.start(). We no longer
@@ -294,6 +336,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       context_document_ids: contextDocIds,
       language,
       duration_minutes:     durationMinutes > 0 ? durationMinutes : undefined,
+      mic_device_id:        selectedMicId || null,
     };
 
     // Sync document selections into documentStore so AI context is correct
@@ -711,7 +754,12 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 >
                   <option value="">None selected</option>
                   {jds.map((j) => (
-                    <option key={j.id} value={j.id}>{(j as any).title || j.company_name}</option>
+                    <option key={j.id} value={j.id}>
+                      {(j as { title?: string; role_title?: string }).title ||
+                        (j as { role_title?: string }).role_title ||
+                        j.company_name ||
+                        "Untitled JD"}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -720,7 +768,15 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 <div className="bg-secondary/20 border border-border rounded-xl p-4 text-center">
                   <BookOpen className="w-8 h-8 text-muted-foreground/60 mx-auto mb-2" />
                   <p className="text-xs text-muted-foreground">No documents uploaded yet.</p>
-                  <p className="text-[10px] text-muted-foreground/60 mt-1">Upload documents in the Documents section first.</p>
+                  <p className="text-[10px] text-muted-foreground/60 mt-1">
+                    Upload a resume or JD in Documents, then return here.
+                  </p>
+                  <Link
+                    to="/app/documents"
+                    className="inline-flex mt-3 text-xs font-medium text-primary hover:underline"
+                  >
+                    Open Documents
+                  </Link>
                 </div>
               )}
 
@@ -1076,6 +1132,33 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 </div>
               </label>
 
+              {micPermission === "granted" && micDevices.length > 0 && (
+                <div>
+                  <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground mb-1.5">
+                    <Volume2 className="w-3.5 h-3.5" /> Microphone
+                  </label>
+                  <select
+                    value={selectedMicId ?? ""}
+                    onChange={(e) => setSelectedMicId(e.target.value || null)}
+                    className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 text-sm"
+                  >
+                    {micDevices.map((d) => (
+                      <option key={d.deviceId} value={d.deviceId}>
+                        {d.label || `Microphone ${d.deviceId.slice(0, 6)}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {!isOnline && (
+                <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
+                  <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">
+                    You appear to be offline. Reconnect before starting a session.
+                  </p>
+                </div>
+              )}
+
               {micPermission === "denied" && (
                 <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 space-y-3">
                   <div className="flex items-start gap-2.5">
@@ -1159,14 +1242,16 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 micPermission !== "granted" ||
                 !visibilityAck ||
                 !responsibleUseAck ||
-                preflightLoading
+                preflightLoading ||
+                !isOnline
               }
               className={cn(
                 "flex-1 py-3.5 font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
                 micPermission !== "granted" ||
                   !visibilityAck ||
                   !responsibleUseAck ||
-                  preflightLoading
+                  preflightLoading ||
+                  !isOnline
                   ? "bg-muted text-muted-foreground cursor-not-allowed"
                   : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-foreground"
               )}

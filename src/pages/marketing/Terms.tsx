@@ -12,21 +12,19 @@ export default function Terms() {
 
   return (
     <MarketingLayout>
-      <div className="pt-20 sm:pt-28 pb-6 px-4 sm:px-6 max-w-3xl mx-auto">
+      <article className={`pt-20 sm:pt-28 pb-14 px-4 sm:px-6 max-w-3xl mx-auto text-left ${LEGAL_PROSE_CLASS}`}>
         <ComplianceBanner />
-      </div>
-      <article className={`pb-14 px-4 sm:px-6 max-w-3xl mx-auto ${LEGAL_PROSE_CLASS}`}>
         <h1>Terms of Service</h1>
         <p className="text-xs text-muted-foreground">Last updated: March 25, 2026</p>
 
         <h2>1. Acceptance of Terms</h2>
         <p>
-          By accessing or using {COMPANY_NAME} ("Service"), operated by {LEGAL_ENTITY_NAME} ("Company", "we", "us"), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service.
+          By accessing or using {COMPANY_NAME} (&quot;Service&quot;), operated by {LEGAL_ENTITY_NAME} (&quot;Company&quot;, &quot;we&quot;, &quot;us&quot;), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service.
         </p>
 
         <h2>2. Description of Service</h2>
         <p>
-          Clarify AI is an AI-powered interview preparation platform providing mock interviews, live practice coaching, analytics, and related tools for rehearsal and preparation. The Service is provided "as is" and "as available."
+          Clarify AI is an AI-powered interview preparation platform providing mock interviews, live practice coaching, analytics, and related tools for rehearsal and preparation. The Service is provided &quot;as is&quot; and &quot;as available.&quot;
         </p>
 
         <h3>2.1 Practice and Rehearsal Only</h3>
@@ -82,12 +80,12 @@ export default function Terms() {
 
         <h2>8. Disclaimer of Warranties</h2>
         <p>
-          The Service is provided <strong>&quot;as is&quot;</strong> without warranties of any kind, express or implied. We do not warrant that the Service will be uninterrupted, error-free, or secure.
+          The Service is provided &quot;as is&quot; without warranties of any kind, express or implied. We do not warrant that the Service will be uninterrupted, error-free, or secure.
         </p>
 
         <h2>9. Limitation of Liability</h2>
         <p>
-          To the maximum extent permitted by law, <strong>{LEGAL_ENTITY_NAME}</strong> shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the Service.
+          To the maximum extent permitted by law, {LEGAL_ENTITY_NAME} shall not be liable for any indirect, incidental, special, consequential, or punitive damages arising from your use of the Service.
         </p>
 
         <h2>10. Termination</h2>
@@ -97,7 +95,7 @@ export default function Terms() {
 
         <h2>11. Changes to Terms</h2>
         <p>
-          We reserve the right to modify these Terms at any time. Changes will be posted on this page with an updated "Last updated" date. Continued use of the Service constitutes acceptance of the revised Terms.
+          We reserve the right to modify these Terms at any time. Changes will be posted on this page with an updated &quot;Last updated&quot; date. Continued use of the Service constitutes acceptance of the revised Terms.
         </p>
 
         <h2>12. Contact</h2>

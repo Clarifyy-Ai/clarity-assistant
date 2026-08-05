@@ -229,7 +229,17 @@ export default function Dashboard() {
   const sessionCountLoaded = sessionCount !== null;
   const isNewUser = sessionCountLoaded && sessionCount === 0;
   const isReturningUser = sessionCountLoaded && sessionCount > 0;
-  const showSecondary = isNewUser ? false : isReturningUser ? showMore : sessionCountLoaded;
+  // Interpretation (BUG-09): "More" expands secondary dashboard widgets for paid
+  // plans (Pro / Max / enterprise). Free users keep the focused primary layout.
+  // Spec text said "Pro only / hide Max" — that would hide useful widgets from Max,
+  // so we treat all non-free plans as eligible.
+  const planId = (profile?.plan_id ?? "free").toLowerCase();
+  const canExpandMore = planId !== "free" && planId !== "starter";
+  const showSecondary = isNewUser
+    ? false
+    : isReturningUser
+      ? canExpandMore && showMore
+      : sessionCountLoaded;
 
   return (
     <div className="space-y-6">
@@ -383,7 +393,7 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {isReturningUser && (
+      {isReturningUser && canExpandMore && (
         <button
           type="button"
           onClick={() => setShowMore((v) => !v)}

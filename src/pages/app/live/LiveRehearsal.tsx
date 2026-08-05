@@ -84,7 +84,28 @@ export default function LiveRehearsal() {
 
   return (
     <>
-      <SessionTrustBanner className="mx-auto max-w-2xl mt-4 mb-2" variant="live" />
+      <div className="mx-auto max-w-2xl mt-4 mb-2 flex items-center justify-between gap-3 px-1">
+        <div>
+          <p className="text-xs font-medium text-muted-foreground">
+            <Link to="/app/dashboard" className="hover:text-foreground transition-colors">
+              Dashboard
+            </Link>
+            <span className="mx-1.5 text-muted-foreground/50">/</span>
+            Practice Coach
+          </p>
+          <h1 className="text-xl font-bold text-foreground mt-0.5">Practice Coach</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">
+            Configure your live rehearsal session, then open Overlay mode.
+          </p>
+        </div>
+        <Link
+          to="/app/dashboard"
+          className="shrink-0 text-xs font-medium text-primary hover:underline"
+        >
+          Back to dashboard
+        </Link>
+      </div>
+      <SessionTrustBanner className="mx-auto max-w-2xl mt-2 mb-2" variant="live" />
       {isMobile && !dismissMobileNotice && (
         <div
           role="status"

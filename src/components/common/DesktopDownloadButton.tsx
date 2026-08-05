@@ -58,18 +58,21 @@ export function DesktopDownloadButton({
       </div>
 
       {!url && !loading && (
-        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-3 space-y-2">
-          <p className="text-xs text-foreground font-medium">Installer not hosted yet</p>
+        <div className="rounded-lg border border-border bg-muted/40 p-3 space-y-2 max-w-md">
+          <p className="text-xs text-foreground font-medium">Desktop installer</p>
           <p className="text-[11px] text-muted-foreground leading-relaxed">
-            If you built locally, run{" "}
-            <code className="text-[10px]">npm run install:desktop</code> in the project folder,
-            or open <code className="text-[10px]">release-new\Clarify AI Setup 1.0.0.exe</code> directly.
+            The Windows installer isn&apos;t published for this environment yet. You can keep using
+            Practice Coach in the browser, or open the{" "}
+            <Link to="/app/guide/practice-coach" className="text-primary hover:underline">
+              Practice Coach guide
+            </Link>{" "}
+            for setup tips.
           </p>
-          <p className="text-[11px] text-muted-foreground leading-relaxed">
-            For production: upload the .exe with{" "}
-            <code className="text-[10px]">npm run publish:desktop-installer</code>, set{" "}
-            <code className="text-[10px]">VITE_DESKTOP_DOWNLOAD_URL_WIN</code>, then redeploy.
-          </p>
+          {import.meta.env.DEV && (
+            <p className="text-[10px] text-muted-foreground/80 leading-relaxed font-mono">
+              Dev: set VITE_DESKTOP_DOWNLOAD_URL_WIN or run npm run publish:desktop-installer.
+            </p>
+          )}
         </div>
       )}
 

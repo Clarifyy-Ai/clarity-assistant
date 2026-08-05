@@ -571,11 +571,13 @@ export const useAuthStore = create<AuthStore>()(
                     get().reset();
                   }
 
-                  if (event === "TOKEN_REFRESHED" && session) {
-                    dset((state) => {
-                      state.session = session as unknown as SupabaseSession;
-                    });
-                  }
+                if (event === "TOKEN_REFRESHED" && session) {
+                  dset((state) => {
+                    state.session = session as unknown as SupabaseSession;
+                  });
+                  // Re-check ban on refresh so a mid-session admin ban takes effect.
+                  void get().loadProfile();
+                }
 
                   if (event === "USER_UPDATED" && session) {
                     dset((state) => {
@@ -731,15 +733,23 @@ export const useAuthStore = create<AuthStore>()(
               state.error = null;
             });
 
-            await supabase.auth.signOut();
-
             try {
-              clearBYOKVault();
-            } catch {
-              // Ignore local vault clearing failure.
+              await supabase.auth.signOut({ scope: "global" });
+            } catch (err) {
+              console.warn(
+                "[authStore] Remote signOut failed; clearing local session",
+                err,
+              );
+            } finally {
+              // Always clear local credentials even if the network call fails.
+              await clearStaleLocalSession();
+              try {
+                clearBYOKVault();
+              } catch {
+                // Ignore local vault clearing failure.
+              }
+              get().reset();
             }
-
-            get().reset();
           },
 
           clearAuth: async () => {
@@ -747,11 +757,18 @@ export const useAuthStore = create<AuthStore>()(
           },
 
           sendPasswordReset: async (email) => {
+            const configured =
+              typeof import.meta !== "undefined"
+                ? String(import.meta.env.VITE_APP_URL ?? "").replace(/\/$/, "")
+                : "";
+            const origin =
+              configured ||
+              (typeof window !== "undefined" ? window.location.origin : "");
             const { error } = await supabase.auth.resetPasswordForEmail(
               email.trim(),
               {
-                redirectTo: `${window.location.origin}/reset-password`,
-              }
+                redirectTo: `${origin}/reset-password`,
+              },
             );
 
             if (error) {

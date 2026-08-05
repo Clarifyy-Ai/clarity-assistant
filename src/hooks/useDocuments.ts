@@ -103,6 +103,7 @@ export function useDocuments(options?: UseDocumentsOptions) {
       {
         const mapped = jdRows.map((j) => ({
           ...j,
+          title: j.target_role ?? j.company ?? "Untitled JD",
           role_title:   j.target_role ?? "Unknown Role",
           company_name: j.company ?? null,
           raw_text:     j.content ?? "",

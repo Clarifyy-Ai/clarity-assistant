@@ -666,7 +666,7 @@ export default function AdminUsers() {
 
                 action: selected.is_banned ? "unban" : "ban",
 
-                label: selected.is_banned ? "Unban user" : "Ban user",
+                label: selected.is_banned ? "Reinstate user" : "Suspend user",
 
                 icon: Ban,
 

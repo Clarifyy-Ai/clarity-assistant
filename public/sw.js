@@ -1,5 +1,5 @@
 /* Minimal service worker — network-first; never return a non-Response to respondWith(). */
-const CACHE = "clarify-ai-v4";
+const CACHE = "clarify-ai-v5";
 
 self.addEventListener("install", (event) => {
   event.waitUntil(self.skipWaiting());

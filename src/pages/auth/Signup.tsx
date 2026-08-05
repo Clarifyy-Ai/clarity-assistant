@@ -195,9 +195,10 @@ export default function Signup(): JSX.Element {
   const isFormValid = isValid;
 
   useEffect(() => {
-    if (authStatus === "authenticated") {
-      navigate("/app/dashboard", { replace: true });
-    }
+    if (authStatus !== "authenticated") return;
+    const confirmed = useAuthStore.getState().user?.email_confirmed_at;
+    // Never skip verify-email for unconfirmed sessions (signup often returns a session).
+    navigate(confirmed ? "/app/dashboard" : "/verify-email", { replace: true });
   }, [authStatus, navigate]);
 
   useEffect(() => {

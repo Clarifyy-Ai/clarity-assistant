@@ -518,9 +518,9 @@ const routes = [
   { path: "/reset-password", element: <Page component={ResetPassword} /> },
   { path: "/auth/callback", element: <Page component={AuthCallback} /> },
 
-  // Onboarding
+  // Onboarding — authenticated + email verified (unverified users stay on /verify-email)
   {
-    element: <ProtectedRoute />,
+    element: <ProtectedRoute requireEmailVerification />,
     children: [
       { path: "/onboarding", element: <Page component={OnboardingIndex} /> },
       { path: "/onboarding/step-1", element: <OnboardingRedirect /> },
