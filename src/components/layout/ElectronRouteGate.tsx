@@ -5,6 +5,7 @@ import {
   isElectronAllowedPath,
 } from "@/lib/platform/electronRoutes";
 import { ElectronOpenInBrowser } from "@/components/layout/ElectronOpenInBrowser";
+import { CookieConsent } from "@/components/common/CookieConsent";
 
 /**
  * Restricts the desktop shell to auth, onboarding, and overlay session routes.
@@ -14,7 +15,12 @@ export function ElectronRouteGate(): JSX.Element {
   const location = useLocation();
 
   if (!isElectronApp()) {
-    return <Outlet />;
+    return (
+      <>
+        <Outlet />
+        <CookieConsent />
+      </>
+    );
   }
 
   const { pathname } = location;
@@ -24,7 +30,12 @@ export function ElectronRouteGate(): JSX.Element {
   }
 
   if (isElectronAllowedPath(pathname)) {
-    return <Outlet />;
+    return (
+      <>
+        <Outlet />
+        <CookieConsent />
+      </>
+    );
   }
 
   return (

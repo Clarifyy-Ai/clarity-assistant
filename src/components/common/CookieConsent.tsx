@@ -1,7 +1,4 @@
 import { useState, useEffect } from "react";
-import { Link } from "react-router-dom";
-import { X } from "lucide-react";
-import { cn } from "@/lib/utils";
 
 const CONSENT_KEY = "clarify_cookie_consent";
 
@@ -39,12 +36,10 @@ export function CookieConsent() {
           <p className="text-sm font-semibold text-foreground mb-1">Cookie Notice</p>
           <p className="text-xs text-muted-foreground leading-relaxed">
             We use essential cookies for authentication and optional analytics cookies to improve the experience.{" "}
-            <Link
-              to="/privacy"
-              className="text-primary hover:underline"
-            >
+            {/* Plain <a>: this banner may mount outside RouterProvider (App.tsx sibling). */}
+            <a href="/privacy" className="text-primary hover:underline">
               Review our privacy policy
-            </Link>
+            </a>
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">

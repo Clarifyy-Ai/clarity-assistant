@@ -43,7 +43,6 @@ import { ErrorBoundary } from "@/components/layout/ErrorBoundary";
 import { GlobalErrorBoundary } from "@/components/layout/GlobalErrorBoundary";
 import { AppLoadingFallback } from "@/components/layout/AppLoadingFallback";
 import { Toaster } from "@/components/ui/sonner";
-import { CookieConsent } from "@/components/common/CookieConsent";
 import { TabAudioGuideHost } from "@/components/audio/TabAudioGuideHost";
 import { isElectronApp } from "@/lib/platform/isElectron";
 import LoginPage from "@/pages/auth/Login";
@@ -920,7 +919,6 @@ export default function App(): JSX.Element {
           }}
         />
 
-        <CookieConsent />
         <TabAudioGuideHost />
         {IS_ELECTRON && <ElectronFirstRunModal />}
       </ErrorBoundary>
