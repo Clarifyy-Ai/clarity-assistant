@@ -92,6 +92,15 @@ export function useScorecard({ sessionId }: UseScorecardOptions) {
         candidate_answer: row.answer ?? "",
       }));
 
+      const answered = questionsForScoring.filter((q) =>
+        (q.candidate_answer ?? "").trim().length > 0,
+      );
+      if (answered.length === 0) {
+        throw new Error(
+          "No answers were recorded for this session, so a scorecard cannot be generated. Re-run the session and answer at least one question.",
+        );
+      }
+
       const sessionMeta = session as SessionForScoring;
       const durationSeconds = sessionMeta.duration_seconds ?? 0;
       const fillerTotal =

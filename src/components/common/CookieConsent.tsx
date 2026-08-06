@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -38,12 +39,12 @@ export function CookieConsent() {
           <p className="text-sm font-semibold text-foreground mb-1">Cookie Notice</p>
           <p className="text-xs text-muted-foreground leading-relaxed">
             We use essential cookies for authentication and optional analytics cookies to improve the experience.{" "}
-            <a
-              href="/privacy"
+            <Link
+              to="/privacy"
               className="text-primary hover:underline"
             >
               Review our privacy policy
-            </a>
+            </Link>
           </p>
         </div>
         <div className="flex items-center gap-2 shrink-0">

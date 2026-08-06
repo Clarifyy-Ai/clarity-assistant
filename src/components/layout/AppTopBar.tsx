@@ -88,7 +88,7 @@ export function AppTopBar() {
 
       <div style={noDragStyle} className="flex items-center gap-1.5 min-w-0 shrink-0 md:hidden">
         <Link
-          to="/app"
+          to="/app/dashboard"
           className="flex items-center gap-1.5 pr-1"
           aria-label="Clarify AI home"
         >
@@ -98,6 +98,13 @@ export function AppTopBar() {
       </div>
 
       <div style={noDragStyle} className="hidden md:flex items-center gap-2 min-w-0 flex-1">
+        <Link
+          to="/app/dashboard"
+          className="flex items-center gap-1.5 pr-1 shrink-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label="Clarify AI dashboard"
+        >
+          <BrandLogo size="sm" showText={false} />
+        </Link>
         <ProductModePill />
       </div>
 

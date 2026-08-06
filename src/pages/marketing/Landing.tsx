@@ -327,7 +327,7 @@ export default function Landing() {
     <MarketingLayout>
       <LazyMotion features={domAnimation} strict>
       {/* ── Hero (first viewport: brand · headline · support · CTA · product visual) ─ */}
-      <section className="pt-20 sm:pt-24 pb-10 px-4 sm:px-6 text-center">
+      <section className="pt-4 sm:pt-8 pb-10 px-4 sm:px-6 text-center">
         <m.div
           className="max-w-3xl mx-auto"
           initial={{ opacity: 0, y: 28 }}
@@ -473,7 +473,7 @@ export default function Landing() {
       </section>
 
       {/* ── Feature Pillars ─────────────────────────────────────────────────── */}
-      <section id="features" className="pb-14 sm:pb-16 px-4 sm:px-6">
+      <section id="features" className="scroll-mt-20 pb-14 sm:pb-16 px-4 sm:px-6">
         <div className="max-w-6xl mx-auto">
           <m.div className="text-center mb-10" {...fadeUp()}>
             <h2 className="text-2xl sm:text-3xl font-bold">

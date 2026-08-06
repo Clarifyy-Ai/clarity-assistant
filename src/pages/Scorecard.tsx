@@ -80,10 +80,33 @@ export default function Scorecard() {
   }
 
   const scoreGrade = getScoreGrade(scorecard.overall_score);
+  const looksEmpty =
+    scorecard.overall_score === 0 &&
+    (scorecard.question_scores?.length ?? 0) === 0 &&
+    (scorecard.clarity_score ?? 0) === 0 &&
+    (scorecard.structure_score ?? 0) === 0 &&
+    (scorecard.relevance_score ?? 0) === 0;
 
   return (
     <div className="min-h-screen bg-background text-foreground">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+
+        {looksEmpty && (
+          <div
+            role="alert"
+            className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+          >
+            This scorecard shows all zeros — usually because no answers were scored or AI scoring failed.
+            Use Retry below if generation errored, or return to the session and try again.
+            <button
+              type="button"
+              className="ml-2 underline underline-offset-2"
+              onClick={() => void reload()}
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* ── Header ─────────────────────────────────── */}
         <div className="flex flex-wrap items-start justify-between gap-4">

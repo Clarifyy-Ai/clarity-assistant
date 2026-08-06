@@ -627,12 +627,14 @@ Deno.serve(async (req: Request) => {
       },
     });
 
-    return json(corsHeaders, 200, {
-      success: true,
+    return json(corsHeaders, 502, {
+      success: false,
       request_id: requestId,
       hints: FALLBACK_HINTS,
       source: "fallback",
       refunded: true,
+      error: "AI hint service temporarily unavailable. Credits refunded.",
+      code: "AI_ERROR",
     });
   }
 });

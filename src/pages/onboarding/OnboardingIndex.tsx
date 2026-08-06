@@ -335,19 +335,16 @@ export default function OnboardingIndex() {
           <button
             type="button"
             onClick={() => {
+              const role = data.targetRole?.trim();
               const level = data.currentLevel?.trim();
-              if (!level) {
-                toast.message("Choose an experience level first, or pick Mid-level to skip.", {
-                  action: {
-                    label: "Use Mid-level & skip",
-                    onClick: () => {
-                      void finishOnboarding({
-                        currentLevel: "mid",
-                        yearsOfExperience: 3,
-                      });
-                    },
-                  },
-                });
+              if (!role || !level) {
+                toast.message(
+                  !role && !level
+                    ? "Choose a target role and experience level before skipping."
+                    : !role
+                      ? "Choose a target role before skipping."
+                      : "Choose an experience level before skipping.",
+                );
                 return;
               }
               void finishOnboarding();
@@ -357,7 +354,7 @@ export default function OnboardingIndex() {
             Skip setup and start practice
           </button>
           <p className="text-[10px] text-muted-foreground/50 max-w-sm mx-auto">
-            Skip still needs an experience level so coaching tips match you. You can change it anytime in Settings.
+            Skip still needs a target role and experience level so coaching tips match you. You can change them anytime in Settings.
           </p>
         </div>
       )}

@@ -24,8 +24,12 @@ const MAX_FILE_SIZE_MB = 10;
 const MAX_FILE_SIZE_BYTES = MAX_FILE_SIZE_MB * 1024 * 1024;
 
 const ALLOWED_MIME_TYPES: Record<BucketName, string[]> = {
-  resumes:      ["application/pdf", "application/msword",
-                 "application/vnd.openxmlformats-officedocument.wordprocessingml.document"],
+  resumes:      [
+                  "application/pdf",
+                  "application/msword",
+                  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                  "text/plain",
+                ],
   documents:    [
     "application/pdf",
     "text/plain",
@@ -50,6 +54,29 @@ export const storagePaths = {
 
 // ─── Validation ───────────────────────────────────────────────────────────────
 
+const EXT_TO_MIME: Record<string, string> = {
+  pdf: "application/pdf",
+  doc: "application/msword",
+  docx: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  txt: "text/plain",
+  md: "text/markdown",
+  csv: "text/csv",
+  json: "application/json",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+  gif: "image/gif",
+};
+
+/** Prefer browser MIME; fall back to extension when Windows/browsers leave type empty. */
+export function resolveUploadMimeType(file: File): string {
+  const raw = (file.type || "").trim().toLowerCase().split(";")[0]?.trim();
+  if (raw && raw !== "application/octet-stream") return raw;
+  const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
+  return EXT_TO_MIME[ext] ?? raw ?? "application/octet-stream";
+}
+
 function validateFile(file: File, bucket: BucketName): void {
   if (file.size > MAX_FILE_SIZE_BYTES) {
     throw new StorageError(
@@ -60,11 +87,12 @@ function validateFile(file: File, bucket: BucketName): void {
   }
 
   const allowed = ALLOWED_MIME_TYPES[bucket];
-  if (allowed && !allowed.includes(file.type)) {
+  const resolvedType = resolveUploadMimeType(file);
+  if (allowed && !allowed.includes(resolvedType)) {
     throw new StorageError(
-      `File type "${file.type}" is not supported for ${bucket}.`,
+      `File type "${resolvedType || file.type}" is not supported for ${bucket}.`,
       ErrorCode.STORAGE_INVALID_FILE_TYPE,
-      { type: file.type, allowed, bucket }
+      { type: resolvedType || file.type, allowed, bucket }
     );
   }
 }
@@ -105,7 +133,7 @@ export async function uploadFile(
       .upload(path, file, {
         upsert:        options.upsert       ?? true,
         cacheControl:  options.cacheControl ?? "3600",
-        contentType:   file.type,
+        contentType:   resolveUploadMimeType(file),
       });
 
     if (error) throw error;

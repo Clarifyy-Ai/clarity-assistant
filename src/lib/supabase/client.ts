@@ -14,6 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/env";
 
 import { sanitizeFileName, stripControlCharacters } from "@/lib/security";
+import { getMimeType } from "@/lib/utils/fileUtils";
 
 export { supabase, SUPABASE_URL, SUPABASE_ANON_KEY };
 
@@ -147,11 +148,16 @@ export async function uploadFile(
 
     onProgress?.(10);
 
+    const contentType =
+      (file.type && file.type !== "application/octet-stream"
+        ? file.type
+        : getMimeType(file.name)) || "application/octet-stream";
+
     const { error } = await supabase.storage
       .from(bucketName)
       .upload(safePath, file, {
         upsert: true,
-        contentType: file.type || "application/octet-stream",
+        contentType,
         cacheControl: "3600",
       });
 

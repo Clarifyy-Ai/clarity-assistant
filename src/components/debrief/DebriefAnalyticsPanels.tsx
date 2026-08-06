@@ -212,6 +212,14 @@ export function DebriefSessionMeta({
 
   return (
     <div className="space-y-4">
+      {scorecard == null && overallScore == null && (
+        <div
+          role="status"
+          className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+        >
+          Scoring data is missing for this session. Metrics below may show as zero until AI scoring completes successfully.
+        </div>
+      )}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         {[
           {

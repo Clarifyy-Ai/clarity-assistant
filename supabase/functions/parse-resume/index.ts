@@ -10,9 +10,10 @@ import {
 } from "../_shared/rateLimit.ts";
 import {
   looksLikePdf,
-  validateUploadMime,
+  resolveUploadMime,
 } from "../_shared/uploadValidation.ts";
 import { creditCost } from "../_shared/creditEconomics.ts";
+import JSZip from "https://esm.sh/jszip@3.10.1";
 
 const RESUME_PARSE_COST = creditCost("resume_analysis");
 const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
@@ -112,6 +113,57 @@ async function ocrExtract(pdfBase64: string): Promise<string | null> {
     const json = await res.json();
     return (json?.ParsedResults?.[0]?.ParsedText ?? "").replace(/[^\x20-\x7E\n]/g, "").replace(/\s{2,}/g, " ").trim();
   } catch { return null; }
+}
+
+function bytesToUtf8(bytes: Uint8Array): string {
+  try {
+    return new TextDecoder("utf-8", { fatal: false }).decode(bytes);
+  } catch {
+    let s = "";
+    for (let i = 0; i < bytes.length; i++) s += String.fromCharCode(bytes[i]!);
+    return s;
+  }
+}
+
+/** Extract plain text from a DOCX (OOXML) zip. */
+async function extractDocxText(bytes: Uint8Array): Promise<string | null> {
+  try {
+    const zip = await JSZip.loadAsync(bytes);
+    const docXml = await zip.file("word/document.xml")?.async("string");
+    if (!docXml) return null;
+    const text = docXml
+      .replace(/<w:tab[^/]*\/>/g, "\t")
+      .replace(/<\/w:p>/g, "\n")
+      .replace(/<w:br[^/]*\/>/g, "\n")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&#39;/g, "'")
+      .replace(/[ \t]+\n/g, "\n")
+      .replace(/\n{3,}/g, "\n\n")
+      .replace(/[ \t]{2,}/g, " ")
+      .trim();
+    return text.length >= 20 ? text : null;
+  } catch {
+    return null;
+  }
+}
+
+async function parseFromPlainText(
+  text: string,
+  prompt: string,
+): Promise<unknown | null> {
+  const clipped = text.slice(0, 80_000);
+  const geminiRaw = await callGemini([
+    { text: `${prompt}\n\nResume text:\n${clipped}` },
+  ]);
+  if (geminiRaw) {
+    const parsed = parseJSON(sanitizeAI(geminiRaw), null);
+    if (parsed && isValidResumeSchema(parsed)) return parsed;
+  }
+  return null;
 }
 /**
  * Fan parsed resume out to documents (primary resume row) and backfill
@@ -222,7 +274,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    const { resume_id, version_id } = await req.json();
+    const { resume_id, version_id, mime_type } = await req.json();
 
     if (!resume_id) {
       return new Response(JSON.stringify({ error: "Missing resume_id", code: "BAD_REQUEST" }), { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
@@ -270,7 +322,10 @@ Deno.serve(async (req) => {
 
     const fileBytes = new Uint8Array(buf);
 
-    const mimeCheck = validateUploadMime(null, { filePath: file_path });
+    const mimeCheck = resolveUploadMime(mime_type ?? null, {
+      filePath: file_path,
+      bytes: fileBytes,
+    });
     if (!mimeCheck.ok) {
       return new Response(
         JSON.stringify({ error: mimeCheck.reason, code: "BAD_REQUEST" }),
@@ -278,9 +333,21 @@ Deno.serve(async (req) => {
       );
     }
 
-    if (mimeCheck.mimeType === "application/pdf" && !looksLikePdf(fileBytes)) {
+    const resolvedMime = mimeCheck.mimeType;
+
+    if (resolvedMime === "application/pdf" && !looksLikePdf(fileBytes)) {
       return new Response(
         JSON.stringify({ error: "File content does not match PDF format.", code: "BAD_REQUEST" }),
+        { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
+      );
+    }
+
+    if (resolvedMime === "application/msword") {
+      return new Response(
+        JSON.stringify({
+          error: "Legacy .doc files are not supported. Please upload PDF, DOCX, or TXT.",
+          code: "BAD_REQUEST",
+        }),
         { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } },
       );
     }
@@ -319,51 +386,74 @@ Deno.serve(async (req) => {
     const SCHEMA = `{"name":"","summary":"","skills":[],"experience":[],"projects":[],"education":[],"total_years_experience":null}`;
     const PROMPT = `Extract structured resume information following this schema EXACTLY:\n${SCHEMA}\nReturn ONLY valid JSON. No markdown, no extra text.`;
 
-    // LAYER 1: GEMINI
-    const geminiRaw = await callGemini([
-      { inline_data: { mime_type: "application/pdf", data: base64 } },
-      { text: PROMPT },
-    ]);
-
-    if (geminiRaw) {
-      const parsed = parseJSON(sanitizeAI(geminiRaw), null);
-      if (parsed && isValidResumeSchema(parsed)) {
-        await db.from("resumes").update({ content: JSON.stringify(parsed) }).eq("id", resume_id);
-        if (effectiveVersionId) {
-          await db.from("resume_versions").update({ parsed_data: parsed, parse_status: "ready", parse_error: null }).eq("id", effectiveVersionId);
-        }
-        await fanOutResume(db, userId, parsed);
-        return new Response(JSON.stringify(buildParseSuccess("gemini", parsed)), { headers: getCorsHeaders(req) });
+    const persistSuccess = async (source: string, parsed: unknown) => {
+      await db.from("resumes").update({ content: JSON.stringify(parsed) }).eq("id", resume_id);
+      if (effectiveVersionId) {
+        await db.from("resume_versions").update({ parsed_data: parsed, parse_status: "ready", parse_error: null }).eq("id", effectiveVersionId);
       }
+      await fanOutResume(db, userId, parsed);
+      return new Response(JSON.stringify(buildParseSuccess(source, parsed)), { headers: getCorsHeaders(req) });
+    };
+
+    // ── TXT / plain text ──────────────────────────────────────────
+    if (resolvedMime === "text/plain") {
+      const text = bytesToUtf8(fileBytes).trim();
+      if (text.length < 20) {
+        if (creditsDeducted) {
+          await refundCredits({ userId, cost: RESUME_PARSE_COST, reason: "refund_parse_resume_failed" });
+        }
+        if (effectiveVersionId) {
+          await db.from("resume_versions").update({ parse_status: "error", parse_error: "Text file is empty or too short" }).eq("id", effectiveVersionId);
+        }
+        return new Response(JSON.stringify({ error: "Text file is empty or too short to parse.", code: "BAD_REQUEST" }), { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
+      }
+      const parsed = await parseFromPlainText(text, PROMPT);
+      if (parsed) return await persistSuccess("gemini-text", parsed);
     }
 
-    // LAYER 2: CLAUDE
-    const claudeRaw = await callClaude(base64);
-    if (claudeRaw) {
-      const parsed = parseJSON(sanitizeAI(claudeRaw), null);
-      if (parsed && isValidResumeSchema(parsed)) {
-        await db.from("resumes").update({ content: JSON.stringify(parsed) }).eq("id", resume_id);
-        if (effectiveVersionId) {
-          await db.from("resume_versions").update({ parsed_data: parsed, parse_status: "ready", parse_error: null }).eq("id", effectiveVersionId);
-        }
-        await fanOutResume(db, userId, parsed);
-        return new Response(JSON.stringify(buildParseSuccess("claude", parsed)), { headers: getCorsHeaders(req) });
+    // ── DOCX ──────────────────────────────────────────────────────
+    else if (
+      resolvedMime ===
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+    ) {
+      const docxText = await extractDocxText(fileBytes);
+      if (docxText) {
+        const parsed = await parseFromPlainText(docxText, PROMPT);
+        if (parsed) return await persistSuccess("gemini-docx", parsed);
       }
+      // Fall through to multimodal/OCR attempts with PDF path only if zip failed
     }
 
-    // LAYER 3: OCR + GEMINI
-    const ocr = await ocrExtract(base64);
-    if (ocr) {
-      const ocrRaw = await callGemini([{ text: `Extract structured resume from OCR text:\n${ocr}\nReturn JSON matching: ${SCHEMA}` }]);
-      if (ocrRaw) {
-        const parsed = parseJSON(sanitizeAI(ocrRaw), null);
+    // ── PDF (and DOCX fallback via OCR if zip extract failed) ─────
+    if (resolvedMime === "application/pdf" || looksLikePdf(fileBytes)) {
+      const geminiRaw = await callGemini([
+        { inline_data: { mime_type: "application/pdf", data: base64 } },
+        { text: PROMPT },
+      ]);
+
+      if (geminiRaw) {
+        const parsed = parseJSON(sanitizeAI(geminiRaw), null);
         if (parsed && isValidResumeSchema(parsed)) {
-          await db.from("resumes").update({ content: JSON.stringify(parsed) }).eq("id", resume_id);
-          if (effectiveVersionId) {
-            await db.from("resume_versions").update({ parsed_data: parsed, parse_status: "ready", parse_error: null }).eq("id", effectiveVersionId);
+          return await persistSuccess("gemini", parsed);
+        }
+      }
+
+      const claudeRaw = await callClaude(base64);
+      if (claudeRaw) {
+        const parsed = parseJSON(sanitizeAI(claudeRaw), null);
+        if (parsed && isValidResumeSchema(parsed)) {
+          return await persistSuccess("claude", parsed);
+        }
+      }
+
+      const ocr = await ocrExtract(base64);
+      if (ocr) {
+        const ocrRaw = await callGemini([{ text: `Extract structured resume from OCR text:\n${ocr}\nReturn JSON matching: ${SCHEMA}` }]);
+        if (ocrRaw) {
+          const parsed = parseJSON(sanitizeAI(ocrRaw), null);
+          if (parsed && isValidResumeSchema(parsed)) {
+            return await persistSuccess("ocr", parsed);
           }
-          await fanOutResume(db, userId, parsed);
-          return new Response(JSON.stringify(buildParseSuccess("ocr", parsed)), { headers: getCorsHeaders(req) });
         }
       }
     }

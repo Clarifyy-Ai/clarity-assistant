@@ -73,7 +73,7 @@ export default function GovExams() {
   return (
     <MarketingLayout>
       <LazyMotion features={domAnimation} strict>
-      <section className="pt-24 sm:pt-28 pb-12 px-4 sm:px-6">
+      <section className="pt-8 sm:pt-12 pb-12 px-4 sm:px-6">
         <div className="max-w-5xl mx-auto">
           <m.div
             initial={{ opacity: 0, y: 24 }}

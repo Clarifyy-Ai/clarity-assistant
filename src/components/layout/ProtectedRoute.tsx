@@ -254,12 +254,12 @@ export const ProtectedRoute = memo(function ProtectedRoute({
               <p className="text-sm text-muted-foreground mb-4">
                 You don&apos;t have admin privileges to access this page.
               </p>
-              <a
-                href="/app/dashboard"
+              <Link
+                to="/app/dashboard"
                 className="inline-block px-4 py-2 bg-primary rounded-lg text-sm font-medium text-primary-foreground hover:opacity-90 transition"
               >
                 Go to Dashboard
-              </a>
+              </Link>
             </div>
           </div>
         </Card>

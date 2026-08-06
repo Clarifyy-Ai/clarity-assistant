@@ -135,7 +135,7 @@ const QUICK_ACTIONS: QuickAction[] = [
     to:          "/app/mock-test",
     icon:        Landmark,
     stealthIcon: FileSpreadsheet,
-    label:       "Gov Exam Tests",
+    label:       PRODUCT_NAMES.govExams,
     sub:         "UPSC · SSC · IBPS MCQ",
     stealthSub:  "Assessment module",
     highlight:   false,

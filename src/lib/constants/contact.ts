@@ -10,6 +10,11 @@ export const SECURITY_EMAIL = "security@clarifyprep.com";
 export const STATUS_PAGE_URL =
   import.meta.env.VITE_STATUS_PAGE_URL ?? "https://status.clarifyprep.com";
 
+/** Public GitHub org (releases / source). Override with VITE_GITHUB_ORG_URL. */
+export const GITHUB_ORG_URL =
+  (import.meta.env.VITE_GITHUB_ORG_URL as string | undefined)?.trim() ||
+  "https://github.com/Clarifyy-Ai";
+
 /** Product / service brand name shown in UI and marketing. */
 export const COMPANY_NAME = "Clarify AI";
 

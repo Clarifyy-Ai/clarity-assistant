@@ -86,7 +86,7 @@ export default function Shortcuts() {
 
   return (
     <MarketingLayout>
-      <section className="pt-36 pb-16 px-6">
+      <section className="pt-20 pb-16 px-6">
         <div className="max-w-3xl mx-auto text-center">
           <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
             <Keyboard className="w-10 h-10 text-primary mx-auto mb-4" />

@@ -64,7 +64,7 @@ export default function PrepLab() {
         title={PRODUCT_NAMES.prepLab}
         description="Build STAR answers, review your Answer Bank, and use AI tools"
         breadcrumbs={[
-          { label: "Dashboard", href: "/app/dashboard" },
+          { label: PRODUCT_NAMES.dashboard, href: "/app/dashboard" },
           { label: PRODUCT_NAMES.prepLab },
         ]}
       />

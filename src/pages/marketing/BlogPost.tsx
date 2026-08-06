@@ -94,7 +94,7 @@ function BlogPostNotFound() {
 
   return (
     <MarketingLayout>
-      <div className="flex min-h-[60vh] items-center justify-center px-6 pt-32 pb-24">
+      <div className="flex min-h-[60vh] items-center justify-center px-6 pt-16 pb-24">
         <div className="text-center max-w-md">
           <h1 className="mb-4 text-3xl md:text-4xl font-bold text-foreground">404</h1>
           <p className="mb-4 text-xl text-muted-foreground">This post does not exist</p>
@@ -157,7 +157,7 @@ export default function BlogPost() {
   if (loading) {
     return (
       <MarketingLayout>
-        <section className="pt-32 pb-20 px-6">
+        <section className="pt-16 pb-20 px-6">
           <div className="max-w-2xl mx-auto space-y-4">
             <div className="h-4 w-24 bg-secondary/60 rounded animate-pulse" />
             <div className="h-10 w-3/4 bg-secondary/60 rounded animate-pulse" />
@@ -176,7 +176,7 @@ export default function BlogPost() {
   return (
     <MarketingLayout>
       <LazyMotion features={domAnimation} strict>
-      <section className="pt-32 pb-20 px-6">
+      <section className="pt-16 pb-20 px-6">
         <div className="max-w-2xl mx-auto">
           <Link to="/blog" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6">
             <ArrowLeft className="w-4 h-4" /> Back to Blog

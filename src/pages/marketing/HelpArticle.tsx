@@ -83,7 +83,7 @@ function NotFound() {
   });
   return (
     <MarketingLayout>
-      <div className="pt-32 pb-24 flex items-center justify-center">
+      <div className="pt-16 pb-24 flex items-center justify-center">
         <div className="text-center">
           <p className="text-muted-foreground mb-4">Article not found</p>
           <Link to="/help" className="text-primary hover:underline text-sm">Back to Help Center</Link>
@@ -214,7 +214,7 @@ export default function HelpArticle() {
   if (loading) {
     return (
       <MarketingLayout>
-        <section className="pt-32 pb-20 px-6">
+        <section className="pt-16 pb-20 px-6">
           <div className="max-w-2xl mx-auto space-y-4 animate-pulse">
             <div className="h-4 w-32 rounded bg-secondary/60" />
             <div className="h-8 w-3/4 rounded bg-secondary/60" />
@@ -228,7 +228,7 @@ export default function HelpArticle() {
   if (categoryArticles) {
     return (
       <MarketingLayout>
-        <section className="pt-32 pb-20 px-6">
+        <section className="pt-16 pb-20 px-6">
           <div className="max-w-2xl mx-auto">
             <Link to="/help" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6">
               <ArrowLeft className="w-4 h-4" /> Back to Help Center
@@ -254,7 +254,7 @@ export default function HelpArticle() {
 
   return (
     <MarketingLayout>
-      <section className="pt-32 pb-20 px-6">
+      <section className="pt-16 pb-20 px-6">
         <div className="max-w-2xl mx-auto">
           <Link to="/help" className="inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground transition-colors mb-6">
             <ArrowLeft className="w-4 h-4" /> Back to Help Center

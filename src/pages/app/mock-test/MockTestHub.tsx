@@ -307,11 +307,11 @@ export default function MockTestHub(): React.ReactElement {
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Government Exam Prep"
+        title={PRODUCT_NAMES.govExamPrep}
         description="Which government exam are you preparing for?"
         breadcrumbs={[
-          { label: "Dashboard", href: "/app/dashboard" },
-          { label: "Mock Tests" },
+          { label: PRODUCT_NAMES.dashboard, href: "/app/dashboard" },
+          { label: PRODUCT_NAMES.govExams },
         ]}
         actions={
           <div className="flex gap-2 shrink-0">

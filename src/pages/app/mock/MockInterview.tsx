@@ -23,7 +23,9 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { SessionTrustBanner } from "@/components/session/SessionTrustBanner";
+import { SearchableCombobox } from "@/components/common/SearchableCombobox";
 
 // ─────────────────────────────────────────────────────────────────
 // MockInterview — session config page
@@ -41,6 +43,34 @@ const QUESTION_COUNTS = [3, 5, 8, 10, 15];
 const COMPANIES = [
   "Google", "Meta", "Amazon", "Apple", "Microsoft",
   "Stripe", "Airbnb", "Notion", "OpenAI", "Netflix",
+  "Uber", "LinkedIn", "Salesforce", "Oracle", "IBM",
+  "Adobe", "Intel", "NVIDIA", "Tesla", "Spotify",
+  "Shopify", "Square", "PayPal", "Goldman Sachs", "JPMorgan",
+  "Accenture", "Deloitte", "Infosys", "TCS", "Wipro",
+  "Flipkart", "Swiggy", "Zomato", "Razorpay", "PhonePe",
+];
+
+const ROLES = [
+  "Software Engineer",
+  "Senior Software Engineer",
+  "Frontend Engineer",
+  "Backend Engineer",
+  "Full Stack Engineer",
+  "Product Manager",
+  "Data Scientist",
+  "Data Analyst",
+  "Machine Learning Engineer",
+  "DevOps Engineer",
+  "SRE",
+  "Designer",
+  "UX Designer",
+  "Business Analyst",
+  "Engineering Manager",
+  "QA Engineer",
+  "Security Engineer",
+  "Mobile Engineer",
+  "Marketing Manager",
+  "Other",
 ];
 
 export default function MockInterview() {
@@ -124,11 +154,11 @@ export default function MockInterview() {
   return (
     <div className="space-y-6 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-200">
       <PageHeader
-        title="Mock Interview"
+        title={PRODUCT_NAMES.mockInterview}
         description="Configure your practice session"
         breadcrumbs={[
-          { label: "Dashboard", href: "/app/dashboard" },
-          { label: "Mock Interview" },
+          { label: PRODUCT_NAMES.dashboard, href: "/app/dashboard" },
+          { label: PRODUCT_NAMES.mockInterview },
         ]}
       />
 
@@ -178,38 +208,26 @@ export default function MockInterview() {
           <h3 className="text-sm font-semibold text-foreground mb-3">
             Target company <span className="text-muted-foreground font-normal">(optional)</span>
           </h3>
-          <input
+          <SearchableCombobox
             value={company}
-            onChange={(e) => setCompany(e.target.value)}
-            placeholder="e.g. Google, Stripe…"
-            className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring mb-3 transition-colors"
+            onChange={setCompany}
+            options={COMPANIES}
+            placeholder="Search or type a company…"
+            searchPlaceholder="Search companies…"
+            allowCustom
+            className="mb-4"
           />
-          <div className="flex flex-wrap gap-1.5 mb-4">
-            {COMPANIES.slice(0, 6).map((c) => (
-              <button
-                key={c}
-                onClick={() => setCompany(c)}
-                className={cn(
-                  "px-2.5 py-1 rounded-lg border text-[11px] font-medium transition-all",
-                  company === c
-                    ? "bg-primary/10 border-primary/30 text-primary"
-                    : "bg-secondary border-border text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
 
-          {/* ✅ NEW: role field — pre-filled from profile.target_role */}
           <h3 className="text-sm font-semibold text-foreground mb-2">
             Target role <span className="text-muted-foreground font-normal">(optional)</span>
           </h3>
-          <input
+          <SearchableCombobox
             value={role}
-            onChange={(e) => setRole(e.target.value)}
-            placeholder="e.g. Software Engineer, PM…"
-            className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
+            onChange={setRole}
+            options={ROLES}
+            placeholder="Search or type a role…"
+            searchPlaceholder="Search roles…"
+            allowCustom
           />
         </Card>
 

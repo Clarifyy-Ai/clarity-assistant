@@ -12,7 +12,7 @@ export default function Terms() {
 
   return (
     <MarketingLayout>
-      <article className={`pt-20 sm:pt-28 pb-14 px-4 sm:px-6 max-w-3xl mx-auto text-left ${LEGAL_PROSE_CLASS}`}>
+      <article className={`pt-4 sm:pt-12 pb-14 px-4 sm:px-6 max-w-3xl mx-auto text-left ${LEGAL_PROSE_CLASS}`}>
         <ComplianceBanner />
         <h1>Terms of Service</h1>
         <p className="text-xs text-muted-foreground">Last updated: March 25, 2026</p>

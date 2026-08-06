@@ -83,6 +83,8 @@ export type GenerateHintResponse = {
   hints: string;
   source: "ai" | "fallback";
   refunded?: boolean;
+  error?: string;
+  code?: string;
 };
 
 // ✅ FIX: Added context and answer_mode — both required by generate-answer/index.ts

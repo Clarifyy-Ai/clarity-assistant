@@ -582,7 +582,6 @@ export const useOverlayStore = create<OverlayStore>()(
           current_hint: hint,
           streaming_buffer: "",
           hint_state: "offline_fallback" as HintState,
-          error_message: null,
           session_pipeline_state: transitionOverlayState(
             s.session_pipeline_state,
             "guidance_ready",

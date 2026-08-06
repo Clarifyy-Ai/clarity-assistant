@@ -100,7 +100,7 @@ export default function Help() {
 
   return (
     <MarketingLayout>
-      <section className="pt-20 sm:pt-28 pb-14 px-4 sm:px-6">
+      <section className="pt-4 sm:pt-12 pb-14 px-4 sm:px-6">
         <div className="max-w-3xl mx-auto text-center">
           <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
             <HelpCircle className="w-8 h-8 text-primary mx-auto mb-4" />

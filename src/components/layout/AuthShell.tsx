@@ -36,10 +36,14 @@ export function AuthShell({
     <div className="min-h-screen flex bg-background">
       <div className="hidden lg:flex lg:w-1/2 xl:w-[55%] flex-col relative overflow-hidden bg-gradient-to-br from-primary via-indigo-600 to-blue-700 p-10">
         <div className="absolute inset-0 opacity-20 bg-[radial-gradient(circle_at_30%_20%,white,transparent_45%)]" />
-        <div className="relative z-10 flex items-center gap-3">
+        <Link
+          to="/"
+          className="relative z-10 flex items-center gap-3 w-fit rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/70"
+          aria-label="Clarify AI home"
+        >
           <BrandLogo size="md" showText={false} />
           <span className="text-lg font-bold text-white">Clarify AI</span>
-        </div>
+        </Link>
         <div className="relative z-10 flex-1 flex flex-col justify-center gap-8 max-w-md">
           <h1 className="text-3xl xl:text-4xl font-bold text-white leading-tight">
             Practice interviews with an AI coach that feels real.

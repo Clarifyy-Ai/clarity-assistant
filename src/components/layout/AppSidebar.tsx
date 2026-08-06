@@ -45,7 +45,7 @@ import {
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store/uiStore";
 import { useAuthStore } from "@/store/authStore";
-
+import { BrandLogo } from "@/components/marketing";
 
 import {
   STEALTH_NAV_LABELS,
@@ -295,25 +295,35 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
       }}
       onMouseLeave={() => setHoverExpanded(false)}
     >
-      <div className="flex min-h-[56px] items-center gap-3 border-b border-sidebar-border px-4 py-4">
-        <div
+      <div className="flex min-h-[56px] items-center border-b border-sidebar-border px-3 py-3">
+        <NavLink
+          to="/app/dashboard"
+          onClick={onNavClick}
+          title={stealthMode ? STEALTH_BRAND.name : PRODUCT_NAMES.brand}
+          aria-label={`${stealthMode ? STEALTH_BRAND.name : PRODUCT_NAMES.brand} — Dashboard`}
           className={cn(
-            "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
-            stealthMode ? "bg-blue-600" : "bg-primary"
+            "flex min-w-0 flex-1 items-center gap-2.5 rounded-xl px-1 py-1 transition-colors",
+            "hover:bg-accent/10 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+            visuallyCollapsed && "justify-center px-0",
           )}
         >
           {stealthMode ? (
-            <Briefcase className="h-5 w-5 text-white" />
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-blue-600">
+              <Briefcase className="h-5 w-5 text-white" />
+            </div>
           ) : (
-            <Mic className="h-5 w-5 text-white" />
+            <BrandLogo
+              size="sm"
+              showText={!visuallyCollapsed}
+              className={cn(visuallyCollapsed && "gap-0")}
+            />
           )}
-        </div>
-
-        {!visuallyCollapsed && (
-          <span className="text-lg font-bold tracking-tight text-sidebar-foreground">
-            {stealthMode ? STEALTH_BRAND.name : PRODUCT_NAMES.brand}
-          </span>
-        )}
+          {stealthMode && !visuallyCollapsed && (
+            <span className="truncate text-lg font-bold tracking-tight text-sidebar-foreground">
+              {STEALTH_BRAND.name}
+            </span>
+          )}
+        </NavLink>
       </div>
 
       <nav className="flex-1 space-y-4 overflow-y-auto py-3">

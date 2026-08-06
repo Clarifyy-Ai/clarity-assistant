@@ -52,6 +52,17 @@ export function getResumeParseStatus(
   content: string | null | undefined,
   isParsingGlobally: boolean,
 ): ResumeParseStatus {
+  if (content?.trim()) {
+    try {
+      const raw = JSON.parse(content) as Record<string, unknown>;
+      if (typeof raw._parse_error === "string" && raw._parse_error) {
+        return "error";
+      }
+    } catch {
+      // non-JSON content still counts as ready below
+    }
+  }
+
   const parsed = parseResumeContentString(content);
   if (parsed && (parsed.summary || parsed.skills.length > 0 || parsed.experience.length > 0)) {
     return "ready";

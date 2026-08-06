@@ -2,14 +2,23 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { BrandLogo } from "@/components/marketing";
-import { Menu, X, Twitter, Github } from "lucide-react";
-import { SALES_EMAIL, STATUS_PAGE_URL, LEGAL_ENTITY_NAME } from "@/lib/constants/contact";
+import { Menu, X, Github, LifeBuoy } from "lucide-react";
+import {
+  SALES_EMAIL,
+  SUPPORT_EMAIL,
+  LEGAL_ENTITY_NAME,
+  GITHUB_ORG_URL,
+} from "@/lib/constants/contact";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { cn } from "@/lib/utils";
 
-const NAV_LINKS: Array<{ to?: string; href?: string; label: string }> = [
-  { href: "/#features", label: "Features" },
+type NavItem =
+  | { to: string; label: string; hash?: string }
+  | { href: string; label: string; external?: boolean };
+
+const NAV_LINKS: NavItem[] = [
+  { to: "/", hash: "features", label: "Features" },
   { to: "/gov-exams", label: PRODUCT_NAMES.govExams },
   { to: "/pricing", label: "Pricing" },
   { to: "/shortcuts", label: "Shortcuts" },
@@ -19,15 +28,12 @@ const NAV_LINKS: Array<{ to?: string; href?: string; label: string }> = [
 
 const FOOTER_COLUMNS: Array<{
   heading: string;
-  links: Array<
-    | { href: string; label: string; external?: boolean }
-    | { to: string; label: string }
-  >;
+  links: NavItem[];
 }> = [
   {
     heading: "Product",
     links: [
-      { href: "/#features", label: "Features" },
+      { to: "/", hash: "features", label: "Features" },
       { to: "/gov-exams", label: PRODUCT_NAMES.govExams },
       { to: "/pricing", label: "Pricing" },
       { to: "/shortcuts", label: "Shortcuts" },
@@ -54,26 +60,72 @@ const FOOTER_COLUMNS: Array<{
     ],
   },
   {
-    heading: "Social",
+    heading: "Support",
     links: [
-      { href: "https://twitter.com/clarifyai", label: "Twitter / X", external: true },
-      { href: "https://github.com/clarifyai", label: "GitHub", external: true },
+      { href: `mailto:${SUPPORT_EMAIL}`, label: "Email support" },
+      { to: "/help", label: "Help & status" },
+      { href: GITHUB_ORG_URL, label: "GitHub", external: true },
     ],
   },
 ];
+
+function scrollToHash(hash: string) {
+  const id = hash.replace(/^#/, "");
+  if (!id) return;
+  window.requestAnimationFrame(() => {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+}
+
+function MarketingNavLink({
+  item,
+  className,
+  onNavigate,
+}: {
+  item: NavItem;
+  className?: string;
+  onNavigate?: () => void;
+}) {
+  if ("href" in item) {
+    return (
+      <a
+        href={item.href}
+        target={item.external ? "_blank" : undefined}
+        rel={item.external ? "noopener noreferrer" : undefined}
+        onClick={onNavigate}
+        className={className}
+      >
+        {item.label}
+      </a>
+    );
+  }
+
+  const to = item.hash ? { pathname: item.to, hash: item.hash } : item.to;
+
+  return (
+    <Link
+      to={to}
+      onClick={() => {
+        onNavigate?.();
+        if (item.hash) scrollToHash(item.hash);
+      }}
+      className={className}
+    >
+      {item.label}
+    </Link>
+  );
+}
 
 interface MarketingLayoutProps {
   children: React.ReactNode;
 }
 
 export function MarketingLayout({ children }: MarketingLayoutProps) {
-  const { pathname } = useLocation();
+  const { pathname, hash } = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // 1 + 2 + 3 + 5: lock the background while the drawer is open, restore on close.
   useBodyScrollLock(menuOpen);
 
-  // Close on route change and on Escape.
   useEffect(() => {
     setMenuOpen(false);
   }, [pathname]);
@@ -87,40 +139,49 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [menuOpen]);
 
+  // Honor deep links like /#features after SPA navigation.
+  useEffect(() => {
+    if (pathname === "/" && hash) {
+      scrollToHash(hash);
+    }
+  }, [pathname, hash]);
 
   return (
     <div className="min-h-screen bg-background text-foreground overflow-x-hidden">
-      <a href="#main-content" className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:text-sm focus:font-medium">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:top-2 focus:left-2 focus:z-[9999] focus:px-4 focus:py-2 focus:bg-primary focus:text-primary-foreground focus:rounded-md focus:text-sm focus:font-medium"
+      >
         Skip to content
       </a>
-      <nav aria-label="Main navigation" className="fixed top-0 inset-x-0 z-[110] border-b border-border bg-background/80 backdrop-blur-xl">
+      <nav
+        aria-label="Main navigation"
+        className="fixed top-0 inset-x-0 z-[110] border-b border-border bg-background/80 backdrop-blur-xl"
+      >
         <div className="max-w-6xl mx-auto flex items-center justify-between px-4 sm:px-6 h-16">
-          <Link to="/" className="flex items-center gap-2.5">
+          <Link
+            to="/"
+            className="flex items-center gap-2.5 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label="Clarify AI home"
+          >
             <BrandLogo size="md" />
           </Link>
           <div className="hidden md:flex items-center gap-8 text-sm text-muted-foreground">
             {NAV_LINKS.map((link) => {
-              const key = link.to ?? link.href ?? link.label;
-              const isActive = link.to
-                ? link.to === "/"
-                  ? pathname === "/"
-                  : pathname.startsWith(link.to)
-                : false;
-              const className = cn(
-                "transition-colors",
-                isActive ? "text-foreground" : "hover:text-foreground",
-              );
-              if (link.href) {
-                return (
-                  <a key={key} href={link.href} className={className}>
-                    {link.label}
-                  </a>
-                );
-              }
+              const key = "to" in link ? `${link.to}#${link.hash ?? ""}` : link.href;
+              const isActive =
+                "to" in link &&
+                !link.hash &&
+                (link.to === "/" ? pathname === "/" : pathname.startsWith(link.to));
               return (
-                <Link key={key} to={link.to!} className={className}>
-                  {link.label}
-                </Link>
+                <MarketingNavLink
+                  key={key}
+                  item={link}
+                  className={cn(
+                    "transition-colors",
+                    isActive ? "text-foreground" : "hover:text-foreground",
+                  )}
+                />
               );
             })}
           </div>
@@ -148,51 +209,40 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
             </button>
           </div>
         </div>
-
       </nav>
 
-      {/* Mobile drawer: full-viewport overlay, independently scrollable panel */}
       {menuOpen && (
-        <div className="md:hidden fixed inset-0 z-[100]" role="dialog" aria-modal="true" aria-label="Mobile navigation">
+        <div
+          className="md:hidden fixed inset-0 z-[100]"
+          role="dialog"
+          aria-modal="true"
+          aria-label="Mobile navigation"
+        >
           <button
             type="button"
             aria-label="Close menu"
             onClick={() => setMenuOpen(false)}
             className="absolute inset-0 h-full w-full bg-background/70 backdrop-blur-sm animate-in fade-in duration-200"
           />
-          <div
-            className="absolute inset-x-0 top-16 bottom-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] border-t border-border bg-background px-4 py-3 space-y-1 animate-in slide-in-from-top-2 fade-in duration-200"
-          >
+          <div className="absolute inset-x-0 top-16 bottom-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] border-t border-border bg-background px-4 py-3 space-y-1 animate-in slide-in-from-top-2 fade-in duration-200">
             {NAV_LINKS.map((link) => {
-              const key = link.to ?? link.href ?? link.label;
-              const isActive = link.to ? pathname.startsWith(link.to) : false;
-              const className = cn(
-                "block px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
-                isActive
-                  ? "bg-primary/10 text-foreground"
-                  : "text-muted-foreground hover:text-foreground hover:bg-secondary/40",
-              );
-              if (link.href) {
-                return (
-                  <a
-                    key={key}
-                    href={link.href}
-                    onClick={() => setMenuOpen(false)}
-                    className={className}
-                  >
-                    {link.label}
-                  </a>
-                );
-              }
+              const key = "to" in link ? `${link.to}#${link.hash ?? ""}` : link.href;
+              const isActive =
+                "to" in link &&
+                !link.hash &&
+                (link.to === "/" ? pathname === "/" : pathname.startsWith(link.to));
               return (
-                <Link
+                <MarketingNavLink
                   key={key}
-                  to={link.to!}
-                  onClick={() => setMenuOpen(false)}
-                  className={className}
-                >
-                  {link.label}
-                </Link>
+                  item={link}
+                  onNavigate={() => setMenuOpen(false)}
+                  className={cn(
+                    "block px-3 py-2.5 rounded-xl text-sm font-medium transition-colors",
+                    isActive
+                      ? "bg-primary/10 text-foreground"
+                      : "text-muted-foreground hover:text-foreground hover:bg-secondary/40",
+                  )}
+                />
               );
             })}
             <Link
@@ -206,31 +256,34 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
         </div>
       )}
 
-
-      <main id="main-content">{children}</main>
+      <main id="main-content" className="pt-16">
+        {children}
+      </main>
 
       <footer className="border-t border-border bg-background">
         <div className="max-w-6xl mx-auto px-4 sm:px-6 pt-12 pb-8">
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-8 mb-10">
-            <div className="col-span-2 md:col-span-1">
-              <Link to="/" className="inline-block mb-3">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-x-6 gap-y-10 mb-10 text-left items-start">
+            <div className="col-span-2 sm:col-span-3 lg:col-span-1">
+              <Link
+                to="/"
+                className="inline-flex mb-3 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Clarify AI home"
+              >
                 <BrandLogo size="sm" />
               </Link>
-              <p className="text-xs text-muted-foreground leading-relaxed max-w-[180px]">
+              <p className="text-xs text-muted-foreground leading-relaxed max-w-[220px]">
                 AI interview coaching, gov exam mock tests, and live practice for every career stage.
               </p>
               <div className="flex gap-3 mt-4">
                 <a
-                  href="https://twitter.com/clarifyai"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  aria-label="Twitter / X"
+                  href={`mailto:${SUPPORT_EMAIL}`}
+                  aria-label="Email support"
                   className="p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all"
                 >
-                  <Twitter className="w-4 h-4" />
+                  <LifeBuoy className="w-4 h-4" />
                 </a>
                 <a
-                  href="https://github.com/clarifyai"
+                  href={GITHUB_ORG_URL}
                   target="_blank"
                   rel="noopener noreferrer"
                   aria-label="GitHub"
@@ -241,31 +294,17 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
               </div>
             </div>
             {FOOTER_COLUMNS.map((col) => (
-              <div key={col.heading}>
+              <div key={col.heading} className="min-w-0">
                 <p className="text-xs font-semibold text-foreground uppercase tracking-widest mb-3">
                   {col.heading}
                 </p>
                 <ul className="space-y-2.5">
-                  {col.links
-                    .map((link) => (
+                  {col.links.map((link) => (
                     <li key={link.label}>
-                      {"href" in link ? (
-                        <a
-                          href={link.href}
-                          target={"external" in link && link.external ? "_blank" : undefined}
-                          rel={"external" in link && link.external ? "noopener noreferrer" : undefined}
-                          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          {link.label}
-                        </a>
-                      ) : (
-                        <Link
-                          to={link.to}
-                          className="text-xs text-muted-foreground hover:text-foreground transition-colors"
-                        >
-                          {link.label}
-                        </Link>
-                      )}
+                      <MarketingNavLink
+                        item={link}
+                        className="text-xs text-muted-foreground hover:text-foreground transition-colors"
+                      />
                     </li>
                   ))}
                 </ul>
@@ -273,18 +312,34 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
             ))}
           </div>
           <div className="border-t border-border pt-6 flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-muted-foreground">
-            <span>&copy; {new Date().getFullYear()} {LEGAL_ENTITY_NAME}. All rights reserved.</span>
-            <div className="flex gap-4 flex-wrap justify-center">
-              <Link to="/terms" className="hover:text-foreground transition-colors">Terms</Link>
-              <Link to="/privacy" className="hover:text-foreground transition-colors">Privacy</Link>
-              <Link to="/help" className="hover:text-foreground transition-colors">Help</Link>
-              <Link to="/pricing" className="hover:text-foreground transition-colors">Pricing</Link>
-              <Link to="/blog" className="hover:text-foreground transition-colors">Blog</Link>
+            <span>
+              &copy; {new Date().getFullYear()} {LEGAL_ENTITY_NAME}. All rights reserved.
+            </span>
+            <div className="flex gap-4 flex-wrap justify-center sm:justify-end">
+              <Link to="/terms" className="hover:text-foreground transition-colors">
+                Terms
+              </Link>
+              <Link to="/privacy" className="hover:text-foreground transition-colors">
+                Privacy
+              </Link>
+              <Link to="/help" className="hover:text-foreground transition-colors">
+                Help
+              </Link>
+              <Link to="/pricing" className="hover:text-foreground transition-colors">
+                Pricing
+              </Link>
+              <Link to="/blog" className="hover:text-foreground transition-colors">
+                Blog
+              </Link>
               <Link to="/gov-exams" className="hover:text-foreground transition-colors">
                 {PRODUCT_NAMES.govExams}
               </Link>
-              <Link to="/shortcuts" className="hover:text-foreground transition-colors">Shortcuts</Link>
-              <a href={STATUS_PAGE_URL} target="_blank" rel="noopener noreferrer" className="hover:text-foreground transition-colors">Status</a>
+              <Link to="/shortcuts" className="hover:text-foreground transition-colors">
+                Shortcuts
+              </Link>
+              <Link to="/login" className="hover:text-foreground transition-colors">
+                Log in
+              </Link>
             </div>
           </div>
         </div>

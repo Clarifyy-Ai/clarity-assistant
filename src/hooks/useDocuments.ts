@@ -9,6 +9,8 @@ import { useAnswerBankStore } from "@/store/answerBankStore";
 import { useAuthStore } from "@/store/userStore";
 import { callGemini } from "@/lib/ai/geminiClient";
 import { generateId } from "@/lib/utils";
+import { getMimeType } from "@/lib/utils/fileUtils";
+import { toast } from "sonner";
 import type {
   ResumeDocument,
   JDDocument,
@@ -146,8 +148,12 @@ export function useDocuments(options?: UseDocumentsOptions) {
     if (!user) return { resumeId: null, error: "Not authenticated" };
 
     const resumeId = generateId();
-    const ext      = file.name.split(".").pop() ?? "pdf";
+    const ext      = (file.name.split(".").pop() ?? "pdf").toLowerCase();
     const path     = `${user.id}/${resumeId}.${ext}`;
+    const mimeType =
+      (file.type && file.type !== "application/octet-stream"
+        ? file.type
+        : getMimeType(file.name)) || "application/octet-stream";
 
     docStore.setUploadProgress(0);
 
@@ -174,7 +180,7 @@ export function useDocuments(options?: UseDocumentsOptions) {
       // XP handled by useGamification / useXPSystem at call sites
 
       // Fire-and-forget parse
-      parseResume(resumeId, path, file.type);
+      void parseResume(resumeId, path, mimeType);
 
       await loadDocuments();
       if (!docStore.active_resume_id) {
@@ -287,6 +293,19 @@ export function useDocuments(options?: UseDocumentsOptions) {
       }
     } catch (err) {
       console.error("[useDocuments] parseResume failed:", err);
+      const message =
+        err instanceof Error ? err.message : "Resume parsing failed. Please try again.";
+      try {
+        await resumesDB.update(resumeId, {
+          content: JSON.stringify({ _parse_error: message }),
+        });
+      } catch {
+        // best-effort: status flip still surfaces via toast
+      }
+      toast.error(message);
+      if (mountedRef.current) {
+        await loadDocuments();
+      }
     } finally {
       if (mountedRef.current) setIsParsing(false);
     }

@@ -80,3 +80,71 @@ export function looksLikePdf(bytes: Uint8Array): boolean {
     bytes[4] === 0x2d
   );
 }
+
+/** DOCX/OOXML is a ZIP (PK..) */
+export function looksLikeZip(bytes: Uint8Array): boolean {
+  return (
+    bytes.length >= 4 &&
+    bytes[0] === 0x50 &&
+    bytes[1] === 0x4b &&
+    (bytes[2] === 0x03 || bytes[2] === 0x05 || bytes[2] === 0x07) &&
+    (bytes[3] === 0x04 || bytes[3] === 0x06 || bytes[3] === 0x08)
+  );
+}
+
+/**
+ * Prefer declared MIME, then path extension, then magic bytes.
+ * Handles mangled extensions (e.g. `.resum`) when content is still PDF/DOCX/text.
+ */
+export function resolveUploadMime(
+  mimeType: string | null | undefined,
+  options?: { filePath?: string | null; bytes?: Uint8Array | null },
+): UploadMimeValidation {
+  const declared = validateUploadMime(mimeType, { filePath: options?.filePath });
+  if (declared.ok) {
+    // If claimed PDF but bytes aren't, fall through to magic detection.
+    if (
+      declared.mimeType === "application/pdf" &&
+      options?.bytes &&
+      !looksLikePdf(options.bytes)
+    ) {
+      // continue below
+    } else {
+      return declared;
+    }
+  }
+
+  const bytes = options?.bytes;
+  if (bytes) {
+    if (looksLikePdf(bytes)) {
+      return { ok: true, mimeType: "application/pdf" };
+    }
+    if (looksLikeZip(bytes)) {
+      return {
+        ok: true,
+        mimeType:
+          "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      };
+    }
+    // Printable UTF-8 / ASCII text heuristic
+    const sample = bytes.slice(0, Math.min(bytes.length, 2048));
+    let printable = 0;
+    for (let i = 0; i < sample.length; i++) {
+      const b = sample[i]!;
+      if (b === 0x09 || b === 0x0a || b === 0x0d || (b >= 0x20 && b <= 0x7e) || b >= 0x80) {
+        printable++;
+      }
+    }
+    if (sample.length > 0 && printable / sample.length >= 0.9) {
+      return { ok: true, mimeType: "text/plain" };
+    }
+  }
+
+  return {
+    ok: false,
+    reason: declared.ok
+      ? `File content does not match declared type "${declared.mimeType}".`
+      : (declared.reason ||
+        "Missing or unrecognized file type. Allowed: PDF, DOCX, TXT."),
+  };
+}

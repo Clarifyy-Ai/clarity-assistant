@@ -27,6 +27,7 @@ export default function VerifyEmail() {
   const navigate = useNavigate();
   const location = useLocation();
   const user = useAuthStore((s) => s.user);
+  const signOut = useAuthStore((s) => s.signOut);
   // Signup has no session yet (email confirmation required), so fall back to
   // the address passed through router state.
   const stateEmail = (location.state as { email?: string } | null)?.email ?? "";
@@ -72,7 +73,7 @@ export default function VerifyEmail() {
   }
 
   async function handleSignOut() {
-    await supabase.auth.signOut();
+    await signOut();
     navigate("/login", { replace: true });
   }
 

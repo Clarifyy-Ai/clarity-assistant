@@ -32,7 +32,7 @@ export const DEFAULT_HOTKEYS: Record<string, HotkeyDefinition> = {
     keys:        "Ctrl+Shift+H",
     mac:         "⌘+Shift+H",
     action:      "overlay:toggle",
-    description: "Show / hide the overlay window",
+    description: "Show / hide overlay (desktop app: global; browser: while overlay focused)",
     category:    "overlay",
     global:      true,
   },

@@ -23,6 +23,12 @@ export async function enumerateAudioDevices(): Promise<AudioDevice[]> {
   }
 }
 
+export {
+  enumerateAudioOutputDevices,
+  playSpeakerTestTone,
+} from "@/lib/audio/speakerTest";
+
+
 /**
  * Optional: watch device changes and refresh store.
  * Returns a cleanup function.

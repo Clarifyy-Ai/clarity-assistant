@@ -9,6 +9,8 @@ import {
   Monitor,
 } from "lucide-react";
 import { SessionTrustBanner } from "@/components/session/SessionTrustBanner";
+import { PageHeader } from "@/components/layout/PageHeader";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { useSessionStore } from "@/store/sessionStore";
 import { useOverlayStore } from "@/store/overlayStore";
 import { cn } from "@/lib/utils";
@@ -83,33 +85,30 @@ export default function LiveRehearsal() {
   }
 
   return (
-    <>
-      <div className="mx-auto max-w-2xl mt-4 mb-2 flex items-center justify-between gap-3 px-1">
-        <div>
-          <p className="text-xs font-medium text-muted-foreground">
-            <Link to="/app/dashboard" className="hover:text-foreground transition-colors">
-              Dashboard
-            </Link>
-            <span className="mx-1.5 text-muted-foreground/50">/</span>
-            Practice Coach
-          </p>
-          <h1 className="text-xl font-bold text-foreground mt-0.5">Practice Coach</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">
-            Configure your live rehearsal session, then open Overlay mode.
-          </p>
-        </div>
-        <Link
-          to="/app/dashboard"
-          className="shrink-0 text-xs font-medium text-primary hover:underline"
-        >
-          Back to dashboard
-        </Link>
-      </div>
-      <SessionTrustBanner className="mx-auto max-w-2xl mt-2 mb-2" variant="live" />
+    <div className="space-y-6 max-w-3xl animate-in fade-in slide-in-from-bottom-2 duration-200">
+      <PageHeader
+        title={PRODUCT_NAMES.practiceCoach}
+        description="Configure your live rehearsal session, then open Overlay mode."
+        breadcrumbs={[
+          { label: PRODUCT_NAMES.dashboard, href: "/app/dashboard" },
+          { label: PRODUCT_NAMES.practiceCoach },
+        ]}
+        actions={
+          <Link
+            to="/app/dashboard"
+            className="shrink-0 text-xs font-medium text-primary hover:underline"
+          >
+            Back to dashboard
+          </Link>
+        }
+      />
+
+      <SessionTrustBanner variant="live" />
+
       {isMobile && !dismissMobileNotice && (
         <div
           role="status"
-          className="mx-auto max-w-2xl mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm"
+          className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm"
         >
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -129,10 +128,11 @@ export default function LiveRehearsal() {
           </div>
         </div>
       )}
+
       <div
         role="note"
         className={cn(
-          "mx-auto max-w-2xl mb-4 flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border px-4 py-3 text-sm",
+          "flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border px-4 py-3 text-sm",
           defaultOverlay
             ? "border-primary bg-primary/10 ring-1 ring-primary/20"
             : "border-primary/30 bg-primary/10",
@@ -140,7 +140,7 @@ export default function LiveRehearsal() {
       >
         <p className="flex-1 text-foreground">
           Starting a session opens <strong className="text-primary">Overlay mode</strong> — the
-          focused Practice Coach window without the app sidebar.
+          focused {PRODUCT_NAMES.practiceCoach} window without the app sidebar.
         </p>
         <Link
           to="/app/live/overlay"
@@ -153,20 +153,24 @@ export default function LiveRehearsal() {
           <ExternalLink className="w-3.5 h-3.5" aria-hidden />
         </Link>
       </div>
+
       {!isElectronApp() && (
         <div
           role="note"
-          className="mx-auto max-w-2xl mb-4 flex flex-col sm:flex-row sm:items-center gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm"
+          className="flex flex-col sm:flex-row sm:items-start gap-3 rounded-xl border border-border bg-muted/40 px-4 py-3 text-sm"
         >
-          <Monitor className="w-4 h-4 text-muted-foreground shrink-0" aria-hidden />
-          <p className="flex-1 text-muted-foreground">
-            Floating overlay, global hotkeys, and tab-audio capture work best in the desktop app.
-            Browser Overlay sessions remain fully available.
-          </p>
-          <DesktopDownloadButton className="shrink-0" />
+          <Monitor className="w-4 h-4 text-muted-foreground shrink-0 mt-0.5" aria-hidden />
+          <div className="flex-1 space-y-2 min-w-0">
+            <p className="text-muted-foreground">
+              Floating overlay, global hotkeys, and tab-audio capture work best in the desktop app.
+              Browser Overlay sessions remain fully available.
+            </p>
+            <DesktopDownloadButton />
+          </div>
         </div>
       )}
+
       <PreSessionSetupWizard onStart={handleSetup} sessionType="live" />
-    </>
+    </div>
   );
 }

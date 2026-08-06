@@ -129,10 +129,30 @@ export function useSessionOrchestrator() {
       });
 
       const hint = typeof data?.hints === "string" ? data.hints : String(data?.hints ?? "");
+      const isDegraded =
+        data?.success === false ||
+        data?.source === "fallback" ||
+        data?.refunded === true;
+
+      if (isDegraded) {
+        overlay.setCurrentQuestion(questionText);
+        overlay.setOfflineFallback(hint);
+        overlay.setError(
+          "AI hint service unavailable — showing offline coaching tips. Credits refunded if charged.",
+        );
+        overlay.addChatMessage({
+          role: "assistant",
+          text: `${hint}\n\n_(Offline coaching tips — AI hint service unavailable.)_`,
+          timestamp: Date.now(),
+        });
+        return;
+      }
+
       overlay.setCurrentQuestion(questionText);
       overlay.appendStreamChunk(hint);
       overlay.commitStreamedHint();
       overlay.setHintState("ready");
+      overlay.setError(null);
       overlay.addChatMessage({
         role: "assistant",
         text: hint,
@@ -147,10 +167,12 @@ export function useSessionOrchestrator() {
       const fallbackHint = getLocalHintFallback(questionText, interviewType);
 
       overlay.setCurrentQuestion(questionText);
-      overlay.appendStreamChunk(fallbackHint);
-      overlay.commitStreamedHint();
-      overlay.setHintState("ready");
-      overlay.setError(null);
+      overlay.setOfflineFallback(fallbackHint);
+      overlay.setError(
+        msg.includes("unavailable") || msg.includes("502")
+          ? "AI hint service unavailable — showing offline coaching tips."
+          : `Hint failed: ${msg}`,
+      );
       overlay.addChatMessage({
         role: "assistant",
         text: `${fallbackHint}\n\n_(Offline coaching tips — AI hint service unavailable.)_`,

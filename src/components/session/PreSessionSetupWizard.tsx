@@ -14,7 +14,7 @@ import { cn } from "@/lib/utils";
 import type { LiveSessionConfig } from "@/types/session.types";
 import type { PreferredAIModel, HintStyle, UserProfile } from "@/types/user.types";
 import { runAudioPreflight, type PreflightReport } from "@/lib/validators/audioValidator";
-import { enumerateAudioDevices } from "@/lib/audio/audioCapture";
+import { enumerateAudioDevices, enumerateAudioOutputDevices, playSpeakerTestTone } from "@/lib/audio/audioCapture";
 import type { AudioDevice } from "@/types/audio.types";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useNavigate } from "react-router-dom";
@@ -32,6 +32,7 @@ import {
   loadLastPracticeSetup,
 } from "@/lib/session/lastPracticeSetup";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/Button";
 import { SessionContextChip } from "@/components/session/SessionContextChip";
@@ -42,6 +43,7 @@ import {
   acceptResponsibleUseConsent,
   canStartCoachingSession,
 } from "@/lib/overlay/responsibleUseConsent";
+import { toast } from "sonner";
 
 interface PreSessionSetupWizardProps {
   onStart: (config: LiveSessionConfig) => void;
@@ -92,7 +94,7 @@ function BooleanSwitch({
 export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSessionSetupWizardProps) {
   const { profile } = useAuthStore();
   const { isExhausted: creditsExhausted } = useCreditExhaustedState();
-  useDocuments();
+  const { loadError: documentsLoadError } = useDocuments();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
   const resumes        = useDocumentStore((s) => s.resumes);
@@ -150,6 +152,10 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const [micPermission,      setMicPermission]     = useState<"unknown" | "granted" | "denied" | "checking">("unknown");
   const [micDevices,         setMicDevices]        = useState<AudioDevice[]>([]);
   const [selectedMicId,      setSelectedMicId]     = useState<string | null>(null);
+  const [speakerDevices,     setSpeakerDevices]    = useState<AudioDevice[]>([]);
+  const [selectedSpeakerId,  setSelectedSpeakerId] = useState<string | null>(null);
+  const [speakerTested,      setSpeakerTested]     = useState(false);
+  const [speakerTesting,     setSpeakerTesting]    = useState(false);
   const [isOnline,           setIsOnline]          = useState(
     typeof navigator !== "undefined" ? navigator.onLine : true,
   );
@@ -180,6 +186,20 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const totalSteps = activeSteps.length;
   const connectStep = isMobile ? 2 : 6;
   const resumeStep = isMobile ? 1 : 3;
+
+  // Keep step in range when switching mobile ↔ desktop layouts (avoids
+  // activeSteps[step - 1] being undefined → TypeError reading `.label`).
+  useEffect(() => {
+    setStep((prev) => {
+      const max = activeSteps.length;
+      if (prev < 1) return 1;
+      if (prev > max) return max;
+      return prev;
+    });
+  }, [activeSteps.length]);
+
+  const currentStepMeta = activeSteps[Math.max(0, Math.min(step, activeSteps.length) - 1)];
+  const currentStepLabel = currentStepMeta?.label ?? "Session Setup";
 
   function applyProfileDefaults() {
     setResumeId(activeResumeId);
@@ -273,6 +293,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       if (!selectedMicId && devices.length > 0) {
         setSelectedMicId((devices.find((d) => d.isDefault) ?? devices[0]).deviceId);
       }
+      const outputs = await enumerateAudioOutputDevices();
+      setSpeakerDevices(outputs);
+      if (!selectedSpeakerId && outputs.length > 0) {
+        setSelectedSpeakerId((outputs.find((d) => d.isDefault) ?? outputs[0]).deviceId);
+      }
     } catch {
       setMicPermission("denied");
     }
@@ -288,7 +313,31 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
         }
       })
       .catch(() => {});
-  }, [micPermission, selectedMicId]);
+    void enumerateAudioOutputDevices()
+      .then((outputs) => {
+        setSpeakerDevices(outputs);
+        if (!selectedSpeakerId && outputs.length > 0) {
+          setSelectedSpeakerId((outputs.find((d) => d.isDefault) ?? outputs[0]).deviceId);
+        }
+      })
+      .catch(() => {});
+  }, [micPermission, selectedMicId, selectedSpeakerId]);
+
+  async function handleSpeakerTest() {
+    setSpeakerTesting(true);
+    try {
+      const ok = await playSpeakerTestTone(selectedSpeakerId);
+      if (ok) {
+        setSpeakerTested(true);
+        toast.success("Speaker test played — confirm you heard the beep.");
+      } else {
+        setSpeakerTested(false);
+        toast.error("Could not play speaker test. Check your output device.");
+      }
+    } finally {
+      setSpeakerTesting(false);
+    }
+  }
 
   useEffect(() => {
     const on = () => setIsOnline(true);
@@ -310,6 +359,10 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     if (!gate.ok) return;
     if (preflight && !preflight.ready) return;
     if (!isOnline) return;
+    if (!speakerTested) {
+      toast.message("Play the speaker test so we know you can hear session audio.");
+      return;
+    }
     acceptResponsibleUseConsent();
     // NOTE: tab-audio guidance modal is shown at capture time via
     // confirmTabAudioCapture() inside useAudioSession.start(). We no longer
@@ -408,14 +461,13 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     const quickLanguage = lastSetup.language ?? "English";
 
     return (
-      <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
-        <div className="w-full max-w-lg space-y-5">
-          <div className="text-center space-y-2">
+      <div className="w-full space-y-5">
+          <div className="text-left sm:text-center space-y-2">
             <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-sm font-medium">
               <Radio className="w-3.5 h-3.5 animate-pulse" aria-hidden />
               Ready to practice
             </div>
-            <h1 className="text-2xl font-bold text-foreground">Start Practice Coach</h1>
+            <h2 className="text-xl font-bold text-foreground">Start {PRODUCT_NAMES.practiceCoach}</h2>
             <p className="text-sm text-muted-foreground">
               {formatPracticeSetupSummary(lastSetup)}
             </p>
@@ -461,23 +513,21 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             Change setup
           </button>
         </div>
-      </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background text-foreground flex items-center justify-center p-6">
-      <div className="w-full max-w-lg space-y-6">
+    <div className="w-full space-y-6">
 
         {/* Header */}
-        <div className="text-center">
+        <div className="text-left sm:text-center">
           <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/10 border border-emerald-500/20 rounded-full text-emerald-400 text-sm font-medium mb-4">
             <Radio className="w-3.5 h-3.5 animate-pulse" />
             Session Setup
           </div>
-          <h1 className="text-2xl font-bold text-foreground">
-            {activeSteps[step - 1].label}
-          </h1>
+          <h2 className="text-xl font-bold text-foreground">
+            {currentStepLabel}
+          </h2>
           <div className="mt-2 flex justify-center">
             <SessionContextChip
               resumeLabel={
@@ -766,7 +816,16 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 </select>
               </div>
 
-              {resumes.length === 0 && jds.length === 0 && (
+              {documentsLoadError && (
+                <div
+                  role="alert"
+                  className="rounded-xl border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300"
+                >
+                  Could not load documents: {documentsLoadError}. Refresh or open Documents and try again.
+                </div>
+              )}
+
+              {resumes.length === 0 && jds.length === 0 && !documentsLoadError && (
                 <EmptyState
                   icon={BookOpen}
                   title="No documents uploaded yet"
@@ -1149,6 +1208,67 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 </div>
               )}
 
+              {micPermission === "granted" && (
+                <div className="space-y-2">
+                  <label className="flex items-center gap-1.5 text-xs font-medium text-muted-foreground">
+                    <Volume2 className="w-3.5 h-3.5" /> Speakers / headphones
+                  </label>
+                  {speakerDevices.length > 0 ? (
+                    <select
+                      value={selectedSpeakerId ?? ""}
+                      onChange={(e) => {
+                        setSelectedSpeakerId(e.target.value || null);
+                        setSpeakerTested(false);
+                      }}
+                      className="w-full bg-secondary/40 border border-border text-foreground rounded-xl px-3 py-2.5 focus:outline-none focus:border-emerald-500 text-sm"
+                    >
+                      {speakerDevices.map((d) => (
+                        <option key={d.deviceId} value={d.deviceId}>
+                          {d.label || `Speaker ${d.deviceId.slice(0, 6)}`}
+                        </option>
+                      ))}
+                    </select>
+                  ) : (
+                    <p className="text-[11px] text-muted-foreground">
+                      Using system default output. Play a test tone to confirm you can hear audio.
+                    </p>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => void handleSpeakerTest()}
+                    disabled={speakerTesting}
+                    className={cn(
+                      "w-full py-2.5 border font-medium rounded-xl transition-all flex items-center justify-center gap-2 text-sm",
+                      speakerTested
+                        ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                        : "bg-secondary/40 hover:bg-secondary/60 border-border text-foreground",
+                    )}
+                  >
+                    {speakerTesting ? (
+                      <>
+                        <div className="w-3.5 h-3.5 border-2 border-muted-foreground/30 border-t-foreground rounded-full animate-spin" />
+                        Playing test…
+                      </>
+                    ) : speakerTested ? (
+                      <>
+                        <CheckCircle2 className="w-4 h-4" />
+                        Speaker OK — play again
+                      </>
+                    ) : (
+                      <>
+                        <Volume2 className="w-4 h-4" />
+                        Play speaker test
+                      </>
+                    )}
+                  </button>
+                  {!speakerTested && (
+                    <p className="text-[10px] text-muted-foreground">
+                      Required before starting so you can hear coaching audio.
+                    </p>
+                  )}
+                </div>
+              )}
+
               {!isOnline && (
                 <div className="bg-amber-500/10 border border-amber-500/20 rounded-xl p-3">
                   <p className="text-xs text-amber-700 dark:text-amber-300 font-medium">
@@ -1241,7 +1361,8 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 !visibilityAck ||
                 !responsibleUseAck ||
                 preflightLoading ||
-                !isOnline
+                !isOnline ||
+                !speakerTested
               }
               className={cn(
                 "flex-1 py-3.5 font-semibold rounded-xl transition-all flex items-center justify-center gap-2",
@@ -1249,7 +1370,8 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                   !visibilityAck ||
                   !responsibleUseAck ||
                   preflightLoading ||
-                  !isOnline
+                  !isOnline ||
+                  !speakerTested
                   ? "bg-muted text-muted-foreground cursor-not-allowed"
                   : "bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-foreground"
               )}
@@ -1268,7 +1390,6 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
           )}
         </div>
         </div>
-      </div>
     </div>
   );
 }
