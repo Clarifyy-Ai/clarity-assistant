@@ -52,7 +52,6 @@ import {
   acceptResponsibleUseConsent,
   canStartCoachingSession,
 } from "@/lib/overlay/responsibleUseConsent";
-import { toast } from "sonner";
 
 interface PreSessionSetupWizardProps {
   onStart: (config: LiveSessionConfig) => void;
