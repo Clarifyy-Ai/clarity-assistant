@@ -36,6 +36,10 @@ export default function SettingsModels() {
 
   async function handleSave() {
     if (!profile?.id) return;
+    if (!isPro && !MODEL_OPTIONS.find((m) => m.value === selected)?.free) {
+      toast.error("Upgrade to Pro to use GPT-4o and Claude.");
+      return;
+    }
     setSaving(true);
     try {
       const { data, error } = await supabase

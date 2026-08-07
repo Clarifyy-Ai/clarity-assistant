@@ -124,58 +124,51 @@ const generateHintSchema = z.object({
     .min(1, "Question is required.")
     .max(2_000, "Question is too long."),
 
-  transcript: z
-    .string()
-    .trim()
-    .max(10_000, "Transcript is too long.")
-    .optional()
-    .default(""),
+  transcript: z.preprocess(
+    (v) => (v == null ? "" : v),
+    z.string().trim().max(10_000, "Transcript is too long.").default(""),
+  ),
 
-  resume_context: z
-    .string()
-    .trim()
-    .max(50_000, "Resume context is too long.")
-    .optional()
-    .default(""),
+  resume_context: z.preprocess(
+    (v) => (v == null ? "" : v),
+    z.string().trim().max(50_000, "Resume context is too long.").default(""),
+  ),
 
-  interview_type: z
-    .string()
-    .trim()
-    .max(80, "Interview type is too long.")
-    .optional()
-    .default("behavioral"),
+  interview_type: z.preprocess(
+    (v) => (v == null ? "behavioral" : v),
+    z.string().trim().max(80, "Interview type is too long.").default("behavioral"),
+  ),
 
-  target_company: z
-    .string()
-    .trim()
-    .max(120, "Company name is too long.")
-    .optional()
-    .default(""),
+  target_company: z.preprocess(
+    (v) => (v == null ? "" : v),
+    z.string().trim().max(120, "Company name is too long.").default(""),
+  ),
 
-  session_id: z
-    .string()
-    .uuid("Invalid session ID.")
-    .nullable()
-    .optional(),
+  session_id: z.preprocess(
+    (v) => (v === "" || v == null ? null : v),
+    z.string().uuid("Invalid session ID.").nullable().optional(),
+  ),
 
-  question_id: z
-    .string()
-    .uuid("Invalid question ID.")
-    .nullable()
-    .optional(),
+  // Clients historically sent idempotency keys here — accept and drop non-UUIDs.
+  question_id: z.preprocess((v) => {
+    if (v == null || v === "") return null;
+    if (typeof v !== "string") return null;
+    return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      v,
+    )
+      ? v
+      : null;
+  }, z.string().uuid().nullable().optional()),
 
-  mode: z
-    .string()
-    .trim()
-    .max(40, "Mode is too long.")
-    .optional(),
+  mode: z.preprocess(
+    (v) => (v == null ? undefined : v),
+    z.string().trim().max(40, "Mode is too long.").optional(),
+  ),
 
-  model: z
-    .string()
-    .trim()
-    .max(100, "Model name is too long.")
-    .optional()
-    .default(""),
+  model: z.preprocess(
+    (v) => (v == null ? "" : v),
+    z.string().trim().max(100, "Model name is too long.").default(""),
+  ),
 });
 
 type GenerateHintRequest = z.infer<typeof generateHintSchema>;

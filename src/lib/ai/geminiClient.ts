@@ -68,17 +68,30 @@ export async function streamGeminiHint(opts: GeminiStreamOptions): Promise<void>
     model,
   } = opts;
 
+  const uuidRe =
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  const sessionId =
+    typeof opts.sessionId === "string" && uuidRe.test(opts.sessionId)
+      ? opts.sessionId
+      : undefined;
+  // Idempotency keys are not UUIDs — never send them as question_id (edge zod rejects).
+  const questionId =
+    typeof opts.questionId === "string" && uuidRe.test(opts.questionId)
+      ? opts.questionId
+      : undefined;
+
   const body = {
     question,
     model: model ?? "gemini-2.5-flash",
     interview_type: context.session_type ?? "behavioral",
-    target_company: context.target_company ?? null,
-    transcript: context.last_transcript ?? null,
-    resume_context: context.resume_experience_summary ?? null,
+    // Zod optional strings reject `null` — always send strings or omit.
+    target_company: context.target_company ?? "",
+    transcript: context.last_transcript ?? "",
+    resume_context: context.resume_experience_summary ?? "",
     simple_language: simpleLanguage ?? false,
     screenshot_base64: screenshotBase64 ?? null,
-    session_id: opts.sessionId ?? null,
-    question_id: opts.questionId ?? null,
+    session_id: sessionId ?? null,
+    question_id: questionId ?? null,
     mode: opts.mode ?? null,
   };
 

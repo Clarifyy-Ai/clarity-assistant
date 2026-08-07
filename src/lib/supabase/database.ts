@@ -338,6 +338,29 @@ export const sessionsDB = {
     );
   },
 
+  /** Owner-scoped update — avoids RLS 403/406 when the JWT user doesn't own the row. */
+  async updateForUser(
+    sessionId: string,
+    userId: string,
+    updates: TablesUpdate<"sessions">,
+  ): Promise<Tables<"sessions"> | null> {
+    const { data, error } = await supabase
+      .from("sessions")
+      .update({ ...updates, updated_at: new Date().toISOString() })
+      .eq("id", sessionId)
+      .eq("user_id", userId)
+      .select()
+      .maybeSingle();
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "sessions",
+        operation: "updateForUser",
+      });
+    }
+    return data;
+  },
+
   async end(sessionId: string, summary?: string): Promise<Tables<"sessions">> {
     return sessionsDB.update(sessionId, {
       status:  "completed",
@@ -840,6 +863,23 @@ export const resumesDB = {
     );
   },
 
+  /** Soft lookup — returns null when missing or blocked by RLS (avoids 406 .single). */
+  async getByIdMaybe(resumeId: string): Promise<Tables<"resumes"> | null> {
+    const { data, error } = await supabase
+      .from("resumes")
+      .select("*")
+      .eq("id", resumeId)
+      .maybeSingle();
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "resumes",
+        operation: "getByIdMaybe",
+      });
+    }
+    return data;
+  },
+
   async listByUserId(userId: string): Promise<Tables<"resumes">[]> {
     const { data, error } = await supabase
       .from("resumes")
@@ -938,6 +978,23 @@ export const jobDescriptionsDB = {
       () => supabase.from("job_descriptions").select("*").eq("id", jdId).single(),
       { table: "job_descriptions", operation: "getById" },
     );
+  },
+
+  /** Soft lookup — returns null when missing or blocked by RLS (avoids 406 .single). */
+  async getByIdMaybe(jdId: string): Promise<Tables<"job_descriptions"> | null> {
+    const { data, error } = await supabase
+      .from("job_descriptions")
+      .select("*")
+      .eq("id", jdId)
+      .maybeSingle();
+
+    if (error) {
+      throw new DatabaseError(error.message, ErrorCode.DB_QUERY_FAILED, {
+        table: "job_descriptions",
+        operation: "getByIdMaybe",
+      });
+    }
+    return data;
   },
 
   async listByUserId(userId: string): Promise<Tables<"job_descriptions">[]> {

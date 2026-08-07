@@ -55,11 +55,14 @@ export type AuthStatus =
 
 const AUTH_SESSION_TIMEOUT_MS = isElectronApp() ? 10_000 : 8_000;
 
-/** Per-attempt budget for the profile read. Target: <2s p95 under normal load. */
-const PROFILE_FETCH_TIMEOUT_MS = 2_000;
+/**
+ * Per-attempt budget for the profile read.
+ * us-east-1 round-trips from India commonly take 1–2s; 2s caused false timeouts.
+ */
+const PROFILE_FETCH_TIMEOUT_MS = 8_000;
 
-/** Role lookup is non-blocking for routing; keep it short. */
-const ROLE_CHECK_TIMEOUT_MS = 2_000;
+/** Role lookup is non-blocking for routing; align with profile budget. */
+const ROLE_CHECK_TIMEOUT_MS = 8_000;
 
 const PROFILE_ERROR_MESSAGE =
   "We're having trouble loading your profile. Please try again.";
@@ -347,12 +350,25 @@ function attachCrossTabSignOutListeners(): void {
 
   window.addEventListener("storage", (event: StorageEvent) => {
     if (
-      event.key &&
-      SUPABASE_AUTH_STORAGE_KEY_PATTERN.test(event.key) &&
-      event.newValue === null
+      !event.key ||
+      !SUPABASE_AUTH_STORAGE_KEY_PATTERN.test(event.key) ||
+      event.newValue !== null ||
+      event.oldValue === null
     ) {
-      handleCrossTabSignOutSignal();
+      return;
     }
+
+    // Token refresh can briefly clear then rewrite the auth key. Wait a tick
+    // and only sign out if the session is still actually gone.
+    const clearedKey = event.key;
+    window.setTimeout(() => {
+      try {
+        if (localStorage.getItem(clearedKey) !== null) return;
+      } catch {
+        // If storage is inaccessible, fall through and treat as signed out.
+      }
+      handleCrossTabSignOutSignal();
+    }, 100);
   });
 }
 
@@ -898,6 +914,12 @@ export const useAuthStore = create<AuthStore>()(
 
             const run = async (): Promise<boolean> => {
             const profileStartedAt = Date.now();
+            // Soft-fail recovery: tab focus / TOKEN_REFRESHED must not wipe a
+            // working session when a transient profile refetch fails.
+            const hadLoadedProfile =
+              get().isProfileLoaded && Boolean(get().profile);
+            const priorStatus = get().status;
+
             logger.info(LogEvents.AUTH_PROFILE_LOAD_STARTED, {
               operation: "profile.load",
               attempt: 1,
@@ -1088,6 +1110,35 @@ export const useAuthStore = create<AuthStore>()(
               const timedOut = getErrorMessage(err)
                 .toLowerCase()
                 .includes("timed out");
+
+              // Tab switches / token refresh often re-fetch the profile. A
+              // transient failure must not replace a working session with the
+              // "couldn't load your account" full-page error.
+              if (
+                hadLoadedProfile &&
+                priorStatus === "authenticated" &&
+                !isNonRetryableAuthError(err)
+              ) {
+                logger.warn(
+                  timedOut
+                    ? LogEvents.AUTH_PROFILE_LOAD_TIMED_OUT
+                    : LogEvents.AUTH_PROFILE_LOAD_FAILED,
+                  {
+                    operation: "profile.load",
+                    durationMs: Date.now() - profileStartedAt,
+                    outcome: timedOut ? "timed_out" : "failed",
+                    recoveryAction: "keep_cached_profile",
+                    retryable: true,
+                  },
+                );
+                dset((state) => {
+                  state.status = "authenticated";
+                  state.error = null;
+                  state.isProfileLoaded = true;
+                });
+                return true;
+              }
+
               logger.error(
                 timedOut
                   ? LogEvents.AUTH_PROFILE_LOAD_TIMED_OUT
@@ -1310,7 +1361,7 @@ export const selectIsAdmin = (state: AuthStore) => state.isAdmin;
 export const selectHasByok = (_state: AuthStore) => false;
 
 export const selectPreferredModel = (state: AuthStore) =>
-  state.profile?.preferred_model ?? "gpt-4o";
+  state.profile?.preferred_model ?? "gemini-flash";
 
 export const selectSubscriptionActive = (state: AuthStore) => {
   const status = state.profile?.subscription_status;

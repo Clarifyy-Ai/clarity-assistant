@@ -113,7 +113,11 @@ export default function Login(): JSX.Element {
 
   const locationState = location.state as LocationState | null;
   const returnToFromQuery = sanitizeReturnTo(searchParams.get("returnTo"));
-  const returnToFromState = sanitizeReturnTo(locationState?.from?.pathname);
+  const returnToFromState = sanitizeReturnTo(
+    locationState?.from
+      ? `${locationState.from.pathname ?? ""}${locationState.from.search ?? ""}${locationState.from.hash ?? ""}`
+      : null,
+  );
   const explicitReturnTo = returnToFromQuery ?? returnToFromState;
 
   const authStatus = useAuthStore((state) => state.status);

@@ -24,7 +24,7 @@ function safeCorsHeaders(req?: Request): Record<string, string> {
   return {
     "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
     "Access-Control-Allow-Headers":
-      "authorization, x-client-info, apikey, content-type, x-app-name, x-app-version",
+      "authorization, x-client-info, apikey, content-type, x-app-name, x-app-version, x-csrf-token, idempotency-key, x-idempotency-key",
     "Access-Control-Max-Age": "86400",
     "Vary": "Origin",
   };
@@ -295,6 +295,8 @@ const PROVIDER_MAP: Record<string, "openai" | "anthropic" | "gemini"> = {
   "gemini-2.5-pro": "gemini",
   "gemini-2.5-flash-lite": "gemini",
   "gemini-2.0-flash": "gemini",
+  "gemini-2.0-flash-lite": "gemini",
+  "gemini-flash-latest": "gemini",
   "gemini-1.5-flash": "gemini",
   "gemini-1.5-pro": "gemini",
 };

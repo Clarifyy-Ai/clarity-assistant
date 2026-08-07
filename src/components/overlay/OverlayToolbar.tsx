@@ -14,7 +14,6 @@ import { isCaptureBlockedByNetwork } from "@/lib/overlay/captureGating";
 import { cn } from "@/lib/utils";
 
 import { PANIC_RESPONSE } from "@/types/session.types";
-import type { PreferredAIModel } from "@/types/user.types";
 import type { LucideIcon } from "lucide-react";
 
 import {
@@ -45,13 +44,13 @@ import {
 
 import { OverlayActivityTimer } from "./OverlayActivityTimer";
 import { OverlaySettings } from "./OverlaySettings";
-
-const MODEL_OPTIONS: { id: PreferredAIModel; label: string; note?: string }[] = [
-  { id: "gpt-4o", label: "GPT-4o", note: "via Gemini" },
-  { id: "claude-3-5-sonnet", label: "Claude", note: "via Gemini" },
-  { id: "gemini-1-5-pro", label: "Gemini Pro" },
-  { id: "gemini-flash", label: "Flash" },
-];
+import { useAuthStore } from "@/store/authStore";
+import { useUIStore } from "@/store/uiStore";
+import {
+  MODEL_OPTIONS,
+  hasProModelAccess,
+  isModelAvailableForPlan,
+} from "@/lib/ai/modelOptions";
 
 const HINT_STYLE_LABELS: Record<string, string> = {
   full_answer: "Full",
@@ -110,6 +109,8 @@ export function OverlayToolbar({
   const hintState = useOverlayStore((s) => s.hint_state);
   const hintStyle = useOverlayStore((s) => s.hint_style);
   const activeModel = useOverlayStore((s) => s.active_model);
+  const planId = useAuthStore((s) => s.planId);
+  const canUseProModels = hasProModelAccess(planId);
 
   const isMinimal = useOverlayStore((s) => s.is_minimal_mode);
   const simpleLanguage = useOverlayStore((s) => s.simple_language);
@@ -536,30 +537,52 @@ export function OverlayToolbar({
                   AI Model
                 </p>
                 <div className="space-y-0.5">
-                  {MODEL_OPTIONS.map((m) => (
-                    <button
-                      key={m.id}
-                      type="button"
-                      onClick={() => {
-                        useOverlayStore.getState().setActiveModel(m.id);
-                        setShowMoreMenu(false);
-                      }}
-                      aria-label={`Select ${m.label} AI model${m.note ? ` (${m.note})` : ""}`}
-                      aria-pressed={activeModel === m.id}
-                      className={cn(
-                        "w-full text-left px-2.5 py-1.5 rounded-lg text-[12px] transition-all flex items-center justify-between",
-                        activeModel === m.id
-                          ? "text-indigo-300 bg-indigo-500/15 font-semibold"
-                          : "text-white/45 hover:text-white hover:bg-white/5"
-                      )}
-                    >
-                      <span>{m.label}</span>
-                      <div className="flex items-center gap-1.5">
-                        {m.note && <span className="text-[10px] text-white/20">({m.note})</span>}
-                        {activeModel === m.id && <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />}
-                      </div>
-                    </button>
-                  ))}
+                  {MODEL_OPTIONS.map((m) => {
+                    const locked = !isModelAvailableForPlan(m.value, planId);
+                    return (
+                      <button
+                        key={m.value}
+                        type="button"
+                        disabled={locked}
+                        onClick={() => {
+                          if (locked) {
+                            useUIStore.getState().openUpgradeModal("pro");
+                            toast.message("Upgrade to Pro to use GPT-4o and Claude.");
+                            return;
+                          }
+                          useOverlayStore.getState().setActiveModel(m.value);
+                          setShowMoreMenu(false);
+                        }}
+                        aria-label={
+                          locked
+                            ? `${m.label} AI model (Pro)`
+                            : `Select ${m.label} AI model`
+                        }
+                        aria-pressed={!locked && activeModel === m.value}
+                        className={cn(
+                          "w-full text-left px-2.5 py-1.5 rounded-lg text-[12px] transition-all flex items-center justify-between",
+                          locked && "opacity-40 cursor-not-allowed",
+                          !locked && activeModel === m.value
+                            ? "text-indigo-300 bg-indigo-500/15 font-semibold"
+                            : !locked && "text-white/45 hover:text-white hover:bg-white/5"
+                        )}
+                      >
+                        <span>{m.label}</span>
+                        <div className="flex items-center gap-1.5">
+                          {locked ? (
+                            <span className="text-[10px] text-amber-300/70">Pro</span>
+                          ) : (
+                            !canUseProModels && m.badge === "Recommended" && (
+                              <span className="text-[10px] text-white/20">{m.badge}</span>
+                            )
+                          )}
+                          {!locked && activeModel === m.value && (
+                            <span className="w-1.5 h-1.5 rounded-full bg-indigo-400" />
+                          )}
+                        </div>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
 

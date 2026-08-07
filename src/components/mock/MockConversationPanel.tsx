@@ -43,8 +43,8 @@ export const MockConversationPanel = memo(function MockConversationPanel() {
             "rounded-2xl px-3.5 py-2.5 leading-relaxed border",
             isMobile ? "text-sm" : "text-xs",
             u.speaker === "interviewer"
-              ? "bg-amber-500/10 border-amber-500/20 text-amber-100/90 ml-0 mr-4 sm:mr-6"
-              : "bg-blue-500/10 border-blue-500/20 text-blue-100/90 ml-4 sm:ml-6 mr-0",
+              ? "bg-amber-500/10 border-amber-500/25 text-foreground ml-0 mr-4 sm:mr-6"
+              : "bg-primary/10 border-primary/25 text-foreground ml-4 sm:ml-6 mr-0",
           )}
         >
           <span className="block text-[10px] font-bold uppercase tracking-wide mb-0.5 opacity-70">

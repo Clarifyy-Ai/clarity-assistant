@@ -34,7 +34,7 @@ export function OverlaySetupGuidePanel({
         </p>
       </div>
 
-      <section>
+      <section id="system-checklist" className="scroll-mt-20">
         <h3 className={cn("font-semibold text-foreground flex items-center gap-2 mb-2", compact ? "text-xs" : "text-sm")}>
           <CheckCircle2 className="w-4 h-4 text-emerald-400" />
           System settings checklist
@@ -57,7 +57,7 @@ export function OverlaySetupGuidePanel({
       </section>
 
       {showDesktopInstall && (
-        <section>
+        <section id="desktop-install" className="scroll-mt-20">
           <h3 className={cn("font-semibold text-foreground flex items-center gap-2 mb-2", compact ? "text-xs" : "text-sm")}>
             <Monitor className="w-4 h-4 text-blue-400" />
             Desktop installation
@@ -74,7 +74,7 @@ export function OverlaySetupGuidePanel({
       )}
 
       {showTroubleshooting && (
-        <section>
+        <section id="troubleshooting" className="scroll-mt-20">
           <h3 className={cn("font-semibold text-foreground flex items-center gap-2 mb-2", compact ? "text-xs" : "text-sm")}>
             <Wrench className="w-4 h-4 text-amber-400" />
             Troubleshooting
@@ -101,17 +101,9 @@ export function OverlaySetupGuidePanel({
       )}
 
       <p className={cn("text-muted-foreground", compact ? "text-[10px]" : "text-[11px]")}>
-        Full guide (sign-in required):{" "}
+        Related:{" "}
         {isElectronApp() ? (
           <>
-            <button
-              type="button"
-              onClick={() => openInBrowser("/app/guide/practice-coach")}
-              className="text-primary hover:underline"
-            >
-              Practice Coach setup
-            </button>
-            {" · "}
             <button
               type="button"
               onClick={() => openInBrowser("/app/settings/practice-coach")}
@@ -119,15 +111,35 @@ export function OverlaySetupGuidePanel({
             >
               Settings checklist
             </button>
+            {" · "}
+            <button
+              type="button"
+              onClick={() => openInBrowser("/app/settings/audio")}
+              className="text-primary hover:underline"
+            >
+              Audio settings
+            </button>
+            {" · "}
+            <button
+              type="button"
+              onClick={() => openInBrowser("/app/settings/hotkeys")}
+              className="text-primary hover:underline"
+            >
+              Keyboard shortcuts
+            </button>
           </>
         ) : (
           <>
-            <Link to="/app/guide/practice-coach" className="text-primary hover:underline">
-              Practice Coach setup
-            </Link>
-            {" · "}
             <Link to="/app/settings/practice-coach" className="text-primary hover:underline">
               Settings checklist
+            </Link>
+            {" · "}
+            <Link to="/app/settings/audio" className="text-primary hover:underline">
+              Audio settings
+            </Link>
+            {" · "}
+            <Link to="/app/settings/hotkeys" className="text-primary hover:underline">
+              Keyboard shortcuts
             </Link>
           </>
         )}

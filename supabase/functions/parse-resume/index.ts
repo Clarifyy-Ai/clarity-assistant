@@ -21,7 +21,7 @@ const ANTHROPIC_API_KEY = Deno.env.get("ANTHROPIC_API_KEY") ?? "";
 const OCR_API_KEY = Deno.env.get("OCR_API_KEY") ?? "";
 
 const GEMINI_BASE = "https://generativelanguage.googleapis.com/v1beta";
-const GEMINI_MODEL = "gemini-2.0-flash";
+const GEMINI_MODEL = "gemini-2.5-flash";
 const CLAUDE_MODEL = "claude-3-5-sonnet-20241022";
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
@@ -35,9 +35,45 @@ function safeBase64(bytes: Uint8Array): string {
   return btoa(bin);
 }
 
+/** Accept partial AI output; normalize into the schema resumes.content expects. */
+function normalizeResumeParsed(obj: any): Record<string, unknown> | null {
+  if (!obj || typeof obj !== "object") return null;
+  const name =
+    (typeof obj.name === "string" && obj.name) ||
+    (typeof obj.full_name === "string" && obj.full_name) ||
+    "";
+  const summary =
+    (typeof obj.summary === "string" && obj.summary) ||
+    (typeof obj.profile === "string" && obj.profile) ||
+    "";
+  const skills = Array.isArray(obj.skills) ? obj.skills.map(String).filter(Boolean) : [];
+  const experience = Array.isArray(obj.experience) ? obj.experience : [];
+  const education = Array.isArray(obj.education) ? obj.education : [];
+  const projects = Array.isArray(obj.projects) ? obj.projects : [];
+
+  // Require at least one useful signal — not every key present.
+  if (!name && !summary && skills.length === 0 && experience.length === 0) {
+    return null;
+  }
+
+  return {
+    name,
+    full_name: name || null,
+    summary,
+    skills,
+    experience,
+    education,
+    projects,
+    email: typeof obj.email === "string" ? obj.email : null,
+    phone: typeof obj.phone === "string" ? obj.phone : null,
+    location: typeof obj.location === "string" ? obj.location : null,
+    total_years_experience:
+      typeof obj.total_years_experience === "number" ? obj.total_years_experience : null,
+  };
+}
+
 function isValidResumeSchema(obj: any): boolean {
-  if (!obj || typeof obj !== "object") return false;
-  return "name" in obj && "summary" in obj && Array.isArray(obj.skills) && Array.isArray(obj.experience) && Array.isArray(obj.education);
+  return normalizeResumeParsed(obj) !== null;
 }
 
 function buildParseSuccess(source: string, parsed: unknown) {
@@ -387,12 +423,13 @@ Deno.serve(async (req) => {
     const PROMPT = `Extract structured resume information following this schema EXACTLY:\n${SCHEMA}\nReturn ONLY valid JSON. No markdown, no extra text.`;
 
     const persistSuccess = async (source: string, parsed: unknown) => {
-      await db.from("resumes").update({ content: JSON.stringify(parsed) }).eq("id", resume_id);
+      const normalized = normalizeResumeParsed(parsed) ?? parsed;
+      await db.from("resumes").update({ content: JSON.stringify(normalized) }).eq("id", resume_id);
       if (effectiveVersionId) {
-        await db.from("resume_versions").update({ parsed_data: parsed, parse_status: "ready", parse_error: null }).eq("id", effectiveVersionId);
+        await db.from("resume_versions").update({ parsed_data: normalized, parse_status: "ready", parse_error: null }).eq("id", effectiveVersionId);
       }
-      await fanOutResume(db, userId, parsed);
-      return new Response(JSON.stringify(buildParseSuccess(source, parsed)), { headers: getCorsHeaders(req) });
+      await fanOutResume(db, userId, normalized);
+      return new Response(JSON.stringify(buildParseSuccess(source, normalized)), { headers: getCorsHeaders(req) });
     };
 
     // ── TXT / plain text ──────────────────────────────────────────
@@ -433,16 +470,25 @@ Deno.serve(async (req) => {
 
       if (geminiRaw) {
         const parsed = parseJSON(sanitizeAI(geminiRaw), null);
-        if (parsed && isValidResumeSchema(parsed)) {
-          return await persistSuccess("gemini", parsed);
+        const normalized = normalizeResumeParsed(parsed);
+        if (normalized) {
+          return await persistSuccess("gemini", normalized);
         }
+        console.error("[parse-resume] gemini raw failed schema", {
+          hasKey: Boolean(GEMINI_API_KEY),
+          rawLen: geminiRaw.length,
+          parsedKeys: parsed && typeof parsed === "object" ? Object.keys(parsed as object) : [],
+        });
+      } else {
+        console.error("[parse-resume] gemini returned null", { hasKey: Boolean(GEMINI_API_KEY) });
       }
 
       const claudeRaw = await callClaude(base64);
       if (claudeRaw) {
         const parsed = parseJSON(sanitizeAI(claudeRaw), null);
-        if (parsed && isValidResumeSchema(parsed)) {
-          return await persistSuccess("claude", parsed);
+        const normalized = normalizeResumeParsed(parsed);
+        if (normalized) {
+          return await persistSuccess("claude", normalized);
         }
       }
 
@@ -451,8 +497,9 @@ Deno.serve(async (req) => {
         const ocrRaw = await callGemini([{ text: `Extract structured resume from OCR text:\n${ocr}\nReturn JSON matching: ${SCHEMA}` }]);
         if (ocrRaw) {
           const parsed = parseJSON(sanitizeAI(ocrRaw), null);
-          if (parsed && isValidResumeSchema(parsed)) {
-            return await persistSuccess("ocr", parsed);
+          const normalized = normalizeResumeParsed(parsed);
+          if (normalized) {
+            return await persistSuccess("ocr", normalized);
           }
         }
       }
@@ -466,8 +513,13 @@ Deno.serve(async (req) => {
         reason: "refund_parse_resume_failed",
       });
     }
+    const failMsg = "All extraction methods failed";
+    // Persist error onto resumes.content so the UI can leave "Parsing…" and show Retry/Edit.
+    await db.from("resumes").update({
+      content: JSON.stringify({ _parse_error: failMsg }),
+    }).eq("id", resume_id);
     if (effectiveVersionId) {
-      await db.from("resume_versions").update({ parse_status: "error", parse_error: "All extraction methods failed" }).eq("id", effectiveVersionId);
+      await db.from("resume_versions").update({ parse_status: "error", parse_error: failMsg }).eq("id", effectiveVersionId);
     }
     return new Response(JSON.stringify({ error: "Resume parsing failed after all attempts.", code: "INTERNAL_ERROR" }), { status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
 

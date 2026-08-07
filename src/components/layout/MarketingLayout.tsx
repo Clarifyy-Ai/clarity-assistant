@@ -139,6 +139,8 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [menuOpen]);
 
+  // Reset scroll on route change so footer/nav links land at the top of the page.
+  // Hash deep-links (e.g. /#features) are handled by ScrollToTop + the effect below.
   // Honor deep links like /#features after SPA navigation.
   useEffect(() => {
     if (pathname === "/" && hash) {

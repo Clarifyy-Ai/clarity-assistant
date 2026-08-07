@@ -85,6 +85,7 @@ Deno.serve(async (req) => {
     const idempotencyKey =
       String(
         (body as Record<string, unknown>).idempotencyKey ??
+          req.headers.get("Idempotency-Key") ??
           req.headers.get("x-idempotency-key") ??
           "",
       ).trim().slice(0, 120) || crypto.randomUUID();

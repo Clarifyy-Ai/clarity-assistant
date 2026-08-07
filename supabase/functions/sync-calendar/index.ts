@@ -8,8 +8,8 @@ import {
   successResponse,
   errorResponse,
   log,
-  getAdminClient,
 } from "../_shared/utils.ts";
+import { getCorsHeaders } from "../_shared/cors.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
@@ -244,9 +244,9 @@ Deno.serve(async (req) => {
   try {
     // ── Auth ─────────────────────────────────────────────────────
     const auth = await requireAuth(req);
-    const user = auth.user;
+    const userId = auth.userId;
 
-    const rateLimited = await enforceSessionRateLimitAsync(db, FN, user.id);
+    const rateLimited = await enforceSessionRateLimitAsync(db, FN, userId);
     if (rateLimited) return rateLimited;
 
     // P0-3: Calendar sync is a Pro feature (matches PLANS.features.calendar_sync)
@@ -259,7 +259,13 @@ Deno.serve(async (req) => {
     const body = await parseBody<{
       provider_token?: string;
       days_ahead?:     number;
+      probe?:          boolean;
     }>(req);
+
+    // Availability probe — auth + plan/capability only; skip Google API.
+    if (body?.probe === true) {
+      return successResponse({ available: true, configured: true }, undefined, 200, req);
+    }
 
     let providerToken  = body?.provider_token;
     const daysAhead    = Math.min(Number(body?.days_ahead ?? 30), 90); // cap at 90 days
@@ -270,7 +276,7 @@ Deno.serve(async (req) => {
       : { events: null, status: 0 };
 
     if (!cal.events && (cal.status === 401 || !providerToken)) {
-      const refreshed = await refreshGoogleAccessToken(user.id);
+      const refreshed = await refreshGoogleAccessToken(userId);
       if (refreshed) {
         providerToken = refreshed;
         cal           = await fetchEvents(refreshed, daysAhead);
@@ -283,12 +289,14 @@ Deno.serve(async (req) => {
           "Google Calendar access revoked. Reconnect your calendar.",
           "TOKEN_REVOKED",
           401,
+          req,
         );
       }
       return errorResponse(
         "Failed to fetch Google Calendar events.",
         "GOOGLE_API_ERROR",
         502,
+        req,
       );
     }
 
@@ -317,7 +325,7 @@ Deno.serve(async (req) => {
       const { data: existing } = await db
         .from("scheduled_interviews")
         .select("id")
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .eq("calendar_event_id", evt.id)
         .maybeSingle();
 
@@ -371,7 +379,7 @@ Deno.serve(async (req) => {
       const { data: newInterview, error: iErr } = await db
         .from("scheduled_interviews")
         .insert({
-          user_id:           user.id,
+          user_id:           userId,
           company_name:      company,
           role_title:        role,
           stage,
@@ -416,10 +424,12 @@ Deno.serve(async (req) => {
       skipped,
       total_found: interviewEvents.length,
       events:      summaries,
-    });
+    }, undefined, 200, req);
 
   } catch (err) {
+    // requireAuth / parseBody throw Response objects — return them with CORS intact.
+    if (err instanceof Response) return err;
     log(FN, "error", "Unhandled error", err);
-    return errorResponse("Internal server error", "INTERNAL", 500);
+    return errorResponse("Internal server error", "INTERNAL", 500, req);
   }
 });

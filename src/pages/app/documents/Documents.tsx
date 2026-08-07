@@ -30,6 +30,7 @@ import {
   LayoutGrid, Table2, ArrowUpDown, X,
 } from "lucide-react";
 import { cn, generateId } from "@/lib/utils";
+import { agentLog } from "@/lib/debugAgentLog";
 
 const MAX_UPLOAD_QUEUE = 5;
 
@@ -346,16 +347,32 @@ function ResumeManager() {
     }
 
     setRetrying(resumeId);
+    // #region agent log
+    agentLog({hypothesisId:'C',location:'Documents.tsx:handleRetryParse',message:'retry parse clicked',data:{resumeId}});
+    // #endregion
     try {
-      await fetchEdgeJson("parse-resume", {
-        resume_id: resumeId,
-        file_path: resume.file_path,
-        mime_type: guessMimeType(resume.file_path),
-      });
+      await fetchEdgeJson(
+        "parse-resume",
+        {
+          resume_id: resumeId,
+          file_path: resume.file_path,
+          mime_type: guessMimeType(resume.file_path),
+        },
+        { timeoutMs: 90_000 },
+      );
       await docMgr.reload();
-      toast.success("Re-parsing started.");
-    } catch {
-      toast.error("Retry failed. Please try again.");
+      toast.success("Resume re-parsed.");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Retry failed. Please try again.";
+      try {
+        await resumesDB.update(resumeId, {
+          content: JSON.stringify({ _parse_error: message }),
+        });
+        await docMgr.reload();
+      } catch {
+        // best-effort status flip
+      }
+      toast.error(message);
     } finally {
       setRetrying(null);
     }
@@ -630,9 +647,18 @@ function ResumeManager() {
             const parseStatus = getResumeParseStatus(row.content, isParsingGlobal);
             const parsed = parseResumeContentString(row.content ?? null);
             const isActive  = r.id === activeResumeId;
-            const isParsing = parseStatus === "parsing" || parseStatus === "pending";
+            // Only show "Parsing…" while a parse is actively in-flight.
+            // Empty content with no in-flight parse is "Needs parse", not stuck parsing.
+            const isParsing = parseStatus === "parsing";
+            const isPending = parseStatus === "pending";
             const isError   = parseStatus === "error";
             const isReady   = parseStatus === "ready";
+
+            // #region agent log
+            if (r === sortedPageItems[0]) {
+              agentLog({hypothesisId:'D',location:'Documents.tsx:resumeRow',message:'resume row parse status',data:{resumeId:r.id,parseStatus,isParsingGlobal,hasContent:Boolean(row.content?.trim()),isActive}});
+            }
+            // #endregion
 
             return (
               <Card key={r.id} padding="sm">
@@ -648,6 +674,7 @@ function ResumeManager() {
                       </p>
                       {isActive  && <Badge variant="emerald" size="sm" dot>Active</Badge>}
                       {isParsing && <Badge variant="amber"   size="sm">Parsing…</Badge>}
+                      {isPending && <Badge variant="amber"   size="sm">Needs parse</Badge>}
                       {isError   && <Badge variant="red"     size="sm">Parse failed</Badge>}
                       {isReady   && <Badge variant="blue"    size="sm">Ready</Badge>}
                     </div>
@@ -698,24 +725,22 @@ function ResumeManager() {
                       </Button>
                     )}
                     {isReady && (
-                      <>
-                        <button
-                          onClick={() => setPreviewId(r.id)}
-                          className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/5 transition-all"
-                          title="Preview parsed data"
-                        >
-                          <Eye className="w-3.5 h-3.5" />
-                        </button>
-                        <Link
-                          to={`/app/documents/resume/${r.id}`}
-                          className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-accent/5 transition-all text-[10px] font-medium"
-                          title="Edit extracted fields"
-                        >
-                          Edit
-                        </Link>
-                      </>
+                      <button
+                        onClick={() => setPreviewId(r.id)}
+                        className="p-1.5 rounded-lg text-muted-foreground hover:text-foreground hover:bg-accent/5 transition-all"
+                        title="Preview parsed data"
+                      >
+                        <Eye className="w-3.5 h-3.5" />
+                      </button>
                     )}
-                    {(isError || (!isReady && !isParsing)) && row.file_path && (
+                    <Link
+                      to={`/app/documents/resume/${r.id}`}
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-accent/5 transition-all text-[10px] font-medium"
+                      title="Edit extracted fields"
+                    >
+                      Edit
+                    </Link>
+                    {!isReady && !isParsing && row.file_path && (
                       <button
                         onClick={() => handleRetryParse(r.id)}
                         disabled={retrying === r.id}

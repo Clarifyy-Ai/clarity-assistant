@@ -7,8 +7,7 @@ import type { InterviewType } from "@/types/session.types";
 import { useNetworkStore } from "@/store/networkStore";
 import { useAuthStore } from "@/store/userStore";
 import { useOverlayStore } from "@/store/overlayStore";
-import { normalizeToDisplayTier } from "@/lib/constants/pricing";
-import type { PlanId } from "@/lib/billing/subscriptionManager";
+import { clampPreferredModel } from "./modelOptions";
 
 import { streamGeminiHint, streamFullAnswer } from "./geminiClient";
 import type { AnswerMode, GeminiModel } from "./geminiClient";
@@ -68,11 +67,6 @@ function getResumeFallbackOrTemplate(interviewType: InterviewType, hintStyle: Hi
   return getOfflineTemplate(interviewType, hintStyle);
 }
 
-function isProPlan(planId: PlanId | string | null | undefined): boolean {
-  const tier = normalizeToDisplayTier((planId as PlanId) ?? "free");
-  return tier === "pro" || tier === "enterprise";
-}
-
 function isGeminiModel(model: PreferredAIModel): boolean {
   return model.startsWith("gemini");
 }
@@ -83,10 +77,7 @@ export function selectModel(
   _isDegraded: boolean
 ): PreferredAIModel {
   const planId = useAuthStore.getState().planId ?? "free";
-  if (!isProPlan(planId) && !isGeminiModel(preferred)) {
-    return "gemini-flash";
-  }
-  return preferred || "gemini-flash";
+  return clampPreferredModel(preferred || "gemini-flash", planId);
 }
 
 function getFallbackModel(failed: PreferredAIModel): PreferredAIModel | null {

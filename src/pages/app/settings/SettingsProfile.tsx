@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from "react";
 import { Link } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { supabase } from "@/lib/supabase/client";
+import { avatarStorage } from "@/lib/supabase/storage";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
@@ -15,6 +16,9 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { getPasswordStrength } from "@/lib/validators/emailValidator";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
+
+const AVATAR_ACCEPT = "image/jpeg,image/png,image/webp,image/gif";
+const AVATAR_MAX_BYTES = 2 * 1024 * 1024;
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsProfile — edit name, avatar, role, bio
@@ -96,23 +100,34 @@ export default function SettingsProfile() {
   async function handleAvatarUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
     if (!file || !user) return;
-    setUploading(true);
+    // Allow re-selecting the same file after a failed attempt.
+    e.target.value = "";
 
-    const ext  = file.name.split(".").pop();
-    const path = `${user.id}/avatar.${ext}`;
-
-    const { error } = await supabase.storage
-      .from("avatars")
-      .upload(path, file, { upsert: true });
-
-    if (error) {
-      toast.error("Failed to upload avatar. Please try again.");
-    } else {
-      const { data } = supabase.storage.from("avatars").getPublicUrl(path);
-      setAvatarUrl(data.publicUrl);
-      toast.success("Avatar updated!");
+    if (file.size > AVATAR_MAX_BYTES) {
+      toast.error("Avatar must be 2 MB or smaller.");
+      return;
     }
-    setUploading(false);
+
+    setUploading(true);
+    try {
+      const result = await avatarStorage.upload(user.id, file);
+      const publicUrl = `${result.publicUrl}?t=${Date.now()}`;
+      setAvatarUrl(publicUrl);
+      await updateProfile({ avatar_url: publicUrl } as any);
+      toast.success("Avatar updated!");
+    } catch (err) {
+      const message =
+        err instanceof Error && err.message
+          ? err.message
+          : "Failed to upload avatar. Please try again.";
+      toast.error(
+        message.includes("not supported") || message.includes("too large")
+          ? message
+          : "Failed to upload avatar. Please try again."
+      );
+    } finally {
+      setUploading(false);
+    }
   }
 
   async function handleEmailChange() {
@@ -250,7 +265,7 @@ export default function SettingsProfile() {
             <input
               ref={fileRef}
               type="file"
-              accept="image/*"
+              accept={AVATAR_ACCEPT}
               className="hidden"
               onChange={handleAvatarUpload}
             />

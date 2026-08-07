@@ -46,7 +46,7 @@ describe("isNonRetryableAuthError", () => {
 
   it("allows transient network errors to retry", () => {
     expect(isNonRetryableAuthError(new Error("Failed to fetch"))).toBe(false);
-    expect(isNonRetryableAuthError(new Error("Profile load timed out after 4s"))).toBe(
+    expect(isNonRetryableAuthError(new Error("Profile load timed out after 8s"))).toBe(
       false,
     );
   });

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { agentLog } from "@/lib/debugAgentLog";
 
 const CONSENT_KEY = "clarify_cookie_consent";
 
@@ -24,6 +25,10 @@ export function CookieConsent() {
   }
 
   if (!visible) return null;
+
+  // #region agent log
+  agentLog({hypothesisId:'A',location:'CookieConsent.tsx:visible',message:'CookieConsent visible (plain <a>, not Link)',data:{usesPlainAnchor:true,path:typeof window!=='undefined'?window.location.pathname:null}});
+  // #endregion
 
   return (
     <div

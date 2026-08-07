@@ -81,6 +81,9 @@ export interface LiveSessionConfig {
   context_document_ids?: string[];
   language?: string;
   duration_minutes?: number;
+  /** Mock interview question difficulty (generate-questions / local bank). */
+  difficulty?: "easy" | "medium" | "hard" | "mixed";
+  question_count?: number;
 }
 
 // ── Question ──────────────────────────────────────────────────────

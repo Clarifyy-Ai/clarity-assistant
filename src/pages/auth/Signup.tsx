@@ -19,6 +19,7 @@ import { BrandLogo } from "@/components/marketing";
 import { AuthShell } from "@/components/layout/AuthShell";
 import { Input } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { agentLog } from "@/lib/debugAgentLog";
 
 import {
   GoogleOAuthButton,
@@ -158,6 +159,10 @@ export default function Signup(): JSX.Element {
   });
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+
+  // #region agent log
+  agentLog({hypothesisId:'A',location:'Signup.tsx:mount',message:'Signup mounted with router hooks',data:{ref:searchParams.get('ref'),path:typeof window!=='undefined'?window.location.pathname:null}});
+  // #endregion
 
   const rawRefCode = searchParams.get("ref");
   const refCode = useMemo(() => normalizeReferralCode(rawRefCode), [rawRefCode]);

@@ -136,7 +136,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
 
   // 3) Not authenticated
   if (!user || status === "unauthenticated") {
-    const returnTo = `${location.pathname}${location.search}`;
+    const returnTo = `${location.pathname}${location.search}${location.hash}`;
     const to = buildLoginUrl({ loginPath, returnTo });
     logger.info(LogEvents.ROUTE_GUARD_DECISION, {
       route: location.pathname,

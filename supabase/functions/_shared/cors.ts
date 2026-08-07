@@ -91,7 +91,9 @@ const ALLOWED_HEADERS = [
   "x-csrf-token",
 
   // Idempotency for billing/credit/state-changing actions
+  // Clients send both casings depending on the API helper.
   "idempotency-key",
+  "x-idempotency-key",
 
   // Optional webhook/signature headers if helper is reused
   "stripe-signature",

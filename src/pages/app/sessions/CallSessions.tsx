@@ -29,6 +29,7 @@ import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { formatDistanceToNow } from "date-fns";
 import type { Tables } from "@/integrations/supabase";
 import { useSwipeAction } from "@/hooks/useSwipeAction";
+import { agentLog } from "@/lib/debugAgentLog";
 
 const SESSION_TYPES = ["all", "live", "mock", "practice"] as const;
 type FilterType = (typeof SESSION_TYPES)[number];
@@ -216,13 +217,21 @@ export default function CallSessions() {
             <span>Actions</span>
           </div>
 
-          {filtered.map((s) => {
+          {filtered.map((s, idx) => {
             let duration: string | null = null;
             if (s.started_at && s.ended_at) {
               const ms =
                 new Date(s.ended_at).getTime() - new Date(s.started_at).getTime();
               if (ms > 0) duration = `${Math.floor(ms / 60000)}m`;
+            } else if (s.status === "active" && !s.ended_at) {
+              duration = "In progress";
             }
+
+            // #region agent log
+            if (idx === 0) {
+              agentLog({hypothesisId:'E',location:'CallSessions.tsx:row',message:'session row duration',data:{id:s.id,status:s.status,hasEnded:Boolean(s.ended_at),duration}});
+            }
+            // #endregion
 
             const typeColor =
               s.type === "live"

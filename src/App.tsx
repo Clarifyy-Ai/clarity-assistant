@@ -816,9 +816,14 @@ export default function App(): JSX.Element {
 
   useEffect(() => {
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        void supabase.auth.getSession();
-      }
+      if (document.visibilityState !== "visible") return;
+      // Soft probe only — never clear a working session on tab focus.
+      // Profile refresh on TOKEN_REFRESHED soft-fails if the network blips.
+      const { status } = useAuthStore.getState();
+      if (status !== "authenticated") return;
+      void supabase.auth.getSession().catch(() => {
+        // Ignore probe failures; existing session stays in memory.
+      });
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);

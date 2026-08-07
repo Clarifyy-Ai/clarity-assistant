@@ -29,10 +29,17 @@ export async function streamOpenAIHint(opts: OpenAIStreamOptions): Promise<void>
     question,
     model: opts.model ?? "gpt-4o",
     interview_type: context.session_type ?? "behavioral",
-    target_company: context.target_company ?? null,
-    transcript: context.last_transcript ?? null,
-    resume_context: context.resume_experience_summary ?? null,
+    target_company: context.target_company ?? "",
+    transcript: context.last_transcript ?? "",
+    resume_context: context.resume_experience_summary ?? "",
     simple_language: simpleLanguage ?? false,
+    session_id:
+      typeof opts.sessionId === "string" &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+        opts.sessionId,
+      )
+        ? opts.sessionId
+        : null,
   };
 
   try {

@@ -183,9 +183,9 @@ export function useLiveCopilot({
       }
       if (cfg.jd_id) {
         try {
-          const jd = await jobDescriptionsDB.getById(cfg.jd_id);
-          const raw = jd as Record<string, unknown>;
-          const kw = raw.keywords ?? raw.required_skills ?? raw.skills;
+          const jd = await jobDescriptionsDB.getByIdMaybe(cfg.jd_id);
+          const raw = jd as Record<string, unknown> | null;
+          const kw = raw?.keywords ?? raw?.required_skills ?? raw?.skills;
           if (Array.isArray(kw)) {
             jdKeywords = [
               ...new Set([
@@ -261,8 +261,8 @@ export function useLiveCopilot({
 
     if (!parsed && cfg.resume_id) {
       try {
-        const row = await resumesDB.getById(cfg.resume_id);
-        const content = (row as { content?: string | null }).content;
+        const row = await resumesDB.getByIdMaybe(cfg.resume_id);
+        const content = (row as { content?: string | null } | null)?.content;
         parsed = parseResumeContentString(content ?? null);
       } catch (err) {
         console.warn("[useLiveCopilot] resume load failed:", err);
@@ -302,13 +302,13 @@ export function useLiveCopilot({
     let jdSeniority: string[] = [];
     if (cfg.jd_id) {
       try {
-        const jd = await jobDescriptionsDB.getById(cfg.jd_id);
-        const raw = jd as Record<string, unknown>;
-        const skills = raw.required_skills ?? raw.skills;
+        const jd = await jobDescriptionsDB.getByIdMaybe(cfg.jd_id);
+        const raw = jd as Record<string, unknown> | null;
+        const skills = raw?.required_skills ?? raw?.skills;
         if (Array.isArray(skills)) {
           jdRequiredSkills = skills.filter((s): s is string => typeof s === "string");
         }
-        const seniority = raw.seniority_signals ?? raw.seniority;
+        const seniority = raw?.seniority_signals ?? raw?.seniority;
         if (Array.isArray(seniority)) {
           jdSeniority = seniority.filter((s): s is string => typeof s === "string");
         }
@@ -766,7 +766,7 @@ export function useLiveCopilot({
         const dbModel = toDbModel(overlay.active_model);
         const saveTranscript = useOverlayStore.getState().save_transcript;
 
-        await sessionsDB.update(session.session_id, {
+        await sessionsDB.updateForUser(session.session_id, userId, {
           status: "completed",
           credits_used: session.credits_consumed,
           model_used: dbModel as any,

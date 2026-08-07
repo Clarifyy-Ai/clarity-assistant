@@ -21,9 +21,10 @@ import { requirePlan } from "../_shared/requirePlan.ts";
 
 function sanitizeInput(text: string, max = 2500): string {
   return String(text ?? "")
-    .replace(/```/g, "")             // remove code fences
-    .replace(/[^\x20-\x7E\n]/g, "")  // remove non-printable
-    .replace(/\s{2,}/g, " ")         // compress whitespace
+    .replace(/```/g, "") // remove code fences
+    // Strip control chars only — keep Unicode (Hindi, smart quotes, etc.)
+    .replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g, "")
+    .replace(/\s{2,}/g, " ")
     .slice(0, max)
     .trim();
 }
@@ -232,6 +233,14 @@ Deno.serve(async (req: Request) => {
     }
 
     const sanitizedInput = sanitizeInput(rawInput);
+    if (sanitizedInput.length < 3) {
+      return errorResponse(
+        "Input is empty or too short after sanitization.",
+        "INVALID_REQUEST",
+        400,
+        req,
+      );
+    }
 
     /* ------------------- CREDIT DEDUCTION ------------------- */
     const toolCost = getToolCost(tool_id);
@@ -271,7 +280,12 @@ Deno.serve(async (req: Request) => {
         cost: toolCost,
         reason: `prep-tool AI call failure (${tool_id})`,
       });
-      log(FN, "error", "AI call failed, credits refunded", { userId, tool_id, err: String(aiErr) });
+      const errMsg = aiErr instanceof Error ? aiErr.message : String(aiErr);
+      log(FN, "error", "AI call failed, credits refunded", {
+        userId,
+        tool_id,
+        err: errMsg.slice(0, 500),
+      });
       return errorResponse(
         "AI service temporarily unavailable. Credits refunded.",
         "AI_ERROR",

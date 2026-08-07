@@ -26,11 +26,13 @@
         default-src 'self';
         base-uri 'self';
         object-src 'none';
-        script-src 'self';
+        script-src 'self' 'sha256-94vmev1ZHn894g2iVWfQ1aQu9FkC2BtPA7fJnXbTA7Y=';
         style-src 'self' 'unsafe-inline';
         img-src 'self' data: blob: https:;
         font-src 'self' data: https://cdn.gpteng.co;
         connect-src 'self'
+          http://127.0.0.1:7572
+          http://localhost:7572
           https://api.github.com
           https://*.supabase.co
           wss://*.supabase.co

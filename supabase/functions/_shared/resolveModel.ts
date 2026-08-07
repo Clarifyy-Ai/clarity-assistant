@@ -37,7 +37,7 @@ const KNOWN_MODELS = new Set([
   "claude-3-haiku-20240307",
 ]);
 
-const PRO_PLANS = new Set(["pro", "starter", "elite", "enterprise"]);
+const PRO_PLANS = new Set(["pro", "elite", "enterprise", "max", "team"]);
 
 export function mapAppModelToApi(input: string): string {
   const trimmed = input.trim();
@@ -104,9 +104,12 @@ export function getFallbackModels(primary: string): string[] {
   if (primary !== "gemini-2.5-flash") chain.push("gemini-2.5-flash");
   if (primary !== "gemini-flash-latest") chain.push("gemini-flash-latest");
   if (primary !== "gemini-2.0-flash") chain.push("gemini-2.0-flash");
-  // When Gemini quota is exhausted (429), fail over to OpenAI if configured.
+  // When Gemini quota is exhausted (429), fail over to OpenAI/Anthropic if configured.
   if ((Deno.env.get("OPENAI_API_KEY") ?? "").trim()) {
     chain.push("gpt-4o-mini");
+  }
+  if ((Deno.env.get("ANTHROPIC_API_KEY") ?? "").trim()) {
+    chain.push("claude-3-haiku-20240307");
   }
   return [...new Set(chain)];
 }

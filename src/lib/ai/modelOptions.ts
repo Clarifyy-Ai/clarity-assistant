@@ -1,4 +1,6 @@
 import type { PreferredAIModel } from "@/types/user.types";
+import { normalizeToDisplayTier } from "@/lib/constants/pricing";
+import type { PlanId } from "@/lib/billing/subscriptionManager";
 
 export interface ModelOption {
   value: PreferredAIModel;
@@ -8,7 +10,7 @@ export interface ModelOption {
   free: boolean;
 }
 
-/** Canonical model list for Settings + onboarding. */
+/** Canonical model list for Settings, onboarding, overlay, and session setup. */
 export const MODEL_OPTIONS: ModelOption[] = [
   {
     value: "gemini-flash",
@@ -47,16 +49,49 @@ export const MODEL_OPTIONS: ModelOption[] = [
   },
 ];
 
+const FREE_FALLBACK_MODEL: PreferredAIModel = "gemini-flash";
+
 /** Normalize legacy profile values to current app slugs. */
 export function normalizePreferredModel(raw: string | null | undefined): PreferredAIModel {
   const map: Record<string, PreferredAIModel> = {
     "gemini-1-5-flash": "gemini-flash",
     "gemini-2.0-flash": "gemini-flash",
     "gemini-1-5-pro": "gemini-pro",
+    "gemini-1.5-pro": "gemini-pro",
     claude: "claude-3-5-sonnet",
   };
-  if (!raw) return "gemini-flash";
+  if (!raw) return FREE_FALLBACK_MODEL;
   return map[raw] ?? (raw as PreferredAIModel);
+}
+
+/** True when plan unlocks GPT/Claude (matches Settings → AI Models). */
+export function hasProModelAccess(planId: PlanId | string | null | undefined): boolean {
+  return normalizeToDisplayTier(planId) !== "free";
+}
+
+export function isFreeModel(model: PreferredAIModel | string | null | undefined): boolean {
+  const slug = normalizePreferredModel(model);
+  const option = MODEL_OPTIONS.find((m) => m.value === slug);
+  if (option) return option.free;
+  // Unknown / legacy Gemini aliases stay free; OpenAI/Anthropic stay Pro.
+  return slug.startsWith("gemini");
+}
+
+export function isModelAvailableForPlan(
+  model: PreferredAIModel | string | null | undefined,
+  planId: PlanId | string | null | undefined,
+): boolean {
+  if (hasProModelAccess(planId)) return true;
+  return isFreeModel(model);
+}
+
+/** Clamp a preferred model to what the plan allows. */
+export function clampPreferredModel(
+  model: PreferredAIModel | string | null | undefined,
+  planId: PlanId | string | null | undefined,
+): PreferredAIModel {
+  const slug = normalizePreferredModel(model);
+  return isModelAvailableForPlan(slug, planId) ? slug : FREE_FALLBACK_MODEL;
 }
 
 /** Map UI model slugs to public.ai_model enum values for PostgREST writes. */

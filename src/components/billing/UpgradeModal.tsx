@@ -125,7 +125,12 @@ export function UpgradeModal() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+      <div
+        className={cn(
+          "grid gap-4",
+          MODAL_PLANS.length > 1 ? "grid-cols-1 sm:grid-cols-2" : "grid-cols-1",
+        )}
+      >
         {MODAL_PLANS.map((mp) => {
           const plan = PLANS[mp.id]
           const isCurrentPlan = planId === mp.id

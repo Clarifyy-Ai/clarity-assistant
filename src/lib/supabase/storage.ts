@@ -350,7 +350,12 @@ export const resumeStorage = {
 
 export const avatarStorage = {
   upload: (userId: string, file: File) => {
-    const ext = file.name.split(".").pop() ?? "jpg";
+    const rawExt = file.name.split(".").pop()?.toLowerCase() ?? "";
+    const ext = ["jpg", "jpeg", "png", "webp", "gif"].includes(rawExt)
+      ? rawExt === "jpeg"
+        ? "jpg"
+        : rawExt
+      : "jpg";
     return uploadFile(BUCKETS.AVATARS, file, storagePaths.avatar(userId, ext), { upsert: true });
   },
 

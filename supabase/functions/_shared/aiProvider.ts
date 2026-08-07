@@ -254,6 +254,10 @@ export async function generateWithFallback(
           },
         );
 
+        if (!result.text || !result.text.trim()) {
+          throw new Error(`Model ${model} returned an empty response`);
+        }
+
         const provider = model.startsWith("gpt")
           ? "openai"
           : model.startsWith("claude")

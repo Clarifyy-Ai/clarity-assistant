@@ -11,10 +11,14 @@ export default function Privacy() {
 
   return (
     <MarketingLayout>
-      <article className={`pt-4 sm:pt-12 pb-14 px-4 sm:px-6 max-w-3xl mx-auto text-left ${LEGAL_PROSE_CLASS}`}>
-        <h1>Privacy Policy</h1>
-        <p className="text-xs text-muted-foreground">Last updated: March 25, 2026</p>
-
+      <article className="pt-4 sm:pt-12 pb-14 px-4 sm:px-6 max-w-3xl mx-auto">
+        <header className="text-center mb-8 sm:mb-10">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+            Privacy Policy
+          </h1>
+          <p className="mt-2 text-xs text-muted-foreground">Last updated: March 25, 2026</p>
+        </header>
+        <div className={`text-left ${LEGAL_PROSE_CLASS}`}>
         <h2>1. Introduction</h2>
         <p>
           {LEGAL_ENTITY_NAME} ("Company", "we", "us") operates {COMPANY_NAME}. This Privacy Policy explains how we collect, use, disclose, and safeguard your information when you use our Service. {COMPANY_NAME} is intended for interview preparation and rehearsal — not for use during actual third-party interviews or proctored assessments.
@@ -101,6 +105,7 @@ export default function Privacy() {
             {PRIVACY_EMAIL}
           </a>.
         </p>
+        </div>
       </article>
     </MarketingLayout>
   );

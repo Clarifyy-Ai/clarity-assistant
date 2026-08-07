@@ -1,9 +1,8 @@
 import { lazy, Suspense } from "react";
 import { Link } from "react-router-dom";
-import { ArrowLeft, Mic, Keyboard } from "lucide-react";
+import { ArrowLeft, Mic, Keyboard, Headphones, ListChecks, Monitor, Wrench } from "lucide-react";
 import { Card } from "@/components/ui/Card";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { PageContent } from "@/components/layout/PageContent";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 
 const OverlaySetupGuidePanel = lazy(async () => {
@@ -11,10 +10,16 @@ const OverlaySetupGuidePanel = lazy(async () => {
   return { default: mod.OverlaySetupGuidePanel };
 });
 
+const SECTION_LINKS = [
+  { hash: "system-checklist", label: "System checklist", icon: ListChecks },
+  { hash: "desktop-install", label: "Desktop install", icon: Monitor },
+  { hash: "troubleshooting", label: "Troubleshooting", icon: Wrench },
+] as const;
+
 /** Authenticated-only Practice Coach install & troubleshooting guide. */
 export default function PracticeCoachGuide() {
   return (
-    <PageContent className="max-w-3xl mx-auto space-y-6 pb-8">
+    <div className="max-w-3xl mx-auto space-y-6 pb-8">
       <div className="flex items-center gap-3">
         <Link
           to="/app/dashboard"
@@ -35,6 +40,30 @@ export default function PracticeCoachGuide() {
         className="mb-0"
       />
 
+      <nav
+        aria-label="Guide sections"
+        className="flex flex-wrap gap-2 rounded-xl border border-border bg-secondary/40 p-2"
+      >
+        {SECTION_LINKS.map(({ hash, label, icon: Icon }) => (
+          <a
+            key={hash}
+            href={`#${hash}`}
+            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors"
+            onClick={(e) => {
+              e.preventDefault();
+              const el = document.getElementById(hash);
+              if (!el) return;
+              el.scrollIntoView({ behavior: "smooth", block: "start" });
+              // Keep URL in sync without a full navigation remount.
+              window.history.replaceState(null, "", `#${hash}`);
+            }}
+          >
+            <Icon className="w-3.5 h-3.5" />
+            {label}
+          </a>
+        ))}
+      </nav>
+
       <Suspense fallback={<SkeletonCard />}>
         <Card className="p-4">
           <OverlaySetupGuidePanel />
@@ -42,6 +71,13 @@ export default function PracticeCoachGuide() {
       </Suspense>
 
       <div className="flex flex-wrap gap-2">
+        <Link
+          to="/app/settings/practice-coach"
+          className="inline-flex items-center gap-2 rounded-xl border border-border bg-secondary/60 px-3 py-2 text-sm font-medium hover:bg-secondary transition-colors"
+        >
+          <Headphones className="w-4 h-4" />
+          Practice Coach settings
+        </Link>
         <Link
           to="/app/settings/audio"
           className="inline-flex items-center gap-2 rounded-xl border border-border bg-secondary/60 px-3 py-2 text-sm font-medium hover:bg-secondary transition-colors"
@@ -63,6 +99,6 @@ export default function PracticeCoachGuide() {
           Start Practice Coach
         </Link>
       </div>
-    </PageContent>
+    </div>
   );
 }

@@ -15,19 +15,19 @@ import type { LiveSessionConfig } from "@/types/session.types";
 import type { PreferredAIModel, HintStyle, UserProfile } from "@/types/user.types";
 import { CreditExhaustedState, useCreditExhaustedState } from "@/components/billing/CreditExhaustedState";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
+import {
+  clampPreferredModel,
+  isModelAvailableForPlan,
+  MODEL_OPTIONS as CANONICAL_MODEL_OPTIONS,
+} from "@/lib/ai/modelOptions";
+import { useUIStore } from "@/store/uiStore";
+import { toast } from "sonner";
 
 interface PreSessionSetupProps {
   onStart: (config: LiveSessionConfig) => void;
   sessionType?: "live" | "mock";
   initialConfig?: LiveSessionConfig;
 }
-
-const MODEL_OPTIONS: { id: PreferredAIModel; label: string; desc: string; tag?: string }[] = [
-  { id: "gemini-flash",      label: "Gemini Flash",       desc: "Fastest · Best for practice",   tag: "Recommended" },
-  { id: "gemini-1-5-pro",    label: "Gemini 1.5 Pro",     desc: "Deeper reasoning" },
-  { id: "gpt-4o",            label: "GPT-4o",             desc: "Nuanced, balanced answers" },
-  { id: "claude-3-5-sonnet", label: "Claude 3.5 Sonnet",  desc: "Excellent for writing" },
-];
 
 const INTERVIEW_TYPES = [
   { value: "behavioral",   label: "Behavioural",    emoji: "🧠" },
@@ -44,7 +44,7 @@ const HINT_STYLES: { value: HintStyle; label: string; desc: string }[] = [
 ];
 
 export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }: PreSessionSetupProps) {
-  const { profile } = useAuthStore();
+  const { profile, planId } = useAuthStore();
   const { isExhausted: creditsExhausted } = useCreditExhaustedState();
   const resumes     = useDocumentStore((s) => s.resumes);
   const jds         = useDocumentStore((s) => s.jds);
@@ -59,7 +59,12 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
   const [jdId,          setJdId]            = useState<string | null>(initialConfig?.jd_id ?? activeJdId);
   const [company,       setCompany]         = useState(initialConfig?.company ?? "");
   const [role,          setRole]            = useState(initialConfig?.role ?? "");
-  const [model,         setModel]           = useState<PreferredAIModel>(typedProfile?.preferred_model ?? "gemini-flash");
+  const [model,         setModel]           = useState<PreferredAIModel>(() =>
+    clampPreferredModel(
+      initialConfig?.model ?? typedProfile?.preferred_model,
+      planId ?? typedProfile?.plan_id,
+    )
+  );
   const [hintStyle,     setHintStyle]       = useState<HintStyle>(typedProfile?.hint_style ?? "short_hints");
   const [stealthMode,   setStealthMode]     = useState(false);
   const [micDevices,    setMicDevices]      = useState<AudioDevice[]>([]);
@@ -111,11 +116,12 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
 
   function handleStart() {
     if (micPermission === "denied") return;
+    const effectiveModel = clampPreferredModel(model, planId ?? typedProfile?.plan_id);
     const config: LiveSessionConfig = {
       company:             company || null,
       role:                role || null,
       hint_style:          hintStyle,
-      model,
+      model:               effectiveModel,
       smart_routing:       false,
       stealth_mode:        stealthMode,
       resume_id:           resumeId,
@@ -127,7 +133,7 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
       noise_suppression:   noiseSuppression,
     };
     const overlay = useOverlayStore.getState();
-    overlay.setActiveModel(model);
+    overlay.setActiveModel(effectiveModel);
     overlay.setHintStyle(hintStyle);
     setAppStealthMode(stealthMode);
     onStart(config);
@@ -288,31 +294,49 @@ export function PreSessionSetup({ onStart, sessionType = "live", initialConfig }
 
             {showAdvanced && (
               <div className="mt-3 grid grid-cols-2 gap-2">
-                {MODEL_OPTIONS.map((m) => (
-                  <button
-                    key={m.id}
-                    type="button"
-                    onClick={() => setModel(m.id)}
-                    className={cn(
-                      "text-left px-3 py-2.5 rounded-xl border transition-all",
-                      model === m.id
-                        ? "bg-primary/10 border-primary/40"
-                        : "bg-background border-border hover:border-border"
-                    )}
-                  >
-                    <div className="flex items-center gap-1.5 mb-0.5">
-                      <span className={cn("text-xs font-semibold", model === m.id ? "text-primary" : "text-foreground")}>
-                        {m.label}
-                      </span>
-                      {m.tag && (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-500/15 text-emerald-400 rounded-full">
-                          {m.tag}
-                        </span>
+                {CANONICAL_MODEL_OPTIONS.map((m) => {
+                  const locked = !isModelAvailableForPlan(m.value, planId ?? typedProfile?.plan_id);
+                  return (
+                    <button
+                      key={m.value}
+                      type="button"
+                      disabled={locked}
+                      onClick={() => {
+                        if (locked) {
+                          useUIStore.getState().openUpgradeModal("pro");
+                          toast.message("Upgrade to Pro to use GPT-4o and Claude.");
+                          return;
+                        }
+                        setModel(m.value);
+                      }}
+                      className={cn(
+                        "text-left px-3 py-2.5 rounded-xl border transition-all",
+                        locked && "opacity-50 cursor-not-allowed",
+                        !locked && model === m.value
+                          ? "bg-primary/10 border-primary/40"
+                          : !locked && "bg-background border-border hover:border-border"
                       )}
-                    </div>
-                    <p className="text-[11px] text-muted-foreground">{m.desc}</p>
-                  </button>
-                ))}
+                    >
+                      <div className="flex items-center gap-1.5 mb-0.5">
+                        <span className={cn("text-xs font-semibold", !locked && model === m.value ? "text-primary" : "text-foreground")}>
+                          {m.label}
+                        </span>
+                        {locked ? (
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 bg-amber-500/15 text-amber-400 rounded-full">
+                            Pro
+                          </span>
+                        ) : (
+                          m.badge === "Recommended" && (
+                            <span className="text-[9px] font-bold px-1.5 py-0.5 bg-emerald-500/15 text-emerald-400 rounded-full">
+                              {m.badge}
+                            </span>
+                          )
+                        )}
+                      </div>
+                      <p className="text-[11px] text-muted-foreground">{m.desc}</p>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>

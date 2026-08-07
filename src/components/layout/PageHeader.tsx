@@ -1,8 +1,13 @@
 import { ReactNode, useMemo } from "react";
+import { Link } from "react-router-dom";
 import { ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useUIStore } from "@/store/uiStore";
 import { getStealthLabel } from "@/lib/stealth/stealthConfig";
+
+function isInternalAppPath(href: string): boolean {
+  return href.startsWith("/") && !href.startsWith("//");
+}
 
 interface Breadcrumb {
   label: string;
@@ -94,12 +99,21 @@ export function PageHeader({
                   …
                 </span>
               ) : breadcrumb.href ? (
-                <a
-                  href={breadcrumb.href}
-                  className="text-primary hover:text-primary/80 transition-colors duration-150"
-                >
-                  {breadcrumb.label}
-                </a>
+                isInternalAppPath(breadcrumb.href) ? (
+                  <Link
+                    to={breadcrumb.href}
+                    className="text-primary hover:text-primary/80 transition-colors duration-150"
+                  >
+                    {breadcrumb.label}
+                  </Link>
+                ) : (
+                  <a
+                    href={breadcrumb.href}
+                    className="text-primary hover:text-primary/80 transition-colors duration-150"
+                  >
+                    {breadcrumb.label}
+                  </a>
+                )
               ) : (
                 <span className="text-muted-foreground">{breadcrumb.label}</span>
               )}

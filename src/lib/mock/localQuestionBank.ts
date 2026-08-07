@@ -8,6 +8,7 @@ export interface LocalQuestionInput {
   count?: number;
   company?: string | null;
   role?: string | null;
+  difficulty?: "easy" | "medium" | "hard" | "mixed";
 }
 
 export interface LocalQuestion {
@@ -187,7 +188,16 @@ function personalize(
 export function getLocalMockQuestions(input: LocalQuestionInput): LocalQuestion[] {
   const type = normalizeType(input.type);
   const count = Math.min(Math.max(input.count ?? 5, 1), 15);
-  const pool = [...poolForType(type)];
+  const difficulty = input.difficulty ?? "mixed";
+  let pool = [...poolForType(type)];
+
+  if (difficulty !== "mixed") {
+    const filtered = pool.filter((q) => q.difficulty === difficulty);
+    // Fall back to full pool if the bank is too thin for this level.
+    if (filtered.length >= Math.min(count, 2)) {
+      pool = filtered;
+    }
+  }
 
   // Fisher–Yates shuffle
   for (let i = pool.length - 1; i > 0; i -= 1) {

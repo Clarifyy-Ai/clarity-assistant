@@ -8,6 +8,8 @@ import {
   transitionOverlayState,
   type OverlaySessionState,
 } from "@/lib/overlay/overlaySessionStates";
+import { clampPreferredModel } from "@/lib/ai/modelOptions";
+import { useAuthStore } from "@/store/authStore";
 
 // ─────────────────────────────────────────────────────────────────
 // Overlay Position
@@ -597,7 +599,10 @@ export const useOverlayStore = create<OverlayStore>()(
           return { hint_style: next };
         }),
 
-      setActiveModel: (active_model) => set({ active_model }),
+      setActiveModel: (active_model) => {
+        const planId = useAuthStore.getState().planId ?? "free";
+        set({ active_model: clampPreferredModel(active_model, planId) });
+      },
       setAnswerMode: (answer_mode) => set({ answer_mode }),
 
       navigateHintHistory: (direction) =>

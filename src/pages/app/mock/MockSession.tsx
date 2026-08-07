@@ -20,7 +20,6 @@ import { LiveSessionController } from "@/components/live/LiveSessionController";
 import { PreSessionSetup } from "@/components/session/PreSessionSetup";
 import { PostSessionSummary } from "@/components/session/PostSessionSummary";
 import { saveLastSessionSummary } from "@/lib/session/lastSessionSummary";
-import { MockConversationPanel } from "@/components/mock/MockConversationPanel";
 import {
   sessionsDB,
   sessionTranscriptsDB,
@@ -35,7 +34,6 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Modal } from "@/components/ui/Modal";
 import { Skeleton } from "@/components/ui/SkeletonLoader";
-import { ProgressBar } from "@/components/ui/ProgressBar";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { PANIC_RESPONSE } from "@/types/session.types";
 import type { LiveSessionConfig, SessionQuestion } from "@/types/session.types";
@@ -47,14 +45,13 @@ import {
   Square,
   ChevronRight,
   SkipForward,
+  Eye,
   EyeOff,
   Timer,
   RefreshCw,
-  AlertTriangle,
   CheckCircle,
   Clock,
   Coins,
-  StickyNote,
   Pause,
   Play,
   BarChart2,
@@ -74,6 +71,7 @@ type MockConfig = LiveSessionConfig & {
   count?: number;
   role?: string | null;
   question_count?: number;
+  difficulty?: "easy" | "medium" | "hard" | "mixed";
 };
 
 /* ─── TYPES ─────────────────────────────────────────────────────────────── */
@@ -217,6 +215,7 @@ export default function MockSession() {
       const overlay = useOverlayStore.getState();
       // Respect stealth mode set during session setup (don't force-clear it).
       overlay.setMinimalMode(false);
+      overlay.setActiveTab("transcript");
       overlay.showOverlay();
     }
     return () => {
@@ -386,8 +385,9 @@ export default function MockSession() {
       profile?.target_role ??
       "";
     const company = config.company ?? "";
+    const difficulty = config.difficulty ?? "medium";
 
-    return { interviewType, questionCount, role, company };
+    return { interviewType, questionCount, role, company, difficulty };
   }
 
   async function loadQuestions(
@@ -401,7 +401,8 @@ export default function MockSession() {
     }
 
     setQuestionsError(null);
-    const { interviewType, questionCount, role, company } = resolveMockConfigFields(config);
+    const { interviewType, questionCount, role, company, difficulty } =
+      resolveMockConfigFields(config);
 
     if (!options?.forceLocal) {
       try {
@@ -410,6 +411,7 @@ export default function MockSession() {
           count: questionCount,
           interview_type: interviewType,
           question_count: questionCount,
+          difficulty,
           company,
           role,
           session_id: dbSessionId,
@@ -437,6 +439,7 @@ export default function MockSession() {
       count: questionCount,
       company,
       role,
+      difficulty,
     });
     orchestrator.setQuestions(local);
     questionsCacheRef.current = useSessionStore.getState().questions;
@@ -769,8 +772,6 @@ export default function MockSession() {
     handleEndSessionRef.current = handleEndSession;
   });
 
-  const micLevel = audio.currentLevel;
-
   if (phase === "idle") {
     return (
       <PreSessionSetup
@@ -983,264 +984,156 @@ export default function MockSession() {
     !isPaused && isCapturing && (deepgramStatus === "connected" || deepgramStatus === "reconnecting");
 
   return (
-    <div className="min-h-screen max-h-screen overflow-y-auto bg-background text-foreground">
+    <div className="min-h-screen bg-background text-foreground">
       <LiveSessionController isActive={true} />
       <OverlayKeyboardHandler enabled={phase === "active"} onToggleMute={audio.toggleMute} />
 
-      <div className="flex min-h-screen">
-        {/* T-0266 — note-taking sidebar */}
-        <aside className="hidden lg:flex w-72 shrink-0 border-r border-border bg-card/50 flex-col p-4">
-          <div className="flex items-center gap-2 mb-3">
-            <StickyNote className="w-4 h-4 text-muted-foreground" />
-            <h2 className="text-sm font-semibold text-foreground">Session notes</h2>
-          </div>
-          <textarea
-            value={sessionNotes}
-            onChange={(e) => setSessionNotes(e.target.value)}
-            placeholder="Jot down key points, follow-ups, or reminders…"
-            className="flex-1 min-h-[200px] resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-primary"
-          />
-        </aside>
-
-        {/* Main UI */}
-        <div className="flex-1 flex items-center justify-center">
-        <div className="w-full max-w-lg space-y-4 sm:space-y-6 p-3 sm:p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <span className="text-xs text-muted-foreground font-medium">
-                Question <span className="text-foreground font-bold">{qIndex + 1}</span> / {totalQ}
+      {/* Compact mock chrome — speaking/transcript live only in the overlay */}
+      <header className="fixed top-0 inset-x-0 z-[200] border-b border-border bg-background/95 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-2 px-3 py-2.5 sm:px-4">
+          <div className="flex items-center gap-2 min-w-0 flex-1">
+            <Badge variant="primary" size="sm">
+              mock
+            </Badge>
+            <span className="text-xs text-muted-foreground font-medium truncate">
+              Q <span className="text-foreground font-bold tabular-nums">{qIndex + 1}</span>
+              <span className="text-muted-foreground"> / {totalQ}</span>
+            </span>
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 text-xs font-bold tabular-nums",
+                timeColor === "emerald"
+                  ? "text-emerald-500"
+                  : timeColor === "amber"
+                    ? "text-amber-500"
+                    : "text-red-500",
+              )}
+            >
+              <Timer className="w-3.5 h-3.5" />
+              {timerDisplay}
+            </span>
+            {isPaused && <Badge variant="amber" size="sm">Paused</Badge>}
+            {isListeningActive && (
+              <span className="hidden sm:inline-flex items-center gap-1.5 text-[10px] font-medium text-emerald-500">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                Listening in overlay
               </span>
-              <Badge variant="primary" size="sm">
-                mock
-              </Badge>
-            </div>
-            <div className="flex items-center gap-2">
-              {isPaused && (
-                <Badge variant="amber" size="sm">Paused</Badge>
-              )}
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={() => void handleTogglePause()}
-                leftIcon={isPaused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
-              >
-                {isPaused ? "Resume" : "Pause"}
-              </Button>
-              <Button
-                variant="ghost"
-                size="xs"
-                onClick={() => setCalmMode(true)}
-                leftIcon={<EyeOff className="w-3 h-3" />}
-              >
-                Calm steps
-              </Button>
-              <Button
-                variant="danger"
-                size="xs"
-                onClick={() => setEndConfirm(true)}
-                leftIcon={<Square className="w-3 h-3" />}
-              >
-                End
-              </Button>
-            </div>
-          </div>
-
-          <div className="w-full h-1 bg-secondary rounded-full overflow-hidden">
-            <div
-              className="h-full bg-primary rounded-full transition-all duration-500"
-              style={{ width: `${((qIndex + 1) / totalQ) * 100}%` }}
-            />
-          </div>
-
-          <div className="bg-card border border-border rounded-2xl p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-3 sm:mb-4">
-              <div className="flex items-center gap-2">
-                <div
-                  className={cn(
-                    "flex items-center gap-1.5 text-xs sm:text-sm font-bold tabular-nums",
-                    timerMode === "countup" || sessionTimeLeft > 0
-                      ? timeColor === "emerald"
-                        ? "text-emerald-400"
-                        : timeColor === "amber"
-                          ? "text-amber-400"
-                          : "text-red-400"
-                      : "text-muted-foreground",
-                  )}
-                >
-                  <Timer className="w-3.5 h-3.5" />
-                  {timerDisplay}
-                </div>
-                <div className="flex rounded-lg border border-border overflow-hidden text-[10px]">
-                  <button
-                    type="button"
-                    onClick={() => setTimerMode("countdown")}
-                    className={cn(
-                      "px-2 py-0.5 transition-colors",
-                      timerMode === "countdown"
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    Countdown
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setTimerMode("countup")}
-                    className={cn(
-                      "px-2 py-0.5 transition-colors",
-                      timerMode === "countup"
-                        ? "bg-primary/10 text-primary"
-                        : "text-muted-foreground hover:text-foreground",
-                    )}
-                  >
-                    Count up
-                  </button>
-                </div>
-              </div>
-              <button
-                onClick={() => setSkipConfirm(true)}
-                className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground transition-colors"
-              >
-                <SkipForward className="w-3 h-3" />
-                Skip
-              </button>
-            </div>
-
-            <p className="text-foreground text-sm sm:text-base font-medium leading-relaxed max-h-40 overflow-y-auto">
-              {questionText}
-            </p>
-          </div>
-
-          <div className="bg-card border border-border rounded-2xl p-4 sm:p-6">
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <div
-                  className={cn(
-                    "w-2 h-2 rounded-full",
-                    isListeningActive ? "bg-red-500 animate-pulse" : "bg-muted-foreground/30",
-                  )}
-                />
-                <span className="text-xs font-medium text-foreground">
-                  {isPaused ? "Recording paused" : "Your answer"}
-                </span>
-                <span
-                  className={cn(
-                    "text-xs font-medium",
-                    wpmHook.wpm > 160 ? "text-amber-400" : wpmHook.wpm < 80 ? "text-amber-400" : "text-emerald-400"
-                  )}
-                  title={
-                    wpmHook.wpm < 80
-                      ? "Speaking slowly — try to increase pace"
-                      : wpmHook.wpm > 160
-                        ? "Speaking fast — try to slow down"
-                        : "Good pace"
-                  }
-                >
-                  {wpmHook.wpm} WPM
-                </span>
-              </div>
-              <div className="flex items-center gap-2">
-                {!isMuted && isCapturing && (
-                  <div className="w-16 hidden sm:block">
-                    <ProgressBar
-                      value={micLevel}
-                      max={100}
-                      color={micLevel > 80 ? "red" : micLevel > 30 ? "emerald" : "amber"}
-                      size="sm"
-                    />
-                  </div>
-                )}
-                <label className="hidden sm:flex items-center gap-1.5 text-[10px] text-muted-foreground cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={noiseSuppression}
-                    onChange={(e) => {
-                      const enabled = e.target.checked;
-                      setNoiseSuppression(enabled);
-                      void audio.setNoiseSuppression?.(enabled);
-                    }}
-                    className="rounded border-border"
-                  />
-                  Noise supp.
-                </label>
-                <button
-                  type="button"
-                  onClick={audio.toggleMute}
-                  className="p-1.5 rounded-lg hover:bg-accent/10 transition-all"
-                  title={isMuted ? "Unmute" : "Mute"}
-                >
-                {isMuted ? (
-                  <MicOff className="w-3.5 h-3.5 text-red-400" />
-                ) : (
-                  <Mic className="w-3.5 h-3.5 text-emerald-400" />
-                )}
-              </button>
-              </div>
-            </div>
-
-            <div className="min-h-[60px] text-sm text-foreground leading-relaxed">
-              {candidateTranscript || (
-                <span className="text-muted-foreground italic">Start speaking…</span>
-              )}
-              {interimText && (
-                <span className="text-muted-foreground italic"> {interimText}</span>
-              )}
-            </div>
-
-            <div className="mt-4 pt-3 border-t border-border">
-              <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wide mb-2">
-                Conversation
-              </p>
-              <MockConversationPanel />
-            </div>
-
-            {fillerHook.totalCount > 0 && (
-              <div className="mt-3 flex items-center gap-2 flex-wrap">
-                <span className="text-[10px] text-muted-foreground">Fillers:</span>
-                {Object.entries(fillerHook.counts)
-                  .filter(([, count]) => (count as number) > 0)
-                  .map(([word, count]) => (
-                    <Badge key={word} variant="amber" size="sm">
-                      "{word}" ×{count as number}
-                    </Badge>
-                  ))}
-              </div>
             )}
           </div>
 
-          <Button
-            variant="primary"
-            size="lg"
-            fullWidth
-            onClick={handleNextQuestion}
-            rightIcon={isLastQ ? <Square className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
-          >
-            {isLastQ ? "Finish & see scorecard" : "Next question"}
-          </Button>
+          <div className="flex items-center gap-1.5 flex-wrap justify-end">
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => void handleTogglePause()}
+              leftIcon={isPaused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
+            >
+              {isPaused ? "Resume" : "Pause"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => setSkipConfirm(true)}
+              leftIcon={<SkipForward className="w-3 h-3" />}
+            >
+              Skip
+            </Button>
+            <Button
+              variant="primary"
+              size="xs"
+              onClick={handleNextQuestion}
+              rightIcon={
+                isLastQ ? <Square className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />
+              }
+            >
+              {isLastQ ? "Finish" : "Next"}
+            </Button>
+            <Button
+              variant="danger"
+              size="xs"
+              onClick={() => setEndConfirm(true)}
+              leftIcon={<Square className="w-3 h-3" />}
+            >
+              End
+            </Button>
+          </div>
+        </div>
+        <div className="h-0.5 bg-secondary">
+          <div
+            className="h-full bg-primary transition-all duration-500"
+            style={{ width: `${((qIndex + 1) / totalQ) * 100}%` }}
+          />
+        </div>
+      </header>
 
-          <div className="lg:hidden rounded-2xl border border-border bg-card p-4 space-y-2">
-            <div className="flex items-center gap-2">
-              <StickyNote className="w-3.5 h-3.5 text-muted-foreground" />
-              <p className="text-xs font-semibold text-foreground">Session notes</p>
-            </div>
-            <textarea
-              value={sessionNotes}
-              onChange={(e) => setSessionNotes(e.target.value)}
-              placeholder="Jot down key points…"
-              rows={3}
-              className="w-full resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm"
-            />
+      <div className="flex min-h-screen items-center justify-center px-4 pt-20 pb-28">
+        <div className="w-full max-w-md text-center space-y-4">
+          <p className="text-lg font-semibold text-foreground">Mock overlay active</p>
+          <p className="text-sm text-muted-foreground leading-relaxed">
+            Speech, transcript, fillers, and AI hints appear in the floating overlay — not on this
+            page. Use{" "}
+            <kbd className="px-1.5 py-0.5 rounded bg-secondary text-[10px] font-mono">
+              Ctrl+Shift+H
+            </kbd>{" "}
+            to show or hide it.
+          </p>
+
+          <div className="rounded-2xl border border-border bg-card/60 px-4 py-3 text-left">
+            <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
+              Current question
+            </p>
+            <p className="text-sm text-foreground leading-relaxed line-clamp-4">
+              {questionText || "Waiting for question…"}
+            </p>
           </div>
 
-          <p className="text-center text-xs text-muted-foreground/40">
-            The overlay window provides AI hints, transcript, and session status. Use{" "}
-            <kbd className="px-1 py-0.5 bg-secondary rounded font-mono">Ctrl+Shift+H</kbd> to toggle it.
-          </p>
-        </div>
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => setCalmMode(true)}
+              leftIcon={<EyeOff className="w-3 h-3" />}
+            >
+              Calm steps
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={audio.toggleMute}
+              leftIcon={
+                isMuted ? <MicOff className="w-3 h-3 text-red-400" /> : <Mic className="w-3 h-3" />
+              }
+            >
+              {isMuted ? "Unmute" : "Mute mic"}
+            </Button>
+            <Button
+              variant="ghost"
+              size="xs"
+              onClick={() => useOverlayStore.getState().showOverlay()}
+              leftIcon={<Eye className="w-3 h-3" />}
+            >
+              Show overlay
+            </Button>
+          </div>
+
+          <details className="rounded-xl border border-border bg-card/40 text-left">
+            <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-muted-foreground hover:text-foreground">
+              Session notes (optional)
+            </summary>
+            <div className="px-3 pb-3">
+              <textarea
+                value={sessionNotes}
+                onChange={(e) => setSessionNotes(e.target.value)}
+                placeholder="Jot down key points…"
+                rows={3}
+                className="w-full resize-none rounded-xl border border-border bg-background px-3 py-2 text-sm"
+              />
+            </div>
+          </details>
         </div>
       </div>
 
-      {/* Overlay */}
+      {/* Overlay — primary surface for speech, transcript, and hints */}
       <OverlayWindow
         onToggleMic={audio.toggleMute}
         onToggleSystemAudio={audio.toggleSystemAudio}
@@ -1253,7 +1146,6 @@ export default function MockSession() {
         }}
       />
 
-      {/* Modals */}
       <Modal open={skipConfirm} onClose={() => setSkipConfirm(false)} title="Skip question?" size="sm">
         <p className="text-sm text-muted-foreground mb-5">This question will be marked as skipped.</p>
         <div className="flex gap-3">

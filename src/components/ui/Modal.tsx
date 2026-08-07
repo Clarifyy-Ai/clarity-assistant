@@ -37,21 +37,21 @@ export function Modal({
         showClose={false}
         overlayClassName="z-[100] bg-black/60 backdrop-blur-sm"
         className={cn(
-          "z-[100] w-full p-0 gap-0 overflow-hidden",
+          "z-[100] w-full max-h-[min(90vh,720px)] p-0 gap-0 overflow-y-auto overflow-x-hidden",
           SIZES[size],
           className,
         )}
       >
         {title ? (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-border">
-            <DialogTitle className="text-base font-semibold text-foreground">
+          <div className="flex items-center justify-between gap-3 px-6 pt-5 pb-4 border-b border-border shrink-0">
+            <DialogTitle className="text-base font-semibold leading-snug text-foreground pr-2">
               {title}
             </DialogTitle>
             <button
               type="button"
               onClick={onClose}
               aria-label="Close dialog"
-              className="w-8 h-8 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors duration-150"
+              className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary transition-colors duration-150"
             >
               <X className="w-4 h-4" aria-hidden="true" />
             </button>

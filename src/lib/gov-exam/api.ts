@@ -96,9 +96,9 @@ export type PaperJobResult = {
 export async function createExamPaper(
   body: CreateExamPaperRequest,
 ): Promise<PaperJobResult> {
-  return fetchEdgeJson("create-exam-paper", body, {
-    headers: { "x-idempotency-key": body.idempotencyKey },
-  });
+  // Idempotency lives in the JSON body (create-exam-paper reads body.idempotencyKey).
+  // Avoid custom headers here — x-idempotency-key is rejected by older edge CORS allowlists.
+  return fetchEdgeJson("create-exam-paper", body);
 }
 
 export async function getPaperGenerationJob(jobId: string): Promise<PaperJobResult> {
@@ -407,6 +407,6 @@ export async function generateTopicPractice(
       difficulty: params.difficulty ?? null,
       idempotencyKey,
     },
-    { headers: { "x-idempotency-key": idempotencyKey } },
+    { headers: { "Idempotency-Key": idempotencyKey } },
   );
 }

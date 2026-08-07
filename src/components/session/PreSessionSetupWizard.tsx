@@ -28,6 +28,15 @@ import {
   maxSessionMinutesForPlan,
 } from "@/lib/constants/freeTier";
 import {
+  clampPreferredModel,
+  hasProModelAccess,
+  isModelAvailableForPlan,
+  MODEL_OPTIONS as CANONICAL_MODEL_OPTIONS,
+  normalizePreferredModel,
+} from "@/lib/ai/modelOptions";
+import { useUIStore } from "@/store/uiStore";
+import { toast } from "sonner";
+import {
   formatPracticeSetupSummary,
   loadLastPracticeSetup,
 } from "@/lib/session/lastPracticeSetup";
@@ -49,13 +58,6 @@ interface PreSessionSetupWizardProps {
   onStart: (config: LiveSessionConfig) => void;
   sessionType?: "live" | "mock";
 }
-
-const MODEL_OPTIONS: { id: PreferredAIModel; label: string; desc: string }[] = [
-  { id: "gpt-4o",            label: "GPT-4o",           desc: "Best for nuanced answers" },
-  { id: "claude-3-5-sonnet", label: "Claude 3.5 Sonnet", desc: "Excellent reasoning" },
-  { id: "gemini-1-5-pro",    label: "Gemini 1.5 Pro",   desc: "Fast, cost-effective" },
-  { id: "gemini-flash",      label: "Gemini Flash",      desc: "Fastest response time" },
-];
 
 import { INTERVIEW_TYPE_OPTIONS } from "@/lib/constants/interviewTypes";
 
@@ -104,6 +106,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
 
   const typedProfile = profile as unknown as UserProfile | null;
   const freePlan = isFreePlan(typedProfile?.plan_id);
+  const canUseProModels = hasProModelAccess(typedProfile?.plan_id);
   const maxDuration = maxSessionMinutesForPlan(typedProfile?.plan_id);
   const durationOptions = freePlan ? [5] : [15, 30, 45, 60];
 
@@ -122,8 +125,8 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const [language,         setLanguage]         = useState("English");
   const [simpleLanguage,   setSimpleLanguage]   = useState(false);
   const [instructions,     setInstructions]     = useState("");
-  const [model,            setModel]            = useState<PreferredAIModel>(
-    typedProfile?.preferred_model ?? "gemini-flash"
+  const [model,            setModel]            = useState<PreferredAIModel>(() =>
+    clampPreferredModel(typedProfile?.preferred_model, typedProfile?.plan_id)
   );
   const [smartRouting,     setSmartRouting]     = useState(false);
   const [hintStyle,        setHintStyle]        = useState<HintStyle>(
@@ -202,9 +205,13 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const currentStepLabel = currentStepMeta?.label ?? "Session Setup";
 
   function applyProfileDefaults() {
-    setResumeId(activeResumeId);
-    setJdId(activeJdId);
-    setModel(typedProfile?.preferred_model ?? "gemini-flash");
+    const ownedResume =
+      resumes.some((r) => r.id === activeResumeId) ? activeResumeId : (resumes[0]?.id ?? null);
+    const ownedJd =
+      jds.some((j) => j.id === activeJdId) ? activeJdId : (jds[0]?.id ?? null);
+    setResumeId(ownedResume);
+    setJdId(ownedJd);
+    setModel(clampPreferredModel(typedProfile?.preferred_model, typedProfile?.plan_id));
     setHintStyle(typedProfile?.hint_style ?? "short_hints");
     setLanguage("English");
     setAutoGenerate(true);
@@ -224,13 +231,31 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     setLanguage(setup.language ?? "English");
     setSimpleLanguage(setup.simple_language ?? false);
     setInstructions(setup.instructions ?? "");
-    setModel(setup.model ?? typedProfile?.preferred_model ?? "gemini-flash");
+    setModel(
+      clampPreferredModel(
+        setup.model ?? typedProfile?.preferred_model,
+        typedProfile?.plan_id,
+      ),
+    );
     setSmartRouting(setup.smart_routing ?? false);
     setHintStyle(setup.hint_style ?? typedProfile?.hint_style ?? "short_hints");
-    setResumeId(setup.resume_id ?? activeResumeId);
-    setJdId(setup.jd_id ?? activeJdId);
+    // Never reuse another account's document IDs from localStorage (causes RLS 406).
+    const ownedResumeId =
+      (setup.resume_id && resumes.some((r) => r.id === setup.resume_id)
+        ? setup.resume_id
+        : null) ??
+      (resumes.some((r) => r.id === activeResumeId) ? activeResumeId : null) ??
+      resumes[0]?.id ??
+      null;
+    const ownedJdId =
+      (setup.jd_id && jds.some((j) => j.id === setup.jd_id) ? setup.jd_id : null) ??
+      (jds.some((j) => j.id === activeJdId) ? activeJdId : null) ??
+      jds[0]?.id ??
+      null;
+    setResumeId(ownedResumeId);
+    setJdId(ownedJdId);
     const primaryIds = new Set(
-      [setup.resume_id, setup.jd_id].filter((id): id is string => Boolean(id)),
+      [ownedResumeId, ownedJdId].filter((id): id is string => Boolean(id)),
     );
     const ctxIds = setup.context_document_ids ?? [];
     setExtraDocIds(ctxIds.filter((id) => !primaryIds.has(id)));
@@ -377,7 +402,9 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       company:              company.trim() || null,
       role:                 role.trim() || null,
       hint_style:           hintStyle,
-      model:                smartRouting ? "gemini-flash" : model,
+      model: smartRouting
+        ? "gemini-flash"
+        : clampPreferredModel(model, typedProfile?.plan_id),
       smart_routing:        smartRouting,
       stealth_mode:         stealthMode,
       resume_id:            resumeId,
@@ -400,7 +427,11 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     docStore.setActiveJDId(jdId);
 
     const overlay = useOverlayStore.getState();
-    overlay.setActiveModel(smartRouting ? "gemini-flash" : model);
+    overlay.setActiveModel(
+      smartRouting
+        ? "gemini-flash"
+        : clampPreferredModel(model, typedProfile?.plan_id),
+    );
     overlay.setHintStyle(hintStyle);
     overlay.setAutoGenerate(autoGenerate);
     overlay.setSimpleLanguage(simpleLanguage);
@@ -749,25 +780,47 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 {smartRouting ? (
                   <div className="bg-emerald-500/5 border border-emerald-500/15 rounded-xl p-3">
                     <p className="text-xs text-emerald-400 font-medium">Auto-select best model</p>
-                    <p className="text-[10px] text-muted-foreground mt-1">Routes to optimal model based on question complexity.</p>
+                    <p className="text-[10px] text-muted-foreground mt-1">
+                      {canUseProModels
+                        ? "Routes to the optimal model based on question complexity."
+                        : "Free plans use Gemini. Upgrade to Pro for GPT-4o and Claude routing."}
+                    </p>
                   </div>
                 ) : (
                   <div className="grid grid-cols-2 gap-2">
-                    {MODEL_OPTIONS.map((m) => (
-                      <button
-                        key={m.id}
-                        onClick={() => setModel(m.id)}
-                        className={cn(
-                          "text-left px-3 py-2 rounded-xl border text-sm transition-all",
-                          model === m.id
-                            ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
-                            : "bg-secondary/40 border-border text-muted-foreground hover:border-border"
-                        )}
-                      >
-                        <p className="font-medium text-xs">{m.label}</p>
-                        <p className="text-[10px] mt-0.5 opacity-60">{m.desc}</p>
-                      </button>
-                    ))}
+                    {CANONICAL_MODEL_OPTIONS.map((m) => {
+                      const locked = !isModelAvailableForPlan(m.value, typedProfile?.plan_id);
+                      return (
+                        <button
+                          key={m.value}
+                          type="button"
+                          disabled={locked}
+                          onClick={() => {
+                            if (locked) {
+                              useUIStore.getState().openUpgradeModal("pro");
+                              toast.message("Upgrade to Pro to use GPT-4o and Claude.");
+                              return;
+                            }
+                            setModel(m.value);
+                          }}
+                          className={cn(
+                            "text-left px-3 py-2 rounded-xl border text-sm transition-all",
+                            locked && "opacity-50 cursor-not-allowed",
+                            !locked && model === m.value
+                              ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400"
+                              : !locked && "bg-secondary/40 border-border text-muted-foreground hover:border-border"
+                          )}
+                        >
+                          <div className="flex items-center justify-between gap-1">
+                            <p className="font-medium text-xs">{m.label}</p>
+                            {locked && (
+                              <span className="text-[9px] font-semibold text-amber-400">Pro</span>
+                            )}
+                          </div>
+                          <p className="text-[10px] mt-0.5 opacity-60">{m.desc}</p>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1059,7 +1112,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
                 <p className="text-[10px] font-semibold uppercase tracking-wider text-muted-foreground mb-3">Session Summary</p>
                 {[
                   { label: "Type",          value: sessionCallType === "interview" ? `Interview · ${INTERVIEW_TYPE_OPTIONS.find(t=>t.value===interviewType)?.label ?? interviewType}` : "Regular Call" },
-                  { label: "Model",         value: smartRouting ? "Smart Routing" : MODEL_OPTIONS.find(m=>m.id===model)?.label },
+                  { label: "Model",         value: smartRouting ? "Smart Routing" : CANONICAL_MODEL_OPTIONS.find(m=>m.value===normalizePreferredModel(model))?.label },
                   { label: "Hint Style",    value: hintStyle.replace("_", " ") },
                   { label: "Auto-Generate", value: autoGenerate ? "ON (automatic)" : "Manual trigger" },
                   { label: "Simple Language", value: simpleLanguage ? "ON" : "OFF" },

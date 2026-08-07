@@ -12,11 +12,15 @@ export default function Terms() {
 
   return (
     <MarketingLayout>
-      <article className={`pt-4 sm:pt-12 pb-14 px-4 sm:px-6 max-w-3xl mx-auto text-left ${LEGAL_PROSE_CLASS}`}>
+      <article className="pt-4 sm:pt-12 pb-14 px-4 sm:px-6 max-w-3xl mx-auto">
+        <header className="text-center mb-8 sm:mb-10">
+          <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
+            Terms of Service
+          </h1>
+          <p className="mt-2 text-xs text-muted-foreground">Last updated: March 25, 2026</p>
+        </header>
         <ComplianceBanner />
-        <h1>Terms of Service</h1>
-        <p className="text-xs text-muted-foreground">Last updated: March 25, 2026</p>
-
+        <div className={`text-left ${LEGAL_PROSE_CLASS}`}>
         <h2>1. Acceptance of Terms</h2>
         <p>
           By accessing or using {COMPANY_NAME} (&quot;Service&quot;), operated by {LEGAL_ENTITY_NAME} (&quot;Company&quot;, &quot;we&quot;, &quot;us&quot;), you agree to be bound by these Terms of Service. If you do not agree, do not use the Service.
@@ -105,6 +109,7 @@ export default function Terms() {
             {LEGAL_EMAIL}
           </a>.
         </p>
+        </div>
       </article>
     </MarketingLayout>
   );

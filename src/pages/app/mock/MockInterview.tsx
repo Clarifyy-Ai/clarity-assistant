@@ -13,7 +13,6 @@ import { useAuthStore } from "@/store/userStore";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { PlanGate } from "@/components/layout/PlanGate";
 import { getOrCreateSession } from "@/lib/session/sessionLifecycle";
 import { toDbModel } from "@/lib/ai/modelMapping";
 import { WARMUP_MAX } from "@/pages/app/mock/MockWarmup";
@@ -26,6 +25,8 @@ import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { SessionTrustBanner } from "@/components/session/SessionTrustBanner";
 import { SearchableCombobox } from "@/components/common/SearchableCombobox";
+import type { QuestionDifficulty } from "@/lib/api/ai";
+import type { PreferredAIModel } from "@/types/user.types";
 
 // ─────────────────────────────────────────────────────────────────
 // MockInterview — session config page
@@ -38,6 +39,13 @@ const INTERVIEW_TYPES = [
   { value: "hr",            label: "HR / Culture",  icon: "🏢", desc: "Fit, motivation"       },
   { value: "mixed",         label: "Mixed",         icon: "🎲", desc: "Variety of types"      },
 ];
+
+const DIFFICULTY_LEVELS = [
+  { value: "easy",   label: "Easy",   desc: "Warm-up, foundational" },
+  { value: "medium", label: "Medium", desc: "Standard interview depth" },
+  { value: "hard",   label: "Hard",   desc: "Senior / stretch questions" },
+  { value: "mixed",  label: "Mixed",  desc: "Balanced mix of levels" },
+] as const;
 
 const QUESTION_COUNTS = [3, 5, 8, 10, 15];
 const COMPANIES = [
@@ -80,8 +88,9 @@ export default function MockInterview() {
 
   const [type,    setType]    = useState("behavioural");
   const [company, setCompany] = useState("");
-  const [role,    setRole]    = useState(() => (profile as any)?.target_role ?? "");
+  const [role,    setRole]    = useState(() => (profile as { target_role?: string } | null)?.target_role ?? "");
   const [numQ,    setNumQ]    = useState(5);
+  const [difficulty, setDifficulty] = useState<QuestionDifficulty>("medium");
   const [warmup,  setWarmup]  = useState(false);
   const [loading, setLoading] = useState(false);
   const startingRef = useRef(false);
@@ -103,24 +112,26 @@ export default function MockInterview() {
       //
       // Previously this sent interview_type (not type), and model was "gemini-flash"
       // (not a valid Gemini model string — caused silent model fallback to gpt-4o).
+      const model: PreferredAIModel = "gemini-flash";
       const config = {
         // ── generate-questions contract fields ──
-        type,                              // ✅ was: interview_type (key mismatch)
-        role:    role.trim() || null,      // ✅ was: hardcoded null (ignored user's target_role)
+        type,
+        role:    role.trim() || null,
         company: company.trim() || null,
-        count:   numQ,                     // ✅ was: question_count (key mismatch)
+        count:   numQ,
+        difficulty,
 
         // ── session / copilot fields ──
-        interview_type: type,              // kept for sessionLifecycle + useLiveCopilot
-        hint_style:     "concise",         // ✅ was: "short_hints" (invalid enum value)
-        model:          "gemini-2.0-flash",// ✅ was: "gemini-flash" (invalid model string)
-        smart_routing:  true,              // ✅ was: false (disabled modelRouter entirely)
+        interview_type: type,
+        hint_style:     "short_hints" as const,
+        model,
+        smart_routing:  true,
         stealth_mode:   false,
         resume_id:      null,
         jd_id:          null,
         instructions:   "",
         enable_system_audio: true,
-        question_count: numQ,              // kept for downstream session config readers
+        question_count: numQ,
       };
 
       const { session, reused } = await getOrCreateSession({
@@ -196,6 +207,37 @@ export default function MockInterview() {
                 {t.label}
               </span>
               <span className="text-[10px] text-muted-foreground">{t.desc}</span>
+            </button>
+          ))}
+        </div>
+      </Card>
+
+      {/* Difficulty */}
+      <Card>
+        <h3 className="text-sm font-semibold text-foreground mb-4">Difficulty level</h3>
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          {DIFFICULTY_LEVELS.map((level) => (
+            <button
+              key={level.value}
+              type="button"
+              onClick={() => setDifficulty(level.value)}
+              aria-pressed={difficulty === level.value}
+              className={cn(
+                "flex flex-col items-start gap-1 p-3 rounded-xl border text-left transition-all",
+                difficulty === level.value
+                  ? "bg-primary/10 border-primary/40"
+                  : "bg-card border-border hover:border-primary/30",
+              )}
+            >
+              <span
+                className={cn(
+                  "text-xs font-semibold",
+                  difficulty === level.value ? "text-primary" : "text-foreground",
+                )}
+              >
+                {level.label}
+              </span>
+              <span className="text-[10px] text-muted-foreground leading-snug">{level.desc}</span>
             </button>
           ))}
         </div>

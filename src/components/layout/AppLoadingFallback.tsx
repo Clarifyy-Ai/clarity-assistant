@@ -13,9 +13,10 @@ import {
 
 /**
  * Must exceed AUTH_SESSION_TIMEOUT + profile attempts so we never hard-reload
- * while bootstrap is still within its legitimate budget.
+ * while bootstrap is still within its legitimate budget
+ * (8s session + 8s profile × 2 attempts ≈ 24s worst case).
  */
-const STUCK_TIMEOUT_MS = 20_000;
+const STUCK_TIMEOUT_MS = 30_000;
 
 export function AppLoadingFallback(): JSX.Element {
   const [stuck, setStuck] = useState(false);
