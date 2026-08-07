@@ -36,6 +36,8 @@ import {
 type LocationState = {
   from?: {
     pathname?: string;
+    search?: string;
+    hash?: string;
   };
 };
 
