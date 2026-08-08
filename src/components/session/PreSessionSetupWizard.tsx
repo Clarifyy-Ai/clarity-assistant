@@ -42,8 +42,13 @@ import {
 } from "@/lib/session/lastPracticeSetup";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import {
+  INTERVIEW_COMPANIES,
+  INTERVIEW_ROLES,
+} from "@/lib/constants/interviewTargets";
 import { Switch } from "@/components/ui/switch";
 import { Button } from "@/components/ui/Button";
+import { SearchableCombobox } from "@/components/common/SearchableCombobox";
 import { SessionContextChip } from "@/components/session/SessionContextChip";
 import { AudioOkBadge } from "@/components/session/AudioOkBadge";
 import { markPracticeStart } from "@/lib/analytics/uxMetrics";
@@ -285,22 +290,6 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
     }
   }, []);
 
-  useEffect(() => {
-    if (step !== connectStep) return;
-    let cancelled = false;
-    setPreflightLoading(true);
-    void runAudioPreflight()
-      .then((report) => {
-        if (!cancelled) setPreflight(report);
-      })
-      .finally(() => {
-        if (!cancelled) setPreflightLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [step, micPermission, connectStep]);
-
   const checkMicPermission = async () => {
     setMicPermission("checking");
     try {
@@ -326,6 +315,30 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       setMicPermission("denied");
     }
   };
+
+  useEffect(() => {
+    if (step !== connectStep) return;
+    let cancelled = false;
+    setPreflightLoading(true);
+    void runAudioPreflight()
+      .then((report) => {
+        if (!cancelled) setPreflight(report);
+      })
+      .finally(() => {
+        if (!cancelled) setPreflightLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [step, micPermission, connectStep]);
+
+  // Auto-prompt mic when landing on Connect (QA-078) — skip if already decided.
+  useEffect(() => {
+    if (step !== connectStep) return;
+    if (micPermission !== "unknown") return;
+    void checkMicPermission();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- prompt once per visit to Connect
+  }, [step, connectStep]);
 
   useEffect(() => {
     if (micPermission !== "granted") return;
@@ -526,17 +539,20 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             size="lg"
             leftIcon={<Play className="w-4 h-4" />}
             onClick={() => {
-              markPracticeStart({ source: "same_setup" });
-              onStart(lastSetup);
+              // Never skip Connect gates (mic / speaker / network) — QA-076 / QA-078.
+              applyLastSetup(lastSetup);
+              setShowWizard(true);
+              setStep(connectStep);
             }}
           >
-            Start Practice (same setup)
+            Continue — check mic &amp; speaker
           </Button>
           <button
             type="button"
             onClick={() => {
               applyLastSetup(lastSetup);
               setShowWizard(true);
+              setStep(1);
             }}
             className="w-full text-sm text-muted-foreground hover:text-foreground underline-offset-2 hover:underline"
           >
@@ -659,23 +675,27 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
 
               {sessionCallType === "interview" && (
                 <>
-                  <div className="grid grid-cols-2 gap-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1.5">Company (optional)</label>
-                      <input
+                      <SearchableCombobox
                         value={company}
-                        onChange={(e) => setCompany(e.target.value)}
-                        placeholder="e.g. Google"
-                        className="w-full bg-secondary/40 border border-border text-foreground placeholder:text-muted-foreground/60 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                        onChange={setCompany}
+                        options={[...INTERVIEW_COMPANIES]}
+                        placeholder="Search or type a company…"
+                        searchPlaceholder="Search companies…"
+                        allowCustom
                       />
                     </div>
                     <div>
                       <label className="block text-xs font-medium text-muted-foreground mb-1.5">Role (optional)</label>
-                      <input
+                      <SearchableCombobox
                         value={role}
-                        onChange={(e) => setRole(e.target.value)}
-                        placeholder="e.g. Software Engineer"
-                        className="w-full bg-secondary/40 border border-border text-foreground placeholder:text-muted-foreground/60 rounded-xl px-3 py-2 text-sm focus:outline-none focus:border-emerald-500"
+                        onChange={setRole}
+                        options={[...INTERVIEW_ROLES]}
+                        placeholder="Search or type a role…"
+                        searchPlaceholder="Search roles…"
+                        allowCustom
                       />
                     </div>
                   </div>

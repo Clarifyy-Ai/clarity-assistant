@@ -25,14 +25,23 @@ export function questionFingerprint(text: string): string {
     .slice(0, 240);
 }
 
-/** Stable client idempotency key for hint generation (session + fingerprint). */
+/** Stable client idempotency key for hint generation (session + fingerprint).
+ * Must match edge `isValidIdempotencyKey`: /^[A-Za-z0-9._:-]{16,150}$/
+ * (spaces in fingerprints previously caused CREDIT_DEDUCTION_FAILED 500s).
+ */
 export function hintIdempotencyKey(
   sessionId: string | null | undefined,
   questionText: string,
 ): string {
-  const fp = questionFingerprint(questionText) || "empty";
-  const sid = sessionId?.trim() || "local";
-  return `generate-hint:${sid}:${fp}`;
+  const fpRaw = questionFingerprint(questionText) || "empty";
+  const fp = fpRaw
+    .replace(/\s+/g, "-")
+    .replace(/[^A-Za-z0-9._:-]/g, "")
+    .slice(0, 80) || "empty";
+  const sid = (sessionId?.trim() || "local")
+    .replace(/[^A-Za-z0-9._:-]/g, "")
+    .slice(0, 40) || "local";
+  return `generate-hint:${sid}:${fp}`.slice(0, 150);
 }
 
 /**

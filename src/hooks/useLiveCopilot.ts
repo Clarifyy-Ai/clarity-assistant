@@ -53,6 +53,10 @@ import { toDbModel } from "@/lib/ai/modelMapping";
 import { markFirstListening } from "@/lib/analytics/uxMetrics";
 import { toast } from "sonner";
 import type { LiveSessionConfig } from "@/types/session.types";
+import {
+  getAiUserFacingError,
+  openUpgradeIfInsufficientCredits,
+} from "@/lib/network/aiErrorUx";
 
 interface UseLiveCopilotOptions {
   config: LiveSessionConfig;
@@ -479,7 +483,10 @@ export function useLiveCopilot({
         }
       },
       onError: (err) => {
-        useOverlayStore.getState().setError(err.message || "Failed to generate full answer");
+        openUpgradeIfInsufficientCredits(err);
+        useOverlayStore.getState().setError(
+          getAiUserFacingError(err) || "Failed to generate full answer",
+        );
         useOverlayStore.getState().setHintState("idle");
       },
       signal,
@@ -562,12 +569,18 @@ export function useLiveCopilot({
               useSessionStore.getState().consumeCredit(creditCheck.creditsRequired);
             }
           },
-          onError: (error) => useOverlayStore.getState().setError(error.message),
+          onError: (error) => {
+            openUpgradeIfInsufficientCredits(error);
+            useOverlayStore.getState().setError(getAiUserFacingError(error));
+          },
           signal: controller.signal,
         });
       } catch (err) {
         if (!controller.signal.aborted) {
-          useOverlayStore.getState().setError(err instanceof Error ? err.message : "Hint generation failed");
+          openUpgradeIfInsufficientCredits(err);
+          useOverlayStore.getState().setError(
+            getAiUserFacingError(err) || "Hint generation failed",
+          );
         }
       }
     },
@@ -670,7 +683,8 @@ export function useLiveCopilot({
         }
       } catch (err) {
         if (!controller.signal.aborted) {
-          const msg = err instanceof Error ? err.message : "Chat generation failed";
+          openUpgradeIfInsufficientCredits(err);
+          const msg = getAiUserFacingError(err) || "Chat generation failed";
           useOverlayStore.getState().addChatMessage({
             role: "assistant",
             text: `Error: ${msg}`,

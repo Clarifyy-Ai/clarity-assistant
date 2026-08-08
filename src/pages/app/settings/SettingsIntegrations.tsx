@@ -254,6 +254,18 @@ function ComingSoonCard({ integration }: { integration: Integration }) {
 //   2. "live"              — edge function is ready, show connect/sync UI
 // ─────────────────────────────────────────────────────────────────
 
+function isCalendarNotConfiguredMessage(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("501") ||
+    lower.includes("not_configured") ||
+    lower.includes("not available") ||
+    lower.includes("not configured") ||
+    lower.includes("coming soon") ||
+    lower.includes("isn't available")
+  );
+}
+
 function GoogleCalendarCard({ integration }: { integration: Integration }) {
   const {
     connectGoogle,
@@ -270,6 +282,8 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
 
   // Sync import requires server-side Google OAuth creds; assume unavailable until probed.
   const [syncAvailable, setSyncAvailable] = useState(false);
+  const showSyncError =
+    Boolean(error) && !isSyncing && !isCalendarNotConfiguredMessage(error ?? "");
 
   useEffect(() => {
     if (!integration.live) return;
@@ -281,13 +295,8 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
         if (!cancelled) setSyncAvailable(true);
       } catch (err) {
         // Any probe failure → do not claim full sync works (501, auth, network).
-        const message = (err instanceof Error ? err.message : "").toLowerCase();
-        const notConfigured =
-          message.includes("501") ||
-          message.includes("not available") ||
-          message.includes("not configured") ||
-          message.includes("coming soon") ||
-          message.includes("isn't available");
+        const message = err instanceof Error ? err.message : "";
+        const notConfigured = isCalendarNotConfiguredMessage(message);
         if (!cancelled) {
           setSyncAvailable(false);
           if (!notConfigured) {
@@ -320,16 +329,11 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
   async function handleSync() {
     const result = await syncNow();
     if (result.error) {
-      const notConfigured =
-        result.error.toLowerCase().includes("not available") ||
-        result.error.toLowerCase().includes("not configured") ||
-        result.error.toLowerCase().includes("coming soon") ||
-        result.error.toLowerCase().includes("isn't available") ||
-        result.error.includes("501");
-      if (notConfigured) {
+      if (isCalendarNotConfiguredMessage(result.error)) {
+        // 501 / NOT_CONFIGURED — calm “coming soon” UI, never a scary error toast.
         setSyncAvailable(false);
         toast.info(
-          "Google Calendar sync isn't available yet — server sync is not configured.",
+          "Google Calendar sync isn't available yet — coming soon / not configured on the server.",
         );
         return;
       }
@@ -374,8 +378,8 @@ function GoogleCalendarCard({ integration }: { integration: Integration }) {
               {importedCount !== null && ` · ${importedCount} event${importedCount !== 1 ? "s" : ""} imported`}
             </p>
           )}
-          {error && !isSyncing && (
-            <p className="text-[10px] text-red-400 mt-0.5">{error}</p>
+          {showSyncError && (
+            <p className="text-[10px] text-red-400 mt-0.5" role="alert">{error}</p>
           )}
         </div>
 

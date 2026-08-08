@@ -629,7 +629,7 @@ export default function ResetPassword(): JSX.Element {
                   <span className="font-medium text-foreground">
                     {submittedEmail}
                   </span>
-                  . The link expires in 24 hours.
+                  . The link expires in 1 hour.
                 </CardDescription>
               </CardHeader>
 

@@ -3,7 +3,7 @@
 // Combines former Role + Experience steps into one ~60s screen.
 // ─────────────────────────────────────────────────────────────────────────────
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import {
   Code2,
@@ -50,13 +50,16 @@ const YEARS_MAP: Record<string, number> = {
   intern: 0, junior: 1, mid: 3, senior: 6, staff: 10, manager: 8,
 };
 
-export default function OnboardingStep1Essentials({ data, onNext }: StepProps) {
+export default function OnboardingStep1Essentials({ data, onNext, onChange }: StepProps) {
   const { user, profile, setProfile } = useAuthStore();
   const [searchParams] = useSearchParams();
   const refCode = normalizeRefCode(searchParams.get("ref"));
 
+  const matchedChip = ROLES.find((r) => r.value === data.targetRole)?.value;
   const [name,       setName]       = useState(profile?.full_name ?? "");
-  const [role,       setRole]       = useState("");
+  const [role,       setRole]       = useState(
+    matchedChip ?? (data.targetRole ? "other" : ""),
+  );
   const [customRole, setCustomRole] = useState(
     data.targetRole && !ROLES.some((r) => r.value === data.targetRole) ? data.targetRole : "",
   );
@@ -69,6 +72,15 @@ export default function OnboardingStep1Essentials({ data, onNext }: StepProps) {
   const canProceed = Boolean(
     name.trim() && role && level && (role !== "other" || customRole.trim()),
   );
+
+  // Keep parent in sync so "Skip setup" validates the same fields as Continue.
+  useEffect(() => {
+    onChange?.({
+      targetRole: resolvedRole,
+      currentLevel: level,
+      yearsOfExperience: level ? (YEARS_MAP[level] ?? 0) : data.yearsOfExperience,
+    });
+  }, [resolvedRole, level, onChange, data.yearsOfExperience]);
 
   async function handleNext() {
     if (!canProceed || !user) return;

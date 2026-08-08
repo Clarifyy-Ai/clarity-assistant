@@ -175,11 +175,10 @@ async function getIdempotentResponse(
     return null;
   }
 
+  // Invalid keys must not fail the credit path — treat as "no key" so callers retry safely.
   if (!isValidIdempotencyKey(key)) {
-    return {
-      success: false,
-      error: "Invalid idempotency key.",
-    };
+    console.warn("[credits] Ignoring invalid idempotency key shape.");
+    return null;
   }
 
   try {
@@ -199,6 +198,11 @@ async function getIdempotentResponse(
     };
 
     if (!record.expires_at || new Date(record.expires_at).getTime() <= Date.now()) {
+      return null;
+    }
+
+    // Never replay stored *failures* — allow a fresh deduction attempt.
+    if (record.response && record.response.success === false) {
       return null;
     }
 
@@ -391,14 +395,12 @@ export async function deductCreditsAtomic(
   const result = await deductCredits(input.userId, input.action, input.cost);
 
   if (!result.success || typeof result.newBalance !== "number") {
-    const failure: DeductCreditsAtomicResult = {
+    // Do not persist failed deductions — retries with the same Idempotency-Key
+    // must be allowed (getIdempotentResponse also skips stored failures).
+    return {
       success: false,
       error: result.error ?? "Credit deduction failed.",
     };
-
-    await storeIdempotentResponse(db, input.idempotencyKey, failure);
-
-    return failure;
   }
 
   let transactionId = result.transactionId;

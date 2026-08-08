@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import { agentLog } from "@/lib/debugAgentLog";
 
 const CONSENT_KEY = "clarify_cookie_consent";
 
@@ -26,10 +25,6 @@ export function CookieConsent() {
 
   if (!visible) return null;
 
-  // #region agent log
-  agentLog({hypothesisId:'A',location:'CookieConsent.tsx:visible',message:'CookieConsent visible (plain <a>, not Link)',data:{usesPlainAnchor:true,path:typeof window!=='undefined'?window.location.pathname:null}});
-  // #endregion
-
   return (
     <div
       className="fixed inset-x-0 z-[9998] p-3 sm:p-4 bottom-16 md:bottom-0"
@@ -47,16 +42,18 @@ export function CookieConsent() {
             </a>
           </p>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex items-center gap-2 shrink-0 w-full sm:w-auto">
           <button
+            type="button"
             onClick={decline}
-            className="px-4 py-2 rounded-xl text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all"
+            className="min-h-11 px-4 py-2 rounded-xl text-xs font-medium border border-border text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all flex-1 sm:flex-none"
           >
             Decline
           </button>
           <button
+            type="button"
             onClick={accept}
-            className="px-4 py-2 rounded-xl text-xs font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+            className="min-h-11 px-4 py-2 rounded-xl text-xs font-semibold bg-primary text-primary-foreground hover:opacity-90 transition-opacity flex-1 sm:flex-none"
           >
             Accept All
           </button>

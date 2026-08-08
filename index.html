@@ -31,8 +31,6 @@
         img-src 'self' data: blob: https:;
         font-src 'self' data: https://cdn.gpteng.co;
         connect-src 'self'
-          http://127.0.0.1:7572
-          http://localhost:7572
           https://api.github.com
           https://*.supabase.co
           wss://*.supabase.co
@@ -59,7 +57,7 @@
     <!-- Permissions policy fallback for supporting browsers -->
     <meta
       http-equiv="Permissions-Policy"
-      content="camera=(), microphone=(), geolocation=(), payment=(), usb=(), fullscreen=(self)"
+      content="camera=(), microphone=(self), geolocation=(), payment=(), usb=(), fullscreen=(self)"
     />
 
     <title>Clarify AI — AI-Powered Interview Preparation</title>

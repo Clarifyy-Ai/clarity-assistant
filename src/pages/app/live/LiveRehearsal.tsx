@@ -1,11 +1,10 @@
 // src/pages/app/live/LiveRehearsal.tsx — setup + post-session summary only.
 // Mid-session UI always lives at /app/live/overlay (Parakeet-aligned).
 import { useCallback, useEffect, useState } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { PreSessionSetupWizard } from "@/components/session/PreSessionSetupWizard";
 import { PostSessionSummary } from "@/components/session/PostSessionSummary";
 import {
-  ExternalLink,
   Monitor,
 } from "lucide-react";
 import { SessionTrustBanner } from "@/components/session/SessionTrustBanner";
@@ -93,14 +92,6 @@ export default function LiveRehearsal() {
           { label: PRODUCT_NAMES.dashboard, href: "/app/dashboard" },
           { label: PRODUCT_NAMES.practiceCoach },
         ]}
-        actions={
-          <Link
-            to="/app/dashboard"
-            className="shrink-0 text-xs font-medium text-primary hover:underline"
-          >
-            Back to dashboard
-          </Link>
-        }
       />
 
       <SessionTrustBanner variant="live" />
@@ -140,18 +131,9 @@ export default function LiveRehearsal() {
       >
         <p className="flex-1 text-foreground">
           Starting a session opens <strong className="text-primary">Overlay mode</strong> — the
-          focused {PRODUCT_NAMES.practiceCoach} window without the app sidebar.
+          focused {PRODUCT_NAMES.practiceCoach} window without the app sidebar. Complete the
+          setup wizard below (mic + speaker checks required) to start.
         </p>
-        <Link
-          to="/app/live/overlay"
-          className={cn(
-            "inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg px-3 py-2 text-xs font-semibold text-primary-foreground hover:opacity-90 transition-opacity bg-primary",
-            defaultOverlay && "shadow-md shadow-primary/25",
-          )}
-        >
-          Open Overlay setup
-          <ExternalLink className="w-3.5 h-3.5" aria-hidden />
-        </Link>
       </div>
 
       {!isElectronApp() && (

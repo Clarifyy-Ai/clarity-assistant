@@ -23,6 +23,10 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import {
+  INTERVIEW_COMPANIES,
+  INTERVIEW_ROLES,
+} from "@/lib/constants/interviewTargets";
 import { SessionTrustBanner } from "@/components/session/SessionTrustBanner";
 import { SearchableCombobox } from "@/components/common/SearchableCombobox";
 import type { QuestionDifficulty } from "@/lib/api/ai";
@@ -48,38 +52,8 @@ const DIFFICULTY_LEVELS = [
 ] as const;
 
 const QUESTION_COUNTS = [3, 5, 8, 10, 15];
-const COMPANIES = [
-  "Google", "Meta", "Amazon", "Apple", "Microsoft",
-  "Stripe", "Airbnb", "Notion", "OpenAI", "Netflix",
-  "Uber", "LinkedIn", "Salesforce", "Oracle", "IBM",
-  "Adobe", "Intel", "NVIDIA", "Tesla", "Spotify",
-  "Shopify", "Square", "PayPal", "Goldman Sachs", "JPMorgan",
-  "Accenture", "Deloitte", "Infosys", "TCS", "Wipro",
-  "Flipkart", "Swiggy", "Zomato", "Razorpay", "PhonePe",
-];
-
-const ROLES = [
-  "Software Engineer",
-  "Senior Software Engineer",
-  "Frontend Engineer",
-  "Backend Engineer",
-  "Full Stack Engineer",
-  "Product Manager",
-  "Data Scientist",
-  "Data Analyst",
-  "Machine Learning Engineer",
-  "DevOps Engineer",
-  "SRE",
-  "Designer",
-  "UX Designer",
-  "Business Analyst",
-  "Engineering Manager",
-  "QA Engineer",
-  "Security Engineer",
-  "Mobile Engineer",
-  "Marketing Manager",
-  "Other",
-];
+const COMPANIES = [...INTERVIEW_COMPANIES];
+const ROLES = [...INTERVIEW_ROLES];
 
 export default function MockInterview() {
   const navigate    = useNavigate();
@@ -99,6 +73,10 @@ export default function MockInterview() {
     if (startingRef.current || loading) return; // guard double-click
     if (!user?.id) {
       toast.error("Please sign in to start a mock session.");
+      return;
+    }
+    if (!role.trim()) {
+      toast.message("Choose or type a target role so questions match the job.");
       return;
     }
     startingRef.current = true;
@@ -261,7 +239,7 @@ export default function MockInterview() {
           />
 
           <h3 className="text-sm font-semibold text-foreground mb-2">
-            Target role <span className="text-muted-foreground font-normal">(optional)</span>
+            Target role <span className="text-destructive font-normal">*</span>
           </h3>
           <SearchableCombobox
             value={role}

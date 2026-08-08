@@ -1,5 +1,6 @@
 // src/lib/ai/anthropicClient.ts — PRODUCTION READY
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { createIdempotencyKey } from "@/lib/api/functions";
 import { retry } from "@/lib/utils";
 import type { CoachingContext } from "@/types/ai.types";
 
@@ -41,8 +42,16 @@ export async function streamClaudeHint(opts: ClaudeStreamOptions): Promise<void>
   };
 
   try {
+    const idempotencyKey =
+      typeof opts.questionId === "string" && opts.questionId.length > 0
+        ? opts.questionId
+        : createIdempotencyKey("generate-hint");
     const data = await retry(
-      () => fetchEdgeJson<{ hints?: string; hint?: string }>("generate-hint", body, { signal }),
+      () =>
+        fetchEdgeJson<{ hints?: string; hint?: string }>("generate-hint", body, {
+          signal,
+          headers: { "Idempotency-Key": idempotencyKey },
+        }),
       2,
       400
     );

@@ -1,5 +1,6 @@
 // src/lib/ai/openaiClient.ts — PRODUCTION READY// src/lib/ai/openaiClient } from "@/types/ai.types";
 import { fetchEdgeJson, fetchEdge, getAuthHeaders } from "@/lib/network/fetchEdge";
+import { createIdempotencyKey } from "@/lib/api/functions";
 import type { CoachingContext } from "@/types/ai.types";
 
 export interface OpenAIStreamOptions {
@@ -43,8 +44,16 @@ export async function streamOpenAIHint(opts: OpenAIStreamOptions): Promise<void>
   };
 
   try {
+    const idempotencyKey =
+      typeof opts.questionId === "string" && opts.questionId.length > 0
+        ? opts.questionId
+        : createIdempotencyKey("generate-hint");
     const data = await retry(
-      () => fetchEdgeJson<{ hints?: string; hint?: string }>("generate-hint", body, { signal }),
+      () =>
+        fetchEdgeJson<{ hints?: string; hint?: string }>("generate-hint", body, {
+          signal,
+          headers: { "Idempotency-Key": idempotencyKey },
+        }),
       2,
       400
     );

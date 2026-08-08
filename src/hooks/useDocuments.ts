@@ -21,7 +21,6 @@ import type {
 import type { ParsedJD } from "@/types/ai.types";
 import type { Tables } from "@/integrations/supabase";
 import type { Json } from "@/integrations/supabase/types";
-import { agentLog } from "@/lib/debugAgentLog";
 
 // ─────────────────────────────────────────────────────────────────
 // answer_bank row → SavedAnswer adapter
@@ -180,8 +179,13 @@ export function useDocuments(options?: UseDocumentsOptions) {
       // Fire-and-forget XP award
       // XP handled by useGamification / useXPSystem at call sites
 
-      // Fire-and-forget parse
-      void parseResume(resumeId, path, mimeType);
+      // Await parse so callers can open the detail page with extracted data (QA-114/116).
+      // Parse failures are toasted inside parseResume; upload still succeeds.
+      try {
+        await parseResume(resumeId, path, mimeType);
+      } catch {
+        // keep resumeId — detail page shows Needs parse / error state
+      }
 
       await loadDocuments();
       if (!docStore.active_resume_id) {
@@ -274,9 +278,6 @@ export function useDocuments(options?: UseDocumentsOptions) {
   ): Promise<void> {
     if (!mountedRef.current) return;
     setIsParsing(true);
-    // #region agent log
-    agentLog({hypothesisId:'C',location:'useDocuments.ts:parseResume:start',message:'parseResume started',data:{resumeId,mimeType,hasPath:Boolean(filePath)}});
-    // #endregion
     try {
       const data = await fetchEdgeJson<{ parsed?: Record<string, unknown>; content?: string }>(
         "parse-resume",
@@ -292,9 +293,6 @@ export function useDocuments(options?: UseDocumentsOptions) {
       } else if (data?.content) {
         await resumesDB.update(resumeId, { content: data.content });
       }
-      // #region agent log
-      agentLog({hypothesisId:'C',location:'useDocuments.ts:parseResume:success',message:'parseResume succeeded',data:{resumeId,hasParsed:Boolean(data?.parsed),hasContent:Boolean(data?.content)}});
-      // #endregion
       if (mountedRef.current) {
         await loadDocuments();
         docStore.setActiveResumeId(resumeId);
@@ -303,9 +301,6 @@ export function useDocuments(options?: UseDocumentsOptions) {
       console.error("[useDocuments] parseResume failed:", err);
       const message =
         err instanceof Error ? err.message : "Resume parsing failed. Please try again.";
-      // #region agent log
-      agentLog({hypothesisId:'C',location:'useDocuments.ts:parseResume:error',message:'parseResume failed',data:{resumeId,error:message.slice(0,200)}});
-      // #endregion
       try {
         await resumesDB.update(resumeId, {
           content: JSON.stringify({ _parse_error: message }),
@@ -317,6 +312,7 @@ export function useDocuments(options?: UseDocumentsOptions) {
       if (mountedRef.current) {
         await loadDocuments();
       }
+      throw err instanceof Error ? err : new Error(message);
     } finally {
       if (mountedRef.current) setIsParsing(false);
     }

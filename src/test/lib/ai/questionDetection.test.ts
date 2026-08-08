@@ -22,6 +22,15 @@ describe("questionDetection", () => {
     );
   });
 
+  it("emits idempotency keys accepted by edge regex (no spaces)", () => {
+    const key = hintIdempotencyKey(
+      "1d872c16-f7ff-4c03-b6e5-b20c093d08e9",
+      "tell me what is testing and how many types are there",
+    );
+    expect(key).toMatch(/^[A-Za-z0-9._:-]{16,150}$/);
+    expect(key.includes(" ")).toBe(false);
+  });
+
   it("returns explicit questions with fingerprint", async () => {
     const detected = await detectQuestion({
       transcript: "",

@@ -138,6 +138,20 @@ export default function OnboardingIndex() {
 
   const finishOnboarding = useCallback(async (lastStepData?: Partial<OnboardingData>) => {
     const finalData = lastStepData ? { ...data, ...lastStepData } : data;
+    const role = finalData.targetRole?.trim();
+    const level = finalData.currentLevel?.trim();
+
+    // Hard gate: Skip and Complete both need Essentials role + level (QA-054).
+    if (!role || !level) {
+      toast.message(
+        !role && !level
+          ? "Choose a target role and experience level before continuing."
+          : !role
+            ? "Choose a target role before continuing."
+            : "Choose an experience level before continuing.",
+      );
+      return;
+    }
 
     setIsSaving(true);
 
@@ -148,26 +162,25 @@ export default function OnboardingIndex() {
 
       await updateProfile({
         onboarding_completed: true,
+        target_role:          role,
         preferred_model:      toDbPreferredModel(finalData.preferredModel),
         ...(refCode ? { referred_by: refCode } : {}),
-        ...(finalData.currentLevel
-          ? {
-              experience_years:
-                finalData.yearsOfExperience ??
-                (finalData.currentLevel === "junior"
-                  ? 1
-                  : finalData.currentLevel === "senior"
-                    ? 6
-                    : finalData.currentLevel === "staff"
-                      ? 10
-                      : 3),
-              notification_prefs: {
-                ...((profile as { notification_prefs?: Record<string, unknown> } | null)
-                  ?.notification_prefs ?? {}),
-                experience_level: finalData.currentLevel,
-              },
-            }
-          : {}),
+        experience_years:
+          finalData.yearsOfExperience ??
+          (level === "junior"
+            ? 1
+            : level === "senior"
+              ? 6
+              : level === "staff"
+                ? 10
+                : level === "intern"
+                  ? 0
+                  : 3),
+        notification_prefs: {
+          ...((profile as { notification_prefs?: Record<string, unknown> } | null)
+            ?.notification_prefs ?? {}),
+          experience_level: level,
+        },
       } as Record<string, unknown>);
 
       if (user?.email) {
@@ -230,6 +243,7 @@ export default function OnboardingIndex() {
     onNext: handleNext,
     onBack: handleBack,
     onSkip: () => finishOnboarding(),
+    onChange: mergeData,
     isFirstStep: currentStep === 1,
     isLastStep:  currentStep === TOTAL_STEPS,
   };

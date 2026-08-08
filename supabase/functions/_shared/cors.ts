@@ -321,7 +321,7 @@ export function securityHeaders(origin?: string): Record<string, string> {
     "X-Frame-Options": "DENY",
     "X-XSS-Protection": "0",
     "Referrer-Policy": "strict-origin-when-cross-origin",
-    "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+    "Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
     "Strict-Transport-Security": "max-age=63072000; includeSubDomains; preload",
   };
 

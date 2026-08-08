@@ -245,7 +245,7 @@ def cases() -> list[tuple]:
         ("ONBOARD-002", "P0", "Two-step flow visible", "Onboarding incomplete", "Essentials + Optional steps appear."),
         ("ONBOARD-003", "P0", "Required fields block Continue", "On Essentials step", "Continue disabled until name, target role, and experience level chosen. Skip also requires role + level."),
         ("ONBOARD-004", "P0", "Optional step skippable", "Essentials complete", "Optional can complete or skip."),
-        ("ONBOARD-005", "P0", "Completion → dashboard", "Finish onboarding", "User reaches /app/dashboard."),
+        ("ONBOARD-005", "P0", "Completion → Practice Coach", "Finish onboarding", "User reaches /app/live (Practice Coach setup) with onboarding_completed set."),
         ("ONBOARD-006", "P1", "Legacy step routes", "Any auth user", "/onboarding/step-1…5 redirect safely."),
         ("ONBOARD-007", "P1", "Already onboarded redirect", "Onboarded Pro", "Visiting /onboarding redirects to app."),
         ("ONBOARD-008", "P2", "Rerun ?rerun=1", "Onboarded user", "Works only if supported; else N/A."),

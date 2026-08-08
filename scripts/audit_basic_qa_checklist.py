@@ -30,7 +30,7 @@ WRAP = Alignment(wrap_text=True, vertical="top")
 
 TODAY = date.today().isoformat()
 COMMIT = "a9a8f123"
-PROD_STALE = True  # structured-data.js still on prod tip as of audit
+PROD_STALE = True  # flip False after frontend redeploy ships microphone=(self) CSP/Permissions-Policy + CookieConsent fix
 
 
 def load_report() -> dict:

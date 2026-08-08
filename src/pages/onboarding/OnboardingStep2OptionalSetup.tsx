@@ -239,8 +239,21 @@ export default function OnboardingStep2OptionalSetup({
   }
 
   function onFileChange(f: File) {
-    if (f.type !== "application/pdf" && !f.name.endsWith(".docx")) {
-      setResumeError("Please upload a PDF or DOCX file.");
+    const name = f.name.toLowerCase();
+    const okExt =
+      name.endsWith(".pdf") ||
+      name.endsWith(".docx") ||
+      name.endsWith(".doc") ||
+      name.endsWith(".txt");
+    const okMime =
+      f.type === "application/pdf" ||
+      f.type === "application/msword" ||
+      f.type ===
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document" ||
+      f.type === "text/plain" ||
+      !f.type;
+    if (!okExt || !okMime) {
+      setResumeError("Please upload a PDF, DOCX, DOC, or TXT file.");
       return;
     }
     if (f.size > 5 * 1024 * 1024) {
@@ -597,11 +610,11 @@ export default function OnboardingStep2OptionalSetup({
                   ) : (
                     <>
                       <Upload className="w-8 h-8 text-muted-foreground" />
-                      <p className="text-sm text-muted-foreground">PDF or DOCX · Max 5 MB</p>
+                      <p className="text-sm text-muted-foreground">PDF, DOCX, or TXT · Max 5 MB</p>
                     </>
                   )}
                 </div>
-                <input ref={inputRef} type="file" accept=".pdf,.docx" className="hidden" onChange={(e) => {
+                <input ref={inputRef} type="file" accept=".pdf,.docx,.doc,.txt" className="hidden" onChange={(e) => {
                   const f = e.target.files?.[0];
                   if (f) onFileChange(f);
                 }} />

@@ -44,35 +44,6 @@ export default defineConfig(({ mode }) => {
         : []),
       ...(!isProduction && !isElectron
         ? [{
-            name: "agent-debug-ingest",
-            configureServer(server) {
-              server.middlewares.use("/__agent_debug", (req, res, next) => {
-                if (req.method !== "POST") {
-                  next();
-                  return;
-                }
-                const chunks: Buffer[] = [];
-                req.on("data", (c) => chunks.push(Buffer.from(c)));
-                req.on("end", () => {
-                  try {
-                    const line = Buffer.concat(chunks).toString("utf8").trim();
-                    if (line) {
-                      fs.appendFileSync(
-                        path.join(__dirname, "debug-c458b1.log"),
-                        `${line}\n`,
-                        "utf8",
-                      );
-                    }
-                    res.statusCode = 204;
-                    res.end();
-                  } catch (err) {
-                    res.statusCode = 500;
-                    res.end(String(err));
-                  }
-                });
-              });
-            },
-          }, {
             name: "local-desktop-installer",
             configureServer(server) {
               server.middlewares.use("/dev-downloads/clarify-ai-setup.exe", (_req, res, next) => {
@@ -188,7 +159,7 @@ export default defineConfig(({ mode }) => {
         "X-Frame-Options": "DENY",
         "X-XSS-Protection": "1; mode=block",
         "Referrer-Policy": "strict-origin-when-cross-origin",
-        "Permissions-Policy": "camera=(), microphone=(), geolocation=()",
+        "Permissions-Policy": "camera=(), microphone=(self), geolocation=()",
       },
 
       proxy: {

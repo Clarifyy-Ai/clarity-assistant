@@ -11,6 +11,10 @@ import { hintIdempotencyKey } from "@/lib/ai/questionDetection";
 import { buildResumeContextForAI } from "@/lib/documents/interviewContext";
 import { parseResumeContentString } from "@/lib/documents/resumeParse";
 import { getLocalHintFallback } from "@/lib/mock/localHintFallback";
+import {
+  getAiUserFacingError,
+  isInsufficientCreditsError,
+} from "@/lib/network/aiErrorUx";
 import { useDocumentStore } from "@/store/documentStore";
 import { useAudioStore } from "@/store/audioStore";
 import type { SessionQuestion } from "@/types/session.types";
@@ -159,7 +163,7 @@ export function useSessionOrchestrator() {
         timestamp: Date.now(),
       });
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Failed to generate hint";
+      const msg = getAiUserFacingError(err);
       console.error("[useSessionOrchestrator] requestHint failed:", err);
 
       const interviewType =
@@ -169,9 +173,11 @@ export function useSessionOrchestrator() {
       overlay.setCurrentQuestion(questionText);
       overlay.setOfflineFallback(fallbackHint);
       overlay.setError(
-        msg.includes("unavailable") || msg.includes("502")
+        msg.includes("temporarily unavailable")
           ? "AI hint service unavailable — showing offline coaching tips."
-          : `Hint failed: ${msg}`,
+          : isInsufficientCreditsError(err)
+            ? msg
+            : `Hint failed: ${msg}`,
       );
       overlay.addChatMessage({
         role: "assistant",

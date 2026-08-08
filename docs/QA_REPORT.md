@@ -62,16 +62,16 @@ All 21 failing tests live in two files that pre-date this run and reference an o
 
 These are **stale-test debt**, not product bugs. Recommendation: rewrite in a follow-up sprint to match the current hook signatures.
 
-### 🚧 P0/P1 Spec missing (catalog describes features absent from the codebase)
-| T-ID | Description |
-|---|---|
-| T-0035 | Account lockout after 5 failed login attempts (30-min cooldown) |
-| T-0040 | Password-reset link expires after 1 hour (with explicit UI surface) |
-| T-0041 | Password-reset link single-use enforcement |
-| T-0053 | Session timeout warning 5 minutes before expiry |
-| T-0054 | Extend-session button from timeout warning |
+### 🚧 P0/P1 Spec status (updated 2026-08-08)
+| T-ID | Description | Status |
+|---|---|---|
+| T-0035 | Account lockout after 5 failed login attempts (30-min cooldown) | **Implemented** client-side in `Login.tsx` (localStorage). Server IP lockout still optional. |
+| T-0040 | Password-reset link expires after 1 hour (with explicit UI surface) | **UI aligned** (`ResetPassword.tsx` 1h copy + expired link message). Actual TTL is Supabase Auth recovery OTP setting. |
+| T-0041 | Password-reset link single-use enforcement | **Auth-enforced** + expired/used UI in `ResetPassword.tsx`. |
+| T-0053 | Session timeout warning 5 minutes before expiry | **Implemented** — `SessionTimeoutBanner.tsx` mounted in `App.tsx`. |
+| T-0054 | Extend-session button from timeout warning | **Implemented** — same banner (“Extend session”). |
 
-Recommendation: open follow-up tickets — these are real product gaps surfaced by the catalog.
+Ops still required: Supabase Dashboard recovery OTP expiry = 3600s if catalog requires literal 1 hour.
 
 ### 🖐️ P0/P1 Manual scripts
 20 items requiring real browsers, OAuth providers, Stripe checkout, microphones, screen-share stealth verification, OS notifications, or multi-platform visual checks. Documented in `docs/QA_MANUAL.md`.

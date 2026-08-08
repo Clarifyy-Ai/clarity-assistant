@@ -23,6 +23,10 @@ import { answerBankDB } from "@/lib/supabase/database";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { EDGE_BASE } from "@/lib/env";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import {
+  getAiUserFacingError,
+  openUpgradeIfInsufficientCredits,
+} from "@/lib/network/aiErrorUx";
 import { Link, useSearchParams } from "react-router-dom";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
@@ -637,7 +641,8 @@ function AIToolModal({
       await refreshCredits();
     } catch (err) {
       console.error("AI tool run() failed:", err);
-      toast.error("The AI tool failed to run. Please try again.");
+      openUpgradeIfInsufficientCredits(err);
+      toast.error(getAiUserFacingError(err));
     } finally {
       setLoading(false);
     }

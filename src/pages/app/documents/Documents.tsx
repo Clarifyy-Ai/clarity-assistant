@@ -1,6 +1,6 @@
 // src/pages/app/documents/Documents.tsx
 import { useState, useRef, useCallback, useEffect, useMemo } from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { toast } from "sonner";
 import { jobDescriptionsDB, documentsDB, resumesDB } from "@/lib/supabase/database";
@@ -30,7 +30,6 @@ import {
   LayoutGrid, Table2, ArrowUpDown, X,
 } from "lucide-react";
 import { cn, generateId } from "@/lib/utils";
-import { agentLog } from "@/lib/debugAgentLog";
 
 const MAX_UPLOAD_QUEUE = 5;
 
@@ -146,6 +145,7 @@ function guessMimeType(filePath: string): string {
 }
 
 function ResumeManager() {
+  const navigate = useNavigate();
   const docStore = useDocumentStore();
   const docMgr   = useDocumentManager({ skipInitialLoad: true });
 
@@ -227,7 +227,7 @@ function ResumeManager() {
       );
     }, 300);
 
-    const { error } = await docMgr.uploadResume(item.file);
+    const { resumeId, error } = await docMgr.uploadResume(item.file);
     window.clearInterval(progressTimer);
 
     if (cancelledUploadsRef.current.has(item.id)) {
@@ -252,9 +252,16 @@ function ResumeManager() {
       ),
     );
 
-    if (error) toast.error(`${item.file.name}: ${error}`);
-    else toast.success("Document uploaded successfully");
-  }, [docMgr]);
+    if (error) {
+      toast.error(`${item.file.name}: ${error}`);
+      return;
+    }
+
+    toast.success("Document uploaded — opening parsed resume…");
+    if (resumeId) {
+      navigate(`/app/documents/resume/${resumeId}`);
+    }
+  }, [docMgr, navigate]);
 
   useEffect(() => {
     const pending = uploadQueue.find(
@@ -347,9 +354,6 @@ function ResumeManager() {
     }
 
     setRetrying(resumeId);
-    // #region agent log
-    agentLog({hypothesisId:'C',location:'Documents.tsx:handleRetryParse',message:'retry parse clicked',data:{resumeId}});
-    // #endregion
     try {
       await fetchEdgeJson(
         "parse-resume",
@@ -653,12 +657,6 @@ function ResumeManager() {
             const isPending = parseStatus === "pending";
             const isError   = parseStatus === "error";
             const isReady   = parseStatus === "ready";
-
-            // #region agent log
-            if (r === sortedPageItems[0]) {
-              agentLog({hypothesisId:'D',location:'Documents.tsx:resumeRow',message:'resume row parse status',data:{resumeId:r.id,parseStatus,isParsingGlobal,hasContent:Boolean(row.content?.trim()),isActive}});
-            }
-            // #endregion
 
             return (
               <Card key={r.id} padding="sm">

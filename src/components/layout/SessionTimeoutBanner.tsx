@@ -117,10 +117,11 @@ export function SessionTimeoutBanner() {
       )}
       role="alert"
       aria-live="assertive"
+      aria-atomic="true"
     >
       <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3 px-4 py-2.5 sm:px-6 lg:px-8">
         <div className="flex items-center justify-center rounded-md border border-border bg-secondary p-1.5">
-          <Clock className="h-4 w-4" />
+          <Clock className="h-4 w-4" aria-hidden />
         </div>
 
         <div className="min-w-0 flex-1">
@@ -140,7 +141,8 @@ export function SessionTimeoutBanner() {
             size="sm"
             loading={extending}
             onClick={() => void handleExtend()}
-            leftIcon={<RefreshCw className="h-3.5 w-3.5" />}
+            leftIcon={<RefreshCw className="h-3.5 w-3.5" aria-hidden />}
+            aria-label="Extend session to stay signed in"
           >
             Extend session
           </Button>

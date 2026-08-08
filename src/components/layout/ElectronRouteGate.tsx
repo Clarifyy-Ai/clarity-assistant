@@ -7,7 +7,6 @@ import {
 import { ElectronOpenInBrowser } from "@/components/layout/ElectronOpenInBrowser";
 import { CookieConsent } from "@/components/common/CookieConsent";
 import { ScrollToTop } from "@/components/layout/ScrollToTop";
-import { agentLog } from "@/lib/debugAgentLog";
 
 /**
  * Restricts the desktop shell to auth, onboarding, and overlay session routes.
@@ -15,10 +14,6 @@ import { agentLog } from "@/lib/debugAgentLog";
  */
 export function ElectronRouteGate(): JSX.Element {
   const location = useLocation();
-
-  // #region agent log
-  agentLog({hypothesisId:'A',location:'ElectronRouteGate.tsx:mount',message:'ElectronRouteGate render (CookieConsent inside router)',data:{pathname:location.pathname,isElectron:isElectronApp()}});
-  // #endregion
 
   if (!isElectronApp()) {
     return (

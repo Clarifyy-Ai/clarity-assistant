@@ -21,6 +21,11 @@ import {
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { createIdempotencyKey } from "@/lib/api/functions";
+import {
+  getAiUserFacingError,
+  openUpgradeIfInsufficientCredits,
+} from "@/lib/network/aiErrorUx";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
@@ -377,9 +382,21 @@ function AddAnswerModal({
     if (!question.trim() || generating) return;
     setGenerating(true);
     try {
+      const cat = category.trim() || "Behavioural";
+      const useStar =
+        cat === "Behavioural" || cat === "Leadership" || cat === "HR";
+      const tool_id = useStar ? "star_method" : "raw_prompt";
+      const input = useStar
+        ? `Interview question:\n${question.trim()}\n\nCategory: ${cat}\n\nDraft a complete STAR answer from scratch for THIS exact question (do not substitute a different question). Invent plausible, specific details the candidate can edit.`
+        : `Interview category: ${cat}\nInterview question:\n${question.trim()}\n\nWrite a strong, interview-ready answer for this exact question. Match the category (technical / system design / etc). Do NOT invent a different question. Do NOT force STAR format unless it naturally fits. Be specific and concrete.`;
+
       const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
-        tool_id: "star_method",
-        input: `Interview question:\n${question.trim()}\n\nDraft a complete STAR answer from scratch for this question. Invent plausible, specific details the candidate can edit.`,
+        tool_id,
+        input,
+      }, {
+        headers: {
+          "Idempotency-Key": createIdempotencyKey("answer-bank-ai"),
+        },
       });
       const text = (data.result ?? "").trim();
       if (!text) throw new Error("AI returned an empty answer.");
@@ -388,7 +405,8 @@ function AddAnswerModal({
       await refreshCredits();
       toast.success("Draft generated — review before saving");
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "Failed to generate answer.");
+      openUpgradeIfInsufficientCredits(err);
+      toast.error(getAiUserFacingError(err));
     } finally {
       setGenerating(false);
     }
@@ -446,7 +464,7 @@ function AddAnswerModal({
           <textarea
             value={answer}
             onChange={(e) => setAnswer(e.target.value)}
-            placeholder="Write your STAR answer here, or generate a draft with AI…"
+            placeholder="Write your answer here, or generate a draft with AI…"
             rows={6}
             className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
           />
