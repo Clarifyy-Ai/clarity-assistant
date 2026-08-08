@@ -82,6 +82,10 @@ export async function callClaude(payload: {
     model: payload.model,
     max_tokens: payload.max_tokens,
     session_id: payload.session_id,
+  }, {
+    headers: {
+      "Idempotency-Key": createIdempotencyKey("prep-tool"),
+    },
   });
 
   return data.result ?? "";

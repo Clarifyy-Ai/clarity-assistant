@@ -1,4 +1,10 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { createIdempotencyKey } from "@/lib/api/functions";
+import {
+  getAiUserFacingError,
+  isInsufficientCreditsError,
+  openUpgradeIfInsufficientCredits,
+} from "@/lib/network/aiErrorUx";
 import { supabase } from "@/integrations/supabase/client";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { useState, useEffect, useRef } from "react";
@@ -118,12 +124,22 @@ export default function SystemDesign() {
       const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
         tool_id: "system_design",
         input,
+      }, {
+        headers: {
+          "Idempotency-Key": createIdempotencyKey("prep-tool"),
+        },
       });
       setBreakdown(data.result ?? "Breakdown unavailable.");
       await refreshCredits();
     } catch (err) {
-      setBreakdown(getOfflineBreakdown(activeTopic));
-      toast.info("Using offline breakdown — AI unavailable.");
+      openUpgradeIfInsufficientCredits(err);
+      if (isInsufficientCreditsError(err)) {
+        setError(getAiUserFacingError(err));
+        toast.error(getAiUserFacingError(err));
+      } else {
+        setBreakdown(getOfflineBreakdown(activeTopic));
+        toast.info("Using offline breakdown — AI unavailable.");
+      }
     }
     setLoading(false);
   }

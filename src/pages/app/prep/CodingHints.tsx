@@ -1,4 +1,9 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { createIdempotencyKey } from "@/lib/api/functions";
+import {
+  getAiUserFacingError,
+  openUpgradeIfInsufficientCredits,
+} from "@/lib/network/aiErrorUx";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { useState, useMemo, useEffect } from "react";
 import { useCredits } from "@/hooks/useCredits";
@@ -138,6 +143,10 @@ export default function CodingHints() {
         tool_id: "coding_hint",
         input,
         depth,
+      }, {
+        headers: {
+          "Idempotency-Key": createIdempotencyKey("prep-tool"),
+        },
       });
       setHintText(
         data.result ??
@@ -145,8 +154,8 @@ export default function CodingHints() {
       );
       await refreshCredits();
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "AI hints unavailable. Please try again.";
+      openUpgradeIfInsufficientCredits(err);
+      const message = getAiUserFacingError(err);
       setError(message);
       setHintText("");
       toast.error(message);
@@ -165,12 +174,16 @@ export default function CodingHints() {
       const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
         tool_id: "coding_solution",
         input,
+      }, {
+        headers: {
+          "Idempotency-Key": createIdempotencyKey("prep-tool"),
+        },
       });
       setSolutionText(data.result ?? "Solution explanation unavailable.");
       await refreshCredits();
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "AI solution unavailable. Please try again.";
+      openUpgradeIfInsufficientCredits(err);
+      const message = getAiUserFacingError(err);
       setError(message);
       setSolutionText("");
       toast.error(message);

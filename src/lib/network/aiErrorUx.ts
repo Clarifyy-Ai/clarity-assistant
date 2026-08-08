@@ -90,6 +90,16 @@ export function getAiUserFacingError(err: unknown): string {
   }
 
   const raw = errorText(err).trim();
+  const rawLower = raw.toLowerCase();
+  const code = errorCode(err).toUpperCase();
+  // Transient credit ledger races — not "out of credits"; ask for a retry.
+  if (
+    code === "CREDIT_DEDUCTION_FAILED" ||
+    rawLower.includes("credit deduction failed")
+  ) {
+    return "We couldn't complete that charge. Please try again.";
+  }
+
   if (!raw) {
     return "Something went wrong. Please try again.";
   }

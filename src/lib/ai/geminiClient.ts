@@ -10,6 +10,7 @@
 import type { CoachingContext } from "@/types/ai.types";
 import { retry } from "@/lib/utils";
 import { fetchEdge, fetchEdgeJson, getAuthHeaders } from "@/lib/network/fetchEdge";
+import { createIdempotencyKey } from "@/lib/api/functions";
 
 export type GeminiModel =
   | "gemini-2.5-flash"
@@ -252,6 +253,10 @@ export async function callGemini(payload: {
     max_tokens: payload.max_tokens,
     temperature: payload.temperature,
     session_id: payload.session_id,
+  }, {
+    headers: {
+      "Idempotency-Key": createIdempotencyKey("prep-tool"),
+    },
   });
 
   return response.result ?? "";

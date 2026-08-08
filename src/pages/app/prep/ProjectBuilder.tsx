@@ -1,5 +1,11 @@
 // @ts-nocheck
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { createIdempotencyKey } from "@/lib/api/functions";
+import {
+  getAiUserFacingError,
+  isInsufficientCreditsError,
+  openUpgradeIfInsufficientCredits,
+} from "@/lib/network/aiErrorUx";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { useState, useEffect } from "react";
 import { useCredits } from "@/hooks/useCredits";
@@ -150,6 +156,10 @@ export default function ProjectBuilder() {
       const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
         tool_id: "project_build",
         input,
+      }, {
+        headers: {
+          "Idempotency-Key": createIdempotencyKey("prep-tool"),
+        },
       });
       const result = data.result ?? "Showcase generation unavailable.";
       setShowcase(result);
@@ -169,9 +179,15 @@ export default function ProjectBuilder() {
       }
       await refreshCredits();
     } catch (err) {
-      const offline = getOfflineShowcase(projectName, role, techStack, description, impact);
-      setShowcase(offline);
-      toast.info("Using offline template — AI unavailable.");
+      openUpgradeIfInsufficientCredits(err);
+      if (isInsufficientCreditsError(err)) {
+        setError(getAiUserFacingError(err));
+        toast.error(getAiUserFacingError(err));
+      } else {
+        const offline = getOfflineShowcase(projectName, role, techStack, description, impact);
+        setShowcase(offline);
+        toast.info("Using offline template — AI unavailable.");
+      }
     }
     setLoading(false);
   }

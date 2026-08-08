@@ -90,6 +90,10 @@ export async function callOpenAI(payload: {
     temperature: payload.temperature,
     response_format: payload.response_format,
     session_id: payload.session_id,
+  }, {
+    headers: {
+      "Idempotency-Key": createIdempotencyKey("prep-tool"),
+    },
   });
 
   return data.result ?? "";
@@ -137,7 +141,10 @@ export async function streamCoachChat(opts: {
 
     const res = await fetchEdge("ai-coach-chat", body, {
       method: "POST",
-      headers,
+      headers: {
+        ...headers,
+        "Idempotency-Key": createIdempotencyKey("ai-coach-chat"),
+      },
       signal,
       timeoutMs: 30_000,
     });

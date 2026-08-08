@@ -1,4 +1,10 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { createIdempotencyKey } from "@/lib/api/functions";
+import {
+  getAiUserFacingError,
+  isInsufficientCreditsError,
+  openUpgradeIfInsufficientCredits,
+} from "@/lib/network/aiErrorUx";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { useState } from "react";
 import { useCredits } from "@/hooks/useCredits";
@@ -54,17 +60,26 @@ export default function Rephraser() {
       const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
         tool_id: "rephrase",
         input: original,
+      }, {
+        headers: {
+          "Idempotency-Key": createIdempotencyKey("prep-tool"),
+        },
       });
       const raw = data.result ?? "";
       const parsed: Alternatives = JSON.parse(raw);
       setAlternatives(parsed);
       await refreshCredits();
     } catch (err) {
-      const message =
-        err instanceof Error ? err.message : "Rephrase failed — AI unavailable.";
-      setError(message);
-      setAlternatives(getOfflineAlternatives(original));
-      toast.info("Using offline rephrasing — AI unavailable.");
+      openUpgradeIfInsufficientCredits(err);
+      if (isInsufficientCreditsError(err)) {
+        const message = getAiUserFacingError(err);
+        setError(message);
+        toast.error(message);
+      } else {
+        setError(getAiUserFacingError(err));
+        setAlternatives(getOfflineAlternatives(original));
+        toast.info("Using offline rephrasing — AI unavailable.");
+      }
     }
     setLoading(false);
   }

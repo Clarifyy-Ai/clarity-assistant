@@ -6,6 +6,7 @@
 import type { CoachingContext } from "@/types/ai.types";
 import { useAuthStore } from "@/store/userStore";
 import { EDGE_BASE } from "@/lib/env";
+import { createIdempotencyKey } from "@/lib/api/functions";
 import { retry } from "@/lib/utils";
 import { useNetworkStore } from "@/store/networkStore";
 
@@ -164,7 +165,10 @@ async function loadResumeContext(userId: string | null): Promise<ResumeContext> 
       () =>
         fetch(`${EDGE_BASE}/prep-tool`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": createIdempotencyKey("prep-tool"),
+          },
           body: JSON.stringify({
             tool_id: "resume_context",
             input: { user_id: userId },
@@ -204,7 +208,10 @@ async function loadJDContext(
       () =>
         fetch(`${EDGE_BASE}/prep-tool`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": createIdempotencyKey("prep-tool"),
+          },
           body: JSON.stringify({
             tool_id: "job_description_context",
             input: { user_id: userId, job_id: jobId },
@@ -255,7 +262,10 @@ async function loadAnswerBankContext(
       () =>
         fetch(`${EDGE_BASE}/prep-tool`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": createIdempotencyKey("prep-tool"),
+          },
           body: JSON.stringify({
             tool_id: "answer_bank_context",
             input: {
@@ -307,7 +317,10 @@ async function loadCompanyResearch(
       () =>
         fetch(`${EDGE_BASE}/prep-tool`, {
           method: "POST",
-          headers: { "Content-Type": "application/json" },
+          headers: {
+            "Content-Type": "application/json",
+            "Idempotency-Key": createIdempotencyKey("prep-tool"),
+          },
           body: JSON.stringify({
             tool_id: "company_research_context",
             input: { company },

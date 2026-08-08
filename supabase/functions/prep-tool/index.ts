@@ -244,14 +244,30 @@ Deno.serve(async (req: Request) => {
 
     /* ------------------- CREDIT DEDUCTION ------------------- */
     const toolCost = getToolCost(tool_id);
+    // Prefer standard Idempotency-Key; never invent a random key (that defeats
+    // client retries and can double-charge). Invalid shapes are ignored inside
+    // deductCreditsAtomic.
+    const idempotencyKey =
+      req.headers.get("Idempotency-Key") ??
+      req.headers.get("idempotency-key") ??
+      req.headers.get("x-idempotency-key") ??
+      null;
     const creditResult = await deductCreditsAtomic({
       userId,
       action: `prep_tool_${tool_id}`,
       cost: toolCost,
-      idempotencyKey: req.headers.get("x-idempotency-key") || crypto.randomUUID(),
+      idempotencyKey,
     });
     if (!creditResult.success) {
-      return errorResponse("Insufficient credits", "INSUFFICIENT_CREDITS", 402, req);
+      const msg = (creditResult.error || "").toLowerCase();
+      const insufficient =
+        msg.includes("insufficient") || msg.includes("no credits");
+      return errorResponse(
+        insufficient ? "Insufficient credits" : "Credit deduction failed. Please try again.",
+        insufficient ? "INSUFFICIENT_CREDITS" : "CREDIT_DEDUCTION_FAILED",
+        insufficient ? 402 : 500,
+        req,
+      );
     }
 
     /* ----------------------- PROMPT ----------------------- */

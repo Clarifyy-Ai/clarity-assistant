@@ -23,6 +23,7 @@ import { answerBankDB } from "@/lib/supabase/database";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { EDGE_BASE } from "@/lib/env";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { createIdempotencyKey } from "@/lib/api/functions";
 import {
   getAiUserFacingError,
   openUpgradeIfInsufficientCredits,
@@ -636,6 +637,10 @@ function AIToolModal({
       const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
         tool_id: toolId,
         input,
+      }, {
+        headers: {
+          "Idempotency-Key": createIdempotencyKey("prep-tool"),
+        },
       });
       setOutput(data.result ?? "");
       await refreshCredits();

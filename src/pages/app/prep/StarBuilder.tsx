@@ -2,6 +2,11 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useAuthStore } from "@/store/userStore";
 import { answerBankDB } from "@/lib/supabase/database";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { createIdempotencyKey } from "@/lib/api/functions";
+import {
+  getAiUserFacingError,
+  openUpgradeIfInsufficientCredits,
+} from "@/lib/network/aiErrorUx";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
@@ -116,6 +121,10 @@ export default function StarBuilder() {
       const data = await fetchEdgeJson<{ result?: string }>("prep-tool", {
         tool_id: "star_method",
         input,
+      }, {
+        headers: {
+          "Idempotency-Key": createIdempotencyKey("prep-tool"),
+        },
       });
 
       const text = data?.result ?? "";
@@ -131,7 +140,8 @@ export default function StarBuilder() {
       }
       await refreshCredits();
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : "AI polish failed.");
+      openUpgradeIfInsufficientCredits(err);
+      toast.error(getAiUserFacingError(err));
     } finally {
       setPolishing(false);
     }
