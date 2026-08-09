@@ -168,7 +168,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
           >
             <BrandLogo size="md" />
           </Link>
-          <div className="hidden md:flex items-center gap-8 text-sm text-muted-foreground">
+          <div className="hidden lg:flex items-center gap-6 xl:gap-8 text-sm text-muted-foreground">
             {NAV_LINKS.map((link) => {
               const key = "to" in link ? `${link.to}#${link.hash ?? ""}` : link.href;
               const isActive =
@@ -203,7 +203,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
             </Link>
             <button
               type="button"
-              className="md:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all"
+              className="lg:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all"
               onClick={() => setMenuOpen((p) => !p)}
               aria-label="Toggle menu"
             >
@@ -215,7 +215,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
 
       {menuOpen && (
         <div
-          className="md:hidden fixed inset-0 z-[100]"
+          className="lg:hidden fixed inset-0 z-[100]"
           role="dialog"
           aria-modal="true"
           aria-label="Mobile navigation"

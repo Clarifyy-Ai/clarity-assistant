@@ -118,6 +118,10 @@ export default function AnswerBank() {
       <PageHeader
         title={PRODUCT_NAMES.answerBank}
         description="Your saved STAR answers and best responses"
+        breadcrumbs={[
+          { label: PRODUCT_NAMES.dashboard, href: "/app/dashboard" },
+          { label: PRODUCT_NAMES.answerBank },
+        ]}
         actions={
           <Button
             variant="primary"
@@ -125,7 +129,7 @@ export default function AnswerBank() {
             onClick={() => setAddOpen(true)}
             leftIcon={<Plus className="w-3.5 h-3.5" />}
           >
-            Add answer
+            Add Answer
           </Button>
         }
       />
@@ -170,7 +174,7 @@ export default function AnswerBank() {
             icon={BookOpen}
             title="No saved answers yet"
             description="Save answers from sessions or build them in Prep Lab."
-            actionLabel="Add answer"
+            actionLabel="Add Answer"
             onAction={() => setAddOpen(true)}
           />
         </Card>
@@ -435,7 +439,7 @@ function AddAnswerModal({
   }
 
   return (
-    <Modal open={open} onClose={onClose} title="Add answer to bank" size="lg">
+    <Modal open={open} onClose={onClose} title="Add Answer to bank" size="lg">
       <div className="space-y-4">
         <div>
           <p className="text-xs text-muted-foreground mb-1.5">Question</p>
@@ -445,6 +449,26 @@ function AddAnswerModal({
             placeholder="e.g. Tell me about a time you failed…"
             className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-2.5 text-sm focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
           />
+        </div>
+        <div>
+          <p className="text-xs text-muted-foreground mb-1.5">Category</p>
+          <div className="flex flex-wrap gap-2">
+            {CATEGORIES.filter((c) => c !== "All").map((c) => (
+              <button
+                key={c}
+                type="button"
+                onClick={() => setCategory(c)}
+                className={cn(
+                  "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
+                  category === c
+                    ? "bg-primary/10 border-primary/30 text-primary"
+                    : "bg-secondary border-border text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {c}
+              </button>
+            ))}
+          </div>
         </div>
         <div>
           <div className="flex items-center justify-between mb-1.5 gap-2">
@@ -468,26 +492,6 @@ function AddAnswerModal({
             rows={6}
             className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
           />
-        </div>
-        <div>
-          <p className="text-xs text-muted-foreground mb-1.5">Category</p>
-          <div className="flex flex-wrap gap-2">
-            {CATEGORIES.filter((c) => c !== "All").map((c) => (
-              <button
-                key={c}
-                type="button"
-                onClick={() => setCategory(c)}
-                className={cn(
-                  "px-3 py-1.5 rounded-xl border text-xs font-medium transition-all",
-                  category === c
-                    ? "bg-primary/10 border-primary/30 text-primary"
-                    : "bg-secondary border-border text-muted-foreground hover:text-foreground"
-                )}
-              >
-                {c}
-              </button>
-            ))}
-          </div>
         </div>
         <div className="flex gap-3">
           <Button variant="secondary" size="sm" fullWidth onClick={onClose}>

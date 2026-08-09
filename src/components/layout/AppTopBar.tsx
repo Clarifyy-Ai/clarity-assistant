@@ -108,7 +108,7 @@ export function AppTopBar() {
         <ProductModePill />
       </div>
 
-      <div style={noDragStyle} className="flex items-center gap-1.5 sm:gap-3 flex-shrink-0">
+      <div style={noDragStyle} className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0 h-9">
 
         <button
           type="button"
@@ -117,7 +117,7 @@ export function AppTopBar() {
           onClick={() => uiStore.openUpgradeModal("pro")}
           aria-label={`${credits} credit${credits === 1 ? "" : "s"}${isEmpty ? " — upgrade" : ""}`}
           className={cn(
-            "flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-1.5 rounded-xl border text-[10px] sm:text-xs font-semibold transition-all",
+            "flex items-center gap-1 sm:gap-2 h-8 sm:h-9 px-2 sm:px-3 rounded-xl border text-[10px] sm:text-xs font-semibold transition-all",
             isEmpty
               ? "bg-red-500/10 border-red-500/30 text-red-400 animate-pulse"
               : isLow
@@ -146,7 +146,7 @@ export function AppTopBar() {
               : "Use neutral nav labels for private practice (does not hide the app from screen sharing)"
           }
           className={cn(
-            "hidden md:flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1.5 rounded-xl border text-[10px] sm:text-xs font-medium transition-all",
+            "hidden md:flex items-center gap-1 sm:gap-1.5 h-9 px-2 sm:px-2.5 rounded-xl border text-[10px] sm:text-xs font-medium transition-all",
             stealthMode
               ? "bg-blue-500/10 border-blue-500/30 text-blue-500 dark:text-blue-400"
               : "bg-secondary/60 border-border text-muted-foreground hover:bg-secondary hover:text-foreground"
@@ -160,11 +160,11 @@ export function AppTopBar() {
           <span className="hidden sm:inline">Discrete UI</span>
         </button>
 
-        <div style={noDragStyle} className="hidden md:block">
+        <div style={noDragStyle} className="hidden md:flex items-center h-9">
           <ThemeToggle />
         </div>
 
-        <div className="relative shrink-0" style={noDragStyle}>
+        <div className="relative shrink-0 flex items-center h-9" style={noDragStyle}>
           <button
             type="button"
             onClick={() => {
@@ -230,7 +230,7 @@ export function AppTopBar() {
               style={noDragStyle}
               aria-label="Account menu"
               className={cn(
-                "w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-bold text-white hover:ring-2 transition-all flex-shrink-0",
+                "w-8 h-8 sm:w-9 sm:h-9 rounded-full flex items-center justify-center text-[10px] sm:text-xs font-bold text-white hover:ring-2 transition-all flex-shrink-0",
                 stealthMode
                   ? "bg-blue-600 hover:ring-blue-500"
                   : "bg-primary hover:ring-primary/50"

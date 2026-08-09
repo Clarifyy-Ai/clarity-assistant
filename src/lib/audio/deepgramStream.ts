@@ -500,7 +500,17 @@ async function fetchDeepgramToken(): Promise<TokenResponse> {
       text ||
       `Token fetch failed: ${response.status}`;
 
-    throw new Error(msg);
+    if (response.status === 502 || response.status === 503) {
+      throw new Error(
+        "Speech recognition is temporarily unavailable. Please try again in a moment.",
+      );
+    }
+
+    throw new Error(
+      typeof msg === "string" && msg.trim()
+        ? msg
+        : "Could not start speech recognition. Please try again.",
+    );
   }
 
   const data = (await response.json()) as TokenResponse;

@@ -83,6 +83,7 @@ async function prepPage(context) {
     try {
       localStorage.setItem("clarify_cookie_consent", "accepted");
       sessionStorage.setItem("clarify:walkthrough-done-session", "1");
+      localStorage.setItem("clarify:whats-new-dismissed", "1.5.0");
     } catch {
       /* ignore */
     }

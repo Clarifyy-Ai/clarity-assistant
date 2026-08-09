@@ -91,21 +91,21 @@ export function ProductDemoHero() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 min-h-[280px] sm:min-h-[340px]">
-        <div className="md:col-span-2 border-r border-border p-6 flex flex-col gap-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center">
+      <div className="grid grid-cols-1 lg:grid-cols-3 min-h-[280px] sm:min-h-[340px]">
+        <div className="lg:col-span-2 lg:border-r border-border p-4 sm:p-6 flex flex-col gap-4 border-b lg:border-b-0">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-8 h-8 rounded-full bg-primary/20 flex items-center justify-center shrink-0">
                 <Mic className="w-4 h-4 text-primary" />
               </div>
-              <div>
-                <p className="text-xs font-semibold">Mock Interview — Software Engineer</p>
+              <div className="min-w-0">
+                <p className="text-xs font-semibold truncate">Mock Interview — Software Engineer</p>
                 <p className="text-[10px] text-muted-foreground">FAANG Behavioral Round</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 shrink-0">
               <WaveformBars />
-              <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-[10px] font-medium text-primary border border-primary/20">
+              <span className="px-2.5 py-0.5 rounded-full bg-primary/10 text-[10px] font-medium text-primary border border-primary/20 whitespace-nowrap">
                 Practice Coach Active
               </span>
             </div>
@@ -159,7 +159,7 @@ export function ProductDemoHero() {
           </div>
         </div>
 
-        <div className="p-5 flex flex-col gap-4 bg-secondary/10">
+        <div className="p-4 sm:p-5 flex flex-col gap-4 bg-secondary/10">
           <p className="text-[10px] text-muted-foreground font-semibold uppercase tracking-wide">
             Live Metrics
           </p>

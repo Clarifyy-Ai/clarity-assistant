@@ -22,6 +22,7 @@ import {
 import { format, isToday, isFuture } from "date-fns";
 import { toast } from "sonner";
 import { useSwipeAction } from "@/hooks/useSwipeAction";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
 // ─────────────────────────────────────────────────────────────────
 // Interviews — full scheduled interview list
@@ -80,6 +81,10 @@ export default function Interviews() {
       <PageHeader
         title="Interviews"
         subtitle="Track and manage your scheduled interviews"
+        breadcrumbs={[
+          { label: PRODUCT_NAMES.dashboard, href: "/app/dashboard" },
+          { label: PRODUCT_NAMES.interviews },
+        ]}
         action={
           <div className="flex items-center gap-2">
             <Button

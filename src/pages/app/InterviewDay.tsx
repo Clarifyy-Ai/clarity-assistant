@@ -27,6 +27,7 @@ import {
 import { format, differenceInMinutes } from "date-fns";
 import type { LucideIcon } from "lucide-react";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
 // ─────────────────────────────────────────────────────────────────
 // InterviewDay — focus mode for interview day
@@ -211,6 +212,10 @@ export default function InterviewDay() {
           description="Focus mode for interview day — countdown, checklist, and calm prep"
           badge="Interview Day"
           icon={<Target className="w-5 h-5 text-primary" />}
+          breadcrumbs={[
+            { label: PRODUCT_NAMES.dashboard, href: "/app/dashboard" },
+            { label: PRODUCT_NAMES.interviewDay },
+          ]}
         />
         <SkeletonCard />
         <SkeletonCard />
@@ -225,6 +230,10 @@ export default function InterviewDay() {
         description="Focus mode for interview day — countdown, checklist, and calm prep"
         badge="Interview Day"
         icon={<Target className="w-5 h-5 text-primary" />}
+        breadcrumbs={[
+          { label: PRODUCT_NAMES.dashboard, href: "/app/dashboard" },
+          { label: PRODUCT_NAMES.interviewDay },
+        ]}
       />
 
       {store.load_error && (

@@ -36,6 +36,7 @@ import { format } from "date-fns";
 import { getStealthLabel } from "@/lib/stealth/stealthConfig";
 import { DesktopDownloadButton } from "@/components/common/DesktopDownloadButton";
 import { isElectronApp } from "@/lib/platform/isElectron";
+import { PlanGate } from "@/components/layout/PlanGate";
 import type { Tables } from "@/integrations/supabase/types";
 
 const IS_ELECTRON = isElectronApp();
@@ -229,16 +230,14 @@ export default function Dashboard() {
   const sessionCountLoaded = sessionCount !== null;
   const isNewUser = sessionCountLoaded && sessionCount === 0;
   const isReturningUser = sessionCountLoaded && sessionCount > 0;
-  // Interpretation (BUG-09): "More" expands secondary dashboard widgets for paid
-  // plans (Pro / Max / enterprise). Free users keep the focused primary layout.
-  // Spec text said "Pro only / hide Max" — that would hide useful widgets from Max,
-  // so we treat all non-free plans as eligible.
+  // More is available to all returning users. Free/starter see secondary
+  // widgets behind a PlanGate upsell; Pro+ get full unlocked expansion.
   const planId = (profile?.plan_id ?? "free").toLowerCase();
-  const canExpandMore = planId !== "free" && planId !== "starter";
+  const isFreeOrStarter = planId === "free" || planId === "starter";
   const showSecondary = isNewUser
     ? false
     : isReturningUser
-      ? canExpandMore && showMore
+      ? showMore
       : sessionCountLoaded;
 
   return (
@@ -304,21 +303,6 @@ export default function Dashboard() {
 
       {!profileLoading && !profile?.onboarding_completed && (
         <SetupChecklist prominent dismissible />
-      )}
-
-      {!IS_ELECTRON && showSecondary && (
-        <div className="flex items-center gap-4 p-4 rounded-2xl border border-border bg-card">
-          <div className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center shrink-0">
-            <Monitor className="w-5 h-5 text-primary" />
-          </div>
-          <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold text-foreground">Desktop app</p>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Install Clarify AI for system-wide hotkeys and the floating Practice Coach overlay.
-            </p>
-          </div>
-          <DesktopDownloadButton size="sm" variant="outline" showGuideLink={false} className="shrink-0 max-w-xs" />
-        </div>
       )}
 
       {/* ── Interview Day Banner ────────────────────────────────────── */}
@@ -393,7 +377,7 @@ export default function Dashboard() {
         </Card>
       )}
 
-      {isReturningUser && canExpandMore && (
+      {isReturningUser && (
         <button
           type="button"
           onClick={() => setShowMore((v) => !v)}
@@ -407,6 +391,95 @@ export default function Dashboard() {
 
       {showSecondary && (
         <>
+      {!IS_ELECTRON && (
+        <div className="flex items-center gap-4 p-4 rounded-2xl border border-border bg-card">
+          <div className="w-10 h-10 bg-secondary rounded-xl flex items-center justify-center shrink-0">
+            <Monitor className="w-5 h-5 text-primary" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-sm font-semibold text-foreground">Desktop app</p>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              Install Clarify AI for system-wide hotkeys and the floating Practice Coach overlay.
+            </p>
+          </div>
+          <DesktopDownloadButton size="sm" variant="outline" showGuideLink={false} className="shrink-0 max-w-xs" />
+        </div>
+      )}
+
+      {isFreeOrStarter ? (
+        <PlanGate requiredPlan="pro">
+          <DashboardSecondaryWidgets
+            stealth={stealth}
+            sessionCount={sessionCount}
+            sessionCountError={sessionCountError}
+            setSessionCountReloadKey={setSessionCountReloadKey}
+            profileLoading={profileLoading}
+            profile={profile}
+            gamification={gamification}
+            gamificationLoading={gamificationLoading}
+            readinessScore={readinessScore}
+            readinessLoading={readinessLoading}
+            scheduler={scheduler}
+            reloadInterviews={reloadInterviews}
+          />
+        </PlanGate>
+      ) : (
+        <DashboardSecondaryWidgets
+          stealth={stealth}
+          sessionCount={sessionCount}
+          sessionCountError={sessionCountError}
+          setSessionCountReloadKey={setSessionCountReloadKey}
+          profileLoading={profileLoading}
+          profile={profile}
+          gamification={gamification}
+          gamificationLoading={gamificationLoading}
+          readinessScore={readinessScore}
+          readinessLoading={readinessLoading}
+          scheduler={scheduler}
+          reloadInterviews={reloadInterviews}
+        />
+      )}
+        </>
+      )}
+    </div>
+  );
+}
+
+/* ─── SECONDARY WIDGETS (More section) ───────────────────────────────────── */
+
+function DashboardSecondaryWidgets({
+  stealth,
+  sessionCount,
+  sessionCountError,
+  setSessionCountReloadKey,
+  profileLoading,
+  profile,
+  gamification,
+  gamificationLoading,
+  readinessScore,
+  readinessLoading,
+  scheduler,
+  reloadInterviews,
+}: {
+  stealth: boolean;
+  sessionCount: number | null;
+  sessionCountError: string | null;
+  setSessionCountReloadKey: React.Dispatch<React.SetStateAction<number>>;
+  profileLoading: boolean;
+  profile: { credits?: number | null; onboarding_completed?: boolean | null } | null;
+  gamification: GamificationData;
+  gamificationLoading: boolean;
+  readinessScore: number;
+  readinessLoading: boolean;
+  scheduler: {
+    interviews: ScheduledInterview[];
+    is_loading: boolean;
+    load_error: string | null;
+  };
+  reloadInterviews: () => void;
+}) {
+  return (
+    <div className="space-y-6">
       {/* ── Quick Launch Bar (Mock · Overlay · Upload · Analytics) ─── */}
       <div className="flex flex-wrap gap-2">
         {QUICK_LAUNCH.map((item) => {
@@ -525,8 +598,6 @@ export default function Dashboard() {
           <DocumentsStatusCard />
         </div>
       </div>
-        </>
-      )}
     </div>
   );
 }

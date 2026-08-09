@@ -8,6 +8,7 @@ import { PageContent } from "@/components/layout/PageContent";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { Gift, Copy, Users, Zap, Check, Share2 } from "lucide-react";
 import { toast } from "sonner";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
 export default function Referrals() {
   const { profile, user } = useAuthStore();
@@ -85,6 +86,10 @@ export default function Referrals() {
         title="Referrals"
         description="Invite friends and earn bonus credits"
         icon={<Gift className="w-5 h-5 text-primary" />}
+        breadcrumbs={[
+          { label: PRODUCT_NAMES.dashboard, href: "/app/dashboard" },
+          { label: PRODUCT_NAMES.referrals },
+        ]}
       />
 
       {statsError && (

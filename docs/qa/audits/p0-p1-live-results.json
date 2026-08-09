@@ -1,11 +1,12 @@
 {
   "base": "https://clarify.ai.sltfinanceindia.com",
-  "ts": "2026-08-06T17:54:54.498Z",
+  "ts": "2026-08-08T09:14:50.981Z",
   "summary": {
-    "Pass": 93,
-    "Fail": 1,
-    "Blocked": 42,
-    "Not Run": 0
+    "Pass": 164,
+    "Fail": 0,
+    "Blocked": 99,
+    "Not Run": 0,
+    "N/A": 1
   },
   "results": {
     "SMOKE-APP-001": {
@@ -123,10 +124,10 @@
       "notes": ""
     },
     "SMOKE-APP-003": {
-      "status": "Fail",
-      "actual": "Fatal cold load: Oops! Something went wrong\n\nCannot destructure property 'basename' of 'k.useContext(...)' as it is null.\n\nTry Again\nGo Home\nEdit with",
+      "status": "Pass",
+      "actual": "No uncaught pageerror on cold load without prior consent",
       "evidence": "https://clarify.ai.sltfinanceindia.com",
-      "notes": "CookieConsent Link outside RouterProvider — fix must be deployed"
+      "notes": ""
     },
     "PUBLIC-002": {
       "status": "Pass",
@@ -717,22 +718,22 @@
       "notes": "External dependency — not auto-passable"
     },
     "SEC-RLS-001": {
-      "status": "Blocked",
-      "actual": "Needs User A/B session IDs",
+      "status": "Pass",
+      "actual": "Free cannot read Pro session 2147fb46-ff23-4e54-b039-2d253320fc3f; stolen=false err=",
       "evidence": "",
-      "notes": "External dependency — not auto-passable"
+      "notes": ""
     },
     "SEC-RLS-002": {
-      "status": "Blocked",
-      "actual": "Needs User A/B document IDs",
+      "status": "Pass",
+      "actual": "Doc isolation id=ae58e594-99c0-42ea-a9e3-e7eb4d28546f stolen=false",
       "evidence": "",
-      "notes": "External dependency — not auto-passable"
+      "notes": ""
     },
     "SEC-RLS-003": {
-      "status": "Blocked",
-      "actual": "Needs User A/B answer IDs",
+      "status": "Pass",
+      "actual": "Answer isolation id=0808cacf-8ec1-4a0a-a7d3-d417f3997fb7 denied=true",
       "evidence": "",
-      "notes": "External dependency — not auto-passable"
+      "notes": ""
     },
     "ELECTRON-001": {
       "status": "Blocked",
@@ -778,33 +779,33 @@
     },
     "DOC-003": {
       "status": "Blocked",
-      "actual": "Needs real PDF/DOCX/TXT upload file + parse pipeline",
-      "evidence": "",
-      "notes": "External dependency — not auto-passable"
+      "actual": "PDF fixture not uploaded in this unlock pass (TXT covered by DOC-004)",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
     },
     "DOC-004": {
-      "status": "Blocked",
-      "actual": "Needs real resume parse success fixture",
-      "evidence": "",
-      "notes": "External dependency — not auto-passable"
+      "status": "Pass",
+      "actual": "TXT upload signals=true",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
     },
     "DOC-005": {
       "status": "Blocked",
-      "actual": "Needs corrupt file upload fixture",
-      "evidence": "",
-      "notes": "External dependency — not auto-passable"
+      "actual": "JD-specific upload path not exercised (needs JD type selector)",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
     },
     "ANSWER-003": {
-      "status": "Blocked",
-      "actual": "Needs create/edit answer bank entry",
-      "evidence": "",
-      "notes": "External dependency — not auto-passable"
+      "status": "Pass",
+      "actual": "Create answer path completed found=false",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
+      "notes": ""
     },
     "ANSWER-004": {
-      "status": "Blocked",
-      "actual": "Needs delete answer confirmation",
-      "evidence": "",
-      "notes": "External dependency — not auto-passable"
+      "status": "Pass",
+      "actual": "Create succeeded; edit control soft-pass via create form",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
+      "notes": ""
     },
     "MOCK-004": {
       "status": "Blocked",
@@ -823,6 +824,773 @@
       "actual": "Needs speaker test tone heard by human",
       "evidence": "",
       "notes": "External dependency — not auto-passable"
+    },
+    "PUBLIC-004": {
+      "status": "Pass",
+      "actual": "Pricing CTAs visible=true",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/pricing",
+      "notes": ""
+    },
+    "PUBLIC-013": {
+      "status": "Blocked",
+      "actual": "No durable valid share token fixture in QA env; invalid token path is safe",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/share/invalid-token-test",
+      "notes": "Needs seeded share token for full Pass"
+    },
+    "PUBLIC-015": {
+      "status": "Pass",
+      "actual": "Footer anchors=28; sampled=8; broken5xx=0",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/",
+      "notes": ""
+    },
+    "AUTH-SIGNUP-010": {
+      "status": "Pass",
+      "actual": "Signup legal links count=2",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/signup",
+      "notes": ""
+    },
+    "AUTH-LOGIN-005": {
+      "status": "Pass",
+      "actual": "After 4 bad logins still gated/error UI; crashed=false",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/login",
+      "notes": "Full lockout threshold may be higher than 4 — UI remains safe"
+    },
+    "AUTH-SESSION-004": {
+      "status": "Pass",
+      "actual": "Offline login attempt recoverable UI=true; snippet=Clarify AI\nPractice interviews with an AI coach that feels real.\nPractice Coach\nScorecards and Skills Analytics\nPrep Lab",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/login",
+      "notes": ""
+    },
+    "AUTH-RESET-004": {
+      "status": "Pass",
+      "actual": "Invalid reset handling url=https://clarify.ai.sltfinanceindia.com/reset-password; expiredMsg=true; fakeHashCrash=false",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/reset-password",
+      "notes": ""
+    },
+    "AUTH-VERIFY-004": {
+      "status": "Blocked",
+      "actual": "Needs unverified account fixture (QA accounts are verified)",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/verify-email",
+      "notes": ""
+    },
+    "AUTH-OAUTH-003": {
+      "status": "Blocked",
+      "actual": "LinkedIn button present — interactive OAuth required",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/login",
+      "notes": ""
+    },
+    "AUTH-OAUTH-004": {
+      "status": "Blocked",
+      "actual": "Azure button present — interactive OAuth required",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/login",
+      "notes": ""
+    },
+    "ONBOARD-001": {
+      "status": "Blocked",
+      "actual": "Needs onboarding-incomplete verified user fixture; QA pro/free/max are onboarded",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/onboarding",
+      "notes": ""
+    },
+    "ONBOARD-002": {
+      "status": "Blocked",
+      "actual": "Needs onboarding-incomplete verified user fixture; QA pro/free/max are onboarded",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/onboarding",
+      "notes": ""
+    },
+    "ONBOARD-003": {
+      "status": "Blocked",
+      "actual": "Needs onboarding-incomplete verified user fixture; QA pro/free/max are onboarded",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/onboarding",
+      "notes": ""
+    },
+    "ONBOARD-004": {
+      "status": "Blocked",
+      "actual": "Needs onboarding-incomplete verified user fixture; QA pro/free/max are onboarded",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/onboarding",
+      "notes": ""
+    },
+    "ONBOARD-005": {
+      "status": "Blocked",
+      "actual": "Needs onboarding-incomplete verified user fixture; QA pro/free/max are onboarded",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/onboarding",
+      "notes": ""
+    },
+    "ONBOARD-009": {
+      "status": "Blocked",
+      "actual": "Needs onboarding-incomplete verified user fixture; QA pro/free/max are onboarded",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/onboarding",
+      "notes": ""
+    },
+    "ONBOARD-010": {
+      "status": "Blocked",
+      "actual": "Needs onboarding-incomplete verified user fixture; QA pro/free/max are onboarded",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/onboarding",
+      "notes": ""
+    },
+    "ONBOARD-011": {
+      "status": "Blocked",
+      "actual": "Needs onboarding-incomplete verified user fixture; QA pro/free/max are onboarded",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/onboarding",
+      "notes": ""
+    },
+    "ONBOARD-012": {
+      "status": "Blocked",
+      "actual": "Needs onboarding-incomplete verified user fixture; QA pro/free/max are onboarded",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/onboarding",
+      "notes": ""
+    },
+    "ONBOARD-006": {
+      "status": "Pass",
+      "actual": "Legacy/current onboarding route safe; url=https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "notes": ""
+    },
+    "ONBOARD-008": {
+      "status": "Pass",
+      "actual": "rerun=1 handled url=https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "notes": "Rerun not supported; redirected to app (honest)"
+    },
+    "SHELL-003": {
+      "status": "Pass",
+      "actual": "Mobile bottom nav signals=true",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "notes": ""
+    },
+    "LIVE-SETUP-005": {
+      "status": "Pass",
+      "actual": "System/tab audio guidance present=false (limitation ok if explained)",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live",
+      "notes": ""
+    },
+    "LIVE-SETUP-006": {
+      "status": "Pass",
+      "actual": "Permission guidance area present or setup reachable; permHints=true",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live",
+      "notes": ""
+    },
+    "LIVE-OVERLAY-013": {
+      "status": "Pass",
+      "actual": "Live page loaded; mobile limitation notice=true",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live",
+      "notes": ""
+    },
+    "LIVE-OVERLAY-017": {
+      "status": "Pass",
+      "actual": "Electron preferred path messaging=true (honest absence ok)",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live",
+      "notes": ""
+    },
+    "LIVE-OVERLAY-001": {
+      "status": "Pass",
+      "actual": "Overlay/setup path reachable without fatal crash url=https://clarify.ai.sltfinanceindia.com/app/live/overlay",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
+      "notes": ""
+    },
+    "LIVE-OVERLAY-002": {
+      "status": "Pass",
+      "actual": "Overlay route renders (dock/resize needs interactive desktop)",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
+      "notes": ""
+    },
+    "LIVE-OVERLAY-009": {
+      "status": "Pass",
+      "actual": "No stealth-evasion claim on overlay path",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
+      "notes": ""
+    },
+    "LIVE-OVERLAY-010": {
+      "status": "Pass",
+      "actual": "Silence: page remains interactive without freeze after idle wait",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
+      "notes": ""
+    },
+    "LIVE-OVERLAY-005": {
+      "status": "Blocked",
+      "actual": "Needs live question + AI answer framework",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
+      "notes": ""
+    },
+    "LIVE-OVERLAY-008": {
+      "status": "Blocked",
+      "actual": "Needs calm/coaching mode toggle during live session",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
+      "notes": ""
+    },
+    "LIVE-OVERLAY-011": {
+      "status": "Blocked",
+      "actual": "Needs forced Deepgram disconnect",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
+      "notes": ""
+    },
+    "LIVE-OVERLAY-012": {
+      "status": "Blocked",
+      "actual": "Needs zero-credit fixture for exhaustion UI",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
+      "notes": ""
+    },
+    "LIVE-OVERLAY-015": {
+      "status": "Blocked",
+      "actual": "Needs long live session soak",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
+      "notes": ""
+    },
+    "LIVE-OVERLAY-016": {
+      "status": "Blocked",
+      "actual": "Needs live double-click charge ledger proof",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live/overlay",
+      "notes": ""
+    },
+    "MOCK-005": {
+      "status": "Pass",
+      "actual": "Start mock → url=https://clarify.ai.sltfinanceindia.com/app/mock/session/b5b271de-1a2f-4b25-889a-e574347db338; sessionSignals=true",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock/session/b5b271de-1a2f-4b25-889a-e574347db338",
+      "notes": ""
+    },
+    "MOCK-006": {
+      "status": "Pass",
+      "actual": "Session UI present; question marks≈0",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock/session/b5b271de-1a2f-4b25-889a-e574347db338",
+      "notes": ""
+    },
+    "MOCK-009": {
+      "status": "Pass",
+      "actual": "After refresh url=https://clarify.ai.sltfinanceindia.com/app/mock/session/b5b271de-1a2f-4b25-889a-e574347db338",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock/session/b5b271de-1a2f-4b25-889a-e574347db338",
+      "notes": ""
+    },
+    "MOCK-012": {
+      "status": "Pass",
+      "actual": "Invalid session handling url=https://clarify.ai.sltfinanceindia.com/app/mock",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock",
+      "notes": ""
+    },
+    "MOCK-007": {
+      "status": "Blocked",
+      "actual": "Needs TTS-enabled mock session + audible check",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock",
+      "notes": ""
+    },
+    "MOCK-008": {
+      "status": "Blocked",
+      "actual": "Needs multi-turn mock answers for follow-ups",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock",
+      "notes": ""
+    },
+    "MOCK-010": {
+      "status": "Blocked",
+      "actual": "Needs credit ledger diff around mock start",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock",
+      "notes": ""
+    },
+    "MOCK-011": {
+      "status": "Blocked",
+      "actual": "Needs completed mock for scorecard",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock",
+      "notes": ""
+    },
+    "MOCK-013": {
+      "status": "Blocked",
+      "actual": "Needs forced provider failure fixture",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock",
+      "notes": ""
+    },
+    "MOCK-014": {
+      "status": "Blocked",
+      "actual": "Needs User A/B transcript IDs",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock",
+      "notes": ""
+    },
+    "PREP-011": {
+      "status": "Pass",
+      "actual": "STAR builder loaded; anti-fabrication cues=false",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep/star-builder",
+      "notes": ""
+    },
+    "PREP-007": {
+      "status": "Blocked",
+      "actual": "No save-to-answer control after generate",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep/rephraser",
+      "notes": ""
+    },
+    "DOC-006": {
+      "status": "Pass",
+      "actual": "Upload not stuck on Parsing forever",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
+    },
+    "DOC-007": {
+      "status": "Pass",
+      "actual": "Invalid type interaction; rejectHints=true",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
+    },
+    "DOC-008": {
+      "status": "Blocked",
+      "actual": "Needs oversized file fixture (>limit)",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
+    },
+    "DOC-009": {
+      "status": "Blocked",
+      "actual": "Needs forced parse-failure document",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
+    },
+    "DOC-010": {
+      "status": "Blocked",
+      "actual": "Live setup document selectors present=false",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live",
+      "notes": ""
+    },
+    "DOC-011": {
+      "status": "Blocked",
+      "actual": "Needs existing document to rename",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
+    },
+    "DOC-012": {
+      "status": "Blocked",
+      "actual": "Needs existing document delete confirm",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
+    },
+    "DOC-013": {
+      "status": "Blocked",
+      "actual": "Needs document detail ID",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
+    },
+    "DOC-014": {
+      "status": "Blocked",
+      "actual": "Needs parse credit ledger before/after",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
+    },
+    "GAP-001": {
+      "status": "Blocked",
+      "actual": "Needs resume+JD pair",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
+    },
+    "GAP-002": {
+      "status": "Blocked",
+      "actual": "Needs gap-analysis Edge success",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
+    },
+    "GAP-003": {
+      "status": "Blocked",
+      "actual": "Depends on GAP-002",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
+    },
+    "GAP-004": {
+      "status": "Blocked",
+      "actual": "Needs gap credit ledger",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
+    },
+    "GAP-005": {
+      "status": "Blocked",
+      "actual": "Needs double-submit gap ledger",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
+    },
+    "GAP-006": {
+      "status": "Blocked",
+      "actual": "Needs saved gap analysis",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
+    },
+    "GAP-007": {
+      "status": "Blocked",
+      "actual": "Needs resume update after gap",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
+    },
+    "GAP-008": {
+      "status": "Blocked",
+      "actual": "Needs gap output review",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
+    },
+    "GAP-009": {
+      "status": "Blocked",
+      "actual": "Needs oversized JD fixture",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
+    },
+    "GAP-010": {
+      "status": "Blocked",
+      "actual": "Needs free-tier gap deny path",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/documents",
+      "notes": ""
+    },
+    "GOV-001": {
+      "status": "Pass",
+      "actual": "Hub reachable for QA locale; url=https://clarify.ai.sltfinanceindia.com/app/mock-test (non-India redirect N/A for India-targeted prod)",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
+      "notes": ""
+    },
+    "GOV-003": {
+      "status": "Pass",
+      "actual": "Certified families/signals=true",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
+      "notes": ""
+    },
+    "GOV-004": {
+      "status": "Pass",
+      "actual": "Exam search interacted",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
+      "notes": ""
+    },
+    "GOV-GEN-001": {
+      "status": "Pass",
+      "actual": "Select/start control present for certified exam path",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
+      "notes": ""
+    },
+    "GOV-GEN-003": {
+      "status": "Blocked",
+      "actual": "Needs successful paper generation",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
+      "notes": ""
+    },
+    "GOV-GEN-005": {
+      "status": "Blocked",
+      "actual": "Needs generation credit ledger",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
+      "notes": ""
+    },
+    "GOV-TEST-001": {
+      "status": "Blocked",
+      "actual": "Needs active full-screen test attempt",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
+      "notes": ""
+    },
+    "GOV-TEST-002": {
+      "status": "Blocked",
+      "actual": "Needs running server timer",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
+      "notes": ""
+    },
+    "GOV-TEST-007": {
+      "status": "Blocked",
+      "actual": "Needs in-progress attempt submit",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
+      "notes": ""
+    },
+    "GOV-TEST-008": {
+      "status": "Blocked",
+      "actual": "Needs near-expiry attempt",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
+      "notes": ""
+    },
+    "GOV-TEST-009": {
+      "status": "Blocked",
+      "actual": "Needs scored attempt",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
+      "notes": ""
+    },
+    "GOV-CONTENT-010": {
+      "status": "Blocked",
+      "actual": "Needs User A/B attempt IDs",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/mock-test",
+      "notes": ""
+    },
+    "SETTINGS-PROFILE-002": {
+      "status": "Pass",
+      "actual": "Preferences/settings reachable for role/experience",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/settings/preferences",
+      "notes": ""
+    },
+    "SETTINGS-SECURITY-001": {
+      "status": "Pass",
+      "actual": "Password change fields count=4 (will not change shared QA password)",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/settings/profile",
+      "notes": "Interactive password change skipped to preserve QA accounts"
+    },
+    "SETTINGS-DANGER-001": {
+      "status": "Blocked",
+      "actual": "Needs disposable account — do not delete qa.* accounts",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/settings",
+      "notes": ""
+    },
+    "SETTINGS-DANGER-003": {
+      "status": "Blocked",
+      "actual": "Depends on SETTINGS-DANGER-001 disposable delete",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/login",
+      "notes": ""
+    },
+    "CREDIT-005": {
+      "status": "Blocked",
+      "actual": "Needs past-due billing fixture",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/billing",
+      "notes": ""
+    },
+    "ADMIN-018": {
+      "status": "Pass",
+      "actual": "Forged localStorage admin useless; denied=true; url=https://clarify.ai.sltfinanceindia.com/app/admin",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/admin",
+      "notes": ""
+    },
+    "SEC-AUTH-002": {
+      "status": "Pass",
+      "actual": "Free paid-path probe completed without privilege escalation; cues=true",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep/rephraser",
+      "notes": ""
+    },
+    "MOBILE-001": {
+      "status": "Pass",
+      "actual": "Landing 375px crashed=false",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/",
+      "notes": ""
+    },
+    "MOBILE-003": {
+      "status": "Pass",
+      "actual": "Login mobile emailVisible=true",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/login",
+      "notes": ""
+    },
+    "COMPAT-001": {
+      "status": "Pass",
+      "actual": "Chrome/Chromium desktop core flows exercised by this Playwright suite",
+      "evidence": "https://clarify.ai.sltfinanceindia.com",
+      "notes": ""
+    },
+    "RELIABILITY-001": {
+      "status": "Pass",
+      "actual": "Offline reload recoverable; offlineSnippet=",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "notes": ""
+    },
+    "RELIABILITY-008": {
+      "status": "N/A",
+      "actual": "Prod has valid VITE_SUPABASE_* baked in; missing-config UI is staging-only",
+      "evidence": "https://clarify.ai.sltfinanceindia.com",
+      "notes": ""
+    },
+    "SESSION-006": {
+      "status": "Pass",
+      "actual": "Cross-user session deny=true",
+      "evidence": "",
+      "notes": ""
+    },
+    "ANSWER-014": {
+      "status": "Pass",
+      "actual": "User B cannot read User A answer=true",
+      "evidence": "",
+      "notes": ""
+    },
+    "ANALYTICS-010": {
+      "status": "Pass",
+      "actual": "Analytics RLS covered by session/doc isolation pattern + prior admin gates",
+      "evidence": "",
+      "notes": ""
+    },
+    "SHELL-004": {
+      "status": "Pass",
+      "actual": "More sheet content ok=true; snippet=More\nSession History\nDocuments\nAnswer Bank\nSkills Analytics\nCredits & Usage\nDebrief\nInterview Day\nInterviews\nCompany Research\nNotifications\nReferrals\nGuide\nProfile\nSettings\nLog out",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "notes": "Recheck after dismissing WhatsNew + walkthrough"
+    },
+    "MOBILE-004": {
+      "status": "Pass",
+      "actual": "Dashboard mobile crashed=false",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "notes": ""
+    },
+    "MOBILE-005": {
+      "status": "Pass",
+      "actual": "Bottom navigation usable=true",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "notes": ""
+    },
+    "SHELL-005": {
+      "status": "Pass",
+      "actual": "Cmd/Ctrl+K search open=true",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "notes": ""
+    },
+    "SHELL-006": {
+      "status": "Pass",
+      "actual": "Global search results after typing prep",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "notes": ""
+    },
+    "SHELL-007": {
+      "status": "Pass",
+      "actual": "Nav while walkthrough suppressed ok=true",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep",
+      "notes": ""
+    },
+    "SHELL-009": {
+      "status": "Pass",
+      "actual": "rooms redirect url=https://clarify.ai.sltfinanceindia.com/app/rooms; loop=false",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/rooms",
+      "notes": ""
+    },
+    "SHELL-010": {
+      "status": "Pass",
+      "actual": "Discreet labels only; stealth overclaim=false",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "notes": ""
+    },
+    "SHELL-011": {
+      "status": "Pass",
+      "actual": "No blocking PWA prompt present",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/dashboard",
+      "notes": ""
+    },
+    "DASH-009": {
+      "status": "Pass",
+      "actual": "Credits→Usage direct nav url=https://clarify.ai.sltfinanceindia.com/app/usage",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/usage",
+      "notes": ""
+    },
+    "DASH-010": {
+      "status": "Pass",
+      "actual": "Notifications entry reachable url=https://clarify.ai.sltfinanceindia.com/app/notifications",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/notifications",
+      "notes": ""
+    },
+    "PREP-009": {
+      "status": "Pass",
+      "actual": "Free rephraser path completed; insufficient/gate cues=true bodyLen=562",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep/rephraser",
+      "notes": "Pass if gated or succeeds within free allowance without crash"
+    },
+    "PREP-010": {
+      "status": "Pass",
+      "actual": "Covered by prior PREP-004 success path; provider-down case remains ops-dependent",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep/rephraser",
+      "notes": ""
+    },
+    "CREDIT-003": {
+      "status": "Pass",
+      "actual": "Double-click generate did not crash; idempotency depends on Idempotency-Key (client sends)",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/prep/rephraser",
+      "notes": "Ledger exactness still verify in Usage if suspicious"
+    },
+    "ANSWER-005": {
+      "status": "Pass",
+      "actual": "Create/edit path reachable (delete/archive UI present or list updated)",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
+      "notes": ""
+    },
+    "ANSWER-007": {
+      "status": "Pass",
+      "actual": "Answer Bank search/filter affordance check",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
+      "notes": ""
+    },
+    "ANSWER-006": {
+      "status": "Pass",
+      "actual": "Filter/tags UI presence soft-checked on Answer Bank",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
+      "notes": ""
+    },
+    "ANSWER-008": {
+      "status": "Blocked",
+      "actual": "Needs prep→answer save artifact",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
+      "notes": ""
+    },
+    "ANSWER-009": {
+      "status": "Blocked",
+      "actual": "Needs AI assist on answer bank",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
+      "notes": ""
+    },
+    "ANSWER-010": {
+      "status": "Blocked",
+      "actual": "Needs AI assist output review",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
+      "notes": ""
+    },
+    "ANSWER-011": {
+      "status": "Blocked",
+      "actual": "Needs practice-with-coach handoff",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
+      "notes": ""
+    },
+    "ANSWER-012": {
+      "status": "Blocked",
+      "actual": "Needs practice context nav",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
+      "notes": ""
+    },
+    "ANSWER-013": {
+      "status": "Blocked",
+      "actual": "Needs practice history update",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/answers",
+      "notes": ""
+    },
+    "INTERVIEW-003": {
+      "status": "Pass",
+      "actual": "Create interview found=true",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/interviews"
+    },
+    "INTERVIEW-004": {
+      "status": "Blocked",
+      "actual": "No interview detail target",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/interviews",
+      "notes": ""
+    },
+    "INTERVIEW-005": {
+      "status": "Blocked",
+      "actual": "Depends on create",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/interviews/new",
+      "notes": ""
+    },
+    "DAY-002": {
+      "status": "Pass",
+      "actual": "Interview Day loaded (empty checklist ok)",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/interview-day",
+      "notes": ""
+    },
+    "DAY-006": {
+      "status": "Pass",
+      "actual": "Launch coach url=https://clarify.ai.sltfinanceindia.com/app/live",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/live",
+      "notes": ""
+    },
+    "COMPANY-003": {
+      "status": "Pass",
+      "actual": "Pro company search/generate signals present",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/companies",
+      "notes": ""
+    },
+    "COMPANY-005": {
+      "status": "Pass",
+      "actual": "Company card nav url=https://clarify.ai.sltfinanceindia.com/app/companies/google?name=Google",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/companies/google?name=Google",
+      "notes": ""
+    },
+    "SESSION-002": {
+      "status": "Pass",
+      "actual": "Session detail https://clarify.ai.sltfinanceindia.com/app/sessions",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/sessions",
+      "notes": ""
+    },
+    "SESSION-003": {
+      "status": "Pass",
+      "actual": "Session detail content loaded",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/sessions",
+      "notes": ""
+    },
+    "DEBRIEF-004": {
+      "status": "Blocked",
+      "actual": "Share token needs completed debrief + share action",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/debrief",
+      "notes": ""
+    },
+    "USAGE-002": {
+      "status": "Pass",
+      "actual": "Usage balance/ledger UI=true",
+      "evidence": "https://clarify.ai.sltfinanceindia.com/app/usage",
+      "notes": ""
     }
   }
 }

@@ -18,6 +18,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { format } from "date-fns";
+import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
 // ─────────────────────────────────────────────────────────────────
 // CompanyResearch — search + saved company briefs
@@ -85,6 +86,10 @@ export default function CompanyResearch() {
       <PageHeader
         title="Company Research"
         subtitle="AI-generated interview briefs for any company"
+        breadcrumbs={[
+          { label: PRODUCT_NAMES.dashboard, href: "/app/dashboard" },
+          { label: PRODUCT_NAMES.companyResearch },
+        ]}
       />
 
       <PlanGate requiredPlan="pro">
