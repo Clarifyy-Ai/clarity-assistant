@@ -116,40 +116,36 @@ const APP_ENV_VALUE = parseAppEnvironment(
 const isProductionRuntime =
   APP_ENV_VALUE === "production" || import.meta.env.PROD === true;
 
-// Public (safe-to-ship) fallbacks for local/dev only. The Supabase project URL
-// and anon key are designed to be exposed in the browser — RLS protects data.
-// Never use these in production: a missing VITE_* inject must fail clearly.
+// Public (safe-to-ship) fallbacks. The Supabase project URL and anon key are
+// designed to be exposed in the browser — RLS protects the data. If a build
+// ships without the VITE_* injects we log loudly but still boot, rather than
+// hard-crashing the whole app with a blank screen.
 const FALLBACK_SUPABASE_URL = "https://qzgvjrvtkwlzxpmlddkx.supabase.co";
 const FALLBACK_SUPABASE_ANON_KEY =
   "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF6Z3ZqcnZ0a3dsenhwbWxkZGt4Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM4MDE4MzAsImV4cCI6MjA4OTM3NzgzMH0.hsDv4Sk7L8on5zlr9K6LT1FQe3bEEzmav5bCYes-0so";
 
 const SUPABASE_URL_RAW = optional(["VITE_SUPABASE_URL"]);
 if (!SUPABASE_URL_RAW) {
-  if (isProductionRuntime) {
-    firstDefined(["VITE_SUPABASE_URL"]);
-  }
-  console.warn(
-    "[env] VITE_SUPABASE_URL missing from bundle — using public project fallback."
-  );
+  const warning =
+    "[env] VITE_SUPABASE_URL missing from bundle — using public project fallback.";
+  if (isProductionRuntime) console.error(warning);
+  else console.warn(warning);
 }
 const SUPABASE_URL_VALUE = assertValidUrl(
   SUPABASE_URL_RAW || FALLBACK_SUPABASE_URL,
   "VITE_SUPABASE_URL"
 );
 
-const SUPABASE_ANON_KEY_VALUE = isProductionRuntime
-  ? firstDefined(["VITE_SUPABASE_ANON_KEY", "VITE_SUPABASE_PUBLISHABLE_KEY"])
-  : optional(
-      ["VITE_SUPABASE_ANON_KEY", "VITE_SUPABASE_PUBLISHABLE_KEY"],
-      FALLBACK_SUPABASE_ANON_KEY
-    );
+const SUPABASE_ANON_KEY_VALUE = optional(
+  ["VITE_SUPABASE_ANON_KEY", "VITE_SUPABASE_PUBLISHABLE_KEY"],
+  FALLBACK_SUPABASE_ANON_KEY
+);
 
-const SUPABASE_PUBLISHABLE_KEY_VALUE = isProductionRuntime
-  ? firstDefined(["VITE_SUPABASE_PUBLISHABLE_KEY", "VITE_SUPABASE_ANON_KEY"])
-  : optional(
-      ["VITE_SUPABASE_PUBLISHABLE_KEY", "VITE_SUPABASE_ANON_KEY"],
-      FALLBACK_SUPABASE_ANON_KEY
-    );
+const SUPABASE_PUBLISHABLE_KEY_VALUE = optional(
+  ["VITE_SUPABASE_PUBLISHABLE_KEY", "VITE_SUPABASE_ANON_KEY"],
+  FALLBACK_SUPABASE_ANON_KEY
+);
+
 
 const APP_URL_VALUE = normalizeOptionalUrl(optional(["VITE_APP_URL"]));
 
