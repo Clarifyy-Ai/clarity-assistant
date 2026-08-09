@@ -137,7 +137,13 @@ export const ProtectedRoute = memo(function ProtectedRoute({
   // 3) Not authenticated
   if (!user || status === "unauthenticated") {
     const returnTo = `${location.pathname}${location.search}${location.hash}`;
-    const to = buildLoginUrl({ loginPath, returnTo });
+    // Prefer pathname + search object so returnTo is never dropped by path-only parsing.
+    const loginHref = buildLoginUrl({ loginPath, returnTo });
+    const qIndex = loginHref.indexOf("?");
+    const to =
+      qIndex >= 0
+        ? { pathname: loginHref.slice(0, qIndex), search: loginHref.slice(qIndex) }
+        : loginHref;
     logger.info(LogEvents.ROUTE_GUARD_DECISION, {
       route: location.pathname,
       authState: "anonymous",

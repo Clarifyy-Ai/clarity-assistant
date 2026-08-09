@@ -27,6 +27,12 @@ import { usePageMeta } from "@/hooks/usePageMeta";
 import { AuthShell } from "@/components/layout/AuthShell";
 import { sanitizeReturnTo } from "@/lib/auth/safeReturnTo";
 import {
+  billingReturnPathForPlan,
+  getPendingPlan,
+  isPaidSignupPlan,
+  setPendingPlan,
+} from "@/lib/billing/pendingPlan";
+import {
   SESSION_EXPIRED_MESSAGE,
   SESSION_EXPIRED_REASON,
   SIGNED_OUT_ELSEWHERE_MESSAGE,
@@ -121,6 +127,12 @@ export default function Login(): JSX.Element {
       : null,
   );
   const explicitReturnTo = returnToFromQuery ?? returnToFromState;
+  const planFromQuery = searchParams.get("plan");
+  const signupHref = isPaidSignupPlan(planFromQuery)
+    ? `/signup?plan=${planFromQuery}`
+    : getPendingPlan()
+      ? `/signup?plan=${getPendingPlan()}`
+      : "/signup";
 
   const authStatus = useAuthStore((state) => state.status);
   const isAdmin = useAuthStore((state) => state.isAdmin);
@@ -148,6 +160,10 @@ export default function Login(): JSX.Element {
     mode: "onChange",
     defaultValues: { email: "", password: "" },
   });
+
+  useEffect(() => {
+    setPendingPlan(searchParams.get("plan"));
+  }, [searchParams]);
 
   useEffect(() => {
     const message = searchParams.get("message");
@@ -180,9 +196,15 @@ export default function Login(): JSX.Element {
       return;
     }
 
-    // Honor deep-link returnTo when present; otherwise send admins to admin home.
+    const pendingPlan = getPendingPlan();
+    // Honor deep-link returnTo when present; else paid-plan CTAs → billing; else admin/dashboard.
     const target =
-      explicitReturnTo ?? (isAdmin ? "/app/admin" : "/app/dashboard");
+      explicitReturnTo ??
+      (pendingPlan
+        ? billingReturnPathForPlan(pendingPlan)
+        : isAdmin
+          ? "/app/admin"
+          : "/app/dashboard");
     navigate(target, { replace: true });
   }, [authStatus, isProfileLoaded, isAdmin, explicitReturnTo, navigate, mfaPending]);
 
@@ -528,7 +550,7 @@ export default function Login(): JSX.Element {
           <p className="text-center text-sm text-muted-foreground mt-6">
             Don&apos;t have an account?{" "}
             <Link
-              to="/signup"
+              to={signupHref}
               className="text-primary font-medium hover:opacity-80 transition-opacity"
             >
               Sign up free

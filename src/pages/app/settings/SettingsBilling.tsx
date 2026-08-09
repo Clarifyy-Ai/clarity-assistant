@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
@@ -26,6 +26,10 @@ import {
   openCheckoutForPrice,
   openBillingPortal,
 } from "@/lib/api/billing";
+import {
+  clearPendingPlan,
+  isPaidSignupPlan,
+} from "@/lib/billing/pendingPlan";
 import {
   openRazorpayCheckout,
   type RazorpayProductType,
@@ -159,6 +163,7 @@ export default function SettingsBilling(): JSX.Element {
   const [razorpayLoading, setRazorpayLoading] = useState<string | null>(null);
   /** Sum of debit amounts this calendar month; null when unknown / N/A. */
   const [creditsUsedThisPeriod, setCreditsUsedThisPeriod] = useState<number | null>(null);
+  const upgradeCheckoutStartedRef = useRef(false);
 
   const effectivePlanId = (planId as PlanId) || "free";
   const currentPlan = PLANS[effectivePlanId] ?? PLANS.free;
@@ -228,9 +233,11 @@ export default function SettingsBilling(): JSX.Element {
     const checkoutStatus = searchParams.get("checkout");
     const legacySuccess = searchParams.get("success");
     const legacyCanceled = searchParams.get("canceled");
+    const upgradePlan = searchParams.get("upgrade");
 
     if (checkoutStatus === "success" || legacySuccess === "1") {
       toast.success("Payment successful! Your balance is updating now.");
+      clearPendingPlan();
       setSearchParams({}, { replace: true });
       void reloadBillingState();
       void refreshCredits();
@@ -240,8 +247,33 @@ export default function SettingsBilling(): JSX.Element {
     if (checkoutStatus === "cancelled" || legacyCanceled === "1") {
       toast.info("Checkout was cancelled. No payment was taken.");
       setSearchParams({}, { replace: true });
+      return;
     }
-  }, [searchParams, setSearchParams]);
+
+    if (
+      isPaidSignupPlan(upgradePlan) &&
+      STRIPE_CONFIGURED &&
+      !upgradeCheckoutStartedRef.current
+    ) {
+      const priceId = getPlanPriceId(upgradePlan as PlanId);
+      if (!priceId) {
+        toast.error("No Stripe price is configured for this plan.");
+        setSearchParams({}, { replace: true });
+        return;
+      }
+      upgradeCheckoutStartedRef.current = true;
+      clearPendingPlan();
+      setSearchParams({}, { replace: true });
+      setActionLoading(upgradePlan);
+      void openCheckoutForPrice(priceId)
+        .catch((error) => {
+          console.error("[SettingsBilling] upgrade checkout error:", error);
+          toast.error("Failed to start checkout. Please try again later.");
+          upgradeCheckoutStartedRef.current = false;
+        })
+        .finally(() => setActionLoading(null));
+    }
+  }, [searchParams, setSearchParams, reloadBillingState, refreshCredits]);
 
   const statusInfo = STATUS_LABELS[subscription?.status ?? ""] ?? null;
 

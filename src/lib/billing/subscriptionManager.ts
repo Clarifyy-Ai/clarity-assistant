@@ -203,7 +203,7 @@ export const PLANS: Record<PlanId, Plan> = {
     name: "Pro",
     tagline: "Everything you need to land the role",
     monthlyPrice: 2_900,
-    yearlyPrice: 2_417, // $29,000/yr ÷ 12 — display only
+    yearlyPrice: 2_320, // 20% off $29/mo — display monthly equivalent when billed annually
     creditsPerMonth: 1_400,
     stripePriceIdMonthly: ENV.STRIPE_PRICE_PRO_MONTHLY,
     stripePriceIdYearly: ENV.STRIPE_PRICE_PRO_YEARLY,
@@ -366,7 +366,7 @@ export const PLANS: Record<PlanId, Plan> = {
     name: "Max",
     tagline: "Higher credits for power users and coaches",
     monthlyPrice: 7_900,
-    yearlyPrice: 6_583, // ~$79/mo billed yearly ($790.00/yr ÷ 12) — display only
+    yearlyPrice: 6_320, // 20% off $79/mo — display monthly equivalent when billed annually
     creditsPerMonth: 4_000,
     stripePriceIdMonthly: ENV.STRIPE_PRICE_ENTERPRISE_MONTHLY,
     stripePriceIdYearly: ENV.STRIPE_PRICE_ENTERPRISE_YEARLY,

@@ -19,7 +19,7 @@ type NavItem =
 
 const NAV_LINKS: NavItem[] = [
   { to: "/", hash: "features", label: "Features" },
-  { to: "/gov-exams", label: PRODUCT_NAMES.govExams },
+  { to: "/gov-exams", label: "Gov Exams" },
   { to: "/pricing", label: "Pricing" },
   { to: "/shortcuts", label: "Shortcuts" },
   { to: "/blog", label: "Blog" },
@@ -187,8 +187,8 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
               );
             })}
           </div>
-          <div className="flex items-center gap-2 sm:gap-3">
-            <ThemeToggle />
+          <div className="flex items-center gap-1.5 sm:gap-3">
+            <ThemeToggle className="w-8 h-8 sm:w-9 sm:h-9 shrink-0" />
             <Link
               to="/login"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:inline-block"
@@ -197,13 +197,14 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
             </Link>
             <Link
               to="/signup"
-              className="text-xs sm:text-sm font-semibold px-3 sm:px-5 py-2 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity"
+              className="text-xs sm:text-sm font-semibold px-2.5 sm:px-5 py-2 rounded-xl bg-primary text-primary-foreground hover:opacity-90 transition-opacity whitespace-nowrap shrink-0"
             >
-              Get started free
+              <span className="sm:hidden">Sign up</span>
+              <span className="hidden sm:inline">Get started free</span>
             </Link>
             <button
               type="button"
-              className="lg:hidden p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all"
+              className="lg:hidden p-1.5 sm:p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all shrink-0"
               onClick={() => setMenuOpen((p) => !p)}
               aria-label="Toggle menu"
             >

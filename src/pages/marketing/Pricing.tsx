@@ -9,7 +9,10 @@ import { MarketingLayout } from "@/components/layout/MarketingLayout";
 import { usePageMeta } from "@/hooks/usePageMeta";
 
 import { LAUNCH_PLANS } from "@/lib/constants/pricing";
-import { SALES_EMAIL } from "@/lib/constants/contact";
+import {
+  billingReturnPathForPlan,
+  isPaidSignupPlan,
+} from "@/lib/billing/pendingPlan";
 
 const DISPLAY_PLANS: PlanId[] = LAUNCH_PLANS;
 
@@ -22,6 +25,12 @@ const PLAN_COLORS: Record<string, string> = {
 };
 
 const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
+
+function paidPlanHref(planId: PlanId): string {
+  if (!isPaidSignupPlan(planId)) return "/signup";
+  const returnTo = encodeURIComponent(billingReturnPathForPlan(planId));
+  return `/login?plan=${planId}&returnTo=${returnTo}`;
+}
 
 export default function Pricing() {
   usePageMeta({
@@ -39,9 +48,9 @@ export default function Pricing() {
         return {
           "@type": "Offer",
           name: plan.name,
-          price: planId === "enterprise" ? "0" : (plan.monthlyPrice / 100).toFixed(2),
+          price: planId === "free" ? "0" : (plan.monthlyPrice / 100).toFixed(2),
           priceCurrency: "USD",
-          url: `${SITE_URL}/signup${planId === "free" ? "" : planId === "enterprise" ? "" : `?plan=${planId}`}`,
+          url: `${SITE_URL}${planId === "free" ? "/signup" : paidPlanHref(planId)}`,
         };
       }),
     },
@@ -106,6 +115,7 @@ export default function Pricing() {
                 ? "Free"
                 : `$${(effectiveMonthly / 100).toFixed(0)}`;
             const isMax = planId === "enterprise";
+            const ctaHref = planId === "free" ? "/signup" : paidPlanHref(planId);
 
             return (
               <m.div
@@ -133,39 +143,35 @@ export default function Pricing() {
                 <h3 className="text-base font-bold">{plan.name}</h3>
                 <p className="text-xs text-muted-foreground mt-1">{plan.tagline}</p>
 
-                <div className="mt-5">
+                <div className="mt-5 min-h-[4.5rem]">
                   <span className="text-3xl font-extrabold">{priceDisplay}</span>
                   {effectiveMonthly > 0 && (
                     <span className="text-sm text-muted-foreground ml-1">/mo</span>
                   )}
-                  {annual && effectiveMonthly > 0 && (
+                  {annual && effectiveMonthly > 0 ? (
                     <p className="text-[11px] text-muted-foreground/70 mt-0.5">billed annually</p>
+                  ) : (
+                    <p className="text-[11px] text-transparent mt-0.5 select-none" aria-hidden>
+                      billed annually
+                    </p>
                   )}
                 </div>
                 <p className="text-[11px] text-muted-foreground/70 mt-1">
                   {plan.creditsPerMonth.toLocaleString()} credits/mo
                 </p>
 
-                {isMax ? (
-                  <Link
-                    to={`/signup?plan=${planId}`}
-                    className="mt-5 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all bg-secondary text-foreground hover:bg-secondary/80"
-                  >
-                    Get Max <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
-                ) : (
-                  <Link
-                    to={planId === "free" ? "/signup" : `/signup?plan=${planId}`}
-                    className={cn(
-                      "mt-5 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all",
-                      plan.isPopular
-                        ? "bg-primary text-primary-foreground hover:opacity-90"
-                        : "bg-secondary text-foreground hover:bg-secondary/80"
-                    )}
-                  >
-                    {planId === "free" ? "Start Free" : "Get Started"} <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
-                )}
+                <Link
+                  to={ctaHref}
+                  className={cn(
+                    "mt-5 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all",
+                    plan.isPopular
+                      ? "bg-primary text-primary-foreground hover:opacity-90"
+                      : "bg-secondary text-foreground hover:bg-secondary/80"
+                  )}
+                >
+                  {planId === "free" ? "Start Free" : isMax ? "Get Max" : "Get Started"}{" "}
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
 
                 <div className="mt-6 pt-5 border-t border-border space-y-2.5 flex-1">
                   {plan.features.map((f) => (

@@ -10,6 +10,7 @@ import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { buildLoginUrl } from "@/lib/auth/safeReturnTo";
 
 // ─────────────────────────────────────────────────────────────────
 // Settings — sidebar layout wrapper (grouped IA)
@@ -106,7 +107,8 @@ function SettingsNavLink({ item }: { item: SettingsNavItem }) {
 }
 
 export default function Settings() {
-  const { pathname } = useLocation();
+  const location = useLocation();
+  const { pathname } = location;
   const navigate = useNavigate();
   const signOut = useAuthStore((s) => s.signOut);
   const isRoot = pathname === "/app/settings" || pathname === "/app/settings/";
@@ -114,8 +116,9 @@ export default function Settings() {
   const showSettingsHeader = !pathname.includes("/billing");
 
   async function handleSignOut() {
+    const returnTo = `${pathname}${location.search}${location.hash}`;
     await signOut();
-    navigate("/login", { replace: true });
+    navigate(buildLoginUrl({ returnTo }), { replace: true });
   }
 
   return (

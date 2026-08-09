@@ -56,6 +56,7 @@ import {
 import type { ProfileRow } from "@/types";
 import { getPlanDisplayName } from "@/lib/constants/pricing";
 import { PRODUCT_NAMES, NAV_SECTION_LABELS } from "@/lib/constants/productNames";
+import { buildLoginUrl } from "@/lib/auth/safeReturnTo";
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -272,8 +273,9 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
 
   async function handleLogout(): Promise<void> {
     try {
+      const returnTo = `${location.pathname}${location.search}${location.hash}`;
       await signOut();
-      navigate("/login");
+      navigate(buildLoginUrl({ returnTo }), { replace: true });
     } catch (error) {
       console.error("[AppSidebar] Sign out failed:", error);
     }

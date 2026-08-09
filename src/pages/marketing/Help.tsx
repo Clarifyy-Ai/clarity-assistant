@@ -248,9 +248,23 @@ export default function Help() {
           </a>
           <p className="text-xs text-muted-foreground mt-4">
             System status:{" "}
-            <a href={STATUS_PAGE_URL} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">
-              status.clarifyprep.com
-            </a>
+            {STATUS_PAGE_URL ? (
+              <a
+                href={STATUS_PAGE_URL}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline"
+              >
+                View status page
+              </a>
+            ) : (
+              <a
+                href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Clarify AI system status")}`}
+                className="text-primary hover:underline"
+              >
+                Email support for outages
+              </a>
+            )}
           </p>
         </div>
       </section>

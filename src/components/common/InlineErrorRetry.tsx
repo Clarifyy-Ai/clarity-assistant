@@ -29,7 +29,9 @@ export function InlineErrorRetry({
         className={cn("shrink-0 text-destructive", compact ? "w-3.5 h-3.5" : "w-4 h-4")}
         aria-hidden="true"
       />
-      <span className="flex-1 text-destructive truncate">{message}</span>
+      <span className="flex-1 text-destructive whitespace-normal break-words min-w-0">
+        {message}
+      </span>
       <Button
         type="button"
         variant="ghost"

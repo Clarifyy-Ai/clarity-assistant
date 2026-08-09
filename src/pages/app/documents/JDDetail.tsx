@@ -130,8 +130,8 @@ export default function JDDetail() {
     setGapResult(null);
     try {
       const result = await fetchEdgeJson<GapResult>("gap-analysis", {
-        method: "POST",
-        body: { resume_id: selectedResumeId, jd_id: id },
+        resume_id: selectedResumeId,
+        jd_id: id,
       });
       setGapResult(result);
       toast.success("Gap analysis ready");

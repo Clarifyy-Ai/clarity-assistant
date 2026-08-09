@@ -8,7 +8,7 @@ export const PRIVACY_EMAIL = "privacy@clarifyprep.com";
 export const SECURITY_EMAIL = "security@clarifyprep.com";
 
 export const STATUS_PAGE_URL =
-  import.meta.env.VITE_STATUS_PAGE_URL ?? "https://status.clarifyprep.com";
+  (import.meta.env.VITE_STATUS_PAGE_URL as string | undefined)?.trim() || "";
 
 /** Public GitHub org (releases / source). Override with VITE_GITHUB_ORG_URL. */
 export const GITHUB_ORG_URL =

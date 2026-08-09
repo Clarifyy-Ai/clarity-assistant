@@ -28,6 +28,7 @@ import {
 
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { notifyOverlayVisibilityOnMobile } from "@/lib/overlay/overlayVisibilityNotice";
+import { buildLoginUrl } from "@/lib/auth/safeReturnTo";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import {
@@ -166,7 +167,10 @@ export function MobileNav(): JSX.Element {
             type="button"
             onClick={() => {
               setMoreOpen(false);
-              void signOut().then(() => navigate("/login", { replace: true }));
+              const returnTo = `${location.pathname}${location.search}${location.hash}`;
+              void signOut().then(() =>
+                navigate(buildLoginUrl({ returnTo }), { replace: true }),
+              );
             }}
             className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm font-semibold text-red-500 hover:bg-red-500/10 transition-colors"
           >

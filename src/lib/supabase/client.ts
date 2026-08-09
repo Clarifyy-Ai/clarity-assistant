@@ -149,9 +149,9 @@ export async function uploadFile(
     onProgress?.(10);
 
     const contentType =
-      (file.type && file.type !== "application/octet-stream"
-        ? file.type
-        : getMimeType(file.name)) || "application/octet-stream";
+      (!file.type || file.type === "application/octet-stream"
+        ? getMimeType(file.name)
+        : file.type.split(";")[0]?.trim()) || "application/octet-stream";
 
     const { error } = await supabase.storage
       .from(bucketName)
@@ -179,7 +179,8 @@ export async function uploadFile(
       url,
       path: safePath,
     };
-  } catch {
+  } catch (err) {
+    console.error("[supabase] uploadFile failed:", err);
     return null;
   }
 }

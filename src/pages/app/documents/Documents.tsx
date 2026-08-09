@@ -991,12 +991,19 @@ function JDManager() {
             return (
               <Card key={jd.id} padding="sm">
                 <div className="flex items-center gap-3 sm:gap-4">
-                  <div className="w-9 h-9 bg-primary/10 rounded-xl items-center justify-center shrink-0 hidden sm:flex">
+                  <Link
+                    to={`/app/documents/jd/${jd.id}`}
+                    className="w-9 h-9 bg-primary/10 rounded-xl items-center justify-center shrink-0 hidden sm:flex hover:bg-primary/15 transition-colors"
+                    aria-label={`Open ${jd.role_title}`}
+                  >
                     <ClipboardList className="w-4 h-4 text-primary" />
-                  </div>
-                  <div className="flex-1 min-w-0">
+                  </Link>
+                  <Link
+                    to={`/app/documents/jd/${jd.id}`}
+                    className="flex-1 min-w-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  >
                     <div className="flex items-center gap-2">
-                      <p className="text-xs sm:text-sm font-medium text-foreground truncate">
+                      <p className="text-xs sm:text-sm font-medium text-foreground truncate hover:text-primary transition-colors">
                         {jd.role_title}
                       </p>
                       {isActive && <Badge variant="emerald" size="sm" dot>Active</Badge>}
@@ -1008,7 +1015,7 @@ function JDManager() {
                       {jd.company_name && `${jd.company_name} · `}
                       {format(new Date(jd.created_at), "MMM d, yyyy")}
                     </p>
-                  </div>
+                  </Link>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {!isActive && (
                       <Button
@@ -1020,6 +1027,13 @@ function JDManager() {
                         Set active
                       </Button>
                     )}
+                    <Link
+                      to={`/app/documents/jd/${jd.id}`}
+                      className="p-1.5 rounded-lg text-muted-foreground hover:text-primary hover:bg-accent/5 transition-all text-[10px] font-medium"
+                      title="Open job description"
+                    >
+                      Open
+                    </Link>
                     <button
                       onClick={() => setDeleteId(jd.id)}
                       className="p-1.5 rounded-lg text-muted-foreground hover:text-red-400 hover:bg-accent/5 transition-all"
