@@ -187,11 +187,11 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
               );
             })}
           </div>
-          <div className="flex items-center gap-1.5 sm:gap-3">
+          <div className="flex items-center gap-2 sm:gap-3 min-w-0">
             <ThemeToggle className="w-8 h-8 sm:w-9 sm:h-9 shrink-0" />
             <Link
               to="/login"
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:inline-block"
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:inline-block shrink-0"
             >
               Log in
             </Link>
@@ -206,7 +206,9 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
               type="button"
               className="lg:hidden p-1.5 sm:p-2 rounded-lg text-muted-foreground hover:text-foreground hover:bg-secondary/60 transition-all shrink-0"
               onClick={() => setMenuOpen((p) => !p)}
-              aria-label="Toggle menu"
+              aria-label={menuOpen ? "Close menu" : "Open menu"}
+              aria-expanded={menuOpen}
+              aria-controls="marketing-mobile-nav"
             >
               {menuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
             </button>
@@ -216,6 +218,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
 
       {menuOpen && (
         <div
+          id="marketing-mobile-nav"
           className="lg:hidden fixed inset-0 z-[100]"
           role="dialog"
           aria-modal="true"

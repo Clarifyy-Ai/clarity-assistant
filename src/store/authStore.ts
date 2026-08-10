@@ -35,9 +35,14 @@ import {
   isInvalidRefreshTokenError,
   isNonRetryableAuthError,
   redirectToSessionExpiredLogin,
-  redirectAfterCrossTabSignOut,
 } from "@/lib/auth/sessionErrors";
 import { buildAuthRedirectUrl } from "@/lib/auth/redirectUrl";
+import {
+  clearTabLocalLogout,
+  isTabLocalLogout,
+  markTabLocalLogout,
+  softClearTabSession,
+} from "@/lib/auth/tabLocalLogout";
 
 import type {
   SupabaseSession,
@@ -279,111 +284,12 @@ let _bootstrapping = false;
 let inFlightProfileLoad: { userId: string; promise: Promise<boolean> } | null = null;
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Concurrent-tab logout sync (QA-231)
+// Tab-local logout (independent tabs)
 //
-// Supabase's JS client does not broadcast sign-out across tabs on its own —
-// each tab keeps whatever session state it already loaded into memory until
-// its next network call fails. We close that gap two ways:
-//   1. BroadcastChannel — signOut() posts a message; other tabs react instantly.
-//   2. `storage` event fallback — catches the case where the Supabase auth
-//      token key is removed from localStorage by another tab/context that
-//      doesn't go through our signOut() (e.g. an older tab, a future code
-//      path), so tabs without BroadcastChannel support still self-heal.
+// Logout clears auth UI state for THIS tab only (sessionStorage flag) and does
+// not remove the shared Supabase localStorage session, so other open tabs keep
+// working. Opening a new tab still inherits the shared login.
 // ─────────────────────────────────────────────────────────────────────────────
-
-const CROSS_TAB_AUTH_CHANNEL_NAME = "clarify-auth-sync-v1";
-const CROSS_TAB_SIGNED_OUT_SIGNAL = "signed-out";
-const SUPABASE_AUTH_STORAGE_KEY_PATTERN = /^sb-.*-auth-token$/;
-
-let crossTabAuthChannel: BroadcastChannel | null = null;
-let crossTabListenersAttached = false;
-
-function getCrossTabAuthChannel(): BroadcastChannel | null {
-  if (typeof window === "undefined" || typeof BroadcastChannel === "undefined") {
-    return null;
-  }
-  if (!crossTabAuthChannel) {
-    try {
-      crossTabAuthChannel = new BroadcastChannel(CROSS_TAB_AUTH_CHANNEL_NAME);
-    } catch {
-      crossTabAuthChannel = null;
-    }
-  }
-  return crossTabAuthChannel;
-}
-
-/** Called by this tab's signOut() so every other open tab drops its session too. */
-function notifyOtherTabsSignedOut(): void {
-  try {
-    getCrossTabAuthChannel()?.postMessage(CROSS_TAB_SIGNED_OUT_SIGNAL);
-  } catch {
-    // Best-effort; the storage-event fallback still applies.
-  }
-}
-
-function handleCrossTabSignOutSignal(): void {
-  const state = useAuthStore.getState();
-  if (!state.isAuthenticated) {
-    return;
-  }
-  resetPostHog();
-  state.reset();
-  // Fire-and-forget: drop this tab's in-memory GoTrue session too, so a
-  // stale access token isn't reused before the redirect completes.
-  void clearStaleLocalSession();
-  redirectAfterCrossTabSignOut();
-}
-
-/** Idempotent — safe to call every initialize(); only attaches listeners once per tab. */
-function attachCrossTabSignOutListeners(): void {
-  if (crossTabListenersAttached || typeof window === "undefined") {
-    return;
-  }
-  crossTabListenersAttached = true;
-
-  const channel = getCrossTabAuthChannel();
-  channel?.addEventListener("message", (event: MessageEvent) => {
-    if (event.data === CROSS_TAB_SIGNED_OUT_SIGNAL) {
-      handleCrossTabSignOutSignal();
-    }
-  });
-
-  window.addEventListener("storage", (event: StorageEvent) => {
-    if (
-      !event.key ||
-      !SUPABASE_AUTH_STORAGE_KEY_PATTERN.test(event.key) ||
-      event.newValue !== null ||
-      event.oldValue === null
-    ) {
-      return;
-    }
-
-    // Token refresh can briefly clear then rewrite the auth key. Wait a tick
-    // and only sign out if the session is still actually gone.
-    const clearedKey = event.key;
-    window.setTimeout(() => {
-      try {
-        if (localStorage.getItem(clearedKey) !== null) return;
-      } catch {
-        // If storage is inaccessible, fall through and treat as signed out.
-      }
-      handleCrossTabSignOutSignal();
-    }, 100);
-  });
-}
-
-
-function getErrorMessage(error: unknown): string {
-  if (error instanceof Error) {
-    return error.message;
-  }
-
-  if (typeof error === "string" && error.trim().length > 0) {
-    return error;
-  }
-
-  return "Something went wrong.";
-}
 
 async function clearStaleLocalSession(): Promise<void> {
   try {
@@ -396,6 +302,18 @@ async function clearStaleLocalSession(): Promise<void> {
     recoveryAction: "clear_stale_session",
     outcome: "succeeded",
   });
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) {
+    return error.message;
+  }
+
+  if (typeof error === "string" && error.trim().length > 0) {
+    return error;
+  }
+
+  return "Something went wrong.";
 }
 
 function isPostHogEnabled(): boolean {
@@ -568,74 +486,96 @@ export const useAuthStore = create<AuthStore>()(
             //   (b) profile/role requests failing with 401 on a stale token,
             //   (c) repeated timeout warnings that look like an auth loop.
 
-            try {
-              const {
-                data: { session },
-                error,
-              } = await withTimeout(
-                supabase.auth.getSession(),
-                AUTH_SESSION_TIMEOUT_MS,
-                "Session check",
+            // This tab opted out of the shared session (independent logout).
+            // Skip hydrating from getSession(); still attach the normal listener
+            // so an intentional login in this tab can recover.
+            if (isTabLocalLogout()) {
+              resetPostHog();
+              dset((state) => {
+                state.session = null;
+                state.user = null;
+                state.profile = null;
+                state.status = "unauthenticated";
+                state.error = null;
+              });
+              logger.info(LogEvents.BOOTSTRAP_COMPLETED, {
+                operation: "initialize",
+                authState: "tab_local_logout",
+                outcome: "succeeded",
+              });
+              void softClearTabSession(() =>
+                supabase.auth.signOut({ scope: "local" }),
               );
+            } else {
+              try {
+                const {
+                  data: { session },
+                  error,
+                } = await withTimeout(
+                  supabase.auth.getSession(),
+                  AUTH_SESSION_TIMEOUT_MS,
+                  "Session check",
+                );
 
-              if (error) {
-                throw error;
-              }
+                if (error) {
+                  throw error;
+                }
 
-              if (session) {
-                dset((state) => {
-                  state.session = session as unknown as SupabaseSession;
-                  state.user = session.user as unknown as SupabaseUser;
-                });
-
-                const profileLoaded = await get().loadProfile();
-                // Do not return early on profile failure — listener registration and
-                // bootstrap lock release must still run below.
-                if (profileLoaded) {
+                if (session) {
                   dset((state) => {
-                    state.status = "authenticated";
+                    state.session = session as unknown as SupabaseSession;
+                    state.user = session.user as unknown as SupabaseUser;
                   });
 
+                  const profileLoaded = await get().loadProfile();
+                  // Do not return early on profile failure — listener registration and
+                  // bootstrap lock release must still run below.
+                  if (profileLoaded) {
+                    dset((state) => {
+                      state.status = "authenticated";
+                    });
+
+                    logger.info(LogEvents.BOOTSTRAP_COMPLETED, {
+                      operation: "initialize",
+                      authState: "authenticated",
+                      outcome: "succeeded",
+                    });
+                    identifyPostHogUser(session.user as unknown as SupabaseUser);
+                  }
+                } else {
+                  dset((state) => {
+                    state.status = "unauthenticated";
+                  });
                   logger.info(LogEvents.BOOTSTRAP_COMPLETED, {
                     operation: "initialize",
-                    authState: "authenticated",
+                    authState: "anonymous",
                     outcome: "succeeded",
                   });
-                  identifyPostHogUser(session.user as unknown as SupabaseUser);
                 }
-              } else {
-                dset((state) => {
-                  state.status = "unauthenticated";
-                });
-                logger.info(LogEvents.BOOTSTRAP_COMPLETED, {
-                  operation: "initialize",
-                  authState: "anonymous",
-                  outcome: "succeeded",
-                });
-              }
-            } catch (error) {
-              if (isInvalidRefreshTokenError(error)) {
-                logger.warn(LogEvents.AUTH_SESSION_RECOVERY_INVALID_TOKEN, {
-                  outcome: "failed",
-                  recoveryAction: "clear_stale_session",
-                  retryable: false,
-                });
-                console.warn(
-                  "[authStore] Stale refresh token detected — clearing local session and redirecting to login",
-                );
-                await clearStaleLocalSession();
-                resetPostHog();
-                get().reset();
-                redirectToSessionExpiredLogin();
-              } else {
-                logger.error(LogEvents.BOOTSTRAP_FAILED, {
-                  outcome: "failed",
-                  operation: "session.check",
-                });
-                dset((state) => {
-                  state.status = "error";
-                  state.error = getErrorMessage(error);
-                });
+              } catch (error) {
+                if (isInvalidRefreshTokenError(error)) {
+                  logger.warn(LogEvents.AUTH_SESSION_RECOVERY_INVALID_TOKEN, {
+                    outcome: "failed",
+                    recoveryAction: "clear_stale_session",
+                    retryable: false,
+                  });
+                  console.warn(
+                    "[authStore] Stale refresh token detected — clearing local session and redirecting to login",
+                  );
+                  await clearStaleLocalSession();
+                  resetPostHog();
+                  get().reset();
+                  redirectToSessionExpiredLogin();
+                } else {
+                  logger.error(LogEvents.BOOTSTRAP_FAILED, {
+                    outcome: "failed",
+                    operation: "session.check",
+                  });
+                  dset((state) => {
+                    state.status = "error";
+                    state.error = getErrorMessage(error);
+                  });
+                }
               }
             }
 
@@ -646,6 +586,14 @@ export const useAuthStore = create<AuthStore>()(
               const { data } = supabase.auth.onAuthStateChange(
                 async (event, session) => {
                   if (event === "SIGNED_IN" && session) {
+                    // Cross-tab storage sync must not undo independent logout.
+                    // Intentional login clears the flag before calling signIn*.
+                    if (isTabLocalLogout()) {
+                      void softClearTabSession(() =>
+                        supabase.auth.signOut({ scope: "local" }),
+                      );
+                      return;
+                    }
                     dset((state) => {
                       state.session = session as unknown as SupabaseSession;
                       state.user = session.user as unknown as SupabaseUser;
@@ -666,19 +614,31 @@ export const useAuthStore = create<AuthStore>()(
                   }
 
                   if (event === "SIGNED_OUT") {
+                    if (isTabLocalLogout()) {
+                      return;
+                    }
                     resetPostHog();
                     get().reset();
                   }
 
-                if (event === "TOKEN_REFRESHED" && session) {
-                  dset((state) => {
-                    state.session = session as unknown as SupabaseSession;
-                  });
-                  // Re-check ban on refresh so a mid-session admin ban takes effect.
-                  void get().loadProfile();
-                }
+                  if (event === "TOKEN_REFRESHED" && session) {
+                    if (isTabLocalLogout()) {
+                      void softClearTabSession(() =>
+                        supabase.auth.signOut({ scope: "local" }),
+                      );
+                      return;
+                    }
+                    dset((state) => {
+                      state.session = session as unknown as SupabaseSession;
+                    });
+                    // Re-check ban on refresh so a mid-session admin ban takes effect.
+                    void get().loadProfile();
+                  }
 
                   if (event === "USER_UPDATED" && session) {
+                    if (isTabLocalLogout()) {
+                      return;
+                    }
                     dset((state) => {
                       state.session = session as unknown as SupabaseSession;
                       state.user = session.user as unknown as SupabaseUser;
@@ -688,6 +648,9 @@ export const useAuthStore = create<AuthStore>()(
                   }
 
                   if (event === "PASSWORD_RECOVERY" && session) {
+                    if (isTabLocalLogout()) {
+                      return;
+                    }
                     dset((state) => {
                       state.session = session as unknown as SupabaseSession;
                       state.user = session.user as unknown as SupabaseUser;
@@ -700,8 +663,6 @@ export const useAuthStore = create<AuthStore>()(
               unsubAuthListener = () => {
                 data.subscription.unsubscribe();
               };
-
-              attachCrossTabSignOutListeners();
             } finally {
               // Release after listener attach so deliberate re-init (OAuth / password
               // reset) can run, but concurrent StrictMode boots stay serialized.
@@ -710,6 +671,7 @@ export const useAuthStore = create<AuthStore>()(
           },
 
           signInWithEmail: async (email, password) => {
+            clearTabLocalLogout();
             dset((state) => {
               state.status = "loading";
               state.error = null;
@@ -759,6 +721,7 @@ export const useAuthStore = create<AuthStore>()(
           },
 
           signUpWithEmail: async (email, password, fullName) => {
+            clearTabLocalLogout();
             dset((state) => {
               state.status = "loading";
               state.error = null;
@@ -805,6 +768,7 @@ export const useAuthStore = create<AuthStore>()(
           },
 
           signInWithOAuth: async (provider) => {
+            clearTabLocalLogout();
             dset((state) => {
               state.status = "loading";
               state.error = null;
@@ -834,25 +798,18 @@ export const useAuthStore = create<AuthStore>()(
               state.error = null;
             });
 
+            // Tab-local only: keep shared localStorage session so other tabs stay signed in.
+            markTabLocalLogout();
+            resetPostHog();
             try {
-              await supabase.auth.signOut({ scope: "global" });
-            } catch (err) {
-              console.warn(
-                "[authStore] Remote signOut failed; clearing local session",
-                err,
-              );
-            } finally {
-              // Always clear local credentials even if the network call fails.
-              await clearStaleLocalSession();
-              try {
-                clearBYOKVault();
-              } catch {
-                // Ignore local vault clearing failure.
-              }
-              get().reset();
-              // Let any other open tabs for this account drop their session too.
-              notifyOtherTabsSignedOut();
+              clearBYOKVault();
+            } catch {
+              // Ignore local vault clearing failure.
             }
+            await softClearTabSession(() =>
+              supabase.auth.signOut({ scope: "local" }),
+            );
+            get().reset();
           },
 
           clearAuth: async () => {

@@ -21,6 +21,7 @@ export {
   AdminRevenue,
   AdminFeatureFlags,
   AdminModelCosts,
+  AdminAiHub,
 } from "./admin";
 
 // ─── Answer Bank ──────────────────────────────────────────────────────────────

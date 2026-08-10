@@ -156,22 +156,12 @@ export default function Pricing() {
                     </p>
                   )}
                 </div>
-                <p className="text-[11px] text-muted-foreground/70 mt-1">
+                <p className="text-[11px] text-muted-foreground/70 mt-1 min-h-[2.5rem]">
                   {plan.creditsPerMonth.toLocaleString()} credits/mo
+                  {annual && plan.creditsPerMonth > 0
+                    ? " (monthly allocation while billed annually)"
+                    : ""}
                 </p>
-
-                <Link
-                  to={ctaHref}
-                  className={cn(
-                    "mt-5 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all",
-                    plan.isPopular
-                      ? "bg-primary text-primary-foreground hover:opacity-90"
-                      : "bg-secondary text-foreground hover:bg-secondary/80"
-                  )}
-                >
-                  {planId === "free" ? "Start Free" : isMax ? "Get Max" : "Get Started"}{" "}
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
 
                 <div className="mt-6 pt-5 border-t border-border space-y-2.5 flex-1">
                   {plan.features.map((f) => (
@@ -190,6 +180,19 @@ export default function Pricing() {
                     </div>
                   ))}
                 </div>
+
+                <Link
+                  to={ctaHref}
+                  className={cn(
+                    "mt-5 flex items-center justify-center gap-2 py-2.5 rounded-xl text-sm font-semibold transition-all",
+                    plan.isPopular
+                      ? "bg-primary text-primary-foreground hover:opacity-90"
+                      : "bg-secondary text-foreground hover:bg-secondary/80"
+                  )}
+                >
+                  {planId === "free" ? "Start Free" : isMax ? "Get Max" : "Get Started"}{" "}
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
               </m.div>
             );
           })}

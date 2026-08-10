@@ -5,6 +5,7 @@ export { default as AdminAnalytics }    from "./AdminAnalytics";
 export { default as AdminRevenue }      from "./AdminRevenue";
 export { default as AdminFeatureFlags } from "./AdminFeatureFlags";
 export { default as AdminModelCosts }   from "./AdminModelCosts";
+export { default as AdminAiHub }        from "./AdminAiHub";
 export { default as AdminAuditLog }     from "./AdminAuditLog";
 export { default as AdminSupport }      from "./AdminSupport";
 export { default as AdminGovSources } from "./AdminGovSources";

@@ -2,6 +2,7 @@
 // so first paint can treat the user as signed-in without awaiting getSession().
 
 import type { Session, User } from "@supabase/supabase-js";
+import { isTabLocalLogout } from "@/lib/auth/tabLocalLogout";
 
 const AUTH_TOKEN_SUFFIX = "-auth-token";
 
@@ -16,6 +17,11 @@ export function readCachedAuthSession(): {
   user: User;
 } | null {
   if (typeof window === "undefined" || !window.localStorage) {
+    return null;
+  }
+
+  // Independent-tab logout: do not hydrate UI from the shared session.
+  if (isTabLocalLogout()) {
     return null;
   }
 

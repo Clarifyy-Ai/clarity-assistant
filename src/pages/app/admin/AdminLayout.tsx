@@ -5,7 +5,7 @@ import { logger } from "@/lib/logger";
 import { toast } from "sonner";
 import {
   LayoutDashboard, Users, BarChart2,
-  Flag, Shield, ChevronRight, DollarSign, Cpu,
+  Flag, Shield, ChevronRight, DollarSign, Cpu, Bot,
   MessageSquare, FileText, Database, ScrollText, LifeBuoy,
   ExternalLink, ClipboardCheck, Upload, Menu, Tag, Settings2,
   Link2, BookOpen, ListChecks, FileStack, Languages, FileUp,
@@ -69,6 +69,7 @@ const ADMIN_NAV_SECTIONS: AdminNavSection[] = [
       { to: "/app/admin/feature-flags",   icon: Flag,            label: "Feature Flags"   },
       { to: "/app/admin/security-config", icon: Shield,          label: "Security Config" },
       { to: "/app/admin/model-costs",     icon: Cpu,             label: "Model Costs"     },
+      { to: "/app/admin/ai-hub",          icon: Bot,             label: "AI Hub"          },
     ],
   },
 ];

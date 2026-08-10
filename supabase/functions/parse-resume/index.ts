@@ -358,6 +358,58 @@ Deno.serve(async (req) => {
 
     const fileBytes = new Uint8Array(buf);
 
+    // SHA-256 content fingerprint for duplicate detection
+    const hashBuf = await crypto.subtle.digest("SHA-256", buf);
+    const contentHash = Array.from(new Uint8Array(hashBuf))
+      .map((b) => b.toString(16).padStart(2, "0"))
+      .join("");
+
+    // Same user + same bytes already parsed elsewhere → return existing without re-charge
+    const { data: dupRow } = await db
+      .from("resumes")
+      .select("id, content")
+      .eq("user_id", userId)
+      .eq("content_hash", contentHash)
+      .neq("id", resume_id)
+      .not("content", "is", null)
+      .limit(1)
+      .maybeSingle();
+
+    if (dupRow?.content) {
+      let parsed: unknown = null;
+      try {
+        parsed = JSON.parse(String(dupRow.content));
+      } catch {
+        parsed = { text: dupRow.content };
+      }
+      await db
+        .from("resumes")
+        .update({ content: dupRow.content, content_hash: contentHash })
+        .eq("id", resume_id);
+      if (effectiveVersionId) {
+        await db
+          .from("resume_versions")
+          .update({
+            parsed_data: parsed,
+            parse_status: "ready",
+            parse_error: null,
+          })
+          .eq("id", effectiveVersionId);
+      }
+      return new Response(
+        JSON.stringify({
+          ...buildParseSuccess("duplicate", parsed),
+          duplicate: true,
+          code: "DUPLICATE_DOCUMENT",
+          message: "Identical resume content already on file — no additional credit charged.",
+        }),
+        { headers: getCorsHeaders(req) },
+      );
+    }
+
+    // Store hash on current resume for future dedupe
+    await db.from("resumes").update({ content_hash: contentHash }).eq("id", resume_id);
+
     const mimeCheck = resolveUploadMime(mime_type ?? null, {
       filePath: file_path,
       bytes: fileBytes,

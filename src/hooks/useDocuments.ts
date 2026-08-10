@@ -1,6 +1,7 @@
 // src/hooks/useDocuments.ts
 import { EDGE_BASE } from "@/lib/env";
 import { fetchEdge, fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { documentParseIdempotencyKey } from "@/lib/network/idempotency";
 import { useState, useEffect, useCallback, useRef } from "react";
 import { supabase, uploadFile, deleteFile, STORAGE_BUCKETS } from "@/lib/supabase/client";
 import { answerBankDB, documentsDB, jobDescriptionsDB, resumesDB } from "@/lib/supabase/database";
@@ -242,11 +243,23 @@ export function useDocuments(options?: UseDocumentsOptions) {
 
         let parseError: string | null = null;
         try {
-          await fetchEdgeJson("parse-document", {
-            document_id: documentId,
-            file_path: path,
-            mime_type: mimeType,
-          });
+          await fetchEdgeJson(
+            "parse-document",
+            {
+              document_id: documentId,
+              file_path: path,
+              mime_type: mimeType,
+            },
+            {
+              headers: {
+                "x-idempotency-key": documentParseIdempotencyKey(
+                  "parse-document",
+                  documentId,
+                  path,
+                ),
+              },
+            },
+          );
         } catch (parseErr) {
           console.warn("[useDocuments] parse-document:", parseErr);
           parseError =
@@ -279,14 +292,23 @@ export function useDocuments(options?: UseDocumentsOptions) {
     if (!mountedRef.current) return;
     setIsParsing(true);
     try {
-      const data = await fetchEdgeJson<{ parsed?: Record<string, unknown>; content?: string }>(
+      const data = await fetchEdgeJson<{ parsed?: Record<string, unknown>; content?: string; duplicate?: boolean }>(
         "parse-resume",
         {
           resume_id: resumeId,
           file_path: filePath,
           mime_type: mimeType,
         },
-        { timeoutMs: 90_000 },
+        {
+          timeoutMs: 90_000,
+          headers: {
+            "x-idempotency-key": documentParseIdempotencyKey(
+              "parse-resume",
+              resumeId,
+              filePath,
+            ),
+          },
+        },
       );
       if (data?.parsed) {
         await resumesDB.update(resumeId, { content: JSON.stringify(data.parsed) });
@@ -433,10 +455,18 @@ ${rawText.slice(0, 4000)}`;
     if (!resume || !jd) return;
 
     try {
-      const gap = await fetchEdgeJson<Record<string, unknown>>("gap-analysis", {
-        method: "POST",
-        body: { resume_id: resumeId, jd_id: jdId },
-      });
+      const gap = await fetchEdgeJson<Record<string, unknown>>(
+        "gap-analysis",
+        { resume_id: resumeId, jd_id: jdId },
+        {
+          headers: {
+            "x-idempotency-key": documentParseIdempotencyKey(
+              "gap-analysis",
+              `${resumeId}:${jdId}`,
+            ),
+          },
+        },
+      );
       if (mountedRef.current) {
         docStore.setGapAnalysis({
           id: crypto.randomUUID(),

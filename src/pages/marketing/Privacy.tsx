@@ -1,6 +1,7 @@
 import { PRIVACY_EMAIL, LEGAL_ENTITY_NAME, COMPANY_NAME } from "@/lib/constants/contact";
 import { LEGAL_PROSE_CLASS } from "@/lib/constants/legal";
 import { MarketingLayout } from "@/components/layout/MarketingLayout";
+import { LegalAuthBackLink } from "@/components/marketing/LegalAuthBackLink";
 import { usePageMeta } from "@/hooks/usePageMeta";
 
 export default function Privacy() {
@@ -12,6 +13,7 @@ export default function Privacy() {
   return (
     <MarketingLayout>
       <article className="pt-4 sm:pt-12 pb-14 px-4 sm:px-6 max-w-3xl mx-auto">
+        <LegalAuthBackLink />
         <header className="text-center mb-8 sm:mb-10">
           <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-foreground">
             Privacy Policy

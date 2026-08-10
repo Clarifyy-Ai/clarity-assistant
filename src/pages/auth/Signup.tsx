@@ -491,7 +491,7 @@ export default function Signup(): JSX.Element {
               <span className="text-[12px] text-muted-foreground leading-snug">
                 I agree to the{" "}
                 <Link
-                  to="/terms"
+                  to="/terms?from=signup"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary underline hover:opacity-80"
@@ -500,7 +500,7 @@ export default function Signup(): JSX.Element {
                 </Link>{" "}
                 and{" "}
                 <Link
-                  to="/privacy"
+                  to="/privacy?from=signup"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="text-primary underline hover:opacity-80"

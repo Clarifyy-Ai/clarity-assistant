@@ -4,6 +4,7 @@ import { Clock, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/Button";
+import { buildLoginUrl } from "@/lib/auth/safeReturnTo";
 import { cn } from "@/lib/utils";
 
 const WARN_BEFORE_MS = 5 * 60 * 1000;
@@ -43,12 +44,13 @@ export function SessionTimeoutBanner() {
     try {
       await signOut();
     } finally {
-      navigate("/login", {
+      const returnTo = `${location.pathname}${location.search}${location.hash}`;
+      navigate(buildLoginUrl({ returnTo, reason: "session_expired" }), {
         replace: true,
-        state: { from: { pathname: location.pathname } },
+        state: { from: location },
       });
     }
-  }, [clearTick, signOut, navigate, location.pathname]);
+  }, [clearTick, signOut, navigate, location]);
 
   const evaluateExpiry = useCallback(() => {
     const expiresAt = session?.expires_at;

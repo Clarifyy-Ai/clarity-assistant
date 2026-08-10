@@ -476,6 +476,7 @@ export default function Login(): JSX.Element {
                     aria-label={
                       showPassword ? "Hide password" : "Show password"
                     }
+                    aria-pressed={showPassword}
                   >
                     {showPassword ? (
                       <EyeOff className="w-4 h-4" />
@@ -486,8 +487,8 @@ export default function Login(): JSX.Element {
                 }
               />
 
-              <div className="flex items-center justify-between">
-                <label className="flex items-center gap-2 cursor-pointer select-none">
+              <div className="flex items-center justify-between pt-2 mt-1">
+                <label className="flex items-center gap-2.5 cursor-pointer select-none min-h-8">
                   <input
                     type="checkbox"
                     checked={rememberMe}

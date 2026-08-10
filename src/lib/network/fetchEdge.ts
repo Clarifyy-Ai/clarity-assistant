@@ -5,6 +5,7 @@ import { getPrivateMode } from "@/hooks/usePrivateMode";
 import { EDGE_BASE, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { logger } from "@/lib/logger";
+import { isTabLocalLogout } from "@/lib/auth/tabLocalLogout";
 
 /** Edge calls blocked while private mode is on (no cloud AI / analysis). */
 const PRIVATE_MODE_ALLOWLIST = new Set([
@@ -17,12 +18,17 @@ const CREDIT_REFRESH_SKIP = new Set([
   "stripe-webhook",
   "create-checkout",
   "create-portal-session",
+  "ai-hub-router",
 ]);
 
 /**
  * ✅ FIX P7-C: Always read a fresh JWT at call time (session may have refreshed).
  */
 async function readToken(): Promise<string | undefined> {
+  // This tab logged out independently — never attach the shared-session JWT.
+  if (isTabLocalLogout()) {
+    return undefined;
+  }
   const { data, error } = await supabase.auth.getSession();
   if (error) {
     logger.warn("auth.session.recovery.failed", { error: error.message });

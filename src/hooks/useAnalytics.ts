@@ -24,6 +24,7 @@ export function useAnalytics() {
   const [data,         setData]         = useState<AnalyticsDashboardData | null>(null);
   const [isLoading,    setIsLoading]    = useState(true);
   const [error,        setError]        = useState<string | null>(null);
+  const [isStale,      setIsStale]      = useState(false);
   const [filter,       setFilterState]  = useState<AnalyticsFilter>({
     period:         "30d",
     session_filter: "all",
@@ -35,7 +36,7 @@ export function useAnalytics() {
 
   useEffect(() => {
     if (!user) return;
-    loadAnalytics();
+    void loadAnalytics();
   }, [user?.id, filter.period, filter.session_filter, filter.interview_type]);
 
   async function loadAnalytics(): Promise<void> {
@@ -46,6 +47,7 @@ export function useAnalytics() {
       const result = await fetchEdgeJson<AnalyticsDashboardData>(
         "analytics-dashboard",
         { filter },
+        { timeoutMs: 25_000 },
       );
       if (result?.recent_sessions) {
         result.recent_sessions = result.recent_sessions.filter(
@@ -53,8 +55,14 @@ export function useAnalytics() {
         );
       }
       setData(result);
+      setIsStale(false);
     } catch (err) {
+      // Keep last-known data so optional 503s do not blank the shell.
       setError(err instanceof Error ? err.message : "Failed to load analytics");
+      setData((prev) => {
+        setIsStale(Boolean(prev));
+        return prev;
+      });
     } finally {
       setIsLoading(false);
     }
@@ -239,6 +247,7 @@ export function useAnalytics() {
     data,
     isLoading,
     error,
+    isStale,
     filter,
     comparison,
 

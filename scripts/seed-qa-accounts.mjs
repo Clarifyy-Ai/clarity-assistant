@@ -25,6 +25,8 @@ const QA_ACCOUNTS = [
     planId: "free",
     credits: 50,
     admin: false,
+    emailConfirm: true,
+    onboardingCompleted: true,
     notes: "Workbook Free tier — 50 monthly credits",
   },
   {
@@ -34,6 +36,8 @@ const QA_ACCOUNTS = [
     planId: "pro",
     credits: 1400,
     admin: false,
+    emailConfirm: true,
+    onboardingCompleted: true,
     notes: "Workbook Pro tier — Stripe checkout path",
   },
   {
@@ -43,6 +47,8 @@ const QA_ACCOUNTS = [
     planId: "enterprise",
     credits: 4000,
     admin: false,
+    emailConfirm: true,
+    onboardingCompleted: true,
     notes: "Workbook Max/Elite → plan_id enterprise (4000 credits)",
   },
   {
@@ -52,7 +58,42 @@ const QA_ACCOUNTS = [
     planId: "enterprise",
     credits: 4000,
     admin: true,
+    emailConfirm: true,
+    onboardingCompleted: true,
     notes: "user_roles.admin + Max credits for admin QA",
+  },
+  {
+    key: "UNVERIFIED",
+    email: "qa.unverified@clarify.ai.test",
+    fullName: "QA Unverified User",
+    planId: "free",
+    credits: 50,
+    admin: false,
+    emailConfirm: false,
+    onboardingCompleted: false,
+    notes: "AUTH-VERIFY — must land on /verify-email",
+  },
+  {
+    key: "ZERO_CREDIT",
+    email: "qa.zero@clarify.ai.test",
+    fullName: "QA Zero Credit User",
+    planId: "pro",
+    credits: 0,
+    admin: false,
+    emailConfirm: true,
+    onboardingCompleted: true,
+    notes: "CREDIT-001 insufficient credits fixture",
+  },
+  {
+    key: "ONBOARDING",
+    email: "qa.onboarding@clarify.ai.test",
+    fullName: "QA Onboarding User",
+    planId: "free",
+    credits: 50,
+    admin: false,
+    emailConfirm: true,
+    onboardingCompleted: false,
+    notes: "ONBOARD-001 incomplete onboarding",
   },
 ];
 
@@ -96,7 +137,7 @@ async function upsertAccount(admin, account, password) {
   if (user) {
     const updated = await admin.auth.admin.updateUserById(user.id, {
       password,
-      email_confirm: true,
+      email_confirm: account.emailConfirm !== false,
       user_metadata: { full_name: account.fullName, qa_seed: true },
     });
     if (updated.error) throw updated.error;
@@ -105,7 +146,7 @@ async function upsertAccount(admin, account, password) {
     const created = await admin.auth.admin.createUser({
       email: account.email,
       password,
-      email_confirm: true,
+      email_confirm: account.emailConfirm !== false,
       user_metadata: { full_name: account.fullName, qa_seed: true },
     });
     if (created.error) throw created.error;
@@ -113,6 +154,7 @@ async function upsertAccount(admin, account, password) {
   }
 
   const now = new Date().toISOString();
+  const onboarded = account.onboardingCompleted !== false;
   const { error: profileErr } = await admin.from("profiles").upsert(
     {
       id: user.id,
@@ -121,8 +163,8 @@ async function upsertAccount(admin, account, password) {
       plan_id: account.planId,
       credits: account.credits,
       credits_used_this_month: 0,
-      onboarding_completed: true,
-      onboarding_step: 99,
+      onboarding_completed: onboarded,
+      onboarding_step: onboarded ? 99 : 1,
       subscription_status: "active",
       updated_at: now,
     },

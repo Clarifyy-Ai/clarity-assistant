@@ -264,6 +264,7 @@ const AdminRevenue = lazy(
 const AdminModelCosts = lazy(
   () => import("@/pages/app/admin/AdminModelCosts")
 );
+const AdminAiHub = lazy(() => import("@/pages/app/admin/AdminAiHub"));
 const AdminFeatureFlags = lazy(
   () => import("@/pages/app/admin/AdminFeatureFlags")
 );
@@ -348,6 +349,16 @@ function OnboardingRedirect(): JSX.Element {
 function AnalyticsDebriefRedirect(): JSX.Element {
   const { sessionId } = useParams<{ sessionId: string }>();
   return <Navigate to={`/app/debrief/${sessionId ?? ""}`} replace />;
+}
+
+function AnswerBankLegacyRedirect(): JSX.Element {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/app/answers/${id ?? ""}`} replace />;
+}
+
+function DebriefLegacyRedirect(): JSX.Element {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/app/debrief/${id ?? ""}`} replace />;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -624,6 +635,14 @@ const routes = [
 
           { path: "answers", element: <Page component={AnswerBank} /> },
           { path: "answers/:id", element: <Page component={AnswerDetail} /> },
+          {
+            path: "answer-bank",
+            element: <Navigate to="/app/answers" replace />,
+          },
+          {
+            path: "answer-bank/:id",
+            element: <AnswerBankLegacyRedirect />,
+          },
 
           { path: "interviews", element: <Page component={Interviews} /> },
           {
@@ -652,6 +671,14 @@ const routes = [
 
           { path: "debrief", element: <Page component={Debrief} /> },
           { path: "debrief/:id", element: <Page component={DebriefDetail} /> },
+          {
+            path: "debriefs",
+            element: <Navigate to="/app/debrief" replace />,
+          },
+          {
+            path: "debriefs/:id",
+            element: <DebriefLegacyRedirect />,
+          },
 
           { path: "guide", element: <Page component={Guide} /> },
           { path: "guide/practice-coach", element: <Page component={PracticeCoachGuide} /> },
@@ -730,6 +757,10 @@ const routes = [
           {
             path: "model-costs",
             element: <Page component={AdminModelCosts} />,
+          },
+          {
+            path: "ai-hub",
+            element: <Page component={AdminAiHub} />,
           },
           {
             path: "feature-flags",

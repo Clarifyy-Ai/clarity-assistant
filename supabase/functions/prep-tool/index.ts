@@ -170,7 +170,9 @@ ${input}
 
   star_method: (input) => `
 Improve this STAR interview answer. Keep it authentic and specific.
-Polish the language, flow, and impact. Quantify results where possible.
+Only use employers, metrics, tools, dates, and achievements present in the user input.
+If evidence is missing, ask a clarifying question or use [NEEDS EVIDENCE] — never invent experience.
+Polish the language, flow, and impact. Quantify results only when the user provided numbers.
 Return the improved version with all 4 sections clearly labeled:
 
 Situation: ...

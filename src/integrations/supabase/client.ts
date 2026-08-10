@@ -9,10 +9,13 @@ import {
   SUPABASE_PUBLISHABLE_KEY,
   SUPABASE_URL,
 } from "@/lib/env";
+import { tabAwareAuthStorage } from "@/lib/auth/tabLocalLogout";
 
 export const supabase = createClient<Database>(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
   auth: {
-    storage: localStorage,
+    // Shared localStorage for multi-tab login; tab-local logout hides the session
+    // in this tab only (see tabAwareAuthStorage / softClearTabSession).
+    storage: tabAwareAuthStorage,
     persistSession: true,
     autoRefreshToken: true,
   },

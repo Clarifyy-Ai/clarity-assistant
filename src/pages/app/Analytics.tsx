@@ -15,6 +15,7 @@ import {
   Calendar, Clock, Volume2, Download, GitCompare,
 } from "lucide-react";
 import { EmptyState } from "@/components/common/EmptyState";
+import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/Button";
 import {
@@ -68,7 +69,7 @@ export default function Analytics() {
     );
   }
 
-  if (analytics.error) {
+  if (analytics.error && !analytics.data) {
     return (
       <div className="space-y-6 max-w-5xl">
         <PageHeader
@@ -79,16 +80,10 @@ export default function Analytics() {
             { label: "Analytics" },
           ]}
         />
-        <Card className="border-red-500/30 bg-red-500/10 p-4">
-          <p className="text-sm text-red-300">{analytics.error}</p>
-          <button
-            type="button"
-            onClick={() => analytics.reload()}
-            className="mt-3 text-xs font-medium text-primary hover:underline"
-          >
-            Retry
-          </button>
-        </Card>
+        <InlineErrorRetry
+          message={analytics.error}
+          onRetry={() => void analytics.reload()}
+        />
       </div>
     );
   }
@@ -160,6 +155,18 @@ export default function Analytics() {
           </div>
         }
       />
+
+      {analytics.error && analytics.data && (
+        <div className="space-y-2">
+          {analytics.isStale && (
+            <Badge variant="amber" size="sm">Showing last known data</Badge>
+          )}
+          <InlineErrorRetry
+            message={analytics.error}
+            onRetry={() => void analytics.reload()}
+          />
+        </div>
+      )}
 
       {/* ── KPI row ───────────────────────────────────── */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">

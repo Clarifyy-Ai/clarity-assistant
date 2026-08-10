@@ -21,6 +21,9 @@ verify_jwt = false
 [functions.ai-coach-chat]
 verify_jwt = true
 
+[functions.ai-hub-router]
+verify_jwt = true
+
 [functions.analytics-dashboard]
 verify_jwt = true
 

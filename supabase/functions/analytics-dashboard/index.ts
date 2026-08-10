@@ -2,8 +2,9 @@ import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import {
-  enforceRateLimitAsync,
+  checkRateLimitAsync,
   createRateLimitKey,
+  rateLimitResponse,
 } from "../_shared/rateLimit.ts";
 
 Deno.serve(async (req: Request) => {
@@ -16,12 +17,15 @@ Deno.serve(async (req: Request) => {
 
     const user = auth.context.user;
 
-    const rateLimited = await enforceRateLimitAsync(createServiceClient(), {
+    // Controlled degradation: RPC outage must not blank Analytics with 503.
+    const rateLimitResult = await checkRateLimitAsync(createServiceClient(), {
       key: createRateLimitKey("analytics-dashboard", user.id),
       limit: 10,
       windowMs: 60_000,
     });
-    if (rateLimited) return rateLimited;
+    if (!rateLimitResult.allowed && !rateLimitResult.backendFailure) {
+      return rateLimitResponse(rateLimitResult);
+    }
 
     const db = createServiceClient();
     const jsonHeaders = { ...getCorsHeaders(req), "Content-Type": "application/json" };
@@ -104,7 +108,7 @@ Deno.serve(async (req: Request) => {
     const avgScore =
       scores.length > 0
         ? Math.round(scores.reduce((a, b) => a + b, 0) / scores.length)
-        : 0;
+        : null;
 
     const mid = new Date();
     mid.setDate(mid.getDate() - Math.min(days, 30));
@@ -135,31 +139,33 @@ Deno.serve(async (req: Request) => {
       .slice(-30)
       .map((sc) => ({
         date: sc.created_at,
-        total_fillers: Math.round((sc.filler_rate ?? 0) * 10),
+        total_fillers: typeof sc.filler_rate === "number" ? Math.round(sc.filler_rate * 10) : null,
         top_filler: sc.top_filler_word ?? null,
       }));
 
     const byType = new Map<string, { sum: number; count: number; sessions: number }>();
     for (const sc of scorecardList) {
+      if (typeof sc.overall_score !== "number") continue;
       const session = sessionList.find((s) => s.id === sc.session_id);
       const label = session?.interview_type ?? "behavioral";
       const cur = byType.get(label) ?? { sum: 0, count: 0, sessions: 0 };
-      cur.sum += sc.overall_score ?? 0;
+      cur.sum += sc.overall_score;
       cur.count += 1;
       cur.sessions += 1;
       byType.set(label, cur);
     }
     const weakSpotRadar = [...byType.entries()].map(([label, v]) => ({
       label,
-      avg_score: v.count ? Math.round(v.sum / v.count) : 0,
+      avg_score: v.count ? Math.round(v.sum / v.count) : null,
       session_count: v.sessions,
     }));
 
-    /* ---------------------------
-       RECENT SESSIONS (SAFE)
-    --------------------------- */
     const recentSessions = sessionList.slice(0, 50).map((s) => {
       const sc = scorecardList.find((x) => x.session_id === s.id);
+      const hasScore = typeof sc?.overall_score === "number";
+      const incomplete =
+        (s.status === "incomplete" || s.status === "abandoned") ||
+        (!hasScore && (s.question_count ?? 0) === 0);
 
       return {
         session_id: s.id,
@@ -167,24 +173,22 @@ Deno.serve(async (req: Request) => {
         mode: s.mode ?? "mock",
         interview_type: s.interview_type ?? "behavioral",
         company: s.company ?? null,
-        overall_score: sc?.overall_score ?? 0,
-        filler_rate: sc?.filler_rate ?? 0,
-        wpm_avg: sc?.wpm_avg ?? 0,
+        overall_score: hasScore ? sc!.overall_score : null,
+        score_status: incomplete ? "incomplete" : hasScore ? "scored" : "unscored",
+        filler_rate: typeof sc?.filler_rate === "number" ? sc.filler_rate : null,
+        wpm_avg: typeof sc?.wpm_avg === "number" ? sc.wpm_avg : null,
         duration_minutes: Math.round((s.duration_seconds ?? 0) / 60),
         question_count: s.question_count ?? 0,
       };
     });
 
-    /* ---------------------------
-       CONFIDENCE TREND (FIXED)
-    --------------------------- */
     const confidenceTrend = scorecardList
+      .filter((sc) => typeof sc.overall_score === "number")
       .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime())
       .map((sc) => ({
         date: sc.created_at,
-        score: sc.overall_score ?? 0,
+        score: sc.overall_score as number,
       }));
-
     /* ---------------------------
        CREDIT RECONCILIATION CHECK
     --------------------------- */

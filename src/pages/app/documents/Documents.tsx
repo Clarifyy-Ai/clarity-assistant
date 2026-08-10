@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { jobDescriptionsDB, documentsDB, resumesDB } from "@/lib/supabase/database";
 import { getSignedUrl, STORAGE_BUCKETS } from "@/lib/supabase/client";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { documentParseIdempotencyKey } from "@/lib/network/idempotency";
 import { useDocumentStore } from "@/store/documentStore";
 import { useDocumentManager } from "@/hooks/useDocumentManager";
 import { sanitizeFileName } from "@/lib/security/sanitizer";
@@ -362,7 +363,16 @@ function ResumeManager() {
           file_path: resume.file_path,
           mime_type: guessMimeType(resume.file_path),
         },
-        { timeoutMs: 90_000 },
+        {
+          timeoutMs: 90_000,
+          headers: {
+            "x-idempotency-key": documentParseIdempotencyKey(
+              "parse-resume",
+              resumeId,
+              `retry:${resume.file_path}`,
+            ),
+          },
+        },
       );
       await docMgr.reload();
       toast.success("Resume re-parsed.");
@@ -1099,13 +1109,19 @@ function JDManager() {
             </div>
 
             {jdMode === "paste" ? (
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="Paste the full job description here…"
-                rows={8}
-                className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
-              />
+              <div>
+                <textarea
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  placeholder="Paste the full job description here…"
+                  rows={8}
+                  className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
+                />
+                <p className="text-[11px] text-muted-foreground mt-1.5">
+                  Paste text up to ~10,000 characters · File uploads (PDF/DOCX/TXT) max{" "}
+                  {FILE_LIMITS.jd.maxMB} MB when supported
+                </p>
+              </div>
             ) : (
               <div>
                 <input

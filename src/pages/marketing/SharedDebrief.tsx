@@ -6,7 +6,8 @@ import { Badge } from "@/components/ui/Badge";
 import { ProgressBar } from "@/components/ui/ProgressBar";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { BrandLogo } from "@/components/marketing";
-import { AlertTriangle, Loader2 } from "lucide-react";
+import { Loader2 } from "lucide-react";
+import { PublicErrorState } from "@/components/common/PublicErrorState";
 import { format } from "date-fns";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
@@ -104,13 +105,14 @@ export default function SharedDebrief() {
   if (error || (!debrief && !scorecard)) {
     return (
       <SharedShell>
-        <div className="flex flex-col items-center justify-center gap-4 px-4 py-24">
-          <AlertTriangle className="w-10 h-10 text-amber-400" />
-          <p className="text-muted-foreground text-sm text-center">{error ?? "Not found"}</p>
-          <Link to="/" className="text-sm text-primary hover:underline">
-            Go to Clarify AI
-          </Link>
-        </div>
+        <PublicErrorState
+          title="Shared link unavailable"
+          description={
+            error ??
+            "This shared link is invalid, expired, or has been revoked. No private account data is shown."
+          }
+          homeLabel="Go to Clarify AI"
+        />
       </SharedShell>
     );
   }

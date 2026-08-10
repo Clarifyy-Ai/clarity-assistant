@@ -279,7 +279,7 @@ export const PLANS: Record<PlanId, Plan> = {
     name: "Elite",
     tagline: "For FAANG-level prep",
     monthlyPrice: 7_900,
-    yearlyPrice: 5_900,
+    yearlyPrice: 6_320, // 20% off $79/mo — display monthly equivalent when billed annually
     creditsPerMonth: 1_000,
     stripePriceIdMonthly: ENV.STRIPE_PRICE_ELITE_MONTHLY,
     stripePriceIdYearly: ENV.STRIPE_PRICE_ELITE_YEARLY,

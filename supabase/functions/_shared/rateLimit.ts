@@ -34,6 +34,7 @@ export const RATE_LIMIT_CLASS: Record<string, RateLimitClass> = {
   "collect-exam-papers": "strict_fail_closed",
   "ingest-source-document": "strict_fail_closed",
   "bulk-import-questions": "strict_fail_closed",
+  "ai-hub-router": "strict_fail_closed",
   "analytics-dashboard": "controlled_degradation_candidate",
   ping: "controlled_degradation_candidate",
 };

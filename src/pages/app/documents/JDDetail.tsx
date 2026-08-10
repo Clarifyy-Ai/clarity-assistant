@@ -4,6 +4,7 @@ import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { supabase } from "@/lib/supabase/client";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { documentParseIdempotencyKey } from "@/lib/network/idempotency";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -129,10 +130,21 @@ export default function JDDetail() {
     setGapRunning(true);
     setGapResult(null);
     try {
-      const result = await fetchEdgeJson<GapResult>("gap-analysis", {
-        resume_id: selectedResumeId,
-        jd_id: id,
-      });
+      const result = await fetchEdgeJson<GapResult>(
+        "gap-analysis",
+        {
+          resume_id: selectedResumeId,
+          jd_id: id,
+        },
+        {
+          headers: {
+            "x-idempotency-key": documentParseIdempotencyKey(
+              "gap-analysis",
+              `${selectedResumeId}:${id}`,
+            ),
+          },
+        },
+      );
       setGapResult(result);
       toast.success("Gap analysis ready");
     } catch (err: unknown) {

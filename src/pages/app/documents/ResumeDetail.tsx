@@ -2,6 +2,7 @@ import { useState, useEffect, useMemo, useCallback } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
 import { useAuthStore } from "@/store/userStore";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
+import { documentParseIdempotencyKey } from "@/lib/network/idempotency";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
@@ -187,11 +188,24 @@ export default function ResumeDetail() {
     if (!id || !doc?.file_path) return;
     setReparse(true);
     try {
-      const data = await fetchEdgeJson<{ parsed?: Record<string, unknown> }>("parse-resume", {
-        resume_id: id,
-        file_path: doc.file_path,
-        mime_type: guessMimeType(doc.file_path),
-      });
+      const data = await fetchEdgeJson<{ parsed?: Record<string, unknown> }>(
+        "parse-resume",
+        {
+          resume_id: id,
+          file_path: doc.file_path,
+          mime_type: guessMimeType(doc.file_path),
+        },
+        {
+          timeoutMs: 90_000,
+          headers: {
+            "x-idempotency-key": documentParseIdempotencyKey(
+              "parse-resume",
+              id,
+              `reparse:${doc.file_path}`,
+            ),
+          },
+        },
+      );
       if (data?.parsed) {
         const normalized = normalizeParsedResume(data.parsed);
         const content = JSON.stringify(data.parsed);
