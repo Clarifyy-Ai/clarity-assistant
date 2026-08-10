@@ -4,6 +4,7 @@ import { Clock, CheckCircle2, Landmark } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const GOV_EXAMS = ["UPSC CSE", "SSC CGL", "IBPS PO", "HPCL", "PSU"];
+const PALETTE_SIZE = 24;
 
 const SAMPLE_QUESTIONS = [
   {
@@ -32,12 +33,13 @@ interface GovExamShowcaseProps {
 }
 
 export function GovExamShowcase({ compact = false, className }: GovExamShowcaseProps) {
-  const [qIndex, setQIndex] = useState(0);
+  // Single progress cursor — palette highlight, Q label, and card content stay in lockstep.
+  const [step, setStep] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [seconds, setSeconds] = useState(compact ? 847 : 2847);
-  const [paletteFilled, setPaletteFilled] = useState(0);
 
-  const question = SAMPLE_QUESTIONS[qIndex];
+  const question = SAMPLE_QUESTIONS[step % SAMPLE_QUESTIONS.length];
+  const qNumber = step + 1;
 
   useEffect(() => {
     const t = setInterval(() => setSeconds((s) => (s > 0 ? s - 1 : compact ? 847 : 2847)), 1000);
@@ -47,8 +49,7 @@ export function GovExamShowcase({ compact = false, className }: GovExamShowcaseP
   useEffect(() => {
     const t = setInterval(() => {
       setSelected(null);
-      setQIndex((i) => (i + 1) % SAMPLE_QUESTIONS.length);
-      setPaletteFilled((p) => (p >= 24 ? 3 : p + 1));
+      setStep((s) => (s + 1) % PALETTE_SIZE);
     }, compact ? 3500 : 4500);
     return () => clearInterval(t);
   }, [compact]);
@@ -57,7 +58,7 @@ export function GovExamShowcase({ compact = false, className }: GovExamShowcaseP
     if (selected !== null) return;
     const t = setTimeout(() => setSelected(question.correct), compact ? 1800 : 2200);
     return () => clearTimeout(t);
-  }, [qIndex, selected, question.correct, compact]);
+  }, [step, selected, question.correct, compact]);
 
   const mins = Math.floor(seconds / 60);
   const secs = seconds % 60;
@@ -97,9 +98,9 @@ export function GovExamShowcase({ compact = false, className }: GovExamShowcaseP
               Question palette
             </p>
             <div className="grid grid-cols-6 gap-1.5">
-              {Array.from({ length: 24 }, (_, i) => {
-                const answered = i < paletteFilled;
-                const current = i === paletteFilled;
+              {Array.from({ length: PALETTE_SIZE }, (_, i) => {
+                const answered = i < step;
+                const current = i === step;
                 return (
                   <m.div
                     key={i}
@@ -138,57 +139,61 @@ export function GovExamShowcase({ compact = false, className }: GovExamShowcaseP
           </div>
         )}
 
-        <div className={cn(compact ? "" : "lg:col-span-3", "rounded-xl border border-border bg-card/80 p-4")}>
-          <div className="flex items-center justify-between mb-3">
-            <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600">
-              {question.exam}
-            </span>
-            <span className="text-[10px] text-muted-foreground">Q{qIndex + 1} of 100</span>
-          </div>
-
-          <AnimatePresence mode="wait">
-            <m.p
-              key={qIndex}
+        <div className={cn(compact ? "" : "lg:col-span-3", "rounded-xl border border-border bg-card/80 p-4 overflow-hidden")}>
+          {/* Animate the full card together so stem/options/label never mix across steps */}
+          <AnimatePresence mode="wait" initial={false}>
+            <m.div
+              key={step}
               initial={{ opacity: 0, y: 8 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
-              className={cn("font-medium text-foreground mb-4", compact ? "text-xs" : "text-sm")}
+              transition={{ duration: 0.22 }}
             >
-              {question.q}
-            </m.p>
-          </AnimatePresence>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-            {question.options.map((opt, i) => (
-              <m.button
-                key={opt}
-                type="button"
-                animate={{
-                  borderColor:
-                    selected === i
-                      ? i === question.correct
-                        ? "rgba(34, 197, 94, 0.5)"
-                        : "rgba(239, 68, 68, 0.5)"
-                      : "rgba(148, 163, 184, 0.2)",
-                  backgroundColor:
-                    selected === i
-                      ? i === question.correct
-                        ? "rgba(34, 197, 94, 0.1)"
-                        : "rgba(239, 68, 68, 0.08)"
-                      : "transparent",
-                }}
-                className="flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs text-foreground"
-              >
-                <span className="w-5 h-5 rounded-md bg-secondary flex items-center justify-center text-[10px] font-bold shrink-0">
-                  {String.fromCharCode(65 + i)}
+              <div className="flex items-center justify-between mb-3">
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600">
+                  {question.exam}
                 </span>
-                <span className="flex-1">{opt}</span>
-                {selected === i && i === question.correct && (
-                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                <span className="text-[10px] text-muted-foreground">
+                  Q{qNumber} of 100
+                </span>
+              </div>
+
+              <p
+                className={cn(
+                  "font-medium text-foreground mb-4",
+                  compact ? "text-xs" : "text-sm",
                 )}
-              </m.button>
-            ))}
-          </div>
+              >
+                {question.q}
+              </p>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {question.options.map((opt, i) => {
+                  const isSelected = selected === i;
+                  const isCorrect = i === question.correct;
+                  return (
+                    <div
+                      key={`${step}-${i}`}
+                      className={cn(
+                        "flex items-center gap-2 rounded-lg border px-3 py-2 text-left text-xs text-foreground transition-colors duration-200",
+                        isSelected && isCorrect && "border-emerald-500/50 bg-emerald-500/10",
+                        isSelected && !isCorrect && "border-red-500/50 bg-red-500/10",
+                        !isSelected && "border-border/60 bg-transparent",
+                      )}
+                    >
+                      <span className="w-5 h-5 rounded-md bg-secondary flex items-center justify-center text-[10px] font-bold shrink-0">
+                        {String.fromCharCode(65 + i)}
+                      </span>
+                      <span className="flex-1">{opt}</span>
+                      {isSelected && isCorrect && (
+                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0" />
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            </m.div>
+          </AnimatePresence>
         </div>
       </div>
     </div>
