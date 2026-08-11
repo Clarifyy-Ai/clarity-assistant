@@ -19,6 +19,7 @@ const CREDIT_REFRESH_SKIP = new Set([
   "create-checkout",
   "create-portal-session",
   "ai-hub-router",
+  "support-chat",
 ]);
 
 /**

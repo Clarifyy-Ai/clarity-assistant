@@ -4,6 +4,7 @@ import { BrandLogo } from "@/components/marketing";
 import { ThemeToggle } from "@/components/ui/ThemeToggle";
 import { Sparkles, TrendingUp, Users } from "lucide-react";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { SupportChatWidget } from "@/components/support/SupportChatWidget";
 
 type AuthShellProps = {
   children: ReactNode;
@@ -88,6 +89,7 @@ export function AuthShell({
           <div className="w-full max-w-sm">{children}</div>
         </div>
       </div>
+      <SupportChatWidget />
     </div>
   );
 }

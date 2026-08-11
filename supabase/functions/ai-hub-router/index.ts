@@ -6,7 +6,7 @@
 // - Paid Hub Lab/ops calls use USD ops budgets in ai_hub_settings only — do NOT debit credits.
 // - Product AI (Practice Coach / Prep / etc.) is unchanged and still uses credits.
 
-import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders, withCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest, enforceAdmin } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import {
@@ -75,7 +75,7 @@ Deno.serve(async (req) => {
   }
 
   const adminGate = await enforceAdmin(auth.context.user.id);
-  if (adminGate) return adminGate;
+  if (adminGate) return withCorsHeaders(req, adminGate);
 
   const userId = auth.context.user.id;
   const db = createServiceClient();

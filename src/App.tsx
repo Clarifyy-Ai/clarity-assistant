@@ -29,6 +29,7 @@ import { toast } from "sonner";
 
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { WhatsNewModal, useWhatsNewPrompt } from "@/components/common/WhatsNewModal";
+import { SupportChatWidget } from "@/components/support/SupportChatWidget";
 import { AppSidebar } from "@/components/layout/AppSidebar";
 import { AppTopBar } from "@/components/layout/AppTopBar";
 import { MobileNav } from "@/components/layout/MobileNav";
@@ -476,6 +477,7 @@ function AppShell(): JSX.Element {
       <AppWalkthrough />
       <InstallPromptModal />
       <WhatsNewModal open={whatsNew.open} onDismiss={whatsNew.dismiss} />
+      <SupportChatWidget />
     </div>
   );
 }

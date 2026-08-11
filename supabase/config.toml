@@ -24,6 +24,10 @@ verify_jwt = true
 [functions.ai-hub-router]
 verify_jwt = true
 
+[functions.support-chat]
+# Guest widget uses anon key + guest_token; auth is optional in-function.
+verify_jwt = false
+
 [functions.analytics-dashboard]
 verify_jwt = true
 

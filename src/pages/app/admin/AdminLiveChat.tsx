@@ -18,7 +18,9 @@ import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 
 interface Thread {
   id: string;
-  user_id: string;
+  user_id: string | null;
+  guest_email?: string | null;
+  guest_name?: string | null;
   subject: string;
   status: "open" | "pending" | "resolved" | "snoozed";
   priority: "low" | "normal" | "high" | "urgent";
@@ -62,7 +64,9 @@ export default function AdminLiveChat() {
       const list = (await supportDB.listThreads(statusFilter)) as Thread[];
       setThreads(list);
 
-      const ids = Array.from(new Set(list.map((t) => t.user_id)));
+      const ids = Array.from(
+        new Set(list.map((t) => t.user_id).filter((id): id is string => Boolean(id))),
+      );
       if (ids.length) {
         const profs = await profilesDB.listLiteByIds(ids);
         const map: Record<string, ProfileLite> = {};
@@ -118,10 +122,12 @@ export default function AdminLiveChat() {
     if (!search.trim()) return threads;
     const q = search.toLowerCase();
     return threads.filter((t) => {
-      const p = profiles[t.user_id];
+      const p = t.user_id ? profiles[t.user_id] : undefined;
       return (
         t.subject?.toLowerCase().includes(q) ||
         t.last_message_preview?.toLowerCase().includes(q) ||
+        t.guest_name?.toLowerCase().includes(q) ||
+        t.guest_email?.toLowerCase().includes(q) ||
         p?.full_name?.toLowerCase().includes(q) ||
         p?.email?.toLowerCase().includes(q)
       );
@@ -228,7 +234,13 @@ export default function AdminLiveChat() {
               />
             ) : (
               filtered.map((t) => {
-                const p = profiles[t.user_id];
+                const p = t.user_id ? profiles[t.user_id] : undefined;
+                const label =
+                  p?.full_name ??
+                  p?.email ??
+                  t.guest_name ??
+                  t.guest_email ??
+                  "Guest";
                 return (
                   <button
                     key={t.id}
@@ -240,7 +252,12 @@ export default function AdminLiveChat() {
                   >
                     <div className="flex items-start justify-between gap-2 mb-0.5">
                       <span className="text-sm font-semibold text-foreground truncate">
-                        {p?.full_name ?? p?.email ?? "Unknown"}
+                        {label}
+                        {!t.user_id && (
+                          <span className="ml-1 text-[10px] font-normal text-muted-foreground">
+                            (guest)
+                          </span>
+                        )}
                       </span>
                       {t.unread_for_admin && <span className="w-2 h-2 rounded-full bg-primary mt-1.5 shrink-0" />}
                     </div>
@@ -268,7 +285,9 @@ export default function AdminLiveChat() {
                 <div>
                   <p className="text-sm font-bold">{active.subject}</p>
                   <p className="text-[11px] text-muted-foreground">
-                    {profiles[active.user_id]?.email ?? active.user_id}
+                    {active.user_id
+                      ? (profiles[active.user_id]?.email ?? active.user_id)
+                      : (active.guest_email ?? active.guest_name ?? "Guest visitor")}
                   </p>
                 </div>
                 <div className="flex gap-1.5">

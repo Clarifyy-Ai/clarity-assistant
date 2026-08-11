@@ -12,6 +12,7 @@ import {
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { useBodyScrollLock } from "@/hooks/useBodyScrollLock";
 import { cn } from "@/lib/utils";
+import { SupportChatWidget } from "@/components/support/SupportChatWidget";
 
 type NavItem =
   | { to: string; label: string; hash?: string }
@@ -350,6 +351,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
           </div>
         </div>
       </footer>
+      <SupportChatWidget />
     </div>
   );
 }
