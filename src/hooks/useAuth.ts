@@ -16,6 +16,7 @@ import type { Provider } from "@supabase/supabase-js";
 import { supabase, STORAGE_BUCKETS, uploadFile } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { sanitizeFileName } from "@/lib/security";
+import { buildAuthRedirectUrl } from "@/lib/auth/redirectUrl";
 
 import type { AuthProvider, ProfileRow } from "@/types";
 import type { UserProfile } from "@/types/user.types";
@@ -236,7 +237,13 @@ export function useAuth() {
           type: "signup",
           email,
           options: {
-            emailRedirectTo: `${window.location.origin}/auth/callback`,
+            emailRedirectTo: buildAuthRedirectUrl({
+              path: "/auth/callback",
+              configuredAppUrl: import.meta.env.VITE_APP_URL,
+              appEnv: import.meta.env.VITE_APP_ENV,
+              windowOrigin:
+                typeof window !== "undefined" ? window.location.origin : null,
+            }),
           },
         });
 

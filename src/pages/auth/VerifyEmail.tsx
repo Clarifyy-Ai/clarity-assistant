@@ -16,6 +16,7 @@ import { BrandLogo } from "@/components/marketing";
 import { AuthShell } from "@/components/layout/AuthShell";
 import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
 import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
+import { buildAuthRedirectUrl } from "@/lib/auth/redirectUrl";
 
 /**
  * Verify Email gate — shown when an authenticated user has not yet
@@ -62,7 +63,15 @@ export default function VerifyEmail() {
     const { error } = await supabase.auth.resend({
       type: "signup",
       email,
-      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
+      options: {
+        emailRedirectTo: buildAuthRedirectUrl({
+          path: "/auth/callback",
+          configuredAppUrl: import.meta.env.VITE_APP_URL,
+          appEnv: import.meta.env.VITE_APP_ENV,
+          windowOrigin:
+            typeof window !== "undefined" ? window.location.origin : null,
+        }),
+      },
     });
 
     setResending(false);

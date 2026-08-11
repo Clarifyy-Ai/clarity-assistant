@@ -34,8 +34,14 @@ function detectEnvironment(): AppEnvironment {
   return "development";
 }
 
+/** Example IDs from .env.example / sync script — never allow into the live catalog. */
+const PLACEHOLDER_PRICE_ID_RE =
+  /^price_(starter|pro|elite|enterprise|credits)(_\d+)?_(monthly|yearly)$/i;
+const PLACEHOLDER_CREDITS_PACK_RE = /^price_credits_\d+$/i;
+
 function isPlaceholder(value: string): boolean {
   const v = value.trim().toLowerCase();
+  const raw = value.trim();
   return (
     !v ||
     v.includes("changeme") ||
@@ -43,7 +49,9 @@ function isPlaceholder(value: string): boolean {
     v.includes("xxx") ||
     v.includes("placeholder") ||
     v === "test" ||
-    v === "todo"
+    v === "todo" ||
+    PLACEHOLDER_PRICE_ID_RE.test(raw) ||
+    PLACEHOLDER_CREDITS_PACK_RE.test(raw)
   );
 }
 

@@ -24,16 +24,25 @@
 // Localhost origins are allowed only in non-production environments.
 
 function isProductionEnvironment(): boolean {
+  const appEnv = (Deno.env.get("APP_ENV") ?? "").trim().toLowerCase();
   const environment = (Deno.env.get("ENVIRONMENT") ?? "").trim().toLowerCase();
   const denoEnv = (Deno.env.get("DENO_ENV") ?? "").trim().toLowerCase();
 
-  if (["development", "dev", "local", "preview", "staging"].includes(environment)) {
+  const nonProdLabels = ["development", "dev", "local", "preview", "staging", "stage", "test"];
+  if (
+    nonProdLabels.includes(appEnv) ||
+    nonProdLabels.includes(environment) ||
+    ["development", "dev", "local", "test"].includes(denoEnv)
+  ) {
     return false;
   }
-  if (["development", "dev", "local", "test"].includes(denoEnv)) {
-    return false;
-  }
-  if (environment === "production" || denoEnv === "production") {
+  if (
+    appEnv === "production" ||
+    appEnv === "prod" ||
+    environment === "production" ||
+    environment === "prod" ||
+    denoEnv === "production"
+  ) {
     return true;
   }
 

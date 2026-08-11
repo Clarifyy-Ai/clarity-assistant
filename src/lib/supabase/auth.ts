@@ -98,7 +98,13 @@ export async function signUp(credentials: SignUpCredentials): Promise<AuthResult
           full_name:  fullName  ?? "",
           avatar_url: avatarUrl ?? "",
         },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: buildAuthRedirectUrl({
+          path: "/auth/callback",
+          configuredAppUrl: import.meta.env.VITE_APP_URL,
+          appEnv: import.meta.env.VITE_APP_ENV,
+          windowOrigin:
+            typeof window !== "undefined" ? window.location.origin : null,
+        }),
       },
     });
 
@@ -159,7 +165,13 @@ export async function signInWithOAuth(provider: OAuthProvider): Promise<void> {
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
-        redirectTo: `${window.location.origin}/auth/callback`,
+        redirectTo: buildAuthRedirectUrl({
+          path: "/auth/callback",
+          configuredAppUrl: import.meta.env.VITE_APP_URL,
+          appEnv: import.meta.env.VITE_APP_ENV,
+          windowOrigin:
+            typeof window !== "undefined" ? window.location.origin : null,
+        }),
         queryParams: {
           access_type: "offline",
           prompt: "consent",
@@ -188,7 +200,13 @@ export async function sendMagicLink(email: string): Promise<void> {
     const { error } = await supabase.auth.signInWithOtp({
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: buildAuthRedirectUrl({
+          path: "/auth/callback",
+          configuredAppUrl: import.meta.env.VITE_APP_URL,
+          appEnv: import.meta.env.VITE_APP_ENV,
+          windowOrigin:
+            typeof window !== "undefined" ? window.location.origin : null,
+        }),
       },
     });
     if (error) throw error;
@@ -328,7 +346,13 @@ export async function resendVerificationEmail(email: string): Promise<void> {
       type:  "signup",
       email,
       options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
+        emailRedirectTo: buildAuthRedirectUrl({
+          path: "/auth/callback",
+          configuredAppUrl: import.meta.env.VITE_APP_URL,
+          appEnv: import.meta.env.VITE_APP_ENV,
+          windowOrigin:
+            typeof window !== "undefined" ? window.location.origin : null,
+        }),
       },
     });
     if (error) throw error;

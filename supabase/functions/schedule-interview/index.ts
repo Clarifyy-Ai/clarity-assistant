@@ -6,7 +6,10 @@ import { requireAuth } from "../_shared/utils.ts";
 import { enforceSessionRateLimitAsync } from "../_shared/rateLimit.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
-const FROM_EMAIL = Deno.env.get("FROM_EMAIL") ?? "Clarify AI <hello@confideq.app>";
+const FROM_EMAIL =
+  Deno.env.get("RESEND_FROM_EMAIL") ??
+  Deno.env.get("FROM_EMAIL") ??
+  "Clarify AI <noreply@clarifyprep.com>";
 const APP_URL = Deno.env.get("APP_URL") ?? "https://clarityapp.ai";
 
 function sanitize(str: unknown, max = 200): string {

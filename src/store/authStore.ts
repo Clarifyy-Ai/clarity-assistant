@@ -738,7 +738,13 @@ export const useAuthStore = create<AuthStore>()(
                 data: {
                   full_name: fullName.trim(),
                 },
-                emailRedirectTo: `${window.location.origin}/auth/callback`,
+                emailRedirectTo: buildAuthRedirectUrl({
+                  path: "/auth/callback",
+                  configuredAppUrl: import.meta.env.VITE_APP_URL,
+                  appEnv: import.meta.env.VITE_APP_ENV,
+                  windowOrigin:
+                    typeof window !== "undefined" ? window.location.origin : null,
+                }),
               },
             });
 
@@ -788,7 +794,13 @@ export const useAuthStore = create<AuthStore>()(
             const { error } = await supabase.auth.signInWithOAuth({
               provider: provider as any,
               options: {
-                redirectTo: `${window.location.origin}/auth/callback`,
+                redirectTo: buildAuthRedirectUrl({
+                  path: "/auth/callback",
+                  configuredAppUrl: import.meta.env.VITE_APP_URL,
+                  appEnv: import.meta.env.VITE_APP_ENV,
+                  windowOrigin:
+                    typeof window !== "undefined" ? window.location.origin : null,
+                }),
                 scopes: provider === "google" ? "email profile" : undefined,
               },
             });

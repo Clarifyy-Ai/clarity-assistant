@@ -11,7 +11,10 @@ import {
 import { enforceEmailRateLimitAsync } from "../_shared/rateLimit.ts";
 
 const RESEND_API_KEY = Deno.env.get("RESEND_API_KEY") ?? "";
-const FROM_EMAIL = "Clarify AI <hello@confideq.app>";
+const FROM_EMAIL =
+  Deno.env.get("RESEND_FROM_EMAIL") ??
+  Deno.env.get("FROM_EMAIL") ??
+  "Clarify AI <noreply@clarifyprep.com>";
 /** Public legal operator name — not "Payara Innovations Private Limited". */
 const LEGAL_ENTITY_NAME = "Payara Labs";
 

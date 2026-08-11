@@ -26,7 +26,33 @@ function rejectTestModeInProduction(appEnv: string, livemode: boolean): boolean 
   return !(prod && livemode === false);
 }
 
+/** Mirrors supabase/functions/_shared/billingConfig.ts isPlaceholder price rules. */
+function isExamplePricePlaceholder(value: string): boolean {
+  const v = value.trim().toLowerCase();
+  const raw = value.trim();
+  return (
+    !v ||
+    v.includes("changeme") ||
+    v.includes("your_") ||
+    v.includes("xxx") ||
+    v.includes("placeholder") ||
+    v === "test" ||
+    v === "todo" ||
+    /^price_(starter|pro|elite|enterprise|credits)(_\d+)?_(monthly|yearly)$/i.test(raw) ||
+    /^price_credits_\d+$/i.test(raw)
+  );
+}
+
 describe("billing guards", () => {
+  it("rejects .env.example Stripe price IDs as placeholders", () => {
+    expect(isExamplePricePlaceholder("price_starter_monthly")).toBe(true);
+    expect(isExamplePricePlaceholder("price_pro_yearly")).toBe(true);
+    expect(isExamplePricePlaceholder("price_elite_monthly")).toBe(true);
+    expect(isExamplePricePlaceholder("price_credits_50")).toBe(true);
+    expect(isExamplePricePlaceholder("price_credits_150_monthly")).toBe(true);
+    expect(isExamplePricePlaceholder("price_1AbCdEfGhIjKlMnOpQrStUv")).toBe(false);
+  });
+
   it("ignores client-supplied credit quantity", () => {
     expect(resolvePackCredits("credits_50", 999_999)).toBe(50);
     expect(resolvePackCredits(undefined, 500)).toBe(0);

@@ -27,3 +27,7 @@ Monitor Edge 503 rate for `analytics-dashboard`, `parse-resume`, and gateway tim
 ## Analytics rate-limit policy
 
 `analytics-dashboard` is a `controlled_degradation_candidate`: when the distributed rate-limit RPC is unavailable, the function **fails open** (serves data) instead of returning 503. Genuine per-user quota exceeded still returns 429.
+
+## AI provider keys
+
+Product AI (chat, Prep, resume, etc.) requires `GEMINI_API_KEY` on Edge. `AI_PROVIDER_MODE=live` controls Admin Hub provider routing only — it does not gate product AI.
