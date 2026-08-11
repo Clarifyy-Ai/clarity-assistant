@@ -6,11 +6,10 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
-import { useNavigate } from "react-router-dom";
 import { cn } from "@/lib/utils";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
-import { buildLoginUrl } from "@/lib/auth/safeReturnTo";
+import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
 
 // ─────────────────────────────────────────────────────────────────
 // Settings — sidebar layout wrapper (grouped IA)
@@ -109,7 +108,6 @@ function SettingsNavLink({ item }: { item: SettingsNavItem }) {
 export default function Settings() {
   const location = useLocation();
   const { pathname } = location;
-  const navigate = useNavigate();
   const signOut = useAuthStore((s) => s.signOut);
   const isRoot = pathname === "/app/settings" || pathname === "/app/settings/";
   const activeNav = SETTINGS_NAV.find((item) => pathname.startsWith(item.to));
@@ -118,7 +116,7 @@ export default function Settings() {
   async function handleSignOut() {
     const returnTo = `${pathname}${location.search}${location.hash}`;
     await signOut();
-    navigate(buildLoginUrl({ returnTo }), { replace: true });
+    assignLoginWithReturnTo({ returnTo });
   }
 
   return (

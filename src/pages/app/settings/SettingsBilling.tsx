@@ -116,8 +116,15 @@ const PLAN_COLORS: Record<string, "violet" | "amber" | "emerald" | "blue"> = {
   enterprise: "emerald",
 };
 
-function getPlanPriceId(planId: PlanId): string | undefined {
-  return PLANS[planId]?.stripePriceIdMonthly;
+function getPlanPriceId(
+  planId: PlanId,
+  interval: "monthly" | "yearly" = "monthly"
+): string | undefined {
+  const plan = PLANS[planId];
+  if (!plan) return undefined;
+  return interval === "yearly"
+    ? plan.stripePriceIdYearly || plan.stripePriceIdMonthly
+    : plan.stripePriceIdMonthly;
 }
 
 function getSettingsBillingSuccessUrl(): string {
@@ -234,6 +241,8 @@ export default function SettingsBilling(): JSX.Element {
     const legacySuccess = searchParams.get("success");
     const legacyCanceled = searchParams.get("canceled");
     const upgradePlan = searchParams.get("upgrade");
+    const upgradeInterval =
+      searchParams.get("interval") === "yearly" ? "yearly" : "monthly";
 
     if (checkoutStatus === "success" || legacySuccess === "1") {
       toast.success("Payment successful! Your balance is updating now.");
@@ -255,7 +264,7 @@ export default function SettingsBilling(): JSX.Element {
       STRIPE_CONFIGURED &&
       !upgradeCheckoutStartedRef.current
     ) {
-      const priceId = getPlanPriceId(upgradePlan as PlanId);
+      const priceId = getPlanPriceId(upgradePlan as PlanId, upgradeInterval);
       if (!priceId) {
         toast.error("No Stripe price is configured for this plan.");
         setSearchParams({}, { replace: true });

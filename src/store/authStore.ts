@@ -28,6 +28,8 @@ import { readCachedAuthSession } from "@/lib/supabase/sessionCache";
 import { profilesDB, userRolesDB } from "@/lib/supabase/database";
 import { useOverlayStore } from "@/store/overlayStore";
 import { normalizePreferredModel } from "@/lib/ai/modelOptions";
+import { ACCOUNT_SUSPENDED_MESSAGE, isAccountSuspendedAuthError } from "@/lib/errors";
+import { isOAuthProviderEnabled } from "@/lib/auth/oauthProviders";
 import { isElectronApp } from "@/lib/platform/isElectron";
 import { clearBYOKVault } from "@/lib/security/byokVault";
 import { logger, LogEvents } from "@/lib/logger";
@@ -774,6 +776,15 @@ export const useAuthStore = create<AuthStore>()(
               state.error = null;
             });
 
+            if (!isOAuthProviderEnabled(provider)) {
+              const err = new Error("Unsupported OAuth provider.");
+              dset((state) => {
+                state.status = "error";
+                state.error = err.message;
+              });
+              throw err;
+            }
+
             const { error } = await supabase.auth.signInWithOAuth({
               provider: provider as any,
               options: {
@@ -993,7 +1004,7 @@ export const useAuthStore = create<AuthStore>()(
                 try {
                   sessionStorage.setItem(
                     "clarify_auth_ban_message",
-                    "Your account has been suspended. Contact support."
+                    ACCOUNT_SUSPENDED_MESSAGE
                   );
                 } catch {
                   // Ignore storage failures.
@@ -1061,6 +1072,21 @@ export const useAuthStore = create<AuthStore>()(
                 resetPostHog();
                 get().reset();
                 redirectToSessionExpiredLogin();
+                return false;
+              }
+
+              // Banned / Auth-disabled accounts often surface as opaque schema errors
+              // from the token or profile path — never show SQL to the user.
+              if (isAccountSuspendedAuthError(err)) {
+                try {
+                  sessionStorage.setItem(
+                    "clarify_auth_ban_message",
+                    ACCOUNT_SUSPENDED_MESSAGE,
+                  );
+                } catch {
+                  // Ignore storage failures.
+                }
+                await get().signOut();
                 return false;
               }
 

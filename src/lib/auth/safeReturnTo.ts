@@ -53,3 +53,25 @@ export function buildLoginUrl(options?: {
   const qs = params.toString();
   return qs ? `${loginPath}?${qs}` : loginPath;
 }
+
+/**
+ * Hard-navigate to login with returnTo of the current (or provided) path.
+ * Prefer this after logout so SPA race with ProtectedRoute cannot drop returnTo.
+ */
+export function assignLoginWithReturnTo(options?: {
+  returnTo?: string | null;
+  reason?: string;
+}): void {
+  if (typeof window === "undefined") return;
+
+  const returnTo =
+    options?.returnTo ??
+    `${window.location.pathname}${window.location.search}${window.location.hash}`;
+
+  window.location.assign(
+    buildLoginUrl({
+      returnTo,
+      reason: options?.reason,
+    }),
+  );
+}

@@ -19,6 +19,7 @@ import { useEffect, useMemo, useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 
 import { useAuthStore } from "@/store/authStore";
+import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
 
 type CallbackError = {
   message: string;
@@ -77,6 +78,7 @@ export default function AuthCallback(): JSX.Element {
   const location = useLocation();
 
   const status = useAuthStore((state) => state.status);
+  const user = useAuthStore((state) => state.user);
   const isOnboarded = useAuthStore((state) => state.isOnboarded);
   const isAdmin = useAuthStore((state) => state.isAdmin);
   const isProfileLoaded = useAuthStore((state) => state.isProfileLoaded);
@@ -130,6 +132,11 @@ export default function AuthCallback(): JSX.Element {
     }
 
     if (status === "authenticated" && isProfileLoaded) {
+      if (!isUserEmailConfirmed(user)) {
+        navigate("/verify-email", { replace: true });
+        return;
+      }
+
       const target = getSafeRedirectTarget({
         isAdmin,
         isOnboarded,
@@ -150,6 +157,7 @@ export default function AuthCallback(): JSX.Element {
     isAdmin,
     isOnboarded,
     navigate,
+    user,
   ]);
 
   if (timedOut) {

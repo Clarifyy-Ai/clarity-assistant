@@ -55,6 +55,7 @@ import {
   Pause,
   Play,
   BarChart2,
+  AlertTriangle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -92,7 +93,11 @@ interface MockSessionSummaryStats {
   timeTakenSeconds: number;
   creditsUsed: number;
   sessionId: string | null;
+  /** True when session ended with no scored answers — no fake 0 scorecard. */
+  incompleteNoAnswers?: boolean;
 }
+
+const INCOMPLETE_NO_ANSWERS_NOTE = "incomplete_no_answers";
 
 function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -643,6 +648,7 @@ export default function MockSession() {
     const creditsUsed = useSessionStore.getState().credits_consumed;
     const sessionId = useSessionStore.getState().session_id;
     const hintsUsed = useOverlayStore.getState().hint_history.length;
+    const incompleteNoAnswers = questionsAnswered === 0;
 
     if (sessionId) {
       saveLastSessionSummary({
@@ -659,21 +665,22 @@ export default function MockSession() {
       timeTakenSeconds,
       creditsUsed,
       sessionId,
+      incompleteNoAnswers,
     });
     setPhase("completed");
     setIsSavingSummary(true);
 
     try {
-      await persistMockSession();
+      await persistMockSession({ incompleteNoAnswers });
       await orchestrator.completeSession();
 
       const userId = profile?.id;
-      const sessionId = useSessionStore.getState().session_id;
-      if (userId) {
+      const sid = useSessionStore.getState().session_id;
+      if (userId && !incompleteNoAnswers) {
         const totalSessions = await sessionsDB.countCompletedByUserId(userId);
         await checkPostSessionAchievements({
           sessionType: "mock",
-          sessionId: sessionId ?? undefined,
+          sessionId: sid ?? undefined,
           totalSessions,
           durationMinutes: Math.round(timeTakenSeconds / 60),
           fillerWordCount: fillerHook.totalCount,
@@ -701,7 +708,7 @@ export default function MockSession() {
     }
   }
 
-  async function persistMockSession() {
+  async function persistMockSession(opts?: { incompleteNoAnswers?: boolean }) {
     const session = useSessionStore.getState();
     const overlay = useOverlayStore.getState();
     const userId = profile?.id;
@@ -719,9 +726,18 @@ export default function MockSession() {
         ? new Date(startTimeRef.current).getTime()
         : Date.now();
       const duration_seconds = Math.max(1, Math.round((Date.now() - startedMs) / 1000));
+      const answeredCount = answersRef.current.filter((a) => !a.skipped).length;
+      const incompleteNoAnswers = opts?.incompleteNoAnswers ?? answeredCount === 0;
+
+      const existingNotes = sessionNotes.trim();
+      const notesParts = [
+        incompleteNoAnswers ? INCOMPLETE_NO_ANSWERS_NOTE : null,
+        existingNotes || null,
+        !incompleteNoAnswers ? transcript || null : null,
+      ].filter(Boolean);
 
       await sessionsDB.update(sessionId, {
-        status: "completed",
+        status: incompleteNoAnswers ? "abandoned" : "completed",
         credits_used: session.credits_consumed,
         model_used: dbModel as any,
         ended_at: new Date().toISOString(),
@@ -730,13 +746,14 @@ export default function MockSession() {
         filler_words: fillerHook.totalCount,
         avg_wpm: wpmHook.wpm,
         hints_used: overlay.hint_history.length,
-        answers_generated: answersRef.current.filter((a) => !a.skipped).length,
+        answers_generated: answeredCount,
         questions_asked: questionCount,
-        notes: sessionNotes.trim() || transcript || null,
+        ...(incompleteNoAnswers ? { overall_score: null } : {}),
+        notes: notesParts.length > 0 ? notesParts.join("\n") : null,
         session_type: "mock",
       } as any);
 
-      if (transcript) {
+      if (transcript && !incompleteNoAnswers) {
         await sessionTranscriptsDB.create({
           session_id: sessionId,
           user_id: userId,
@@ -847,6 +864,47 @@ export default function MockSession() {
   }
 
   if (phase === "completed" && summaryStats?.sessionId) {
+    if (summaryStats.incompleteNoAnswers) {
+      return (
+        <div className="flex items-center justify-center min-h-screen px-4">
+          <div className="w-full max-w-md space-y-5 text-center">
+            <AlertTriangle className="h-10 w-10 text-amber-500 mx-auto" />
+            <div className="space-y-2">
+              <h2 className="text-lg font-bold text-foreground">Session incomplete</h2>
+              <p className="text-sm text-muted-foreground leading-relaxed whitespace-normal">
+                No answers were recorded for this mock interview, so it was saved as incomplete
+                without a scorecard or a fake zero score. Re-run the session and answer at least one
+                question to generate scoring and debrief feedback.
+              </p>
+              {isSavingSummary && (
+                <p className="text-xs text-muted-foreground">Saving incomplete session…</p>
+              )}
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-center">
+              <Button
+                variant="primary"
+                size="sm"
+                fullWidth
+                disabled={isSavingSummary}
+                onClick={() => navigate("/app/mock")}
+              >
+                Start a new mock
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                fullWidth
+                disabled={isSavingSummary}
+                onClick={() => navigate("/app/sessions")}
+              >
+                Back to sessions
+              </Button>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
     return (
       <PostSessionSummary
         sessionId={summaryStats.sessionId}

@@ -1,4 +1,4 @@
-import { Link, useLocation, useNavigate } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { useEffect, useState } from "react";
 import { Bell, Zap, AlertTriangle, Shield, ShieldOff, LogOut, Settings, User, Search, X } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
@@ -18,13 +18,12 @@ import {
 import { cn } from "@/lib/utils";
 import { BrandLogo } from "@/components/marketing";
 import { ProductModePill } from "@/components/layout/ProductModePill";
-import { buildLoginUrl } from "@/lib/auth/safeReturnTo";
+import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
 
 const CMDK_TIP_KEY = "clarify:cmdk-tip-dismissed";
 
 export function AppTopBar() {
   const { profile, signOut, refreshCredits } = useAuthStore();
-  const navigate = useNavigate();
   const location = useLocation();
   const notifStore  = useNotificationStore();
   const uiStore     = useUIStore();
@@ -77,7 +76,7 @@ export function AppTopBar() {
     try {
       const returnTo = `${location.pathname}${location.search}${location.hash}`;
       await signOut();
-      navigate(buildLoginUrl({ returnTo }), { replace: true });
+      assignLoginWithReturnTo({ returnTo });
     } catch (error) {
       console.error("[AppTopBar] Sign out failed:", error);
     }

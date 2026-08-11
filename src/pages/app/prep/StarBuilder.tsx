@@ -1,8 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { useAuthStore } from "@/store/userStore";
-import { answerBankDB } from "@/lib/supabase/database";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
-import { createIdempotencyKey } from "@/lib/api/functions";
+import { prepToolIdempotencyKey } from "@/lib/network/idempotency";
 import {
   getAiUserFacingError,
   openUpgradeIfInsufficientCredits,
@@ -21,12 +18,16 @@ import {
   parseStarResponse,
   type StarFields,
 } from "@/components/prep/StarBuilderForm";
+import { PrepToolShell } from "@/components/prep/PrepToolShell";
 import {
   Star, Sparkles, Save, Loader2, BookOpen, Trash2, Pencil, Filter,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import type { Tables } from "@/integrations/supabase/types";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useAuthStore } from "@/store/userStore";
+import { answerBankDB } from "@/lib/supabase/database";
 
 const EXAMPLES = [
   "Tell me about a time you led a team through a difficult project.",
@@ -46,7 +47,9 @@ export default function StarBuilder() {
   const [star, setStar] = useState<StarFields>(EMPTY_STAR);
   const [competencyTag, setCompetencyTag] = useState("");
   const [polishing, setPolishing] = useState(false);
+  const [polishError, setPolishError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const polishKeyRef = useRef<string | null>(null);
 
   const [stories, setStories] = useState<StarStory[]>([]);
   const [loadingStories, setLoadingStories] = useState(true);
@@ -113,8 +116,14 @@ export default function StarBuilder() {
       toast.error("Write something in the STAR fields first.");
       return;
     }
+    if (polishing) return;
 
     setPolishing(true);
+    setPolishError(null);
+    const idempotencyKey =
+      polishKeyRef.current ?? prepToolIdempotencyKey("star_method");
+    polishKeyRef.current = idempotencyKey;
+
     try {
       const input = `Question: ${question || "(general behavioral)"}\n\nSituation: ${star.situation}\nTask: ${star.task}\nAction: ${star.action}\nResult: ${star.result}`;
 
@@ -123,7 +132,7 @@ export default function StarBuilder() {
         input,
       }, {
         headers: {
-          "Idempotency-Key": createIdempotencyKey("prep-tool"),
+          "x-idempotency-key": idempotencyKey,
         },
       });
 
@@ -138,10 +147,13 @@ export default function StarBuilder() {
         }));
         toast.success("Answer polished with AI!");
       }
+      polishKeyRef.current = null;
       await refreshCredits();
     } catch (err) {
       openUpgradeIfInsufficientCredits(err);
-      toast.error(getAiUserFacingError(err));
+      const message = getAiUserFacingError(err);
+      setPolishError(message);
+      toast.error(message);
     } finally {
       setPolishing(false);
     }
@@ -212,6 +224,14 @@ export default function StarBuilder() {
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <div className="lg:col-span-2 space-y-4">
+          <PrepToolShell
+            title="Build a STAR story"
+            description="Fill the sections, then polish with AI when ready."
+            isGenerating={polishing}
+            generationLabel="Polishing STAR answer…"
+            error={polishError}
+            onRetry={() => void handlePolish()}
+          >
           <StarBuilderForm
             question={question}
             onQuestionChange={setQuestion}
@@ -246,6 +266,7 @@ export default function StarBuilder() {
               </Button>
             )}
           </div>
+          </PrepToolShell>
 
           <Card>
             <div className="flex items-center justify-between gap-2 mb-3">

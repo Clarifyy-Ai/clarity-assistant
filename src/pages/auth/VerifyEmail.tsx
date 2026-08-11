@@ -14,6 +14,8 @@ import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/Button";
 import { BrandLogo } from "@/components/marketing";
 import { AuthShell } from "@/components/layout/AuthShell";
+import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
+import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
 
 /**
  * Verify Email gate — shown when an authenticated user has not yet
@@ -40,7 +42,7 @@ export default function VerifyEmail() {
   const [cooldown, setCooldown] = useState(0);
 
   useEffect(() => {
-    if (user?.email_confirmed_at) {
+    if (isUserEmailConfirmed(user)) {
       navigate("/app/dashboard", { replace: true });
     }
   }, [user, navigate]);
@@ -74,7 +76,7 @@ export default function VerifyEmail() {
 
   async function handleSignOut() {
     await signOut();
-    navigate("/login", { replace: true });
+    assignLoginWithReturnTo({ returnTo: "/verify-email" });
   }
 
   return (

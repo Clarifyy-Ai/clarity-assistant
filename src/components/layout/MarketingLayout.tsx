@@ -18,14 +18,16 @@ type NavItem =
   | { to: string; label: string; hash?: string }
   | { href: string; label: string; external?: boolean };
 
+/** Header nav — short labels for narrow / tablet drawer (PUBLIC-002). */
 const NAV_LINKS: NavItem[] = [
   { to: "/", hash: "features", label: "Features" },
   { to: "/gov-exams", label: "Gov Exams" },
   { to: "/pricing", label: "Pricing" },
   { to: "/shortcuts", label: "Shortcuts" },
   { to: "/blog", label: "Blog" },
-  { to: "/help", label: "Help" },
 ];
+
+const HELP_NAV: NavItem = { to: "/help", label: "Help" };
 
 const FOOTER_COLUMNS: Array<{
   heading: string;
@@ -169,7 +171,8 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
           >
             <BrandLogo size="md" />
           </Link>
-          <div className="hidden lg:flex items-center gap-6 xl:gap-8 text-sm text-muted-foreground">
+          {/* Desktop links from lg+ — drawer below that avoids cramped wrapping at 375–1023. */}
+          <div className="hidden lg:flex items-center gap-5 xl:gap-8 text-sm text-muted-foreground">
             {NAV_LINKS.map((link) => {
               const key = "to" in link ? `${link.to}#${link.hash ?? ""}` : link.href;
               const isActive =
@@ -181,7 +184,7 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
                   key={key}
                   item={link}
                   className={cn(
-                    "transition-colors",
+                    "transition-colors whitespace-nowrap",
                     isActive ? "text-foreground" : "hover:text-foreground",
                   )}
                 />
@@ -189,7 +192,18 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
             })}
           </div>
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <ThemeToggle className="w-8 h-8 sm:w-9 sm:h-9 shrink-0" />
+            <div className="flex items-center gap-2 shrink-0">
+              <MarketingNavLink
+                item={HELP_NAV}
+                className={cn(
+                  "text-sm transition-colors whitespace-nowrap",
+                  pathname.startsWith("/help")
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              />
+              <ThemeToggle className="w-8 h-8 sm:w-9 sm:h-9 shrink-0" />
+            </div>
             <Link
               to="/login"
               className="text-sm text-muted-foreground hover:text-foreground transition-colors hidden sm:inline-block shrink-0"
@@ -231,8 +245,8 @@ export function MarketingLayout({ children }: MarketingLayoutProps) {
             onClick={() => setMenuOpen(false)}
             className="absolute inset-0 h-full w-full bg-background/70 backdrop-blur-sm animate-in fade-in duration-200"
           />
-          <div className="absolute inset-x-0 top-16 bottom-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] border-t border-border bg-background px-4 py-3 space-y-1 animate-in slide-in-from-top-2 fade-in duration-200">
-            {NAV_LINKS.map((link) => {
+          <div className="absolute inset-x-0 top-16 bottom-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch] border-t border-border bg-background px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] space-y-1 animate-in slide-in-from-top-2 fade-in duration-200">
+            {[...NAV_LINKS, HELP_NAV].map((link) => {
               const key = "to" in link ? `${link.to}#${link.hash ?? ""}` : link.href;
               const isActive =
                 "to" in link &&

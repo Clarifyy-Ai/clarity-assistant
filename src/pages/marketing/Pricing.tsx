@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { PLANS, type PlanId } from "@/lib/billing/subscriptionManager";
+import { PLANS, type BillingInterval, type PlanId } from "@/lib/billing/subscriptionManager";
 import { Check, X, ArrowRight, Zap } from "lucide-react";
 import { ComplianceBanner } from "@/components/marketing";
 import { LazyMotion, domAnimation, m } from "framer-motion";
@@ -26,13 +26,31 @@ const PLAN_COLORS: Record<string, string> = {
 
 const SITE_URL = "https://clarify.ai.sltfinanceindia.com";
 
-function paidPlanHref(planId: PlanId): string {
+/** Exact 20% off: annual yearlyPrice × 5 === monthly × 12 × 4. */
+function hasExactSave20(monthlyPrice: number, yearlyPrice: number): boolean {
+  if (monthlyPrice <= 0) return false;
+  return yearlyPrice * 5 === monthlyPrice * 12 * 4;
+}
+
+function paidPlanHref(planId: PlanId, interval: BillingInterval): string {
   if (!isPaidSignupPlan(planId)) return "/signup";
-  const returnTo = encodeURIComponent(billingReturnPathForPlan(planId));
-  return `/login?plan=${planId}&returnTo=${returnTo}`;
+  const returnTo = encodeURIComponent(billingReturnPathForPlan(planId, interval));
+  return `/login?plan=${planId}&interval=${interval}&returnTo=${returnTo}`;
 }
 
 export default function Pricing() {
+  const [annual, setAnnual] = useState(false);
+  const interval: BillingInterval = annual ? "yearly" : "monthly";
+
+  const showSave20 = useMemo(
+    () =>
+      DISPLAY_PLANS.filter((id) => id !== "free").every((planId) => {
+        const plan = PLANS[planId];
+        return hasExactSave20(plan.monthlyPrice, plan.yearlyPrice);
+      }),
+    []
+  );
+
   usePageMeta({
     title: "Pricing — Clarify AI",
     description: "Simple, transparent pricing for interview prep and rehearsal. Start free, upgrade when ready.",
@@ -50,12 +68,11 @@ export default function Pricing() {
           name: plan.name,
           price: planId === "free" ? "0" : (plan.monthlyPrice / 100).toFixed(2),
           priceCurrency: "USD",
-          url: `${SITE_URL}${planId === "free" ? "/signup" : paidPlanHref(planId)}`,
+          url: `${SITE_URL}${planId === "free" ? "/signup" : paidPlanHref(planId, "monthly")}`,
         };
       }),
     },
   });
-  const [annual, setAnnual] = useState(false);
 
   return (
     <MarketingLayout>
@@ -90,7 +107,10 @@ export default function Pricing() {
                 annual ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
               )}
             >
-              Annual <span className="text-primary text-xs ml-1">Save 20%</span>
+              Annual
+              {showSave20 ? (
+                <span className="text-primary text-xs ml-1">Save 20%</span>
+              ) : null}
             </button>
           </div>
         </div>
@@ -107,15 +127,16 @@ export default function Pricing() {
           {DISPLAY_PLANS.map((planId, i) => {
             const plan = PLANS[planId];
             const monthlyPrice = plan.monthlyPrice;
+            // PLANS.yearlyPrice is annual cents; monthly equivalent = yearlyPrice/12.
             const effectiveMonthly = annual
-              ? Math.round(plan.yearlyPrice)
+              ? Math.round(plan.yearlyPrice / 12)
               : monthlyPrice;
             const priceDisplay =
               effectiveMonthly === 0
                 ? "Free"
                 : `$${(effectiveMonthly / 100).toFixed(0)}`;
             const isMax = planId === "enterprise";
-            const ctaHref = planId === "free" ? "/signup" : paidPlanHref(planId);
+            const ctaHref = planId === "free" ? "/signup" : paidPlanHref(planId, interval);
 
             return (
               <m.div

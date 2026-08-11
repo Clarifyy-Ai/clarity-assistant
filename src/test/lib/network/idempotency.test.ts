@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { documentParseIdempotencyKey } from "@/lib/network/idempotency";
+import {
+  documentParseIdempotencyKey,
+  prepToolIdempotencyKey,
+  isValidClientIdempotencyKey,
+} from "@/lib/network/idempotency";
 import { sanitizeReturnTo, buildLoginUrl } from "@/lib/auth/safeReturnTo";
 
 describe("documentParseIdempotencyKey", () => {
@@ -15,6 +19,14 @@ describe("documentParseIdempotencyKey", () => {
     const a = documentParseIdempotencyKey("gap-analysis", "r1:j1", "v1");
     const b = documentParseIdempotencyKey("gap-analysis", "r1:j1", "v2");
     expect(a).not.toBe(b);
+  });
+});
+
+describe("prepToolIdempotencyKey", () => {
+  it("produces valid edge keys", () => {
+    const key = prepToolIdempotencyKey("rephrase");
+    expect(isValidClientIdempotencyKey(key)).toBe(true);
+    expect(key.startsWith("prep-tool:rephrase:")).toBe(true);
   });
 });
 

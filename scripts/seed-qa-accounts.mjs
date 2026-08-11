@@ -95,6 +95,42 @@ const QA_ACCOUNTS = [
     onboardingCompleted: false,
     notes: "ONBOARD-001 incomplete onboarding",
   },
+  {
+    key: "BANNED",
+    email: "qa.banned@clarify.ai.test",
+    fullName: "QA Banned User",
+    planId: "free",
+    credits: 0,
+    admin: false,
+    emailConfirm: true,
+    onboardingCompleted: true,
+    subscriptionStatus: "active",
+    banned: true,
+    notes: "AUTH-RESTRICT banned — dedicated suspended UI",
+  },
+  {
+    key: "PAST_DUE",
+    email: "qa.pastdue@clarify.ai.test",
+    fullName: "QA Past Due User",
+    planId: "pro",
+    credits: 100,
+    admin: false,
+    emailConfirm: true,
+    onboardingCompleted: true,
+    subscriptionStatus: "past_due",
+    notes: "Billing recovery — past_due subscription",
+  },
+  {
+    key: "DISPOSABLE",
+    email: "qa.disposable@clarify.ai.test",
+    fullName: "QA Disposable User",
+    planId: "free",
+    credits: 10,
+    admin: false,
+    emailConfirm: true,
+    onboardingCompleted: true,
+    notes: "SETTINGS-DANGER account deletion fixture",
+  },
 ];
 
 function loadEnvFile(filePath) {
@@ -155,6 +191,7 @@ async function upsertAccount(admin, account, password) {
 
   const now = new Date().toISOString();
   const onboarded = account.onboardingCompleted !== false;
+  const subscriptionStatus = account.subscriptionStatus ?? "active";
   const { error: profileErr } = await admin.from("profiles").upsert(
     {
       id: user.id,
@@ -165,7 +202,8 @@ async function upsertAccount(admin, account, password) {
       credits_used_this_month: 0,
       onboarding_completed: onboarded,
       onboarding_step: onboarded ? 99 : 1,
-      subscription_status: "active",
+      subscription_status: subscriptionStatus,
+      is_banned: account.banned === true,
       updated_at: now,
     },
     { onConflict: "id" },
@@ -176,7 +214,7 @@ async function upsertAccount(admin, account, password) {
     {
       user_id: user.id,
       plan_id: account.planId,
-      status: "active",
+      status: subscriptionStatus,
       monthly_credits: account.credits,
       updated_at: now,
     },

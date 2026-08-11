@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { useInterviewSchedulerStore } from "@/store/interviewSchedulerStore";
 import { useInterviewScheduler } from "@/hooks/useInterviewScheduler";
@@ -7,6 +7,7 @@ import { PageHeader } from "@/components/layout/PageHeader";
 import { PageContent } from "@/components/layout/PageContent";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
+import { DesktopDownloadButton } from "@/components/common/DesktopDownloadButton";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -14,7 +15,7 @@ import { ProgressBar } from "@/components/ui/ProgressBar";
 import { SkeletonCard } from "@/components/ui/SkeletonLoader";
 import {
   CalendarDays, Clock, CheckCircle,
-  Mic, ChevronRight, Building2, Target,
+  Building2, Target, Mic, ChevronRight,
   Wind, Star, Volume2, VolumeX, Droplets, StickyNote, Monitor, Smartphone,
   Link2, ExternalLink,
 } from "lucide-react";
@@ -28,6 +29,10 @@ import { format, differenceInMinutes } from "date-fns";
 import type { LucideIcon } from "lucide-react";
 import { usePrefersReducedMotion } from "@/hooks/usePrefersReducedMotion";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { useDesktopDownload } from "@/hooks/useDesktopDownload";
+import { stashPendingPracticeSetup } from "@/lib/session/lastPracticeSetup";
+import type { LiveSessionConfig } from "@/types/session.types";
+import { isElectronApp } from "@/lib/platform/isElectron";
 
 // ─────────────────────────────────────────────────────────────────
 // InterviewDay — focus mode for interview day
@@ -57,6 +62,7 @@ export default function InterviewDay() {
   const store     = useInterviewSchedulerStore();
   const scheduler = useInterviewScheduler();
   const prefersReducedMotion = usePrefersReducedMotion();
+  const { url: desktopInstallerUrl, loading: desktopInstallerLoading } = useDesktopDownload();
 
   useEffect(() => {
     scheduler.reload();
@@ -203,6 +209,34 @@ export default function InterviewDay() {
   const allDone = checklistDone === FINAL_CHECKLIST.length;
 
   const firstName = profile?.full_name?.split(" ")[0] ?? "there";
+
+  const practiceCoachHref = useMemo(() => {
+    const params = new URLSearchParams();
+    if (todayIv?.id) params.set("interviewId", todayIv.id);
+    if (todayIv?.company_name) params.set("company", todayIv.company_name);
+    if (todayIv?.role_title) params.set("role", todayIv.role_title);
+    const qs = params.toString();
+    return qs ? `/app/live?${qs}` : "/app/live";
+  }, [todayIv?.id, todayIv?.company_name, todayIv?.role_title]);
+
+  function stashInterviewContextForCoach() {
+    if (!todayIv) return;
+    const partial: LiveSessionConfig = {
+      company: todayIv.company_name || null,
+      role: todayIv.role_title || null,
+      hint_style: "short_hints",
+      model: "gemini-flash",
+      smart_routing: false,
+      stealth_mode: false,
+      resume_id: null,
+      jd_id: null,
+      interview_type: "behavioral",
+      instructions: `Interview Day context for ${todayIv.company_name} — ${todayIv.role_title}`,
+      enable_system_audio: true,
+      save_transcript: true,
+    };
+    stashPendingPracticeSetup(partial);
+  }
 
   if (store.is_loading) {
     return (
@@ -497,20 +531,39 @@ export default function InterviewDay() {
         />
       </Card>
 
-      {/* Launch co-pilot */}
+      {/* Launch Practice Coach — web primary; no Retry for unpublished installer */}
       <div className="space-y-3">
         <Button
           variant="primary"
           size="lg"
           fullWidth
-          onClick={() => navigate("/app/live")}
+          onClick={() => {
+            stashInterviewContextForCoach();
+            navigate(practiceCoachHref);
+          }}
           leftIcon={<Mic className="w-5 h-5" />}
           rightIcon={<ChevronRight className="w-5 h-5" />}
           className="py-4 text-base"
         >
-          Launch Practice Coach
+          Continue in browser
         </Button>
+        {!isElectronApp() && (desktopInstallerUrl || desktopInstallerLoading) && (
+          <DesktopDownloadButton
+            fullWidth
+            size="md"
+            variant="outline"
+            webCoachHref={practiceCoachHref}
+            showGuideLink={false}
+          />
+        )}
+        {!isElectronApp() && !desktopInstallerUrl && !desktopInstallerLoading && (
+          <p className="text-center text-[11px] text-muted-foreground leading-relaxed">
+            Desktop installer isn&apos;t published for this environment yet — use Continue in browser
+            above. No retry needed until an installer artifact is configured.
+          </p>
+        )}
         <p className="text-center text-xs text-muted-foreground">
+          Opens {PRODUCT_NAMES.practiceCoach} with today&apos;s interview context when available.
           For interview rehearsal only — not for use during real interviews.
         </p>
       </div>

@@ -1,6 +1,6 @@
 // prep-tool/index.ts — FIXED, SECURE, PRODUCTION-READY
 
-import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders, withCorsHeaders } from "../_shared/cors.ts";
 import {
   requireAuth,
   successResponse,
@@ -8,12 +8,45 @@ import {
   log,
   getAdminClient,
 } from "../_shared/utils.ts";
-import { deductCreditsAtomic, refundCredits } from "../_shared/supabase.ts";
+import {
+  createServiceClient,
+  deductCreditsAtomic,
+  getIdempotentResponse,
+  refundCredits,
+  storeIdempotentResponse,
+} from "../_shared/supabase.ts";
 import { generateWithFallback, logAICost } from "../_shared/aiProvider.ts";
 import { AI_CREDIT_COSTS } from "../_shared/creditEconomics.ts";
 import { requireCapabilityForFunction } from "../_shared/requireCapability.ts";
 import { enforceAiRateLimitAsync } from "../_shared/rateLimit.ts";
 import { requirePlan } from "../_shared/requirePlan.ts";
+
+function structuredError(
+  req: Request,
+  message: string,
+  code: "PROVIDER_UNAVAILABLE" | "INTERNAL_ERROR",
+  status: number,
+  correlationId: string,
+): Response {
+  return new Response(
+    JSON.stringify({
+      success: false,
+      error: message,
+      code,
+      correlation_id: correlationId,
+    }),
+    {
+      status,
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+    },
+  );
+}
+
+function isProviderFailure(err: unknown): boolean {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  return /missing required|missing.*env|api.?key|GEMINI|OPENAI|ANTHROPIC|provider|unavailable|timeout|ECONNREFUSED|fetch failed|network/i
+    .test(msg);
+}
 
 /* -------------------------------------------------------------------------- */
 /*                          SANITIZATION HELPERS                              */
@@ -195,6 +228,7 @@ Deno.serve(async (req: Request) => {
   if (cors) return cors;
 
   const FN = "prep-tool";
+  const correlationId = crypto.randomUUID();
 
   try {
     /* ----------------------- AUTH ----------------------- */
@@ -206,7 +240,7 @@ Deno.serve(async (req: Request) => {
       "prep-tool",
       userId,
     );
-    if (rateLimited) return rateLimited;
+    if (rateLimited) return withCorsHeaders(req, rateLimited);
 
     const planGate = requirePlan(auth.planId, "free", req);
     if (planGate) return planGate;
@@ -246,14 +280,35 @@ Deno.serve(async (req: Request) => {
 
     /* ------------------- CREDIT DEDUCTION ------------------- */
     const toolCost = getToolCost(tool_id);
-    // Prefer standard Idempotency-Key; never invent a random key (that defeats
-    // client retries and can double-charge). Invalid shapes are ignored inside
-    // deductCreditsAtomic.
+    // Prefer x-idempotency-key / Idempotency-Key; never invent a random key
+    // (that defeats client retries and can double-charge).
     const idempotencyKey =
+      req.headers.get("x-idempotency-key") ??
       req.headers.get("Idempotency-Key") ??
       req.headers.get("idempotency-key") ??
-      req.headers.get("x-idempotency-key") ??
       null;
+
+    // Full-result replay: same key already completed → no second charge / AI call.
+    const db = createServiceClient();
+    const prior = await getIdempotentResponse(db, idempotencyKey);
+    const priorResult =
+      prior?.success && typeof prior.payload?.result === "string"
+        ? prior.payload.result
+        : null;
+    if (priorResult !== null) {
+      log(FN, "info", "Prep tool idempotent replay", {
+        userId,
+        tool_id,
+        correlationId,
+      });
+      return successResponse(
+        { result: priorResult, cached: true },
+        { creditsCharged: 0 },
+        200,
+        req,
+      );
+    }
+
     const creditResult = await deductCreditsAtomic({
       userId,
       action: `prep_tool_${tool_id}`,
@@ -304,11 +359,12 @@ Deno.serve(async (req: Request) => {
         tool_id,
         err: errMsg.slice(0, 500),
       });
-      return errorResponse(
+      return structuredError(
+        req,
         "AI service temporarily unavailable. Credits refunded.",
-        "AI_ERROR",
+        "PROVIDER_UNAVAILABLE",
         502,
-        req
+        correlationId,
       );
     }
 
@@ -324,11 +380,20 @@ Deno.serve(async (req: Request) => {
 
     const cleaned = sanitizeAIOutput(raw);
 
+    // Persist AI result on the same idempotency key so retries return cache.
+    await storeIdempotentResponse(db, idempotencyKey, {
+      success: true,
+      balanceAfter: creditResult.balanceAfter,
+      transactionId: creditResult.transactionId,
+      payload: { result: cleaned, tool_id },
+    });
+
     /* ----------------------- RESPOND ----------------------- */
     log(FN, "info", "Prep tool executed", {
       userId,
       tool_id,
       inputLength: sanitizedInput.length,
+      correlationId,
     });
 
     return successResponse(
@@ -338,7 +403,26 @@ Deno.serve(async (req: Request) => {
       req
     );
   } catch (err) {
-    console.error("prep-tool error:", err);
-    return errorResponse("Internal error", "INTERNAL", 500, req);
+    if (err instanceof Response) {
+      return withCorsHeaders(req, err);
+    }
+    const errMsg = err instanceof Error ? err.message : String(err ?? "");
+    console.error("prep-tool error:", { correlationId, err: errMsg.slice(0, 500) });
+    if (isProviderFailure(err)) {
+      return structuredError(
+        req,
+        "AI service temporarily unavailable. Please try again.",
+        "PROVIDER_UNAVAILABLE",
+        502,
+        correlationId,
+      );
+    }
+    return structuredError(
+      req,
+      "Internal error",
+      "INTERNAL_ERROR",
+      500,
+      correlationId,
+    );
   }
 });

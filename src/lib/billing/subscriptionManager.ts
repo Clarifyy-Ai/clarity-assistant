@@ -36,6 +36,7 @@ export interface Plan {
   name: string;
   tagline: string;
   monthlyPrice: number;
+  /** Annual total in cents (true 20% off = monthlyPrice × 12 × 0.8). */
   yearlyPrice: number;
   creditsPerMonth: number;
   stripePriceIdMonthly?: string;
@@ -203,7 +204,7 @@ export const PLANS: Record<PlanId, Plan> = {
     name: "Pro",
     tagline: "Everything you need to land the role",
     monthlyPrice: 2_900,
-    yearlyPrice: 2_320, // 20% off $29/mo — display monthly equivalent when billed annually
+    yearlyPrice: 27_840, // annual cents = monthly×12×0.8 (true 20%); display monthly = yearlyPrice/12
     creditsPerMonth: 1_400,
     stripePriceIdMonthly: ENV.STRIPE_PRICE_PRO_MONTHLY,
     stripePriceIdYearly: ENV.STRIPE_PRICE_PRO_YEARLY,
@@ -279,7 +280,7 @@ export const PLANS: Record<PlanId, Plan> = {
     name: "Elite",
     tagline: "For FAANG-level prep",
     monthlyPrice: 7_900,
-    yearlyPrice: 6_320, // 20% off $79/mo — display monthly equivalent when billed annually
+    yearlyPrice: 75_840, // annual cents = monthly×12×0.8 (true 20%); display monthly = yearlyPrice/12
     creditsPerMonth: 1_000,
     stripePriceIdMonthly: ENV.STRIPE_PRICE_ELITE_MONTHLY,
     stripePriceIdYearly: ENV.STRIPE_PRICE_ELITE_YEARLY,
@@ -366,7 +367,7 @@ export const PLANS: Record<PlanId, Plan> = {
     name: "Max",
     tagline: "Higher credits for power users and coaches",
     monthlyPrice: 7_900,
-    yearlyPrice: 6_320, // 20% off $79/mo — display monthly equivalent when billed annually
+    yearlyPrice: 75_840, // annual cents = monthly×12×0.8 (true 20%); display monthly = yearlyPrice/12
     creditsPerMonth: 4_000,
     stripePriceIdMonthly: ENV.STRIPE_PRICE_ENTERPRISE_MONTHLY,
     stripePriceIdYearly: ENV.STRIPE_PRICE_ENTERPRISE_YEARLY,

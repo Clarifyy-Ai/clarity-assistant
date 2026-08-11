@@ -20,6 +20,7 @@ import { jobDescriptionsDB } from "@/lib/supabase/database";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { companyProfilePath } from "@/lib/company/slug";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
+import { cn } from "@/lib/utils";
 
 interface ResumeOption {
   id: string;
@@ -420,26 +421,49 @@ export default function JDDetail() {
               first.
             </p>
           ) : (
-            <div className="flex flex-wrap items-end gap-3">
-              <div className="min-w-[200px] flex-1">
-                <label className="text-xs text-muted-foreground">Resume</label>
-                <select
-                  value={selectedResumeId}
-                  onChange={(e) => setSelectedResumeId(e.target.value)}
-                  className="mt-1 w-full rounded-xl border border-border bg-background px-3 py-2 text-sm text-foreground focus:outline-none focus:ring-2 focus:ring-primary/50"
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">Select resume</p>
+                <div className="flex flex-wrap gap-2">
+                  {resumes.map((r) => {
+                    const selected = selectedResumeId === r.id;
+                    return (
+                      <button
+                        key={r.id}
+                        type="button"
+                        onClick={() => setSelectedResumeId(r.id)}
+                        aria-pressed={selected}
+                        className={cn(
+                          "rounded-xl border px-3 py-2 text-left text-sm transition-all",
+                          selected
+                            ? "border-primary bg-primary/10 ring-2 ring-primary/30 text-foreground"
+                            : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                        )}
+                      >
+                        <span className="font-medium">{r.name}</span>
+                        {r.is_primary ? (
+                          <span className="ml-1.5 text-[10px] uppercase tracking-wide text-primary">
+                            Primary
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+                <div
+                  className={cn(
+                    "mt-2 rounded-xl border px-3 py-2 text-xs",
+                    "border-primary/40 bg-primary/5 text-foreground",
+                  )}
                 >
-                  {resumes.map((r) => (
-                    <option key={r.id} value={r.id}>
-                      {r.name}{r.is_primary ? " (primary)" : ""}
-                    </option>
-                  ))}
-                </select>
+                  JD selected: <span className="font-medium">{jd.target_role || jd.title}</span>
+                </div>
               </div>
               <Button
                 variant="primary"
                 size="sm"
                 onClick={() => void handleGapAnalysis()}
-                disabled={gapRunning || !selectedResumeId}
+                disabled={gapRunning || !selectedResumeId || !id}
                 leftIcon={
                   gapRunning
                     ? <Loader2 className="w-4 h-4 animate-spin" />

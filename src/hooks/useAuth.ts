@@ -19,6 +19,7 @@ import { sanitizeFileName } from "@/lib/security";
 
 import type { AuthProvider, ProfileRow } from "@/types";
 import type { UserProfile } from "@/types/user.types";
+import { getEnabledOAuthProviders } from "@/lib/auth/oauthProviders";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
@@ -51,12 +52,7 @@ type FeatureKey =
   | "export_pdf"
   | "byok";
 
-const SUPPORTED_OAUTH_PROVIDERS = new Set<string>([
-  "google",
-  "github",
-  "linkedin_oidc",
-  "azure",
-]);
+const SUPPORTED_OAUTH_PROVIDERS = new Set<string>(getEnabledOAuthProviders());
 
 const FEATURE_PLAN_MAP: Record<FeatureKey, string[]> = {
   live_copilot: ["pro", "elite", "enterprise"],

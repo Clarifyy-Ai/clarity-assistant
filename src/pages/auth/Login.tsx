@@ -19,15 +19,24 @@ import {
   LinkedInOAuthButton,
   AzureOAuthButton,
 } from "@/components/auth/OAuthButton";
+import { isOAuthProviderEnabled } from "@/lib/auth/oauthProviders";
 
-import { formatSupabaseAuthError, isSupabaseConfigAuthError } from "@/lib/errors";
+import {
+  ACCOUNT_SUSPENDED_MESSAGE,
+  formatSupabaseAuthError,
+  isAccountSuspendedAuthError,
+  isSupabaseConfigAuthError,
+} from "@/lib/errors";
 import { loginSchema, type LoginInput } from "@/lib/validators";
 import { getCSRFHiddenInputProps, validateCSRFToken } from "@/lib/security";
 import { usePageMeta } from "@/hooks/usePageMeta";
 import { AuthShell } from "@/components/layout/AuthShell";
 import { sanitizeReturnTo } from "@/lib/auth/safeReturnTo";
+import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
+import { supportMailto } from "@/lib/auth/recoveryActions";
 import {
   billingReturnPathForPlan,
+  getPendingInterval,
   getPendingPlan,
   isPaidSignupPlan,
   setPendingPlan,
@@ -128,13 +137,19 @@ export default function Login(): JSX.Element {
   );
   const explicitReturnTo = returnToFromQuery ?? returnToFromState;
   const planFromQuery = searchParams.get("plan");
+  const intervalFromQuery = searchParams.get("interval");
   const signupHref = isPaidSignupPlan(planFromQuery)
-    ? `/signup?plan=${planFromQuery}`
+    ? `/signup?plan=${planFromQuery}${
+        intervalFromQuery === "yearly" ? "&interval=yearly" : ""
+      }`
     : getPendingPlan()
-      ? `/signup?plan=${getPendingPlan()}`
+      ? `/signup?plan=${getPendingPlan()}${
+          getPendingInterval() === "yearly" ? "&interval=yearly" : ""
+        }`
       : "/signup";
 
   const authStatus = useAuthStore((state) => state.status);
+  const authUser = useAuthStore((state) => state.user);
   const isAdmin = useAuthStore((state) => state.isAdmin);
   const isProfileLoaded = useAuthStore((state) => state.isProfileLoaded);
   const signInWithEmail = useAuthStore((state) => state.signInWithEmail);
@@ -146,6 +161,7 @@ export default function Login(): JSX.Element {
   const [lockedUntil, setLockedUntil] = useState<number | null>(null);
   const [lockTick, setLockTick] = useState(0);
   const [authError, setAuthError] = useState<string | null>(null);
+  const [accountSuspended, setAccountSuspended] = useState(false);
   const [mfaPending, setMfaPending] = useState(false);
   const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
   const [mfaCode, setMfaCode] = useState("");
@@ -162,7 +178,7 @@ export default function Login(): JSX.Element {
   });
 
   useEffect(() => {
-    setPendingPlan(searchParams.get("plan"));
+    setPendingPlan(searchParams.get("plan"), searchParams.get("interval"));
   }, [searchParams]);
 
   useEffect(() => {
@@ -174,7 +190,13 @@ export default function Login(): JSX.Element {
     } else if (reason === SIGNED_OUT_ELSEWHERE_REASON) {
       setAuthError(SIGNED_OUT_ELSEWHERE_MESSAGE);
     } else if (message) {
-      setAuthError(decodeURIComponent(message.replace(/\+/g, " ")));
+      const decoded = decodeURIComponent(message.replace(/\+/g, " "));
+      if (isAccountSuspendedAuthError(decoded)) {
+        setAccountSuspended(true);
+        setAuthError(ACCOUNT_SUSPENDED_MESSAGE);
+      } else {
+        setAuthError(decoded);
+      }
     } else if (errorCode) {
       setAuthError(`Sign-in failed (${errorCode}). Please try again.`);
     } else {
@@ -182,7 +204,8 @@ export default function Login(): JSX.Element {
         const banMessage = sessionStorage.getItem("clarify_auth_ban_message");
         if (banMessage) {
           sessionStorage.removeItem("clarify_auth_ban_message");
-          setAuthError(banMessage);
+          setAccountSuspended(true);
+          setAuthError(banMessage || ACCOUNT_SUSPENDED_MESSAGE);
         }
       } catch {
         // Ignore storage failures.
@@ -191,22 +214,38 @@ export default function Login(): JSX.Element {
   }, [searchParams]);
 
   useEffect(() => {
-    if (mfaPending) return;
+    if (mfaPending || accountSuspended) return;
     if (authStatus !== "authenticated" || !isProfileLoaded) {
       return;
     }
 
+    // Unverified email/password sessions must not skip into /app or onboarding.
+    if (!isUserEmailConfirmed(authUser)) {
+      navigate("/verify-email", { replace: true });
+      return;
+    }
+
     const pendingPlan = getPendingPlan();
+    const pendingInterval = getPendingInterval();
     // Honor deep-link returnTo when present; else paid-plan CTAs → billing; else admin/dashboard.
     const target =
       explicitReturnTo ??
       (pendingPlan
-        ? billingReturnPathForPlan(pendingPlan)
+        ? billingReturnPathForPlan(pendingPlan, pendingInterval)
         : isAdmin
           ? "/app/admin"
           : "/app/dashboard");
     navigate(target, { replace: true });
-  }, [authStatus, isProfileLoaded, isAdmin, explicitReturnTo, navigate, mfaPending]);
+  }, [
+    authStatus,
+    isProfileLoaded,
+    isAdmin,
+    explicitReturnTo,
+    navigate,
+    mfaPending,
+    accountSuspended,
+    authUser,
+  ]);
 
   useEffect(() => {
     const storedLock = safeGetLocalStorageItem(LOCK_KEY);
@@ -289,6 +328,7 @@ export default function Login(): JSX.Element {
     }
 
     setAuthError(null);
+    setAccountSuspended(false);
 
     try {
       await signInWithEmail(data.email, data.password);
@@ -314,6 +354,12 @@ export default function Login(): JSX.Element {
       }
     } catch (error) {
       const message = formatSupabaseAuthError(error);
+
+      if (isAccountSuspendedAuthError(error) || isAccountSuspendedAuthError(message)) {
+        setAccountSuspended(true);
+        setAuthError(ACCOUNT_SUSPENDED_MESSAGE);
+        return;
+      }
 
       if (isSupabaseConfigAuthError(error)) {
         if (import.meta.env.DEV) {
@@ -387,16 +433,58 @@ export default function Login(): JSX.Element {
 
           <div className="mb-8">
             <h1 className="text-2xl font-bold text-foreground">
-              {mfaPending ? "Two-factor authentication" : "Welcome back"}
+              {accountSuspended
+                ? "Account suspended"
+                : mfaPending
+                  ? "Two-factor authentication"
+                  : "Welcome back"}
             </h1>
             <p className="text-muted-foreground text-sm mt-1">
-              {mfaPending
-                ? "Enter the 6-digit code from your authenticator app"
-                : "Sign in to your account to continue"}
+              {accountSuspended
+                ? "This account cannot sign in right now."
+                : mfaPending
+                  ? "Enter the 6-digit code from your authenticator app"
+                  : "Sign in to your account to continue"}
             </p>
           </div>
 
-          {mfaPending ? (
+          {accountSuspended ? (
+            <div className="space-y-4">
+              <div
+                role="alert"
+                className="flex items-start gap-2 text-sm text-destructive bg-destructive/10 border border-destructive/20 rounded-xl px-3 py-2.5"
+              >
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>{authError || ACCOUNT_SUSPENDED_MESSAGE}</span>
+              </div>
+              <div className="flex flex-col gap-2">
+                <a
+                  href={supportMailto("Clarify AI suspended account")}
+                  className="inline-flex items-center justify-center rounded-xl border border-border px-4 py-2.5 text-sm font-medium hover:bg-secondary transition"
+                >
+                  Contact support
+                </a>
+                <Link
+                  to="/help"
+                  className="inline-flex items-center justify-center rounded-xl border border-border px-4 py-2.5 text-sm font-medium hover:bg-secondary transition"
+                >
+                  Help Center
+                </Link>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="md"
+                  fullWidth
+                  onClick={() => {
+                    setAccountSuspended(false);
+                    setAuthError(null);
+                  }}
+                >
+                  Try a different account
+                </Button>
+              </div>
+            </div>
+          ) : mfaPending ? (
             <div className="space-y-4">
               <Input
                 label="Authenticator code"
@@ -429,10 +517,10 @@ export default function Login(): JSX.Element {
           ) : (
           <>
           <div className="grid grid-cols-2 gap-2">
-            <GoogleOAuthButton />
-            <GithubOAuthButton />
-            <LinkedInOAuthButton />
-            <AzureOAuthButton />
+            {isOAuthProviderEnabled("google") ? <GoogleOAuthButton /> : null}
+            {isOAuthProviderEnabled("github") ? <GithubOAuthButton /> : null}
+            {isOAuthProviderEnabled("linkedin_oidc") ? <LinkedInOAuthButton /> : null}
+            {isOAuthProviderEnabled("azure") ? <AzureOAuthButton /> : null}
           </div>
 
           <div className="flex items-center gap-3 my-5">

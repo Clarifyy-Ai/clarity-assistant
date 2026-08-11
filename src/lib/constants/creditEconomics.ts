@@ -31,12 +31,16 @@ export const PLAN_PRICE_CENTS_MONTHLY = {
   enterprise: 7_900,
 } as const;
 
+/**
+ * Annual billed totals (cents) — source of truth matches subscriptionManager
+ * PLANS.yearlyPrice (monthly×12×0.8 = true 20% off).
+ */
 export const PLAN_PRICE_CENTS_YEARLY = {
   free: 0,
   starter: 0,
-  pro: 29_000,
-  elite: 29_000,
-  enterprise: 79_000,
+  pro: 27_840,
+  elite: 75_840,
+  enterprise: 75_840,
 } as const;
 
 /**

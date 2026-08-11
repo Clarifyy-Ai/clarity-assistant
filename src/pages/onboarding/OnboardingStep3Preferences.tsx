@@ -104,9 +104,12 @@ export default function OnboardingStep3Preferences({ onNext, onBack, onSkip }: S
       .from("profiles")
       .update({
         response_style:  hintStyle,
-        coach_tone:      coachTone,
         preferred_model: toDbPreferredModel(model),
-        notification_prefs: { ...existingPrefs, interview_styles: styles },
+        notification_prefs: {
+          ...existingPrefs,
+          interview_styles: styles,
+          coach_tone: coachTone,
+        },
         onboarding_step: 4,
       } as any)
       .eq("id", user.id)

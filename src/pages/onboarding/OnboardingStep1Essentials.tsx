@@ -106,7 +106,8 @@ export default function OnboardingStep1Essentials({ data, onNext, onChange }: St
           experience_level: level,
         },
         onboarding_step:   1,
-        ...(refCode ? { referred_by: refCode } : {}),
+        // referred_by is server-owned (blocklisted on client profile updates);
+        // finishOnboarding records referrals via recordReferral().
       })
       .eq("id", user.id)
       .select()

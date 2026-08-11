@@ -64,7 +64,7 @@ export function requireCapability(
   if (hasCapability(planId, capability)) return null;
   return errorResponse(
     `This feature requires a higher plan (${capability}).`,
-    "PLAN_UPGRADE_REQUIRED",
+    "CAPABILITY_REQUIRED",
     403,
     req,
   );

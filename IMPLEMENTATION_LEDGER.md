@@ -46,4 +46,22 @@
 
 **Gov release decision:** CONDITIONAL_GO_PILOT — engine + admin + ingest + mastery + validators live; **0** full-sim ready packs (SSC 20/100, UPSC 23/100, IBPS 18/100 partial; APPSC/RRB empty); FE host deploy external; alerts/drain still external. Not GO for all exams.
 
-Last updated: 2026-08-02 (ops snapshot + embedding-ready similarity helpers; release unchanged CONDITIONAL_GO_PILOT)
+Last updated: 2026-08-11 — Aug 11 QA remediation remaining work (billing redirects, OAuth allowlist, prep idempotency, verify gates, deletion CORS, fixtures).
+
+| ID | Priority | Requirement | Implementation | Status | Remaining |
+|----|----------|-------------|----------------|--------|-----------|
+| AUG11-WS2 | P0 | QA credential rotation | seed-qa-accounts + QA_CREDENTIAL_ROTATION.md; scan:secrets | IMPLEMENTED_REQUIRES_EXTERNAL_OPS | Operator must rotate + MFA |
+| AUG11-WS3 | P0 | Edge 502/503 / CORS | prep-tool/send-email/delete-account CORS + structured errors | IMPLEMENTED_NOT_DEPLOYED | Redeploy EFs + RESEND key |
+| AUG11-WS5 | P0 | Pricing 20% + CTA | PLANS yearly true 20%; paidPlanHref plan+interval | IMPLEMENTED_AND_LOCALLY_VERIFIED | Stripe price IDs in ops |
+| AUG11-WS7 | P0 | returnTo on logout | assignLoginWithReturnTo hard nav | IMPLEMENTED_AND_LOCALLY_VERIFIED | — |
+| AUG11-WS8 | P0 | Email verify before onboarding | isUserEmailConfirmed gates | IMPLEMENTED_AND_LOCALLY_VERIFIED | send-email deploy |
+| AUG11-WS10 | P0 | OAuth allowlist | VITE_OAUTH_PROVIDERS default google | IMPLEMENTED_AND_LOCALLY_VERIFIED | Enable providers in Supabase |
+| AUG11-WS11 | P0 | Banned / past-due UX | Suspended + billing recovery UI | IMPLEMENTED_AND_LOCALLY_VERIFIED | Fixture seed banned/past_due |
+| AUG11-WS13-14 | P0 | Prep shell + idempotency | PrepToolShell + prep-tool cache replay | IMPLEMENTED_NOT_DEPLOYED | Redeploy prep-tool |
+| AUG11-WS15-16 | P1 | Docs TXT + Gap JD select | MIME + selectors + CAPABILITY_REQUIRED | IMPLEMENTED_NOT_DEPLOYED | Redeploy gap-analysis |
+| AUG11-WS19 | P0 | Interview Day web launch | Continue in browser → /app/live | IMPLEMENTED_AND_LOCALLY_VERIFIED | — |
+| AUG11-WS21 | P0 | Account deletion UX | Safe toasts + CORS on delete-account | IMPLEMENTED_NOT_DEPLOYED | Redeploy delete-account |
+| AUG11-WS28 | P0 | /app/billing redirect | App.tsx → settings/billing | IMPLEMENTED_AND_LOCALLY_VERIFIED | — |
+| AUG11-WS4 | P1 | Mobile header | Gov Exams short label + drawer | IMPLEMENTED_AND_LOCALLY_VERIFIED | Visual UAT |
+| AUG11-WS30 | P1 | QA fixtures | banned/past_due/disposable seed keys | IMPLEMENTED_REQUIRES_EXTERNAL_OPS | Run qa:seed-accounts |
+

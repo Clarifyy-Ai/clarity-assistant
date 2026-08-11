@@ -6,9 +6,9 @@ import { documentParseIdempotencyKey } from "@/lib/network/idempotency";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { FileText, Download, Trash2, CheckCircle, Clock, Edit, Save, X, Loader2, RefreshCw, History } from "lucide-react";
+import { FileText, Download, Trash2, CheckCircle, Clock, Edit, Save, X, Loader2, RefreshCw, History, GitCompare } from "lucide-react";
 import { toast } from "sonner";
-import { resumesDB, resumeVersionsDB } from "@/lib/supabase/database";
+import { resumesDB, resumeVersionsDB, jobDescriptionsDB } from "@/lib/supabase/database";
 import { ConfirmDialog } from "@/components/common/ConfirmDialog";
 import { EmptyState } from "@/components/common/EmptyState";
 import { InlineErrorRetry } from "@/components/common/InlineErrorRetry";
@@ -18,6 +18,12 @@ import {
   parseResumeContentString,
 } from "@/lib/documents/resumeParse";
 import type { ParsedResume } from "@/types/ai.types";
+import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
+import { cn } from "@/lib/utils";
+import {
+  getAiUserFacingError,
+  openUpgradeIfInsufficientCredits,
+} from "@/lib/network/aiErrorUx";
 
 interface ResumeVersionRow {
   id: string;
@@ -123,6 +129,17 @@ export default function ResumeDetail() {
   const [deleting, setDeleting] = useState(false);
   const [versions, setVersions] = useState<ResumeVersionRow[]>([]);
   const [versionsLoading, setVersionsLoading] = useState(false);
+  const [jds, setJds] = useState<Array<{ id: string; target_role: string; company: string | null }>>([]);
+  const [selectedJdId, setSelectedJdId] = useState("");
+  const [gapRunning, setGapRunning] = useState(false);
+  const [gapResult, setGapResult] = useState<{
+    match_score?: number;
+    matching_skills?: string[];
+    missing_skills?: string[];
+    recommendations?: string[];
+    experience_gap?: string;
+    education_fit?: string;
+  } | null>(null);
 
   const parsed = useMemo(
     () => parseResumeContentString(doc?.content ?? null),
@@ -168,6 +185,63 @@ export default function ResumeDetail() {
     void loadResume();
   }, [loadResume]);
 
+  useEffect(() => {
+    if (!user?.id) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const rows = await jobDescriptionsDB.listByUserId(user.id);
+        if (cancelled) return;
+        const mapped = rows.map((j) => ({
+          id: j.id,
+          target_role: j.target_role ?? j.title ?? "Untitled JD",
+          company: j.company ?? null,
+        }));
+        setJds(mapped);
+        if (mapped.length === 1) setSelectedJdId(mapped[0].id);
+      } catch {
+        if (!cancelled) setJds([]);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [user?.id]);
+
+  async function handleGapAnalysis() {
+    if (!id || !selectedJdId) {
+      toast.error("Select a job description to compare against this resume.");
+      return;
+    }
+    setGapRunning(true);
+    setGapResult(null);
+    try {
+      const result = await fetchEdgeJson<{
+        match_score?: number;
+        matching_skills?: string[];
+        missing_skills?: string[];
+        recommendations?: string[];
+        experience_gap?: string;
+        education_fit?: string;
+      }>(
+        "gap-analysis",
+        { resume_id: id, jd_id: selectedJdId },
+        {
+          headers: {
+            "x-idempotency-key": documentParseIdempotencyKey(
+              "gap-analysis",
+              `${id}:${selectedJdId}`,
+            ),
+          },
+        },
+      );
+      setGapResult(result);
+      toast.success("Gap analysis ready");
+    } catch (err) {
+      openUpgradeIfInsufficientCredits(err);
+      toast.error(getAiUserFacingError(err));
+    } finally {
+      setGapRunning(false);
+    }
+  }
   async function handleSaveEdit() {
     if (!id || !user?.id) return;
     setSavingEdit(true);
@@ -502,6 +576,122 @@ export default function ResumeDetail() {
             </div>
           </Card>
         )}
+
+        <Card id="gap-analysis-panel">
+          <h3 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">
+            <GitCompare className="w-4 h-4 text-primary" />
+            Resume ↔ JD Gap Analysis
+          </h3>
+          <p className="text-xs text-muted-foreground mb-3">
+            Costs {AI_CREDIT_COSTS.gap_analysis} credits. Select a JD, then analyze.
+          </p>
+          <div
+            className={cn(
+              "mb-3 rounded-xl border px-3 py-2 text-xs",
+              "border-primary/40 bg-primary/5 text-foreground",
+            )}
+          >
+            Resume selected: <span className="font-medium">{doc.name || "This resume"}</span>
+          </div>
+          {jds.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No job descriptions yet.{" "}
+              <Link to="/app/documents" className="text-primary underline-offset-2 hover:underline">
+                Add a JD
+              </Link>{" "}
+              first.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              <div>
+                <p className="text-xs text-muted-foreground mb-2">Select job description</p>
+                <div className="flex flex-wrap gap-2">
+                  {jds.map((jd) => {
+                    const selected = selectedJdId === jd.id;
+                    return (
+                      <button
+                        key={jd.id}
+                        type="button"
+                        onClick={() => setSelectedJdId(jd.id)}
+                        aria-pressed={selected}
+                        className={cn(
+                          "rounded-xl border px-3 py-2 text-left text-sm transition-all max-w-xs",
+                          selected
+                            ? "border-primary bg-primary/10 ring-2 ring-primary/30 text-foreground"
+                            : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground",
+                        )}
+                      >
+                        <span className="font-medium line-clamp-1">{jd.target_role}</span>
+                        {jd.company ? (
+                          <span className="block text-[10px] text-muted-foreground mt-0.5 truncate">
+                            {jd.company}
+                          </span>
+                        ) : null}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => void handleGapAnalysis()}
+                disabled={gapRunning || !selectedJdId || !id}
+                leftIcon={
+                  gapRunning
+                    ? <Loader2 className="w-4 h-4 animate-spin" />
+                    : <GitCompare className="w-4 h-4" />
+                }
+              >
+                {gapRunning ? "Analyzing…" : "Run gap analysis"}
+              </Button>
+            </div>
+          )}
+          {gapResult && (
+            <div className="mt-4 space-y-3 border-t border-border pt-4">
+              <div className="flex items-center gap-3">
+                <div className="rounded-xl bg-primary/10 px-3 py-2 text-center min-w-[72px]">
+                  <p className="text-lg font-bold text-primary tabular-nums">
+                    {Math.round(Number(gapResult.match_score) || 0)}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground uppercase">Match</p>
+                </div>
+                <div className="flex-1 text-sm text-muted-foreground space-y-1">
+                  {gapResult.experience_gap && (
+                    <p><span className="font-medium text-foreground">Experience:</span> {gapResult.experience_gap}</p>
+                  )}
+                  {gapResult.education_fit && (
+                    <p><span className="font-medium text-foreground">Education:</span> {gapResult.education_fit}</p>
+                  )}
+                </div>
+              </div>
+              {(gapResult.matching_skills?.length ?? 0) > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-foreground mb-1.5">Matching skills</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {gapResult.matching_skills!.map((s) => (
+                      <span key={s} className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-600 dark:text-emerald-400">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {(gapResult.missing_skills?.length ?? 0) > 0 && (
+                <div>
+                  <p className="text-xs font-semibold text-foreground mb-1.5">Missing skills</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {gapResult.missing_skills!.map((s) => (
+                      <span key={s} className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-500/15 text-amber-700 dark:text-amber-400">
+                        {s}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </Card>
 
         <Card>
           <h3 className="text-sm font-semibold text-foreground mb-1 flex items-center gap-2">

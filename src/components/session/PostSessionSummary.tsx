@@ -25,7 +25,39 @@ export function PostSessionSummary({ sessionId, onStartNew }: PostSessionSummary
     : "Just now";
   const questions = summary?.questionsDetected ?? 0;
   const hints = summary?.hintsUsed ?? 0;
+  const incompleteNoAnswers = questions === 0;
   const nextStep = buildNextStepSuggestion(summary);
+
+  if (incompleteNoAnswers) {
+    return (
+      <div className="flex items-center justify-center min-h-[60vh]">
+        <div className="text-center space-y-4 max-w-md px-4">
+          <div className="mx-auto w-12 h-12 rounded-2xl bg-amber-500/10 flex items-center justify-center mb-1">
+            <ClipboardCheck className="w-6 h-6 text-amber-600 dark:text-amber-400" />
+          </div>
+          <div className="space-y-2">
+            <p className="text-lg font-semibold text-foreground">Session incomplete</p>
+            <p className="text-sm text-muted-foreground leading-relaxed whitespace-normal">
+              No answers were recorded, so this session was saved without a scorecard or a fake
+              zero score. Answer at least one question in a new session to unlock scoring and
+              debrief.
+            </p>
+          </div>
+          <div className="flex items-center justify-center gap-3 mt-1 flex-wrap">
+            <Button variant="primary" size="sm" onClick={onStartNew}>
+              Start New Session
+            </Button>
+            <Link
+              to="/app/sessions"
+              className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-foreground text-sm font-medium rounded-xl transition-all"
+            >
+              Back to sessions
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const bullets = [
     `Duration: ${durationLabel}`,

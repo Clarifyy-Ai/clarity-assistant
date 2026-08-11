@@ -423,9 +423,14 @@ export default function OnboardingStep2OptionalSetup({
           (profile?.notification_prefs as Record<string, unknown> | null) ?? {};
         const prefsPatch = {
           response_style: hintStyle,
-          coach_tone: "encouraging" as const,
           preferred_model: toDbPreferredModel(model),
-          notification_prefs: { ...existingPrefs, interview_styles: styles },
+          // coach_tone may be absent from generated profile types on some deploys —
+          // persist under notification_prefs to avoid PATCH 400 on unknown columns.
+          notification_prefs: {
+            ...existingPrefs,
+            interview_styles: styles,
+            coach_tone: "encouraging",
+          },
           onboarding_step: 2,
         };
         const { data: prefsRow } = await supabase

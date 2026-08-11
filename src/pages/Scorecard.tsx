@@ -58,10 +58,24 @@ export default function Scorecard() {
   }
 
   if (error || !scorecard) {
+    const isNoAnswersError =
+      typeof error === "string" &&
+      (/no answers were recorded/i.test(error) || /incomplete_no_answers/i.test(error));
+
     return (
       <div className="min-h-screen bg-background text-foreground">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-4">
-          {error && (
+          {error && isNoAnswersError && (
+            <EmptyState
+              icon={AlertTriangle}
+              title="Session incomplete — no scorecard"
+              description={error}
+              actionLabel="Back to mock interviews"
+              onAction={() => navigate("/app/mock")}
+              compact
+            />
+          )}
+          {error && !isNoAnswersError && (
             <InlineErrorRetry message={error} onRetry={() => void reload()} />
           )}
           {!error && (
@@ -94,17 +108,22 @@ export default function Scorecard() {
         {looksEmpty && (
           <div
             role="alert"
-            className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-200"
+            className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm text-amber-950 dark:text-amber-100"
           >
-            This scorecard shows all zeros — usually because no answers were scored or AI scoring failed.
-            Use Retry below if generation errored, or return to the session and try again.
-            <button
-              type="button"
-              className="ml-2 underline underline-offset-2"
-              onClick={() => void reload()}
-            >
-              Retry
-            </button>
+            <p className="leading-relaxed whitespace-normal">
+              This scorecard shows all zeros because no answers were scored for the session.
+              Incomplete sessions are saved without a real score — this is not a performance
+              result. Start a new mock and answer at least one question to generate a real
+              scorecard. Retry is only available when AI scoring fails after answers exist.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Link
+                to="/app/mock"
+                className="inline-flex items-center rounded-lg bg-secondary px-3 py-1.5 text-xs font-medium hover:bg-secondary/80"
+              >
+                Start a new mock
+              </Link>
+            </div>
           </div>
         )}
 

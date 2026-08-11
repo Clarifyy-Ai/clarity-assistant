@@ -443,7 +443,7 @@ function ResumeManager() {
       <UploadZone
         title="Drop resume here or browse"
         description={`PDF, DOCX, DOC or TXT · Max 10 MB · Up to ${MAX_UPLOAD_QUEUE} files at once`}
-        accept=".pdf,.docx,.doc,.txt"
+        accept=".pdf,.docx,.doc,.txt,text/plain,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         multiple
         loading={uploading}
         loadingContent={
@@ -669,18 +669,33 @@ function ResumeManager() {
             const isReady   = parseStatus === "ready";
 
             return (
-              <Card key={r.id} padding="sm">
+              <Card
+                key={r.id}
+                padding="sm"
+                className={cn(
+                  isActive && "ring-2 ring-primary/40 border-primary/40 bg-primary/5",
+                )}
+              >
                 <div className="flex items-center gap-3 sm:gap-4">
                   <div className="w-9 h-9 bg-blue-500/10 rounded-xl items-center justify-center shrink-0 hidden sm:flex">
                     <FileText className="w-4 h-4 text-blue-400" />
                   </div>
 
-                  <div className="flex-1 min-w-0">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      void docMgr.setActiveResume(r.id)
+                        .then(() => toast.success("Active resume updated."))
+                        .catch(() => toast.error("Failed to set active resume."));
+                    }}
+                    className="flex-1 min-w-0 text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-pressed={isActive}
+                  >
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-xs sm:text-sm font-medium text-foreground truncate">
                         {row.title || row.name || "Untitled"}
                       </p>
-                      {isActive  && <Badge variant="emerald" size="sm" dot>Active</Badge>}
+                      {isActive  && <Badge variant="emerald" size="sm" dot>Selected</Badge>}
                       {isParsing && <Badge variant="amber"   size="sm">Parsing…</Badge>}
                       {isPending && <Badge variant="amber"   size="sm">Needs parse</Badge>}
                       {isError   && <Badge variant="red"     size="sm">Parse failed</Badge>}
@@ -695,7 +710,7 @@ function ResumeManager() {
                         {parsed.summary}
                       </p>
                     )}
-                  </div>
+                  </button>
 
                   <div className="flex items-center gap-1.5 shrink-0">
                     {row.file_path && (
@@ -900,8 +915,9 @@ function JDManager() {
   const [company,   setCompany]   = useState("");
   const [text,      setText]      = useState("");
   // ★ URL input mode
-  const [jdMode,    setJdMode]    = useState<"paste" | "url">("paste");
+  const [jdMode,    setJdMode]    = useState<"paste" | "url" | "upload">("paste");
   const [jdUrl,     setJdUrl]     = useState("");
+  const [jdFile,    setJdFile]    = useState<File | null>(null);
   const [saving,    setSaving]    = useState(false);
   const [deleteId,  setDeleteId]  = useState<string | null>(null);
   const [search, setSearch] = useState("");
@@ -919,27 +935,68 @@ function JDManager() {
     if (page !== safePage) setPage(safePage);
   }, [page, safePage]);
 
-  // Validate: paste mode needs text, url mode needs valid URL
+  // Validate: paste needs text, url needs valid URL, upload needs a file (+ title)
   const isAddValid = title.trim() && (
-    jdMode === "paste" ? text.trim() : (jdUrl.trim() && isValidUrl(jdUrl.trim()))
+    jdMode === "paste"
+      ? text.trim()
+      : jdMode === "url"
+        ? (jdUrl.trim() && isValidUrl(jdUrl.trim()))
+        : !!jdFile
   );
+
+  async function handleJdFile(file: File) {
+    const validationError = validateFile(file, "jd");
+    if (validationError) {
+      toast.error(validationError);
+      return;
+    }
+    setJdFile(file);
+    const lower = file.name.toLowerCase();
+    if (lower.endsWith(".txt") || file.type === "text/plain") {
+      try {
+        const content = await file.text();
+        setText(content);
+        toast.success("TXT loaded — review and save.");
+      } catch {
+        toast.error("Could not read TXT file.");
+      }
+    }
+  }
 
   async function handleAdd() {
     if (!isAddValid) return;
     setSaving(true);
     try {
-      const { jdId, error } = await docMgr.addJobDescription({
-        rawText:   jdMode === "paste" ? text : `[URL] ${jdUrl}`,
-        method:    jdMode === "paste" ? "paste" : "url",
+      let rawText = text;
+      let method: "paste" | "url" | "upload" = jdMode === "paste" ? "paste" : jdMode === "url" ? "url" : "upload";
+      let fileUrl: string | undefined = jdMode === "url" ? jdUrl : undefined;
+
+      if (jdMode === "upload" && jdFile) {
+        if (jdFile.name.toLowerCase().endsWith(".txt") || jdFile.type === "text/plain") {
+          rawText = text.trim() || (await jdFile.text());
+        } else {
+          // PDF/DOCX: store a placeholder; user can paste full text later if needed.
+          rawText =
+            text.trim() ||
+            `[Uploaded file: ${jdFile.name}]\n\nPaste the job description text here after upload if automatic extraction is unavailable.`;
+        }
+        method = "upload";
+      } else if (jdMode === "url") {
+        rawText = `[URL] ${jdUrl}`;
+      }
+
+      const { error } = await docMgr.addJobDescription({
+        rawText,
+        method,
         roleTitle: title,
         company,
-        fileUrl:   jdMode === "url" ? jdUrl : undefined,
+        fileUrl,
       });
       if (error) toast.error(error);
       else {
         toast.success("Job description saved.");
         setAddOpen(false);
-        setTitle(""); setCompany(""); setText(""); setJdUrl(""); setJdMode("paste");
+        setTitle(""); setCompany(""); setText(""); setJdUrl(""); setJdFile(null); setJdMode("paste");
       }
     } catch {
       toast.error("Failed to save job description. Please try again.");
@@ -999,24 +1056,40 @@ function JDManager() {
           {pageItems.map((jd) => {
             const isActive = jd.id === activeJdId;
             return (
-              <Card key={jd.id} padding="sm">
+              <Card
+                key={jd.id}
+                padding="sm"
+                className={cn(
+                  isActive && "ring-2 ring-primary/40 border-primary/40 bg-primary/5",
+                )}
+              >
                 <div className="flex items-center gap-3 sm:gap-4">
-                  <Link
-                    to={`/app/documents/jd/${jd.id}`}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      docMgr.setActiveJD(jd.id);
+                      toast.success("Active job description updated.");
+                    }}
                     className="w-9 h-9 bg-primary/10 rounded-xl items-center justify-center shrink-0 hidden sm:flex hover:bg-primary/15 transition-colors"
-                    aria-label={`Open ${jd.role_title}`}
+                    aria-label={`Select ${jd.role_title}`}
+                    aria-pressed={isActive}
                   >
                     <ClipboardList className="w-4 h-4 text-primary" />
-                  </Link>
-                  <Link
-                    to={`/app/documents/jd/${jd.id}`}
-                    className="flex-1 min-w-0 rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      docMgr.setActiveJD(jd.id);
+                      toast.success("Active job description updated.");
+                    }}
+                    className="flex-1 min-w-0 text-left rounded-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    aria-pressed={isActive}
                   >
                     <div className="flex items-center gap-2">
-                      <p className="text-xs sm:text-sm font-medium text-foreground truncate hover:text-primary transition-colors">
+                      <p className="text-xs sm:text-sm font-medium text-foreground truncate">
                         {jd.role_title}
                       </p>
-                      {isActive && <Badge variant="emerald" size="sm" dot>Active</Badge>}
+                      {isActive && <Badge variant="emerald" size="sm" dot>Selected</Badge>}
                       {jd.parse_status === "parsing" && (
                         <Badge variant="amber" size="sm">Parsing…</Badge>
                       )}
@@ -1025,16 +1098,19 @@ function JDManager() {
                       {jd.company_name && `${jd.company_name} · `}
                       {format(new Date(jd.created_at), "MMM d, yyyy")}
                     </p>
-                  </Link>
+                  </button>
                   <div className="flex items-center gap-1.5 shrink-0">
                     {!isActive && (
                       <Button
                         variant="secondary"
                         size="xs"
-                        onClick={() => docMgr.setActiveJD(jd.id)}
+                        onClick={() => {
+                          docMgr.setActiveJD(jd.id);
+                          toast.success("Active job description updated.");
+                        }}
                         leftIcon={<Star className="w-3 h-3" />}
                       >
-                        Set active
+                        Select
                       </Button>
                     )}
                     <Link
@@ -1092,7 +1168,7 @@ function JDManager() {
           <div>
             <p className="text-xs text-muted-foreground mb-2">Job description source</p>
             <div className="flex gap-2 mb-3">
-              {(["paste", "url"] as const).map((mode) => (
+              {(["paste", "url", "upload"] as const).map((mode) => (
                 <button
                   key={mode}
                   onClick={() => setJdMode(mode)}
@@ -1103,7 +1179,7 @@ function JDManager() {
                       : "bg-secondary border-border text-muted-foreground hover:text-foreground"
                   )}
                 >
-                  {mode === "paste" ? "📋 Paste text" : "🔗 URL"}
+                  {mode === "paste" ? "Paste text" : mode === "url" ? "URL" : "Upload file"}
                 </button>
               ))}
             </div>
@@ -1118,11 +1194,10 @@ function JDManager() {
                   className="w-full bg-background border border-input text-foreground placeholder:text-muted-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring transition-colors"
                 />
                 <p className="text-[11px] text-muted-foreground mt-1.5">
-                  Paste text up to ~10,000 characters · File uploads (PDF/DOCX/TXT) max{" "}
-                  {FILE_LIMITS.jd.maxMB} MB when supported
+                  Paste text up to ~10,000 characters
                 </p>
               </div>
-            ) : (
+            ) : jdMode === "url" ? (
               <div>
                 <input
                   value={jdUrl}
@@ -1138,6 +1213,34 @@ function JDManager() {
                 </p>
                 {jdUrl && !isValidUrl(jdUrl) && (
                   <p className="text-xs text-red-400 mt-1">Please enter a valid URL (including https://)</p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-2">
+                <UploadZone
+                  title="Drop JD file here or browse"
+                  description={`PDF, DOCX, DOC or TXT · Max ${FILE_LIMITS.jd.maxMB} MB`}
+                  accept=".pdf,.docx,.doc,.txt,text/plain,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                  onFileSelect={(files) => {
+                    const f = files[0];
+                    if (f) void handleJdFile(f);
+                  }}
+                />
+                {jdFile && (
+                  <p className="text-xs text-muted-foreground">
+                    Selected: <span className="text-foreground font-medium">{jdFile.name}</span>
+                    {" · "}
+                    Max {FILE_LIMITS.jd.maxMB} MB
+                  </p>
+                )}
+                {text.trim() && (
+                  <textarea
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    rows={4}
+                    className="w-full bg-background border border-input text-foreground rounded-xl px-4 py-3 text-sm resize-none focus:outline-none focus:border-ring focus:ring-1 focus:ring-ring"
+                    placeholder="Extracted or pasted JD text…"
+                  />
                 )}
               </div>
             )}
@@ -1234,7 +1337,7 @@ function CoverLetterManager() {
       <UploadZone
         title="Drop cover letter here or browse"
         description="PDF, DOCX, DOC or TXT · Max 5 MB"
-        accept=".pdf,.docx,.doc,.txt"
+        accept=".pdf,.docx,.doc,.txt,text/plain,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
         loading={uploading}
         loadingContent={
           <div className="flex flex-col items-center gap-2">

@@ -1,4 +1,4 @@
-import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders, withCorsHeaders } from "../_shared/cors.ts";
 import { authenticateRequest } from "../_shared/auth.ts";
 import { createServiceClient } from "../_shared/supabase.ts";
 import {
@@ -7,19 +7,33 @@ import {
 
 // delete-account — securely delete account and all linked data
 
+function jsonWithCors(
+  req: Request,
+  body: Record<string, unknown>,
+  status = 200,
+): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: {
+      ...getCorsHeaders(req),
+      "Content-Type": "application/json",
+    },
+  });
+}
+
 Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
   try {
     const auth = await authenticateRequest(req);
-    if (auth.error) return auth.error;
+    if (auth.error) return withCorsHeaders(req, auth.error);
     const authenticatedUserId = auth.context.user.id;
     const userEmail = auth.context.user.email;
 
     const db = createServiceClient();
     const rateLimited = await enforceAccountDeletionRateLimitAsync(db, authenticatedUserId);
-    if (rateLimited) return rateLimited;
+    if (rateLimited) return withCorsHeaders(req, rateLimited);
 
     /* -------------------------------------------------------
        VALIDATE BODY & CONFIRMATION
@@ -30,12 +44,13 @@ Deno.serve(async (req) => {
       : "";
 
     if (confirmation !== "DELETE" && confirmation !== userEmail) {
-      return new Response(
-        JSON.stringify({
+      return jsonWithCors(
+        req,
+        {
           error: "Confirmation required. Send { \"confirmation\": \"DELETE\" } or your email address to proceed.",
           code: "CONFIRMATION_REQUIRED",
-        }),
-        { status: 400, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
+        },
+        400,
       );
     }
 
@@ -77,9 +92,10 @@ Deno.serve(async (req) => {
       const { error } = await db.from(table).delete().eq(col, targetUserId);
       if (error) {
         console.error(`Error deleting from ${table}:`, error);
-        return new Response(
-          JSON.stringify({ error: `Failed deleting ${table}`, code: "INTERNAL_ERROR" }),
-          { status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
+        return jsonWithCors(
+          req,
+          { error: "Failed to delete account data", code: "INTERNAL_ERROR" },
+          500,
         );
       }
     }
@@ -100,7 +116,7 @@ Deno.serve(async (req) => {
       }
 
       if (data?.length) {
-        const paths = data.map((f: any) => `${targetUserId}/${f.name}`);
+        const paths = data.map((f: { name: string }) => `${targetUserId}/${f.name}`);
         const { error: delErr } = await db.storage.from(bucket).remove(paths);
 
         if (delErr) {
@@ -115,9 +131,10 @@ Deno.serve(async (req) => {
     const { error: deleteErr } = await db.auth.admin.deleteUser(targetUserId);
     if (deleteErr) {
       console.error("auth delete error:", deleteErr);
-      return new Response(
-        JSON.stringify({ error: "Failed to delete auth user", code: "INTERNAL_ERROR" }),
-        { status: 500, headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } }
+      return jsonWithCors(
+        req,
+        { error: "Failed to delete account", code: "INTERNAL_ERROR" },
+        500,
       );
     }
 
@@ -132,13 +149,14 @@ Deno.serve(async (req) => {
       created_at: new Date().toISOString(),
     }).catch(() => {});
 
-    return new Response(JSON.stringify({ success: true }), {
-      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
+    return jsonWithCors(req, { success: true });
 
   } catch (err) {
     console.error("delete-account error:", err);
-    return new Response(JSON.stringify({ error: "Internal error", code: "INTERNAL_ERROR" }), {
-      status: 500,
-      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" } });
+    return jsonWithCors(
+      req,
+      { error: "Internal error", code: "INTERNAL_ERROR" },
+      500,
+    );
   }
 });

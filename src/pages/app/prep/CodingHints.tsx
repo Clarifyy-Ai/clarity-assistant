@@ -1,19 +1,20 @@
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
-import { createIdempotencyKey } from "@/lib/api/functions";
+import { prepToolIdempotencyKey } from "@/lib/network/idempotency";
 import {
   getAiUserFacingError,
   openUpgradeIfInsufficientCredits,
 } from "@/lib/network/aiErrorUx";
 import { refreshCredits } from "@/lib/billing/creditsManager";
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useCredits } from "@/hooks/useCredits";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { PrepToolShell } from "@/components/prep/PrepToolShell";
 import {
   Code2, Search, ChevronRight, Lightbulb, BookOpen,
-  Copy, Sparkles, AlertCircle, LayoutList, BarChart3, Type,
+  Copy, Sparkles, LayoutList, BarChart3, Type,
   GitBranch, Network, Sigma, Link2, ArrowUpDown,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -82,6 +83,8 @@ export default function CodingHints() {
   const [loading, setLoading]       = useState<"hint" | "solution" | null>(null);
   const [error, setError]           = useState<string | null>(null);
   const [depth, setDepth]           = useState<"surface" | "medium" | "near-complete">("surface");
+  const hintKeyRef = useRef<string | null>(null);
+  const solutionKeyRef = useRef<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -132,10 +135,14 @@ export default function CodingHints() {
   const activeProblem = problems?.find((p) => p.id === selected) ?? null;
 
   async function getAIHint() {
-    if (!activeProblem || !credits.canAfford("coding_hint")) return;
+    if (!activeProblem || !credits.canAfford("coding_hint") || loading) return;
     setLoading("hint");
     setError(null);
     setHintText("");
+
+    const idempotencyKey =
+      hintKeyRef.current ?? prepToolIdempotencyKey("coding_hint");
+    hintKeyRef.current = idempotencyKey;
 
     try {
       const input = `Problem: ${activeProblem.title}\n\n${activeProblem.description}\n\nExamples:\n${activeProblem.examples}\n\nTags: ${activeProblem.tags.join(", ")}`;
@@ -145,13 +152,14 @@ export default function CodingHints() {
         depth,
       }, {
         headers: {
-          "Idempotency-Key": createIdempotencyKey("prep-tool"),
+          "x-idempotency-key": idempotencyKey,
         },
       });
       setHintText(
         data.result ??
           "Think about the data structures that would help here. Consider time and space complexity tradeoffs."
       );
+      hintKeyRef.current = null;
       await refreshCredits();
     } catch (err) {
       openUpgradeIfInsufficientCredits(err);
@@ -164,10 +172,14 @@ export default function CodingHints() {
   }
 
   async function getAISolution() {
-    if (!activeProblem || !credits.canAfford("coding_solution")) return;
+    if (!activeProblem || !credits.canAfford("coding_solution") || loading) return;
     setLoading("solution");
     setError(null);
     setSolutionText("");
+
+    const idempotencyKey =
+      solutionKeyRef.current ?? prepToolIdempotencyKey("coding_solution");
+    solutionKeyRef.current = idempotencyKey;
 
     try {
       const input = `Problem: ${activeProblem.title}\n\n${activeProblem.description}\n\nExamples:\n${activeProblem.examples}\n\nTags: ${activeProblem.tags.join(", ")}`;
@@ -176,10 +188,11 @@ export default function CodingHints() {
         input,
       }, {
         headers: {
-          "Idempotency-Key": createIdempotencyKey("prep-tool"),
+          "x-idempotency-key": idempotencyKey,
         },
       });
       setSolutionText(data.result ?? "Solution explanation unavailable.");
+      solutionKeyRef.current = null;
       await refreshCredits();
     } catch (err) {
       openUpgradeIfInsufficientCredits(err);
@@ -303,12 +316,25 @@ export default function CodingHints() {
 
         <div className="flex-1 space-y-4">
           {activeProblem ? (
-            <>
+            <PrepToolShell
+              title={activeProblem.title}
+              description="Get progressive AI hints or a full solution walkthrough."
+              isGenerating={loading !== null}
+              generationLabel={
+                loading === "solution" ? "Generating solution…" : "Generating hint…"
+              }
+              error={error}
+              onRetry={() => {
+                if (loading) return;
+                if (!hintText && !solutionText) void getAIHint();
+                else if (!solutionText && hintText) void getAIHint();
+                else void getAISolution();
+              }}
+            >
               <Card>
                 <div className="flex items-start justify-between mb-3">
                   <div>
-                    <h2 className="text-lg font-semibold text-foreground">{activeProblem.title}</h2>
-                    <div className="flex items-center gap-2 mt-1.5">
+                    <div className="flex items-center gap-2 mt-0.5">
                       <Badge variant={DIFFICULTY_COLORS[activeProblem.difficulty] as "emerald" | "amber" | "red"} size="sm">
                         {activeProblem.difficulty}
                       </Badge>
@@ -327,16 +353,6 @@ export default function CodingHints() {
                   />
                 )}
               </Card>
-
-              {error && (
-                <Card className="border-red-500/20 bg-red-500/5">
-                  <div className="flex items-center gap-2 text-red-400 text-sm">
-                    <AlertCircle className="w-4 h-4" />
-                    {error}
-                  </div>
-                </Card>
-              )}
-
               <div className="flex gap-1.5">
                 {([
                   { id: "surface",      label: "Quick hint" },
@@ -423,7 +439,7 @@ export default function CodingHints() {
                 </p>
                 <CodeScratchpad />
               </div>
-            </>
+            </PrepToolShell>
           ) : (
             <Card className="text-center py-20">
               <Code2 className="w-12 h-12 text-muted-foreground/40 mx-auto mb-3" />

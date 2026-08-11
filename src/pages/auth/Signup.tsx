@@ -26,6 +26,8 @@ import {
   LinkedInOAuthButton,
   AzureOAuthButton,
 } from "@/components/auth/OAuthButton";
+import { isOAuthProviderEnabled } from "@/lib/auth/oauthProviders";
+import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
 
 import { signupSchema } from "@/lib/validators";
 import { getCSRFHiddenInputProps, sanitizeText, validateCSRFToken } from "@/lib/security";
@@ -197,9 +199,12 @@ export default function Signup(): JSX.Element {
 
   useEffect(() => {
     if (authStatus !== "authenticated") return;
-    const confirmed = useAuthStore.getState().user?.email_confirmed_at;
-    // Never skip verify-email for unconfirmed sessions (signup often returns a session).
-    navigate(confirmed ? "/app/dashboard" : "/verify-email", { replace: true });
+    // Email/password signup often returns a session before confirm — never skip verify-email.
+    if (!isUserEmailConfirmed(useAuthStore.getState().user)) {
+      navigate("/verify-email", { replace: true });
+      return;
+    }
+    navigate("/app/dashboard", { replace: true });
   }, [authStatus, navigate]);
 
   useEffect(() => {
@@ -209,7 +214,7 @@ export default function Signup(): JSX.Element {
   }, [refCode]);
 
   useEffect(() => {
-    setPendingPlan(searchParams.get("plan"));
+    setPendingPlan(searchParams.get("plan"), searchParams.get("interval"));
   }, [searchParams]);
 
   const passwordStrength = useMemo(
@@ -316,10 +321,10 @@ export default function Signup(): JSX.Element {
           )}
 
           <div className="grid grid-cols-2 gap-2">
-            <GoogleOAuthButton />
-            <GithubOAuthButton />
-            <LinkedInOAuthButton />
-            <AzureOAuthButton />
+            {isOAuthProviderEnabled("google") ? <GoogleOAuthButton /> : null}
+            {isOAuthProviderEnabled("github") ? <GithubOAuthButton /> : null}
+            {isOAuthProviderEnabled("linkedin_oidc") ? <LinkedInOAuthButton /> : null}
+            {isOAuthProviderEnabled("azure") ? <AzureOAuthButton /> : null}
           </div>
 
           <div className="flex items-center gap-3 my-5">

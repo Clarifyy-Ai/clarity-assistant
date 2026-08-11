@@ -105,7 +105,7 @@ describe("fetchEdgeJson — RPC/edge error handling", () => {
     const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
 
     await expect(fetchEdgeJson("deduct-credits", { action: "generate_hint" })).rejects.toThrow(
-      /failed with HTTP 500/,
+      /HTTP 500/i,
     );
   });
 
@@ -114,8 +114,22 @@ describe("fetchEdgeJson — RPC/edge error handling", () => {
     const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
 
     await expect(fetchEdgeJson("deduct-credits", { action: "generate_hint" })).rejects.toThrow(
-      /unreachable/i,
+      /couldn't reach the server/i,
     );
+  });
+
+  it("does not name delete-account on network failure", async () => {
+    (global.fetch as any).mockRejectedValueOnce(new TypeError("Failed to fetch"));
+    const { fetchEdgeJson } = await import("@/lib/network/fetchEdge");
+
+    let message = "";
+    try {
+      await fetchEdgeJson("delete-account", { confirmation: "DELETE" });
+    } catch (err) {
+      message = err instanceof Error ? err.message : String(err);
+    }
+    expect(message).toMatch(/couldn't complete account deletion/i);
+    expect(message).not.toMatch(/Edge Function|CORS/i);
   });
 });
 

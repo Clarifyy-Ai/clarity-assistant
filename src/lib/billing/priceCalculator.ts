@@ -108,9 +108,8 @@ export function formatPrice(
 /**
  * Format a price with billing interval suffix.
  *
- * Note:
- * yearlyPrice in PLANS is stored as effective monthly price
- * when billed annually.
+ * Note: PLANS.yearlyPrice is the annual total in cents. Pass the
+ * monthly equivalent (yearlyPrice/12) when formatting yearly display.
  */
 export function formatPriceWithInterval(
   cents: number,
@@ -153,7 +152,8 @@ export function calculateYearlySavings(planId: PlanId): {
   }
 
   const monthlyTotal = normalizeCents(plan.monthlyPrice) * 12;
-  const yearlyTotal = normalizeCents(plan.yearlyPrice) * 12;
+  // PLANS.yearlyPrice is the annual total (true 20% off monthly×12).
+  const yearlyTotal = normalizeCents(plan.yearlyPrice);
   const savedCents = Math.max(0, monthlyTotal - yearlyTotal);
 
   const savedPercent =
@@ -181,7 +181,7 @@ export function getEffectiveMonthlyPrice(
   }
 
   return interval === "yearly"
-    ? normalizeCents(plan.yearlyPrice)
+    ? Math.round(normalizeCents(plan.yearlyPrice) / 12)
     : normalizeCents(plan.monthlyPrice);
 }
 
@@ -199,7 +199,7 @@ export function getBillingAmount(
   }
 
   if (interval === "yearly") {
-    return normalizeCents(plan.yearlyPrice) * 12;
+    return normalizeCents(plan.yearlyPrice);
   }
 
   return normalizeCents(plan.monthlyPrice);
@@ -365,7 +365,10 @@ export function buildPlanComparison(
   return {
     planId,
     monthlyPrice: formatPriceWithInterval(plan.monthlyPrice, "monthly"),
-    yearlyPrice: formatPriceWithInterval(plan.yearlyPrice, "yearly"),
+    yearlyPrice: formatPriceWithInterval(
+      Math.round(normalizeCents(plan.yearlyPrice) / 12),
+      "yearly"
+    ),
     yearlySaving: savedPercent > 0 ? `Save ${savedPercent}%` : "",
     yearlySavingPercent: savedPercent,
     creditsPerMonth: `${plan.creditsPerMonth.toLocaleString()} credits/mo`,

@@ -9,6 +9,7 @@ import { isElectronApp } from "@/lib/platform/isElectron";
 import { openInBrowser } from "@/lib/platform/openInBrowser";
 import { Button } from "@/components/ui/Button";
 import { buildLoginUrl } from "@/lib/auth/safeReturnTo";
+import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
 import { logger, LogEvents } from "@/lib/logger";
 import {
   hardReloadApp,
@@ -87,6 +88,15 @@ function AccountLoadErrorCard({
   );
 }
 
+function isBillingRecoveryPath(pathname: string): boolean {
+  return (
+    pathname.startsWith("/app/settings/billing") ||
+    pathname.startsWith("/app/settings/credits") ||
+    pathname === "/help" ||
+    pathname.startsWith("/help/")
+  );
+}
+
 export const ProtectedRoute = memo(function ProtectedRoute({
   requireOnboarding = false,
   requireOnboarded = false,
@@ -153,11 +163,15 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     return <Navigate to={to} state={{ from: location }} replace />;
   }
 
-  // 3a) Billing suspension — past_due beyond 3-day grace (stripe-webhook sets payment_failed_at)
+  // 3a) Email verification — before profile-dependent gates so unverified users
+  // cannot flash /onboarding or /app while profile/ban checks resolve.
+  if (requireEmailVerification && !isUserEmailConfirmed(user)) {
+    return <Navigate to="/verify-email" state={{ from: location }} replace />;
+  }
+
+  // 3b) Billing suspension — past_due beyond 3-day grace (stripe-webhook sets payment_failed_at)
   const billingSuspended = isProfileLoaded && isBillingSuspended(profile);
-  const onBillingRecoveryPath =
-    location.pathname.startsWith("/app/settings/billing") ||
-    location.pathname.startsWith("/app/settings/credits");
+  const onBillingRecoveryPath = isBillingRecoveryPath(location.pathname);
 
   if (billingSuspended && !onBillingRecoveryPath) {
     return (
@@ -166,34 +180,41 @@ export const ProtectedRoute = memo(function ProtectedRoute({
           <div className="flex gap-3">
             <AlertCircle className="h-5 w-5 text-destructive mt-1 flex-shrink-0" />
             <div>
-              <h2 className="text-lg font-semibold mb-2">Account suspended</h2>
+              <h2 className="text-lg font-semibold mb-2">Payment past due</h2>
               <p className="text-sm text-muted-foreground mb-4">
-                Your subscription payment is overdue. Update your billing details
-                to restore access.
+                Your subscription payment is overdue. Update billing to restore
+                paid features, or visit Help if you need assistance.
               </p>
-              {isElectronApp() ? (
-                <Button
-                  type="button"
-                  className="mr-2"
-                  onClick={() => openInBrowser("/app/settings/billing")}
-                >
-                  Update billing in browser
-                </Button>
-              ) : (
+              <div className="flex flex-wrap gap-2">
+                {isElectronApp() ? (
+                  <Button
+                    type="button"
+                    onClick={() => openInBrowser("/app/settings/billing")}
+                  >
+                    Update billing in browser
+                  </Button>
+                ) : (
+                  <Link
+                    to="/app/settings/billing"
+                    className="inline-block px-4 py-2 bg-primary rounded-lg text-sm font-medium text-primary-foreground hover:opacity-90 transition"
+                  >
+                    Update billing
+                  </Link>
+                )}
                 <Link
-                  to="/app/settings/billing"
-                  className="inline-block px-4 py-2 bg-primary rounded-lg text-sm font-medium text-primary-foreground hover:opacity-90 transition mr-2"
+                  to="/help"
+                  className="inline-block px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-secondary transition"
                 >
-                  Update billing
+                  Help
                 </Link>
-              )}
-              <button
-                type="button"
-                onClick={() => useAuthStore.getState().signOut()}
-                className="inline-block px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-secondary transition"
-              >
-                Sign out
-              </button>
+                <button
+                  type="button"
+                  onClick={() => useAuthStore.getState().signOut()}
+                  className="inline-block px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-secondary transition"
+                >
+                  Sign out
+                </button>
+              </div>
             </div>
           </div>
         </Card>
@@ -201,7 +222,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     );
   }
 
-  // 3b) Banned users — block all protected routes
+  // 3c) Banned users — block all protected routes with dedicated suspended UI
   if (isProfileLoaded && profile?.is_banned) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-4">
@@ -221,6 +242,12 @@ export const ProtectedRoute = memo(function ProtectedRoute({
                 >
                   Contact support
                 </a>
+                <Link
+                  to="/help"
+                  className="inline-block px-4 py-2 border border-border rounded-lg text-sm font-medium hover:bg-secondary transition"
+                >
+                  Help
+                </Link>
                 <button
                   type="button"
                   onClick={() => useAuthStore.getState().signOut()}
@@ -273,12 +300,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     );
   }
 
-  // 5) Email verification check — block unverified users from /app/*
-  if (requireEmailVerification && user && !user.email_confirmed_at) {
-    return <Navigate to="/verify-email" state={{ from: location }} replace />;
-  }
-
-  // 6) Onboarding check — wait for profile before allowing /app
+  // 5) Onboarding check — wait for profile before allowing /app
   if (requireOnboarded || requireOnboarding) {
     if (!isProfileLoaded) {
       return <AppLoadingFallback />;
@@ -288,7 +310,7 @@ export const ProtectedRoute = memo(function ProtectedRoute({
     }
   }
 
-  // 7) All checks passed
+  // 6) All checks passed
   return children ? <>{children}</> : <Outlet />;
 });
 

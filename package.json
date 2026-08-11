@@ -40,6 +40,7 @@
     "billing:preflight": "node scripts/billing-config-preflight.mjs",
     "release:gates": "node scripts/release-copy-gates.mjs",
     "release:security-gates": "node scripts/release-security-gates.mjs",
+    "scan:secrets": "node scripts/scan-secrets.mjs",
     "billing:parity": "node scripts/billing-catalog-parity.mjs",
     "release:capability-gates": "node scripts/edge-function-capability-gates.mjs",
     "electron:smoke:static": "node scripts/electron-smoke-static.mjs",

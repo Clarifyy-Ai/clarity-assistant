@@ -65,14 +65,31 @@ function isAiTemporarilyUnavailableError(err: unknown): boolean {
   if (status === 502 || status === 503) return true;
 
   const code = errorCode(err).toUpperCase();
-  if (code === "AI_ERROR") return true;
+  if (code === "AI_ERROR" || code === "PROVIDER_UNAVAILABLE") return true;
 
   const msg = errorText(err).toLowerCase();
   return (
     msg.includes("temporarily unavailable") ||
     msg.includes("credits refunded") ||
     msg.includes("ai_error") ||
+    msg.includes("provider_unavailable") ||
     msg.includes("service unavailable")
+  );
+}
+
+/** Network / CORS / gateway failures that should never name Edge Functions. */
+function isUnreachableOrCorsError(err: unknown): boolean {
+  const msg = errorText(err).toLowerCase();
+  return (
+    msg.includes("unreachable") ||
+    msg.includes("couldn't reach the server") ||
+    msg.includes("could not reach the server") ||
+    msg.includes("failed to fetch") ||
+    msg.includes("networkerror") ||
+    msg.includes("network error") ||
+    msg.includes("cors") ||
+    msg.includes("access-control-allow-origin") ||
+    msg.includes("load failed")
   );
 }
 
@@ -89,6 +106,10 @@ export function getAiUserFacingError(err: unknown): string {
     return AI_UNAVAILABLE_MESSAGE;
   }
 
+  if (isUnreachableOrCorsError(err)) {
+    return "We couldn't reach the server. Please check your connection and try again.";
+  }
+
   const raw = errorText(err).trim();
   const rawLower = raw.toLowerCase();
   const code = errorCode(err).toUpperCase();
@@ -100,6 +121,15 @@ export function getAiUserFacingError(err: unknown): string {
     return "We couldn't complete that charge. Please try again.";
   }
 
+  if (
+    code === "CAPABILITY_REQUIRED" ||
+    code === "PLAN_UPGRADE_REQUIRED" ||
+    rawLower.includes("requires a higher plan") ||
+    (rawLower.includes("requires the") && rawLower.includes("plan"))
+  ) {
+    return "This feature requires a Pro plan or higher. Upgrade to continue.";
+  }
+
   if (!raw) {
     return "Something went wrong. Please try again.";
   }
@@ -109,8 +139,20 @@ export function getAiUserFacingError(err: unknown): string {
     return "Something went wrong. Please try again.";
   }
 
-  if (/timed out after\s+\d+ms/i.test(raw) || /\bis unreachable\b/i.test(raw)) {
+  if (
+    /timed out after\s+\d+ms/i.test(raw) ||
+    /the request timed out/i.test(raw) ||
+    /\bis unreachable\b/i.test(raw)
+  ) {
     return AI_UNAVAILABLE_MESSAGE;
+  }
+
+  // Account deletion: never surface function names or CORS jargon.
+  if (
+    rawLower.includes("account deletion") ||
+    rawLower.includes("delete-account")
+  ) {
+    return "We couldn't complete account deletion right now. Please try again or contact support.";
   }
 
   return raw;

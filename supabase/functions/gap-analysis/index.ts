@@ -49,14 +49,14 @@ Deno.serve(async (req: Request) => {
     const body = await parseBody<any>(req);
 
     if (!body || typeof body.resume_id !== "string" || typeof body.jd_id !== "string") {
-      return errorResponse("Invalid input", "INVALID_REQUEST", 400);
+      return errorResponse("Invalid input", "INVALID_REQUEST", 400, req);
     }
 
     const resume_id = body.resume_id.trim();
     const jd_id = body.jd_id.trim();
 
     if (!resume_id || !jd_id) {
-      return errorResponse("Invalid IDs", "INVALID_REQUEST", 400);
+      return errorResponse("Invalid IDs", "INVALID_REQUEST", 400, req);
     }
 
     /* -------------------------------------------------------
@@ -70,7 +70,7 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (rErr || !resume) {
-      return errorResponse("Resume not found", "NOT_FOUND", 404);
+      return errorResponse("Resume not found", "NOT_FOUND", 404, req);
     }
 
     /* -------------------------------------------------------
@@ -84,7 +84,7 @@ Deno.serve(async (req: Request) => {
       .single();
 
     if (jErr || !jd) {
-      return errorResponse("Job description not found", "NOT_FOUND", 404);
+      return errorResponse("Job description not found", "NOT_FOUND", 404, req);
     }
 
     /* -------------------------------------------------------
@@ -101,6 +101,7 @@ Deno.serve(async (req: Request) => {
         `Insufficient credits. Gap analysis costs ${GAP_ANALYSIS_COST} credits.`,
         "INSUFFICIENT_CREDITS",
         402,
+        req,
       );
     }
 
@@ -167,7 +168,7 @@ ${safeJD}
         cost: GAP_ANALYSIS_COST,
         reason: "refund_gap_analysis_empty",
       });
-      return errorResponse("Gap analysis unavailable. Credits refunded.", "AI_ERROR", 502);
+      return errorResponse("Gap analysis unavailable. Credits refunded.", "AI_ERROR", 502, req);
     }
 
     const clean = aiResult.text.replace(/```json|```/g, "").trim();
@@ -202,6 +203,6 @@ ${safeJD}
   } catch (err: any) {
     if (err instanceof Response) return err;
     log(FN, "error", "resume-jd-analysis error", err);
-    return errorResponse("Internal server error", "INTERNAL_ERROR", 500);
+    return errorResponse("Internal server error", "INTERNAL_ERROR", 500, req);
   }
 });

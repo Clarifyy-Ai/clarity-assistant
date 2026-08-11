@@ -20,16 +20,17 @@ import { Spinner } from "@/components/ui/Spinner";
 import { useAuthStore } from "@/store/authStore";
 import { sanitizeText } from "@/lib/security";
 import { cn } from "@/lib/utils";
+import {
+  getEnabledOAuthProviders,
+  isOAuthProviderEnabled,
+  type OAuthProviderId,
+} from "@/lib/auth/oauthProviders";
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types
 // ─────────────────────────────────────────────────────────────────────────────
 
-export type OAuthProviderName =
-  | "google"
-  | "github"
-  | "linkedin_oidc"
-  | "azure";
+export type OAuthProviderName = OAuthProviderId;
 
 export interface OAuthProvider {
   name: OAuthProviderName;
@@ -51,12 +52,9 @@ interface OAuthButtonProps {
 
 const REFERRAL_STORAGE_KEY = "clarify_ref";
 
-const ALLOWED_OAUTH_PROVIDERS = new Set<OAuthProviderName>([
-  "google",
-  "github",
-  "linkedin_oidc",
-  "azure",
-]);
+const ALLOWED_OAUTH_PROVIDERS = new Set<OAuthProviderName>(
+  getEnabledOAuthProviders()
+);
 
 const OAUTH_ERROR_MESSAGES: Record<string, string> = {
   provider_disabled:
@@ -143,7 +141,7 @@ function safeSetLocalStorageItem(key: string, value: string): void {
 }
 
 function assertAllowedProvider(provider: OAuthProviderName): boolean {
-  return ALLOWED_OAUTH_PROVIDERS.has(provider);
+  return isOAuthProviderEnabled(provider) && ALLOWED_OAUTH_PROVIDERS.has(provider);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

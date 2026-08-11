@@ -6,6 +6,7 @@ import { EDGE_BASE, SUPABASE_PUBLISHABLE_KEY } from "@/lib/env";
 import { refreshCredits } from "@/lib/billing/creditsManager";
 import { logger } from "@/lib/logger";
 import { isTabLocalLogout } from "@/lib/auth/tabLocalLogout";
+import { ApiClientError } from "@/lib/api/apiClient";
 
 /** Edge calls blocked while private mode is on (no cloud AI / analysis). */
 const PRIVATE_MODE_ALLOWLIST = new Set([
@@ -136,15 +137,23 @@ export async function fetchEdge(
   } catch (err: unknown) {
     if (err instanceof Error && err.name === "AbortError") {
       if (options?.signal?.aborted) {
-        throw new Error(`Edge Function "${fnName}" call was aborted`);
+        throw new Error(
+          fnName === "delete-account"
+            ? "Account deletion was cancelled."
+            : "Request was cancelled. Please try again.",
+        );
       }
       logger.warn("network.request.transient_failure", { fnName, timeoutMs, reason: "timeout" });
-      throw new Error(`Edge Function "${fnName}" timed out after ${timeoutMs}ms`);
+      throw new Error("The request timed out. Please try again.");
     }
     if (err instanceof TypeError) {
+      // CORS blocks / network failures surface as TypeError("Failed to fetch").
+      // Never name the Edge Function — especially sensitive for delete-account UX.
       logger.error("network.request.transient_failure", { fnName, reason: "unreachable" });
       throw new Error(
-        `Edge Function "${fnName}" is unreachable. Check CORS configuration and deployment.`
+        fnName === "delete-account"
+          ? "We couldn't complete account deletion right now. Please try again in a moment."
+          : "We couldn't reach the server. Please check your connection and try again.",
       );
     }
     throw err;
@@ -178,11 +187,21 @@ export async function fetchEdgeJson<T>(
   const payload = text ? safeJsonParse(text) ?? { error: text } : {};
 
   if (!response.ok) {
-    const message =
-      payload?.error ||
-      payload?.message ||
-      `Edge Function "${fnName}" failed with HTTP ${response.status}`;
-    throw new Error(message);
+    const fallback =
+      fnName === "delete-account"
+        ? "We couldn't complete account deletion right now. Please try again or contact support."
+        : `Request failed (HTTP ${response.status}). Please try again.`;
+    const message = payload?.error || payload?.message || fallback;
+    const code =
+      typeof payload?.code === "string" && payload.code.trim()
+        ? payload.code.trim()
+        : "API_ERROR";
+    throw new ApiClientError({
+      message: typeof message === "string" ? message : fallback,
+      status: response.status,
+      code,
+      details: payload,
+    });
   }
 
   if (!CREDIT_REFRESH_SKIP.has(fnName)) {

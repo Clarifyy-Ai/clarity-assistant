@@ -17,7 +17,7 @@ import { runAudioPreflight, type PreflightReport } from "@/lib/validators/audioV
 import { enumerateAudioDevices, enumerateAudioOutputDevices, playSpeakerTestTone } from "@/lib/audio/audioCapture";
 import type { AudioDevice } from "@/types/audio.types";
 import { useDocuments } from "@/hooks/useDocuments";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { OverlaySetupGuidePanel } from "@/components/overlay/OverlaySetupGuidePanel";
 import { OVERLAY_VISIBILITY_WARNING } from "@/lib/constants/overlaySetupGuide";
@@ -39,6 +39,7 @@ import { toast } from "sonner";
 import {
   formatPracticeSetupSummary,
   loadLastPracticeSetup,
+  consumePendingPracticeSetup,
 } from "@/lib/session/lastPracticeSetup";
 import { AI_CREDIT_COSTS } from "@/lib/constants/creditEconomics";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
@@ -103,6 +104,7 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const { loadError: documentsLoadError } = useDocuments();
   const isMobile = useIsMobile();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const resumes        = useDocumentStore((s) => s.resumes);
   const jds            = useDocumentStore((s) => s.jds);
   const activeResumeId = useDocumentStore((s) => s.active_resume_id);
@@ -188,6 +190,28 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
       applyLastSetup(lastSetup);
     }
   }, [showWizard, lastSetup]);
+
+  // Interview Day (and similar) can pass company/role via query or pending stash.
+  useEffect(() => {
+    const pending = consumePendingPracticeSetup();
+    const companyParam = searchParams.get("company")?.trim() || "";
+    const roleParam = searchParams.get("role")?.trim() || "";
+    if (pending) {
+      applyLastSetup(pending);
+      setShowWizard(true);
+      if (pending.company || pending.role) {
+        setCompany(pending.company ?? companyParam);
+        setRole(pending.role ?? roleParam);
+      }
+      return;
+    }
+    if (companyParam || roleParam) {
+      setShowWizard(true);
+      if (companyParam) setCompany(companyParam);
+      if (roleParam) setRole(roleParam);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- apply once on mount / query change
+  }, [searchParams]);
 
   const activeSteps = isMobile ? MOBILE_STEPS : STEPS;
   const totalSteps = activeSteps.length;

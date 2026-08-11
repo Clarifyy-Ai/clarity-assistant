@@ -37,6 +37,8 @@ export type DeductCreditsAtomicResult = {
   balanceAfter?: number;
   transactionId?: string;
   error?: string;
+  /** Optional cached business payload for full request replay (e.g. prep-tool AI result). */
+  payload?: Record<string, unknown>;
 };
 
 export type RefundCreditsInput = {
@@ -167,7 +169,7 @@ export function createUserClient(accessToken: string): SupabaseClient {
  * - expires_at timestamptz not null
  * - created_at timestamptz default now()
  */
-async function getIdempotentResponse(
+export async function getIdempotentResponse(
   db: SupabaseClient,
   key?: string | null
 ): Promise<DeductCreditsAtomicResult | null> {
@@ -212,7 +214,7 @@ async function getIdempotentResponse(
   }
 }
 
-async function storeIdempotentResponse(
+export async function storeIdempotentResponse(
   db: SupabaseClient,
   key: string | null | undefined,
   response: DeductCreditsAtomicResult

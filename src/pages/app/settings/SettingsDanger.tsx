@@ -15,7 +15,7 @@ import { Modal } from "@/components/ui/Modal";
 import { Input } from "@/components/ui/Input";
 import {
   Trash2, Download, AlertTriangle,
-  LogOut, RefreshCw,
+  RefreshCw,
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -89,6 +89,15 @@ export default function SettingsDanger() {
 
   // ── Delete account ───────────────────────────────────────────
 
+  function safeDeleteAccountMessage(err: unknown): string {
+    const ref =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID().slice(0, 8)
+        : `del-${Date.now().toString(36).slice(-8)}`;
+    console.error("[SettingsDanger] account deletion failed", { ref, err });
+    return `We couldn't delete your account right now. Please try again later or contact support with reference ${ref}.`;
+  }
+
   async function handleDelete() {
     if (!user?.email) return;
 
@@ -115,13 +124,14 @@ export default function SettingsDanger() {
         confirmation: usePasswordConfirm ? "DELETE" : confirm,
       });
 
-      if (!res.ok) throw new Error(`Account deletion failed: ${res.statusText}`);
+      if (!res.ok) {
+        throw new Error(`delete_failed_${res.status}`);
+      }
 
       await signOut();
       navigate("/");
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : "Failed to delete account. Please contact support.";
-      toast.error(message);
+      toast.error(safeDeleteAccountMessage(err));
       setDeleting(false);
     }
   }

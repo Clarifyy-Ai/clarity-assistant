@@ -262,7 +262,7 @@ export default function Help() {
                 href={`mailto:${SUPPORT_EMAIL}?subject=${encodeURIComponent("Clarify AI system status")}`}
                 className="text-primary hover:underline"
               >
-                Email support for outages
+                Email {SUPPORT_EMAIL} for outages (no public status page configured)
               </a>
             )}
           </p>

@@ -10,7 +10,14 @@ import {
 import {
   sanitizeReturnTo,
   buildLoginUrl,
+  assignLoginWithReturnTo,
 } from "@/lib/auth/safeReturnTo";
+import { isUserEmailConfirmed } from "@/lib/auth/emailVerification";
+import {
+  ACCOUNT_SUSPENDED_MESSAGE,
+  formatSupabaseAuthError,
+  isAccountSuspendedAuthError,
+} from "@/lib/errors";
 import { redactSensitiveFields } from "@/lib/logger";
 
 describe("isInvalidRefreshTokenError", () => {
@@ -79,6 +86,59 @@ describe("sanitizeReturnTo / buildLoginUrl", () => {
     expect(
       buildLoginUrl({ reason: SESSION_EXPIRED_REASON, returnTo: "//evil.com" }),
     ).toBe("/login?reason=session_expired");
+  });
+});
+
+describe("isUserEmailConfirmed", () => {
+  it("requires a non-empty confirmation timestamp", () => {
+    expect(isUserEmailConfirmed({ email_confirmed_at: "2026-01-01T00:00:00Z" })).toBe(
+      true,
+    );
+    expect(isUserEmailConfirmed({ email_confirmed_at: null })).toBe(false);
+    expect(isUserEmailConfirmed({ email_confirmed_at: "" })).toBe(false);
+    expect(isUserEmailConfirmed(null)).toBe(false);
+  });
+});
+
+describe("account suspended auth errors", () => {
+  it("maps schema / ban failures to suspended copy", () => {
+    expect(
+      isAccountSuspendedAuthError(new Error("Database error querying schema")),
+    ).toBe(true);
+    expect(
+      formatSupabaseAuthError({ message: "User is banned", code: "user_banned" }),
+    ).toBe(ACCOUNT_SUSPENDED_MESSAGE);
+  });
+});
+
+describe("assignLoginWithReturnTo", () => {
+  const originalLocation = window.location;
+
+  beforeEach(() => {
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: {
+        ...originalLocation,
+        pathname: "/app/dashboard",
+        search: "",
+        hash: "",
+        assign: vi.fn(),
+      },
+    });
+  });
+
+  afterEach(() => {
+    Object.defineProperty(window, "location", {
+      configurable: true,
+      value: originalLocation,
+    });
+  });
+
+  it("hard-assigns login with returnTo of current path", () => {
+    assignLoginWithReturnTo();
+    expect(window.location.assign).toHaveBeenCalledWith(
+      "/login?returnTo=%2Fapp%2Fdashboard",
+    );
   });
 });
 

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { NavLink, Link, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, Link, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Mic,
@@ -28,7 +28,7 @@ import {
 
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 import { notifyOverlayVisibilityOnMobile } from "@/lib/overlay/overlayVisibilityNotice";
-import { buildLoginUrl } from "@/lib/auth/safeReturnTo";
+import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/authStore";
 import {
@@ -61,7 +61,7 @@ const TABS: MobileTab[] = [
   {
     to: "/app/mock-test",
     icon: Brain,
-    label: PRODUCT_NAMES.govExams,
+    label: "Gov Exams",
   },
 ];
 
@@ -90,7 +90,6 @@ function isRouteActive(pathname: string, tab: MobileTab): boolean {
 
 export function MobileNav(): JSX.Element {
   const location = useLocation();
-  const navigate = useNavigate();
   const signOut = useAuthStore((s) => s.signOut);
   const isAdmin = useAuthStore((s) => s.isAdmin);
   const [moreOpen, setMoreOpen] = useState(false);
@@ -168,9 +167,7 @@ export function MobileNav(): JSX.Element {
             onClick={() => {
               setMoreOpen(false);
               const returnTo = `${location.pathname}${location.search}${location.hash}`;
-              void signOut().then(() =>
-                navigate(buildLoginUrl({ returnTo }), { replace: true }),
-              );
+              void signOut().then(() => assignLoginWithReturnTo({ returnTo }));
             }}
             className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm font-semibold text-red-500 hover:bg-red-500/10 transition-colors"
           >

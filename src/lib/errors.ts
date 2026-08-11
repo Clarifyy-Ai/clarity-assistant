@@ -411,10 +411,60 @@ type SupabaseAuthErrorShape = {
   status?: number;
 };
 
+/** Shown for banned / Auth-disabled accounts (never raw SQL or "wrong password"). */
+export const ACCOUNT_SUSPENDED_MESSAGE =
+  "Your account has been suspended. Contact support if you need help.";
+
+/**
+ * Detect Auth/API failures that mean the account is banned or disabled.
+ * Supabase often surfaces bans as `user_banned` or the opaque
+ * "Database error querying schema" 500 on the token endpoint.
+ */
+export function isAccountSuspendedAuthError(error: unknown): boolean {
+  if (typeof error === "string") {
+    const msg = error.toLowerCase();
+    return (
+      msg.includes("suspended") ||
+      msg.includes("banned") ||
+      msg.includes("disabled") ||
+      msg.includes("database error querying schema")
+    );
+  }
+
+  if (!error || typeof error !== "object") {
+    return false;
+  }
+
+  const err = error as SupabaseAuthErrorShape;
+  const code = err.code?.toLowerCase() ?? "";
+  const message = (err.message ?? "").toLowerCase();
+
+  if (
+    code === "user_banned" ||
+    code === "user_disabled" ||
+    code === "forbidden"
+  ) {
+    return true;
+  }
+
+  return (
+    message.includes("user is banned") ||
+    message.includes("user_banned") ||
+    message.includes("account has been banned") ||
+    message.includes("account has been disabled") ||
+    message.includes("account has been suspended") ||
+    message.includes("database error querying schema")
+  );
+}
+
 /**
  * Map Supabase Auth API errors (signInWithPassword, signUp, etc.) to user-facing copy.
  */
 export function formatSupabaseAuthError(error: unknown): string {
+  if (isAccountSuspendedAuthError(error)) {
+    return ACCOUNT_SUSPENDED_MESSAGE;
+  }
+
   if (typeof error === "string" && error.trim()) {
     return error.trim();
   }
@@ -446,7 +496,8 @@ export function formatSupabaseAuthError(error: unknown): string {
     case "email_not_confirmed":
       return USER_MESSAGES[ErrorCode.AUTH_EMAIL_NOT_VERIFIED]!;
     case "user_banned":
-      return "This account has been disabled. Contact support if you need help.";
+    case "user_disabled":
+      return ACCOUNT_SUSPENDED_MESSAGE;
     case "over_request_rate_limit":
     case "too_many_requests":
       return "Too many sign-in attempts. Please wait a few minutes and try again.";

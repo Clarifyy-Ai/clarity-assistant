@@ -1,6 +1,6 @@
 // send-email/index.ts — FIXED, SECURE, PRODUCTION VERSION
 
-import { handleCors, getCorsHeaders } from "../_shared/cors.ts";
+import { handleCors, getCorsHeaders, withCorsHeaders } from "../_shared/cors.ts";
 import {
   requireAuth,
   errorResponse,
@@ -19,7 +19,7 @@ const LEGAL_ENTITY_NAME = "Payara Labs";
 /*                              HELPERS                                       */
 /* -------------------------------------------------------------------------- */
 
-function sanitize(str: any, max = 500): string {
+function sanitize(str: unknown, max = 500): string {
   return String(str ?? "")
     .replace(/[<>]/g, "")
     .replace(/`/g, "")
@@ -30,6 +30,27 @@ function sanitize(str: any, max = 500): string {
 
 function isValidEmail(email: string): boolean {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function structuredError(
+  req: Request,
+  message: string,
+  code: string,
+  status: number,
+  correlationId: string,
+): Response {
+  return new Response(
+    JSON.stringify({
+      success: false,
+      error: message,
+      code,
+      correlation_id: correlationId,
+    }),
+    {
+      status,
+      headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
+    },
+  );
 }
 
 async function sendEmailResend(to: string, subject: string, html: string): Promise<boolean> {
@@ -65,8 +86,8 @@ const ALLOWED_TYPES = [
 
 type EmailType = (typeof ALLOWED_TYPES)[number];
 
-function renderTemplate(type: EmailType, data: any) {
-  const safe = (x: any, max = 500) => sanitize(x, max);
+function renderTemplate(type: EmailType, data: Record<string, unknown>) {
+  const safe = (x: unknown, max = 500) => sanitize(x, max);
 
   const base = (inner: string) => `
 <!DOCTYPE html>
@@ -170,16 +191,19 @@ Deno.serve(async (req) => {
   const cors = handleCors(req);
   if (cors) return cors;
 
-  if (!RESEND_API_KEY.trim()) {
-    return errorResponse(
-      "Email is not configured yet. Add RESEND_API_KEY in Supabase project secrets.",
-      "SERVICE_UNAVAILABLE",
-      503,
-      req,
-    );
-  }
+  const correlationId = crypto.randomUUID();
 
   try {
+    if (!RESEND_API_KEY.trim()) {
+      return structuredError(
+        req,
+        "Email is not configured yet. Add RESEND_API_KEY in Supabase project secrets.",
+        "PROVIDER_UNAVAILABLE",
+        503,
+        correlationId,
+      );
+    }
+
     const auth = await requireAuth(req);
     const userId = auth.userId;
 
@@ -188,25 +212,29 @@ Deno.serve(async (req) => {
       "send-email",
       userId,
     );
-    if (rateLimited) return rateLimited;
+    if (rateLimited) return withCorsHeaders(req, rateLimited);
 
     const body = await req.json().catch(() => null);
     if (!body) {
-      return errorResponse("Invalid JSON body", "INVALID", 400);
+      return errorResponse("Invalid JSON body", "INVALID", 400, req);
     }
 
-    const { to, type, data } = body;
+    const { to, type, data } = body as {
+      to?: unknown;
+      type?: unknown;
+      data?: Record<string, unknown>;
+    };
 
     if (!to || typeof to !== "string" || !isValidEmail(to)) {
-      return errorResponse("Invalid 'to' field", "VALIDATION_ERROR", 400);
+      return errorResponse("Invalid 'to' field", "VALIDATION_ERROR", 400, req);
     }
 
-    if (!type || !ALLOWED_TYPES.includes(type)) {
-      return errorResponse("Unknown email type", "VALIDATION_ERROR", 400);
+    if (!type || !ALLOWED_TYPES.includes(type as EmailType)) {
+      return errorResponse("Unknown email type", "VALIDATION_ERROR", 400, req);
     }
 
     if (to !== auth.email) {
-      return errorResponse("Not authorized to send to this address", "FORBIDDEN", 403);
+      return errorResponse("Not authorized to send to this address", "FORBIDDEN", 403, req);
     }
 
     // Honour profile notification preferences (master + category)
@@ -242,23 +270,32 @@ Deno.serve(async (req) => {
     })();
 
     if (!typeAllowed) {
-      log("send-email", "info", "Skipped by notification prefs", { to, type, userId });
+      log("send-email", "info", "Skipped by notification prefs", { to, type, userId, correlationId });
       return successResponse({
         success: false,
         skipped: true,
         reason: "notification_prefs_disabled",
-      });
+      }, undefined, 200, req);
     }
 
-    const { subject, html } = renderTemplate(type, data ?? {});
+    const { subject, html } = renderTemplate(type as EmailType, data ?? {});
     const ok = await sendEmailResend(to, subject, html);
 
-    log("send-email", "info", "Email sent", { to, type, userId });
+    log("send-email", "info", "Email sent", { to, type, userId, correlationId, ok });
 
-    return successResponse({ success: ok });
+    return successResponse({ success: ok }, undefined, 200, req);
   } catch (err) {
-    console.error("[send-email] error:", err);
-    if (err instanceof Response) return err;
-    return errorResponse("Internal error", "INTERNAL", 500);
+    if (err instanceof Response) {
+      return withCorsHeaders(req, err);
+    }
+    const errMsg = err instanceof Error ? err.message : String(err ?? "");
+    console.error("[send-email] error:", { correlationId, err: errMsg.slice(0, 500) });
+    return structuredError(
+      req,
+      "Internal error",
+      "INTERNAL_ERROR",
+      500,
+      correlationId,
+    );
   }
 });

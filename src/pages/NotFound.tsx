@@ -8,9 +8,9 @@ import { MobileNav } from "@/components/layout/MobileNav";
 import { NetworkBanner } from "@/components/layout/NetworkBanner";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/Button";
-import { ArrowLeft, Home, HelpCircle } from "lucide-react";
+import { ArrowLeft, Home, LayoutDashboard, HelpCircle } from "lucide-react";
 
-function NotFoundContent() {
+function NotFoundContent({ isAuthenticated }: { isAuthenticated: boolean }) {
   const location = useLocation();
 
   return (
@@ -24,11 +24,23 @@ function NotFoundContent() {
       </p>
 
       <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
-        <Link to="/app/dashboard">
+        <Link to="/">
           <Button variant="primary" size="md" leftIcon={<Home className="w-4 h-4" />}>
-            Go to dashboard
+            Go Home
           </Button>
         </Link>
+
+        {isAuthenticated && (
+          <Link to="/app/dashboard">
+            <Button
+              variant="secondary"
+              size="md"
+              leftIcon={<LayoutDashboard className="w-4 h-4" />}
+            >
+              Go Dashboard
+            </Button>
+          </Link>
+        )}
 
         <Link to="/help">
           <Button variant="outline" size="md" leftIcon={<HelpCircle className="w-4 h-4" />}>
@@ -36,11 +48,13 @@ function NotFoundContent() {
           </Button>
         </Link>
 
-        <Link to="/">
-          <Button variant="ghost" size="md" leftIcon={<ArrowLeft className="w-4 h-4" />}>
-            Marketing home
-          </Button>
-        </Link>
+        {!isAuthenticated && (
+          <Link to="/login">
+            <Button variant="ghost" size="md" leftIcon={<ArrowLeft className="w-4 h-4" />}>
+              Log in
+            </Button>
+          </Link>
+        )}
       </div>
     </div>
   );
@@ -69,7 +83,7 @@ export default function NotFound() {
           <NetworkBanner />
           <main id="main-content" className="flex-1 overflow-y-auto pb-16 md:pb-0">
             <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-4 md:py-6">
-              <NotFoundContent />
+              <NotFoundContent isAuthenticated />
             </div>
           </main>
         </div>
@@ -81,7 +95,7 @@ export default function NotFound() {
   return (
     <MarketingLayout>
       <section className="pt-32 pb-24 px-6">
-        <NotFoundContent />
+        <NotFoundContent isAuthenticated={false} />
       </section>
     </MarketingLayout>
   );

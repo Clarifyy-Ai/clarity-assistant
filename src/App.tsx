@@ -577,6 +577,14 @@ const routes = [
           },
           { path: "usage", element: <Page component={UsageDashboard} /> },
           { path: "profile", element: <Navigate to="/app/settings/profile" replace /> },
+          {
+            path: "billing",
+            element: <Navigate to="/app/settings/billing" replace />,
+          },
+          {
+            path: "subscription",
+            element: <Navigate to="/app/settings/billing" replace />,
+          },
           { path: "notifications", element: <Page component={Notifications} /> },
           { path: "referrals", element: <Page component={Referrals} /> },
           { path: "live", element: <Page component={LiveRehearsal} /> },

@@ -4,7 +4,7 @@ import {
   useEffect,
   useState,
 } from "react";
-import { NavLink, useLocation, useNavigate } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import {
   LayoutDashboard,
   Mic,
@@ -56,7 +56,7 @@ import {
 import type { ProfileRow } from "@/types";
 import { getPlanDisplayName } from "@/lib/constants/pricing";
 import { PRODUCT_NAMES, NAV_SECTION_LABELS } from "@/lib/constants/productNames";
-import { buildLoginUrl } from "@/lib/auth/safeReturnTo";
+import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
 
 type IconComponent = ComponentType<SVGProps<SVGSVGElement>>;
 
@@ -131,7 +131,7 @@ const NAV_SECTIONS: NavSection[] = [
         to: "/app/mock-test",
         icon: GraduationCap,
         stealthIcon: Award,
-        label: PRODUCT_NAMES.govExams,
+        label: "Gov Exams",
       },
     ],
   },
@@ -230,7 +230,6 @@ function isPathActive(currentPath: string, itemPath: string): boolean {
 
 export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
   const location = useLocation();
-  const navigate = useNavigate();
 
   const sidebarCollapsed = useUIStore((state) => state.sidebar_collapsed);
   const stealthMode = useUIStore((state) => state.stealth_mode);
@@ -275,7 +274,7 @@ export function AppSidebar({ onNavClick }: AppSidebarProps = {}): JSX.Element {
     try {
       const returnTo = `${location.pathname}${location.search}${location.hash}`;
       await signOut();
-      navigate(buildLoginUrl({ returnTo }), { replace: true });
+      assignLoginWithReturnTo({ returnTo });
     } catch (error) {
       console.error("[AppSidebar] Sign out failed:", error);
     }

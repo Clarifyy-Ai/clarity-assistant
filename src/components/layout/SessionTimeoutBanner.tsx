@@ -1,10 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { Clock, RefreshCw } from "lucide-react";
 import { supabase } from "@/lib/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { Button } from "@/components/ui/Button";
-import { buildLoginUrl } from "@/lib/auth/safeReturnTo";
+import { assignLoginWithReturnTo } from "@/lib/auth/safeReturnTo";
 import { cn } from "@/lib/utils";
 
 const WARN_BEFORE_MS = 5 * 60 * 1000;
@@ -21,7 +21,6 @@ export function SessionTimeoutBanner() {
   const session = useAuthStore((s) => s.session);
   const setSession = useAuthStore((s) => s.setSession);
   const signOut = useAuthStore((s) => s.signOut);
-  const navigate = useNavigate();
   const location = useLocation();
 
   const [showWarning, setShowWarning] = useState(false);
@@ -41,16 +40,13 @@ export function SessionTimeoutBanner() {
     if (forcedSignOutRef.current) return;
     forcedSignOutRef.current = true;
     clearTick();
+    const returnTo = `${location.pathname}${location.search}${location.hash}`;
     try {
       await signOut();
     } finally {
-      const returnTo = `${location.pathname}${location.search}${location.hash}`;
-      navigate(buildLoginUrl({ returnTo, reason: "session_expired" }), {
-        replace: true,
-        state: { from: location },
-      });
+      assignLoginWithReturnTo({ returnTo, reason: "session_expired" });
     }
-  }, [clearTick, signOut, navigate, location]);
+  }, [clearTick, signOut, location]);
 
   const evaluateExpiry = useCallback(() => {
     const expiresAt = session?.expires_at;
