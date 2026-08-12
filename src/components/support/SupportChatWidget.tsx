@@ -55,15 +55,22 @@ function shouldHideWidget(pathname: string): boolean {
  * Floating Live Chat widget for marketing, auth, and app shells.
  * Guests chat via support-chat edge; messages land in Admin → Live Chat.
  */
+function clearChatSession(): void {
+  writeStorage(THREAD_KEY, null);
+  writeStorage(GUEST_TOKEN_KEY, null);
+}
+
 export function SupportChatWidget() {
   const location = useLocation();
   const user = useAuthStore((s) => s.user);
+  const profile = useAuthStore((s) => s.profile);
   const authStatus = useAuthStore((s) => s.status);
   const isAuthed = authStatus === "authenticated" && Boolean(user?.id);
 
   const [open, setOpen] = useState(false);
   const [guestName, setGuestName] = useState("");
   const [guestEmail, setGuestEmail] = useState("");
+  const [forceGuestFields, setForceGuestFields] = useState(false);
   const [draft, setDraft] = useState("");
   const [threadId, setThreadId] = useState<string | null>(() => readStorage(THREAD_KEY));
   const [guestToken, setGuestToken] = useState<string | null>(() => readStorage(GUEST_TOKEN_KEY));
@@ -74,10 +81,42 @@ export function SupportChatWidget() {
 
   const hide = shouldHideWidget(location.pathname);
   const offsetMobileNav = location.pathname.startsWith("/app");
+  const showGuestFields = (!isAuthed || forceGuestFields) && !threadId;
+
+  const resolvedGuestName =
+    guestName.trim() ||
+    profile?.full_name?.trim() ||
+    user?.email?.split("@")[0]?.trim() ||
+    "";
+  const resolvedGuestEmail =
+    guestEmail.trim() ||
+    user?.email?.trim() ||
+    profile?.email?.trim() ||
+    "";
+
+  function resetThreadLocally(message?: string) {
+    clearChatSession();
+    setThreadId(null);
+    setGuestToken(null);
+    setMessages([]);
+    setForceGuestFields(true);
+    if (message) setError(message);
+  }
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, open]);
+
+  // Prefill guest contact from the signed-in profile when available.
+  useEffect(() => {
+    if (!isAuthed) return;
+    if (!guestName && (profile?.full_name || user?.email)) {
+      setGuestName(profile?.full_name?.trim() || user?.email?.split("@")[0] || "");
+    }
+    if (!guestEmail && (user?.email || profile?.email)) {
+      setGuestEmail(user?.email?.trim() || profile?.email?.trim() || "");
+    }
+  }, [isAuthed, profile?.full_name, profile?.email, user?.email, guestName, guestEmail]);
 
   // Restore / poll conversation while panel is open.
   useEffect(() => {
@@ -99,9 +138,17 @@ export function SupportChatWidget() {
           setError(null);
         }
       } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Could not load chat");
+        if (cancelled) return;
+        const message = err instanceof Error ? err.message : "Could not load chat";
+        const status = typeof (err as { status?: number })?.status === "number"
+          ? (err as { status: number }).status
+          : undefined;
+        // Stale thread / lost guest token after logout — start fresh instead of looping errors.
+        if (status === 403 || status === 404 || /forbidden|not found/i.test(message)) {
+          resetThreadLocally("Previous chat session expired. Enter your details to continue.");
+          return;
         }
+        setError(message);
       }
     }
 
@@ -120,11 +167,12 @@ export function SupportChatWidget() {
     const text = draft.trim();
     if (!text || sending) return;
 
-    if (!isAuthed) {
-      if (!guestName.trim() || !guestEmail.trim()) {
-        setError("Please enter your name and email to start chatting.");
-        return;
-      }
+    // Always send contact fields as a fallback: UI may be "authenticated" while the
+    // Edge call only has the anon key (tab-local logout / expired JWT).
+    if (!resolvedGuestName || !resolvedGuestEmail) {
+      setForceGuestFields(true);
+      setError("Please enter your name and email to start chatting.");
+      return;
     }
 
     setSending(true);
@@ -136,8 +184,8 @@ export function SupportChatWidget() {
         message: text,
         thread_id: threadId,
         guest_token: guestToken,
-        guest_name: guestName.trim(),
-        guest_email: guestEmail.trim(),
+        guest_name: resolvedGuestName,
+        guest_email: resolvedGuestEmail,
       });
 
       setThreadId(data.thread_id);
@@ -146,10 +194,22 @@ export function SupportChatWidget() {
         setGuestToken(data.guest_token);
         writeStorage(GUEST_TOKEN_KEY, data.guest_token);
       }
+      setForceGuestFields(false);
       setMessages(data.messages ?? []);
       setDraft("");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send message");
+      const message = err instanceof Error ? err.message : "Failed to send message";
+      const status = typeof (err as { status?: number })?.status === "number"
+        ? (err as { status: number }).status
+        : undefined;
+      if (status === 403 || status === 404 || /forbidden|not found/i.test(message)) {
+        resetThreadLocally("Previous chat session expired. Enter your details and send again.");
+      } else if (/name and email/i.test(message)) {
+        setForceGuestFields(true);
+        setError("Please enter your name and email to start chatting.");
+      } else {
+        setError(message);
+      }
     } finally {
       setSending(false);
     }
@@ -225,7 +285,7 @@ export function SupportChatWidget() {
               <div ref={bottomRef} />
             </div>
 
-            {!isAuthed && !threadId && (
+            {showGuestFields && (
               <div className="grid grid-cols-1 gap-2 border-t border-border px-3 pt-2">
                 <Input
                   value={guestName}
@@ -242,13 +302,15 @@ export function SupportChatWidget() {
                   autoComplete="email"
                   className="h-9 text-xs"
                 />
-                <p className="text-[10px] text-muted-foreground">
-                  Already have an account?{" "}
-                  <Link to="/login" className="text-primary hover:underline">
-                    Log in
-                  </Link>{" "}
-                  for a linked chat history.
-                </p>
+                {!isAuthed && (
+                  <p className="text-[10px] text-muted-foreground">
+                    Already have an account?{" "}
+                    <Link to="/login" className="text-primary hover:underline">
+                      Log in
+                    </Link>{" "}
+                    for a linked chat history.
+                  </p>
+                )}
               </div>
             )}
 

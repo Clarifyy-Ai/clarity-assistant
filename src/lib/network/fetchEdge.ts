@@ -11,6 +11,8 @@ import { ApiClientError } from "@/lib/api/apiClient";
 /** Edge calls blocked while private mode is on (no cloud AI / analysis). */
 const PRIVATE_MODE_ALLOWLIST = new Set([
   "ping",
+  // Live Chat is human support, not cloud AI — keep available in private mode.
+  "support-chat",
 ]);
 
 /** Edge functions that do not deduct credits — skip balance refresh. */

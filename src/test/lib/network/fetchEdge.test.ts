@@ -74,6 +74,18 @@ describe("fetchEdge — private-mode blocking", () => {
     expect(global.fetch).toHaveBeenCalledTimes(1);
   });
 
+  it("allows support-chat while private mode is enabled", async () => {
+    mockGetPrivateMode.mockReturnValue(true);
+    (global.fetch as any).mockResolvedValueOnce(
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+    const { fetchEdge } = await import("@/lib/network/fetchEdge");
+
+    const res = await fetchEdge("support-chat", { action: "list" });
+    expect(res.ok).toBe(true);
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
   it("does not block calls when private mode is disabled", async () => {
     mockGetPrivateMode.mockReturnValue(false);
     (global.fetch as any).mockResolvedValueOnce(
