@@ -5,6 +5,7 @@ import { RotateCcw, Check, X, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const STORAGE_KEY = "clarify_custom_hotkeys";
 
@@ -55,6 +56,7 @@ function captureCombo(e: KeyboardEvent): string | null {
 }
 
 export default function SettingsHotkeys() {
+  const isMobile = useIsMobile();
   const [overrides, setOverrides] = useState<Overrides>(() => loadOverrides());
   const [recordingId, setRecordingId] = useState<HotkeyId | null>(null);
 
@@ -117,6 +119,15 @@ export default function SettingsHotkeys() {
       description="Click a binding to record a new combination. Press Esc to cancel."
       className="max-w-3xl"
     >
+      {isMobile && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-3 text-sm">
+          <p className="font-medium">Desktop shortcuts</p>
+          <p className="text-muted-foreground text-xs mt-1 leading-relaxed">
+            Ctrl+Shift overlay hotkeys work in the desktop app and a focused desktop browser.
+            They are not available on phones or tablets.
+          </p>
+        </div>
+      )}
       <div className="flex justify-end -mt-2">
         <button
           onClick={resetAll}

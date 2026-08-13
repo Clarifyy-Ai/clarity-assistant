@@ -15,7 +15,7 @@ export type CanonicalPlanId =
 
 export const PLAN_RANK: Record<CanonicalPlanId, number> = {
   free: 0,
-  starter: 0,
+  starter: 1,
   pro: 2,
   elite: 2,
   enterprise: 4,

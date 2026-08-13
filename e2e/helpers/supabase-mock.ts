@@ -80,10 +80,20 @@ function makeProfile(
 }
 
 const EMPTY_ANALYTICS = {
-  total_sessions: 0,
-  avg_score: 0,
+  total_sessions: 1,
+  avg_score: null,
   streak_days: 0,
-  recent_sessions: [],
+  recent_sessions: [
+    {
+      session_id: "e2e-unscored-1",
+      date: new Date().toISOString(),
+      mode: "mock",
+      interview_type: "behavioral",
+      company: "Unscored Co",
+      overall_score: null,
+      score_status: "not_scored",
+    },
+  ],
   category_scores: [],
   filler_stats: { total_fillers: 0, top_fillers: [] },
   wpm_trend: [],
@@ -209,7 +219,15 @@ export async function setupSupabaseMocks(
     }
 
     if (url.includes("/rest/v1/job_descriptions") && method === "GET") {
-      return fulfillJson(route, 200, []);
+      return fulfillJson(route, 200, [
+        {
+          id: "e2e-jd-1",
+          user_id: E2E_TEST_USER.id,
+          title: "Staff Engineer",
+          target_role: "Staff Engineer",
+          content: "Build APIs. TypeScript required.",
+        },
+      ]);
     }
 
     if (url.includes("/rest/v1/answer_bank") && method === "GET") {

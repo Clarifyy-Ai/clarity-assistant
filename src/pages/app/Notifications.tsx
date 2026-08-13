@@ -31,7 +31,7 @@ function resolveNotificationUrl(n: Notification): string | null {
     case "session":
       return eid ? `/app/sessions/${eid}` : "/app/sessions";
     case "debrief":
-      return eid ? `/app/debrief/${eid}` : "/app/debrief";
+      return eid ? `/app/debriefs/${eid}` : "/app/debriefs";
     case "credit":
     case "billing":
       return "/app/settings/billing";

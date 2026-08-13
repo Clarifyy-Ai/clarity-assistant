@@ -14,7 +14,7 @@ import { PLANS } from "@/lib/billing/subscriptionManager";
 describe("plan catalog parity", () => {
   it("ranks match expected backend ranks", () => {
     expect(PLAN_RANK).toEqual(EXPECTED_BACKEND_RANKS);
-    expect(PLAN_RANK.starter).toBe(PLAN_RANK.free);
+    expect(PLAN_RANK.starter).toBeGreaterThan(PLAN_RANK.free);
     expect(PLAN_RANK.elite).toBe(PLAN_RANK.pro);
     expect(PLAN_RANK.enterprise).toBeGreaterThan(PLAN_RANK.pro);
   });

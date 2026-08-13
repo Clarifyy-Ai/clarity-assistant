@@ -97,7 +97,7 @@ interface MockSessionSummaryStats {
   incompleteNoAnswers?: boolean;
 }
 
-const INCOMPLETE_NO_ANSWERS_NOTE = "incomplete_no_answers";
+const INCOMPLETE_NO_ANSWERS_NOTE = "not_scored";
 
 function formatDuration(seconds: number): string {
   const mins = Math.floor(seconds / 60);
@@ -962,7 +962,7 @@ export default function MockSession() {
                   size="sm"
                   fullWidth
                   disabled={isSavingSummary}
-                  onClick={() => navigate(`/app/debrief/${summaryStats.sessionId}`)}
+                  onClick={() => navigate(`/app/debriefs/${summaryStats.sessionId}`)}
                   leftIcon={<BarChart2 className="w-4 h-4" />}
                 >
                   Go to Analytics
@@ -1140,7 +1140,7 @@ export default function MockSession() {
             <p className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground mb-1.5">
               Current question
             </p>
-            <p className="text-sm text-foreground leading-relaxed line-clamp-4">
+            <p className="text-sm text-foreground leading-relaxed">
               {questionText || "Waiting for question…"}
             </p>
           </div>

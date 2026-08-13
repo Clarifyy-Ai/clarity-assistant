@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { PrepToolShell, SaveToAnswerBankConfirm } from "@/components/prep/PrepToolShell";
 import { answerBankDB } from "@/lib/supabase/database";
 import { Whiteboard, type WhiteboardHandle } from "@/components/prep/Whiteboard";
 import { SYSTEM_DESIGN_PRESETS } from "@/lib/prep/systemDesignPresets";
@@ -79,6 +80,7 @@ export default function SystemDesign() {
   const [breakdown, setBreakdown] = useState("");
   const [loading, setLoading]     = useState(false);
   const [saved, setSaved]         = useState(false);
+  const [savedAnswerId, setSavedAnswerId] = useState<string | null>(null);
   const [error, setError]         = useState<string | null>(null);
 
   useEffect(() => {
@@ -147,19 +149,19 @@ export default function SystemDesign() {
   async function saveDesignNotes() {
     if (!user || !activeTopic || !notes.trim()) return;
     try {
-      await answerBankDB.create(user.id, {
+      const created = await answerBankDB.create(user.id, {
         question_text: `System Design: ${activeTopic.title}`,
         answer_text: `${notes}\n\n--- AI Breakdown ---\n${breakdown}`,
         category: "System Design",
         source: "prep_lab",
       });
+      setSaved(true);
+      setSavedAnswerId(created.id);
+      toast.success("Design notes saved to Answer Bank");
+      setTimeout(() => setSaved(false), 2500);
     } catch {
       toast.error("Failed to save — please try again");
-      return;
     }
-    setSaved(true);
-    toast.success("Design notes saved to Answer Bank");
-    setTimeout(() => setSaved(false), 2500);
   }
 
   return (
@@ -173,6 +175,20 @@ export default function SystemDesign() {
           { label: "System Design" },
         ]}
       />
+
+      <PrepToolShell
+        title="Structured design"
+        description="Generate a breakdown, then save exactly once to Answer Bank."
+        isGenerating={loading}
+        generationLabel="Generating system design sections…"
+        error={error}
+      >
+      {savedAnswerId && (
+        <SaveToAnswerBankConfirm
+          answerId={savedAnswerId}
+          onDismiss={() => setSavedAnswerId(null)}
+        />
+      )}
 
       <Card>
         <div className="flex items-center gap-2 mb-3">
@@ -357,6 +373,7 @@ export default function SystemDesign() {
           )}
         </div>
       </div>
+      </PrepToolShell>
     </div>
   );
 }

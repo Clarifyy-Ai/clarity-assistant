@@ -1,8 +1,7 @@
 import { useState, useEffect } from "react";
-import { NavLink, Outlet, Navigate } from "react-router-dom";
+import { NavLink, Outlet, Link } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { logger } from "@/lib/logger";
-import { toast } from "sonner";
 import {
   LayoutDashboard, Users, BarChart2,
   Flag, Shield, ChevronRight, DollarSign, Cpu, Bot,
@@ -117,7 +116,6 @@ export default function AdminLayout() {
         route: window.location.pathname,
         reason: "User lacks admin role",
       });
-      toast.error("Unauthorized: Admin privileges required.");
     }
   }, [isProfileLoaded, isAdminResolved, isAdmin]);
 
@@ -127,7 +125,24 @@ export default function AdminLayout() {
   }
 
   if (!isAdmin) {
-    return <Navigate to="/app/dashboard" replace />;
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-4">
+        <div className="w-full max-w-md rounded-xl border border-border bg-card p-6 space-y-4">
+          <h1 className="text-lg font-semibold" tabIndex={-1} autoFocus>
+            Access Denied
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            You are not authorized to access admin tools.
+          </p>
+          <Link
+            to="/app/dashboard"
+            className="inline-flex h-10 items-center justify-center rounded-lg bg-primary px-4 text-sm font-medium text-primary-foreground"
+          >
+            Return to Dashboard
+          </Link>
+        </div>
+      </div>
+    );
   }
 
   return (

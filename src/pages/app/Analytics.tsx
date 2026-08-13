@@ -38,6 +38,7 @@ import type { AnalyticsPeriod } from "@/types/analytics.types";
 import { cn } from "@/lib/utils";
 import { format, subDays } from "date-fns";
 import { PRODUCT_NAMES } from "@/lib/constants/productNames";
+import { formatSessionScore } from "@/lib/analytics/scoreStatus";
 
 // ─────────────────────────────────────────────────────────────────
 // Analytics — progress trends, filler analysis, category scores
@@ -348,7 +349,11 @@ function DimensionRadar({
   return (
     <Card>
       <h3 className="text-sm font-semibold text-foreground mb-4">Average by dimension</h3>
-      <div className="space-y-3">
+      <div
+        className="space-y-3"
+        role="img"
+        aria-label="Average scores by interview dimension"
+      >
         {Object.entries(dims).map(([key, val]) => {
           const c =
             val >= 75 ? "emerald" :
@@ -552,7 +557,11 @@ function ActivityHeatmap({ data }: { data: Record<string, number> }) {
         <Flame className="w-4 h-4 text-amber-400" />
         Practice activity — last 12 weeks
       </h3>
-      <div className="flex gap-1 overflow-x-auto pb-2">
+      <div
+        className="flex gap-1 overflow-x-auto pb-2"
+        role="img"
+        aria-label="Practice activity heatmap for the last 12 weeks"
+      >
         {weeks.map((week, wi) => (
           <div key={wi} className="flex flex-col gap-1">
             {week.map((day) => {
@@ -692,7 +701,13 @@ function SessionPicker({
 }: {
   label: string;
   value: string;
-  sessions: { session_id: string; date: string; company?: string | null; overall_score: number }[];
+  sessions: {
+    session_id: string;
+    date: string;
+    company?: string | null;
+    overall_score: number | null;
+    score_status?: string;
+  }[];
   onChange: (id: string) => void;
 }) {
   return (
@@ -708,7 +723,7 @@ function SessionPicker({
         <option value="">Select session…</option>
         {sessions.map((s) => (
           <option key={s.session_id} value={s.session_id}>
-            {format(new Date(s.date), "MMM d")} · {s.overall_score} · {s.company ?? s.session_id.slice(0, 8)}
+            {format(new Date(s.date), "MMM d")} · {formatSessionScore(s.overall_score, s.score_status)} · {s.company ?? s.session_id.slice(0, 8)}
           </option>
         ))}
       </select>
@@ -724,9 +739,10 @@ function CompareSessionCard({
     mode: string;
     interview_type: string;
     company: string | null;
-    overall_score: number;
-    filler_rate: number;
-    wpm_avg: number;
+    overall_score: number | null;
+    score_status?: string;
+    filler_rate: number | null;
+    wpm_avg: number | null;
     duration_minutes: number;
     question_count: number;
   };
@@ -741,10 +757,12 @@ function CompareSessionCard({
       {session.company && (
         <p className="text-sm font-medium text-foreground mb-3">{session.company}</p>
       )}
-      <div className="text-3xl font-black text-primary mb-3">{session.overall_score}</div>
+      <div className="text-3xl font-black text-primary mb-3">
+        {formatSessionScore(session.overall_score, session.score_status)}
+      </div>
       <div className="space-y-2 text-xs">
-        <div className="flex justify-between"><span className="text-muted-foreground">WPM</span><span>{session.wpm_avg}</span></div>
-        <div className="flex justify-between"><span className="text-muted-foreground">Fillers/min</span><span>{session.filler_rate.toFixed(1)}</span></div>
+        <div className="flex justify-between"><span className="text-muted-foreground">WPM</span><span>{session.wpm_avg ?? "—"}</span></div>
+        <div className="flex justify-between"><span className="text-muted-foreground">Fillers/min</span><span>{typeof session.filler_rate === "number" ? session.filler_rate.toFixed(1) : "—"}</span></div>
         <div className="flex justify-between"><span className="text-muted-foreground">Duration</span><span>{session.duration_minutes}m</span></div>
         <div className="flex justify-between"><span className="text-muted-foreground">Questions</span><span>{session.question_count}</span></div>
       </div>

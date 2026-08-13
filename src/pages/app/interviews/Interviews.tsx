@@ -350,6 +350,13 @@ function InterviewRow({
           >
             View details
           </Button>
+          <Button
+            variant="ghost"
+            size="xs"
+            onClick={() => navigate(`/app/interviews/${iv.id}/edit`)}
+          >
+            Edit
+          </Button>
           {!isNow && status !== "completed" && (
             <Button
               variant="ghost"

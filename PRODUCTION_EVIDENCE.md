@@ -243,3 +243,40 @@ Honest takeaway: registry approved for **5** pilot exams; **0** full-simulation-
 - LazyMotion GovExams/MockTestHub; rooms route dedupe; calendar 501 honesty
 - CSP: no script unsafe-inline; utils.deductCredits → atomic
 - Ban: authStore sign-out; requireAuth fail-closed on lookup errors
+
+## 2026-08-13 remaining QA plan (local)
+
+**Branch/commit:** `main` `6e627554` (working tree dirty with this sprint; not committed)  
+**Environment:** Windows 10, Node local, Supabase CLI v1.226.4 (not logged in; `SUPABASE_ACCESS_TOKEN` unset)
+
+| Command | Exit | Result |
+|---------|------|--------|
+| `npm run typecheck` | **0** | Pass |
+| `npx eslint . --quiet` | **0** | 0 errors (warnings remain; ignored `.deploy-payloads` / `node_modules_mcp`) |
+| `npm run test:run` | **0** | 60 files / 442 tests |
+| `npm run release:gates` | **0** | OK |
+| `npm run release:security-gates` | **0** | OK |
+| `npm run scan:secrets` | **0** | 1366 files |
+| `npm run billing:parity` | **0** | After aligning FE `PLAN_RANK.starter` to BE `1` |
+| `npm run release:capability-gates` | **0** | 15 AI functions |
+| `npx playwright test e2e/qa-legacy-routes.spec.ts e2e/qa-remaining.spec.ts` | **0** | 14 passed |
+| `npm run build:check` | **0** | Vite prod build + dist bake-in |
+| `npx supabase functions deploy delete-account --use-api` | **1** | CLI v1.226.4: unknown flag `--use-api`; Access token not provided |
+| `npm run rls:spot-check` | not run | Needs `SUPABASE_ACCESS_TOKEN`; User A/B keys wired in script |
+
+### Code landed (not deployed)
+
+- Canonical `/app/debriefs`; `/app/rooms*` → Dashboard toast; onboarding → Dashboard
+- Analytics `not_scored` (never coerce to 0); durable `account_deletion_operations`; `gap_analyses`; `profiles.region`
+- India region restored; full-mock fail-closed; Admin Access Denied copy
+- Unit + Playwright coverage for redirects, palette, Access Denied, Interview Day web CTA
+
+### Remote ops still required
+
+- Apply `supabase/migrations/20260813100000_account_deletion_and_gap_analyses.sql`
+- Redeploy changed EFs (`delete-account`, `analytics-dashboard`, `gap-analysis`, `select-test-questions`, plus `_shared` importers) after `npx supabase login`
+- Frontend host production release
+- QA password rotation + MFA; Stripe/Resend/Site URL (no localhost in prod)
+
+**Release decision remains CONDITIONAL_GO_CLOSED_BETA / NO_GO for full production** until those ops complete. Never claim `IMPLEMENTED_AND_RUNTIME_VERIFIED` from this session.
+

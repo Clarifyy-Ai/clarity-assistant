@@ -13,6 +13,7 @@ const INTERVIEW_PREFIXES = [
   "/app/interview", // interview-day, interviews
   "/app/companies",
   "/app/debrief",
+  "/app/debriefs",
   "/app/dashboard",
 ] as const;
 

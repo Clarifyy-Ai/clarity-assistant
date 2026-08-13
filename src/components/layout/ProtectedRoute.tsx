@@ -283,15 +283,15 @@ export const ProtectedRoute = memo(function ProtectedRoute({
           <div className="flex gap-3">
             <AlertCircle className="h-5 w-5 text-amber-500 mt-1 flex-shrink-0" />
             <div>
-              <h2 className="text-lg font-semibold mb-2">Access Denied</h2>
+              <h2 className="text-lg font-semibold mb-2" tabIndex={-1}>Access Denied</h2>
               <p className="text-sm text-muted-foreground mb-4">
-                You don&apos;t have admin privileges to access this page.
+                You are not authorized to access this page.
               </p>
               <Link
                 to="/app/dashboard"
                 className="inline-block px-4 py-2 bg-primary rounded-lg text-sm font-medium text-primary-foreground hover:opacity-90 transition"
               >
-                Go to Dashboard
+                Return to Dashboard
               </Link>
             </div>
           </div>

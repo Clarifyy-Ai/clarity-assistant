@@ -94,3 +94,35 @@
 | Unexpected plan_id | any | SEV3 | Catalog audit |
 
 Notification destination: configure in your log drain (PagerDuty/Slack) — **external ops**.
+
+## Auth Site URL / password reset
+
+Production Supabase **Authentication → URL Configuration**:
+
+- Site URL = production origin (never `http://localhost:*` in production).
+- Redirect allowlist must include `{APP_URL}/auth/callback`, `{APP_URL}/reset-password`, `{APP_URL}/login`.
+- Enable only OAuth providers listed in `VITE_OAUTH_PROVIDERS`.
+
+## Public status page
+
+Set `VITE_STATUS_PAGE_URL` to the real status domain. If unset, Help falls back to a mailto link — do not invent a status hostname.
+
+## Account deletion
+
+`delete-account` writes `account_deletion_operations` (additive migration `20260813100000_*`) then deletes owned rows. Repeat requests return the existing completed operation. Never expose CORS/function names in the UI.
+
+## Government exam expiry
+
+Client auto-submits at timer 0 using the same `submit-test` path. Server `expires_at` remains authoritative. If a browser is asleep past expiry, the next submit is idempotent.
+
+## QA credentials
+
+Never store passwords in workbooks. Seed with `npm run qa:seed-accounts` → gitignored `.env.qa.local`. CI runs `npm run scan:secrets`.
+
+## Aug 13 remote apply (ops)
+
+1. `npx supabase login` (or set `SUPABASE_ACCESS_TOKEN`). CLI v1.226.4 in this repo does **not** accept `--use-api`.
+2. Apply `supabase/migrations/20260813100000_account_deletion_and_gap_analyses.sql` (`npx supabase db push` or `node scripts/apply-sql-migration.mjs <file>`).
+3. Deploy at least: `delete-account`, `analytics-dashboard`, `gap-analysis`, `select-test-questions`, plus any function importing changed `_shared` (see `docs/EDGE_DEPLOY_COMMANDS.txt`).
+4. `npm run rls:spot-check` after the migration is live.
+

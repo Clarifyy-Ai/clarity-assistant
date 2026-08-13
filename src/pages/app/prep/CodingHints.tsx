@@ -82,7 +82,7 @@ export default function CodingHints() {
   const [solutionText, setSolutionText] = useState("");
   const [loading, setLoading]       = useState<"hint" | "solution" | null>(null);
   const [error, setError]           = useState<string | null>(null);
-  const [depth, setDepth]           = useState<"surface" | "medium" | "near-complete">("surface");
+  const [depth, setDepth]           = useState<"surface" | "medium" | "near-complete" | "edge" | "implement">("surface");
   const hintKeyRef = useRef<string | null>(null);
   const solutionKeyRef = useRef<string | null>(null);
 
@@ -355,9 +355,11 @@ export default function CodingHints() {
               </Card>
               <div className="flex gap-1.5">
                 {([
-                  { id: "surface",      label: "Quick hint" },
-                  { id: "medium",       label: "Deeper hint" },
-                  { id: "near-complete", label: "Near-complete" },
+                  { id: "surface", label: "1. Restate" },
+                  { id: "medium", label: "2. Approach" },
+                  { id: "near-complete", label: "3. Trade-offs" },
+                  { id: "edge", label: "4. Edge cases" },
+                  { id: "implement", label: "5. Implementation" },
                 ] as const).map((d) => (
                   <button
                     key={d.id}

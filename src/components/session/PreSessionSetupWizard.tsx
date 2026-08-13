@@ -144,6 +144,36 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
   const [jdId,             setJdId]             = useState<string | null>(activeJdId);
   const [extraDocIds,      setExtraDocIds]      = useState<string[]>([]);
 
+  useEffect(() => {
+    try {
+      const raw = sessionStorage.getItem("clarify:practice-setup-draft");
+      if (!raw) return;
+      const draft = JSON.parse(raw) as {
+        step?: number;
+        company?: string;
+        role?: string;
+        interviewType?: string;
+      };
+      if (typeof draft.step === "number" && draft.step >= 1) setStep(draft.step);
+      if (draft.company) setCompany(draft.company);
+      if (draft.role) setRole(draft.role);
+      if (draft.interviewType) setInterviewType(draft.interviewType);
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    try {
+      sessionStorage.setItem(
+        "clarify:practice-setup-draft",
+        JSON.stringify({ step, company, role, interviewType, resumeId, jdId }),
+      );
+    } catch {
+      // ignore
+    }
+  }, [step, company, role, interviewType, resumeId, jdId]);
+
   // Step 4 — Auto-Generate
   const [autoGenerate,     setAutoGenerate]     = useState(true);
 
@@ -1477,8 +1507,15 @@ export function PreSessionSetupWizard({ onStart, sessionType = "live" }: PreSess
             </button>
           ) : (
             <button
-              onClick={() => setStep((p) => p + 1)}
-              className="flex-1 flex items-center justify-center gap-1.5 py-3.5 bg-emerald-600 hover:bg-emerald-500 text-foreground font-semibold rounded-xl transition-all text-sm"
+              onClick={() => {
+                if (step === 2 && !role.trim()) {
+                  toast.message("Choose a target role before continuing.");
+                  return;
+                }
+                setStep((p) => p + 1);
+              }}
+              disabled={step === 2 && !role.trim()}
+              className="flex-1 flex items-center justify-center gap-1.5 py-3.5 bg-emerald-600 hover:bg-emerald-500 disabled:bg-muted disabled:text-muted-foreground disabled:cursor-not-allowed text-foreground font-semibold rounded-xl transition-all text-sm"
             >
               Next
               <ChevronRight className="w-4 h-4" />

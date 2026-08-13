@@ -3,9 +3,9 @@
 export const OVERLAY_VISIBILITY_WARNING =
   "The Practice Coach overlay is a normal on-screen window. It stays visible on screen share, recordings, and proctoring tools — not hidden from interviewers or viewers.";
 
-export const OVERLAY_MOBILE_TOAST_TITLE = "Overlay stays visible";
+export const OVERLAY_MOBILE_TOAST_TITLE = "Desktop overlay required";
 export const OVERLAY_MOBILE_TOAST_BODY =
-  "Anyone viewing your screen share or recording can see the assistant. Practice and mock sessions only.";
+  "Live overlay, global hotkeys (Ctrl+Shift+H / Ctrl+Shift+P), and system-audio capture need a desktop browser or the Clarify desktop app. On mobile you can still complete setup and practice with the microphone, but overlay shortcuts are unavailable.";
 
 export type SetupChecklistItem = {
   id: string;

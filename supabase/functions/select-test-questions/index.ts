@@ -358,6 +358,8 @@ Deno.serve(async (req: Request) => {
     const source_types = sanitizeList(config.source_types ?? ["OFFICIAL_PYP"]);
 
     const question_count = sanitizeInt(config.question_count, 30, 1, 100);
+    const allow_shortfall =
+      config.allow_shortfall === true || config.practice_mode === true;
 
     const year_range_raw = config.year_range as
       | { min?: unknown; max?: unknown }
@@ -603,6 +605,20 @@ Deno.serve(async (req: Request) => {
       console.warn(
         `[select-test-questions] 0 questions returned for exam_type="${exam_type}", ` +
         `year_range=${JSON.stringify(year_range)}, subjects=${JSON.stringify(subjects)}`,
+      );
+    }
+
+    if (!allow_shortfall && finalIds.length !== question_count) {
+      return new Response(
+        JSON.stringify({
+          question_ids: finalIds,
+          count: finalIds.length,
+          required: question_count,
+          code: "INSUFFICIENT_APPROVED_QUESTIONS",
+          error:
+            `Only ${finalIds.length} of ${question_count} approved questions are available. Use a Custom Practice Set.`,
+        }),
+        { status: 422, headers },
       );
     }
 

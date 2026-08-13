@@ -20,6 +20,7 @@ import {
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 import { SettingsPageShell } from "@/components/layout/SettingsPageShell";
+import { isTerminalDeletionStatus } from "@/lib/account/deletionStates";
 
 // ─────────────────────────────────────────────────────────────────
 // SettingsDanger — delete account, export data, reset
@@ -128,6 +129,13 @@ export default function SettingsDanger() {
         throw new Error(`delete_failed_${res.status}`);
       }
 
+      const payload = await res.json().catch(() => ({}));
+      setDeleteOpen(false);
+      if (payload?.status && !isTerminalDeletionStatus(String(payload.status))) {
+        toast.success(
+          `Account deletion is ${String(payload.status).replaceAll("_", " ")}. We'll finish this in the background.`,
+        );
+      }
       await signOut();
       navigate("/");
     } catch (err: unknown) {

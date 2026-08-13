@@ -73,15 +73,23 @@ export interface SessionComparisonData {
   regression_areas: string[];
 }
 
+export type AnalyticsScoreStatus =
+  | "scored"
+  | "not_scored"
+  | "pending"
+  | "failed"
+  | "excluded";
+
 export interface SessionAnalyticsSummary {
   session_id: string;
   date: string;
   mode: SessionMode;
   interview_type: InterviewType;
   company: string | null;
-  overall_score: number;
-  filler_rate: number;
-  wpm_avg: number;
+  overall_score: number | null;
+  score_status: AnalyticsScoreStatus;
+  filler_rate: number | null;
+  wpm_avg: number | null;
   duration_minutes: number;
   question_count: number;
 }

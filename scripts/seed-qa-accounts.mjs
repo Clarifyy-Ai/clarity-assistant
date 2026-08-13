@@ -131,6 +131,28 @@ const QA_ACCOUNTS = [
     onboardingCompleted: true,
     notes: "SETTINGS-DANGER account deletion fixture",
   },
+  {
+    key: "USER_A",
+    email: "qa.user-a@clarify.ai.test",
+    fullName: "QA User A",
+    planId: "pro",
+    credits: 1400,
+    admin: false,
+    emailConfirm: true,
+    onboardingCompleted: true,
+    notes: "RLS isolation owner — documents, answers, sessions, debriefs",
+  },
+  {
+    key: "USER_B",
+    email: "qa.user-b@clarify.ai.test",
+    fullName: "QA User B",
+    planId: "pro",
+    credits: 1400,
+    admin: false,
+    emailConfirm: true,
+    onboardingCompleted: true,
+    notes: "RLS isolation peer — must not read User A rows",
+  },
 ];
 
 function loadEnvFile(filePath) {

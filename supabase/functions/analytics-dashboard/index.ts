@@ -174,7 +174,7 @@ Deno.serve(async (req: Request) => {
         interview_type: s.interview_type ?? "behavioral",
         company: s.company ?? null,
         overall_score: hasScore ? sc!.overall_score : null,
-        score_status: incomplete ? "incomplete" : hasScore ? "scored" : "unscored",
+        score_status: incomplete ? "not_scored" : hasScore ? "scored" : "not_scored",
         filler_rate: typeof sc?.filler_rate === "number" ? sc.filler_rate : null,
         wpm_avg: typeof sc?.wpm_avg === "number" ? sc.wpm_avg : null,
         duration_minutes: Math.round((s.duration_seconds ?? 0) / 60),

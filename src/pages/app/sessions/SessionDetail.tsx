@@ -179,7 +179,7 @@ export default function SessionDetail() {
           <Button
             variant="secondary"
             size="sm"
-            onClick={() => navigate(`/app/debrief/${session.id}`)}
+            onClick={() => navigate(`/app/debriefs/${session.id}`)}
             leftIcon={<Brain className="w-3.5 h-3.5" />}
           >
             Debrief
@@ -533,7 +533,7 @@ export default function SessionDetail() {
           variant="primary"
           size="sm"
           className="w-full sm:w-auto shrink-0"
-          onClick={() => navigate(`/app/debrief/${session.id}`)}
+          onClick={() => navigate(`/app/debriefs/${session.id}`)}
           rightIcon={<ChevronRight className="w-3.5 h-3.5" />}
         >
           View debrief
@@ -564,7 +564,7 @@ export default function SessionDetail() {
               className="w-full"
               onClick={() => {
                 setShareOpen(false);
-                navigate(`/app/debrief/${session.id}`);
+                navigate(`/app/debriefs/${session.id}`);
               }}
             >
               Open debrief

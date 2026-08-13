@@ -161,6 +161,10 @@ export const ROUTES = {
 
   // App (protected) — matches src/App.tsx
   DASHBOARD:         "/app/dashboard",
+  DEBRIEFS:          "/app/debriefs",
+  DEBRIEF:           (id: string) => `/app/debriefs/${id}`,
+  GUIDE:             "/app/guide",
+  GUIDE_PRACTICE_COACH: "/app/guide/practice-coach",
   LIVE_SESSION:      "/app/live",
   SESSION:           (id: string) => `/app/sessions/${id}`,
   MOCK_INTERVIEW:    "/app/mock",

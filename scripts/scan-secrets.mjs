@@ -48,11 +48,15 @@ const SKIP_FILE_GLOBS = [
   /\.pdf$/i,
   /\.mp4$/i,
   /\.zip$/i,
+  /\.xlsx$/i,
+  /\.xls$/i,
+  /\.env\.qa\.local$/i,
 ];
 
 /** Docs/examples that intentionally mention secret prefixes. */
 const ALLOWLIST_REL = new Set([
   "scripts/scan-secrets.mjs",
+  "scripts/seed-qa-accounts.mjs",
   "scripts/sync-edge-secrets-from-env.mjs",
   "scripts/gov-bank-readiness.mjs",
   "scripts/gov-bank-verify-stats.mjs",
@@ -68,6 +72,8 @@ const PATTERNS = [
   { name: "sk_live", re: /\bsk_live_[A-Za-z0-9]{16,}\b/ },
   { name: "whsec_", re: /\bwhsec_[A-Za-z0-9+/=_-]{16,}\b/ },
   { name: "BEGIN PRIVATE KEY", re: /-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/ },
+  // Hardcoded QA fixture passwords (generated values look like Qa!<base64url>)
+  { name: "qa_password_literal", re: /\bQa![A-Za-z0-9_-]{8,}\b/ },
 ];
 
 function shouldSkipDir(name) {
@@ -90,6 +96,8 @@ function walk(dir, out = []) {
     if (ent.name.startsWith(".") && ent.name !== ".env.example" && ent.isFile()) {
       // Still scan .env.example; skip other dotfiles like .DS_Store
       if (!ent.name.startsWith(".env")) continue;
+      // Generated local credential files are gitignored — never scan them.
+      if (ent.name.endsWith(".local")) continue;
     }
     const full = path.join(dir, ent.name);
     const rel = path.relative(root, full).replace(/\\/g, "/");
@@ -107,7 +115,14 @@ function walk(dir, out = []) {
 }
 
 function looksLikePlaceholder(line) {
-  return /your[-_]|example|changeme|replace|xxx|\.\.\.|REDACTED|placeholder/i.test(line);
+  if (/your[-_]|example|changeme|replace|xxx|\.\.\.|REDACTED|placeholder/i.test(line)) {
+    return true;
+  }
+  // Password *generators* (template + randomBytes) are not secrets.
+  if (/\$\{|crypto\.randomBytes|QA_.*_PASSWORD/.test(line) && !/\bQa![A-Za-z0-9_-]{8,}\b/.test(line)) {
+    return true;
+  }
+  return false;
 }
 
 let failed = false;

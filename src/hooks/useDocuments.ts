@@ -318,9 +318,20 @@ export function useDocuments(options?: UseDocumentsOptions) {
       if (mountedRef.current) {
         await loadDocuments();
         docStore.setActiveResumeId(resumeId);
+        if ((data as { duplicate?: boolean })?.duplicate) {
+          const { toast } = await import("sonner");
+          toast.message("This file was already parsed. Reusing the existing document — no extra charge.");
+        }
       }
     } catch (err) {
       console.error("[useDocuments] parseResume failed:", err);
+      const code = (err as { code?: string })?.code;
+      if (code === "DUPLICATE_DOCUMENT") {
+        const { toast } = await import("sonner");
+        toast.message("This file was already uploaded. Opening the existing document — no extra charge.");
+        if (mountedRef.current) await loadDocuments();
+        return;
+      }
       const message =
         err instanceof Error ? err.message : "Resume parsing failed. Please try again.";
       try {

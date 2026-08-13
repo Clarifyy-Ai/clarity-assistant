@@ -115,8 +115,14 @@ export async function fetchEdge(
   }
   const signal = timeoutController.signal;
 
+  const requestId =
+    (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`);
+
   const headers = await getAuthHeaders({
     ...(isFormData ? {} : { "Content-Type": "application/json" }),
+    "x-request-id": requestId,
     ...(options?.headers ?? {}),
   });
 
@@ -145,13 +151,22 @@ export async function fetchEdge(
             : "Request was cancelled. Please try again.",
         );
       }
-      logger.warn("network.request.transient_failure", { fnName, timeoutMs, reason: "timeout" });
+      logger.warn("network.request.transient_failure", {
+        fnName,
+        timeoutMs,
+        reason: "timeout",
+        requestId,
+      });
       throw new Error("The request timed out. Please try again.");
     }
     if (err instanceof TypeError) {
       // CORS blocks / network failures surface as TypeError("Failed to fetch").
       // Never name the Edge Function — especially sensitive for delete-account UX.
-      logger.error("network.request.transient_failure", { fnName, reason: "unreachable" });
+      logger.error("network.request.transient_failure", {
+        fnName,
+        reason: "unreachable",
+        requestId,
+      });
       throw new Error(
         fnName === "delete-account"
           ? "We couldn't complete account deletion right now. Please try again in a moment."
@@ -198,10 +213,24 @@ export async function fetchEdgeJson<T>(
       typeof payload?.code === "string" && payload.code.trim()
         ? payload.code.trim()
         : "API_ERROR";
+    const correlationId =
+      (typeof payload?.correlationId === "string" && payload.correlationId) ||
+      (typeof payload?.requestId === "string" && payload.requestId) ||
+      response.headers.get("x-request-id") ||
+      undefined;
+    if (correlationId) {
+      logger.warn("network.request.failed", {
+        fnName,
+        status: response.status,
+        code,
+        requestId: correlationId,
+      });
+    }
     throw new ApiClientError({
       message: typeof message === "string" ? message : fallback,
       status: response.status,
       code,
+      errorId: correlationId,
       details: payload,
     });
   }

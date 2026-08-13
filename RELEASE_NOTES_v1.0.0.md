@@ -70,6 +70,7 @@ It is **not** an HRIS, workforce platform, multi-tenant organization suite, SSO/
 - Monitoring alerts require external provider wiring (gov: snapshot script only)
 - Live billing secrets must be validated with `billing-config-preflight.mjs` in the ops environment
 - Full-pattern gov mocks: **none certified** (SSC/UPSC/IBPS partial banks; RRB/APPSC empty for verified)
+- 2026-08-13: plaintext QA passwords removed from scripts; canonical `/app/debriefs`; Rooms redirect to Dashboard; onboarding lands on Dashboard; analytics never shows fake zeros for unscored sessions
 
 ## Scale boundary
 

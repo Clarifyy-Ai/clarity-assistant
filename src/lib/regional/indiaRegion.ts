@@ -39,11 +39,26 @@ export function detectIndiaFromBrowser(): boolean {
 export function resolveIsIndiaUser(profile?: {
   timezone?: string | null;
   locale?: string | null;
+  region?: string | null;
+  notification_prefs?: { region?: string } | null;
 } | null): boolean {
   const forced = envForceIndia();
-  if (forced !== null) return forced;
+  const isProd =
+    import.meta.env.PROD &&
+    String(import.meta.env.VITE_APP_ENV ?? "").toLowerCase() === "production";
+  if (forced !== null && !isProd) return forced;
 
-  // Allow all users globally — gov exam access is no longer gated to India only.
-  // The feature is useful to anyone preparing for Indian government exams worldwide.
-  return true;
+  const storedRegion =
+    profile?.region ??
+    profile?.notification_prefs?.region ??
+    null;
+  if (typeof storedRegion === "string") {
+    const normalized = storedRegion.trim().toUpperCase();
+    if (normalized === "IN" || normalized === "INDIA") return true;
+    if (normalized.length > 0) return false;
+  }
+
+  if (isIndiaTimezone(profile?.timezone)) return true;
+  if (isIndiaLocale(profile?.locale)) return true;
+  return detectIndiaFromBrowser();
 }

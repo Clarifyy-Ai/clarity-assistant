@@ -71,7 +71,7 @@ const MORE_LINKS: MoreLink[] = [
   { to: "/app/answers", icon: BookOpen, label: PRODUCT_NAMES.answerBank },
   { to: "/app/analytics", icon: BarChart3, label: PRODUCT_NAMES.analytics },
   { to: "/app/usage", icon: Gauge, label: PRODUCT_NAMES.creditsUsage },
-  { to: "/app/debrief", icon: MessageSquare, label: PRODUCT_NAMES.debrief },
+  { to: "/app/debriefs", icon: MessageSquare, label: PRODUCT_NAMES.debrief },
   { to: "/app/interview-day", icon: Sunrise, label: PRODUCT_NAMES.interviewDay },
   { to: "/app/interviews", icon: CalendarDays, label: PRODUCT_NAMES.interviews },
   { to: "/app/companies", icon: Building2, label: PRODUCT_NAMES.companyResearch },
@@ -142,7 +142,10 @@ export function MobileNav(): JSX.Element {
             <span>More</span>
           </button>
         </SheetTrigger>
-        <SheetContent side="bottom" className="rounded-t-2xl pb-8">
+        <SheetContent
+          side="bottom"
+          className="rounded-t-2xl pb-[max(2rem,env(safe-area-inset-bottom))] max-h-[min(85dvh,calc(100dvh-env(safe-area-inset-bottom)))] overflow-y-auto"
+        >
           <SheetHeader>
             <SheetTitle>More</SheetTitle>
           </SheetHeader>

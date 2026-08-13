@@ -55,6 +55,52 @@ Deno.serve(async (req) => {
     }
 
     const targetUserId = authenticatedUserId;
+    const correlationId =
+      req.headers.get("x-request-id")?.trim() || crypto.randomUUID();
+
+    const { data: existingOp } = await db
+      .from("account_deletion_operations")
+      .select("id, status")
+      .eq("user_id", targetUserId)
+      .order("created_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (existingOp?.status === "completed") {
+      return jsonWithCors(req, {
+        success: true,
+        status: "completed",
+        operationId: existingOp.id,
+        correlationId,
+      });
+    }
+
+    let operationId = existingOp?.id as string | undefined;
+    if (!operationId) {
+      const { data: created } = await db
+        .from("account_deletion_operations")
+        .insert({
+          user_id: targetUserId,
+          status: "identity_confirmed",
+          correlation_id: correlationId,
+          current_step: "confirmed",
+        })
+        .select("id")
+        .single();
+      operationId = created?.id;
+    }
+
+    if (operationId) {
+      await db
+        .from("account_deletion_operations")
+        .update({
+          status: "processing",
+          current_step: "delete_rows",
+          correlation_id: correlationId,
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", operationId);
+    }
 
     /* -------------------------------------------------------
        DELETE ALL USER DATA IN SAFE ORDER
@@ -92,9 +138,23 @@ Deno.serve(async (req) => {
       const { error } = await db.from(table).delete().eq(col, targetUserId);
       if (error) {
         console.error(`Error deleting from ${table}:`, error);
+        if (operationId) {
+          await db.from("account_deletion_operations").update({
+            status: "partially_completed",
+            current_step: table,
+            error_code: "INTERNAL_ERROR",
+            updated_at: new Date().toISOString(),
+          }).eq("id", operationId);
+        }
         return jsonWithCors(
           req,
-          { error: "Failed to delete account data", code: "INTERNAL_ERROR" },
+          {
+            error: "Failed to delete account data",
+            code: "INTERNAL_ERROR",
+            correlationId,
+            operationId,
+            status: "partially_completed",
+          },
           500,
         );
       }
@@ -131,9 +191,23 @@ Deno.serve(async (req) => {
     const { error: deleteErr } = await db.auth.admin.deleteUser(targetUserId);
     if (deleteErr) {
       console.error("auth delete error:", deleteErr);
+      if (operationId) {
+        await db.from("account_deletion_operations").update({
+          status: "failed",
+          current_step: "auth_delete",
+          error_code: "INTERNAL_ERROR",
+          updated_at: new Date().toISOString(),
+        }).eq("id", operationId);
+      }
       return jsonWithCors(
         req,
-        { error: "Failed to delete account", code: "INTERNAL_ERROR" },
+        {
+          error: "Failed to delete account",
+          code: "INTERNAL_ERROR",
+          correlationId,
+          operationId,
+          status: "failed",
+        },
         500,
       );
     }
@@ -149,7 +223,21 @@ Deno.serve(async (req) => {
       created_at: new Date().toISOString(),
     }).catch(() => {});
 
-    return jsonWithCors(req, { success: true });
+    if (operationId) {
+      await db.from("account_deletion_operations").update({
+        status: "completed",
+        current_step: "done",
+        completed_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      }).eq("id", operationId);
+    }
+
+    return jsonWithCors(req, {
+      success: true,
+      status: "completed",
+      operationId,
+      correlationId,
+    });
 
   } catch (err) {
     console.error("delete-account error:", err);

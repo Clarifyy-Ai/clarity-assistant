@@ -176,7 +176,7 @@ export default function DebriefDetail() {
 
   const debriefBreadcrumbs = [
     { label: "Dashboard", href: "/app/dashboard" },
-    { label: "Debriefs", href: "/app/debrief" },
+    { label: "Debriefs", href: "/app/debriefs" },
     { label: debriefTitle },
   ];
 
@@ -231,7 +231,7 @@ export default function DebriefDetail() {
             actionLabel="Retry"
             onAction={fetchDebrief}
             secondaryActionLabel="Back to debriefs"
-            onSecondaryAction={() => navigate("/app/debrief")}
+            onSecondaryAction={() => navigate("/app/debriefs")}
           />
         </Card>
       </div>
@@ -252,7 +252,7 @@ export default function DebriefDetail() {
             title="Debrief not found"
             description="This debrief may have been deleted or you may not have access."
             actionLabel="Back to debriefs"
-            onAction={() => navigate("/app/debrief")}
+            onAction={() => navigate("/app/debriefs")}
           />
         </Card>
       </div>

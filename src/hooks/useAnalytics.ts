@@ -137,9 +137,10 @@ export function useAnalytics() {
       mode:             session.mode,
       interview_type:   session.interview_type,
       company:          session.company,
-      overall_score:    d.overall_score,
-      filler_rate:      d.filler_rate,
-      wpm_avg:          d.wpm_avg,
+      overall_score:    d.overall_score ?? null,
+      score_status:     typeof d.overall_score === "number" ? "scored" : "not_scored",
+      filler_rate:      d.filler_rate ?? null,
+      wpm_avg:          d.wpm_avg ?? null,
       duration_minutes: Math.round(session.duration_seconds / 60),
       question_count:   session.session_questions?.[0]?.count ?? 0,
     };

@@ -96,7 +96,7 @@ export function PostSessionSummary({ sessionId, onStartNew }: PostSessionSummary
             View Scorecard
           </Link>
           <Link
-            to={`/app/debrief/${sessionId}`}
+            to={`/app/debriefs/${sessionId}`}
             className="inline-flex items-center gap-2 px-4 py-2 bg-secondary hover:bg-secondary/80 text-foreground text-sm font-medium rounded-xl transition-all"
           >
             Open Debrief

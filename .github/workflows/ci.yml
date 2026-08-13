@@ -46,6 +46,9 @@ jobs:
       - name: Release copy gates
         run: npm run release:gates
 
+      - name: Secret scan
+        run: npm run scan:secrets
+
       - name: Release security gates
         run: npm run release:security-gates
 

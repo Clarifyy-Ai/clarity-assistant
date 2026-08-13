@@ -1,6 +1,6 @@
 // Sprint C: Global command palette (Ctrl+K / ⌘K)
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 
 import { useNavigate } from "react-router-dom";
 
@@ -28,7 +28,7 @@ import {
 
   User, Bell, Mic, Brain, Calendar, Sparkles, Lock, CreditCard,
 
-  CalendarDays, Building2, Gift, History, Trash2, Users,
+  CalendarDays, Building2, Gift, History, Trash2,
 
 } from "lucide-react";
 
@@ -38,8 +38,6 @@ import { PRODUCT_NAMES } from "@/lib/constants/productNames";
 
 import { useUIStore } from "@/store/uiStore";
 
-import { toast } from "sonner";
-
 import {
 
   addRecentSearch,
@@ -48,6 +46,7 @@ import {
 
   getRecentSearches,
 
+  paletteGroupOrder,
 } from "@/lib/search/commandPaletteStorage";
 
 
@@ -63,7 +62,6 @@ interface NavCommand {
   icon: React.ComponentType<{ className?: string }>;
 
   group: "Navigate" | "Sessions" | "Prep" | "Account";
-  comingSoon?: boolean;
 }
 
 const COMMANDS: NavCommand[] = [
@@ -98,28 +96,23 @@ const COMMANDS: NavCommand[] = [
 
   { label: PRODUCT_NAMES.sessionHistory, path: "/app/sessions", icon: Calendar, group: "Sessions", keywords: "history calls" },
 
-  { label: PRODUCT_NAMES.debrief, path: "/app/debrief", icon: Sparkles, group: "Sessions", keywords: "debriefs feedback" },
+  { label: PRODUCT_NAMES.debrief, path: "/app/debriefs", icon: Sparkles, group: "Sessions", keywords: "debriefs feedback" },
 
-  {
-    label: `${PRODUCT_NAMES.groupPractice} (Coming soon)`,
-    path: "/app/rooms",
-    icon: Users,
-    group: "Sessions",
-    keywords: "rooms collaborative webrtc",
-    comingSoon: true,
-  },
+  { label: PRODUCT_NAMES.prepLab, path: "/app/prep", icon: BookOpen, group: "Prep", keywords: "prep lab tools" },
 
-  { label: PRODUCT_NAMES.prepLab, path: "/app/prep", icon: BookOpen, group: "Prep" },
+  { label: "STAR builder", path: "/app/prep/star-builder", icon: BookOpen, group: "Prep", keywords: "prep star behavioral" },
 
-  { label: "STAR builder", path: "/app/prep/star-builder", icon: BookOpen, group: "Prep" },
+  { label: "Project builder", path: "/app/prep/project-builder", icon: BookOpen, group: "Prep", keywords: "prep project" },
 
-  { label: "Project builder", path: "/app/prep/project-builder", icon: BookOpen, group: "Prep" },
+  { label: "Rephraser", path: "/app/prep/rephraser", icon: BookOpen, group: "Prep", keywords: "prep rephrase rewrite" },
 
-  { label: "Rephraser", path: "/app/prep/rephraser", icon: BookOpen, group: "Prep" },
+  { label: "System design", path: "/app/prep/system-design", icon: BookOpen, group: "Prep", keywords: "prep system design" },
 
-  { label: "System design", path: "/app/prep/system-design", icon: BookOpen, group: "Prep" },
+  { label: "Coding hints", path: "/app/prep/coding-hints", icon: BookOpen, group: "Prep", keywords: "prep coding hints" },
 
-  { label: "Coding hints", path: "/app/prep/coding-hints", icon: BookOpen, group: "Prep" },
+  { label: "Guide", path: "/app/guide", icon: BookOpen, group: "Navigate", keywords: "guide help how to" },
+
+  { label: "Practice Coach guide", path: "/app/guide/practice-coach", icon: BookOpen, group: "Navigate", keywords: "prep guide overlay coach" },
 
   { label: PRODUCT_NAMES.documents, path: "/app/documents", icon: FileText, group: "Prep" },
 
@@ -161,6 +154,11 @@ export function CommandPalette() {
 
       setRecentSearches(getRecentSearches());
 
+      requestAnimationFrame(() => {
+        const list = document.querySelector("[cmdk-list]");
+        if (list instanceof HTMLElement) list.scrollTop = 0;
+      });
+
     } else {
 
       setQuery("");
@@ -195,15 +193,7 @@ export function CommandPalette() {
 
   const go = useCallback(
 
-    (path: string, comingSoon?: boolean) => {
-
-      if (comingSoon) {
-        toast.message("Coming soon", {
-          description: "Group Practice rooms ship after WebRTC support is ready.",
-        });
-        setOpen(false);
-        return;
-      }
+    (path: string) => {
 
       if (canFilter) addRecentSearch(trimmedQuery);
 
@@ -219,13 +209,16 @@ export function CommandPalette() {
 
 
 
-  const grouped = visibleCommands.reduce<Record<string, NavCommand[]>>((acc, c) => {
-
-    (acc[c.group] ??= []).push(c);
-
-    return acc;
-
-  }, {});
+  const grouped = useMemo(() => {
+    const acc = visibleCommands.reduce<Record<string, NavCommand[]>>((map, c) => {
+      (map[c.group] ??= []).push(c);
+      return map;
+    }, {});
+    const order = paletteGroupOrder(trimmedQuery);
+    return order
+      .filter((group) => acc[group]?.length)
+      .map((group) => [group, acc[group]!] as const);
+  }, [visibleCommands, trimmedQuery]);
 
 
 
@@ -317,7 +310,7 @@ export function CommandPalette() {
 
 
 
-        {canFilter && Object.entries(grouped).map(([group, items]) => (
+        {canFilter && grouped.map(([group, items]) => (
 
           <CommandGroup key={group} heading={group}>
 
@@ -335,7 +328,7 @@ export function CommandPalette() {
 
                   value={`${c.label} ${c.keywords ?? ""} ${c.path}`}
 
-                  onSelect={() => go(c.path, c.comingSoon)}
+                  onSelect={() => go(c.path)}
 
                 >
 
@@ -346,7 +339,7 @@ export function CommandPalette() {
                     <span>{c.label}</span>
 
                     <span className="truncate text-xs text-muted-foreground">
-                      {c.comingSoon ? "Not available yet" : preview}
+                      {preview}
                     </span>
 
                   </div>

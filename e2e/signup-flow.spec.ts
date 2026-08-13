@@ -86,7 +86,7 @@ test.describe.skip("Mock interview session (requires onboarded user)", () => {
 
 test.describe.skip("Debrief review (requires completed mock session)", () => {
   test("opens debrief list and detail", async ({ page }) => {
-    await page.goto("/app/debrief");
+    await page.goto("/app/debriefs");
   });
 });
 

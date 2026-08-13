@@ -36,8 +36,11 @@ export async function fillLoginForm(
 }
 
 /** Log in via UI with mocked Supabase responses; lands on /app/dashboard. */
-export async function loginAsTestUser(page: Page): Promise<void> {
-  await setupSupabaseMocks(page);
+export async function loginAsTestUser(
+  page: Page,
+  options?: Parameters<typeof setupSupabaseMocks>[1],
+): Promise<void> {
+  await setupSupabaseMocks(page, options);
   await page.goto("/login", { waitUntil: "domcontentloaded" });
   await dismissCookieBanner(page);
   await fillLoginForm(page, E2E_TEST_USER.email, E2E_TEST_USER.password);

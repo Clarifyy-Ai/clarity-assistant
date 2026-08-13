@@ -45,6 +45,14 @@ const HINT_STYLES = [
   { value: "keywords",    label: "Keywords",    sub: "Key terms only" },
 ] as const;
 
+const ANXIETY_LABELS: Record<number, string> = {
+  1: "Cool as ice",
+  2: "Mostly calm",
+  3: "A little nervous",
+  4: "Quite anxious",
+  5: "Interview terror",
+};
+
 const INTERVIEW_STYLES = [
   { value: "behavioral", label: "Behavioral" },
   { value: "technical",  label: "Technical" },
@@ -69,6 +77,7 @@ export default function OnboardingStep2OptionalSetup({
   data,
   onNext,
   onBack,
+  onSkip,
 }: StepProps) {
   const { user, profile, setProfile, updateProfile, planId } = useAuthStore();
   const audio = useAudioCapture();
@@ -82,6 +91,10 @@ export default function OnboardingStep2OptionalSetup({
   const [testError, setTestError] = useState<string | null>(null);
   const [playbackUrl, setPlaybackUrl] = useState<string | null>(null);
   const [selectedDeviceId, setSelectedDeviceId] = useState(data.selectedMicId);
+  const [outputDeviceId, setOutputDeviceId] = useState(data.selectedOutputDeviceId ?? "default");
+  const [audioInputs, setAudioInputs] = useState<MediaDeviceInfo[]>([]);
+  const [audioOutputs, setAudioOutputs] = useState<MediaDeviceInfo[]>([]);
+  const [deviceFallbackNote, setDeviceFallbackNote] = useState<string | null>(null);
   const [level, setLevel] = useState(0);
 
   const rafRef = useRef<number | null>(null);
@@ -119,9 +132,43 @@ export default function OnboardingStep2OptionalSetup({
   );
   const [styles, setStyles] = useState<string[]>(existingStyles);
   const [prefsSkipped, setPrefsSkipped] = useState(false);
+  const existingAnxiety = (() => {
+    const prefs = profile?.notification_prefs as { interview_anxiety?: number } | null;
+    if (typeof prefs?.interview_anxiety === "number") return prefs.interview_anxiety;
+    return data.interviewAnxiety ?? 3;
+  })();
+  const [anxiety, setAnxiety] = useState(existingAnxiety);
 
   const [finishing, setFinishing] = useState(false);
   const [finishError, setFinishError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        if (cancelled) return;
+        const inputs = devices.filter((d) => d.kind === "audioinput");
+        const outputs = devices.filter((d) => d.kind === "audiooutput");
+        setAudioInputs(inputs);
+        setAudioOutputs(outputs);
+        if (data.selectedMicId && data.selectedMicId !== "default") {
+          const stillThere = inputs.some((d) => d.deviceId === data.selectedMicId);
+          if (!stillThere) {
+            setSelectedDeviceId("default");
+            setDeviceFallbackNote(
+              "Previously selected microphone is unavailable. Using the browser default.",
+            );
+          }
+        }
+      } catch {
+        setDeviceFallbackNote("Could not list audio devices. The browser default will be used.");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [data.selectedMicId]);
 
   useEffect(() => {
     return () => {
@@ -430,6 +477,7 @@ export default function OnboardingStep2OptionalSetup({
             ...existingPrefs,
             interview_styles: styles,
             coach_tone: "encouraging",
+            interview_anxiety: anxiety,
           },
           onboarding_step: 2,
         };
@@ -450,10 +498,12 @@ export default function OnboardingStep2OptionalSetup({
         preferredModel: model,
         interviewTypes: styles,
         selectedMicId: selectedDeviceId,
+        selectedOutputDeviceId: outputDeviceId,
         audioVerified: micOk && !audioSkipped,
         resumeFileId: resumeSkipped ? null : resumeId,
         resumeFileName: resumeSkipped ? null : file?.name ?? data.resumeFileName,
         skipResume: resumeSkipped || (!resumeDone && !resumeId),
+        interviewAnxiety: anxiety,
       });
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not save setup.";
@@ -463,8 +513,8 @@ export default function OnboardingStep2OptionalSetup({
       setFinishing(false);
     }
   }, [
-    user, micOk, audioSkipped, selectedDeviceId, prefsSkipped, hintStyle, model,
-    styles, profile, resumeSkipped, resumeId, resumeDone, file, data.resumeFileName,
+    user, micOk, audioSkipped, selectedDeviceId, outputDeviceId, prefsSkipped, hintStyle, model,
+    styles, anxiety, profile, resumeSkipped, resumeId, resumeDone, file, data.resumeFileName,
     onNext, setProfile,
   ]);
 
@@ -498,6 +548,45 @@ export default function OnboardingStep2OptionalSetup({
             <p className="text-xs text-muted-foreground">
               Verify your mic so live transcription works during practice sessions.
             </p>
+            {audioInputs.length > 0 && (
+              <label className="block space-y-1">
+                <span className="text-xs font-medium text-muted-foreground">Microphone</span>
+                <select
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  value={selectedDeviceId}
+                  onChange={(e) => setSelectedDeviceId(e.target.value)}
+                  aria-label="Microphone device"
+                >
+                  <option value="default">Browser default</option>
+                  {audioInputs.map((d) => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.label || `Microphone ${d.deviceId.slice(0, 6)}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {audioOutputs.length > 0 && (
+              <label className="block space-y-1">
+                <span className="text-xs font-medium text-muted-foreground">Speakers</span>
+                <select
+                  className="w-full rounded-lg border border-border bg-background px-3 py-2 text-sm"
+                  value={outputDeviceId}
+                  onChange={(e) => setOutputDeviceId(e.target.value)}
+                  aria-label="Speaker device"
+                >
+                  <option value="default">Browser default</option>
+                  {audioOutputs.map((d) => (
+                    <option key={d.deviceId} value={d.deviceId}>
+                      {d.label || `Speaker ${d.deviceId.slice(0, 6)}`}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {deviceFallbackNote && (
+              <p className="text-[11px] text-amber-500">{deviceFallbackNote}</p>
+            )}
             <div className="bg-secondary border border-border rounded-xl p-4">
               <div className="h-2 bg-background rounded-full overflow-hidden mb-3">
                 <div
@@ -732,6 +821,27 @@ export default function OnboardingStep2OptionalSetup({
                 })}
               </div>
             </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground mb-2">
+                Interview nerves (1–5)
+              </p>
+              <input
+                type="range"
+                min={1}
+                max={5}
+                step={1}
+                value={anxiety}
+                onChange={(e) => {
+                  setAnxiety(Number(e.target.value));
+                  setPrefsSkipped(false);
+                }}
+                className="w-full"
+                aria-label="Interview anxiety from 1 calm to 5 anxious"
+              />
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {anxiety}: {ANXIETY_LABELS[anxiety] ?? "A little nervous"}
+              </p>
+            </div>
             <Button variant="ghost" size="sm" onClick={skipPreferences} leftIcon={<SkipForward className="w-3.5 h-3.5" />}>
               Use default preferences
             </Button>
@@ -745,15 +855,18 @@ export default function OnboardingStep2OptionalSetup({
       <div className="flex items-start gap-2 rounded-xl border border-border/60 bg-muted/30 px-3 py-2.5">
         <Info className="h-4 w-4 text-primary shrink-0 mt-0.5" />
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          Everything here is optional. Hit Start Practice to jump into your first session — we&apos;ll remember what you set up.
+          Everything here is optional. Continue to Dashboard, then start Practice Coach when you are ready.
         </p>
       </div>
 
       {finishError && <p className="text-xs text-red-400">{finishError}</p>}
 
-      <div className="flex gap-3">
+      <div className="flex flex-col sm:flex-row gap-3">
         <Button variant="ghost" size="md" onClick={onBack}>
           Back
+        </Button>
+        <Button variant="secondary" size="md" onClick={onSkip}>
+          Skip
         </Button>
         <Button
           variant="primary"
@@ -762,7 +875,7 @@ export default function OnboardingStep2OptionalSetup({
           loading={finishing}
           onClick={() => void handleFinish()}
         >
-          Start Practice
+          Continue to Dashboard
         </Button>
       </div>
     </div>

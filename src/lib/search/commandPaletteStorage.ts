@@ -39,3 +39,13 @@ export function clearRecentSearches(): void {
     /* best-effort */
   }
 }
+
+export const PALETTE_GROUPS_DEFAULT = ["Navigate", "Sessions", "Prep", "Account"] as const;
+export const PALETTE_GROUPS_PREP_FIRST = ["Prep", "Navigate", "Sessions", "Account"] as const;
+
+/** Rank Prep Lab / STAR / Rephraser above later sections when the query mentions prep. */
+export function paletteGroupOrder(query: string): readonly string[] {
+  return query.toLowerCase().includes("prep")
+    ? PALETTE_GROUPS_PREP_FIRST
+    : PALETTE_GROUPS_DEFAULT;
+}

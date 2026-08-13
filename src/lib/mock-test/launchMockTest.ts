@@ -72,6 +72,12 @@ export async function launchMockTest(
     throw new Error(`No questions available for this paper. ${hint}`);
   }
 
+  if (!config.practice_mode && questionIds.length !== config.question_count) {
+    throw new Error(
+      `Only ${questionIds.length} of ${config.question_count} approved questions are available. Start a Custom Practice Set instead of a full mock.`,
+    );
+  }
+
   const createData = await fetchEdgeJson<{ test_id: string }>("create-test", {
     test_name: config.test_name,
     config: normalizedConfig,

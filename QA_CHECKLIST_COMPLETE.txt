@@ -30,12 +30,12 @@ QA LOGIN CREDENTIALS (share only with QA — do not post publicly)
 --------------------------------------------------------------------------------
 All accounts are email-verified and already onboarded (seeded).
 
-Role   | Email                      | Password
+Role   | Email                      | Password location
 -------|----------------------------|----------------------
-Free   | qa.free@clarify.ai.test    | Qa!zhYtmnqMbeaTPmbT
-Pro    | qa.pro@clarify.ai.test     | Qa!oAsIgtemsX9tVPx2
-Max    | qa.max@clarify.ai.test     | Qa!xUVwdU4NSObRvoj_
-Admin  | qa.admin@clarify.ai.test   | Qa!0KisyHK4tmDPCeyv
+Free   | qa.free@clarify.ai.test    | .env.qa.local ? QA_FREE_PASSWORD
+Pro    | qa.pro@clarify.ai.test     | .env.qa.local ? QA_PRO_PASSWORD
+Max    | qa.max@clarify.ai.test     | .env.qa.local ? QA_MAX_PASSWORD
+Admin  | qa.admin@clarify.ai.test   | .env.qa.local ? QA_ADMIN_PASSWORD
 
 Suggested order for today:
   1) Pro account  — most feature coverage (Practice Coach, Mock, Prep, Billing)

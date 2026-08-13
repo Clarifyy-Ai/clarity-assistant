@@ -103,16 +103,18 @@ def main() -> None:
     ws0["A20"].font = Font(bold=True, size=12, color="C00000")
     ws0.merge_cells("A20:D20")
 
-    for col, h in enumerate(["Role", "Email", "Password", "Use for"], 1):
+    for col, h in enumerate(["Role", "Email", "Password location", "Use for"], 1):
         cell = ws0.cell(21, col, h)
         cell.fill = header_fill
         cell.font = header_font
 
     creds = [
-        ("Free", "qa.free@clarify.ai.test", "Qa!zhYtmnqMbeaTPmbT", "Plan limits / upgrade gates"),
-        ("Pro", "qa.pro@clarify.ai.test", "Qa!oAsIgtemsX9tVPx2", "Main feature coverage (start here)"),
-        ("Max", "qa.max@clarify.ai.test", "Qa!xUVwdU4NSObRvoj_", "Max-tier / high credits"),
-        ("Admin", "qa.admin@clarify.ai.test", "Qa!0KisyHK4tmDPCeyv", "Admin portal /app/admin only"),
+        ("Free", "qa.free@clarify.ai.test", ".env.qa.local → QA_FREE_PASSWORD", "Plan limits / upgrade gates"),
+        ("Pro", "qa.pro@clarify.ai.test", ".env.qa.local → QA_PRO_PASSWORD", "Main feature coverage (start here)"),
+        ("Max", "qa.max@clarify.ai.test", ".env.qa.local → QA_MAX_PASSWORD", "Max-tier / high credits"),
+        ("Admin", "qa.admin@clarify.ai.test", ".env.qa.local → QA_ADMIN_PASSWORD", "Admin portal /app/admin only"),
+        ("User A", "qa.user-a@clarify.ai.test", ".env.qa.local → QA_USER_A_PASSWORD", "RLS isolation owner"),
+        ("User B", "qa.user-b@clarify.ai.test", ".env.qa.local → QA_USER_B_PASSWORD", "RLS isolation peer"),
     ]
     for r, row in enumerate(creds, 22):
         for c, val in enumerate(row, 1):

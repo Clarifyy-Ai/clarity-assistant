@@ -157,7 +157,7 @@ const NAV_SECTIONS: NavSection[] = [
         label: PRODUCT_NAMES.creditsUsage,
       },
       {
-        to: "/app/debrief",
+        to: "/app/debriefs",
         icon: BookMarked,
         stealthIcon: Inbox,
         label: PRODUCT_NAMES.debrief,

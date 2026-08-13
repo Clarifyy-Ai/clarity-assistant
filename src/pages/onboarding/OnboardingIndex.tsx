@@ -1,7 +1,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // OnboardingIndex.tsx — Master onboarding orchestrator (2-step flow).
 // Step 1: Essentials (~60s) · Step 2: Optional setup (accordion).
-// On complete: persist profile, seed lastPracticeSetup, navigate to /app/live.
+// On complete: persist profile, seed lastPracticeSetup, navigate to Dashboard.
 // ─────────────────────────────────────────────────────────────────────────────
 
 import { useState, useCallback, useEffect } from "react";
@@ -11,9 +11,14 @@ import { motion, AnimatePresence } from "framer-motion";
 import { fetchEdgeJson } from "@/lib/network/fetchEdge";
 import { useAuthStore } from "@/store";
 import { recordReferral, getStoredRefCode, normalizeRefCode } from "@/lib/referrals";
-import { ROUTES } from "@/lib/constants";
+import { ONBOARDING_COMPLETION_PATH } from "@/lib/routes/canonical";
 import { saveLastPracticeSetup } from "@/lib/session/lastPracticeSetup";
 import { markOnboardingComplete } from "@/lib/analytics/uxMetrics";
+import {
+  clearOnboardingDraft,
+  loadOnboardingDraft,
+  saveOnboardingDraft,
+} from "@/lib/onboarding/draft";
 import { normalizePreferredModel, toDbPreferredModel } from "@/lib/ai/modelOptions";
 import { OnboardingProgress } from "@/components/onboarding/OnboardingProgress";
 
@@ -50,6 +55,7 @@ const INITIAL_ONBOARDING_DATA: OnboardingData = {
   resumeFileId:       null,
   resumeFileName:     null,
   skipResume:         false,
+  interviewAnxiety:   3,
 };
 
 const TOTAL_STEPS = 2;
@@ -102,13 +108,17 @@ export default function OnboardingIndex() {
   const isRerun = searchParams.get("rerun") === "1";
   const refCode = normalizeRefCode(searchParams.get("ref")) ?? getStoredRefCode();
 
-  const [currentStep, setCurrentStep] = useState(1);
-  const [data, setData] = useState<OnboardingData>(INITIAL_ONBOARDING_DATA);
+  const restored = !isRerun ? loadOnboardingDraft() : null;
+  const [currentStep, setCurrentStep] = useState(restored?.step ?? 1);
+  const [data, setData] = useState<OnboardingData>({
+    ...INITIAL_ONBOARDING_DATA,
+    ...(restored?.data ?? {}),
+  });
   const [isSaving, setIsSaving] = useState(false);
 
   useEffect(() => {
     if (isProfileLoaded && isOnboarded && !isRerun) {
-      navigate(ROUTES.DASHBOARD, { replace: true });
+      navigate(ONBOARDING_COMPLETION_PATH, { replace: true });
     }
   }, [isProfileLoaded, isOnboarded, isRerun, navigate]);
 
@@ -128,13 +138,18 @@ export default function OnboardingIndex() {
   }, [isRerun, profile]);
 
   const mergeData = useCallback((partial: Partial<OnboardingData>) => {
-    setData((prev) => ({ ...prev, ...partial }));
-  }, []);
+    setData((prev) => {
+      const next = { ...prev, ...partial };
+      saveOnboardingDraft(currentStep, next);
+      return next;
+    });
+  }, [currentStep]);
 
   const goToStep = useCallback((step: number) => {
     setCurrentStep(step);
+    saveOnboardingDraft(step, data);
     window.scrollTo({ top: 0, behavior: "smooth" });
-  }, []);
+  }, [data]);
 
   const finishOnboarding = useCallback(async (lastStepData?: Partial<OnboardingData>) => {
     const finalData = lastStepData ? { ...data, ...lastStepData } : data;
@@ -180,6 +195,9 @@ export default function OnboardingIndex() {
           ...((profile as { notification_prefs?: Record<string, unknown> } | null)
             ?.notification_prefs ?? {}),
           experience_level: level,
+          ...(typeof finalData.interviewAnxiety === "number"
+            ? { interview_anxiety: finalData.interviewAnxiety }
+            : {}),
         },
       } as Record<string, unknown>);
 
@@ -208,8 +226,9 @@ export default function OnboardingIndex() {
       );
 
       markOnboardingComplete();
+      clearOnboardingDraft();
 
-      navigate(ROUTES.LIVE_SESSION, { replace: true });
+      navigate(ONBOARDING_COMPLETION_PATH, { replace: true });
     } catch (err) {
       console.error("[OnboardingIndex] Failed to save onboarding:", err);
       const message =
@@ -235,7 +254,7 @@ export default function OnboardingIndex() {
   }, [currentStep, goToStep]);
 
   const handleSkipRerun = useCallback(() => {
-    navigate(ROUTES.DASHBOARD, { replace: true });
+    navigate(ONBOARDING_COMPLETION_PATH, { replace: true });
   }, [navigate]);
 
   const stepProps = {
@@ -365,10 +384,10 @@ export default function OnboardingIndex() {
             }}
             className="text-xs text-muted-foreground/60 hover:text-muted-foreground underline underline-offset-4 transition-colors"
           >
-            Skip setup and start practice
+            Skip optional setup — go to Dashboard
           </button>
           <p className="text-[10px] text-muted-foreground/50 max-w-sm mx-auto">
-            Skip still needs a target role and experience level so coaching tips match you. You can change them anytime in Settings.
+            Skip still needs a target role and experience level. You can start Practice Coach from the Dashboard anytime.
           </p>
         </div>
       )}

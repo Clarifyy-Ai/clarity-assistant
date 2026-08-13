@@ -65,3 +65,21 @@ Last updated: 2026-08-11 — Aug 11 QA remediation remaining work (billing redir
 | AUG11-WS4 | P1 | Mobile header | Gov Exams short label + drawer | IMPLEMENTED_AND_LOCALLY_VERIFIED | Visual UAT |
 | AUG11-WS30 | P1 | QA fixtures | banned/past_due/disposable seed keys | IMPLEMENTED_REQUIRES_EXTERNAL_OPS | Run qa:seed-accounts |
 
+Last updated: 2026-08-13 — remaining QA plan: local gates + Playwright passed; remote migration/EF deploy blocked (no CLI token; MCP invoke unavailable).
+
+| ID | Priority | Requirement | Implementation | Status | Remaining |
+|----|----------|-------------|----------------|--------|-----------|
+| AUG13-WS2 | P0 | Strip QA password literals; CI scan:secrets; User A/B fixtures | `make_basic_qa_xlsx.py`, `qa-p0-p1-runner.mjs`, `seed-qa-accounts.mjs`, CI | IMPLEMENTED_AND_LOCALLY_VERIFIED | Operator rotation + MFA |
+| AUG13-WS3 | P0 | Profile stale cache + correlation IDs | `authStore.ts`, `fetchEdge.ts` | IMPLEMENTED_AND_LOCALLY_VERIFIED | Runtime smoke after deploy |
+| AUG13-WS12 | P0 | Onboarding → Dashboard; Skip; anxiety; audio devices | `OnboardingIndex.tsx`, OptionalSetup | IMPLEMENTED_AND_LOCALLY_VERIFIED | Playwright onboarding Skip |
+| AUG13-WS23 | P0 | Canonical `/app/debriefs` | `App.tsx` + nav/search | IMPLEMENTED_AND_LOCALLY_VERIFIED | Playwright redirects |
+| AUG13-WS29 | P0 | Rooms retired redirect | `RetiredRoomsRedirect` | IMPLEMENTED_AND_LOCALLY_VERIFIED | Playwright `/app/rooms` |
+| AUG13-WS24 | P0 | Analytics not_scored vs zero | `scoreStatus.ts`, Analytics UI, EF | IMPLEMENTED_NOT_DEPLOYED | Redeploy analytics-dashboard |
+| AUG13-WS26 | P0 | Durable deletion operations | migration + `delete-account` | IMPLEMENTED_NOT_DEPLOYED | Apply `20260813100000_*` + redeploy |
+| AUG13-WS25 | P0 | India region + fail-closed paper count | `indiaRegion.ts`, `select-test-questions`, `launchMockTest` | IMPLEMENTED_NOT_DEPLOYED | Redeploy select-test-questions |
+| AUG13-WS28 | P1 | Admin Access Denied copy | AdminLayout + ProtectedRoute | IMPLEMENTED_AND_LOCALLY_VERIFIED | Playwright Access Denied |
+| AUG13-WS13 | P1 | More sheet Logout; palette Guide + prep rank | MobileNav, CommandPalette | IMPLEMENTED_AND_LOCALLY_VERIFIED | Playwright |
+| AUG13-WS30 | P1 | Unit + Playwright + RLS fixtures | `src/test/lib/**`, `e2e/qa-*.spec.ts`, `rls-spot-check.mjs` | IMPLEMENTED_AND_LOCALLY_VERIFIED | Full RLS matrix needs live User A/B |
+| AUG13-WS32 | P0 | Gates + build; remote migrate/deploy | lint/typecheck/test/gates/build:check | IMPLEMENTED_REQUIRES_EXTERNAL_OPS | PAT + `db push` + EF `--use-api` + FE host |
+
+

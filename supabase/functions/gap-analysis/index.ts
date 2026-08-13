@@ -121,6 +121,8 @@ Deno.serve(async (req: Request) => {
     ------------------------------------------------------- */
     const prompt = `
 Analyze the alignment between this resume and job description.
+Use ONLY facts present in the resume text. Do not invent employers, titles, dates, metrics, or technologies.
+If a JD requirement is not evidenced in the resume, list it under missing_skills / experience_gap as a gap — never as a fabricated match.
 Return ONLY valid JSON.
 
 Schema:
@@ -130,7 +132,9 @@ Schema:
   "missing_skills": string[],
   "recommendations": string[],
   "experience_gap": string,
-  "education_fit": string
+  "education_fit": string,
+  "matched_evidence": string[],
+  "missing_evidence": string[]
 }
 
 Resume:
@@ -196,7 +200,23 @@ ${safeJD}
 
     log(FN, "info", "Gap analysis generated", { userId, resume_id, jd_id });
 
-    return new Response(JSON.stringify(analysis), {
+    try {
+      await db.from("gap_analyses").upsert(
+        {
+          user_id: userId,
+          resume_id,
+          jd_id,
+          result: analysis,
+          stale: false,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: "user_id,resume_id,jd_id" },
+      );
+    } catch (persistErr) {
+      console.warn("[gap-analysis] persist skipped", persistErr);
+    }
+
+    return new Response(JSON.stringify({ ...analysis, stale: false }), {
       headers: { ...getCorsHeaders(req), "Content-Type": "application/json" },
     });
 

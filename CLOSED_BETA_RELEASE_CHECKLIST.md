@@ -2,14 +2,18 @@
 
 ## Code
 
-- [x] Builds pass (`npm run build`) — Evidence: PRODUCTION_EVIDENCE.md 2026-07-27 exit 0
-- [x] Tests pass (`npm run test:run`) — Evidence: 22 files / 204 tests passed
-- [x] Typecheck passes — Evidence: `tsc --noEmit` exit 0 (2026-08-02 late)
+- [x] Builds pass (`npm run build`) — Evidence: PRODUCTION_EVIDENCE.md 2026-08-13 `build:check` exit 0
+- [x] Tests pass (`npm run test:run`) — Evidence: 60 files / 442 tests (2026-08-13)
+- [x] Typecheck passes — Evidence: `tsc --noEmit` exit 0 (2026-08-13)
+- [x] `scan:secrets` — Evidence: exit 0 (1366 files); wired in CI
+- [ ] Additive migration `20260813100000_account_deletion_and_gap_analyses.sql` applied remotely — local file only; PAT/CLI login required
+- [ ] Redeploy Aug 13 Edge Functions (`delete-account`, `analytics-dashboard`, `gap-analysis`, `select-test-questions`) — CLI token missing this session
 - [x] Electron build passes (`npm run electron:build`) — Evidence: exit 0
 - [x] Release copy gates pass — Evidence: `npm run release:gates` exit 0
 - [x] Security gates pass — Evidence: `npm run release:security-gates` exit 0
-- [x] Billing catalog parity — Evidence: `npm run billing:parity` exit 0
-- [x] AI capability gates — Evidence: `npm run release:capability-gates` (16 functions)
+- [x] Billing catalog parity — Evidence: `npm run billing:parity` exit 0 (FE/BE `starter` rank = 1)
+- [x] Playwright QA redirects + remaining paths — Evidence: 14 passed (`e2e/qa-legacy-routes.spec.ts`, `e2e/qa-remaining.spec.ts`)
+- [x] AI capability gates — Evidence: `npm run release:capability-gates` (15 functions, 2026-08-13)
 - [x] Migrations applied remotely (incl. `20260727010000_revoke_deduct_credits_authenticated.sql`) — Evidence: PRODUCTION_EVIDENCE 2026-08-02 evening
 - [x] Edge Functions redeployed (billing, AI, rateLimit shared) — 11 functions via `--use-api`
 - [x] RLS spot-check on sessions/session_transcripts/profiles/credit_transactions (`npm run rls:spot-check`) — full cross-user matrix still deferred

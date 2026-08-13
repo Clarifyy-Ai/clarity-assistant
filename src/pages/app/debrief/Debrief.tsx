@@ -172,7 +172,7 @@ export default function Debrief() {
               <Card
                 key={d.id}
                 hover
-                onClick={() => navigate(`/app/debrief/${d.id}`)}
+                onClick={() => navigate(`/app/debriefs/${d.id}`)}
               >
                 <div className="flex items-start gap-4">
                   <div className={cn(

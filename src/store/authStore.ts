@@ -285,6 +285,14 @@ let _bootstrapping = false;
 /** Dedupes concurrent profile loads for the same user. */
 let inFlightProfileLoad: { userId: string; promise: Promise<boolean> } | null = null;
 
+const PROFILE_CACHE_TTL_MS = 30_000;
+let profileCache: { userId: string; profile: ProfileRow; cachedAt: number } | null = null;
+
+function clearProfileLoadState(): void {
+  inFlightProfileLoad = null;
+  profileCache = null;
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Tab-local logout (independent tabs)
 //
@@ -822,6 +830,7 @@ export const useAuthStore = create<AuthStore>()(
             });
 
             // Tab-local only: keep shared localStorage session so other tabs stay signed in.
+            clearProfileLoadState();
             markTabLocalLogout();
             resetPostHog();
             try {
@@ -881,6 +890,17 @@ export const useAuthStore = create<AuthStore>()(
             // load for the same user within the same tick.
             if (inFlightProfileLoad && inFlightProfileLoad.userId === userId) {
               return inFlightProfileLoad.promise;
+            }
+
+            const cached = profileCache;
+            if (
+              cached &&
+              cached.userId === userId &&
+              Date.now() - cached.cachedAt < PROFILE_CACHE_TTL_MS &&
+              get().isProfileLoaded &&
+              get().profile
+            ) {
+              return true;
             }
 
             // Surface loading UI when recovering from a prior error state.
@@ -1025,6 +1045,12 @@ export const useAuthStore = create<AuthStore>()(
                 return false;
               }
 
+              profileCache = {
+                userId,
+                profile: profile as unknown as ProfileRow,
+                cachedAt: Date.now(),
+              };
+
               set((state) => {
                 state.profile = profile as unknown as ProfileRow;
                 state.isProfileLoaded = true;
@@ -1109,11 +1135,20 @@ export const useAuthStore = create<AuthStore>()(
               // Tab switches / token refresh often re-fetch the profile. A
               // transient failure must not replace a working session with the
               // "couldn't load your account" full-page error.
+              const stale = profileCache?.userId === userId ? profileCache.profile : null;
               if (
-                hadLoadedProfile &&
+                (hadLoadedProfile || stale) &&
                 priorStatus === "authenticated" &&
                 !isNonRetryableAuthError(err)
               ) {
+                if (stale && !get().profile) {
+                  set((state) => {
+                    state.profile = stale;
+                    state.isProfileLoaded = true;
+                    state.status = "authenticated";
+                    state.error = null;
+                  });
+                }
                 logger.warn(
                   timedOut
                     ? LogEvents.AUTH_PROFILE_LOAD_TIMED_OUT
@@ -1288,6 +1323,7 @@ export const useAuthStore = create<AuthStore>()(
           },
 
           reset: () => {
+            clearProfileLoadState();
             // Never Object.assign(INITIAL_STATE): that snapshot may still hold a
             // boot-time cached session and would resurrect auth after sign-out.
             dset((state) => {

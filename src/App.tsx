@@ -26,6 +26,7 @@ import { syncStealthFromOverlay } from "@/lib/stealth/stealthActions";
 import type { PlanId } from "@/lib/constants/pricing";
 import { useOverlayStore } from "@/store/overlayStore";
 import { toast } from "sonner";
+import { RETIRED_ROOMS_REDIRECT, RETIRED_ROOMS_TOAST } from "@/lib/routes/canonical";
 
 import { ProtectedRoute } from "@/components/layout/ProtectedRoute";
 import { WhatsNewModal, useWhatsNewPrompt } from "@/components/common/WhatsNewModal";
@@ -194,11 +195,6 @@ const Debrief = lazy(() => import("@/pages/app/debrief/Debrief"));
 const DebriefDetail = lazy(
   () => import("@/pages/app/debrief/DebriefDetail")
 );
-
-// Rooms — group practice waitlist preview
-const GroupPracticeComingSoon = lazy(
-  () => import("@/pages/app/rooms/GroupPracticeComingSoon")
-);
 // Settings
 const Settings = lazy(() => import("@/pages/app/settings/Settings"));
 const SettingsProfile = lazy(
@@ -349,7 +345,7 @@ function OnboardingRedirect(): JSX.Element {
 
 function AnalyticsDebriefRedirect(): JSX.Element {
   const { sessionId } = useParams<{ sessionId: string }>();
-  return <Navigate to={`/app/debrief/${sessionId ?? ""}`} replace />;
+  return <Navigate to={`/app/debriefs/${sessionId ?? ""}`} replace />;
 }
 
 function AnswerBankLegacyRedirect(): JSX.Element {
@@ -359,7 +355,21 @@ function AnswerBankLegacyRedirect(): JSX.Element {
 
 function DebriefLegacyRedirect(): JSX.Element {
   const { id } = useParams<{ id: string }>();
-  return <Navigate to={`/app/debrief/${id ?? ""}`} replace />;
+  return <Navigate to={`/app/debriefs/${id ?? ""}`} replace />;
+}
+
+function RetiredRoomsRedirect(): JSX.Element {
+  useEffect(() => {
+    try {
+      if (!sessionStorage.getItem("clarify:rooms-retired-notice")) {
+        sessionStorage.setItem("clarify:rooms-retired-notice", "1");
+        toast.message(RETIRED_ROOMS_TOAST);
+      }
+    } catch {
+      toast.message(RETIRED_ROOMS_TOAST);
+    }
+  }, []);
+  return <Navigate to={RETIRED_ROOMS_REDIRECT} replace />;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -679,21 +689,21 @@ const routes = [
             element: <Page component={Scorecard} />,
           },
 
-          { path: "debrief", element: <Page component={Debrief} /> },
-          { path: "debrief/:id", element: <Page component={DebriefDetail} /> },
+          { path: "debriefs", element: <Page component={Debrief} /> },
+          { path: "debriefs/:id", element: <Page component={DebriefDetail} /> },
           {
-            path: "debriefs",
-            element: <Navigate to="/app/debrief" replace />,
+            path: "debrief",
+            element: <Navigate to="/app/debriefs" replace />,
           },
           {
-            path: "debriefs/:id",
+            path: "debrief/:id",
             element: <DebriefLegacyRedirect />,
           },
 
           { path: "guide", element: <Page component={Guide} /> },
           { path: "guide/practice-coach", element: <Page component={PracticeCoachGuide} /> },
-          { path: "rooms", element: <Page component={GroupPracticeComingSoon} /> },
-          { path: "rooms/*", element: <Page component={GroupPracticeComingSoon} /> },
+          { path: "rooms", element: <RetiredRoomsRedirect /> },
+          { path: "rooms/*", element: <RetiredRoomsRedirect /> },
 
           {
             path: "settings",

@@ -34,6 +34,11 @@ export interface OnboardingData {
   resumeFileId:        string | null;
   resumeFileName:      string | null;
   skipResume:          boolean;
+
+  /** Optional 1–5 interview-anxiety / confidence preference. */
+  interviewAnxiety?:   number;
+  /** Output / speaker device id when available. */
+  selectedOutputDeviceId?: string;
 }
 
 export interface StepProps {

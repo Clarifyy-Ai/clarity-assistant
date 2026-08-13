@@ -29,22 +29,57 @@ function loadCredsFromXlsx() {
   return null;
 }
 
+function loadQaEnv() {
+  const envPath = path.join(ROOT, ".env.qa.local");
+  if (!fs.existsSync(envPath)) return {};
+  const out = {};
+  for (const line of fs.readFileSync(envPath, "utf8").split(/\r?\n/)) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+    const eq = trimmed.indexOf("=");
+    if (eq <= 0) continue;
+    const key = trimmed.slice(0, eq).trim();
+    let val = trimmed.slice(eq + 1).trim();
+    if (
+      (val.startsWith('"') && val.endsWith('"')) ||
+      (val.startsWith("'") && val.endsWith("'"))
+    ) {
+      val = val.slice(1, -1);
+    }
+    out[key] = val;
+  }
+  return out;
+}
+
+const qaEnv = { ...loadQaEnv(), ...process.env };
+
+function requireQaPassword(envKey) {
+  const value = qaEnv[envKey];
+  if (!value) {
+    console.error(
+      `Missing ${envKey}. Run npm run qa:seed-accounts and use gitignored .env.qa.local.`,
+    );
+    process.exit(1);
+  }
+  return value;
+}
+
 const CREDS = {
   pro: {
-    email: process.env.QA_PRO_EMAIL || "qa.pro@clarify.ai.test",
-    password: process.env.QA_PRO_PASSWORD || "Qa!oAsIgtemsX9tVPx2",
+    email: qaEnv.QA_PRO_EMAIL || "qa.pro@clarify.ai.test",
+    password: requireQaPassword("QA_PRO_PASSWORD"),
   },
   free: {
-    email: process.env.QA_FREE_EMAIL || "qa.free@clarify.ai.test",
-    password: process.env.QA_FREE_PASSWORD || "Qa!zhYtmnqMbeaTPmbT",
+    email: qaEnv.QA_FREE_EMAIL || "qa.free@clarify.ai.test",
+    password: requireQaPassword("QA_FREE_PASSWORD"),
   },
   max: {
-    email: process.env.QA_MAX_EMAIL || "qa.max@clarify.ai.test",
-    password: process.env.QA_MAX_PASSWORD || "Qa!xUVwdU4NSObRvoj_",
+    email: qaEnv.QA_MAX_EMAIL || "qa.max@clarify.ai.test",
+    password: requireQaPassword("QA_MAX_PASSWORD"),
   },
   admin: {
-    email: process.env.QA_ADMIN_EMAIL || "qa.admin@clarify.ai.test",
-    password: process.env.QA_ADMIN_PASSWORD || "Qa!0KisyHK4tmDPCeyv",
+    email: qaEnv.QA_ADMIN_EMAIL || "qa.admin@clarify.ai.test",
+    password: requireQaPassword("QA_ADMIN_PASSWORD"),
   },
 };
 
