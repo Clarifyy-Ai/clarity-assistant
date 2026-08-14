@@ -162,6 +162,17 @@ export default function OnboardingStep2OptionalSetup({
             );
           }
         }
+        if (data.selectedOutputDeviceId && data.selectedOutputDeviceId !== "default") {
+          const outputStillThere = outputs.some((d) => d.deviceId === data.selectedOutputDeviceId);
+          if (!outputStillThere) {
+            setOutputDeviceId("default");
+            setDeviceFallbackNote((prev) =>
+              prev
+                ? `${prev} Previously selected speaker is also unavailable — using the browser default.`
+                : "Previously selected speaker is unavailable. Using the browser default.",
+            );
+          }
+        }
       } catch {
         setDeviceFallbackNote("Could not list audio devices. The browser default will be used.");
       }
@@ -452,14 +463,18 @@ export default function OnboardingStep2OptionalSetup({
     setFinishError(null);
 
     try {
-      if (micOk && !audioSkipped) {
+      {
+        const audioUpdate: Record<string, unknown> = {
+          audio_output_device: outputDeviceId || "default",
+        };
+        if (micOk && !audioSkipped) {
+          audioUpdate.audio_input_device = selectedDeviceId || "default";
+          audioUpdate.auto_transcript = true;
+          audioUpdate.noise_suppression = true;
+        }
         const { data: audioRow } = await supabase
           .from("profiles")
-          .update({
-            audio_input_device: selectedDeviceId || "default",
-            auto_transcript: true,
-            noise_suppression: true,
-          })
+          .update(audioUpdate as never)
           .eq("id", user.id)
           .select()
           .maybeSingle();
@@ -535,8 +550,9 @@ export default function OnboardingStep2OptionalSetup({
         <AccordionItem value="audio">
           <AccordionTrigger className="hover:no-underline">
             <span className="flex items-center gap-2 text-sm font-semibold">
-              <Mic className="h-4 w-4 text-primary" />
+              <Mic className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
               Microphone test
+              <span className="text-[9px] font-normal uppercase tracking-wide text-muted-foreground/70 border border-border rounded-full px-1.5 py-0.5">Optional</span>
               {micOk && !audioSkipped && (
                 <CheckCircle className="h-3.5 w-3.5 text-emerald-500 ml-1" />
               )}
@@ -646,8 +662,9 @@ export default function OnboardingStep2OptionalSetup({
         <AccordionItem value="resume">
           <AccordionTrigger className="hover:no-underline">
             <span className="flex items-center gap-2 text-sm font-semibold">
-              <FileText className="h-4 w-4 text-primary" />
+              <FileText className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
               Resume upload
+              <span className="text-[9px] font-normal uppercase tracking-wide text-muted-foreground/70 border border-border rounded-full px-1.5 py-0.5">Optional</span>
               {resumeDone && !resumeSkipped && (
                 <CheckCircle className="h-3.5 w-3.5 text-emerald-500 ml-1" />
               )}
@@ -744,8 +761,9 @@ export default function OnboardingStep2OptionalSetup({
         <AccordionItem value="preferences">
           <AccordionTrigger className="hover:no-underline">
             <span className="flex items-center gap-2 text-sm font-semibold">
-              <Settings2 className="h-4 w-4 text-primary" />
+              <Settings2 className="h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
               Coaching preferences
+              <span className="text-[9px] font-normal uppercase tracking-wide text-muted-foreground/70 border border-border rounded-full px-1.5 py-0.5">Optional</span>
               {!prefsSkipped && (
                 <Brain className="h-3.5 w-3.5 text-muted-foreground ml-1 opacity-60" />
               )}
@@ -870,13 +888,15 @@ export default function OnboardingStep2OptionalSetup({
           Back
         </Button>
         <Button
-          variant="secondary"
+          variant="ghost"
           size="md"
           onClick={() => {
             const selectedMicId = selectedDeviceId || "default";
-            onChange?.({ selectedMicId });
-            onSkip({ selectedMicId });
+            onChange?.({ selectedMicId, selectedOutputDeviceId: outputDeviceId });
+            onSkip({ selectedMicId, selectedOutputDeviceId: outputDeviceId });
           }}
+          className="text-muted-foreground"
+          aria-label="Skip optional setup and go to Dashboard"
         >
           Skip
         </Button>

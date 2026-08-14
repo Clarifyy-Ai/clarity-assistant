@@ -144,39 +144,43 @@ export function MobileNav(): JSX.Element {
         </SheetTrigger>
         <SheetContent
           side="bottom"
-          className="rounded-t-2xl pb-[max(2rem,env(safe-area-inset-bottom))] max-h-[min(85dvh,calc(100dvh-env(safe-area-inset-bottom)))] overflow-y-auto"
+          className="rounded-t-2xl p-0 flex flex-col max-h-[min(85dvh,calc(100dvh-env(safe-area-inset-bottom)))]"
         >
-          <SheetHeader>
+          <SheetHeader className="px-6 pt-6 pb-2 shrink-0">
             <SheetTitle>More</SheetTitle>
           </SheetHeader>
-          <div className="grid grid-cols-2 gap-2 mt-4">
-            {visibleMore.map((link) => {
-              const Icon = link.icon;
-              return (
-                <Link
-                  key={link.to}
-                  to={link.to}
-                  onClick={() => setMoreOpen(false)}
-                  className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 text-sm font-medium hover:bg-secondary/60 transition-colors"
-                >
-                  <Icon className="w-4 h-4 text-primary" />
-                  {link.label}
-                </Link>
-              );
-            })}
+          <div className="flex-1 min-h-0 overflow-y-auto px-6">
+            <div className="grid grid-cols-2 gap-2 py-2">
+              {visibleMore.map((link) => {
+                const Icon = link.icon;
+                return (
+                  <Link
+                    key={link.to}
+                    to={link.to}
+                    onClick={() => setMoreOpen(false)}
+                    className="flex items-center gap-3 rounded-xl border border-border px-4 py-3 text-sm font-medium hover:bg-secondary/60 transition-colors"
+                  >
+                    <Icon className="w-4 h-4 text-primary" />
+                    {link.label}
+                  </Link>
+                );
+              })}
+            </div>
           </div>
-          <button
-            type="button"
-            onClick={() => {
-              setMoreOpen(false);
-              const returnTo = `${location.pathname}${location.search}${location.hash}`;
-              void signOut().then(() => assignLoginWithReturnTo({ returnTo }));
-            }}
-            className="mt-4 w-full flex items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm font-semibold text-red-500 hover:bg-red-500/10 transition-colors"
-          >
-            <LogOut className="w-4 h-4" />
-            Log out
-          </button>
+          <div className="shrink-0 px-6 pt-3 pb-[max(1.25rem,env(safe-area-inset-bottom))] border-t border-border bg-background">
+            <button
+              type="button"
+              onClick={() => {
+                setMoreOpen(false);
+                const returnTo = `${location.pathname}${location.search}${location.hash}`;
+                void signOut().then(() => assignLoginWithReturnTo({ returnTo }));
+              }}
+              className="w-full flex items-center justify-center gap-2 rounded-xl border border-red-500/30 bg-red-500/5 px-4 py-3 text-sm font-semibold text-red-500 hover:bg-red-500/10 transition-colors"
+            >
+              <LogOut className="w-4 h-4" />
+              Log out
+            </button>
+          </div>
         </SheetContent>
       </Sheet>
     </nav>

@@ -330,6 +330,10 @@ export default function OnboardingIndex() {
       </header>
 
       <main className="mx-auto max-w-2xl px-4 py-10">
+        <p className="sr-only" role="status" aria-live="polite">
+          {currentStep === 1 ? "Step 1 of 2: Quick essentials" : "Step 2 of 2: Optional setup"}
+        </p>
+
         {isSaving && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm">
             <div className="flex flex-col items-center gap-3">

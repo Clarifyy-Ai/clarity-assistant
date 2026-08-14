@@ -167,15 +167,18 @@ export default function OnboardingStep1Essentials({ data, onNext, onChange }: St
 
       <div>
         <p className="text-xs font-medium text-muted-foreground mb-2">
-          Target role
+          Target role <span className="text-primary">*</span>
+          <span className="ml-1 text-[10px] uppercase tracking-wide text-primary/80">Required</span>
         </p>
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2" role="radiogroup" aria-label="Target role">
           {ROLES.map((r) => {
             const Icon = r.icon;
             return (
               <button
                 key={r.value}
                 type="button"
+                role="radio"
+                aria-checked={role === r.value}
                 onClick={() => setRole(r.value)}
                 className={cn(
                   "flex flex-col items-center gap-1.5 p-3 rounded-xl border text-xs font-medium transition-all",
@@ -184,7 +187,7 @@ export default function OnboardingStep1Essentials({ data, onNext, onChange }: St
                     : "bg-secondary/50 border-border text-muted-foreground hover:border-primary/30",
                 )}
               >
-                <Icon className="h-5 w-5" />
+                <Icon className="h-5 w-5" aria-hidden="true" />
                 {r.label}
               </button>
             );
@@ -204,13 +207,16 @@ export default function OnboardingStep1Essentials({ data, onNext, onChange }: St
 
       <div>
         <p className="text-xs font-medium text-muted-foreground mb-2">
-          Experience level
+          Experience level <span className="text-primary">*</span>
+          <span className="ml-1 text-[10px] uppercase tracking-wide text-primary/80">Required</span>
         </p>
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-2" role="radiogroup" aria-label="Experience level">
           {LEVELS.map((l) => (
             <button
               key={l.value}
               type="button"
+              role="radio"
+              aria-checked={level === l.value}
               onClick={() => setLevel(l.value)}
               className={cn(
                 "flex flex-col items-start gap-0.5 p-3 rounded-xl border text-left transition-all",

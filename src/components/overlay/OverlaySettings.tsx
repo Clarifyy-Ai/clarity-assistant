@@ -1,5 +1,6 @@
 // src/components/overlay/OverlaySettings.tsx
 import { useMemo, useState } from "react";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { useOverlayStore } from "@/store/overlayStore";
 import type { OverlayLayoutMode } from "@/store/overlayStore";
 import { setAppStealthMode } from "@/lib/stealth/stealthActions";
@@ -23,6 +24,8 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { OVERLAY_HOTKEYS } from "@/components/overlay/OverlayHotkeyHelp";
+import { formatHotkeyLabel } from "@/lib/overlay/hotkeys";
 
 interface OverlaySettingsProps {
   isOpen?: boolean;
@@ -55,6 +58,7 @@ export function OverlaySettings({
   onClose,
   className,
 }: OverlaySettingsProps) {
+  const isMobile = useIsMobile();
   const isStealthMode = useOverlayStore((s) => s.is_stealth_mode);
   const isProctorSafe = useOverlayStore((s) => s.is_proctor_safe);
   const hintStyle = useOverlayStore((s) => s.hint_style);
@@ -517,16 +521,20 @@ export function OverlaySettings({
           <p className="text-[11px] font-bold text-white/30 uppercase tracking-widest mb-2">
             Shortcuts
           </p>
-          <div className="space-y-1 text-[11px] font-mono text-white/25">
-            <p>Ctrl+Shift+A — Generate answer</p>
-            <p>Ctrl+Shift+H / C — Toggle Overlay</p>
-            <p>Ctrl+Shift+S / D — Scroll answer up / down</p>
-            <p>Ctrl+Shift+Q — Clear answer</p>
-            <p>Ctrl+Shift+T — Discrete UI</p>
-            <p>Ctrl+Shift+P — Calm coaching steps</p>
-            <p>Ctrl+Shift+Y — Cycle Hint Style</p>
-            <p>Escape — Clear / Hide</p>
-          </div>
+          {isMobile ? (
+            <p className="text-[11px] text-amber-300/80 leading-relaxed">
+              Keyboard shortcuts require a physical keyboard and aren't available on mobile.
+              For the full Practice Coach experience, use a desktop or laptop browser.
+            </p>
+          ) : (
+            <div className="space-y-1 text-[11px] font-mono text-white/25">
+              {OVERLAY_HOTKEYS.map((hk) => (
+                <p key={hk.label}>
+                  {hk.keys.includes("1-4") ? "Ctrl+Shift+1-4" : formatHotkeyLabel(hk.keys)} — {hk.label}
+                </p>
+              ))}
+            </div>
+          )}
         </div>
       </div>
 

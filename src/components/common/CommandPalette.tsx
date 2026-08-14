@@ -1,6 +1,6 @@
 // Sprint C: Global command palette (Ctrl+K / ⌘K)
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { useEffect, useState, useCallback, useMemo, useRef } from "react";
 
 import { useNavigate } from "react-router-dom";
 
@@ -137,6 +137,10 @@ export function CommandPalette() {
 
   const [query, setQuery] = useState("");
 
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+
+  const [isSearching, setIsSearching] = useState(false);
+
   const [recentSearches, setRecentSearches] = useState<string[]>([]);
 
   const navigate = useNavigate();
@@ -147,7 +151,7 @@ export function CommandPalette() {
 
 
 
-  const trimmedQuery = query.trim();
+  const trimmedQuery = debouncedQuery.trim();
 
   const canFilter = trimmedQuery.length >= 2;
 
@@ -171,10 +175,32 @@ export function CommandPalette() {
 
   }, [open]);
 
+  // Debounce the query so filtering/ranking doesn't run on every keystroke,
+  // and cancel any in-flight debounce timer when a newer query supersedes it.
+  useEffect(() => {
+    if (!open) {
+      setDebouncedQuery("");
+      setIsSearching(false);
+      return;
+    }
+    const raw = query.trim();
+    if (raw.length < 2) {
+      setDebouncedQuery(query);
+      setIsSearching(false);
+      return;
+    }
+    setIsSearching(true);
+    const timer = window.setTimeout(() => {
+      setDebouncedQuery(query);
+      setIsSearching(false);
+    }, 150);
+    return () => window.clearTimeout(timer);
+  }, [query, open]);
+
   useEffect(() => {
     if (!open) return;
     resetCmdkListScroll();
-  }, [query, open]);
+  }, [debouncedQuery, open]);
 
 
 
@@ -218,16 +244,46 @@ export function CommandPalette() {
 
 
 
+  // Relevance score: exact match first, then prefix match on label/keywords,
+  // then "contains" matches, so typing "prep" surfaces Prep Lab / STAR Builder /
+  // Rephraser / Project Builder / System Design / Coding Hints ahead of anything
+  // that merely mentions "prep" in passing.
+  const scoreCommand = useCallback((c: NavCommand, q: string): number => {
+    if (!q) return 0;
+    const label = c.label.toLowerCase();
+    const keywords = (c.keywords ?? "").toLowerCase();
+    if (label === q) return 0;
+    if (label.startsWith(q)) return 1;
+    if (keywords.split(" ").some((word) => word.startsWith(q))) return 2;
+    if (label.includes(q)) return 3;
+    if (keywords.includes(q)) return 4;
+    return 5;
+  }, []);
+
+  const filteredCommands = useMemo(() => {
+    if (!canFilter) return visibleCommands;
+    const q = trimmedQuery.toLowerCase();
+    return visibleCommands.filter((c) => scoreCommand(c, q) < 5);
+  }, [visibleCommands, canFilter, trimmedQuery, scoreCommand]);
+
   const grouped = useMemo(() => {
-    const acc = visibleCommands.reduce<Record<string, NavCommand[]>>((map, c) => {
+    const q = trimmedQuery.toLowerCase();
+    const acc = filteredCommands.reduce<Record<string, NavCommand[]>>((map, c) => {
       (map[c.group] ??= []).push(c);
       return map;
     }, {});
+    if (canFilter) {
+      for (const group of Object.keys(acc)) {
+        acc[group] = [...acc[group]].sort(
+          (a, b) => scoreCommand(a, q) - scoreCommand(b, q) || a.label.localeCompare(b.label),
+        );
+      }
+    }
     const order = paletteGroupOrder(trimmedQuery);
     return order
       .filter((group) => acc[group]?.length)
       .map((group) => [group, acc[group]!] as const);
-  }, [visibleCommands, trimmedQuery]);
+  }, [filteredCommands, trimmedQuery, canFilter, scoreCommand]);
 
 
 
@@ -255,9 +311,9 @@ export function CommandPalette() {
 
       />
 
-      <CommandList>
+      <CommandList aria-busy={isSearching}>
 
-        {!canFilter && (
+        {!canFilter && !isSearching && (
 
           <div className="px-4 py-3 text-sm text-muted-foreground">
 
@@ -269,7 +325,23 @@ export function CommandPalette() {
 
 
 
-        {canFilter && <CommandEmpty>No results found.</CommandEmpty>}
+        {isSearching && (
+
+          <div className="px-4 py-3 text-sm text-muted-foreground" role="status">
+
+            Searching…
+
+          </div>
+
+        )}
+
+
+
+        {canFilter && !isSearching && grouped.length === 0 && (
+
+          <CommandEmpty>No results found for &ldquo;{trimmedQuery}&rdquo;.</CommandEmpty>
+
+        )}
 
 
 
